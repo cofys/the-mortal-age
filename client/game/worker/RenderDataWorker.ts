@@ -12,7 +12,6 @@ import {
     varReadsMatch,
     writeSquare,
 } from "./MapSquareCache";
-import { decompressStats } from "../../rs/cache/Container";
 import { loadFromPayload } from "../../common/gamemode/GamemodeContentStore";
 import { TransferDescriptor } from "threads";
 import { registerSerializer } from "threads";
@@ -21,7 +20,6 @@ import { Transfer, expose } from "threads/worker";
 import { CacheSystem } from "../../rs/cache/CacheSystem";
 import { ConfigType } from "../../rs/cache/ConfigType";
 import { IndexType } from "../../rs/cache/IndexType";
-import { isGroupMissingError } from "../../rs/cache/js5/GroupMissingError";
 import { Js5RangeClient } from "../../rs/cache/js5/Js5RangeClient";
 import { WorkerJs5Coordinator } from "../../rs/cache/js5/Js5Coordinator";
 import { PresenceBitset } from "../../rs/cache/js5/PresenceBitset";
@@ -60,6 +58,7 @@ import { createNpcData } from "../../render/npc/NpcData";
 import { squareNpcInstances } from "../../render/loader/SdMapDataLoader";
 import { Scene } from "../../rs/scene/Scene";
 import { RenderDataLoader, renderDataLoaderSerializer } from "./RenderDataLoader";
+import { runWithSparseRetry } from "./SparseRetry";
 
 registerSerializer(renderDataLoaderSerializer);
 
@@ -274,69 +273,6 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
 
         npcInstances,
     };
-}
-
-/**
- * Run a worker task with sparse-cache miss handling. A thrown miss (e.g. a
- * map group) waits for that fetch and reruns. Non-throwing misses (models,
- * anim frames render as gaps and only bump the store's miss counter) are
- * detected by comparing the counter across the run: one pass touches every
- * needed group, queueing all fetches, so waiting for the queue to settle and
- * rerunning converges in a few passes.
- */
-async function runWithSparseRetry<T>(
-    workerState: WorkerState,
-    task: () => Promise<T>,
-    profileLabel?: string,
-    outcome?: { complete: boolean },
-): Promise<T> {
-    const js5 = workerState.js5;
-    if (!js5) {
-        if (outcome) outcome.complete = true;
-        return task();
-    }
-    const store = js5.store;
-    const maxAttempts = 8;
-    for (let attempt = 0; attempt < maxAttempts - 1; attempt++) {
-        const missesBefore = store.missCount;
-        const passStarted = performance.now();
-        const decompressBefore = { ...decompressStats };
-        try {
-            const result = await task();
-            if (profileLabel) {
-                const gzip = `${Math.round(decompressStats.gzipMs - decompressBefore.gzipMs)}ms/${decompressStats.gzipCount - decompressBefore.gzipCount}`;
-                const bzip2 = `${Math.round(decompressStats.bzip2Ms - decompressBefore.bzip2Ms)}ms/${decompressStats.bzip2Count - decompressBefore.bzip2Count}`;
-                console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} build=${Math.round(performance.now() - passStarted)}ms misses=${store.missCount - missesBefore} gzip=${gzip} bzip2=${bzip2}`);
-            }
-            if (store.missCount === missesBefore) {
-                if (outcome) outcome.complete = true;
-                return result;
-            }
-            // Groups were missing; their fetches are queued. Wait and rerun.
-            const waitStarted = performance.now();
-            await js5.settled();
-            if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
-        } catch (e) {
-            if (!isGroupMissingError(e)) {
-                throw e;
-            }
-            try {
-                const waitStarted = performance.now();
-                await js5.requestGroup(e.indexId, e.archiveId, true);
-                if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} blockingGroup=${e.indexId}:${e.archiveId} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
-            } catch (fetchError) {
-                // Transient fetch failure; back off and let the next attempt
-                // re-queue it rather than failing the whole task.
-                console.warn("[js5] Group fetch failed, retrying task:", fetchError);
-                await new Promise((resolve) => setTimeout(resolve, 250));
-            }
-        }
-    }
-    // Final attempt: whatever is still missing renders as gaps.
-    const missesBefore = store.missCount;
-    const result = await task();
-    if (outcome) outcome.complete = store.missCount === missesBefore;
-    return result;
 }
 
 /** A stored square's NPCs are replaced by the ones in it now, with the stored per-type animations. */

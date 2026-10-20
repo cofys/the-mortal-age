@@ -21,6 +21,12 @@ function bossDeath(event) {
   const fight = event.npc?.__amoxliatlFight;
   if (!fight || fight.stopped) return;
   const { session, player } = fight;
+  if (session.quest) {
+    fight.hideHud();
+    session.end();
+    Common.api.emitCustomEvent('amoxliatl:quest-defeated', { player });
+    return;
+  }
   const ticks = fight.duration();
   const best = Number(player.getAttribute(Common.BEST_TICKS_ATTRIBUTE)) || 0;
   if (!best || ticks < best) player.setAttribute(Common.BEST_TICKS_ATTRIBUTE, ticks);

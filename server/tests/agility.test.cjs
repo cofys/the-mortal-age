@@ -220,17 +220,30 @@ const LAP_ENDS = {
   "wyrm-basic": [1645, 2933, 0],
   "wyrm-advanced": [1645, 2933, 0],
   werewolf: [3528, 9873, 0],
+  "ape-atoll": [2770, 2747, 0],
 };
 /** Courses that need gear to finish a lap. */
 const LAP_GEAR = { "shayzien-advanced": () => grappleGear() };
 /** Courses that need an item carried to finish a lap: Werewolf's stick, fetched on the way. */
 const LAP_ITEMS = { werewolf: [4179] };
+/** The greegree form a course needs to finish a lap (Greegrees.plugin.js answers in game). */
+const LAP_FORMS = { "ape-atoll": "small-ninja-monkey" };
+
+function answerForm(form) {
+  if (form) hooks.answers["greegree:form"] = (request) => { request.form = form; };
+  else delete hooks.answers["greegree:form"];
+}
 
 for (const course of COURSES) {
   test(`${course.name}: a full lap counts once and pays the course's lap experience`, () => {
     groundItems.length = 0;
     const player = createPlayer(3200, 3200, 0, 99, { worn: LAP_GEAR[course.key]?.() ?? [], held: [...(LAP_ITEMS[course.key] ?? [])] });
-    runLap(course, player);
+    answerForm(LAP_FORMS[course.key]);
+    try {
+      runLap(course, player);
+    } finally {
+      answerForm(null);
+    }
 
     assert.equal(player.getAttribute("agility.laps")?.[course.key], 1);
     assert.ok(
@@ -579,5 +592,89 @@ test("Grace sells the graceful outfit the game equips (11850-11861) and amylase 
   const items = Array.isArray(gameplay) ? gameplay : Object.values(gameplay);
   for (const id of [11850, 11854, 11856, 11858, 11860, 11852]) {
     assert.ok(items.some((item) => item.id === id && item.weight < 0), `graceful ${id} is wearable and lightens`);
+  }
+});
+
+const APE_ATOLL = () => COURSES.find((course) => course.key === "ape-atoll");
+const apeObstacle = (index) => APE_ATOLL().obstacles.find((obstacle) => obstacle.index === index);
+const APE_TILES = { 1: [2754, 2742, 0], 2: [2753, 2741, 0], 3: [2752, 2741, 2], 4: [2746, 2741, 0], 5: [2752, 2731, 0], 6: [2757, 2734, 0] };
+
+test("Ape Atoll: as a human every obstacle slips and hurts, and the rope drops them at the stepping stone (Wiki)", () => {
+  answerForm(null);
+  for (const index of [1, 2, 3, 4, 6]) {
+    const player = createPlayer(3200, 3200, 0, 99);
+    operate(player, apeObstacle(index).object, APE_TILES[index]);
+    assert.ok(player.state.messages.includes("...you're not monkey enough to try this!"), `obstacle ${index}`);
+    assert.equal(player.state.hits, 1, `obstacle ${index} hurts`);
+    assert.equal(player.state.xp, 0);
+    assert.ok(!player.getAttribute("agility.progress"), "no lap progress");
+  }
+  const rope = createPlayer(3200, 3200, 0, 99);
+  operate(rope, apeObstacle(5).object, APE_TILES[5]);
+  assert.ok(rope.state.messages.includes("You lose your grip on the vine! ...you're not monkey enough to try this!"));
+  assert.deepEqual(tileOf(rope), [2755, 2742, 0]);
+});
+
+test("Ape Atoll: any monkey but a ninja or Kruk is turned away, and a boost won't reach 48 (Wiki)", () => {
+  try {
+    answerForm("gorilla");
+    const gorilla = createPlayer(2755, 2742, 0, 99);
+    operate(gorilla, apeObstacle(1).object, APE_TILES[1]);
+    assert.deepEqual(gorilla.state.messages, ["Only the stealthiest and most agile monkey can use this!"]);
+    assert.deepEqual(tileOf(gorilla), [2755, 2742, 0]);
+
+    answerForm("kruk");
+    const boosted = createPlayer(2755, 2742, 0, 50);
+    const skills = boosted.getSkillManager();
+    boosted.getSkillManager = () => ({ ...skills, getMaxLevel: () => 45 });
+    operate(boosted, apeObstacle(1).object, APE_TILES[1]);
+    assert.deepEqual(boosted.state.messages, ["Your Agility boost won't help you here."]);
+
+    const kruk = createPlayer(2755, 2742, 0, 48);
+    operate(kruk, apeObstacle(1).object, APE_TILES[1]);
+    assert.deepEqual(tileOf(kruk), [2753, 2742, 0], "Kruk jumps the stone");
+    assert.equal(kruk.state.xp, 40);
+  } finally {
+    answerForm(null);
+  }
+});
+
+test("Ape Atoll: a monkey under 75 can fall to the signpost; from 75, or on the stone and last tree, never (Wiki)", () => {
+  const random = Math.random;
+  Math.random = () => 0.999;
+  answerForm("medium-ninja-monkey");
+  try {
+    const low = createPlayer(2753, 2742, 0, 48);
+    operate(low, apeObstacle(2).object, APE_TILES[2]);
+    assert.deepEqual(tileOf(low), [2757, 2745, 0]);
+    assert.equal(low.state.hits, 1);
+    assert.equal(low.state.xp, 0);
+
+    const ropeFall = createPlayer(2751, 2731, 0, 48);
+    operate(ropeFall, apeObstacle(5).object, APE_TILES[5]);
+    assert.deepEqual(tileOf(ropeFall), [2753, 2742, 0], "a monkey falls by the first tree");
+
+    for (const [index, level] of [[2, 75], [1, 48], [6, 48]]) {
+      const player = createPlayer(3200, 3200, 0, level);
+      operate(player, apeObstacle(index).object, APE_TILES[index]);
+      assert.equal(player.state.hits, 0, `obstacle ${index} at ${level}`);
+    }
+  } finally {
+    Math.random = random;
+    answerForm(null);
+  }
+});
+
+test("Ape Atoll: the rope won't take a pet across (Wiki)", () => {
+  const player = createPlayer(2751, 2731, 0, 99);
+  hooks.answers["pets:current"] = (request) => { request.pet = {}; };
+  answerForm("small-ninja-monkey");
+  try {
+    operate(player, apeObstacle(5).object, APE_TILES[5]);
+    assert.deepEqual(player.state.messages, ["Your little friend can't make it over the obstacle..."]);
+    assert.deepEqual(tileOf(player), [2751, 2731, 0]);
+  } finally {
+    delete hooks.answers["pets:current"];
+    answerForm(null);
   }
 });

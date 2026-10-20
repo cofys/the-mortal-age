@@ -11,6 +11,7 @@ import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
 import type { FontLoader } from "../../widgets/components/TextRenderer";
 import type { IndexedSprite } from "../../rs/sprite/IndexedSprite";
+import type { OverlayPosition } from "@runelite/client/ui/overlay/OverlayPosition";
 import type { Cs2Vm } from "../../rs/cs2/Cs2Vm";
 import type {
     WebGPUSceneExtension,
@@ -68,7 +69,12 @@ export type WidgetOverlayDrawContext = {
     fontLoader: FontLoader;
     /** A cache sprite as a texture. */
     sprite(id: number): { tex: WebGLTexture; w: number; h: number } | undefined;
+    /** Where a movable overlay of this size (layout units) draws this frame; nothing while the HUD is hidden. */
+    place(overlay: WidgetOverlay, width: number, height: number): OverlayPlacement | undefined;
 };
+
+/** A movable overlay's top left in device pixels, and the device pixels per layout unit. */
+export type OverlayPlacement = { x: number; y: number; scaleX: number; scaleY: number };
 
 /** UI drawn above the widgets and under the right-click menu (RuneLite's ABOVE_WIDGETS). */
 export interface WidgetOverlay {
@@ -81,6 +87,12 @@ export interface WidgetOverlay {
      * Used by overlays that sit over the side panel (status bars) so tooltips still win.
      */
     drawAtAnchor?: boolean;
+    /**
+     * Makes it a RuneLite movable overlay: Alt-drag moves it, Alt + right-click resets it. The
+     * name keys its saved position (RuneLite's overlay class name); position is its default
+     * snap corner. It draws where `context.place` says.
+     */
+    movable?: { name: string; position: OverlayPosition };
 }
 
 export type CameraInputContext = {
@@ -173,6 +185,13 @@ export interface ClientPlugin {
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
     widgetOverlay?: WidgetOverlay;
+    /** Lays out movable overlays (the RuneLite OverlayRenderer). */
+    placeOverlay?(
+        overlay: WidgetOverlay,
+        width: number,
+        height: number,
+        canvas: { w: number; h: number },
+    ): OverlayPlacement | undefined;
     /** Handle a client-side `::command`; return true to consume it (no server round trip). */
     handleClientCommand?(command: string): boolean;
     /** Handle a widget action locally; return true to consume it before CS2 or network dispatch. */
@@ -310,6 +329,18 @@ export class ClientPluginManager {
         const overlays: WidgetOverlay[] = [];
         for (const plugin of this.plugins) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
         return overlays;
+    }
+
+    placeOverlay(
+        overlay: WidgetOverlay,
+        width: number,
+        height: number,
+        canvas: { w: number; h: number },
+    ): OverlayPlacement | undefined {
+        for (const plugin of this.plugins) {
+            if (plugin.placeOverlay) return plugin.placeOverlay(overlay, width, height, canvas);
+        }
+        return undefined;
     }
 
     handleWidgetAction(event: WidgetActionEvent): boolean {

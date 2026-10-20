@@ -220,7 +220,8 @@ export function registerMinimapData(host: WebGLOsrsRendererHost, mapData: SdMapD
             }
 
             const key = getMapPlaneId(mapX, mapY, level);
-            const icons = mapData.minimapIcons?.[level] ?? [];
+            const icons = mapData.minimapIcons?.[level];
+            if (icons === undefined) continue;
             if (icons.length > 0) {
                 host.minimapIcons.set(key, icons);
             } else {

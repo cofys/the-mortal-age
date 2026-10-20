@@ -31,6 +31,16 @@ const fontIds = new WeakMap<BitmapFont, number>();
 const atlasCache = new WeakMap<GLRenderer, WeakMap<BitmapFont, BitmapFontAtlas>>();
 let nextFontId = 1;
 
+// The atlas cache is weak, but GLRenderer.textures holds each atlas texture under a
+// per-font key. Free it when its font is collected, or every discarded BitmapFont
+// leaks a GL texture (#559).
+const atlasTextures =
+    typeof FinalizationRegistry === "function"
+        ? new FinalizationRegistry<{ glr: WeakRef<GLRenderer>; key: string }>(({ glr, key }) => {
+              glr.deref()?.deleteTexture(key);
+          })
+        : undefined;
+
 function getFontId(font: BitmapFont): number {
     let id = fontIds.get(font);
     if (id === undefined) {
@@ -159,8 +169,9 @@ export function getBitmapFontAtlas(glr: GLRenderer, font: BitmapFont): BitmapFon
 
     ctx.putImageData(imageData, 0, 0);
 
+    const textureKey = `fontatlas:${getFontId(font)}`;
     const atlas: BitmapFontAtlas = {
-        texture: glr.createTextureFromCanvas(`fontatlas:${getFontId(font)}`, canvas),
+        texture: glr.createTextureFromCanvas(textureKey, canvas),
         glyphs,
         ascent: font.ascent | 0,
         maxAscent: font.maxAscent | 0,
@@ -168,5 +179,6 @@ export function getBitmapFontAtlas(glr: GLRenderer, font: BitmapFont): BitmapFon
         font,
     };
     rendererCache.set(font, atlas);
+    atlasTextures?.register(font, { glr: new WeakRef(glr), key: textureKey });
     return atlas;
 }

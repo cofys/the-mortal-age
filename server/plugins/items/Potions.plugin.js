@@ -406,9 +406,9 @@ function applyStaminaRequest({player,energy=20,durationMs=STAMINA_DURATION_MS}) 
   player.setAttribute(ATTR_STAMINA_ACC, 0);
 }
 
-function applyDivine(player, baseEffect, affectedSkills) {
+function applyDivine(player, baseEffect, affectedSkills, { damage = 10 } = {}) {
   baseEffect(player);
-  damageButKeepAlive(player, 10);
+  if (damage > 0) damageButKeepAlive(player, damage);
 
   const targets = affectedSkills
     .filter(Boolean)
@@ -472,6 +472,9 @@ function registerPotion(definition) {
     area: definition.area ?? null,
     requiresFoodPermission: Boolean(definition.requiresFoodPermission),
     shareable: definition.shareable !== false,
+    // Drinks with their own animation and messages: { animation, messages(itemId) } in place of
+    // the potion swig and "You have finished your potion.".
+    drink: definition.drink ?? null,
     // null: nothing is left once the last dose is drunk.
     emptyItemId: definition.emptyItemId === null
       ? NO_EMPTY_ITEM
@@ -524,11 +527,14 @@ registerPotion({ name: "Beer", chains: [[Items.BEER]], emptyItemId: Items.BEER_G
     lowerSkillByCurrent(player, Skill.ATTACK, 1, 0.06);
   } });
 
-// POH refreshments use the same consumption, cooldown and stat-boost rules as potions.
-for (const [id, cup, boost] of [[Items.CUP_OF_TEA_9, Items.EMPTY_CUP_3, 1],
-  [Items.CUP_OF_TEA_11, Items.PORCELAIN_CUP_2, 2], [Items.CUP_OF_TEA_13, Items.PORCELAIN_CUP_3, 3]]) {
+// POH refreshments use the same consumption, cooldown and stat-boost rules as potions, with the
+// cup's own drinking animation and messages (rsprox captures: human_drink_from_teacup_*, "You drink
+// the cup of (milky) tea.", "You feel refreshed and ready for more building.").
+for (const [id, cup, boost, animation] of [[Items.CUP_OF_TEA_9, Items.EMPTY_CUP_3, 1, 3702],
+  [Items.CUP_OF_TEA_11, Items.PORCELAIN_CUP_2, 2, 3703], [Items.CUP_OF_TEA_13, Items.PORCELAIN_CUP_3, 3, 3704]]) {
   registerPotion({ name: "Cup of tea", chains: [[id], [id + 1]], emptyItemId: cup,
-    requiresFoodPermission: true, effect: player => boostSkill(player, Skill.CONSTRUCTION, boost, 0) });
+    requiresFoodPermission: true, effect: player => boostSkill(player, Skill.CONSTRUCTION, boost, 0),
+    drink: { animation, messages: (itemId) => [itemId === id ? "You drink the cup of tea." : "You drink the cup of milky tea.", "You feel refreshed and ready for more building."] } });
 }
 for (const [id, effect] of [
   [Items.BEER_3, player => { boostSkill(player, Skill.STRENGTH, 1, 0.02); lowerSkillByCurrent(player, Skill.ATTACK, 1, 0.06); }],
@@ -919,6 +925,35 @@ registerPotion({
   effect: applyMix(applyStamina),
 });
 
+/**
+ * Moonlight potion (Wiki): its strength comes from the drinker's Herblore level. Prayer: the
+ * greater of 7 + 25% of the Prayer level and 7 + 30% of the Herblore level, nothing below 38
+ * Herblore. Attack, Strength and Defence: 3 + 10% from 33 Herblore, 5 + 15% from 45 (Attack),
+ * 55 (Strength) and 66 (Defence); from 70 Defence is 7 + 20% and held like a divine potion's for
+ * five minutes, without the divine potions' damage.
+ */
+function applyMoonlightPotion(player) {
+  const herblore = getCurrentLevel(player, Skill.HERBLORE);
+  if (herblore >= 38) {
+    const prayer = getMaxLevel(player, Skill.PRAYER);
+    restorePrayer(player, Math.max(Math.floor(prayer * 0.25), Math.floor(herblore * 0.3)) + 7, 0);
+  }
+  if (herblore < 33) return;
+  const tier = (from) => (herblore >= from ? [5, 0.15] : [3, 0.1]);
+  boostSkill(player, Skill.ATTACK, ...tier(45));
+  boostSkill(player, Skill.STRENGTH, ...tier(55));
+  if (herblore >= 70) {
+    applyDivine(player, (p) => boostSkill(p, Skill.DEFENCE, 7, 0.2), [Skill.DEFENCE], { damage: 0 });
+  } else {
+    boostSkill(player, Skill.DEFENCE, ...tier(66));
+  }
+}
+
+registerPotion({
+  name: "Moonlight potion",
+  chains: [doseChain("MOONLIGHT_POTION_4_", "MOONLIGHT_POTION_3_", "MOONLIGHT_POTION_2_", "MOONLIGHT_POTION_1_")],
+  effect: applyMoonlightPotion,
+});
 registerPotion({
   name: "Divine super attack potion",
   chains: [doseChain("DIVINE_SUPER_ATTACK_POTION_4_", "DIVINE_SUPER_ATTACK_POTION_3_", "DIVINE_SUPER_ATTACK_POTION_2_", "DIVINE_SUPER_ATTACK_POTION_1_")],
@@ -1237,7 +1272,7 @@ function handlePotionDrink(player, itemId, slot) {
   timers.extendOrRegister(TimerKey.FOOD, 3);
 
   player.getPacketSender().sendInterfaceRemoval();
-  player.performAnimation(DRINK_ANIMATION);
+  player.performAnimation(entry.potion.drink?.animation ? new Animation(entry.potion.drink.animation) : DRINK_ANIMATION);
   Sounds.sendSound(player, Sound.DRINK);
 
   inventory.setItem(slot, new Item(entry.replacementId, entry.replacementId === NO_EMPTY_ITEM ? 0 : 1)).refreshItems();
@@ -1253,7 +1288,9 @@ function handlePotionDrink(player, itemId, slot) {
     }
   }
 
-  if (entry.replacementId === entry.potion.emptyItemId) {
+  if (entry.potion.drink?.messages) {
+    for (const message of entry.potion.drink.messages(itemId)) player.sendMessage(message);
+  } else if (entry.replacementId === entry.potion.emptyItemId) {
     player.sendMessage(entry.potion.area === "chambers-of-xeric"
       ? "You have finished your potion. The gourd vial disintegrates."
       : "You have finished your potion.");

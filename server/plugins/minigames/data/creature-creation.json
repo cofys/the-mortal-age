@@ -1,0 +1,8 @@
+[
+  { "tile": "3058,4410", "key": "newtroost", "creature": "Newtroost", "npc": "NEWTROOST", "ingredients": ["EYE_OF_NEWT", "FEATHER"] },
+  { "tile": "3018,4410", "key": "unicow", "creature": "Unicow", "npc": "UNICOW", "ingredients": ["COWHIDE", "UNICORN_HORN"] },
+  { "tile": "3012,4380", "key": "swordchick", "creature": "Swordchick", "npc": "SWORDCHICK", "ingredients": ["RAW_SWORDFISH", "RAW_CHICKEN"] },
+  { "tile": "3066,4380", "key": "spidine", "creature": "Spidine", "npc": "SPIDINE", "ingredients": ["RED_SPIDERS_EGGS", "RAW_SARDINE"] },
+  { "tile": "3034,4361", "key": "frogeel", "creature": "Frogeel", "npc": "FROGEEL", "ingredients": ["RAW_CAVE_EEL", "GIANT_FROG_LEGS"] },
+  { "tile": "3043,4361", "key": "jubster", "creature": "Jubster", "npc": "JUBSTER", "ingredients": ["RAW_JUBBLY", "RAW_LOBSTER"] }
+]

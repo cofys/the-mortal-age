@@ -143,7 +143,8 @@ export class WebGPUUi {
             }
 
             const key = getMapPlaneId(mapX, mapY, level);
-            const icons = mapData.minimapIcons?.[level] ?? [];
+            const icons = mapData.minimapIcons?.[level];
+            if (icons === undefined) continue;
             if (icons.length > 0) {
                 this.minimapIcons.set(key, icons);
             } else {

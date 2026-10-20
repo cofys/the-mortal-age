@@ -25,6 +25,8 @@ export class Equipment extends ItemContainer {
     public static RING_SLOT = 12;
     public static AMMUNITION_SLOT = 13;
     public static NO_ITEM = new Item(-1);
+    /** The cache's worn inventory ("worn"), which the equipment tab's scripts read. */
+    public static WORN_INVENTORY_ID = 94;
     static ITEM_COUNT = 10;
 
     constructor(public player: Player) {
@@ -66,8 +68,21 @@ export class Equipment extends ItemContainer {
 
     public refreshItems(): ItemContainer {
         this.getPlayer().getPacketSender().sendItemContainer(this, Equipment.INVENTORY_INTERFACE_ID);
+        if ((this.getPlayer().getNpcTransformationId?.() ?? -1) >= 0) {
+            this.sendWornInventory();
+        }
         require("../../../../plugins/PluginManager").PluginManager.emitCustomEvent("equipment:changed", { player: this.getPlayer() });
         return this;
+    }
+
+    /**
+     * The worn inventory on its own. The client draws the equipment tab from the player's
+     * appearance, which for a transformed player carries the NPC instead of the items.
+     */
+    public sendWornInventory(): void {
+        const items = this.getItems().map((item) =>
+            item && item.getId() > 0 && item.getAmount() > 0 ? { id: item.getId(), amount: item.getAmount() } : null);
+        this.getPlayer().getPacketSender().sendInventory(Equipment.WORN_INVENTORY_ID, this.capacity(), items);
     }
 
     public wearingNexAmours(): boolean {

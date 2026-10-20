@@ -193,6 +193,21 @@ export class CacheDefinitions {
         return this.getGamevals().namesOf(GamevalKind.SEQ);
     }
 
+    /** Every named loc: id -> gameval name. */
+    static getLocNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.LOC);
+    }
+
+    /** Every named obj: id -> gameval name. */
+    static getObjNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.OBJ);
+    }
+
+    /** Every named NPC: id -> gameval name. */
+    static getNpcNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.NPC);
+    }
+
     /** A database row's id by its gameval name (`mixology_rewards`), or null. */
     static getDbRowId(name: string): number | null {
         return this.idByName(GamevalKind.DBROW).get(name) ?? null;
@@ -211,6 +226,12 @@ export class CacheDefinitions {
     /** An interface component's packed id by its gameval name (`bankside:runepouch_top`), or null. */
     static getComponentId(name: string): number | null {
         return this.getGamevals().componentId(name);
+    }
+
+    /** An interface's group id by its gameval name (`poh_jewellery_box`), or null. */
+    static getInterfaceId(name: string): number | null {
+        for (const [group, iface] of this.getGamevals().allInterfaces()) if (iface.name === name) return group;
+        return null;
     }
 
     private static idsByName = new Map<GamevalKind, Map<string, number>>();

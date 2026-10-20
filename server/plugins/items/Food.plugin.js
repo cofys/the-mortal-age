@@ -134,12 +134,25 @@ function canAnglerfishOverheal(player) {
   return combat?.getTarget?.() == null && combat?.getAttacker?.() == null;
 }
 
-/** A heal from the data: a number, a { min, max } roll, or { flat, percent } of Hitpoints level. */
-function healAmount(heal, maxHp, random = Math.random) {
+/**
+ * The heal of a bite, from the data: a number, a { min, max } roll, { flat, percent } of
+ * Hitpoints level, or `lowestOf`. `levels` (skill name -> base level) feeds `lowestOf`: the lowest of each
+ * skill's level divided by its number, rounded as `round` says (the Neypotzli foods).
+ */
+function healAmount(heal, maxHp, random = Math.random, levels = () => 0) {
   if (typeof heal === "number") return heal;
   if (!heal) return 0;
   if (heal.min !== undefined) return heal.min + Math.floor(random() * (heal.max - heal.min + 1));
+  if (heal.lowestOf) {
+    const lowest = Math.min(...Object.entries(heal.lowestOf).map(([name, divisor]) => levels(name) / divisor));
+    return heal.round === "nearest" ? Math.round(lowest) : Math.floor(lowest);
+  }
   return (heal.flat ?? 0) + Math.floor((maxHp * (heal.percent ?? 0)) / 100);
+}
+
+/** A player's base level by skill name, for `lowestOf` heals. */
+function baseLevels(player) {
+  return (name) => player.getSkillManager().getMaxLevel(skill(name));
 }
 
 function healBy(player, amount, overheal = 0) {
@@ -250,7 +263,7 @@ function applyFood(player, food, random = Math.random) {
   const after = [];
   if (food.outcomes) {
     const outcome = rollOutcome(food.outcomes, random);
-    healBy(player, healAmount(outcome.heal, maxHp, random));
+    healBy(player, healAmount(outcome.heal, maxHp, random, baseLevels(player)));
     applyStats(player, outcome);
     const drained = outcome.drainRandom ? drainRandomSkill(player, outcome.drainRandom, random) : undefined;
     if (outcome.message) after.push(outcome.message);
@@ -264,7 +277,7 @@ function applyFood(player, food, random = Math.random) {
     const amount = getAnglerfishHeal(maxHp);
     healed = healBy(player, amount, canAnglerfishOverheal(player) ? amount : 0);
   } else {
-    healed = healBy(player, healAmount(food.heal, maxHp, random));
+    healed = healBy(player, healAmount(food.heal, maxHp, random, baseLevels(player)));
   }
   applyStats(player, food);
   if (food.poisonImmunity) {

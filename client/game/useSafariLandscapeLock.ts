@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react";
 
-import { checkMobile, shouldFreezeViewportForVirtualKeyboard } from "../common/utils/DeviceUtil";
+import {
+    checkMobile,
+    isMobileChatKeyboardFocused,
+    shouldFreezeViewportForVirtualKeyboard,
+} from "../common/utils/DeviceUtil";
 
 interface MobileLandscapeLockState {
     enabled: boolean;
     rotated: boolean;
 }
 
-function readViewportSize(): { width: number; height: number } {
+function readViewportSize(): {
+    width: number;
+    height: number;
+    offsetLeft: number;
+    offsetTop: number;
+} {
     if (typeof window === "undefined") {
-        return { width: 0, height: 0 };
+        return { width: 0, height: 0, offsetLeft: 0, offsetTop: 0 };
     }
 
     const viewport = window.visualViewport;
@@ -17,13 +26,50 @@ function readViewportSize(): { width: number; height: number } {
         return {
             width: Math.max(1, Math.round(viewport.width)),
             height: Math.max(1, Math.round(viewport.height)),
+            offsetLeft: Math.round(viewport.offsetLeft),
+            offsetTop: Math.round(viewport.offsetTop),
         };
     }
 
     return {
         width: Math.max(1, Math.round(window.innerWidth)),
         height: Math.max(1, Math.round(window.innerHeight)),
+        offsetLeft: 0,
+        offsetTop: 0,
     };
+}
+
+export function applyForcedLandscapeSize(
+    root: HTMLElement,
+    width: number,
+    height: number,
+    keepRotation: boolean = false,
+    offsetLeft: number = 0,
+    offsetTop: number = 0,
+): { width: number; height: number; rotated: boolean } {
+    const rotated = keepRotation
+        ? root.dataset.iosSafariForceLandscapeRotated === "1"
+        : height > width;
+    const size = {
+        width: rotated ? height : width,
+        height: rotated ? width : height,
+        rotated,
+    };
+    root.style.setProperty("--ios-safari-landscape-w", `${size.width}px`);
+    root.style.setProperty("--ios-safari-landscape-h", `${size.height}px`);
+    root.style.setProperty("--ios-safari-center-x", `${offsetLeft + width / 2}px`);
+    root.style.setProperty("--ios-safari-center-y", `${offsetTop + height / 2}px`);
+    root.dataset.iosSafariForceLandscapeRotated = size.rotated ? "1" : "0";
+    return size;
+}
+
+export function getForcedLandscapeRotation(
+    chatInputFocused: boolean,
+    currentRotation: boolean,
+    portraitLayout: boolean | undefined,
+): boolean | undefined {
+    if (!chatInputFocused) return undefined;
+    return portraitLayout ?? currentRotation;
 }
 
 /**
@@ -51,23 +97,48 @@ export function useSafariLandscapeLock(enabled: boolean = true): MobileLandscape
         let lastApplied: { width: number; height: number } | undefined;
 
         const applyViewportMetrics = () => {
-            const { width, height } = readViewportSize();
+            const { width, height, offsetLeft, offsetTop } = readViewportSize();
+            const chatInputFocused = isMobileChatKeyboardFocused();
+            const orientationType = window.screen?.orientation?.type;
+            const portraitLayout = orientationType?.startsWith("portrait")
+                ? true
+                : orientationType?.startsWith("landscape")
+                  ? false
+                  : typeof window.matchMedia === "function"
+                    ? window.matchMedia("(orientation: portrait)").matches
+                    : undefined;
+            const targetRotation = getForcedLandscapeRotation(
+                chatInputFocused,
+                root.dataset.iosSafariForceLandscapeRotated === "1",
+                portraitLayout,
+            );
+            const preserveRotation = targetRotation !== undefined;
+            if (targetRotation !== undefined) {
+                root.dataset.iosSafariForceLandscapeRotated = targetRotation ? "1" : "0";
+            }
+            const keyboardResize = shouldFreezeViewportForVirtualKeyboard(
+                lastApplied,
+                { width, height },
+            );
             // While the on-screen keyboard is open the visual viewport only reflects the
-            // sliver above the keyboard. Recomputing the forced-landscape size (and the
-            // rotation flag) from it collapses the app and can un-rotate it mid-typing,
-            // so keep the pre-keyboard metrics until the keyboard closes.
-            if (shouldFreezeViewportForVirtualKeyboard(lastApplied, { width, height })) {
+            // sliver above the keyboard. Login keeps its old layout; gameplay resizes while
+            // preserving the active rotation so the chat input stays above the keyboard.
+            if (keyboardResize && !chatInputFocused) {
                 return;
             }
             lastApplied = { width, height };
             root.style.setProperty("--ios-safari-vw", `${width}px`);
             root.style.setProperty("--ios-safari-vh", `${height}px`);
-            root.style.setProperty("--ios-safari-landscape-w", `${Math.max(width, height)}px`);
-            root.style.setProperty("--ios-safari-landscape-h", `${Math.min(width, height)}px`);
-            const shouldRotate = height > width;
-            setRotated(shouldRotate);
+            const landscapeSize = applyForcedLandscapeSize(
+                root,
+                width,
+                height,
+                preserveRotation,
+                offsetLeft,
+                offsetTop,
+            );
+            setRotated(landscapeSize.rotated);
             root.dataset.iosSafariForceLandscape = "1";
-            root.dataset.iosSafariForceLandscapeRotated = shouldRotate ? "1" : "0";
         };
 
         const scheduleApply = () => {
@@ -127,6 +198,8 @@ export function useSafariLandscapeLock(enabled: boolean = true): MobileLandscape
             root.style.removeProperty("--ios-safari-vh");
             root.style.removeProperty("--ios-safari-landscape-w");
             root.style.removeProperty("--ios-safari-landscape-h");
+            root.style.removeProperty("--ios-safari-center-x");
+            root.style.removeProperty("--ios-safari-center-y");
             delete root.dataset.iosSafariForceLandscape;
             delete root.dataset.iosSafariForceLandscapeRotated;
         };

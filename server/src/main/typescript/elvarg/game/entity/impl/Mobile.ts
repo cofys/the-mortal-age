@@ -150,6 +150,12 @@ export abstract class Mobile extends Entity {
     }
 
     private notifyTeleport(target: Location): void {
+        const following = this.getFollowing();
+        if (this.isPlayer() && following) {
+            this.setFollowing(null);
+            if (this.getInteractingMobile() === following) this.setMobileInteraction(null);
+            if (this.getPositionToFace()?.equals(following.getLocation())) this.setPositionToFace(null);
+        }
         for (const listener of Mobile.teleportListeners) listener(this, target);
     }
 

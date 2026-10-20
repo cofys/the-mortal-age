@@ -63,7 +63,11 @@ function openPopup(player, layer, line1, line2) {
 
 function openSkillPopup(player, skill, newLevel) {
   player.getSkillManager().stopSkillable();
-  player.performAnimation(pluginApi.core.Animation.DEFAULT_RESET_ANIMATION);
+  // Combat XP lands on the swing's tick; resetting here would wipe the attack (or block) animation.
+  const combat = player.getCombat();
+  if (!combat.getTarget() && !combat.getAttacker()) {
+    player.performAnimation(pluginApi.core.Animation.DEFAULT_RESET_ANIMATION);
+  }
   pluginApi.emitCustomEvent(POPUP_OPENED_EVENT, { player, skill });
   const name = skill.getName();
   openPopup(player, SKILL_LAYERS[skill.getIndex()],

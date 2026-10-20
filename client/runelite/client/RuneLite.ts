@@ -13,6 +13,7 @@ import { ConfigManager } from "./config/ConfigManager";
 import { EventBus } from "./eventbus/EventBus";
 import { PluginManager } from "./plugins/PluginManager";
 import { ClientToolbar } from "./ui/ClientToolbar";
+import { OverlayRenderer } from "./ui/overlay/OverlayRenderer";
 import { CLIENT_TOKEN } from "./plugins/PluginInjector";
 import { CORE_PLUGINS, LEGACY_CONFIG_MIGRATIONS } from "./plugins";
 import { toRuneLiteGameState } from "../impl/GameStateMapping";
@@ -31,11 +32,14 @@ export class RuneLite {
     readonly pluginManager: PluginManager;
     /** The sidebar's buttons, added by plugins (`inject(ClientToolbar)`). */
     readonly clientToolbar: ClientToolbar;
+    /** Lays out movable overlays and lets the player Alt-drag them. */
+    readonly overlayRenderer: OverlayRenderer;
 
     private constructor(private readonly client: OsrsClient) {
         this.configManager = new ConfigManager(this.eventBus);
         this.pluginManager = new PluginManager(this.eventBus, this.configManager);
         this.clientToolbar = this.pluginManager.getInjector().get(ClientToolbar);
+        this.overlayRenderer = new OverlayRenderer(client, this.configManager);
     }
 
     static start(client: OsrsClient): RuneLite {
@@ -88,5 +92,8 @@ export class RuneLite {
         for (const plugin of this.pluginManager.getPlugins()) {
             this.client.clientPlugins.add(plugin);
         }
+        // Last, so its outlines and snap corners draw over every overlay.
+        this.client.clientPlugins.add(this.overlayRenderer);
+        this.overlayRenderer.start();
     }
 }

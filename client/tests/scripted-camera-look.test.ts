@@ -213,4 +213,31 @@ terrainPan.applySmoothing(100);
 assert.deepEqual([...terrainPan.pos], [5, 6, 0], "terrain-aware movement interpolates the height offset while sampling intermediate terrain");
 terrainPan.applySmoothing(100);
 assert.deepEqual([...terrainPan.pos], [10, 15, 0]);
+const speakerTurn = new Camera(0, -2, 0, 256, 0);
+speakerTurn.setScriptedPosition(3257.5, 0, 3449.5, 232, 100, () => -2);
+speakerTurn.setScriptedLook(3256.5, 0, 3449.5, 232, 100, () => -2);
+speakerTurn.applySmoothing(20);
+const facingHaig = speakerTurn.getYaw();
+speakerTurn.rotateScriptedBy(0, 1024, 5, "linear");
+speakerTurn.applySmoothing(40);
+assert.ok(speakerTurn.getYaw() !== facingHaig && speakerTurn.getYaw() !== (facingHaig + 1024) % 2048, "cam_rotateby turns over its cycles");
+speakerTurn.applySmoothing(60);
+// Within the look's own integer-angle truncation (1537 west, 511 east).
+assert.ok(Math.abs(speakerTurn.getYaw() - (facingHaig + 1024) % 2048) <= 2, "cam_rotateby turns half a circle to the other speaker");
+speakerTurn.rotateScriptedBy(0, -1024, 5, "ease_out_sine");
+speakerTurn.applySmoothing(100);
+assert.equal(speakerTurn.getYaw(), facingHaig, "and back");
+// cam_moveto_arc (The Heart of Darkness's nagua pan): the camera swings about the centre, not across it.
+const arc = new Camera(0, 0, 0, 256, 0);
+arc.snapToPosition(10, -4, 0);
+arc.setScriptedPositionArc(0, 0, -10, 0, 10, "linear", () => 0, 512);
+arc.applySmoothing(100); // half way
+assert.ok(Math.abs(Math.hypot(arc.pos[0], arc.pos[2]) - 10) < 0.05, "half way round the arc keeps its radius");
+assert.ok(Math.abs(arc.pos[2]) > 9, "and is off the straight line between the ends");
+arc.applySmoothing(100);
+assert.ok(Math.abs(arc.pos[0] + 10) < 0.01 && Math.abs(arc.pos[2]) < 0.01, "and lands on its target");
+const terrainArc = new Camera(10, 100, 0, 256, 0);
+terrainArc.setScriptedPositionArc(0, 0, -10, 0, 10, "linear", x => x * x, 0, false);
+terrainArc.applySmoothing(100);
+assert.ok(Math.abs(terrainArc.pos[1]) < 0.01, "terrain-aware arcs follow the ground along the curve");
 console.log("cycle camera easing and rotation: ok");

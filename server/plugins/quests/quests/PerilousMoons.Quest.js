@@ -45,14 +45,13 @@
  *    and no Building Supplies crate near Jessamine, so the crate (50857) is
  *    registered at (1436,9637,1) and camps are built by using building supplies
  *    on the Cooking stove at each camp tile rather than on a "Camp spot".
- *  - Entrance landing tiles and the post-fight teleport are chosen from open
- *    collision tiles near the real portals; the live game's exact exit tiles and
- *    its "teleport to the next camp" on boss death are approximated by landing
- *    in the antechamber after a Moon falls.
- *  - The Moons are real owner-only spawns with their cache combat stats (500 HP
- *    each), but there is no arena scripting: no highlighted circle, special
- *    attacks, glyphs, enrage or escape. A Moon dies when it is killed and the
- *    defeat transcript plays.
+ *  - Entrance landing tiles are chosen from open collision tiles near the real
+ *    portals; the boss rooms' entrances land in front of each Moon's statue.
+ *  - The Moons themselves are the MoonsOfPeril plugin's (bosses/MoonsOfPeril):
+ *    during the fight stages it lets the player through the statues
+ *    ("moons-of-peril:can-enter"), each kill ("moons-of-peril:killed")
+ *    counts here and plays the defeat transcript, and from the ritual on it
+ *    runs the camps ("moons-of-peril:camps-open").
  *  - The talisman "Locate" step only acts within four tiles of the summon point
  *    (1525,9580,0); elsewhere it repeats Attala's line. The live north/south and
  *    east/west pull messages are not in the transcript dump and are not authored.
@@ -108,10 +107,6 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const NAHTA_NPC_ID = NpcIdentifiers.NAHTA; // 13036, static magic shop spawn
   const BLACKSMITH_NPC_ID = NpcIdentifiers.BLACKSMITH_2; // 13038, static forge spawn
   const SULPHUR_NAGUA_NPC_ID = NpcIdentifiers.SULPHUR_NAGUA; // 12879, combat 98
-  const BLOOD_MOON_NPC_ID = NpcIdentifiers.BLOOD_MOON; // 13011
-  const ECLIPSE_MOON_NPC_ID = NpcIdentifiers.ECLIPSE_MOON; // 13012
-  const BLUE_MOON_NPC_ID = NpcIdentifiers.BLUE_MOON; // 13013
-  const MOON_NPC_IDS = new Set([BLOOD_MOON_NPC_ID, ECLIPSE_MOON_NPC_ID, BLUE_MOON_NPC_ID]);
 
   // Objects (ObjectIdentifiers; 62193 is unnamed in the identifier file).
   const CAMP_SUPPLIES_OBJECT_ID = ObjectIdentifiers.BUILDING_SUPPLIES_3; // 50857
@@ -222,12 +217,10 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const STREAMBOUND_LANDING = { x: 1482, y: 9671, z: 0 };
   const CAVE_TO_ANTECHAMBER_LANDING = { x: 1421, y: 9654, z: 1 };
   const CAVE_TO_EARTHBOUND_LANDING = { x: 1402, y: 9720, z: 0 };
-  const BLUE_ROOM_LANDING = { x: 1441, y: 9690, z: 0 };
-  const BLOOD_ROOM_LANDING = { x: 1385, y: 9632, z: 0 };
-  const ECLIPSE_ROOM_LANDING = { x: 1481, y: 9632, z: 0 };
-  const BLUE_MOON_TILE = { x: 1441, y: 9678, z: 0 };
-  const BLOOD_MOON_TILE = { x: 1391, y: 9632, z: 0 };
-  const ECLIPSE_MOON_TILE = { x: 1487, y: 9632, z: 0 };
+  // In front of each Moon's statue (pmoon_entry_statue_*), on the side away from its arena.
+  const BLUE_ROOM_LANDING = { x: 1440, y: 9656, z: 0 };
+  const BLOOD_ROOM_LANDING = { x: 1414, y: 9632, z: 0 };
+  const ECLIPSE_ROOM_LANDING = { x: 1463, y: 9632, z: 0 };
   const CAVE_EXIT_LANDING = { x: 1440, y: 9618, z: 1 };
 
   // The three camp spots and their varbits (lookup-gameval pmoon_camp_1..3).
@@ -237,9 +230,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     { name: "Streambound Cavern", x: 1510, y: 9693, z: 0, varbit: CAMP_VARBITS[2], bit: 4 },
   ];
 
-  // Boss rooms (Quest Helper zones) and their entrances.
-  const BLUE_MOON_ZONE = { minX: 1417, minY: 9647, maxX: 1463, maxY: 9699, levels: [0] };
-  const BLOOD_MOON_ZONE = { minX: 1373, minY: 9614, maxX: 1421, maxY: 9650, levels: [0] };
+  // The Eclipse Moon's room (Quest Helper zone): Zuma's first meeting with it.
   const ECLIPSE_MOON_ZONE = { minX: 1457, minY: 9614, maxX: 1506, maxY: 9650, levels: [0] };
 
   // ==========================================================================
@@ -550,9 +541,12 @@ module.exports = function registerPerilousMoonsQuest(api) {
     CAMP_SITES.forEach((site, index) => {
       sender.sendVarbit(CAMP_VARBITS[index], (campMask(player) & site.bit) !== 0 ? 1 : 0);
     });
-    sender.sendVarbit(BOSS_DEAD_VARBITS.blood, moonDead(player, MOON_BLOOD_BIT) ? 1 : 0);
-    sender.sendVarbit(BOSS_DEAD_VARBITS.blue, moonDead(player, MOON_BLUE_BIT) ? 1 : 0);
-    sender.sendVarbit(BOSS_DEAD_VARBITS.eclipse, moonDead(player, MOON_ECLIPSE_BIT) ? 1 : 0);
+    // After the quest the MoonsOfPeril plugin owns the Moons' dead varbits (the Lunar Chest resets them).
+    if (stageOf(player) < STAGE_COMPLETE) {
+      sender.sendVarbit(BOSS_DEAD_VARBITS.blood, moonDead(player, MOON_BLOOD_BIT) ? 1 : 0);
+      sender.sendVarbit(BOSS_DEAD_VARBITS.blue, moonDead(player, MOON_BLUE_BIT) ? 1 : 0);
+      sender.sendVarbit(BOSS_DEAD_VARBITS.eclipse, moonDead(player, MOON_ECLIPSE_BIT) ? 1 : 0);
+    }
     sender.sendVarbit(
       EYATLALLI_VIS_VARBIT,
       stageOf(player) >= STAGE_EYAT_FOUND && stageOf(player) < STAGE_COMPLETE ? 1 : 0
@@ -654,10 +648,6 @@ module.exports = function registerPerilousMoonsQuest(api) {
     if (wanted.has("nagua")) {
       spawnTracked(player, "nagua", { id: SULPHUR_NAGUA_NPC_ID, ...NAGUA_TILE, wanderRadius: 0 });
     }
-  }
-
-  function spawnMoon(player, key, id, tile) {
-    spawnTracked(player, key, { id, ...tile, wanderRadius: 0 });
   }
 
   // ==========================================================================
@@ -1154,14 +1144,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     const { player, usedItemId, usedWithItemId } = event;
     if (!player) return;
     const pair = new Set([usedItemId, usedWithItemId]);
-    if (pair.has(PESTLE_AND_MORTAR_ITEM_ID) && pair.has(MOONLIGHT_GRUB_ITEM_ID)) {
-      event.handled = true;
-      if (!held(player, MOONLIGHT_GRUB_ITEM_ID)) return;
-      player.getInventory().deleteNumber(MOONLIGHT_GRUB_ITEM_ID, 1);
-      player.getInventory().adds(MOONLIGHT_GRUB_PASTE_ITEM_ID, 1);
-      player.sendMessage("You grind the moonlight grub into a paste.");
-      return;
-    }
+    // Grinding grubs into paste is the MoonsOfPeril plugin's (Camps.MoonsOfPeril), for everyone.
     if (pair.has(KNIFE_ITEM_ID) && pair.has(RAW_BREAM_ITEM_ID)) {
       event.handled = true;
       if (!held(player, RAW_BREAM_ITEM_ID)) return;
@@ -1313,7 +1296,6 @@ module.exports = function registerPerilousMoonsQuest(api) {
     player.moveTo(new Location(landing.x, landing.y, landing.z));
     if (stage === STAGE_RITUAL) quest.setStage(player, STAGE_MOONS);
     if (entrance.boss === "eclipse") ensureEclipseCutscene(player);
-    enterMoonRoom(player, entrance.boss);
   }
 
   function handleCampSupplies(event) {
@@ -1329,8 +1311,10 @@ module.exports = function registerPerilousMoonsQuest(api) {
     const { player } = event;
     const text = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
     if (!text.startsWith("Take-from")) return;
+    // From the Moons on, the MoonsOfPeril plugin hands out the camps' kits.
+    if (stageOf(player) >= STAGE_RITUAL || quest.isComplete(player)) return;
     event.handled = true;
-    if (stageOf(player) < STAGE_TRIO || quest.isComplete(player)) return;
+    if (stageOf(player) < STAGE_TRIO) return;
     if (text.includes("Fishing")) {
       giveToolIfMissing(player, KNIFE_ITEM_ID);
       giveToolIfMissing(player, BIG_FISHING_NET_ITEM_ID);
@@ -1352,6 +1336,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     const { player } = event;
     const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
     if (option !== "Collect-from") return;
+    if (stageOf(player) >= STAGE_RITUAL) return; // the MoonsOfPeril plugin's from here on
     event.handled = true;
     if (guardGathering(player)) return;
     if (
@@ -1406,10 +1391,11 @@ module.exports = function registerPerilousMoonsQuest(api) {
     const { player } = event;
     const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
     if (option !== "Fish") return;
+    const stage = stageOf(player);
+    if (stage >= STAGE_RITUAL) return; // the MoonsOfPeril plugin's river fishing from here on
     event.handled = true;
     if (guardGathering(player)) return;
-    const stage = stageOf(player);
-    if (stage < STAGE_CAMPS || stage >= STAGE_RITUAL) return;
+    if (stage < STAGE_CAMPS) return;
     if (held(player, RAW_BREAM_ITEM_ID) || held(player, BREAM_SCALES_ITEM_ID)) return;
     if (!held(player, BIG_FISHING_NET_ITEM_ID)) {
       player.sendMessage("You need a big fishing net to catch a bream.");
@@ -1457,38 +1443,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
     startTranscript(api, player, ZUMA_NPC_ID, PAGE, V_MOON_ECLIPSE_MEET);
   }
 
-  /** Zone entry is the real trigger: bosses also appear when teleported in. */
-  function handleBlueMoonEnter({ player }) {
-    enterMoonRoom(player, "blue");
-  }
-
-  function handleBloodMoonEnter({ player }) {
-    enterMoonRoom(player, "blood");
-  }
-
+  /** Teleporting into the Eclipse Moon's room also plays Zuma's first meeting with it. */
   function handleEclipseMoonEnter({ player }) {
     if (isMoonFightActive(player)) ensureEclipseCutscene(player);
-    enterMoonRoom(player, "eclipse");
-  }
-
-  function enterMoonRoom(player, boss) {
-    if (!player || !isMoonFightActive(player)) return;
-    if (stageOf(player) === STAGE_RITUAL) quest.setStage(player, STAGE_MOONS);
-    if (boss === "blue") {
-      if (!moonDead(player, MOON_BLUE_BIT)) {
-        spawnMoon(player, "boss-blue", BLUE_MOON_NPC_ID, BLUE_MOON_TILE);
-      }
-      return;
-    }
-    if (boss === "blood") {
-      if (!moonDead(player, MOON_BLOOD_BIT)) {
-        spawnMoon(player, "boss-blood", BLOOD_MOON_NPC_ID, BLOOD_MOON_TILE);
-      }
-      return;
-    }
-    if (!moonDead(player, MOON_ECLIPSE_BIT)) {
-      spawnMoon(player, "boss-eclipse", ECLIPSE_MOON_NPC_ID, ECLIPSE_MOON_TILE);
-    }
   }
 
   function isMoonFightActive(player) {
@@ -1496,24 +1453,23 @@ module.exports = function registerPerilousMoonsQuest(api) {
     return stage >= STAGE_RITUAL && stage < STAGE_COMPLETE && stage < STAGE_MOONS_DONE;
   }
 
-  function handleMoonZoneExit({ player }) {
-    if (!player) return;
-    if (stageOf(player) >= STAGE_MOONS_DONE) return;
-    removeTracked(player, "boss-blue");
-    removeTracked(player, "boss-blood");
-    removeTracked(player, "boss-eclipse");
+  /** The MoonsOfPeril statues let the player in while the quest needs the Moons fought. */
+  function handleCanEnter(request) {
+    if (!request?.player || !isMoonFightActive(request.player)) return;
+    if (stageOf(request.player) === STAGE_RITUAL) quest.setStage(request.player, STAGE_MOONS);
+    request.allow = true;
+  }
+
+  /** Neypotzli's camps are the MoonsOfPeril plugin's from the ritual on, Moons done included. */
+  function handleCampsOpen(request) {
+    if (request?.player && stageOf(request.player) >= STAGE_RITUAL) request.open = true;
   }
 
   function handleNpcDeath(event) {
     const npc = event.npc;
     const player = npc?.getOwner?.() ?? (event.killer?.isPlayer?.() ? event.killer : null);
     if (!player) return;
-    if (event.npcId === SULPHUR_NAGUA_NPC_ID) {
-      handleNaguaDeath(player);
-      return;
-    }
-    const moon = MOON_TILE_BY_NPC_ID.get(event.npcId);
-    if (moon) handleMoonDeath(player, moon);
+    if (event.npcId === SULPHUR_NAGUA_NPC_ID) handleNaguaDeath(player);
   }
 
   function handleNaguaDeath(player) {
@@ -1523,24 +1479,18 @@ module.exports = function registerPerilousMoonsQuest(api) {
     startTranscript(api, player, ATTALA_NPC_ID, PAGE, V_KILLED_NAGUA);
   }
 
-  const MOON_TILE_BY_NPC_ID = new Map([
-    [BLOOD_MOON_NPC_ID, { key: "boss-blood", bit: MOON_BLOOD_BIT, varbit: BOSS_DEAD_VARBITS.blood, variant: V_MOON_BLOOD }],
-    [BLUE_MOON_NPC_ID, { key: "boss-blue", bit: MOON_BLUE_BIT, varbit: BOSS_DEAD_VARBITS.blue, variant: V_MOON_BLUE }],
-    [ECLIPSE_MOON_NPC_ID, { key: "boss-eclipse", bit: MOON_ECLIPSE_BIT, varbit: BOSS_DEAD_VARBITS.eclipse, variant: V_MOON_ECLIPSE }],
-  ]);
+  const MOON_BY_KEY = {
+    blood: { bit: MOON_BLOOD_BIT, variant: V_MOON_BLOOD },
+    blue: { bit: MOON_BLUE_BIT, variant: V_MOON_BLUE },
+    eclipse: { bit: MOON_ECLIPSE_BIT, variant: V_MOON_ECLIPSE },
+  };
 
-  function handleMoonDeath(player, moon) {
-    if (!isMoonFightActive(player) || moonDead(player, moon.bit)) return;
-    removeTracked(player, moon.key);
+  /** A Moon subdued (the MoonsOfPeril plugin has already moved the player to a camp). */
+  function handleMoonKilled({ player, moon: key }) {
+    const moon = MOON_BY_KEY[key];
+    if (!player || !moon || !isMoonFightActive(player) || moonDead(player, moon.bit)) return;
     addMaskBit(player, MOONS_ATTRIBUTE, moon.bit);
-    player.getPacketSender().sendVarbit(moon.varbit, 1);
-    if (allMoonsDead(player)) {
-      quest.setStage(player, STAGE_MOONS_DONE);
-      removeTracked(player, "boss-blood");
-      removeTracked(player, "boss-blue");
-      removeTracked(player, "boss-eclipse");
-    }
-    player.moveTo(new Location(NEYPOTZLI_LANDING.x, NEYPOTZLI_LANDING.y, NEYPOTZLI_LANDING.z));
+    if (allMoonsDead(player)) quest.setStage(player, STAGE_MOONS_DONE);
     startTranscript(api, player, EYATLALLI_NPC_ID, PAGE, moon.variant);
   }
 
@@ -1798,12 +1748,10 @@ module.exports = function registerPerilousMoonsQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);
-  api.onZoneEnter(BLUE_MOON_ZONE, handleBlueMoonEnter);
-  api.onZoneEnter(BLOOD_MOON_ZONE, handleBloodMoonEnter);
   api.onZoneEnter(ECLIPSE_MOON_ZONE, handleEclipseMoonEnter);
-  api.onZoneExit(BLUE_MOON_ZONE, handleMoonZoneExit);
-  api.onZoneExit(BLOOD_MOON_ZONE, handleMoonZoneExit);
-  api.onZoneExit(ECLIPSE_MOON_ZONE, handleMoonZoneExit);
+  api.onCustomEvent("moons-of-peril:can-enter", handleCanEnter);
+  api.onCustomEvent("moons-of-peril:killed", handleMoonKilled);
+  api.onCustomEvent("moons-of-peril:camps-open", handleCampsOpen);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

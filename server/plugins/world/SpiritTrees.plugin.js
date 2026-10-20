@@ -229,6 +229,17 @@ function openFromPatch({ player, x, y, z }) {
   openMenu(player, from, YOUNG_TREE_HEAD);
 }
 
+/** A tree away from the network's own sites (a player-owned house's): its last destination. */
+function lastDestinationFrom({ player }) {
+  if (!canUseNetwork(player, null)) return;
+  const last = trees.find((tree) => tree.name === player.getAttribute(LAST_DESTINATION_ATTRIBUTE));
+  if (!last) {
+    speak(player, YOUNG_TREE_HEAD, FIRST_LAST_DESTINATION, () => openMenu(player, null, YOUNG_TREE_HEAD));
+    return;
+  }
+  goTo(player, { tree: last, to: destination(player, last, grownPatches(player)) }, { from: null, head: YOUNG_TREE_HEAD });
+}
+
 const ownTreeTravel = ownTree(travelOption);
 const ownTreeTalkTo = ownTree(talkToOption);
 const ownTreeLastDestination = ownTree(lastDestinationOption);
@@ -267,6 +278,7 @@ module.exports = {
     api.onObjectInteraction("Spirit Tree", { Travel: ownTreeTravel, "Talk-to": ownTreeTalkTo, "Last-destination": ownTreeLastDestination });
     api.onInterfaceActionClick(chooseTree);
     api.onCustomEvent("spirit-trees:open", openFromPatch);
+    api.onCustomEvent("spirit-trees:last-destination", lastDestinationFrom);
     api.onCustomEvent("interface:closed", menuClosed);
   },
 };

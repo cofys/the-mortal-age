@@ -1026,6 +1026,11 @@ export class WidgetsOverlay implements Overlay {
             renderer: glr,
             fontLoader: this.ctx.getFontLoader?.() || (() => undefined),
             sprite: (id: number) => (glr.canvas as any).__textureCache?.getSpriteById(id),
+            place: (overlay: WidgetOverlay, width: number, height: number) =>
+                this.ctx.getGameContext?.()?.osrsClient?.clientPlugins?.placeOverlay(overlay, width, height, {
+                    w: glr.width,
+                    h: glr.height,
+                }),
         };
         if (resetRects) this.widgetOverlayRects = [];
         for (const overlay of overlays) {

@@ -1,79 +1,16 @@
 /**
- * Death on the Isle (members).
- *
- * The words come from the "Death on the Isle" transcript page (OSRS Wiki). The
- * stage lives in varbit 11210 ("doti", varp 4401, bits 0-6); the sibling bits of
- * varp 4401/4402 ("doti_*" progress flags, scripts/lookup-gameval.ts varbit doti)
- * mirror the per-suspect clues. Evidence for the values/ranges and ids:
- *   - cs2 script 4024 maps quest DB row 3711 to varbit 11210 (the quest list read).
- *   - dbTable 0 row 3711 column 19 = 50, the completion value (column 33 holds the
- *     XP rewards, column 14 the start NPC 14065, row name "Death on the Isle").
- *   - the multi-locs' transform tables use 11210 directly: the antique wine turns
- *     "Investigate" at value 18 (55379 -> 54704), the five cellar clues appear at
- *     values 21-22 (55380-55384 -> 54708-54712), the backstage costume rack and
- *     poison crate at 36+ (55385/55387 -> 54718/54731), the secret bookshelf
- *     passage at 49 (54735 -> 54728); Quest Helper's step map (DeathOnTheIsle.java)
- *     confirms the checkpoints 0,2,4,6,8,10,12,14,15,16,18,19,20,21,22,24,26,27,28,
- *     30,32,33,34,36,38,40,42,45,49.
- *
- * Stage map (varbit 11210):
- *   0 not started, 2 accepted Patzi's offer, 4 squeezed through the window,
- *   6 uniform stolen, 8 Adala headed inside (staff entrance known),
- *   10 wearing the uniform at the head butler, 12 entered Villa Lucens (mask/tray),
- *   14 talked to Patzi inside, 15 met the host and all three guests,
- *   16 Patzi asked for the Principum Red, 18 in the cellar (wine investigable),
- *   19 the body found, 20 taken to the small room, 21 interrogation over
- *   (investigation starts), 22 all cellar clues and the body examined,
- *   24 reported back to the guards, 26 pickpocket phase, 27 evidence handed over,
- *   28 accusations on the top floor, 30 Adala fights, 32 Adala escorted away,
- *   33 guards thanked, 34 loose rocks climbed (theatre), 36 guards at the theatre,
- *   38 backstage clues found, 40 Naiatli accused, 42 on the stage,
- *   45 Naiatli "killed" on stage, 49 case closed, 50 complete.
- *
- * Rewards per the OSRS Wiki: 2 Quest points, 10,000 Thieving, 7,500 Agility and
- * 5,000 Crafting XP, a costume needle from the costumer, the masks and butler's
- * tray from the head butler, and the North Aldarin Pendant of Ates teleport.
- *
- * Sources: OSRS Wiki "Death on the Isle", Quick guide, Transcript and Journal pages
- * (behaviour and words); the cache for every varbit, item, NPC and object id and all
- * placements; Quest Helper's DeathOnTheIsle.java for tiles and stage checkpoints.
- *
- * Gaps / approximations:
- *  - Item holding on entry (varbit HOLDING_INVENTORY_LOCATION) does not exist in
- *    this repo, so the head butler only teleports the player; the mask and tray are
- *    handed out on entry and taken back on exit instead.
- *  - The Adala fight is real combat but cannot be lost: onPlayerBeforeDeath cancels
- *    the killing blow and plays the "loses the fight" branch. The Naiatli/Clodius
- *    stage fight is the transcript's stage directions only (no combat entities).
- *  - The four party guests are global npc-spawns with no Pickpocket option, so the
- *    pickpocket phase spawns owner-only copies of the *_PICKPOCKET ids on the same
- *    tiles; Patzi and Adala, which the repo does not spawn at all, are owner-only
- *    throughout. Their pre-quest visibility is per player, not world-wide.
- *  - The per-player quest NPCs (Patzi, Adala, the costumer, Naiatli, Clodius, the
- *    body, the outside head butler) are owner-only spawns because npc-spawns.json
- *    does not contain them (or only the base party variants).
- *  - Wiki "same as above"/"continues" jump tails (the rejection reply, the -again
- *    accusation menus, the stolen-items reply) are replayed by slicing the owning
- *    variant at its menu instead of resolving the jump.
- *  - The placed backstage bookshelf is the varbit-driven base 54735, which only
- *    resolves to the no-option 54729 before stage 49; the searchable 54726/54727
- *    bookcases are nowhere in the map. The object search is still wired (it works if
- *    the data is fixed), but the bookshelf clue is also granted by the costumer's
- *    "Did you know there was a hidden passage in here?" question so the quest can be
- *    finished; the blocking shared change is placing 54734 at 1458/1461,9331.
- *  - The pickpocket failure branches (the random "clumsily bump" variants) are not
- *    played: 34 Thieving always succeeds in these scenes.
- *  - The wiki "-again" accusation menus are jump-only and would close under this
- *    replay, so the full accusation menu is replayed instead until it is made.
- *  - The statue activation drops its water rune into the inventory rather than on
- *    the floor; the fountain/statue/chest rewards are gated by quest completion and
- *    the opened-chest flag, which also drives varbit 11232 (ates_piece_hunt). The
- *    fountain ids 54738/54739 are in the cache, placed as the multi-loc 54740 at
- *    1436,2920, which transforms to the searchable 54739 once that varbit is 1.
+ * Death on the Isle: RSProx 1695 (ticks 5884-7030), OSRS Wiki transcript/walkthrough,
+ * and the cache's doti varbits and multi-NPCs. Evidence: docs/p2p-varlamore-group-2-parity.md.
+ * The butler holds both containers with their slots/metadata; private accusation/stage actors
+ * and the nonlethal fight recover their earned checkpoints on login.
  */
 module.exports = function registerDeathOnTheIsleQuest(api) {
   const {
     Equipment,
+    CombatMethod,
+    CombatType,
+    Item,
+    Animation,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -81,6 +18,13 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     Skill,
   } = api.core;
   const { refreshQuestList, registerQuest, startTranscript } = require("../QuestRuntime");
+  const { createQuestScenes } = require('../QuestScenes');
+  const ObstacleRunner = require('../../skills/agility/ObstacleRunner.Agility');
+  const Scenes = createQuestScenes(api);
+  const GEAR_ATTRIBUTE = 'death-on-the-isle:held-gear';
+  const VILLA_GEAR_ATTRIBUTE = 'death-on-the-isle:villa-gear';
+  const FINAL_FIGHT_ATTRIBUTE = 'death-on-the-isle:final-fight';
+  const STAGE_VERSION_ATTRIBUTE = 'death-on-the-isle:stage-version';
 
   const PAGE = "Death on the Isle";
   const START_HOOK = "quest:death-on-the-isle:start";
@@ -240,12 +184,12 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   const VARBIT_ATES_PIECE_HUNT = 11232; // ates_piece_hunt, transforms the placed 54740 fountain
 
   const STAGE_STARTED = 2;
-  const STAGE_WINDOW = 4;
+  const STAGE_WINDOW = 6;
   const STAGE_UNIFORM = 6;
   const STAGE_ADALA_INSIDE = 8;
   const STAGE_UNIFORM_WORN = 10;
-  const STAGE_ENTERED = 12;
-  const STAGE_PATZI_INSIDE = 14;
+  const STAGE_ENTERED = 14;
+  const STAGE_PATZI_INSIDE = 15;
   const STAGE_MET_GUESTS = 15;
   const STAGE_WINE_REQUEST = 16;
   const STAGE_WINE_INVESTIGATED = 18;
@@ -257,67 +201,42 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   const STAGE_PICKPOCKET = 26;
   const STAGE_EVIDENCE = 27;
   const STAGE_ACCUSATIONS = 28;
-  const STAGE_FIGHT = 30;
-  const STAGE_ADALA_GONE = 32;
-  const STAGE_ACCUSATION_DONE = 33;
-  const STAGE_THEATRE = 34;
+  const STAGE_ADALA_GONE = 33;
+  const STAGE_ACCUSATION_DONE = 34;
+  const STAGE_THEATRE = 36;
   const STAGE_THEATRE_GUARDS = 36;
-  const STAGE_BACKSTAGE_DONE = 38;
+  const STAGE_BACKSTAGE_DONE = 40;
   const STAGE_NAIATLI_ACCUSED = 40;
   const STAGE_ON_STAGE = 42;
-  const STAGE_NAIATLI_DOWN = 45;
   const STAGE_CASE_CLOSED = 49;
   const STAGE_COMPLETE = 50;
 
   const QUEST_KEYS = { the_fremennik_isles: "the_fremennik_isles" };
 
   // ==========================================================================
-  // Tiles (Quest Helper zones/listeners; maps around Villa Lucens/Aldarin)
+  // Tiles from RSProx 1695 (Villa Lucens/Aldarin)
   // ==========================================================================
 
-  const PATZI_START_TILE = new Location(1414, 2937, 0);
-  const ADALA_START_TILE = new Location(1412, 2938, 0);
-  const PATZI_PARTY_TILE = new Location(1447, 2936, 0);
-  const ADALA_PARTY_TILE = new Location(1446, 2936, 0);
   const HEAD_BUTLER_TILE = new Location(1426, 2919, 0);
-  const BODY_TILE = new Location(1454, 9322, 0);
-  const COSTUMER_TILE = new Location(1466, 9330, 0);
   const NAIATLI_TILE = new Location(1465, 2932, 0);
   const CLODIUS_TILE = new Location(1469, 2937, 0);
-  const THEATRE_GUARDS_TILE = new Location(1472, 2925, 0);
-  const UPSTAIRS_GUESTS = [
-    { key: "const-up", id: CONSTANTINIUS, tile: new Location(1446, 2931, 2) },
-    { key: "cozyac-up", id: COZYAC, tile: new Location(1442, 2929, 2) },
-    { key: "xocotla-up", id: XOCOTLA, tile: new Location(1444, 2928, 2) },
-    { key: "pavo-up", id: PAVO, tile: new Location(1442, 2931, 2) },
-    { key: "adala-up", id: ADALA, tile: new Location(1446, 2933, 2) },
-    { key: "patzi-up", id: PATZI, tile: new Location(1444, 2934, 2) },
-    { key: "stradius-up", id: STRADIUS, tile: new Location(1443, 2932, 2) },
-    { key: "hutza-up", id: HUTZA, tile: new Location(1444, 2932, 2) },
-  ];
-  const PICKPOCKET_SPAWNS = [
-    { key: "const-pick", id: CONSTANTINIUS_PICKPOCKET, tile: new Location(1449, 2932, 0) },
-    { key: "cozyac-pick", id: COZYAC_PICKPOCKET, tile: new Location(1448, 2934, 0) },
-    { key: "xocotla-pick", id: XOCOTLA_PICKPOCKET, tile: new Location(1442, 2926, 0) },
-    { key: "pavo-pick", id: PAVO_PICKPOCKET, tile: new Location(1444, 2930, 0) },
-  ];
 
-  const WINDOW_OUTSIDE = new Location(1401, 2967, 0);
-  const WINDOW_INSIDE = new Location(1401, 2970, 0);
-  const INSIDE_PARTY = new Location(1447, 2936, 0);
-  const ROOM_INSIDE = new Location(1440, 2937, 0);
-  const ROOM_OUTSIDE = new Location(1446, 2938, 0);
-  const TOP_FLOOR = new Location(1447, 2933, 2);
+  const WINDOW_OUTSIDE = new Location(1401, 2966, 0);
+  const WINDOW_INSIDE = new Location(1401, 2967, 0);
+  const INSIDE_PARTY = new Location(1434, 2934, 0);
+  const ROOM_INSIDE = new Location(1438, 2938, 0);
+  const ROOM_OUTSIDE = new Location(1438, 2940, 0);
+  const TOP_FLOOR = new Location(1444, 2935, 2);
   const CELLAR_INSIDE = new Location(1447, 9333, 0);
   const CELLAR_STAIR_OUT = new Location(1447, 2938, 0);
   const BACKSTAGE_INSIDE = new Location(1466, 9330, 0);
   const THEATRE_OUTSIDE = new Location(1472, 2925, 0);
   const STAGE_LANDING = new Location(1470, 2931, 0);
-  const ROCK_FIRST_TOP = new Location(1473, 2920, 0);
+  const ROCK_FIRST_TOP = new Location(1471, 2918, 0);
   const ROCK_SECOND_TOP = new Location(1477, 2925, 0);
   const VILLA_CELLAR_FROM_PASSAGE = new Location(1445, 9336, 0);
-  const FINAL_VILLA = new Location(1443, 2932, 0);
-  const BOSS_TILE = new Location(1447, 2932, 2);
+  const FINAL_VILLA = new Location(1444, 2934, 0);
+  const BOSS_TILE = new Location(1446, 2933, 2);
 
   const FIGHT_WON = 2;
   const FIGHT_LOST = 3;
@@ -403,7 +322,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
 
   function maskAssignment(player) {
     const value = Number(player.getAttribute(flagKey("mask")));
-    return Number.isInteger(value) && value >= 0 && value < MASKS.length ? value : 0;
+    return Number.isInteger(value) && value >= 1 && value <= MASKS.length ? value : 1;
   }
 
   function setMaskAssignment(player, value) {
@@ -536,6 +455,29 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     return startTranscript(api, player, npcId, PAGE, variant, select);
   }
 
+  function ownGear(player) { return !!player.getAttribute(GEAR_ATTRIBUTE); }
+
+  /** Save both containers, including slots and item metadata, before swapping the held gear. */
+  function swapGear(player, outgoing, incoming, defaults) {
+    const inventory = player.getInventory(), equipment = player.getEquipment();
+    const save = container => container.getItems().map(item => [item.getId(), item.getAmount(), Item.cloneMeta(item.meta)]);
+    const saved = player.getAttribute(incoming) ?? defaults;
+    if (!saved) return false;
+    player.setAttribute(outgoing, { inventory: save(inventory), equipment: save(equipment) });
+    inventory.setItems(saved.inventory.map(([id, amount, meta]) => new Item(id, amount, meta)));
+    equipment.setItems(saved.equipment.map(([id, amount, meta]) => new Item(id, amount, meta)));
+    player.setAttribute(incoming, null);
+    inventory.refreshItems(); equipment.refreshItems();
+    return true;
+  }
+
+  function fadeMove(player, move, resume) {
+    Scenes.fade(player, true); Scenes.controls(player, true);
+    Scenes.later(player, 3, move);
+    Scenes.later(player, 4, () => { Scenes.fade(player, false); Scenes.controls(player, false); resume?.(); });
+    Scenes.later(player, 6, () => Scenes.closeFade(player));
+  }
+
   /** A variant sliced from its first top-level menu (wiki jump "above" tails). */
   function selectFromMenu(steps) {
     if (!Array.isArray(steps)) return steps;
@@ -583,7 +525,11 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       owner: player,
       ownerOnly: true,
     });
-    if (npc) tracked.set(key, npc);
+    if (npc) {
+      npc.__skipDefaultRespawn = true;
+      Scenes.get(player)?.area?.add(npc);
+      tracked.set(key, npc);
+    }
     return npc;
   }
 
@@ -596,44 +542,13 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     }
   }
 
+  // The world's multi-NPCs handle visibility; only the stage's actors are private.
   function desiredSpawns(player) {
-    const stage = stageOf(player);
-    const done = quest.isComplete(player);
-    const list = [];
-    if (done) {
-      list.push({ key: "patzi", id: PATZI, tile: PATZI_PARTY_TILE });
-      list.push({ key: "costumer", id: COSTUMER, tile: COSTUMER_TILE });
-      list.push({ key: "const-pick", id: CONSTANTINIUS_PICKPOCKET, tile: new Location(1449, 2932, 0) });
-      return list;
-    }
-    if (stage < STAGE_UNIFORM_WORN) {
-      list.push({ key: "patzi", id: PATZI, tile: PATZI_START_TILE });
-      list.push({ key: "adala", id: ADALA_NOMASK, tile: ADALA_START_TILE });
-    } else if (stage < STAGE_THEATRE) {
-      const picking = stage >= STAGE_PICKPOCKET && stage < STAGE_EVIDENCE;
-      list.push({ key: "patzi", id: picking ? PATZI_PICKPOCKET : PATZI, tile: PATZI_PARTY_TILE });
-      if (stage < STAGE_EVIDENCE + 1) {
-        list.push({ key: "adala", id: picking ? ADALA_PICKPOCKET : ADALA, tile: ADALA_PARTY_TILE });
-      }
-      if (picking) list.push(...PICKPOCKET_SPAWNS);
-      if (stage >= STAGE_ACCUSATIONS) {
-        list.push(...UPSTAIRS_GUESTS.filter((spawn) => spawn.key !== "adala-up" || stage < STAGE_FIGHT));
-      }
-    }
-    list.push({ key: "headbutler", id: HEAD_BUTLER, tile: HEAD_BUTLER_TILE });
-    if (hasFlag(player, "wine")) {
-      list.push({ key: "body", id: stage >= STAGE_INTERROGATED ? LIVIUS_NAMED : LIVIUS_BODY, tile: BODY_TILE });
-    }
-    if (stage >= STAGE_THEATRE) {
-      list.push({ key: "costumer", id: COSTUMER, tile: COSTUMER_TILE });
-      list.push({ key: "stradius-theatre", id: STRADIUS, tile: THEATRE_GUARDS_TILE });
-      list.push({ key: "hutza-theatre", id: HUTZA, tile: new Location(1473, 2925, 0) });
-      if (stage >= STAGE_ON_STAGE) {
-        list.push({ key: "naiatli", id: NAIATLI, tile: NAIATLI_TILE });
-        list.push({ key: "clodius", id: CLODIUS, tile: CLODIUS_TILE });
-      }
-    }
-    return list;
+    if (!Scenes.get(player) || stageOf(player) < STAGE_ON_STAGE || stageOf(player) >= STAGE_CASE_CLOSED) return [];
+    return [
+      { key: "naiatli", id: NAIATLI, tile: NAIATLI_TILE },
+      { key: "clodius", id: CLODIUS, tile: CLODIUS_TILE },
+    ];
   }
 
   function syncSpawns(player) {
@@ -649,19 +564,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     }
     for (const [key, spawn] of wanted) {
       const npc = tracked.get(key);
-      if (npc) {
-        // A stage change moves Patzi/Adala and swaps ids (body, pickpocket
-        // copies), so a tracked NPC only stays if it still matches the spot.
-        const at = npc.getLocation?.();
-        const current =
-          npc.getId?.() === spawn.id &&
-          at?.getX() === spawn.tile.getX() &&
-          at?.getY() === spawn.tile.getY() &&
-          at?.getZ() === spawn.tile.getZ();
-        if (current) continue;
-        api.removeNpc(npc);
-        tracked.delete(key);
-      }
+      if (npc?.isRegistered() && npc.getId() === spawn.id) continue;
+      if (npc) { api.removeNpc(npc); tracked.delete(key); }
       spawnTracked(player, key, spawn);
     }
   }
@@ -706,7 +610,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     if (stage < STAGE_ADALA_INSIDE) {
       return hasAnyUniform(player) || wearingUniform(player) ? UNIFORM_TALK_WITH : "getting-a-uniform-talking-to-patzi-without-a-uniform";
     }
-    if (stage < STAGE_UNIFORM_WORN) return "getting-a-uniform-talking-to-patzi-after-adala-is-gone";
+    if (stage < STAGE_ENTERED) return "getting-a-uniform-talking-to-patzi-after-adala-is-gone";
     if (stage < STAGE_WINE_REQUEST) {
       if (stage < STAGE_PATZI_INSIDE) return "inside-villa-lucens-talking-to-patzi";
       return allMet(player)
@@ -816,9 +720,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     }
     if (stage >= STAGE_BACKSTAGE_DONE) return "the-backstage-talking-to-hutza-or-stradius-after-investigating-the-backstage";
     if (stage >= STAGE_THEATRE_GUARDS) {
-      return allBackstage(player)
-        ? "the-backstage-talking-to-hutza-or-stradius-after-investigating-the-backstage"
-        : "the-backstage-talking-to-hutza-or-stradius-without-investigating-the-backstage";
+      return !hasFlag(player, 'backstage.intro') ? 'the-backstage-talking-to-hutza-or-stradius'
+        : 'the-backstage-talking-to-hutza-or-stradius-without-investigating-the-backstage';
     }
     if (stage >= STAGE_THEATRE) {
       return "the-backstage-talking-to-hutza-or-stradius";
@@ -841,7 +744,6 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     }
     if (stage >= STAGE_CELLAR_DONE) {
       if (allClues(player)) {
-        if (stage < STAGE_REPORTED) quest.setStage(player, STAGE_REPORTED);
         return "the-investigation-talking-to-hutza-or-stradius-after-investigating-everything";
       }
       return "the-investigation-talking-to-hutza-or-stradius";
@@ -871,13 +773,6 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const { player, npcId } = event;
     const variant = selectPatziVariant(player, npcId);
     if (!variant) return false;
-    if (variant === "inside-villa-lucens-talking-to-patzi") {
-      setFlag(player, "initial");
-      if (stageOf(player) < STAGE_PATZI_INSIDE) quest.setStage(player, STAGE_PATZI_INSIDE);
-    }
-    if (variant === "inside-villa-lucens-talking-to-patzi-after-talking-to-everyone-else") {
-      quest.setStage(player, STAGE_WINE_REQUEST);
-    }
     return playVariant(player, npcId, variant);
   }
 
@@ -895,16 +790,6 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     if (!info) return false;
     const variant = selectGuestVariant(player, npcId);
     if (!variant) return false;
-    if (variant === info.intro) {
-      setFlag(player, `met.${info.key}`);
-      if (
-        allMet(player) &&
-        stageOf(player) >= STAGE_PATZI_INSIDE &&
-        stageOf(player) < STAGE_MET_GUESTS
-      ) {
-        quest.setStage(player, STAGE_MET_GUESTS);
-      }
-    }
     if (variant === info.investigate) setFlag(player, `investigated.${info.key}`);
     if (variant === info.accuse) setFlag(player, `questioned.${info.key}`);
     return playVariant(player, npcId, variant);
@@ -914,9 +799,13 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const { player, npcId } = event;
     const variant = selectGuardsVariant(player, npcId);
     if (!variant) return false;
-    if (variant === "the-backstage-talking-to-hutza-or-stradius") {
-      if (stageOf(player) < STAGE_THEATRE_GUARDS) quest.setStage(player, STAGE_THEATRE_GUARDS);
-      setFlag(player, "backstage.intro");
+    if (variant === 'the-investigation-talking-to-hutza-or-stradius-after-investigating-everything' && allClues(player)) {
+      return playVariant(player, npcId, variant, steps => {
+        const menu = steps.find(step => step.type === 'choice');
+        const report = menu.options[0];
+        const proceed = report.steps.find(step => step.type === 'choice').options[0].steps;
+        return [steps[0], { ...menu, options: [{ ...report, steps: [report.steps[0], ...proceed] }, ...menu.options.slice(1)] }];
+      });
     }
     if (variant === "the-investigation-talking-to-hutza-or-stradius-after-giving-them-the-evidence") {
       return playVariant(
@@ -931,17 +820,16 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
 
   function talkHeadButler(event) {
     const { player, npcId, npc } = event;
-    if (quest.isComplete(player)) {
+    if (quest.isComplete(player) && !ownGear(player)) {
       return playVariant(player, npcId, "post-quest-dialogue-talking-to-the-head-butler");
     }
-    const own = npc?.getOwner?.() === player;
+    const own = npc?.getLocation?.().getY() === HEAD_BUTLER_TILE.getY();
     if (own) {
       const stage = stageOf(player);
       if (stage >= STAGE_ENTERED) {
         return playVariant(player, npcId, "getting-inside-the-villa-talking-to-the-head-butler-again");
       }
       if (wearingUniform(player)) {
-        if (stage < STAGE_UNIFORM_WORN) quest.setStage(player, STAGE_UNIFORM_WORN);
         return playVariant(
           player,
           npcId,
@@ -964,15 +852,13 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const { player, npcId } = event;
     const variant = selectCostumerVariant(player);
     if (!variant) return false;
-    return playVariant(player, npcId, variant);
+    return playVariant(player, npcId, variant, stageOf(player) >= 38 ? selectFromMenu : null);
   }
 
   function talkNaiatli(event) {
     const { player, npcId } = event;
     const variant = selectNaiatliVariant(player);
     if (!variant) return false;
-    const step = (Number(player.getAttribute(flagKey("fight.step"))) || 0) + 1;
-    player.setAttribute(flagKey("fight.step"), step | 0);
     return playVariant(player, npcId, variant);
   }
 
@@ -986,7 +872,6 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   function checkMan(event) {
     const { player } = event;
     if (!hasFlag(player, "wine")) return false;
-    if (stageOf(player) < STAGE_BODY_FOUND) quest.setStage(player, STAGE_BODY_FOUND);
     return playVariant(player, STRADIUS, "inside-villa-lucens-investigating-the-man-on-the-floor");
   }
 
@@ -1004,10 +889,9 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   function pickpocketAdala(event) {
     const { player, npcId } = event;
     if (stageOf(player) < STAGE_PICKPOCKET || stageOf(player) >= STAGE_EVIDENCE) return false;
-    if (hasFlag(player, "pickpocket.adala")) {
+    if (hasItem(player, WINE_LABELS)) {
       return playVariant(player, npcId, "the-investigation-pickpocketing-adala-again");
     }
-    setFlag(player, "pickpocket.adala");
     return playVariant(player, npcId, "the-investigation-pickpocketing-adala");
   }
 
@@ -1027,13 +911,12 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     }
     const stage = stageOf(player);
     if (stage < STAGE_PICKPOCKET || stage >= STAGE_EVIDENCE) return false;
-    const already = hasFlag(player, `pickpocket.${info.key}`);
+    const already = hasItem(player, { cozyac: THREATENING_NOTE, pavo: DRINKING_FLASK, xocotla: SHIPPING_CONTRACT }[info.key]);
     const variant = info.key === "const"
       ? "the-investigation-pickpocketing-constantinius"
       : already
         ? `the-investigation-pickpocketing-${info.key}-again`
         : `the-investigation-pickpocketing-${info.key}`;
-    setFlag(player, `pickpocket.${info.key}`);
     return playVariant(player, npcId, variant);
   }
 
@@ -1150,14 +1033,6 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     return null;
   }
 
-  const CHAT_OPTION_IDS = new Map([
-    ["gG3NLs", "chat.poison"],
-    ["7XZaiY", "chat.poison"],
-    ["8Qe3cB", "chat.clothing"],
-    ["wYlPLN", "chat.clothing"],
-    ["4N708L", "chat.bookshelf"],
-    ["cGI66G", "chat.bookshelf"],
-  ]);
 
   const ACCUSED_BY_NPC = new Map([
     [CONSTANTINIUS, "accused.const"],
@@ -1173,36 +1048,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   function handleChoice(event) {
     const { player, npcId, stepId, option } = event;
     if (!player) return;
-    const chatFlag = CHAT_OPTION_IDS.get(stepId);
-    if (chatFlag) {
-      setFlag(player, chatFlag);
-      // The placed backstage "Bookshelf" base (54735 at 1458/1461,9331) only ever
-      // resolves to the no-option 54729 during the quest - the searchable 54726/54727
-      // bookcases are not on the map - so the passage conversation is the third clue.
-      if (chatFlag === "chat.bookshelf") {
-        setFlag(player, "backstage.bookshelf");
-        maybeBackstageStage(player);
-      }
-      return;
-    }
-    if (option === "What can you tell me about the actors?") {
-      setFlag(player, "chat.actors");
-      return;
-    }
-    if (option === "Proceed regardless.") {
-      if (stageOf(player) < STAGE_PICKPOCKET) quest.setStage(player, STAGE_PICKPOCKET);
-      return;
-    }
-    if (option === "Naiatli.") {
-      if (stageOf(player) < STAGE_NAIATLI_ACCUSED) quest.setStage(player, STAGE_NAIATLI_ACCUSED);
-      return;
-    }
     if (option === "Accuse Patzi.") {
       setFlag(player, "accused.patzi");
-      return;
-    }
-    if (option === "Accuse Adala.") {
-      if (allQuestioned(player) && stageOf(player) < STAGE_FIGHT) quest.setStage(player, STAGE_FIGHT);
       return;
     }
     if (option === "I am." && HEAD_BUTLER_IDS.has(npcId) && stageOf(player) >= STAGE_ENTERED) {
@@ -1219,7 +1066,101 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     if (event?.hook !== START_HOOK || !event.player) return;
     if (event.npcId !== PATZI && event.npcId !== PATZI_PICKPOCKET) return;
     const { player } = event;
-    if (stageOf(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (stageOf(player) !== 0 || !meetsRequirements(player)) return;
+    player.setAttribute(STAGE_VERSION_ATTRIBUTE, 1);
+    quest.setStage(player, STAGE_STARTED);
+    player.sendMessage("You've started a new quest: <col=081190>Death on the Isle</col>");
+  }
+
+  /** State changes when the captured line appears, so cancelling a conversation keeps its work. */
+  function handleLine(event) {
+    if (!event.pages?.some(page => page.page === PAGE)) return;
+    const { player, npcId } = event;
+    const text = event.step?.text ?? event.step?.player ?? event.step?.npc ?? event.text;
+    const at = (line, minimum, maximum, callback, when = 'before') => {
+      if (text !== line) return;
+      const previous = event[when];
+      event[when] = () => { previous?.(); const value = stageOf(player); if (value >= minimum && value <= maximum) callback(); };
+    };
+    const advance = value => { if (stageOf(player) < value) quest.setStage(player, value); };
+    at("Right... I guess I'm off to find a uniform then.", 2, 2, () => advance(4));
+    at("I'll bet Adala went through it. You should've followed her! I think she headed somewhere along that hedgerow.", 8, 8, () => advance(10));
+    at('Right, I think that covers everything. Are you ready to enter?', 10, 12, () => { if (stageOf(player) < 12) setMaskAssignment(player, 1 + Math.floor(Math.random() * MASKS.length)); advance(12); });
+    at("No, no. I think you're doing more than enough right now, thank you.", 14, 14, () => { setFlag(player, 'initial'); advance(15); });
+    at('Alright, one glass of wine coming right up.', 15, 15, () => { if (allMet(player)) advance(16); });
+    at('Stradius...', 20, 20, () => advance(21));
+    at('What if they hired someone to do it for them?', 22, 22, () => { if (allClues(player)) advance(24); });
+    at('Hutza!', 24, 24, () => advance(26));
+    if (text.startsWith('Alright, [player name], just let us know when you want everyone gathered')) at(text, 26, 26, () => advance(27));
+    at("Murder! What a ridiculous assertion! I may be a thief, but I'd never kill someone!", 28, 28, () => advance(30));
+    at('Go ahead.', 36, 36, () => advance(38));
+    if ([HUTZA, STRADIUS].includes(npcId)) at("Okay, I'll get to it.", 36, 38, () => setFlag(player, 'backstage.intro'));
+    if (npcId === COSTUMER) {
+      const flags = [
+        ["I don't think so. I suppose I do get quite engrossed in my work sometimes, so it's not impossible. But I'm sure I'd have spotted someone going up the stairs...", 'chat.actors'],
+        ['Ah, that was a gift from Constantinius. We were having a bit of a rat problem, so he gave us the poison to deal with them.', 'chat.poison'],
+        ["Interesting...", 'chat.clothing'],
+        ['This is an old villa. Apparently it once played a role in some smuggling operations a long time ago. I could see them having a few secrets to help them with that.', 'chat.bookshelf'],
+      ];
+      for (const [line, flag] of flags) at(line, 38, 40, () => { setFlag(player, flag); maybeBackstageStage(player); });
+    }
+    for (const [id, info] of GUEST_INFO) {
+      if (id !== npcId) continue;
+      const intro = require('../QuestRuntime').loadTranscripts(api)?.[PAGE]?.variants?.[info.intro] ?? [];
+      const last = intro.filter(step => step.type === 'line').at(-1)?.text;
+      if (last) at(last, 14, 16, () => setFlag(player, `met.${info.key}`));
+    }
+    at("Well then we'll have to just speed things along a bit. I'm going out there!", 40, 40, () => advance(42));
+    at('Argh! You\'re stronger than I thought... I need to regroup!', 42, 42, () => advance(45));
+    at('Aha, villain! This is where you fall!', 45, 45, () => { setFinalFight(player, 2); player.setAttribute(flagKey('fight.step'), 2); });
+    if (text === 'Bravo!') at(text, 45, 45, () => setFinalFight(player, 6));
+    at('You win some and you lose some I guess. All the best, [player name]!', 49, 49, () => quest.complete(player), 'after');
+  }
+
+  function setFinalFight(player, value) {
+    player.setAttribute(FINAL_FIGHT_ATTRIBUTE, value);
+    const id = api.core.CacheDefinitions.getVarbitId('doti_final_fight');
+    if (id != null) player.getPacketSender().sendVarbit(id, value);
+  }
+
+  function openAccusation(player) {
+    if (Scenes.get(player)?.name === 'doti-accusation') return;
+    const scene = Scenes.open(player, 'doti-accusation', [[1428, 1461, 2920, 2947, 2]], { multi: true, canAttack: (attacker, target) => target?.__dotiOwner === player || attacker?.__dotiOwner === player ? null : false });
+    for (const [id, x, y] of [[PATZI,1446,2934],[ADALA,1446,2933],[CONSTANTINIUS,1446,2931],[COZYAC,1442,2929],[XOCOTLA,1444,2928],[PAVO,1442,2931],[STRADIUS,1444,2936],[HUTZA,1445,2936]]) Scenes.actor(scene, id, [x,y,2]);
+  }
+
+  function openStage(player) {
+    if (Scenes.get(player)?.name === 'doti-stage') return;
+    const scene = Scenes.open(player, 'doti-stage', [[1430, 1485, 2915, 2947, 0]]);
+    for (const [id,x,y] of [[CONSTANTINIUS,1458,2932],[COZYAC,1457,2930],[PAVO,1457,2934],[PATZI,1459,2935],[STRADIUS,1472,2925],[HUTZA,1473,2925]]) Scenes.actor(scene, id, [x,y]);
+    syncSpawns(player);
+  }
+
+  class StageCombat extends CombatMethod {
+    type() { return CombatType.MELEE; }
+    attackDistance() { return 1; }
+    attackSpeed() { return 4; }
+    start(player, npc) {
+      player.getCombat().reset();
+      const event = { player, npc, npcId: npc.getId() };
+      if (event.npcId === NAIATLI) talkNaiatli(event);
+      else if (event.npcId === CLODIUS) attackClodius(event);
+    }
+    hits() { return []; }
+  }
+  const stageCombat = new StageCombat();
+  function resolveStageCombat(player) {
+    return Scenes.get(player)?.name === 'doti-stage' ? stageCombat : null;
+  }
+
+  function stageStrike(player, damage, value, destination, clodius = false) {
+    const npc = trackedNpcs.get(player)?.get(clodius ? 'clodius' : 'naiatli');
+    if (!npc) return;
+    player.performAnimation(new Animation(390));
+    npc.showHitsplat?.(damage, { mine: 17, others: 17 });
+    setFinalFight(player, value);
+    if (destination) npc.getMovementQueue().addSteps(new Location(...destination, 0));
+    else if (!clodius) npc.performAnimation(new Animation(836));
   }
 
   // ==========================================================================
@@ -1227,18 +1168,26 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   // ==========================================================================
 
   function enterVilla(player) {
-    if (!hasItem(player, TRAY)) addItem(player, TRAY);
-    const mask = MASKS[maskAssignment(player)];
-    if (!hasItem(player, mask)) addItem(player, mask);
-    if (stageOf(player) < STAGE_ENTERED) quest.setStage(player, STAGE_ENTERED);
-    player.moveTo(INSIDE_PARTY);
+    if (stageOf(player) < 12) return;
+    if (!ownGear(player)) {
+      const blank = container => container.getItems().map(() => [-1, 0, null]);
+      const equipment = blank(player.getEquipment());
+      equipment[Equipment.BODY_SLOT] = [UNIFORM_TOP_VILLA, 1, null];
+      equipment[Equipment.LEG_SLOT] = [UNIFORM_BOTTOM_VILLA, 1, null];
+      equipment[Equipment.HEAD_SLOT] = [MASKS[maskAssignment(player) - 1], 1, null];
+      equipment[Equipment.WEAPON_SLOT] = [TRAY, 1, null];
+      swapGear(player, GEAR_ATTRIBUTE, VILLA_GEAR_ATTRIBUTE, { inventory: blank(player.getInventory()), equipment });
+    }
+    fadeMove(player, () => { if (stageOf(player) < STAGE_ENTERED) quest.setStage(player, STAGE_ENTERED); player.moveTo(INSIDE_PARTY); });
   }
 
   function leaveVilla(player) {
-    removeItems(player, TRAY);
-    removeItems(player, MASKS[maskAssignment(player)]);
-    quest.setStage(player, Math.max(stageOf(player), STAGE_ENTERED));
-    player.moveTo(HEAD_BUTLER_TILE);
+    if (!ownGear(player)) return;
+    fadeMove(player, () => {
+      Scenes.end(player, false);
+      swapGear(player, VILLA_GEAR_ATTRIBUTE, GEAR_ATTRIBUTE);
+      player.moveTo(HEAD_BUTLER_TILE);
+    });
   }
 
   function startAdalaFight(player) {
@@ -1246,7 +1195,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     setFlag(player, "fight.won", false);
     setFlag(player, "fight.lost", false);
     setFightOutcome(player, 0);
-    spawnTracked(player, "adala-boss", { id: ADALA_BOSS, tile: BOSS_TILE });
+    const npc = spawnTracked(player, "adala-boss", { id: ADALA_BOSS, tile: BOSS_TILE });
+    if (npc) { npc.__dotiOwner = player; npc.getCombat().attack(player); }
   }
 
   function finishFight(player, outcome) {
@@ -1255,7 +1205,23 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     setFightOutcome(player, outcome);
     setFlag(player, outcome === FIGHT_WON ? "fight.won" : "fight.lost");
     removeTracked(player, "adala-boss");
+    player.getCombat().reset();
+    if (stageOf(player) < 32) quest.setStage(player, 32);
     playVariant(player, ADALA_NOMASK, "the-accusation-fighting-adala");
+  }
+
+  function preventAdalaDeath(event) {
+    const player = event.npc?.__dotiOwner;
+    if (!player || !hasFlag(player, 'fight.active')) return;
+    event.preventDeath = true;
+    finishFight(player, FIGHT_WON);
+  }
+
+  function fightHit({ attacker, target }) {
+    const player = target?.__dotiOwner ?? attacker?.__dotiOwner;
+    if (!player || !hasFlag(player, 'fight.active')) return;
+    if (target?.__dotiOwner && target.getHitpoints() <= 10) finishFight(player, FIGHT_WON);
+    else if (target === player && player.getHitpoints() <= 10) finishFight(player, FIGHT_LOST);
   }
 
   function handleNpcDeath(event) {
@@ -1275,7 +1241,16 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
 
   function handleAction(event) {
     const { player, stepId } = event;
-    if (!player || !stepId) return;
+    if (!player || !stepId || !event.pages?.some(page => page.page === PAGE)) return;
+    const boxes = {
+      '0NeKgL': [UNIFORM_TOP_VILLA, UNIFORM_BOTTOM_VILLA],
+      '5z2Lhi': [WINE_LABELS], SsD2Fw: [THREATENING_NOTE], Adb65_: [DRINKING_FLASK], XXxTM6: [SHIPPING_CONTRACT],
+      JwtSTS: [WINE_LABELS, THREATENING_NOTE], FTSXlx: [CHEST_KEY], '1XIQ80': [ICON],
+    };
+    if (boxes[stepId]) { event.handled = true; event.box = { items: boxes[stepId] }; }
+    if (boxes[stepId]?.some(id => EVIDENCE_ITEMS.includes(id)) && stepId !== 'JwtSTS' && player.getInventory().getFreeSlots() < 1) {
+      event.handled = true; event.end = true; player.sendMessage('You need some free inventory space.'); return;
+    }
     switch (stepId) {
       case "Uj6RhJ":
         if (stageOf(player) < STAGE_WINDOW) quest.setStage(player, STAGE_WINDOW);
@@ -1284,11 +1259,13 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         if (stageOf(player) < STAGE_UNIFORM) quest.setStage(player, STAGE_UNIFORM);
         return;
       case "VOULZt":
-        if (stageOf(player) < STAGE_ADALA_INSIDE) quest.setStage(player, STAGE_ADALA_INSIDE);
+        event.handled = true; event.end = true;
+        fadeMove(player, () => { if (stageOf(player) < STAGE_ADALA_INSIDE) quest.setStage(player, STAGE_ADALA_INSIDE); },
+          () => playVariant(player, PATZI, UNIFORM_TALK_WITH, steps => steps.slice(6)));
         return;
       case "wNdlW9":
         setFlag(player, "wine");
-        if (stageOf(player) < STAGE_WINE_INVESTIGATED) quest.setStage(player, STAGE_WINE_INVESTIGATED);
+        if (stageOf(player) === STAGE_WINE_INVESTIGATED) quest.setStage(player, STAGE_BODY_FOUND);
         syncSpawns(player);
         return;
       case "5z2Lhi":
@@ -1308,9 +1285,11 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         setFlag(player, "pickpocket.xocotla");
         return;
       case "JwtSTS": {
+        if (!hasFlag(player, 'given') && !EVIDENCE_ITEMS.every(id => hasItem(player, id))) {
+          event.handled = true; event.end = true; player.sendMessage('You should recover the missing evidence first.'); return;
+        }
         for (const itemId of EVIDENCE_ITEMS) removeItems(player, itemId);
         setFlag(player, "given");
-        if (stageOf(player) < STAGE_EVIDENCE) quest.setStage(player, STAGE_EVIDENCE);
         return;
       }
       case "BpumsX":
@@ -1338,7 +1317,8 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         player.getPacketSender().sendVarbit(VARBIT_ATES_PIECE_HUNT, 2);
         return;
       case "Q8AJrp":
-        if (!hasItem(player, WATER_RUNE)) addItem(player, WATER_RUNE);
+        api.getItemOnGroundManager().registerLocation(player, new Item(WATER_RUNE, 1), player.getLocation().clone());
+        event.handled = true;
         return;
       case "pn24Ai":
         addItem(player, ItemIdentifiers.RAM_MASK);
@@ -1372,38 +1352,50 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       case "GTGWOB":
         event.handled = true;
         if (stageOf(player) < STAGE_ARRESTED) quest.setStage(player, STAGE_ARRESTED);
-        player.moveTo(ROOM_INSIDE);
+        fadeMove(player, () => player.moveTo(ROOM_INSIDE));
         return;
       case "YgkOvV":
         event.handled = true;
         if (!hasItem(player, CASE_FILE)) addItem(player, CASE_FILE);
-        if (stageOf(player) < STAGE_INTERROGATED) quest.setStage(player, STAGE_INTERROGATED);
-        player.moveTo(ROOM_OUTSIDE);
+        if (stageOf(player) < STAGE_CELLAR_DONE) quest.setStage(player, STAGE_CELLAR_DONE);
+        fadeMove(player, () => player.moveTo(ROOM_OUTSIDE));
         return;
       case "saoG_F":
         event.handled = true;
         if (stageOf(player) < STAGE_ACCUSATIONS) quest.setStage(player, STAGE_ACCUSATIONS);
         player.moveTo(TOP_FLOOR);
+        openAccusation(player);
         return;
       case "fAjuOG":
         event.handled = true;
-        if (stageOf(player) < STAGE_FIGHT) quest.setStage(player, STAGE_FIGHT);
         startAdalaFight(player);
         return;
       case "k5CJTB":
         removeTracked(player, "adala-boss");
+        event.handled = true;
         if (stageOf(player) < STAGE_ADALA_GONE) quest.setStage(player, STAGE_ADALA_GONE);
         return;
       case "QJgNYI":
         if (stageOf(player) < STAGE_ACCUSATION_DONE) quest.setStage(player, STAGE_ACCUSATION_DONE);
+        Scenes.end(player, false);
         return;
+      case '33aVQJ':
+        event.handled = true; stageStrike(player, 3, 1, [1470, 2936]); player.setAttribute(flagKey('fight.step'), 1); return;
+      case '-7LlHY':
+        event.handled = true; stageStrike(player, 5, 3, null, true); return;
+      case 'Ek_VQn':
+        event.handled = true; stageStrike(player, 8, 4, [1472, 2931]); player.setAttribute(flagKey('fight.step'), 3); return;
+      case '_5FOD1': case 'PZ_3g5':
+        event.handled = true; return;
       case "lPk2UZ":
         event.handled = true;
+        if (stageOf(player) < 40) { event.end = true; return; }
         if (!hasItem(player, PROP_SWORD)) addItem(player, PROP_SWORD);
         if (stageOf(player) < STAGE_ON_STAGE) quest.setStage(player, STAGE_ON_STAGE);
         setFlag(player, "on.stage");
         player.setAttribute(flagKey("fight.step"), 0);
-        player.moveTo(STAGE_LANDING);
+        openStage(player);
+        player.moveTo(new Location(1472, 2929, 0));
         return;
       case "FuqU1o":
         event.handled = true;
@@ -1418,7 +1410,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         return;
       case "SWcdkt":
         event.handled = true;
-        if (stageOf(player) < STAGE_NAIATLI_DOWN) quest.setStage(player, STAGE_NAIATLI_DOWN);
+        stageStrike(player, 4, 5, null);
         return;
       case "wdaiPu":
         event.handled = true;
@@ -1426,9 +1418,9 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         removeTracked(player, "naiatli");
         removeTracked(player, "clodius");
         removeItems(player, PROP_SWORD);
+        Scenes.end(player, false);
         player.moveTo(FINAL_VILLA);
         if (stageOf(player) < STAGE_CASE_CLOSED) quest.setStage(player, STAGE_CASE_CLOSED);
-        if (!quest.isComplete(player)) quest.complete(player);
         return;
       case "-1VVkQ":
         removeItems(player, ICON);
@@ -1443,7 +1435,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   }
 
   function maybeBackstageStage(player) {
-    if (allBackstage(player) && stageOf(player) < STAGE_BACKSTAGE_DONE) {
+    if (allBackstage(player) && ['chat.bookshelf','chat.clothing','chat.poison','chat.actors'].every(flag => hasFlag(player, flag)) && stageOf(player) < STAGE_BACKSTAGE_DONE) {
       quest.setStage(player, STAGE_BACKSTAGE_DONE);
     }
   }
@@ -1500,7 +1492,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const inside =
       player.getLocation().getX() >= 1392 &&
       player.getLocation().getX() <= 1402 &&
-      player.getLocation().getY() >= 2968 &&
+      player.getLocation().getY() >= 2967 &&
       player.getLocation().getY() <= 2977;
     event.handled = true;
     if (inside) {
@@ -1528,6 +1520,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       playVariant(player, PATZI, "getting-a-uniform-attempting-to-steal-another-uniform");
       return;
     }
+    if (player.getInventory().getFreeSlots() < 2) { player.sendMessage('You need two free inventory spaces.'); return; }
     addItem(player, UNIFORM_TOP_VILLA);
     addItem(player, UNIFORM_BOTTOM_VILLA);
     playVariant(player, PATZI, "getting-a-uniform-stealing-a-uniform");
@@ -1604,7 +1597,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const { player } = event;
     const stage = stageOf(player);
     event.handled = true;
-    if (stage < STAGE_THEATRE_GUARDS) {
+    if (stage < STAGE_THEATRE_GUARDS || !hasFlag(player, 'backstage.intro')) {
       playVariant(
         player,
         STRADIUS,
@@ -1738,20 +1731,28 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
 
   function handleLogin({ player }) {
     cullLeakedSpawns(player);
+    if (player.getAttribute(STAGE_VERSION_ATTRIBUTE) !== 1) {
+      player.setAttribute(STAGE_VERSION_ATTRIBUTE, 1);
+      const mapped = { 4: 6, 10: 12, 12: 14, 14: 15, 21: 22, 32: 33, 33: 34, 34: 36, 38: 40 }[stageOf(player)];
+      if (mapped != null) quest.setStage(player, mapped);
+    }
     if (hasFlag(player, "fight.active")) {
-      // A logout mid-fight loses the boss; count it as a win so the story can go on.
+      // An interrupted fight resumes from its earned checkpoint, without a free victory.
       setFlag(player, "fight.active", false);
       removeTracked(player, "adala-boss");
-      setFightOutcome(player, FIGHT_WON);
-      if (stageOf(player) < STAGE_ADALA_GONE) quest.setStage(player, STAGE_ADALA_GONE);
+      setFightOutcome(player, 0);
     }
     syncVarbits(player);
+    if (stageOf(player) >= 28 && stageOf(player) <= 33 && player.getLocation().getZ() === 2) openAccusation(player);
+    if (stageOf(player) >= 42 && stageOf(player) < 49 && player.getLocation().getY() < 3000) openStage(player);
     syncSpawns(player);
     refreshQuestList(player);
   }
 
   function handleLogout({ player }) {
-    if (player) removeAllSpawns(player);
+    if (!player) return;
+    removeAllSpawns(player);
+    Scenes.end(player, true); Scenes.cancel(player);
   }
 
   // ==========================================================================
@@ -1912,8 +1913,6 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     skills.addExperiences(Skill.AGILITY, 7500);
     skills.addExperiences(Skill.CRAFTING, 5000);
     removeItems(player, PROP_SWORD);
-    removeItems(player, TRAY);
-    removeItems(player, MASKS[maskAssignment(player)]);
     player.getPacketSender().sendVarbit(VARBIT_ALDARIN_PENDANT, hasFlag(player, "icon.found") ? 1 : 0);
   }
 
@@ -1925,6 +1924,11 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     api.persistAttribute(flagKey(flag));
   }
 
+  api.persistAttribute(GEAR_ATTRIBUTE, null);
+  api.persistAttribute(VILLA_GEAR_ATTRIBUTE, null);
+  api.persistAttribute(STAGE_VERSION_ATTRIBUTE, 0);
+  api.persistAttribute(FINAL_FIGHT_ATTRIBUTE, 0);
+
   quest = registerQuest(api, {
     key: "death_on_the_isle",
     name: "Death on the Isle",
@@ -1933,6 +1937,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,
+    scrollItemId: MASKS[0],
     xpRewards: [
       { skillId: Skill.THIEVING.getIndex(), amount: 10000, label: "Thieving" },
       { skillId: Skill.AGILITY.getIndex(), amount: 7500, label: "Agility" },
@@ -1952,10 +1957,14 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   api.onItemAction(handleItemAction);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:hook", handleHook);
   api.onCustomEvent("quest:stage-changed", handleStageChanged);
   api.onNpcDeath(handleNpcDeath);
+  api.onNpcBeforeDeath(preventAdalaDeath);
+  api.onCombatHitResolved(fightHit);
+  api.registerCombatMethodResolver({ resolve: resolveStageCombat });
   api.onPlayerBeforeDeath(handlePlayerBeforeDeath);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);

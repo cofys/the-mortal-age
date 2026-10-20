@@ -795,6 +795,10 @@
                     );
                 }
 
+                if (osrsClient?.worldMap?.pendingWorldMapImageIds?.size > 0) {
+                    drawTextGL("Loading map...", x + 8, y + height - 22, width - 16, 16, 0, 0xffffff, 0, 1, true);
+                }
+
                 const mapElementCache =
                     worldMapRenderHost.__worldMapElementCache ??
                     (worldMapRenderHost.__worldMapElementCache = new Map<number, any>());

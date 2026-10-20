@@ -193,9 +193,6 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   function level(player, skill) {
     return player.getSkillManager().getCurrentLevel(skill);
   }
-  function baseLevel(player, skill) {
-    return player.getSkillManager().getMaxLevel?.(skill) ?? level(player, skill);
-  }
   function skrachState(player) { return Number(player.getAttribute(SKRACH_STATE_ATTRIBUTE)) || 0; }
   function setSkrachBit(player, bit) { player.setAttribute(SKRACH_STATE_ATTRIBUTE, skrachState(player) | bit); }
   function completedQuest(player, key) {
@@ -2163,31 +2160,16 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     return (awowogeiState(player) & 0x3f) === 0x3f;
   }
 
+  /** The Ape Atoll course's rope (Agility.plugin.js) swung during the quest opens the hole beside it. */
+  function handleTchikiRopeSwung({ player, objectId }) {
+    if (objectId !== api.core.ObjectIdentifiers.ROPE_20 || stage(player) < STAGE_OPENING_COMPLETE || hasFlag(player, 128)) return;
+    player.setAttribute(AWOWOGEI_STATE_ATTRIBUTE, awowogeiState(player) | TCHIKI_COURSE_SWUNG);
+  }
+
   function handleTchikiCourse(event) {
     const { player, objectId } = event;
     const option = event.definition?.getActions?.()?.[event.clickType - 1];
     const { ObjectIdentifiers } = api.core;
-    if (objectId === ObjectIdentifiers.ROPE_20 && option === "Swing"
-      && stage(player) >= STAGE_OPENING_COMPLETE && !hasFlag(player, 128)) {
-      event.handled = true;
-      if (baseLevel(player, Skill.AGILITY) < 48) {
-        player.sendMessage("You need level 48 Agility to swing across the Ape Atoll course.");
-        return;
-      }
-      if (!equippedMonkey(player, NINJA_GREEGREE_IDS)) {
-        player.sendMessage("You need to be transformed with a ninja monkey greegree to swing across the rope.");
-        return;
-      }
-      if (follower(player) || hasPetCarried(player)) {
-        player.sendMessage("You cannot bring a pet or follower through the agility course.");
-        return;
-      }
-      player.setAttribute(AWOWOGEI_STATE_ATTRIBUTE, awowogeiState(player) | TCHIKI_COURSE_SWUNG);
-      player.getSkillManager().addExperiences(Skill.AGILITY, 100);
-      moveTo(player, 2756, 2731, 0);
-      player.sendMessage("You swing across the rope and land beside the hole.");
-      return;
-    }
     if (objectId === ObjectIdentifiers.HOLE_18 && option === "Enter"
       && stage(player) >= STAGE_OPENING_COMPLETE && !hasFlag(player, 128)) {
       event.handled = true;
@@ -2246,16 +2228,6 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     addItem(player, ItemIdentifiers.TCHIKI_MONKEY_NUTS);
     require("../QuestRuntime").startTranscript(api, player, NpcIdentifiers.KING_AWOWOGEI,
       "Recipe for Disaster/Freeing King Awowogei", "ape-atoll-tchiki-nut-bush-taking-nuts");
-  }
-
-  function handleTchikiCourseExit(event) {
-    const { player, objectId } = event;
-    const option = event.definition?.getActions?.()?.[event.clickType - 1];
-    if (objectId !== 16062 || option !== "Climb-down"
-      || !inZone(player, { minX: 2754, maxX: 2760, minY: 2731, maxY: 2737, z: 0 })) return;
-    event.handled = true;
-    moveTo(player, 2757, 2726, 0);
-    player.sendMessage("You climb down the tropical tree and complete the agility course.");
   }
 
   function handleAwowogeiKing(event) {
@@ -2646,7 +2618,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   api.onObjectInteraction(handleAmikObjects);
   api.onObjectInteraction(handleTchikiCourse);
   api.onObjectInteraction(handleTchikiCaveObject);
-  api.onObjectInteraction(handleTchikiCourseExit);
+  api.onCustomEvent("agility:obstacle", handleTchikiRopeSwung);
   api.onObjectInteraction(handleAwowogeiObjects);
   api.onObjectInteraction(handleAwowogeiDungeon);
   api.onObjectRoute(routeRedBananaTree);

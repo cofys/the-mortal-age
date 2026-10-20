@@ -1,6 +1,6 @@
 import { CachePipeline } from "../../cache/CachePipeline";
 import type { Player } from "../../entity/impl/player/Player";
-import { packTemplateChunk } from "../../plugin/impl/construction/HousePaletteCompiler";
+import { packTemplateChunk } from "../../model/areas/impl/TemplatedInstanceArea";
 import {
     encodeLocAddChange,
     encodeRebuildWorldEntity,

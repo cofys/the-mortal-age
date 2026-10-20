@@ -101,6 +101,52 @@ function invalidateWorldMapIconCacheForId(state: WorldMapStateHolder, mapId: num
     state.worldMapIconCache.delete(mapId);
 }
 
+function isWorldMapImageIcon(icon: unknown): icon is MinimapIcon {
+    if (!icon || typeof icon !== "object") return false;
+    const candidate = icon as MinimapIcon;
+    if (
+        !Number.isInteger(candidate.localX) ||
+        candidate.localX < 0 ||
+        candidate.localX >= 64 ||
+        !Number.isInteger(candidate.localY) ||
+        candidate.localY < 0 ||
+        candidate.localY >= 64 ||
+        !Number.isSafeInteger(candidate.elementId) ||
+        candidate.elementId < 0 ||
+        !Number.isSafeInteger(candidate.category) ||
+        !Number.isSafeInteger(candidate.spriteId)
+    ) {
+        return false;
+    }
+    for (const key of [
+        "textColor",
+        "textSize",
+        "horizontalAlignment",
+        "verticalAlignment",
+        "sourcePlane",
+        "sourceX",
+        "sourceY",
+        "displayPlane",
+        "displayX",
+        "displayY",
+    ] as const) {
+        const value = candidate[key];
+        if (value !== undefined && !Number.isSafeInteger(value)) return false;
+    }
+    for (const key of ["sourcePlane", "displayPlane"] as const) {
+        const plane = candidate[key];
+        if (plane !== undefined && (plane < 0 || plane > 3)) return false;
+    }
+    for (const key of ["sourceX", "sourceY", "displayX", "displayY"] as const) {
+        const coord = candidate[key];
+        if (coord !== undefined && (coord < 0 || coord > 0x3fff)) return false;
+    }
+    return (
+        (candidate.worldMapVisible === undefined || typeof candidate.worldMapVisible === "boolean") &&
+        (candidate.name === undefined || typeof candidate.name === "string")
+    );
+}
+
 export function clearWorldMapIconCache(state: WorldMapStateHolder): void {
     state.worldMapIconCache.clear();
     state.worldMapIconCacheAreaId = state.worldMapState.getCurrentMapAreaId();
@@ -231,11 +277,14 @@ function queueLoadWorldMapImage(
             const tileWidth = tile?.width;
             const tileHeight = tile?.height;
             if (
-                tile?.pixels &&
+                tile?.pixels instanceof Uint8Array &&
                 typeof tileWidth === "number" &&
                 typeof tileHeight === "number" &&
-                (tileWidth | 0) > 0 &&
-                (tileHeight | 0) > 0
+                Number.isSafeInteger(tileWidth) &&
+                Number.isSafeInteger(tileHeight) &&
+                tileWidth > 0 &&
+                tileHeight > 0 &&
+                tile.pixels.length >= tileWidth * tileHeight * 4
             ) {
                 setWorldMapImageTile(
                     state,
@@ -246,7 +295,7 @@ function queueLoadWorldMapImage(
                     tileWidth | 0,
                     tileHeight | 0,
                     level | 0,
-                    (tile.icons ?? []) as MinimapIcon[],
+                    Array.isArray(tile.icons) ? tile.icons.filter(isWorldMapImageIcon) : [],
                 );
                 return;
             }

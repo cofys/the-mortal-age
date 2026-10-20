@@ -94,6 +94,7 @@ an update. What to do with each source:
 | Data | Source | On an update |
 |---|---|---|
 | `item-combat-styles.json` | cache DB table 78 | `yarn dump:item-combat-styles` (in `server/`) and commit the result |
+| Construction hand data (`server/plugins/skills/construction/data/`) | cache DB tables 110 (furniture), 111 (poh_room), 112 (poh_hotspot), enum 5215 | the plugin reads the cache's fields at load; `yarn dump:construction` lists rows the data names that are gone (exit 1) and new furniture, rooms and trophies that need experience and built loc ids added by hand |
 | `item-gameplay.json` | an old export, no generator | `ItemDefinitionLoader` skips an entry whose name differs from the cache's (ignoring case), so list the entries that match the old cache's name but not the new one's and fix them by hand, checking the item against the cache (a rename can be a different item: check its params) |
 | `monsters-complete`, `npc-drops`, `npc-dialogues`, `npc-dialogue-index`, `shops` | [osrsreboxed-db](https://github.com/DayV-git/osrsreboxed-db), built from the live Wiki | Usually already on the new revision; refresh only to pick up new content |
 | `item-prices.json` | live Wiki prices | `yarn fetch:prices` if it predates the revision |

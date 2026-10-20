@@ -13,25 +13,36 @@ const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
 const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
 const { Sounds } = require("../dist/game/Sounds");
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const { ItemIdentifiers: Ids } = require("../dist/util/ItemIdentifiers");
 const Sos = require("../plugins/areas/strongholdofsecurity/StrongholdOfSecurity.plugin");
 const Data = require("../plugins/areas/strongholdofsecurity/Data.StrongholdOfSecurity");
 const Doors = require("../plugins/areas/strongholdofsecurity/Doors.StrongholdOfSecurity");
 const Rewards = require("../plugins/areas/strongholdofsecurity/Rewards.StrongholdOfSecurity");
 const Travel = require("../plugins/areas/strongholdofsecurity/Travel.StrongholdOfSecurity");
+const Sceptre = require("../plugins/areas/strongholdofsecurity/Sceptre.StrongholdOfSecurity");
 
 const tasks = [];
 const prompts = [];
 const events = [];
 const sounds = [];
+/** Varrock diary tiers the fake diary plugin answers as complete. */
+const diaryDone = new Set();
 Sounds.sendSound = (_player, sound) => sounds.push(sound.getId?.() ?? sound.id);
-Sos.register(new Proxy({
+const registerSos = () => Sos.register(new Proxy({
+  core: PluginManager.getCoreApi(),
   getTaskManager: () => ({ submit: (task) => { task.setRunning(true); tasks.push(task); } }),
   sendMultiChatboxPrompt: (player, title, ...pairs) => prompts.push({ title, pairs }),
-  emitCustomEvent: (name, event) => events.push({ name, ...event }),
+  emitCustomEvent: (name, event) => {
+    if (name === "diary:is-complete") event.complete = event.diary === "varrock" && diaryDone.has(event.tier);
+    else events.push({ name, ...event });
+  },
 }, { get: (target, key) => target[key] ?? (() => {}) }));
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  // After the cache: the sceptre hooks its items by their cache names.
+  registerSos();
   RegionManager.init();
   for (const [x, y] of [[2039, 5244], [2356, 5218]]) RegionManager.loadMapFiles(x, y);
 });
@@ -262,4 +273,107 @@ test("as captured: portals need the floor done (or the Wiki's combat level); ent
     "move 3081,3421,0",
   ]);
   assert.equal(Travel.climbDown({ player, object: { getId: () => 1 } }), false, "other ladders fall through");
+});
+
+/** A container holding [id, amount] slots, with the methods the sceptre uses. */
+function fakeContainer(contents = []) {
+  const slots = contents.map(([id, amount = 1]) => ({ id, amount }));
+  const wrap = (slot) => slot && { getId: () => slot.id, setId: (id) => { slot.id = id; } };
+  return {
+    slots,
+    ids: () => slots.filter(Boolean).map((slot) => slot.amount > 1 ? `${slot.id}x${slot.amount}` : `${slot.id}`),
+    get: (index) => wrap(slots[index]),
+    getItems: () => slots.map(wrap),
+    getSlotForItemId: (id) => slots.findIndex((slot) => slot?.id === id),
+    contains: (id) => slots.some((slot) => slot?.id === id),
+    getAmount: (id) => slots.filter((slot) => slot?.id === id).reduce((sum, slot) => sum + slot.amount, 0),
+    deleteAtSlot: (index) => { slots[index] = null; },
+    delete: (id, amount) => {
+      const slot = slots.find((entry) => entry?.id === id);
+      slot.amount -= amount;
+      if (slot.amount <= 0) slots[slots.indexOf(slot)] = null;
+    },
+    adds: (id, amount) => {
+      const stack = slots.find((slot) => slot?.id === id && id === Ids.BONE_FRAGMENTS);
+      if (stack) stack.amount += amount;
+      else slots.push({ id, amount });
+    },
+    refreshItems: () => {},
+  };
+}
+
+function sceptrePlayer(inventory = [], { bank = [] } = {}) {
+  const player = createPlayer();
+  const inv = fakeContainer(inventory);
+  const worn = fakeContainer();
+  const banks = [fakeContainer(bank)];
+  Object.assign(player, { inv, worn, getInventory: () => inv, getEquipment: () => worn, getBanks: () => banks });
+  return player;
+}
+
+const use = (player, used, usedWith) => ({
+  player,
+  usedItemId: used, usedItemSlot: player.inv.getSlotForItemId(used),
+  usedWithItemId: usedWith, usedWithItemSlot: player.inv.getSlotForItemId(usedWith),
+});
+
+test("as captured: the pieces combine with their item boxes; the sceptre starts full (Wiki: 10)", () => {
+  const player = sceptrePlayer([[Ids.LEFT_SKULL_HALF], [Ids.RIGHT_SKULL_HALF], [Ids.TOP_OF_SCEPTRE], [Ids.BOTTOM_OF_SCEPTRE]]);
+  player.setAttribute(Sceptre.SPENT_ATTRIBUTE, 7);
+  Sceptre.combine(use(player, Ids.LEFT_SKULL_HALF, Ids.RIGHT_SKULL_HALF));
+  Sceptre.combine(use(player, Ids.TOP_OF_SCEPTRE, Ids.BOTTOM_OF_SCEPTRE));
+  Sceptre.combine(use(player, Ids.RUNED_SCEPTRE, Ids.STRANGE_SKULL));
+  assert.deepEqual(player.inv.ids(), [`${Ids.SKULL_SCEPTRE}`]);
+  assert.deepEqual(player.log.filter((line) => line.startsWith("say")), [
+    "say The two halves of the skull fit perfectly, they appear to have a fixing point, perhaps they are to be mounted on something?",
+    "say The two halves of the sceptre fit perfectly. It appears to be designed to have something on top.",
+    "say The skull fits perfectly atop the sceptre. You feel there is great magical power at work here, and that the sceptre has 10 charges.",
+  ]);
+  assert.equal(Sceptre.combine(use(player, Ids.SKULL_SCEPTRE, Ids.SKULL_SCEPTRE)), false, "not a combine");
+});
+
+test("Wiki: each Varrock diary tier adds 4 charges, and 1 to every piece", () => {
+  const player = sceptrePlayer();
+  assert.equal(Sceptre.maxCharges(player), 10);
+  assert.deepEqual(["LEFT_SKULL_HALF", "RIGHT_SKULL_HALF", "STRANGE_SKULL", "RUNED_SCEPTRE", "SKULL_SCEPTRE"].map((name) => Sceptre.pieceValue(player, name)), [5, 3, 8, 6, 14]);
+  diaryDone.add("easy").add("medium");
+  try {
+    assert.equal(Sceptre.maxCharges(player), 18);
+    assert.equal(Sceptre.charges(player), 18, "charges are kept as charges spent");
+    assert.deepEqual(["LEFT_SKULL_HALF", "STRANGE_SKULL", "SKULL_SCEPTRE"].map((name) => Sceptre.pieceValue(player, name)), [7, 12, 22]);
+  } finally {
+    diaryDone.clear();
+  }
+});
+
+test("Wiki: only an imbued sceptre takes pieces and fragments, up to its maximum; a chisel makes fragments", () => {
+  const player = sceptrePlayer([[Ids.SKULL_SCEPTRE_I_], [Ids.LEFT_SKULL_HALF], [Ids.TOP_OF_SCEPTRE], [Ids.BONE_FRAGMENTS, 20], [Ids.CHISEL], [Ids.RUNED_SCEPTRE]]);
+  player.setAttribute(Sceptre.SPENT_ATTRIBUTE, 9);
+  Sceptre.rechargeWithPiece(use(player, Ids.LEFT_SKULL_HALF, Ids.SKULL_SCEPTRE_I_));
+  assert.equal(Sceptre.charges(player), 6);
+  assert.equal(player.log.at(-1), "<col=7f00ff>Your Skull Sceptre has 6 charges left.</col>");
+  Sceptre.rechargeWithFragments(use(player, Ids.BONE_FRAGMENTS, Ids.SKULL_SCEPTRE_I_));
+  assert.equal(Sceptre.charges(player), 10);
+  assert.equal(player.inv.getAmount(Ids.BONE_FRAGMENTS), 16, "only the fragments needed are used");
+  Sceptre.rechargeWithPiece(use(player, Ids.TOP_OF_SCEPTRE, Ids.SKULL_SCEPTRE_I_));
+  assert.ok(player.inv.contains(Ids.TOP_OF_SCEPTRE), "a full sceptre takes nothing");
+  Sceptre.chisel(use(player, Ids.CHISEL, Ids.RUNED_SCEPTRE));
+  assert.equal(player.inv.getAmount(Ids.BONE_FRAGMENTS), 22);
+  assert.equal(player.inv.contains(Ids.RUNED_SCEPTRE), false);
+  assert.equal(Sceptre.chisel(use(player, Ids.CHISEL, Ids.SKULL_SCEPTRE_I_)), false, "the imbued sceptre is not chiselled");
+});
+
+test("transcript: Solztun's imbue needs the sceptre and boots, and imbues every sceptre the player has", () => {
+  const player = sceptrePlayer([[Ids.SKULL_SCEPTRE], [Ids.FIGHTING_BOOTS]], { bank: [[Ids.SKULL_SCEPTRE]] });
+  const definition = { getName: () => "Solztun" };
+  const ask = (stepId) => Sceptre.solztunCondition({ player, definition, stepId });
+  assert.deepEqual(["KfXhQ0", "DM2B8U", "kXhUXq", "Z90S7u", "VjwWD6"].map(ask), [true, true, false, true, false]);
+  assert.equal(Sceptre.solztunCondition({ player, definition: { getName: () => "Bob" }, stepId: "KfXhQ0" }), null);
+  const action = { player, definition, stepId: "ZHlxEk", handled: false };
+  Sceptre.solztunAction(action);
+  assert.equal(action.handled, true);
+  assert.deepEqual(player.inv.ids(), [`${Ids.SKULL_SCEPTRE_I_}`, `${Ids.FIGHTING_BOOTS}`]);
+  assert.deepEqual(player.getBanks()[0].ids(), [`${Ids.SKULL_SCEPTRE_I_}`]);
+  assert.ok(player.log.includes("varbit 5638=1"));
+  assert.equal(ask("KfXhQ0"), false, "nothing left to imbue");
 });

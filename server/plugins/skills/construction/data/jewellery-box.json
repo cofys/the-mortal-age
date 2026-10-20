@@ -1,0 +1,37 @@
+{
+  "$comment": "Jewellery box teleports in the order of the box's own client script (1685) and its last-destination locs (varbit 2308 = slot + 1). Tiles come from the jewellery they belong to (plugins/items/Teleports.Jewellery.js).",
+  "boxes": {
+    "Basic Jewellery Box": { "tier": 1, "slots": 9 },
+    "Fancy Jewellery Box": { "tier": 2, "slots": 19 },
+    "Ornate Jewellery Box": { "tier": 3, "slots": 27 }
+  },
+  "destinations": [
+    { "jewellery": "dueling", "label": "Emir's Arena" },
+    { "jewellery": "dueling", "label": "Castle Wars" },
+    { "jewellery": "dueling", "label": "Ferox Enclave" },
+    { "jewellery": "dueling", "label": "Fortis Colosseum" },
+    { "jewellery": "games", "label": "Burthorpe" },
+    { "jewellery": "games", "label": "Barbarian Outpost" },
+    { "jewellery": "games", "label": "Corporeal Beast" },
+    { "jewellery": "games", "label": "Tears of Guthix" },
+    { "jewellery": "games", "label": "Wintertodt Camp" },
+    { "jewellery": "combat", "label": "Warriors' Guild" },
+    { "jewellery": "combat", "label": "Champions' Guild" },
+    { "jewellery": "combat", "label": "Monastery" },
+    { "jewellery": "combat", "label": "Ranging Guild" },
+    { "jewellery": "skills", "label": "Fishing Guild" },
+    { "jewellery": "skills", "label": "Mining Guild" },
+    { "jewellery": "skills", "label": "Crafting Guild" },
+    { "jewellery": "skills", "label": "Cooking Guild" },
+    { "jewellery": "skills", "label": "Woodcutting Guild" },
+    { "jewellery": "skills", "label": "Farming Guild" },
+    { "jewellery": "wealth", "label": "Miscellania" },
+    { "jewellery": "wealth", "label": "Grand Exchange" },
+    { "jewellery": "wealth", "label": "Falador Park" },
+    { "jewellery": "wealth", "label": "Dondakan's Rock" },
+    { "jewellery": "glory", "label": "Edgeville" },
+    { "jewellery": "glory", "label": "Karamja" },
+    { "jewellery": "glory", "label": "Draynor Village" },
+    { "jewellery": "glory", "label": "Al Kharid" }
+  ]
+}

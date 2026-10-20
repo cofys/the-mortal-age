@@ -194,8 +194,14 @@ function buildSpriteMask(texture: Texture, canvas: HTMLCanvasElement): SpriteMas
     };
 }
 
+// Item icons are keyed by quantity, so bank, shop and inventory stacks make a new one for
+// every count they show. Keep the most recently drawn ones (36x32 each, ~9 MB at the cap).
+const ITEM_ICON_TEXTURE_MAX = 2048;
+
 export class TextureCache {
     private glr: GLRenderer;
+    /** Item icon texture keys, least recently drawn first. */
+    private itemIconKeys = new Set<string>();
     private spriteIndex: CacheIndex;
     private itemIconCanvas?: (
         itemId: number,
@@ -425,11 +431,18 @@ export class TextureCache {
 
         const key = `item:${itemId | 0}:${qty}:${outline | 0}:${shadow | 0}:${mode}`;
         const cached = this.glr.getTexture(key);
-        if (cached) return cached;
+        if (cached) {
+            this.touchItemIcon(key);
+            return cached;
+        }
         try {
             if (this.itemIconCanvas) {
                 const can = this.itemIconCanvas(itemId, qty, outline | 0, shadow | 0, mode);
-                if (can) return this.glr.createTextureFromCanvas(key, can);
+                if (can) {
+                    const tex = this.glr.createTextureFromCanvas(key, can);
+                    this.touchItemIcon(key);
+                    return tex;
+                }
             }
         } catch {}
         try {
@@ -445,6 +458,17 @@ export class TextureCache {
             }
         } catch {}
         return undefined;
+    }
+
+    private touchItemIcon(key: string): void {
+        const keys = this.itemIconKeys;
+        keys.delete(key);
+        keys.add(key);
+        if (keys.size <= ITEM_ICON_TEXTURE_MAX) return;
+        // Icons are drawn right after lookup and never held, so the oldest can go.
+        const oldest = keys.values().next().value as string;
+        keys.delete(oldest);
+        this.glr.deleteTexture(oldest);
     }
 
     /**

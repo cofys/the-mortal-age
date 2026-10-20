@@ -1,0 +1,11 @@
+[
+  {"id":1,"name":"Rimmington","level":1,"cost":5000,"portal":15478,"board":29091,"x":2954,"y":3224},
+  {"id":2,"name":"Taverley","level":10,"cost":5000,"portal":15477,"board":37384,"x":2894,"y":3465},
+  {"id":3,"name":"Pollnivneach","level":20,"cost":7500,"portal":15479,"board":37385,"x":3340,"y":3004},
+  {"id":8,"name":"Hosidius","level":25,"cost":8750,"portal":28822,"board":37386,"x":1743,"y":3517},
+  {"id":4,"name":"Rellekka","level":30,"cost":10000,"portal":15480,"board":37387,"x":2670,"y":3632},
+  {"id":13,"name":"Aldarin","level":35,"cost":12500,"portal":55353,"board":55352,"x":1422,"y":2965},
+  {"id":5,"name":"Brimhaven","level":40,"cost":15000,"portal":15481,"board":37388,"x":2758,"y":3178},
+  {"id":6,"name":"Yanille","level":50,"cost":25000,"portal":15482,"board":37389,"x":2544,"y":3096},
+  {"id":9,"name":"Prifddinas","level":70,"cost":50000,"portal":34947,"board":37390,"x":3239,"y":6076}
+]

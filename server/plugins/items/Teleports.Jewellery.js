@@ -38,7 +38,7 @@ const JEWELLERY = [
     emptyMessage: "Your amulet hasn't got any charges left.",
     lastChargeMessage: "You use your amulet's last charge.",
     destinations: [
-      { label: "Edgeville", tile: [3087, 3489, 0] },
+      { label: "Edgeville", tile: [3087, 3496, 0] },
       { label: "Karamja", tile: [2918, 3176, 0] },
       { label: "Draynor Village", tile: [3105, 3251, 0] },
       { label: "Al Kharid", tile: [3293, 3163, 0] },
@@ -299,4 +299,12 @@ for (const piece of JEWELLERY) {
   }
 }
 
-module.exports = { JEWELLERY, DEFAULT_WILDERNESS_LEVEL };
+/** The ring of wealth's teleports; RingOfWealth.plugin.js handles the ring itself. */
+const RING_OF_WEALTH_DESTINATIONS = [
+  { label: "Grand Exchange", tile: [3163, 3485, 0] },
+  { label: "Miscellania", tile: [2539, 3864, 0] },
+  { label: "Falador Park", tile: [2994, 3377, 0] },
+  { label: "Dondakan", tile: [2824, 10168, 0] },
+];
+
+module.exports = { JEWELLERY, RING_OF_WEALTH_DESTINATIONS, DEFAULT_WILDERNESS_LEVEL };

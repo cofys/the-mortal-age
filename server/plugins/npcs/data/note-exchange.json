@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "about": "Banknote exchange merchants: use a banknote on one to get the real items back for a fee per note (docs/note-exchange.md). Merchants, fees, members status, accepted items and their refusal lines are from the OSRS Wiki (each NPC's page and transcript). The menu, sound and closing item box are from rsprox captures of Virilis (recording 1104, rev 237). npc is the NpcIdentifiers name; gameval is the cache's own name for that id.",
+    "accepts": "Omitted: any banknote. \"bury\": items whose unnoted form has a Bury option. A list: those unnoted item names.",
+    "lines": "Defaults for every merchant; a merchant's own lines replace them. {fee} is the merchant's fee."
+  },
+  "coins": "COINS",
+  "sound": 2417,
+  "lines": {
+    "notBanknote": "I exchange banknotes for real items. That's not a banknote.",
+    "noCoins": "I charge {fee} coins for exchanging each banknote.",
+    "noSpace": "Your inventory is too full."
+  },
+  "merchants": [
+    { "npc": "PHIALS", "gameval": "uncerter_rimmington", "name": "Phials", "fee": 5, "members": false },
+    { "npc": "TILES", "gameval": "uncerter_bandit", "name": "Tiles", "fee": 5, "members": true },
+    { "npc": "AISLES", "gameval": "uncerter_jiminua", "name": "Aisles", "fee": 5, "members": true },
+    {
+      "npc": "BANKNOTE_EXCHANGE_MERCHANT", "gameval": "uncerter_pollnivneach", "name": "Banknote Exchange Merchant",
+      "converts": "The Banknote Exchange Merchant converts your banknotes.", "fee": 5, "members": true
+    },
+    { "npc": "BILES", "gameval": "biles", "name": "Biles", "fee": 5, "members": true },
+    {
+      "npc": "ELDER_CHAOS_DRUID_2", "gameval": "wild_chaos_uncerter", "name": "Elder Chaos druid",
+      "converts": "The Elder Chaos druid converts your banknotes.", "fee": 50, "members": false, "accepts": "bury",
+      "lines": { "notAccepted": "I only exchange items that can be offered as a sacrifice to The Dark Lord's altar." }
+    },
+    {
+      "npc": "VIRILIS", "gameval": "vm_prayer_uncerter", "name": "Virilis", "fee": 10, "members": true,
+      "accepts": [
+        "Bones", "Bat bones", "Big bones", "Zogre bones", "Babydragon bones", "Wyrmling bones", "Dragon bones",
+        "Lava dragon bones", "Wyvern bones", "Superior dragon bones", "Wyrm bones", "Drake bones", "Hydra bones",
+        "Fayrg bones", "Raurg bones", "Ourg bones", "Strykewyrm bones", "Frost dragon bones", "Dagannoth bones",
+        "Burnt bones"
+      ],
+      "lines": {
+        "notBanknote": "I'm afraid I can only exchange bank notes for real items.",
+        "notAccepted": "I only exchange bones that you can bless at Ralos' altar.",
+        "noCoins": "I require {fee} coins for exchanging each banknote."
+      }
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import { PlayerStatus } from "../game/model/PlayerStatus";
 import { PlayerRights } from "../game/model/rights/PlayerRights";
 import { isMembersWorld } from "../game/definition/WorldDefinition";
 import { PluginManager } from "../plugins/PluginManager";
+import { NetworkConstants } from "./NetworkConstants";
 import { Misc } from "../util/Misc";
 import { PlayerPunishment } from "../util/PlayerPunishment";
 import { BinaryChannel, HeadlessBinaryChannel, MAX_GAME_MESSAGE_BYTES, WebSocketBinaryChannel } from "./BinaryChannel";
@@ -189,7 +190,7 @@ export function isConfiguredDeveloperUsername(username: string): boolean {
 }
 
 export class NetworkBuilder {
-  public initialize(port: number): WebSocketServer {
+  public initialize(port: number): WebSocketServer | undefined {
     const browserHost = process.env.BROWSER_HOST === "1";
     const browserHostBridge = browserHost
       ? new BrowserHostHttpBridge((channel) => new ClientConnection(channel))
@@ -233,14 +234,16 @@ export class NetworkBuilder {
       response.setHeader("Content-Length", pack.length);
       response.end(pack);
     });
-    const server = new WebSocketServer({
+    // Browser-host clients arrive through the HTTP bridge above, never a WebSocket.
+    // Only dedicated/desktop deployments need the game WebSocket listener.
+    const server = browserHost ? undefined : new WebSocketServer({
       server: http,
       perMessageDeflate: false,
       maxPayload: MAX_GAME_MESSAGE_BYTES,
     });
-    server.on("connection", (socket, request) => new ClientConnection(new WebSocketBinaryChannel(socket, request)));
-    server.on("listening", () => console.info(`[network] client websocket listening on ${port}`));
-    server.on("error", (error) => console.error("[network] websocket error", error));
+    server?.on("connection", (socket, request) => new ClientConnection(new WebSocketBinaryChannel(socket, request)));
+    server?.on("listening", () => console.info(`[network] client websocket listening on ${port}`));
+    server?.on("error", (error) => console.error("[network] websocket error", error));
     http.listen(port);
     if (!browserHost) {
       // node-datachannel is a native addon; only require it outside the
@@ -265,11 +268,22 @@ export class ClientConnection {
   private closed = false;
   private loginFailure?: string;
   private input = Promise.resolve();
+  private queuedInputFrames = 0;
 
   constructor(private readonly channel: BinaryChannel) {
     channel.onData((frame) => {
+      if (this.closed) return;
+      if (frame.length > MAX_GAME_MESSAGE_BYTES || this.queuedInputFrames >= NetworkConstants.PACKET_QUEUE_LIMIT) {
+        console.warn("[network] client input limit exceeded", { bytes: frame.length, queued: this.queuedInputFrames });
+        this.cleanup("input_limit");
+        channel.close(1008, "input limit");
+        return;
+      }
+      this.queuedInputFrames++;
       this.input = this.input.then(() => this.handle(frame)).catch((error) => {
         console.warn("[network] client packet rejected", error);
+      }).finally(() => {
+        this.queuedInputFrames--;
       });
     });
     channel.onError((error) => {
@@ -281,11 +295,14 @@ export class ClientConnection {
   }
 
   private async handle(frame: Buffer): Promise<void> {
+    if (this.closed) return;
     let packets;
     try {
       packets = decodeClientPackets(frame);
     } catch (error) {
       console.warn("[network] rejected malformed client packet", (error as Error).message);
+      this.cleanup("malformed_packet");
+      this.channel.close(1002, "malformed packet");
       return;
     }
     await this.dispatch(packets);
@@ -315,6 +332,7 @@ export class ClientConnection {
     // on them or build a player for a socket that is already gone.
     if (this.closed) return;
     for (const packet of packets) {
+      if (this.closed) return;
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
       if (this.player && !NON_INPUT_PACKETS.has(packet.type)) this.player.lastInputCycle = World.getProcessCycle();
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
@@ -1239,7 +1257,7 @@ export class ClientConnection {
         look[Appearance.LEGS],
         look[Appearance.FEET],
       ].map((value) => value ?? -1),
-      equip: displayEquipment.map((item) => item?.getId?.() ?? -1),
+      equip: player.getAppearanceEquipmentIds(),
       equipQty: displayEquipment.map((item) => item?.getAmount?.() ?? 0),
       headIcons: {
         skull: player.isSkulled() ? player.getSkullIconId() : -1,
@@ -1291,10 +1309,18 @@ export class ClientConnection {
     // The disconnect hooks fire when the player leaves the world, which a player in
     // combat does only when it ends (World's removal queue).
     this.player.setDisconnectSource(source);
-    this.player.getTrading().closeTrade();
-    GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "disconnect");
     if (!World.getRemovePlayerQueue().includes(this.player)) {
       World.getRemovePlayerQueue().push(this.player);
+    }
+    try {
+      this.player.getTrading().closeTrade();
+    } catch (error) {
+      console.error("[network] disconnect trade cleanup failed", error);
+    }
+    try {
+      GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "disconnect");
+    } catch (error) {
+      console.error("[network] disconnect save request failed", error);
     }
   }
 }

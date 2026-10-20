@@ -2,6 +2,7 @@
   "about": "Amoxliatl (https://oldschool.runescape.wiki/w/Amoxliatl), as captured in her chamber beneath the Ruins of Tapoyauik (rsprox captures 1147 and 1695): the door, the instance, the fight and the kill. Tiles are absolute, on the cache map; the instance copies them. See docs/amoxliatl.md.",
   "npcs": {
     "boss": 13685,
+    "quest": 13686,
     "iceBlock": 13688
   },
   "door": {

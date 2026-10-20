@@ -1,0 +1,420 @@
+{
+  "$comment": "Workbench flatpacks: the category list is cache enum 3526 (its pick is sub / 3); each category's furniture in build-menu order with its flatpack item (poh_flatpack_*). A workbench makes furniture up to its level (rsprox captures: 'This workbench can only make furniture up to level 20.'); levels per bench from the OSRS Wiki.",
+  "benches": {
+    "WOODEN_WORKBENCH": 20,
+    "OAK_WORKBENCH": 40,
+    "STEEL_FRAMED_WORKBENCH": 60,
+    "BENCH_WITH_VICE": 80,
+    "BENCH_WITH_LATHE": 99
+  },
+  "categories": [
+    {
+      "name": "Armchairs",
+      "flatpacks": [
+        [
+          "CRUDE_WOODEN_CHAIR",
+          8496
+        ],
+        [
+          "WOODEN_CHAIR",
+          8498
+        ],
+        [
+          "ROCKING_CHAIR",
+          8500
+        ],
+        [
+          "OAK_CHAIR",
+          8502
+        ],
+        [
+          "OAK_ARMCHAIR",
+          8504
+        ],
+        [
+          "TEAK_ARMCHAIR",
+          8506
+        ],
+        [
+          "MAHOGANY_ARMCHAIR",
+          8508
+        ]
+      ]
+    },
+    {
+      "name": "Bookcases",
+      "flatpacks": [
+        [
+          "WOODEN_BOOKCASE",
+          8510
+        ],
+        [
+          "OAK_BOOKCASE",
+          8512
+        ],
+        [
+          "MAHOGANY_BOOKCASE",
+          8514
+        ]
+      ]
+    },
+    {
+      "name": "Beer barrels",
+      "flatpacks": [
+        [
+          "BEER_BARREL",
+          8516
+        ],
+        [
+          "CIDER_BARREL",
+          8518
+        ],
+        [
+          "ASGARNIAN_ALE_BARREL",
+          8520
+        ],
+        [
+          "GREENMANS_ALE_BARREL",
+          8522
+        ],
+        [
+          "DRAGON_BITTER_BARREL",
+          8524
+        ],
+        [
+          "CHEFS_DELIGHT_BARREL",
+          8526
+        ]
+      ]
+    },
+    {
+      "name": "Kitchen tables",
+      "flatpacks": [
+        [
+          "WOODEN_KITCHEN_TABLE",
+          8528
+        ],
+        [
+          "OAK_KITCHEN_TABLE",
+          8530
+        ],
+        [
+          "TEAK_KITCHEN_TABLE",
+          8532
+        ]
+      ]
+    },
+    {
+      "name": "Dining tables",
+      "flatpacks": [
+        [
+          "WOOD_DINING_TABLE",
+          8548
+        ],
+        [
+          "OAK_DINING_TABLE",
+          8550
+        ],
+        [
+          "CARVED_OAK_TABLE",
+          8552
+        ],
+        [
+          "TEAK_DINING_TABLE",
+          8554
+        ],
+        [
+          "CARVED_TEAK_TABLE",
+          8556
+        ],
+        [
+          "MAHOGANY_DINING_TABLE",
+          8558
+        ],
+        [
+          "OPULENT_DINING_TABLE",
+          8560
+        ]
+      ]
+    },
+    {
+      "name": "Dining benches",
+      "flatpacks": [
+        [
+          "WOODEN_BENCH",
+          8562
+        ],
+        [
+          "OAK_BENCH",
+          8564
+        ],
+        [
+          "CARVED_OAK_BENCH",
+          8566
+        ],
+        [
+          "TEAK_BENCH",
+          8568
+        ],
+        [
+          "CARVED_TEAK_BENCH",
+          8570
+        ],
+        [
+          "MAHOGANY_BENCH",
+          8572
+        ],
+        [
+          "GILDED_BENCH",
+          8574
+        ]
+      ]
+    },
+    {
+      "name": "Beds",
+      "flatpacks": [
+        [
+          "WOODEN_BED",
+          8576
+        ],
+        [
+          "OAK_BED",
+          8578
+        ],
+        [
+          "LARGE_OAK_BED",
+          8580
+        ],
+        [
+          "TEAK_BED",
+          8582
+        ],
+        [
+          "LARGE_TEAK_BED",
+          8584
+        ],
+        [
+          "FOUR_POSTER_BED",
+          8586
+        ],
+        [
+          "GILDED_FOUR_POSTER_BED",
+          8588
+        ]
+      ]
+    },
+    {
+      "name": "Dressers",
+      "flatpacks": [
+        [
+          "SHAVING_STAND",
+          8596
+        ],
+        [
+          "OAK_SHAVING_STAND",
+          8598
+        ],
+        [
+          "OAK_DRESSER",
+          8600
+        ],
+        [
+          "TEAK_DRESSER",
+          8602
+        ],
+        [
+          "FANCY_TEAK_DRESSER",
+          8604
+        ],
+        [
+          "MAHOGANY_DRESSER",
+          8606
+        ],
+        [
+          "GILDED_DRESSER",
+          8608
+        ]
+      ]
+    },
+    {
+      "name": "Wardrobes",
+      "flatpacks": [
+        [
+          "SHOE_BOX",
+          8610
+        ],
+        [
+          "OAK_DRAWERS",
+          8612
+        ],
+        [
+          "OAK_WARDROBE",
+          8614
+        ],
+        [
+          "TEAK_DRAWERS",
+          8616
+        ],
+        [
+          "TEAK_WARDROBE",
+          8618
+        ],
+        [
+          "MAHOGANY_WARDROBE",
+          8620
+        ],
+        [
+          "GILDED_WARDROBE",
+          8622
+        ]
+      ]
+    },
+    {
+      "name": "Clocks",
+      "flatpacks": [
+        [
+          "OAK_CLOCK",
+          8590
+        ],
+        [
+          "TEAK_CLOCK",
+          8592
+        ],
+        [
+          "GILDED_CLOCK",
+          8594
+        ]
+      ]
+    },
+    {
+      "name": "Cape racks",
+      "flatpacks": [
+        [
+          "OAK_CAPE_RACK",
+          9843
+        ],
+        [
+          "TEAK_CAPE_RACK",
+          9844
+        ],
+        [
+          "MAHOGANY_CAPE_RACK",
+          9845
+        ],
+        [
+          "GILDED_CAPE_RACK",
+          9846
+        ],
+        [
+          "MARBLE_CAPE_RACK",
+          9847
+        ],
+        [
+          "MAGICAL_CAPE_RACK",
+          9848
+        ]
+      ]
+    },
+    {
+      "name": "Magic wardrobes",
+      "flatpacks": [
+        [
+          "OAK_MAGIC_WARDROBE",
+          9852
+        ],
+        [
+          "CARVED_OAK_MAGIC_WARDROBE",
+          9853
+        ],
+        [
+          "TEAK_MAGIC_WARDROBE",
+          9854
+        ],
+        [
+          "CARVED_TEAK_MAGIC_WARDROBE",
+          9855
+        ],
+        [
+          "MAHOGANY_MAGIC_WARDROBE",
+          9856
+        ],
+        [
+          "GILDED_MAGIC_WARDROBE",
+          9857
+        ],
+        [
+          "MARBLE_MAGIC_WARDROBE",
+          9858
+        ]
+      ]
+    },
+    {
+      "name": "Armour cases",
+      "flatpacks": [
+        [
+          "OAK_ARMOUR_CASE",
+          9859
+        ],
+        [
+          "TEAK_ARMOUR_CASE",
+          9860
+        ],
+        [
+          "MAHOGANY_ARMOUR_CASE",
+          9861
+        ]
+      ]
+    },
+    {
+      "name": "Treasure trail chests",
+      "flatpacks": [
+        [
+          "OAK_TREASURE_CHEST",
+          9862
+        ],
+        [
+          "TEAK_TREASURE_CHEST",
+          9863
+        ],
+        [
+          "MAHOGANY_TREASURE_CHEST",
+          9864
+        ]
+      ]
+    },
+    {
+      "name": "Fancy dress boxes",
+      "flatpacks": [
+        [
+          "OAK_FANCY_DRESS_BOX",
+          9865
+        ],
+        [
+          "TEAK_FANCY_DRESS_BOX",
+          9866
+        ],
+        [
+          "MAHOGANY_FANCY_DRESS_BOX",
+          9867
+        ]
+      ]
+    },
+    {
+      "name": "Toy boxes",
+      "flatpacks": [
+        [
+          "OAK_TOY_BOX",
+          9849
+        ],
+        [
+          "TEAK_TOY_BOX",
+          9850
+        ],
+        [
+          "MAHOGANY_TOY_BOX",
+          9851
+        ]
+      ]
+    }
+  ]
+}

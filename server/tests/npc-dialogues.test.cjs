@@ -596,7 +596,7 @@ test('"same as above" after an NPC line carries on as that line does elsewhere, 
     sendMultiChatboxPrompt(_player, _title, ...pairs) { pairs[1](); return true; }, // "What is this place?"
   };
   const event = { player, npc: { getId: () => 9020 }, npcId: 9020, definition };
-  startDialogue(api, event, record.variants['first-time-talking-to-him'], {}, { ...context, player, npc: event.npc, npcId: 9020, definition });
+  startDialogue(api, event, record.variants['first-time-talking-to-him'], record.branches, { ...context, player, npc: event.npc, npcId: 9020, definition });
   assert.ok(said.includes('Train?'), 'the full explanation follows');
   assert.equal(said.filter((line) => line.startsWith('This here is the Gauntlet')).length, 1, 'said once');
   assert.equal(said.at(-1), '<closed>');

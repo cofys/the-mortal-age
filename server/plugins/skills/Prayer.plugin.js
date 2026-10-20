@@ -1,32 +1,171 @@
-const { BONE_XP: BONES } = require("../../src/main/typescript/elvarg/game/content/combat/magic/ArceuusOfferings");
-const BURY_DELAY_MS = 1200; // Two OSRS game ticks.
-const OFFER_DELAY_MS = 1800; // Three OSRS game ticks per offering.
+/**
+ * Burying bones, from plugins/skills/data/bones.json (docs/prayer-bones.md).
+ *
+ * Other plugins bury through custom events:
+ *   api.emitCustomEvent("prayer:bury", { player, itemId, scale, crushed })
+ *     -> sets `handled` when `itemId` is a bone: its experience (times `scale`, default 1) and
+ *        its Prayer restore are given. `crushed` (the bonecrusher) leaves out bones it can't crush.
+ *   api.emitCustomEvent("prayer:bone", { itemId, bone: null })
+ *     -> sets `bone` to the bone's row ({ xp, level, ... }) when `itemId` is a bone, for content
+ *        that gives its own experience (altars).
+ *   api.onCustomEvent("prayer:bone-restore", (event) => { event.restore = event.points; })
+ *     -> asked after every burial; `points` is the bone's restore, and Prayer gives back
+ *        `restore` once, so two sources (the Catacombs, a dragonbone necklace) never stack.
+ */
+const DATA = require("./data/bones.json");
 
-// OSRS altar multipliers applied to the bury XP: a plain altar (churches,
-// Edgeville, etc.) grants 2.5x; a gilded altar grants 3.5x.
+// --- Fork addition: offering bones on a generic altar ---------------------
+// Upstream's rewritten Prayer (this file) handles burying and serves the
+// "prayer:bone" lookup; its BoneAltars plugin covers the Chaos Temple altar
+// and construction's Altars covers player-owned house altars. The fork has
+// always also let players offer bones on any other object named "Altar"
+// (2.5x bury XP) or "Gilded altar" (3.5x) — CitizenPrayer's offerBonesAtAltar
+// mirrors these multipliers — so that behaviour is kept below. Two guards
+// stop double-handling with upstream's new plugins: the Chaos Temple altar
+// tile is skipped (BoneAltars owns it), and offerings inside a private area
+// are skipped (house altars own those).
+const OFFER_DELAY_MS = 1800; // Three OSRS game ticks per offering.
 const ALTAR_MULTIPLIERS = new Map([
   ["Altar", 2.5],
   ["Gilded altar", 3.5],
 ]);
+const CHAOS_ALTAR_TILE = { x: 2947, y: 3820, z: 0 }; // BoneAltars.plugin.js
 
-function consumeBone(api, player, itemId, slot, xp, messageLines) {
+function offerBone(event) {
+  const { player, itemId, object } = event;
+  const slot = event.slot ?? event.itemSlot;
   const core = api.core;
+  const bone = boneFor(itemId);
+  if (!bone) return;
+  const altarName = object.getDefinition()?.getName();
+  const multiplier = ALTAR_MULTIPLIERS.get(altarName);
+  if (!multiplier) return;
+  const at = player.getLocation();
+  if (at.x === CHAOS_ALTAR_TILE.x && at.y === CHAOS_ALTAR_TILE.y && at.z === CHAOS_ALTAR_TILE.z) return;
+  if (player.getPrivateArea?.()) return;
+  if (!player.getClickDelay().elapsedTime(OFFER_DELAY_MS)) {
+    event.handled = true;
+    return;
+  }
+  const inventory = player.getInventory();
+  if (inventory.get(slot)?.getId() !== itemId) {
+    event.handled = true;
+    return;
+  }
+  const xp = Math.floor(experience(bone.xp, 1) * multiplier);
   player.getSkillManager().stopSkillable();
   player.getPacketSender().sendInterfaceRemoval();
-  player.performAnimation(new core.Animation(827));
+  player.performAnimation(new core.Animation(BURY_ANIMATION));
   core.Sounds.sendSound(player, core.Sound.BURY_BONES);
-  const location = player.getLocation().clone();
-  const inventory = player.getInventory();
-  // Consume and award XP together on the resolving tick. An interrupted
-  // burial/offering keeps its bone, including on logout before the account
-  // is saved.
+  const location = at.clone();
+  // Consume and award XP together on the resolving tick, as buryBone does:
+  // an interrupted offering keeps its bone.
   const task = new core.CountdownTask(player, 2, () => {
     if (!canComplete() || inventory.get(slot)?.getId() !== itemId) return;
     inventory.deleteAtSlot(slot, 1);
-    for (const line of messageLines(player, itemId)) {
-      player.sendMessage(line);
+    const boneName = core.ItemDefinition.forId(itemId).getName();
+    if (altarName === "Gilded altar") {
+      player.sendMessage(`You offer the ${boneName} at the gilded altar.`);
+      player.sendMessage("The gods are pleased with your offering.");
+    } else {
+      player.sendMessage(`You offer the ${boneName} at the altar.`);
     }
     player.getSkillManager().addExperiences(core.Skill.PRAYER, xp);
+  });
+  function canComplete() {
+    return player.isRegistered() && player.getHitpoints() > 0 &&
+      player.getLocation().equals(location) && player.getMovementQueue().size() === 0 &&
+      player.getForceMovement() == null;
+  }
+  task.onTick = () => { if (!canComplete()) task.stop(); };
+  const stop = task.stop.bind(task);
+  task.stop = () => {
+    stop();
+    if (player.isRegistered()) player.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
+  };
+  api.getTaskManager().submit(task);
+  player.getClickDelay().reset();
+  event.handled = true;
+}
+
+const BURY_DELAY_MS = 1200; // Two OSRS game ticks.
+const BURY_ANIMATION = 827; // human_pickupfloor
+
+let api = null;
+let bones = null;
+
+/** The bone rows by item id, resolved from their gamevals on first use. */
+function boneFor(itemId) {
+  if (!bones) {
+    bones = new Map();
+    for (const row of DATA.bones) {
+      const id = api.core.CacheDefinitions.getObjId(row.obj);
+      if (!Number.isInteger(id)) throw new Error(`[Prayer] unknown obj gameval ${row.obj}`);
+      bones.set(id, row);
+    }
+  }
+  return bones.get(itemId) ?? null;
+}
+
+/** Experience is whole in tsps; a bone's tenths round up, as the old table did (bones 4.5 -> 5). */
+const experience = (xp, scale) => Math.ceil(xp * scale);
+
+function restorePrayer(player, itemId, bone) {
+  if (!bone.restore) return;
+  const event = { player, itemId, points: bone.restore, restore: 0 };
+  api.emitCustomEvent("prayer:bone-restore", event);
+  if (event.restore <= 0) return;
+  const { Skill } = api.core;
+  const skills = player.getSkillManager();
+  const max = skills.getMaxLevel(Skill.PRAYER);
+  if (skills.getCurrentLevel(Skill.PRAYER) >= max) return;
+  skills.increaseCurrentLevel(Skill.PRAYER, event.restore, max);
+}
+
+function award(player, itemId, bone, scale) {
+  player.getSkillManager().addExperiences(api.core.Skill.PRAYER, experience(bone.xp, scale));
+  restorePrayer(player, itemId, bone);
+}
+
+/** "prayer:bury": a bone buried without the spade (the bonecrusher). */
+function buryRequest(request) {
+  const bone = boneFor(request?.itemId);
+  if (!bone || !request.player) return;
+  if (request.crushed && bone.crush === false) return;
+  award(request.player, request.itemId, bone, request.scale ?? 1);
+  request.handled = true;
+}
+
+/** "prayer:bone": the bone's row for `itemId`. */
+function boneRequest(request) {
+  if (request) request.bone = boneFor(request.itemId);
+}
+
+function buryBone({ player, itemId, slot }) {
+  const core = api.core;
+  const bone = boneFor(itemId);
+  if (!bone) return false;
+  if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
+  const inventory = player.getInventory();
+  if (inventory.get(slot)?.getId() !== itemId) return true;
+  if (bone.level && player.getSkillManager().getMaxLevel(core.Skill.PRAYER) < bone.level) {
+    player.sendMessage(`You need a Prayer level of ${bone.level} to bury these bones.`);
+    return true;
+  }
+
+  player.getSkillManager().stopSkillable();
+  player.getPacketSender().sendInterfaceRemoval();
+  player.performAnimation(new core.Animation(BURY_ANIMATION));
+  core.Sounds.sendSound(player, core.Sound.BURY_BONES);
+  const location = player.getLocation().clone();
+  // Consume and award XP together on the resolving tick. An interrupted burial
+  // keeps its bone, including on logout before the account is saved.
+  const task = new core.CountdownTask(player, 2, () => {
+    if (!canComplete() || inventory.get(slot)?.getId() !== itemId) return;
+    inventory.deleteAtSlot(slot, 1);
+    player.sendMessage("You dig a hole in the ground..");
+    player.sendMessage(`..and bury the ${core.ItemDefinition.forId(itemId).getName()}.`);
+    award(player, itemId, bone, 1);
   });
   function canComplete() {
     return player.isRegistered() && player.getHitpoints() > 0 &&
@@ -44,54 +183,16 @@ function consumeBone(api, player, itemId, slot, xp, messageLines) {
   return true;
 }
 
-function buryBone(api, { player, itemId, slot }) {
-  const core = api.core;
-  const xp = BONES.get(itemId);
-  if (!xp) return false;
-  if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
-  const inventory = player.getInventory();
-  if (inventory.get(slot)?.getId() !== itemId) return true;
-
-  return consumeBone(api, player, itemId, slot, xp, (p, id) => [
-    "You dig a hole in the ground..",
-    `..and bury the ${core.ItemDefinition.forId(id).getName()}.`,
-  ]);
-}
-
-function offerBone(api, event) {
-  const { player, itemId, slot, object } = event;
-  const core = api.core;
-  const baseXp = BONES.get(itemId);
-  if (!baseXp) return;
-  const altarName = object.getDefinition()?.getName();
-  const multiplier = ALTAR_MULTIPLIERS.get(altarName);
-  if (!multiplier) return;
-  if (!player.getClickDelay().elapsedTime(OFFER_DELAY_MS)) {
-    event.handled = true;
-    return;
-  }
-  const inventory = player.getInventory();
-  if (inventory.get(slot)?.getId() !== itemId) {
-    event.handled = true;
-    return;
-  }
-  const xp = Math.floor(baseXp * multiplier);
-  const offered = consumeBone(api, player, itemId, slot, xp, (p, id) => {
-    const boneName = core.ItemDefinition.forId(id).getName();
-    return altarName === "Gilded altar"
-      ? [
-          `You offer the ${boneName} at the gilded altar.`,
-          "The gods are pleased with your offering.",
-        ]
-      : [`You offer the ${boneName} at the altar.`];
-  });
-  if (offered) event.handled = true;
-}
-
 module.exports = {
   name: "Prayer",
-  register(api) {
-    api.onItemFirstAction(buryBone.bind(null, api));
-    api.onItemOnObject(offerBone.bind(null, api), { noted: false });
+  register(pluginApi) {
+    api = pluginApi;
+    api.onItemFirstAction(buryBone);
+    api.onCustomEvent("prayer:bury", buryRequest);
+    api.onCustomEvent("prayer:bone", boneRequest);
+    // Guarded: some upstream test mocks provide no onItemOnObject.
+    if (typeof api.onItemOnObject === "function") {
+      api.onItemOnObject(offerBone, { noted: false });
+    }
   },
 };

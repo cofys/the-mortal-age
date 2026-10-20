@@ -610,7 +610,10 @@ function holdsPetItem(player, itemId) {
   for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
     if (tab !== Bank.BANK_SEARCH_TAB_INDEX && banks[tab]?.contains?.(itemId)) return true;
   }
-  return false;
+  // Somewhere else that keeps pets (a player-owned house's menagerie) answers for its own.
+  const request = { player, itemId, held: false };
+  pluginApi?.emitCustomEvent("pets:held-elsewhere", request);
+  return request.held;
 }
 
 /** Probita's "Let's have a look...": every insured pet the player no longer has comes back. */
@@ -621,6 +624,15 @@ function holdsPetItem(player, itemId) {
 function answerCurrentPet(request) {
   const pet = request?.player?.getAttribute?.(CURRENT_PET_ATTRIBUTE);
   if (pet?.isRegistered?.()) request.pet = pet;
+}
+
+/**
+ * "pets:owns" { player, itemId, owns }: whether the player owns the pet that item is (or one of
+ * its family), as the Font of Consumption asks before it rolls an unsired.
+ */
+function answerOwnsPet(request) {
+  const pet = getPetForItemId(request?.itemId);
+  if (pet && request.player && ownsPetFamily(request.player, pet)) request.owns = true;
 }
 
 function answerPetDefinitions(request) {
@@ -1784,6 +1796,7 @@ module.exports = {
     api.onCustomEvent("npc-drops:roll", awardDroppedPets);
     api.onCustomEvent("npc-dialogue:action", reclaimPets);
     api.onCustomEvent("pets:current", answerCurrentPet);
+    api.onCustomEvent("pets:owns", answerOwnsPet);
     api.onCustomEvent("pets:definitions", answerPetDefinitions);
     api.onCustomEvent("pets:release", releasePet);
     api.onItemDropPolicy(onPetItemDropPolicy);

@@ -482,7 +482,7 @@ export class PlayerSession {
             look[Appearance.LEGS],
             look[Appearance.FEET],
           ].map((value) => value ?? -1),
-          equip: equipment.map((item) => item?.getId?.() ?? -1),
+          equip: player.getAppearanceEquipmentIds(),
           npcTransformationId,
           equipQty: equipment.map((item) => item?.getAmount?.() ?? 0),
           headIcons: {

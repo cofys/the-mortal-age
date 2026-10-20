@@ -52,6 +52,7 @@ function harness(t, members = true) {
       object.getLocation().getX() === location.getX() && object.getLocation().getY() === location.getY()); },
     existsLocation(location) { return this.objectsAt(location).length > 0; },
   };
+  const persistedAttributes = new Map();
   const api = {
     core: { Item, ItemIdentifiers: I, NpcIdentifiers: N, Skill, Location, Wilderness: { isPvpArea: () => false },
       WorldDefinition: { isMembersWorld: () => members }, Animation, PlayerRights,
@@ -62,6 +63,7 @@ function harness(t, members = true) {
     onCustomEvent(name, cb) { custom.set(name, [...(custom.get(name) ?? []), cb]); },
     emitCustomEvent(name, event) { custom.get(name)?.forEach(cb => cb(event)); },
     getPluginConfig: () => enabled,
+    persistAttribute(key, defaultValue) { persistedAttributes.set(key, defaultValue); },
     getItemOnGroundManager: () => ({ DESPAWN_DELAY: 300, registerLocation(player, item, position) {
       const drop = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, true, -1, null);
       drops.push(drop); return drop;
@@ -126,9 +128,14 @@ function harness(t, members = true) {
     const slots = [], rewards = [], rewardItems = [], messages = [], xp = new Map(), levels = new Map();
     const p = { slots, rewards, rewardItems, messages, xp, levels, free: 28, online: true, hp: 10,
       location: new Location(3222, 3222, 0), interfaceId: -1,
+      attributes: new Map(),
       isRegistered: () => p.online, isPlayerBot: () => !!p.bot, getHitpoints: () => p.hp,
+      getAttribute: key => p.attributes.get(key), setAttribute(key, value) {
+        if (value == null) p.attributes.delete(key); else p.attributes.set(key, value);
+      }, getNpcTransformationId: () => p.transformation ?? -1,
       getLocation: () => p.location, getUsername: () => 'Player', busy: () => !!p.isBusy,
       getCombat: () => ({ getTarget: () => p.target, getAttacker: () => p.attacker }),
+      getCombatFollowing: () => p.combatFollowing,
       getPrivateArea: () => p.privateArea, getArea: () => p.area,
       getDueling: () => ({ inDuel: () => !!p.duel }), getForceMovement: () => p.movement,
       getInterfaceId: () => p.interfaceId, setInterfaceId(id) { p.interfaceId = id; },
@@ -177,33 +184,126 @@ function harness(t, members = true) {
     t.mock.method(Math, 'random', () => random);
     return npcs.at(-1);
   }
-  return { api, hooks, emit, npcs, prompts, drops, xpRewards, player, spawn,
+  return { api, hooks, emit, npcs, prompts, drops, xpRewards, persistedAttributes, player, spawn,
     advance: ms => { now += ms; }, random: value => { random = value; },
     collision: (b, m) => { blocked = b; movable = m; }, disable: () => { enabled = false; } };
 }
 
-test('natural scheduling checks eligibility, traversable spawn squares, one follower and cooldown', t => {
+test('natural scheduling waits for the due time, checks on five-minute intervals, and keeps one follower', t => {
   const h = harness(t), p = h.player();
   h.emit('PlayerLogin', { player: p }); h.emit('PlayerProcess', { player: p });
   assert.equal(h.npcs.length, 0);
   h.advance(121 * 60_000);
-  for (const key of ['isBusy', 'target', 'attacker', 'privateArea', 'area', 'duel', 'movement']) {
-    p[key] = true; h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 0, key); p[key] = null;
-  }
-  p.location = new Location(3094, 3104, 0); h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 0);
-  p.location = new Location(3222, 3222, 0);
-  h.collision(() => false, (_from, to) => to.getX() < p.location.getX());
-  h.emit('PlayerProcess', { player: p }); const npc = h.npcs[0];
-  assert.equal(npc.location.getX(), 3221, 'an unblocked tile across a wall is skipped');
+  p.isBusy = true; h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 0, 'busy action stalls the due event');
+  const pendingDue = p.getAttribute('random-events:next-at');
+  h.advance(10_000);
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(p.getAttribute('random-events:next-at'), pendingDue, 'pending checks do not reroll the timer');
+  h.advance(10_000);
+  p.isBusy = false; p.target = {}; h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 1, 'the pending event appears as soon as the busy action ends');
+  const dueAt = p.getAttribute('random-events:next-at');
+  assert.ok(dueAt > Date.now());
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 1);
+  const npc = h.npcs[0];
   assert.equal(npc.following, p); assert.equal(npc.definition.ownerOnly, undefined);
-  h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 1);
   h.hooks['Sandwich lady'].Dismiss({ player: p, npc });
-  h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 1, 'dismissal re-arms cooldown');
+  h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 1, 'dismissal keeps the timer set at spawn');
+});
+
+test('a teleport invitation can spawn during combat but does not move the player without acceptance', t => {
+  const h = harness(t), p = h.player();
+  p.target = {}; p.attacker = {}; p.combatFollowing = {};
+  const origin = p.location.clone();
+  const npc = h.spawn(p, 20);
+  assert.equal(npc.definition.id, N.MYSTERIOUS_OLD_MAN_5);
+  assert.equal(p.location.equals(origin), true);
+  assert.equal(Teleports.hasSession(p), false);
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(p.location.equals(origin), true, 'processing the invitation does not teleport either');
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc, handled: false });
+  choose(h, p, 1);
+  assert.equal(p.location.equals(origin), true, 'declining the invitation leaves the fight in place');
+  assert.equal(Teleports.hasSession(p), false);
+});
+
+test('the due timestamp survives relogin and an offline-expired timer moves 10–70 minutes ahead', t => {
+  const h = harness(t), p = h.player();
+  h.emit('PlayerLogin', { player: p });
+  const original = p.getAttribute('random-events:next-at');
+  h.emit('PlayerLogout', { player: p }); h.emit('PlayerLogin', { player: p });
+  assert.equal(p.getAttribute('random-events:next-at'), original);
+  h.advance(original - Date.now() + 1);
+  h.emit('PlayerLogout', { player: p }); h.emit('PlayerLogin', { player: p });
+  const shifted = p.getAttribute('random-events:next-at');
+  assert.ok(shifted - Date.now() >= 10 * 60_000 && shifted - Date.now() <= 70 * 60_000);
+});
+
+test('a corrupt far-future timestamp is replaced with a bounded cooldown', t => {
+  const h = harness(t), p = h.player();
+  p.setAttribute('random-events:next-at', Date.now() + 100 * 365 * 24 * 60 * 60_000);
+  h.emit('PlayerLogin', { player: p });
+  const dueAt = p.getAttribute('random-events:next-at');
+  assert.ok(dueAt > Date.now() && dueAt <= Date.now() + 120 * 60_000);
 });
 
 test('bots and inaccessible squares cannot produce event NPCs', t => {
   const h = harness(t), p = h.player(); p.bot = true; h.spawn(p); assert.equal(h.npcs.length, 0);
   p.bot = false; h.collision(() => false, () => false); h.spawn(p); assert.equal(h.npcs.length, 0);
+});
+
+test('crash relogin returns from a random-event area to the exact saved tile', t => {
+  const h = harness(t), p = h.player();
+  assert.equal(h.persistedAttributes.get('random-events:return-location'), null);
+  const origin = new Location(2750, 3510, 0);
+  p.setAttribute('random-events:return-location', { x: origin.getX(), y: origin.getY(), z: origin.getZ() });
+  p.location = new Location(1926, 5044, 0);
+  h.emit('PlayerLogin', { player: p });
+  assert.ok(p.location.equals(origin));
+  assert.equal(p.getAttribute('random-events:return-location'), undefined);
+});
+
+test('crash recovery clears corrupt or stale return tiles and safely falls back from invalid coordinates', t => {
+  const h = harness(t), p = h.player();
+  p.location = new Location(1926, 5044, 0);
+  p.setAttribute('random-events:return-location', { x: -1, y: 50_000, z: 9 });
+  h.emit('PlayerLogin', { player: p });
+  assert.ok(p.location.equals(new Location(3222, 3218, 0)));
+  assert.equal(p.getAttribute('random-events:return-location'), undefined);
+
+  const q = h.player(), outside = new Location(3300, 3300, 0);
+  q.location = outside;
+  q.setAttribute('random-events:return-location', { broken: true });
+  h.emit('PlayerLogin', { player: q });
+  assert.ok(q.location.equals(outside));
+  assert.equal(q.getAttribute('random-events:return-location'), undefined);
+
+  const r = h.player();
+  r.location = new Location(2008, 4756, 0);
+  r.setAttribute('random-events:return-location', { x: 1926, y: 5044, z: 0 });
+  h.emit('PlayerLogin', { player: r });
+  assert.ok(r.location.equals(new Location(3222, 3218, 0)), 'event-area return tiles are rejected');
+});
+
+test('transformed players stall and Wilderness selection excludes teleporting events', t => {
+  const h = harness(t), p = h.player();
+  h.api.core.Wilderness.isPvpArea = () => true;
+  h.emit('PlayerLogin', { player: p });
+  p.transformation = N.FROG_6;
+  h.advance(121 * 60_000); h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 0);
+  p.transformation = -1;
+  h.random(0); h.advance(5 * 60_000); h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.at(-1).definition.id, N.GENIE);
+});
+
+test('managed non-Wilderness areas defer the schedule instead of spawning in an unknown zone', t => {
+  const h = harness(t), p = h.player();
+  p.area = {};
+  h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000); h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 0);
+  assert.ok(p.getAttribute('random-events:next-at') > Date.now());
 });
 
 test('randevt is described and owner-only, selects each index immediately and replaces the owned event', t => {
@@ -250,11 +350,13 @@ test('randevt rejects malformed/unavailable indices and ineligible players witho
     assert.equal(h.npcs.length, 1); assert.equal(first.removed, undefined);
   }
   p.target = {}; command({ player: p, parts: ['randevt', '1'] });
-  assert.equal(h.npcs.length, 1); assert.equal(first.removed, undefined);
+  assert.equal(h.npcs.length, 2); assert.equal(first.removed, true, 'combat does not block an in-place event');
+  const replacement = h.npcs.at(-1);
   p.target = null; h.collision(() => true, () => false);
   command({ player: p, parts: ['randevt', '1'] });
-  assert.equal(h.npcs.length, 1); assert.match(p.messages.at(-1), /No traversable square/);
-  h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 1, 'failed test retains the cooldown');
+  assert.equal(h.npcs.length, 2); assert.equal(replacement.removed, true);
+  assert.match(p.messages.at(-1), /No traversable square/);
+  h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 2, 'failed test retains the cooldown');
 });
 
 test('Genie and dwarf deny other players, retain full-inventory events and grant only once', t => {
@@ -341,7 +443,7 @@ test('dismissal, expiry, distance, plane, instances, logout, death and shutdown 
     else if (reason.startsWith('Player')) h.emit(reason, { player: p });
     else if (reason === 'ServerShutdown') h.emit(reason);
     else {
-      if (reason === 'expiry') { h.advance(180_000); h.disable(); }
+      if (reason === 'expiry') { h.advance(60_000); h.disable(); }
       if (reason === 'distance') p.location = new Location(3300, 3300, 0);
       if (reason === 'plane') p.location = new Location(3222, 3222, 1);
       if (reason === 'instance') p.privateArea = {};
@@ -464,7 +566,7 @@ test('Certer wrong answers end without a reward; expiry closes its interface', t
   h.random(0); h.hooks.Niles['Talk-to']({ player: p, npc }); certerChoice(h, p, 'Sword');
   assert.equal(npc.removed, true); assert.deepEqual(p.rewards, []); assert.equal(p.interfaceId, -1);
   const q = h.player(), expired = h.spawn(q, 4); h.random(0); h.hooks.Niles['Talk-to']({ player: q, npc: expired });
-  h.advance(180_000); h.emit('PlayerProcess', { player: q }); certerChoice(h, q, 'Fish');
+  h.advance(60_000); h.emit('PlayerProcess', { player: q }); certerChoice(h, q, 'Fish');
   assert.equal(expired.removed, true); assert.deepEqual(q.rewards, []); assert.equal(q.interfaceId, -1);
 });
 
@@ -508,7 +610,7 @@ test('Jekyll rejects strangers, moved/replaced herbs, stale prompts and replies 
     if (reason === 'swapped') p.slots[2] = new Item(I.IRIT_LEAF, 1);
     if (reason === 'new-prompt') h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc });
     if (reason.startsWith('Player')) h.emit(reason, { player: p });
-    if (reason === 'expired') h.advance(180_000);
+    if (reason === 'expired') h.advance(60_000);
     if (reason === 'dismiss') h.hooks['Dr Jekyll'].Dismiss({ player: p, npc });
     yes(); yes(); assert.deepEqual(p.rewards, [], reason);
   }
@@ -568,7 +670,7 @@ test('Strange Plant cleans up without fruit after dismissal, expiry, distance or
     h.hooks['Strange plant'].Dismiss({ player: h.player(), npc }); assert.equal(npc.removed, undefined);
     if (reason === 'dismiss') h.hooks['Strange plant'].Dismiss({ player: p, npc });
     if (reason === 'logout') h.emit('PlayerLogout', { player: p });
-    if (reason === 'expiry') { h.advance(180_000); h.emit('PlayerProcess', { player: p }); }
+    if (reason === 'expiry') { h.advance(60_000); h.emit('PlayerProcess', { player: p }); }
     if (reason === 'distance') { p.location = new Location(3300, 3300, 0); h.emit('PlayerProcess', { player: p }); }
     h.hooks['Strange plant'].Pick({ player: p, npc });
     assert.equal(npc.removed, true); assert.deepEqual(p.rewards, []);
@@ -648,6 +750,7 @@ test('Kiss the frog pays a token, politely ends, or turns rude players into a fr
     } else if (expected === 'end') {
       assert.deepEqual(p.rewards, []);
       assert.equal(npc.removed, true);
+      assert.ok(h.npcs.slice(before).every(entry => entry.removed), 'the frog chorus is cleaned up too');
     } else {
       assert.equal(p.transformation, N.FROG_6);
       assert.equal(p.location.getX(), 2464);
@@ -694,6 +797,25 @@ test("Capt' Arnav's combilock opens, rolls and pays only on a solved lock", t =>
   assert.equal(npc.removed, true);
   const doomed = h.spawn(h.player(), 9);
   h.hooks["Capt' Arnav"]['Talk-to']({ player: h.player(), npc: doomed });
+});
+
+test('throwing session cleanup callbacks do not strand players or stop shutdown cleanup', t => {
+  const h = harness(t), players = [h.player(), h.player()], cleaned = [];
+  t.mock.method(console, 'error', () => {});
+  for (const [index, p] of players.entries()) {
+    const origin = p.location.clone(), npc = h.spawn(p, 10);
+    h.hooks['Bee keeper']['Talk-to']({ player: p, npc, handled: false }); choose(h, p, 0);
+    const session = Teleports.sessionOf(p);
+    session.cleanup.unshift(() => { throw new Error('cleanup failed'); }, () => cleaned.push(index));
+    p.origin = origin;
+  }
+  h.emit('ServerShutdown');
+  assert.deepEqual(cleaned.sort(), [0, 1]);
+  for (const p of players) {
+    assert.ok(p.location.equals(p.origin));
+    assert.equal(p.getAttribute('random-events:return-location'), undefined);
+    assert.equal(Teleports.sessionOf(p), undefined);
+  }
 });
 
 test('Beekeeper assembles the hive and rewards a lamp plus an outfit piece', t => {

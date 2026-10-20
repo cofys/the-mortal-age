@@ -7,6 +7,8 @@ const { ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 
 const PRAY_AT_ALTAR_ANIMATION = new Animation(645);
 
+let core = null;
+
 // The client transforms the occult altar to match the active spellbook. Its
 // first "Venerate" option therefore selects the spellbook omitted by the
 // named options on that variant.
@@ -69,6 +71,14 @@ function prayerAltar({ player }) {
   return handlePrayerAltar(player);
 }
 
+/**
+ * Chaos altars pray as altars do (captured at the Chaos Temple: human_pray, synth 2674, the same
+ * messages). The Yanille Agility dungeon's trapdoor altar is left to fall through.
+ */
+function prayAtChaosAltar({ player, objectId }) {
+  return objectId === core.ObjectIdentifiers.CHAOS_ALTAR_3 ? false : handlePrayerAltar(player);
+}
+
 /** Shrines restore Prayer as altars do; the Woodcutting Guild's full-Prayer line, as captured. */
 function prayAtShrine({ player }) {
   return handlePrayerAltar(player, "You already have full Prayer Points.");
@@ -98,10 +108,12 @@ function arceuusSpellbook({ player }) {
 module.exports = {
   name: "Altars",
   register: (api) => {
+    core = api.core;
     api.onObjectInteraction("Ancient Altar", { Venerate: ancientAltar });
     api.onObjectInteraction("Lunar Altar", { Venerate: lunarAltar });
     api.onObjectInteraction("Dark Altar", { Venerate: darkAltar });
     api.onObjectInteraction("Altar", { "Pray-at": prayerAltar, Pray: prayerAltar });
+    api.onObjectInteraction("Chaos altar", { "Pray-at": prayAtChaosAltar });
     api.onObjectInteraction("Shrine", { "Pray-at": prayAtShrine });
     api.onObjectInteraction("Altar of the Occult", {
       Venerate: venerateOccultAltar,

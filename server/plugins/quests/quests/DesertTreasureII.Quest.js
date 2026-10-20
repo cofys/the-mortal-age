@@ -4853,7 +4853,7 @@ module.exports = function registerDesertTreasureII(api) {
       return promptGolemSearch(p);
     }
     p.setAttribute(SEARCHED_NAMES, searched | bit);
-    // shortcut: archive reports use golem dialogue until the cache's data interface is mapped.
+    // shortcut: archive reports use chatbox messages until the cache's data interface is mapped.
     const variant = `familiar-faces-powering-up-the-golem-machine-${term === "whisperer" ? "the-whisperer-true-name-classified" : term}`;
     talk(p, N.GOLEM_3, variant);
   }

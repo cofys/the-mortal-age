@@ -930,7 +930,10 @@ module.exports = function registerCorsairCurseQuest(api) {
         startTranscript(api, player, CAPTAIN_TOCK_START, PAGE, "the-cursed-crew-talking-to-captain-tock", (steps) => sceneTail(steps,line)??[]);
       });
     }; return; }
+    // Every line passes through here: keep a hook another quest set for the same line.
+    const previous = event.before;
     event.before = () => {
+      previous?.();
       const stage = quest.getStage(player);
       if (TOCK_NPC_IDS.has(npcId) && line === "Sure, I'll try to help with your curse." && stage === 0) {
         advance(player, STAGE_STARTED); player.sendMessage("You've started a new quest: <col=081190>The Corsair Curse</col>");

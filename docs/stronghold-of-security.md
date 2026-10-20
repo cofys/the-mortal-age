@@ -76,9 +76,52 @@ Opened again: "You have already claimed your reward from this level." A claimed 
 
 It can be searched again for more boots. OSRS gates the boots on 2FA and a Jagex Account; neither exists here, so all three are offered.
 
+## The skull sceptre
+
+`Sceptre.StrongholdOfSecurity.js`, with its data under `sceptre` in the JSON.
+
+**Sources:**
+- rsprox captures (recordings 1768, 1844, 3121, 3211): the three combines and Invoke, with an unimbued and an imbued sceptre.
+- The Wiki (Skull sceptre, Bone fragments): charges, recharging and the Wilderness limit.
+- Solztun's Wiki transcript: the imbue.
+
+**Combining** removes both items and shows the result in an item box (interface 193):
+
+| Used together | Makes | Box text (captured) |
+| --- | --- | --- |
+| Right + Left skull half | Strange skull | "The two halves of the skull fit perfectly, they appear to have a fixing point, perhaps they are to be mounted on something?" |
+| Top + Bottom of sceptre | Runed sceptre | "The two halves of the sceptre fit perfectly. It appears to be designed to have something on top." |
+| Strange skull + Runed sceptre | Skull sceptre | "The skull fits perfectly atop the sceptre. You feel there is great magical power at work here, and that the sceptre has N charges." |
+
+A new sceptre starts with the most charges the player can hold (Wiki).
+
+**Invoke**, from the inventory or worn, teleports to 3081,3421. The capture shows the standard spellbook teleport (`human_castteleport`, `teleport_casting`, sound 200, landing on tick 3), so it uses the shared `TeleportType.NORMAL`. It works up to level 20 Wilderness (Wiki). On landing it spends a charge and says "<col=7f00ff>Your Skull Sceptre has N charges left.</col>" (captured). It also completes the Varrock hard diary task "Teleport to Barbarian Village with a skull sceptre" (one capture, on a Leagues world). **Divine** gives the same message.
+
+**Charges (Wiki):**
+- The maximum is 10, plus 4 for each Varrock diary tier done (up to 26).
+- Every unimbued sceptre shares one pool. The one that spends the last charge crumbles, and the pool is full again.
+- The server keeps the charges spent, not the charges left, so a sceptre never used is full and a new diary tier adds its charges straight away.
+
+**Solztun** imbues "any Skull sceptres the player has": the ones carried, worn and banked all become Skull sceptre (i). He also sets `sos_sceptre_imbued` (varbit 5638), which is restored on login, and every sceptre made afterwards is imbued.
+- His transcript runs as usual. The plugin answers its conditions: he needs a sceptre plus Fancy, Fighting or Fancier boots in the inventory.
+- The server has no Authenticator, so the account always counts as safe, as it does for the Cradle's boots.
+- Using a sceptre on him plays his "using a skull sceptre on him" variant.
+
+**An imbued sceptre** never crumbles and can be recharged, up to its maximum (Wiki):
+- a piece: Right skull half, Top of sceptre and Bottom of sceptre give 3 charges each and the Left skull half 5, all +1 per diary tier;
+- bone fragments: one charge each, and only the fragments needed are used.
+
+**A chisel** breaks an unimbued piece, combined piece or whole sceptre into the bone fragments its pieces are worth (Wiki: 14 for a sceptre without diary tiers).
+
+**Not captured:**
+- "Your Skull Sceptre crumbles to dust."
+- "Your Skull Sceptre has no charges left." (an empty imbued sceptre)
+- "Your Skull Sceptre is already fully charged."
+- "You chisel the … into N bone fragments."
+- The charges message with 1 charge left. It is sent as "1 charges", as written in the captured template.
+
 ## Not modelled
 
-- **The skull sceptre:** combining its parts, its teleport and charges, and Solztun's imbue. Its parts drop as usual.
 - **Solztun's `sos_brother_found` varbit (5639)** and the dead explorer's notes. His transcript dialogue plays as for any NPC.
 - **Monster aggression** inside the Stronghold.
 - **The ladder warning's exact varbit meaning:** the capture shows it counting up. The "don't ask" choice is kept server-side.

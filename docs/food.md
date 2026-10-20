@@ -38,7 +38,7 @@ need no id lists. Tests: `server/tests/food-effects.test.cjs` and `eat-attack-de
 | --- | --- |
 | `name` | The item's cache name. |
 | `bites` | The bite names, first to last (`["Cake", "2/3 cake", "Slice of cake"]`), or a number when every bite has the same name: that name's ids, lowest first, are the bites (giant crab meat). |
-| `heal` | A number, `{ "min", "max" }` (a roll), or `{ "flat", "percent" }` of the Hitpoints level (strawberry, sweetcorn, watermelon slice). |
+| `heal` | A number, `{ "min", "max" }` (a roll), `{ "flat", "percent" }` of the Hitpoints level (strawberry, sweetcorn, watermelon slice), or `{ "lowestOf": { skill: divisor }, "round"? }`: the lowest of those base levels divided by their numbers, rounded down or `"nearest"` (the Neypotzli foods: cooked bream the lower of Cooking/3 and Fishing/3, to the nearest, as the Wiki's 7 at 20 Fishing shows; cooked moss lizard the lower of Cooking/3 and Hunter/2, down). |
 | `eatDelay` | Ticks until the next bite, per bite or for all (default 3). |
 | `combo` | A combo food. |
 | `leaves` | The item left after the last bite (`Pie dish`, `Bowl`). |
@@ -72,4 +72,4 @@ Items with an Eat option that aren't in the data, each listed with its reason in
 handled by another plugin (Poisoned cheese, White pearl, ToA's Honey locust, Castle Wars bandages
 use Heal); quest, event and minigame items with their own effects (rock cakes, poison karambwan,
 nightshade, Servery food); event sweets and candy; food only eaten in one
-fight (Moons of Peril); unobtainable items; and the whole watermelon, which is sliced first.
+area (Vampyrium); unobtainable items; and the whole watermelon, which is sliced first.

@@ -32,6 +32,8 @@ const SUBTABLES_FILE = "npc-drop-subtables.json";
 const OVERRIDES_FILE = "npc-drop-overrides.json";
 const CURRENCY_IDS = new Set([995, 6529, 21555]);
 const RING_OF_WEALTH_TABLES = new Set(["rareDrop", "gem", "megaRare"]);
+/** Brimstone key, Larran's key. */
+const SLAYER_KEYS = new Set([23083, 23490]);
 const KALPHITE_QUEEN_NOTED_ITEMS = new Set([
   1391, 3049, 207, 3051, 219, 2363, 1783, 444, 1513, 1621, 1619, 1617, 245, 3138, 1987, 5940, 6016,
 ]);
@@ -141,6 +143,14 @@ function applyOverrides(dump, subtables, overrides) {
 }
 
 function applyWikiCorrections(tableById) {
+  // Brimstone and Larran's keys drop from Konar's and Krystilia's task kills at a chance set by
+  // the monster's combat level (plugins/skills/slayer/Keys.Slayer.js). The Wiki lists them on
+  // some tables as "Always" (Konar task bonus) or a fixed rate, which dropped them on any kill.
+  for (const table of Object.values(tableById)) {
+    for (const field of ["entries", "tertiary"]) {
+      if (table[field]) table[field] = table[field].filter((entry) => !SLAYER_KEYS.has(entry.item_id));
+    }
+  }
   // Each bronze piece survives on its own 9/10 roll (Wiki: 72.9% to get all three back); the
   // export flattened them into one 27-slot roll that always returns exactly one piece.
   for (const entry of tableById.animated_bronze_armour?.entries || []) {

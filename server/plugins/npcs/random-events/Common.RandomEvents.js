@@ -7,10 +7,15 @@ const TRAY_GROUP = 297;
 const TRAY_TITLE = (TRAY_GROUP << 16) | 2;
 const TRAY_FIRST_FOOD = 6;
 const TRAY_SELECT_ACTION = 1;
-const EVENT_LIFETIME_MS = 180_000;
+const EVENT_LIFETIME_MS = 60_000;
 const NAG_INTERVAL_MS = 18_000;
+const CHECK_INTERVAL_MS = 5 * 60_000;
+const MAX_INTERVAL_MS = 120 * 60_000;
+const NEXT_EVENT_ATTRIBUTE = "random-events:next-at";
 const MAX_DISTANCE = 15;
 const DEFINITIONS_EVENT = "random-events:definitions";
+const TELEPORTING_KINDS = new Set(["frog", "beekeeper", "drill", "forester", "gravedigger",
+  "pinball", "evilbob", "prison", "eviltwin", "maze", "mime", "pillory", "quiz", "exam"]);
 const Gift = require("./GiftRewards.RandomEvents");
 const Certer = require("./Certer.RandomEvents");
 const Teleports = require("./Teleports.RandomEvents");
@@ -23,6 +28,7 @@ let foods;
 function initialize(pluginApi) {
   shutdown();
   api = pluginApi;
+  api.persistAttribute(NEXT_EVENT_ATTRIBUTE);
   Teleports.initialize(pluginApi, { finish });
   if (typeof api.registerArea === "function") {
     for (const area of Teleports.createAreas()) api.registerArea(area);
@@ -48,32 +54,43 @@ function initialize(pluginApi) {
 }
 
 // Port of Void's initial cooldown and re-arming before an attempted spawn.
-// The original OSRS scheduler is unpublished; use the reference's 60–120 minutes.
+// Mod Ash's Wiki-cited timing is a real-time 60–120 minute interval.
 function nextEventAt(now) {
   return now + (60 + Math.random() * 60) * 60_000;
 }
 
+function eventAvailable(definition, player) {
+  const wilderness = api.core.Wilderness.isPvpArea(player.getLocation());
+  return (!player.getArea?.() || wilderness) && !(TELEPORTING_KINDS.has(definition.kind) && wilderness);
+}
+
+function disallowedLocation(player) {
+  const location = player.getLocation();
+  const x = location.getX(), y = location.getY();
+  return player.getPrivateArea?.() != null || (location.getZ() === 0 && x >= 3060 && x <= 3165 &&
+    ((y >= 3060 && y <= 3165) || (y >= 9400 && y <= 9620)));
+}
+
 function login({ player }) {
+  if (Teleports.hasSession(player)) Teleports.departed(player, true);
   cleanup({ player });
   if (player?.isPlayerBot?.() === true) return;
   Teleports.recover(player);
-  players.set(player, { nextAt: nextEventAt(Date.now()), active: null });
+  const now = Date.now();
+  let nextAt = Number(player.getAttribute(NEXT_EVENT_ATTRIBUTE));
+  if (!Number.isFinite(nextAt) || nextAt <= 0 || nextAt > now + MAX_INTERVAL_MS) nextAt = nextEventAt(now);
+  else if (nextAt <= now) nextAt = now + (10 + Math.random() * 60) * 60_000;
+  player.setAttribute(NEXT_EVENT_ATTRIBUTE, nextAt);
+  players.set(player, { nextAt, checkAt: now, pending: false, active: null });
 }
 
 function eligible(player, forCommand = false) {
-  const combat = player.getCombat();
-  const location = player.getLocation();
-  const x = location.getX(), y = location.getY();
-  // Same surface/underground footprint as TutorialIsland's existing restriction.
-  const tutorial = location.getZ() === 0 && x >= 3060 && x <= 3165 &&
-    ((y >= 3060 && y <= 3165) || (y >= 9400 && y <= 9620));
   return player.isRegistered() && player.isPlayerBot?.() !== true &&
     player.getHitpoints() > 0 && !player.busy() && !player.isDyingReturn?.() &&
     !player.isTeleportingReturn?.() && player.getForceMovement?.() == null &&
-    player.getPrivateArea?.() == null && !tutorial &&
-    (forCommand || player.getArea?.() == null || api.core.Wilderness.isPvpArea(location)) &&
-    !player.getDueling?.().inDuel?.() &&
-    !combat.getTarget() && !combat.getAttacker() && !player.getCombatFollowing?.();
+    !disallowedLocation(player) &&
+    (forCommand || !player.getDueling?.().inDuel?.()) &&
+    !(player.getNpcTransformationId?.() >= 0);
 }
 
 function spawn(player, state, now, definition = null) {
@@ -121,10 +138,13 @@ function spawnCommand(event) {
     return;
   }
   if (!eligible(player, true)) {
-    player.sendMessage("Move outside combat and restricted activities before testing a random event.");
+    player.sendMessage("Finish restricted actions or activities before testing a random event.");
     return;
   }
   login({ player }); // Replace the previous owned event and re-arm its cooldown.
+  const state = players.get(player);
+  state.nextAt = nextEventAt(Date.now());
+  player.setAttribute(NEXT_EVENT_ATTRIBUTE, state.nextAt);
   if (spawn(player, players.get(player), Date.now(), events[index])) {
     player.sendMessage(`Spawned random event ${index} (${events[index].kind}).`);
   } else {
@@ -142,15 +162,14 @@ function valid(active, player, now = Date.now()) {
 
 function finish(active) {
   const state = players.get(active.player);
-  if (state?.active === active) {
-    state.active = null;
-    state.nextAt = nextEventAt(Date.now());
-  }
+  if (state?.active === active) state.active = null;
   eventsByNpc.delete(active.npc);
   if (active.interfaceId && active.player.getInterfaceId() === active.interfaceId) {
     active.player.getPacketSender().sendInterfaceRemoval();
   }
-  api.removeNpc(active.npc);
+  try { active.definition.onFinish?.(active); }
+  catch (error) { console.error("[RandomEvents] event cleanup failed", error); }
+  finally { api.removeNpc(active.npc); }
 }
 
 function processPlayer({ player }) {
@@ -173,9 +192,31 @@ function processPlayer({ player }) {
     return;
   }
   if (Teleports.hasSession(player)) return;
-  if (api.getPluginConfig("random-events:enabled", true) === false || now < state.nextAt || !eligible(player)) return;
+  if (!state.pending) {
+    if (now < state.checkAt) return;
+    state.checkAt = now + CHECK_INTERVAL_MS;
+    if (now < state.nextAt) return;
+    state.pending = true;
+  }
+  if (api.getPluginConfig("random-events:enabled", true) === false) return;
+  if (disallowedLocation(player)) {
+    state.pending = false;
+    state.nextAt = nextEventAt(now);
+    player.setAttribute(NEXT_EVENT_ATTRIBUTE, state.nextAt);
+    return;
+  }
+  if (!eligible(player)) return;
+  const available = events.filter(definition => eventAvailable(definition, player));
+  if (!available.length) {
+    state.pending = false;
+    state.nextAt = nextEventAt(now);
+    player.setAttribute(NEXT_EVENT_ATTRIBUTE, state.nextAt);
+    return;
+  }
+  state.pending = false;
   state.nextAt = nextEventAt(now);
-  spawn(player, state, now);
+  player.setAttribute(NEXT_EVENT_ATTRIBUTE, state.nextAt);
+  spawn(player, state, now, available[Math.floor(Math.random() * available.length)]);
 }
 
 function serve(active, rewards, exchange = null) {

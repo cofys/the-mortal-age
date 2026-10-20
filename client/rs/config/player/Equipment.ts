@@ -134,7 +134,8 @@ export function deriveAdditionalEquipSlotsFromParams(obj: ObjType | undefined): 
 
 /**
  * The appearance with an animation's held items (a fishing net, a harpoon) in the hands, or the
- * same appearance when the sequence holds none. The cache stores these item ids offset by 512.
+ * same appearance when the sequence holds none. The cache stores these item ids offset by 512;
+ * 0 empties the hand (carpet_sit_down puts the weapon and shield away).
  */
 export function withSeqHandItems(
     app: PlayerAppearance,
@@ -142,7 +143,7 @@ export function withSeqHandItems(
 ): PlayerAppearance {
     if (!seq || (app.npcTransformationId ?? -1) >= 0) return app;
     if (seq.leftHandItem < 0 && seq.rightHandItem < 0) return app;
-    const unoffset = (id: number) => (id >= 512 ? id - 512 : id);
+    const unoffset = (id: number) => (id >= 512 ? id - 512 : -1);
     const equip = app.equip.slice();
     if (seq.leftHandItem >= 0) equip[EquipmentSlot.SHIELD] = unoffset(seq.leftHandItem);
     if (seq.rightHandItem >= 0) equip[EquipmentSlot.WEAPON] = unoffset(seq.rightHandItem);

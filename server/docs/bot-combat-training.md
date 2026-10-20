@@ -288,16 +288,23 @@ handler (`api.emitItemOnObject`). Food the bot's Cooking level cannot cook is le
 ## PvP (wilderness) bots
 
 Configured in the same file, under `"pvp"`: `botPool` (how many `WildyBot` names exist),
-`activeRegionBotsPerRegion` / `activeRegionInset` (regional spread around players) and `hotspots`
-(area, anchor, `targetBots` / `maxBots`, combat level band, allowed loadouts). The gear catalogue
-stays in `pvp-bot-loadouts.json`; hotspots refer to it by loadout id.
+`activeRegionBotsPerRegion` / `activeRegionInset` (regional spread around players). Sites with a
+`pvp` block define hotspots: `bots` sets their population, `pvp.combat` their level band, and
+`pvp.style` selects matching tags from `pvp-bot-loadouts.json`.
 
-Hotspots are clusters spread around the wilderness. All but the ditch are members-only and
-level-matched to the player presets behind `::presets`: each names a `presetGroup` (`main_126`,
-`pure_1_def`, `tank_45_def`, `tank_70_def` in `pvp-bot-loadouts.json`), and its bots spawn wearing
-one of that group's actual player presets, so a cluster's levels and gear mirror what players run
-there. Varrock Ditch is the free-to-play spot: f2p loadouts only, for the classic low-level ditch
-crowd, and it never draws a player preset.
+Regional bots fill attackable regions around players. Town PvP regions use the full regional
+target (48 by default); levelled Wilderness regions use one third, rounded up (16 by default).
+Hotspot bots count towards that region's target. Persistent Wilderness clusters are smaller:
+12 low-level, 10 mid-level and 14 main bots at Edgeville, 40 at Varrock Ditch, and 4 each at
+Green Dragons and the Revenant Caves entrance. Safe tiles and buildings still cannot spawn bots.
+
+Regional bots and hotspot bots both draw from the gear catalogue, including its random equipment
+pools and profile-gated valuable weapons. Hotspots keep their combat bands, and Varrock Ditch
+uses only free-to-play loadouts. A bot keeps its selected archetype when it regears.
+
+Bot gear is lootable under the usual skull/protection rules, including gear loaded through a
+player preset while PvpMode is enabled. Eligible kills put the loot on the ground or in a Loot
+key according to the killer's settings. Human preset items keep their usual restrictions.
 
 A wilderness bot's brain runs `pvp` with no rotation, so it only ever returns to `pvp`. The pvp
 loop reports progress while the bot fights or moves; before that, the brain's 3-minute stall check

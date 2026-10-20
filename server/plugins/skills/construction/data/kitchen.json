@@ -1,0 +1,25 @@
+{
+  "$comment": "Kitchen furniture. Larders and shelves give unlimited items (OSRS Wiki, Larder space / Shelf space); the menus show four at a time with More... as in rsprox captures. Shelves give clay, porcelain or gilt teapots and cups by wood (the Wiki's table leaves the cup out; captures show it). Barrels fill a beer glass with their drink and pour animation (poh_barrel_use2_*; captures: 'You fill the glass with Chef's Delight.').",
+  "larders": {
+    "WOODEN_LARDER": [["Tea", 7738], ["Milk", 1927]],
+    "OAK_LARDER": [["Tea", 7738], ["Milk", 1927], ["Egg", 1944], ["Flour", 1933]],
+    "TEAK_LARDER": [["Tea", 7738], ["Milk", 1927], ["Egg", 1944], ["Flour", 1933], ["Potatoes", 1942], ["Garlic", 1550], ["Onions", 1957], ["Cheese", 1985]]
+  },
+  "shelves": {
+    "WOODEN_SHELVES_1": [["Kettle", 7688], ["Teapot", 7702], ["Cup", 7728]],
+    "WOODEN_SHELVES_2": [["Kettle", 7688], ["Teapot", 7702], ["Cup", 7728], ["Beer glass", 1919]],
+    "WOODEN_SHELVES_3": [["Kettle", 7688], ["Teapot", 7702], ["Cup", 7728], ["Beer glass", 1919], ["Cake tin", 1887]],
+    "OAK_SHELVES_1": [["Kettle", 7688], ["Teapot", 7714], ["Cup", 7732], ["Beer glass", 1919], ["Cake tin", 1887], ["Bowl", 1923]],
+    "OAK_SHELVES_2": [["Kettle", 7688], ["Teapot", 7714], ["Cup", 7732], ["Beer glass", 1919], ["Cake tin", 1887], ["Bowl", 1923], ["Pie dish", 2313]],
+    "TEAK_SHELVES_1": [["Kettle", 7688], ["Teapot", 7726], ["Cup", 7735], ["Beer glass", 1919], ["Cake tin", 1887], ["Bowl", 1923], ["Pie dish", 2313], ["Pot", 1931]],
+    "TEAK_SHELVES_2": [["Kettle", 7688], ["Teapot", 7726], ["Cup", 7735], ["Beer glass", 1919], ["Cake tin", 1887], ["Bowl", 1923], ["Pie dish", 2313], ["Pot", 1931], ["Chef's hat", 1949]]
+  },
+  "barrels": {
+    "BEER_BARREL": [7740, "Beer", 3661],
+    "CIDER_BARREL": [7752, "Cider", 3666],
+    "ASGARNIAN_ALE_BARREL": [1905, "Asgarnian Ale", 3662],
+    "GREENMANS_ALE_BARREL": [1909, "Greenman's Ale", 3663],
+    "DRAGON_BITTER_BARREL": [1911, "Dragon Bitter", 3664],
+    "CHEFS_DELIGHT_BARREL": [7754, "Chef's Delight", 3661]
+  }
+}

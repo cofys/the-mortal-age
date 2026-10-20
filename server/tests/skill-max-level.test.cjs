@@ -485,7 +485,7 @@ function feedbackPlayer(core) {
     getSkill: () => null, setSkill() {}, setCreationMenu() {},
     getUpdateFlag: () => ({ flag() {} }),
     getAttribute: k => attrs.get(k), setAttribute: (k, v) => attrs.set(k, v),
-    getSkillManager: () => p.skills,
+    getSkillManager: () => p.skills, getCombat: () => ({ getTarget: () => p.target ?? null, getAttacker: () => null }),
   };
   p.skills = new SkillManager(p);
   return p;
@@ -580,6 +580,17 @@ test("an open pop-up stops skilling and tells the skilling plugins", () => {
   hooks.onPlayerLevelUp({ player: p, skill: Skill.FISHING, oldLevel: 66, newLevel: 67 });
   assert.equal(p.stopped, 1);
   assert.deepEqual(emitted, [["level-up:popup-opened", Skill.FISHING]]);
+});
+
+test("a level-up mid-fight keeps the attack animation", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const core = PluginManager.getCoreApi();
+  const hooks = registerFeedbackPlugin("interface/SkillLevelUp", core);
+  const p = levelledPlayer(core);
+  p.target = {};
+  hooks.onPlayerLevelUp({ player: p, skill: Skill.ATTACK, oldLevel: 40, newLevel: 41 });
+  assert.deepEqual(p.animations, []);
+  assert.deepEqual(p.graphics, [199]);
 });
 
 test("as captured: every 25 total levels, and level 99, have their own message", () => {

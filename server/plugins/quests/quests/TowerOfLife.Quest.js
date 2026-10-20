@@ -50,8 +50,7 @@
  *    triangle sandwich).
  *  - Effigy has no post-quest transcript variant, so a completed player replays the
  *    "talking-to-effigy-again" conversation; the scare-scene repeat also reuses it.
- *  - Creature Creation (the post-quest altar activity) is not implemented; the quest only
- *    grants its access as a reward line.
+ *  - The post-quest altar activity lives in CreatureCreation.plugin.js.
  *  - The Homunculus mind puzzle asks one question per conversation (the transcript wraps the
  *    questions in a condition run the runtime resolves once), so the bar is filled over
  *    repeated talks; after the first answer the lead-in is skipped.

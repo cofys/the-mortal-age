@@ -18,6 +18,12 @@ assert.strictEqual(app.equip[EquipmentSlot.WEAPON], -1, "the player's own appear
 // Ids past 1024 (a dragon harpoon) only lose the one offset.
 assert.strictEqual(withSeqHandItems(app, { leftHandItem: 21028 + 512, rightHandItem: -1 }).equip[EquipmentSlot.SHIELD], 21028);
 
+// 0 empties a hand: carpet_sit_down puts the weapon and shield away.
+const armed = new PlayerAppearance(0, [0, 0, 0, 0, 0], [0, 1, 2, 3, 4, 5, 6], (() => { const e = new Array(14).fill(-1); e[EquipmentSlot.WEAPON] = 4151; e[EquipmentSlot.SHIELD] = 1201; return e; })());
+const seated = withSeqHandItems(armed, { leftHandItem: 0, rightHandItem: 0 });
+assert.strictEqual(seated.equip[EquipmentSlot.WEAPON], -1);
+assert.strictEqual(seated.equip[EquipmentSlot.SHIELD], -1);
+
 // An NPC-transformed player draws the NPC, not held items.
 const transformed = new PlayerAppearance(0, [0, 0, 0, 0, 0], [0, 1, 2, 3, 4, 5, 6], undefined, undefined, 172);
 assert.strictEqual(withSeqHandItems(transformed, { leftHandItem: -1, rightHandItem: 815 }), transformed);

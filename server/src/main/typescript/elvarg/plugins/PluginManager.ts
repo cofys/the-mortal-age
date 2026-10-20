@@ -2211,6 +2211,20 @@ export class PluginManager {
       TradeState: require("../game/content/Trading").TradeState,
       dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
       connectHeadlessClient: require("../net/NetworkBuilder").connectHeadlessClient,
+      CachePipeline: require("../game/cache/CachePipeline").CachePipeline,
+      CacheIndexDat2: require("../game/cache/codec/rs/cache/CacheIndex").CacheIndexDat2,
+      encodeRebuildRegion: require("../net/protocol/ClientProtocol").encodeRebuildRegion,
+      encodeLocAddChange: require("../net/protocol/ClientProtocol").encodeLocAddChange,
+      encodeLocDel: require("../net/protocol/ClientProtocol").encodeLocDel,
+      getTemplateRegion: require("../game/collision/TemplateRegionData").getTemplateRegion,
+      templateChunkKey: require("../game/collision/TemplateRegionData").templateChunkKey,
+      rotateChunkLoc: require(`${model}/areas/impl/TemplatedInstanceArea`).rotateChunkLoc,
+      rotateChunkTile: require(`${model}/areas/impl/TemplatedInstanceArea`).rotateChunkTile,
+      PrivateChatStatus: require(`${model}/PlayerRelations`).PrivateChatStatus,
+      SpellTeleports: require(`${combat}/magic/SpellTeleports`).SpellTeleports,
+      LunarSpells: require(`${combat}/magic/LunarSpells`).LunarSpells,
+      ArceuusSpells: require(`${combat}/magic/ArceuusSpells`).ArceuusSpells,
+      ArceuusOfferings: require(`${combat}/magic/ArceuusOfferings`),
     });
     return PluginManager.pluginCoreApi;
   }

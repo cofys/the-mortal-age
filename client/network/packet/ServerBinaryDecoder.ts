@@ -16,6 +16,9 @@ import type { ProjectileLaunch } from "../../common/projectiles/ProjectileLaunch
 import type { FriendsChatSnapshot } from "../../common/social/FriendsChat";
 import type { WorldEntityBuildArea } from "../../common/worldentity/WorldEntityTypes";
 
+/** Camera easing ids, in the order the server encodes them (ClientProtocol CAMERA_EASINGS). */
+const CAMERA_EASINGS = ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine"] as const;
+
 /**
  * Binary packet buffer for client decoding
  */
@@ -1538,10 +1541,24 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             if (mode === 8 || mode === 9) {
                 const x = reader.readShort(), y = reader.readShort(), height = reader.readSignedShort();
                 const cycles = reader.readShort(), easingId = reader.readByte(), flags = reader.readByte();
-                const easing = ["linear", "ease_in_out_sine", "ease_out_cubic"][easingId];
+                const easing = CAMERA_EASINGS[easingId];
                 if (!easing) return null;
                 return { type: "camera", payload: { mode: mode === 8 ? "move" : "look", x, y, height, cycles, easing,
                     heightRelative: (flags & 1) !== 0, ignoreTerrain: (flags & 2) !== 0, trackTarget: (flags & 4) !== 0 } };
+            }
+            if (mode === 10) {
+                const pitch = reader.readSignedShort(), yaw = reader.readSignedShort(), cycles = reader.readShort();
+                const easing = CAMERA_EASINGS[reader.readByte()];
+                if (!easing) return null;
+                return { type: "camera", payload: { mode: "rotate", pitch, yaw, cycles, easing } };
+            }
+            if (mode === 11) {
+                const centreX = reader.readShort(), centreY = reader.readShort(), x = reader.readShort(), y = reader.readShort();
+                const height = reader.readSignedShort(), cycles = reader.readShort();
+                const easing = CAMERA_EASINGS[reader.readByte()];
+                const flags = reader.readByte();
+                if (!easing) return null;
+                return { type: "camera", payload: { mode: "arc", centreX, centreY, x, y, height, cycles, easing, ignoreTerrain: (flags & 2) !== 0 } };
             }
             if (mode === 6) {
                 return { type: "camera", payload: { mode: "unlock", unlock: reader.readBoolean() } };

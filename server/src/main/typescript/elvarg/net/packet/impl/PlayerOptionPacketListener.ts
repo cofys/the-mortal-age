@@ -6,6 +6,7 @@ import { PluginManager } from "../../../plugins/PluginManager";
 
 export class PlayerOptionPacketListener {
   public static executeClientOption(player: any, index: number, option: number): void {
+    if (!Number.isInteger(option) || option < 1 || option > 8) return;
     if (!player || player.getHitpoints() <= 0 || player.busy()) return;
     const target = World.getPlayers().get(index) as Player;
     if (!target || target === player || target.getHitpoints() <= 0) return;
@@ -15,11 +16,17 @@ export class PlayerOptionPacketListener {
       PluginManager.emitPlayerAttack({ player, target });
       return;
     }
-    if (option === 2) return TradeRequestPacketListener.request(player, index);
+    if (option === 2) {
+      player.setFollowing(null);
+      return TradeRequestPacketListener.request(player, index);
+    }
     if (option === 3) return FollowPlayerPacketListener.request(player, index);
     const route = { player, target, option, handled: false };
     PluginManager.emitCustomEvent("player:option-route", route);
-    if (route.handled) return;
+    if (route.handled) {
+      player.setFollowing(null);
+      return;
+    }
     player.getMovementQueue().walkToEntity(target, () => {
       PluginManager.emitPlayerOption({ player, target, option, handled: false });
     });

@@ -1,0 +1,183 @@
+// Run after `yarn build`: node --test tests/hueycoatl.test.cjs
+// The Hueycoatl: the ids against the cache's gamevals, the captured slams and symbols, the
+// pillars' rules, the tail's cap, contribution and loot, and the fight's timings, each against
+// the captures and Wiki facts in docs/hueycoatl.md.
+const assert = require("node:assert/strict");
+const { test, before } = require("node:test");
+const path = require("node:path");
+
+const { Server } = require("../dist/Server");
+Server.installProductionPathResolver();
+
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
+const { Gamevals, GamevalKind } = require("../dist/game/cache/Gamevals");
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const Shared = require("../plugins/bosses/hueycoatl/Shared.Hueycoatl");
+const Attacks = require("../plugins/bosses/hueycoatl/Attacks.Hueycoatl");
+const Pillars = require("../plugins/bosses/hueycoatl/Pillars.Hueycoatl");
+const Kills = require("../plugins/bosses/hueycoatl/Kills.Hueycoatl");
+const Fight = require("../plugins/bosses/hueycoatl/Fight.Hueycoatl");
+const Area = require("../plugins/bosses/hueycoatl/Area.Hueycoatl");
+const CombatAchievements = require("../plugins/bosses/hueycoatl/CombatAchievements.Hueycoatl");
+
+const core = PluginManager.getCoreApi();
+let gamevals = null;
+
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  gamevals = new Gamevals();
+  const api = new Proxy({ core }, { get: (target, key) => target[key] ?? (() => {}) });
+  Shared.init(api);
+  Attacks.attach(api);
+  Pillars.attach(api);
+  Kills.attach(api);
+  CombatAchievements.attach(api);
+});
+
+const named = (kind, id) => gamevals.namesOf(kind).get(id);
+
+test("npc and loc ids are the cache's huey gamevals", () => {
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.HEAD), "huey_head");
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.HEAD_SHIELDED), "huey_head_invulnerable");
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.HEAD_DEFEATED), "huey_head_defeated");
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.TAIL), "huey_tail");
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.TAIL_BROKEN), "huey_tail_broken");
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.BODY), "huey_body_part");
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.RUBBLE), "huey_body_part_broken");
+  assert.equal(named(GamevalKind.NPC, Shared.NPC.ARENA_SEER), "huey_seer");
+  assert.equal(named(GamevalKind.LOC, Shared.LOC.CHAIN), "huey_fight_entrance");
+  assert.equal(named(GamevalKind.LOC, Shared.LOC.SLOPE), "huey_fight_exit_shortcut");
+  assert.equal(named(GamevalKind.LOC, Shared.LOC.BARRIER), "huey_p2_barrier");
+  assert.equal(named(GamevalKind.LOC, Shared.LOC.BARRIER_RETRACTED), "huey_p2_barrier_retracted");
+  assert.equal(named(GamevalKind.LOC, Shared.LOC.SYMBOL), "huey_attack_tiles_loc");
+  assert.equal(named(GamevalKind.LOC, Shared.LOC.CAVE_BODY), "df_cave_snow01_entrance03_huey");
+  for (const pillar of Shared.PILLARS) {
+    const kind = pillar.kind === "missiles" ? "ranged" : pillar.kind;
+    assert.equal(named(GamevalKind.LOC, pillar.stages[0]), `huey_prayer_pillar_${kind}_empty`);
+    assert.equal(named(GamevalKind.LOC, pillar.stages[5]), `huey_prayer_pillar_${kind}_s5`);
+    assert.equal(named(GamevalKind.LOC, pillar.on), `huey_prayer_pillar_${kind}_brazier_on`);
+  }
+});
+
+test("animations and graphics are the cache's", () => {
+  assert.equal(named(GamevalKind.SEQ, Shared.SEQ.SHIELD_ACTIVATION), "huey_shield_activation");
+  assert.equal(named(GamevalKind.SEQ, Shared.SEQ.TAIL_BREAK), "npc_huey_tail_break_01");
+  assert.equal(named(GamevalKind.SEQ, Shared.SEQ.BARRIER_TRANSITION), "huey_p2_barrier_transition");
+  for (const style of ["melee", "magic"]) {
+    assert.equal(named(GamevalKind.SEQ, Shared.SEQ.HEAD_ATTACK[style]), `huey_attack_${style}`);
+    assert.equal(named(GamevalKind.SPOTANIM, Shared.GFX.FEATHER[style]), `vfx_huey_attack_${style}_projanim_01`);
+  }
+  assert.equal(named(GamevalKind.SEQ, Shared.SEQ.HEAD_ATTACK.missiles), "huey_attack_range");
+  assert.equal(named(GamevalKind.SPOTANIM, Shared.GFX.FEATHER.missiles), "vfx_huey_attack_ranged_projanim_01");
+  assert.equal(named(GamevalKind.SPOTANIM, Shared.GFX.SYMBOL), "vfx_hueycoatl_prayer_02");
+  for (const [wave, impact] of Object.entries(Shared.GFX.SHOCKWAVE_IMPACT)) {
+    const direction = named(GamevalKind.SPOTANIM, Number(wave)).replace("vfx_huey_tail_slam_shockwave_", "");
+    assert.equal(named(GamevalKind.SPOTANIM, impact), `vfx_huey_tail_slam_shockwave_impact_${direction}`);
+  }
+});
+
+test("the varbits are huey_in_area, huey_encountered and huey_intro", () => {
+  assert.equal(named(GamevalKind.VARBIT, Shared.VARBIT.IN_AREA), "huey_in_area");
+  assert.equal(named(GamevalKind.VARBIT, Shared.VARBIT.ENCOUNTERED), "huey_encountered");
+  assert.equal(named(GamevalKind.VARBIT, Shared.VARBIT.INTRO), "huey_intro");
+});
+
+test("the chain is a multiloc on huey_in_area: Peek only from the camp", () => {
+  const chain = CacheDefinitions.getObject(Shared.LOC.CHAIN);
+  assert.equal(chain.transformVarbit, Shared.VARBIT.IN_AREA);
+  const outside = CacheDefinitions.getObject(chain.transforms[0]).actions.filter(Boolean);
+  const inside = CacheDefinitions.getObject(chain.transforms[1]).actions.filter(Boolean);
+  assert.deepEqual(outside, ["Climb", "Quick-climb", "Peek"]);
+  assert.deepEqual(inside, ["Climb", "Quick-climb"]);
+});
+
+test("the slams are the captured waves: 195 tiles west, 190 east, 15 cycles a tile", () => {
+  assert.equal(Shared.SHOCKWAVES.west.length, 195);
+  assert.equal(Shared.SHOCKWAVES.east.length, 190);
+  for (const tiles of Object.values(Shared.SHOCKWAVES)) {
+    for (const [, , delay, gfx] of tiles) {
+      assert.equal(delay % 15, 0);
+      assert.ok(delay >= 30 && delay <= 270);
+      assert.ok(Shared.GFX.SHOCKWAVE_IMPACT[gfx], `no impact for ${gfx}`);
+    }
+  }
+});
+
+test("a symbol cast lights each occupied part's fixed tiles and fills up to the captured count", () => {
+  const players = [{ part: Shared.SUMMIT_BOUNDS }];
+  const session = { inBounds: (player, bounds) => player.part === bounds };
+  const tiles = Attacks._test.symbolTiles(session, players);
+  assert.equal(tiles.length, 22);
+  for (const [x, y] of Shared.SYMBOLS.summit.fixed) assert.ok(tiles.some((tile) => tile[0] === x && tile[1] === y));
+  assert.equal(Shared.SYMBOLS.summit.fixed.length, 12);
+  assert.equal(Shared.SYMBOLS.mountainside.fixed.length, 6);
+  assert.deepEqual(Attacks._test.symbolTiles(session, []), []);
+});
+
+test("pillars need more prayers as the team grows (Wiki)", () => {
+  assert.deepEqual([1, 5, 6, 8, 9, 12, 15, 18, 20].map(Shared.prayersPerPillar), [1, 1, 2, 2, 3, 4, 5, 6, 6]);
+  const { nextStage } = Pillars._test;
+  assert.equal(nextStage(0, true), 1);
+  assert.equal(nextStage(5, true), 5);
+  assert.equal(nextStage(3, false), 2);
+  assert.equal(nextStage(0, false), 0);
+});
+
+test("lit braziers boost hits by 30%", () => {
+  assert.equal(Pillars.damageBoost({ pillars: { lit: true } }), 1.3);
+  assert.equal(Pillars.damageBoost({ pillars: { lit: false } }), 1);
+});
+
+test("the tail's cap is 9 only when crush is the attacker's highest attack bonus", () => {
+  const player = (bonuses) => ({ getBonusManager: () => ({ getAttackBonus: () => bonuses }) });
+  assert.equal(Kills._test.crushHighest(player([10, 20, 85, 0, 0])), true);
+  assert.equal(Kills._test.crushHighest(player([10, 90, 85, 0, 0])), false);
+  assert.equal(Kills._test.crushHighest(player([0, 0, 5, 0, 90])), false);
+});
+
+test("drop qualification follows the team size (Wiki)", () => {
+  const { qualifies } = Kills._test;
+  assert.equal(qualifies({ body: 25, head: 50, tail: 25 }, 5), true);
+  assert.equal(qualifies({ body: 24, head: 500, tail: 0 }, 5), false);
+  assert.equal(qualifies({ body: 30, head: 40, tail: 0 }, 3), false);
+  assert.equal(qualifies({ body: 0, head: 75, tail: 0 }, 6), true);
+  assert.equal(qualifies({ body: 25, head: 0, tail: 0 }, 6), true);
+  assert.equal(qualifies({ body: 10, head: 40, tail: 0 }, 8), false);
+});
+
+test("loot quantities scale to the share and never below one", () => {
+  const { scaled } = Kills._test;
+  assert.deepEqual(scaled([{ itemId: 557, amount: 3000 }], 0.5), [{ itemId: 557, amount: 1500 }]);
+  assert.deepEqual(scaled([{ itemId: 557, amount: 150 }], 0.001), [{ itemId: 557, amount: 1 }]);
+});
+
+test("the head attacks every 20 ticks on the body, 18/18/24 on the head, 15 shielded, 11s with a 16 last", () => {
+  const { ATTACK_INTERVALS, SYMBOL_INTERVALS } = Fight._test;
+  assert.deepEqual(ATTACK_INTERVALS.body, [20]);
+  assert.equal(ATTACK_INTERVALS.head.reduce((a, b) => a + b, 0) / ATTACK_INTERVALS.head.length, 20);
+  assert.deepEqual(ATTACK_INTERVALS.tail, [15]);
+  assert.deepEqual(ATTACK_INTERVALS.final, [11, 11, 11, 11, 16]);
+  assert.deepEqual(SYMBOL_INTERVALS, { body: 26, head: 26, tail: 36, final: 24 });
+});
+
+test("the peek's respawn line is the captured one", () => {
+  assert.equal(Area._test.PEEK_LINES.defeated, "The Hueycoatl has been subdued!");
+});
+
+test("only earth spells count for You're a wizard", () => {
+  const { isEarthSpell } = CombatAchievements._test;
+  assert.equal(isEarthSpell(core.CombatSpells.EARTH_SURGE), true);
+  assert.equal(isEarthSpell(core.CombatSpells.FIRE_SURGE), false);
+  assert.equal(isEarthSpell(null), false);
+});
+
+test("the arena, the summit and the mountainside hold the captured spawn tiles", () => {
+  const inArena = ([x, y]) => Shared.ARENA_BOUNDS.some((bounds) => Shared.within(bounds, x, y));
+  for (const tile of [Shared.ARENA_ENTRY, Shared.HEAD_TILE, Shared.KNOCKBACK_TILE, Shared.SLOPE_TOP, ...Shared.SEGMENTS.map((s) => s.tile)]) {
+    assert.ok(inArena(tile), `${tile} outside the arena`);
+  }
+  assert.ok(!inArena(Shared.CAMP_LANDING));
+  assert.ok(!inArena(Shared.PRIVATE_LANDING));
+  for (const segment of Shared.SEGMENTS) assert.ok(Shared.within(Shared.MOUNTAINSIDE_BOUNDS, ...segment.tile));
+});

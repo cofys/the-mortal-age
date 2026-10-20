@@ -6,11 +6,12 @@
  * the Old crone, the Old man, the Ghost villager, the Ghost innkeeper and the
  * Ghost captain, the prose-condition answers, the start hook, the bedsheet /
  * ectoplasm disguise, the Book of Haricanto treasure hunt, the toy-ship repair,
- * the Necrovarus tomb, the Ectophial and the completion.
+ * the Necrovarus tomb and the completion. The Ectophial, the Ectofuntus and its slime are
+ * plugins/skills/Ectofuntus.plugin.js.
  *
- * Stages are the reference's quest string states (varp 408; real storage is
- * varbit 217, bits 28-31 of varp 408 - the framework mirrors the raw stage,
- * which only uses the unused low bits of that varp):
+ * Stages are the reference's quest string states, stored in varbit 217 (bits
+ * 28-31 of varp 408). The framework writes that varbit, never the whole varp,
+ * whose other bits hold the Ectofuntus' grinder and unclaimed tokens:
  *   1 asked Velorina, 2 Necrovarus pleaded, 3 sent to the Old crone,
  *   4 collecting the crone's materials, 5 ritual ready, 6 amulet enchanted,
  *   7 Necrovarus commanded, 8 complete.
@@ -91,7 +92,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const TRANSLATION_MANUAL = ItemIdentifiers.TRANSLATION_MANUAL;
   const MYSTICAL_ROBES = ItemIdentifiers.MYSTICAL_ROBES;
   const ECTOPHIAL = ItemIdentifiers.ECTOPHIAL;
-  const ECTOPHIAL_EMPTY = ItemIdentifiers.ECTOPHIAL_2;
   const MODEL_SHIP = ItemIdentifiers.MODEL_SHIP;
   const REPAIRED_SHIP = ItemIdentifiers.MODEL_SHIP_2;
   const BONE_KEY = ItemIdentifiers.BONE_KEY_2; // Ghosts Ahoy bone key (4272)
@@ -110,7 +110,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const BUCKET_OF_SLIME = ItemIdentifiers.BUCKET_OF_SLIME;
   const BUCKET_OF_WATER = ItemIdentifiers.BUCKET_OF_WATER;
   const BUCKET_OF_MILK = ItemIdentifiers.BUCKET_OF_MILK;
-  const BUCKET = ItemIdentifiers.BUCKET;
   const ASHES = ItemIdentifiers.ASHES;
   const OAK_LONGBOW = ItemIdentifiers.OAK_LONGBOW;
   const SIGNED_BOW = ItemIdentifiers.SIGNED_OAK_BOW;
@@ -151,7 +150,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const ENERGY_BARRIER_ID = 57722;
   const COFFIN_ID = ObjectIdentifiers.COFFIN_14; // 16644
   const COFFIN_OPEN_ID = ObjectIdentifiers.COFFIN_15; // 16645
-  const ECTOFUNTUS_ID = ObjectIdentifiers.ECTOFUNTUS; // 16648
   const LOCKED_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_28; // 16116 AHOY_CHEST_LOCKED
   const LOCKED_CHEST_ACTIVE_ID = ObjectIdentifiers.OPEN_CHEST_24; // 16117
   const CLOSED_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_29; // 16118
@@ -163,12 +161,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
     OPEN_CHEST_ID,
   ]);
   const OFFICE_CHEST_IDS = new Set([LOCKED_CHEST_ID, LOCKED_CHEST_ACTIVE_ID]);
-  const SLIME_POOLS = new Set([
-    ObjectIdentifiers.POOL_OF_SLIME,
-    ObjectIdentifiers.POOL_OF_SLIME_2,
-    ObjectIdentifiers.POOL_OF_SLIME_3,
-    ObjectIdentifiers.POOL_OF_SLIME_4,
-  ]);
   const NETTLE_OBJECT_ID = ObjectIdentifiers.NETTLES; // 1181
   const COOKING_OBJECT_NAMES = new Set([
     "Cooking range",
@@ -196,7 +188,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const DIG_Y = 3530;
   const DRAGONTOOTH_LANDING = { x: 3792, y: 3559, z: 0 };
   const PORT_PHASMATYS_LANDING = { x: 3702, y: 3492, z: 0 };
-  const ECTOFUNTUS_LANDING = { x: 3654, y: 3519, z: 0 };
 
   const START_HOOK = "quest:ghosts-ahoy:start";
 
@@ -1226,44 +1217,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
     event.allow = false;
   }
 
-  function emptyEctophial(player) {
-    if (!held(player, ECTOPHIAL)) return;
-    player.getInventory().deleteNumber(ECTOPHIAL, 1);
-    player.getInventory().adds(ECTOPHIAL_EMPTY, 1);
-    player.sendMessage("You empty the ectoplasm onto the ground around your feet...");
-    player.moveTo(new Location(ECTOFUNTUS_LANDING.x, ECTOFUNTUS_LANDING.y, ECTOFUNTUS_LANDING.z));
-    player.sendMessage("... and the world changes around you.");
-  }
-
-  /**
-   * OSRS source of ecto-tokens (the ghost captain's fare): worship the
-   * Ectofuntus with a bucket of slime and bones, and the disciples hand over 5
-   * tokens per worship.
-   * ponytail: the bone grinder/bonemeal step is not implemented, so raw bones
-   * stand in; add the grinder if Prayer training needs it.
-   */
-  function worshipEctofuntus(player) {
-    if (!held(player, BUCKET_OF_SLIME)) {
-      player.sendMessage("You need a bucket of slime to worship the Ectofuntus.");
-      return;
-    }
-    const bone = player
-      .getInventory()
-      .getItems()
-      .find((item) => {
-        const name = String(ItemDefinition.forId(item?.getId?.())?.getName?.() ?? "");
-        return /bones?$/i.test(name);
-      });
-    if (!bone) {
-      player.sendMessage("You need some bones to worship the Ectofuntus.");
-      return;
-    }
-    player.getInventory().deleteNumber(BUCKET_OF_SLIME, 1);
-    player.getInventory().deleteNumber(bone.getId(), 1);
-    player.getInventory().adds(ECTO_TOKEN, 5);
-    player.sendMessage("You worship the Ectofuntus. The ghost disciples give you 5 ecto-tokens.");
-  }
-
   function handleItemAction(event) {
     const { player, itemId } = event;
     const option = String(event.option ?? "").toLowerCase();
@@ -1291,11 +1244,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
       // dig their own spots (X Marks the Spot, Making History, ...).
       if (!held(player, TREASURE_MAP) || !atDigSpot(player)) return;
       digForBook(player);
-      event.handled = true;
-      return;
-    }
-    if (itemId === ECTOPHIAL && option.includes("empty")) {
-      emptyEctophial(player);
       event.handled = true;
       return;
     }
@@ -1330,20 +1278,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
       player.getInventory().adds(ItemIdentifiers.NETTLE_TEA, 1);
       player.getSkillManager().addExperiences(Skill.COOKING, 52);
       player.sendMessage("You boil the water and make nettle tea.");
-      return;
-    }
-    if (itemId === ECTOPHIAL_EMPTY && objectId === ECTOFUNTUS_ID) {
-      player.getInventory().deleteNumber(ECTOPHIAL_EMPTY, 1);
-      player.getInventory().adds(ECTOPHIAL, 1);
-      player.sendMessage("You refill the ectophial from the Ectofuntus.");
-      event.handled = true;
-      return;
-    }
-    if (itemId === BUCKET && SLIME_POOLS.has(objectId)) {
-      player.getInventory().deleteNumber(BUCKET, 1);
-      player.getInventory().adds(BUCKET_OF_SLIME, 1);
-      player.sendMessage("You fill the bucket with ectoplasm.");
-      event.handled = true;
       return;
     }
     if (itemId === BONE_KEY && (objectId === COFFIN_ID || objectId === COFFIN_OPEN_ID)) {
@@ -1456,11 +1390,6 @@ module.exports = function registerGhostsAhoyQuest(api) {
       }
       return;
     }
-    if (objectId === ECTOFUNTUS_ID && option.includes("worship")) {
-      worshipEctofuntus(player);
-      event.handled = true;
-      return;
-    }
     if (objectId === NETTLE_OBJECT_ID && option.includes("pick")) {
       if (freeSlots(player) < 1) {
         player.sendMessage("You don't have enough inventory space.");
@@ -1548,6 +1477,9 @@ module.exports = function registerGhostsAhoyQuest(api) {
     key: "ghosts_ahoy",
     name: "Ghosts Ahoy",
     varpId: VARP_GHOSTS_AHOY,
+    varbitId: GHOSTS_AHOY_PROGRESS_VARBIT,
+    // Unstarted is 0 for the quest list; handleLogin still shows Ak-Haranu (4) as it always has.
+    varbitValue: (stage) => (stage <= 0 ? 0 : progressVarbitValue(stage)),
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,

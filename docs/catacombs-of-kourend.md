@@ -28,6 +28,13 @@ y 10067. The varbit follows a move by a tick, so the border is accurate to a til
   statue's east side (1639, 3673). Nothing was captured for it: the ladder animation (828), the
   tile and the fade are ours.
 
+## Prayer restore
+
+Bones buried here, or crushed by a bonecrusher, give back their Prayer points (Wiki: bones 1, big
+bones 2, dragon bones 4; every bone's value is in `server/plugins/skills/data/bones.json`). The
+plugin answers Prayer's `prayer:bone-restore` for x 1600-1791, y 9984-10111; a dragonbone necklace
+gives the same points and never adds to them. See [prayer-bones.md](prayer-bones.md).
+
 ## Skotizo
 
 The altar in the centre (28900) takes a dark totem to Skotizo's lair, and the Catacombs' monsters

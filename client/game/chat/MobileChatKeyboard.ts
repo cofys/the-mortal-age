@@ -55,6 +55,7 @@ export class MobileChatKeyboard {
         const input = document.createElement("input");
         input.type = "text";
         input.autocomplete = "off";
+        input.dataset.mobileChatInput = "true";
         input.style.cssText =
             "position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none";
         input.addEventListener("input", () => {

@@ -6,7 +6,6 @@ import { PlayerAppearance } from "../../rs/config/player/PlayerAppearance";
 import { PlayerModelLoader } from "../../rs/config/player/PlayerModelLoader";
 import type { LocModelLoader } from "../../rs/config/loctype/LocModelLoader";
 import type { NpcModelLoader } from "../../rs/config/npctype/NpcModelLoader";
-import { BitmapFont } from "../../rs/font/BitmapFont";
 import { ChatheadFactory } from "../../render/ChatheadFactory";
 import { PlayerChatheadFactory } from "../../render/PlayerChatheadFactory";
 import { WIDGET_MODEL_TYPE_LOC, widgetLocModel } from "../../render/render/init/widgetLocModel";
@@ -16,6 +15,7 @@ import { Model2DRenderer } from "../../ui/model/Model2DRenderer";
 import { layoutWidgets } from "../../widgets/layout/WidgetLayout";
 import { prepareViewportFittedRoots } from "../../widgets/layout/fitWidgetToBounds";
 import { WidgetManager } from "../../widgets/WidgetManager";
+import { createSharedFontLoader } from "./sharedFontLoader";
 
 export interface WidgetsOverlayRenderMetrics {
     layoutW: number;
@@ -311,6 +311,8 @@ export function createWidgetsOverlay(host: WidgetsOverlayHost): WidgetsOverlay {
                             return roots;
                         };
 
+                        const fontLoader = createSharedFontLoader(() => host.osrsClient.cacheSystem);
+
                         const widgets = new WidgetsOverlay(undefined as unknown as Program, {
                             getCacheSystem: () => host.osrsClient.cacheSystem,
                             getWidgetManager: () => host.osrsClient.widgetManager,
@@ -322,24 +324,7 @@ export function createWidgetsOverlay(host: WidgetsOverlayHost): WidgetsOverlay {
                                 combatWeaponItemId: host.osrsClient.combatWeaponItemId,
                                 sendEmote,
                             }),
-                            getFontLoader: () => {
-                                // PERF: Cache loaded BitmapFonts (loading parses cache archives/sprites).
-                                const cache = new Map<number, ReturnType<typeof BitmapFont.tryLoad>>();
-                                return (id: number) => {
-                                    const cacheSystem = host.osrsClient.cacheSystem;
-                                    if (!cacheSystem) return undefined;
-                                    const key = id | 0;
-                                    if (cache.has(key)) return cache.get(key);
-                                    const font = BitmapFont.tryLoad(cacheSystem, key);
-                                    // Do not memoize missing fonts forever. During startup the widget overlay
-                                    // can probe a font before the cache data is fully ready, and a permanent
-                                    // cached undefined would make all later CS2 text for that font invisible.
-                                    if (font) {
-                                        cache.set(key, font);
-                                    }
-                                    return font;
-                                };
-                            },
+                            getFontLoader: () => fontLoader,
                             getWidgetRoots: () => computeWidgetRoots(),
                             getWidgetRoot: () => {
                                 const roots = computeWidgetRoots();

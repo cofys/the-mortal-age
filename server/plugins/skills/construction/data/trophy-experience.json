@@ -1,0 +1,21 @@
+{
+  "poh_trophy_crawlinghand": {"CONSTRUCTION":31,"SLAYER":261},
+  "poh_trophy_cockatrice": {"CONSTRUCTION":44,"SLAYER":294},
+  "poh_trophy_basilisk": {"CONSTRUCTION":63,"SLAYER":341},
+  "poh_trophy_kurask": {"CONSTRUCTION":77,"SLAYER":657},
+  "poh_trophy_abyssal": {"CONSTRUCTION":109,"SLAYER":889},
+  "poh_trophy_kbd": {"CONSTRUCTION":223,"combat":{"ATTACK":200,"STRENGTH":200,"DEFENCE":200,"RANGED":200,"MAGIC":200}},
+  "poh_trophy_kalphitequeen": {"CONSTRUCTION":223,"combat":{"ATTACK":200,"STRENGTH":200,"DEFENCE":200,"RANGED":200,"MAGIC":200}},
+  "poh_trophy_vorkath": {"CONSTRUCTION":223,"combat":{"ATTACK":200,"STRENGTH":200,"DEFENCE":200,"RANGED":200,"MAGIC":200}},
+  "poh_trophy_alchemical_hydra_head": {},
+  "poh_trophy_bass": {"CONSTRUCTION":31,"FISHING":151},
+  "poh_trophy_swordfish": {"CONSTRUCTION":50,"FISHING":230},
+  "poh_trophy_shark": {"CONSTRUCTION":70,"FISHING":350},
+  "poh_trophy_harpoonfish": {"CONSTRUCTION":59,"FISHING":239},
+  "poh_trophy_giant_krill": {"CONSTRUCTION":59,"FISHING":239},
+  "poh_trophy_haddock": {"CONSTRUCTION":70,"FISHING":250},
+  "poh_trophy_yellowfin": {"CONSTRUCTION":70,"FISHING":250},
+  "poh_trophy_halibut": {"CONSTRUCTION":74,"FISHING":354},
+  "poh_trophy_bluefin": {"CONSTRUCTION":77,"FISHING":357},
+  "poh_trophy_marlin": {"CONSTRUCTION":80,"FISHING":360}
+}

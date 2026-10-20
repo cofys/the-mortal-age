@@ -4,6 +4,7 @@ import { ConfigGroup, ConfigItem } from "@runelite/client/config/ConfigItem";
 import { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
+import { OverlayPosition } from "@runelite/client/ui/overlay/OverlayPosition";
 import type { CacheInfo } from "../../../rs/cache/CacheInfo";
 import { ConfigType } from "../../../rs/cache/ConfigType";
 import { IndexType } from "../../../rs/cache/IndexType";
@@ -33,7 +34,7 @@ import {
 
 /**
  * Port of RuneLite's Opponent Information: the name and health of whoever the player is
- * fighting, in a panel at the top left of the game view.
+ * fighting, in a panel at the top left of the game view (Alt-drag moves it).
  *
  * Not ported: players' hitpoints as a number and the player comparison panel both come from
  * the OSRS hiscores, which this server doesn't have, so players show a percentage.
@@ -52,10 +53,6 @@ const BORDER = 2;
 const GAP = 2;
 const TITLE_HEIGHT = 16;
 const BAR_HEIGHT = 16;
-/** OverlayRenderer's TOP_LEFT: 5 in, and below the mouse-over text. */
-const VIEWPORT_OFFSET_X = 5;
-const VIEWPORT_OFFSET_Y = 20;
-
 // The game view by top level (548 fixed, 161 resizable, 164 resizable modern).
 const VIEWPORTS: Record<number, number> = {
     548: (548 << 16) | 26,
@@ -128,6 +125,7 @@ export class OpponentInfoPlugin extends Plugin implements ClientPlugin {
             ].join(",");
         },
         draw: (context) => this.draw(context),
+        movable: { name: "OpponentInfoOverlay", position: OverlayPosition.TOP_LEFT },
     };
 
     constructor(osrsClient?: OsrsClient) {
@@ -314,21 +312,16 @@ export class OpponentInfoPlugin extends Plugin implements ClientPlugin {
     private draw(context: WidgetOverlayDrawContext): Rect[] {
         const layout = this.layout();
         if (!layout) return [];
-        const { anchor, panel, label } = layout;
+        const { panel, label } = layout;
         const glr = context.renderer;
-        // Device pixels per layout unit, from the view's drawn size.
-        const sx = anchor._absWidth / Math.max(1, anchor.width);
-        const sy = anchor._absHeight / Math.max(1, anchor.height);
         const font = context.fontLoader(FONT_PLAIN_12);
         const nameWidth = font ? font.measure(panel.name) : 0;
         const width = Math.max(STANDARD_WIDTH, nameWidth + 2 * (BORDER + 3));
         const height = 2 * BORDER + TITLE_HEIGHT + (label ? GAP + BAR_HEIGHT : 0);
-        const r = {
-            x: anchor._absX + VIEWPORT_OFFSET_X * sx,
-            y: anchor._absY + VIEWPORT_OFFSET_Y * sy,
-            w: width * sx,
-            h: height * sy,
-        };
+        const at = context.place(this.widgetOverlay, width, height);
+        if (!at) return [];
+        const { scaleX: sx, scaleY: sy } = at;
+        const r = { x: at.x, y: at.y, w: width * sx, h: height * sy };
 
         // BackgroundComponent: a translucent fill in a darker outline.
         glr.drawRect(r.x, r.y, r.w, r.h, BACKGROUND);

@@ -23,6 +23,7 @@ const Checks = require("../plugins/skills/slayer/Checks.Slayer");
 const Equipment = require("../plugins/skills/slayer/Equipment.Slayer");
 const Finishers = require("../plugins/skills/slayer/Finishers.Slayer");
 const Superiors = require("../plugins/skills/slayer/Superiors.Slayer");
+const Keys = require("../plugins/skills/slayer/Keys.Slayer");
 
 const core = PluginManager.getCoreApi();
 const handlers = { events: new Map(), death: [], canAttack: [] };
@@ -438,6 +439,45 @@ test("superiors: Bigger and Badder spawns one 1 time in 200, worth ten times its
   const superior = npcNamed("Insatiable Bloodveld");
   Superiors.npcKilled({ killer: player, npc: superior });
   assert.equal(player.xp.at(-1)[1], superior.getDefinition().getHitpoints() * 10);
+});
+
+test("keys: brimstone on Konar's tasks, Larran's on Krystilia's, by combat level", () => {
+  assert.deepEqual([1, 50, 99, 100, 200, 349, 350, 1000].map(Keys.brimstoneDenominator), [2060, 600, 100, 100, 80, 51, 50, 50]);
+  assert.deepEqual([1, 40, 80, 81, 200, 350, 351].map(Keys.larranDenominator), [1972, 580, 100, 100, 77, 50, 50]);
+  const placed = () => emitted.filter(([name]) => name === "npc-drops:place").map(([, event]) => event.drops[0].itemId);
+  const before = placed().length;
+  const player = createPlayer();
+  const bloodveld = npcNamed("Bloodveld");
+  giveTask(player, 3, "Bloodveld", 5);
+  Keys.taskKill({ player, npc: bloodveld }, () => 0);
+  assert.equal(placed().length, before, "Vannaka's tasks drop no keys");
+  giveTask(player, 8, "Bloodveld", 5);
+  const level = bloodveld.getDefinition().getCombatLevel();
+  const expected = (1 / Keys.brimstoneDenominator(level)) * 1.2;
+  assert.ok(Math.abs(Keys.chance({ denominator: Keys.brimstoneDenominator }, bloodveld) - expected) < 1e-12, "Slayer level: 20% more");
+  Keys.taskKill({ player, npc: bloodveld }, () => expected + 0.001);
+  assert.equal(placed().length, before);
+  Keys.taskKill({ player, npc: bloodveld }, () => 0);
+  assert.equal(placed().at(-1), CacheDefinitions.getObjId("konar_key"));
+  Keys.taskKill({ player, npc: npcNamed("Insatiable Bloodveld") }, () => 0.999);
+  assert.equal(placed().length, before + 2, "a superior always drops one");
+  giveTask(player, 7, "Bears", 5);
+  Keys.taskKill({ player, npc: npcNamed("Grizzly bear", { getX: () => 3100, getY: () => 3700, getZ: () => 0 }) }, () => 0);
+  assert.equal(placed().at(-1), CacheDefinitions.getObjId("slayer_wilderness_key"));
+  const larran = { denominator: Keys.larranDenominator, caveBoost: true };
+  const bear = (x, y) => npcNamed("Grizzly bear", { getX: () => x, getY: () => y, getZ: () => 0 });
+  assert.ok(Math.abs(Keys.chance(larran, bear(3385, 10100)) / Keys.chance(larran, bear(3100, 3700)) - 1.15) < 1e-12, "Wilderness Slayer Cave: 15% more");
+});
+
+test("drop tables no longer hand out slayer keys on every kill", () => {
+  const NpcDrops = require("../plugins/npcs/NpcDrops.plugin");
+  NpcDrops._test.loadDrops();
+  const keys = new Set([CacheDefinitions.getObjId("konar_key"), CacheDefinitions.getObjId("slayer_wilderness_key")]);
+  for (const tables of NpcDrops._test.tablesByNpc.values()) {
+    for (const table of tables) {
+      for (const entry of [...(table.entries ?? []), ...(table.tertiary ?? [])]) assert.ok(!keys.has(entry.item_id), table.label);
+    }
+  }
 });
 
 test("::completetask finishes the task with its points and streak", () => {

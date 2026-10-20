@@ -21,7 +21,7 @@ function loadPvpLoadouts() {
   const file = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-loadouts.json");
   const definitions = JSON.parse(fs.readFileSync(file, "utf8"));
   if (!definitions || typeof definitions !== "object" || Array.isArray(definitions) ||
-      !Array.isArray(definitions.presetGroups) || !Array.isArray(definitions.archetypes) ||
+      !Array.isArray(definitions.archetypes) ||
       !definitions.pools || typeof definitions.pools !== "object" ||
       !definitions.combat || typeof definitions.combat !== "object" ||
       !Array.isArray(definitions.combat.arrows) || !Array.isArray(definitions.combat.bolts) ||

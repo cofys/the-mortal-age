@@ -85,3 +85,31 @@ obstacles' XP once.
   message rather than his dialogue.
 - **Not done:** marks of grace (no tiles known), the Skullball course, and putting a logged-out
   player back at the entrance.
+
+## Ape Atoll Agility Course
+
+- **File:** `ApeAtoll.Agility.js`. The player must be a small or medium ninja monkey or Kruk, which
+  the course asks the Greegrees plugin through `greegree:form` ([greegrees.md](greegrees.md)).
+- **Requirements (Wiki):** 48 Agility, which a boost can't make up ("Your Agility boost won't help
+  you here."). Monkey Madness I up to chapter 2 isn't checked: no quest plugin answers for a
+  chapter, and the island can't be reached without it.
+- **A lap:** stepping stone 40, tropical tree 40, monkeybars 40, skull slope 60, rope 100, then the
+  second tropical tree 0 and the 300 lap bonus: 580. Marks of grace since May 2024, 5-6 an hour at
+  95 laps an hour, so one roll in 17 a lap.
+- **Failing (Wiki):** from 75 Agility (boosts count) nothing fails, and the stepping stone and the
+  second tree never fail (15 May 2024). A fall from the first tree, the monkeybars or the skull
+  slope lands at the course entrance by the signpost; the rope drops a monkey by the first tree.
+- **Without the form (Wiki):** a human slips off every obstacle with "...you're not monkey enough
+  to try this!" (on the rope, "You lose your grip on the vine! ...you're not monkey enough to try
+  this!", and back to the stepping stone) and takes a little damage. Any other monkey is refused
+  with "Only the stealthiest and most agile monkey can use this!". A pet can't cross the rope
+  ("Your little friend can't make it over the obstacle...").
+- **Tiles from the cache:** the obstacle locs (`100_ilm_*`), the bars between 2752 and 2747 on
+  plane 2, the slope's pieces (2744-2746), the rope (4x1 from 2752,2731) and the vines from the
+  last tree (plane 1, 2758,2735 to their end at 2770,2747). The tiles between them were walked with
+  the agent MCP: a lap loops from the vines' end back to the stepping stone.
+- **No capture exists.** The movement and its timing come from the monkey animations' lengths
+  (`100_ilm_*`, `yarn dump:seq`); the fall damage (1-3), the fail chance below 75 (the engine's
+  linear default), the entrance tile (2757,2745) and the mark tiles are guesses.
+- Recipe for Disaster's Awowogei part opens its hole when this course's rope is swung during the
+  quest (`agility:obstacle`); it no longer swings the rope or climbs the last tree itself.

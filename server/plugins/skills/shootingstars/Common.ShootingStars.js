@@ -29,6 +29,8 @@ let core = null;
 const world = {
   star: null,
   lastSiteIndex: -1,
+  // The next star's site, rolled when the one before lands, so a telescope can see it coming.
+  nextSiteIndex: -1,
   ticksToLanding: 0,
   tick: 0,
 };

@@ -1,94 +1,68 @@
 /**
  * Ethically Acquired Antiquities (members).
  *
- * The words come from the "Ethically Acquired Antiquities" transcript page (OSRS
- * Wiki); this plugin supplies the NPC variant selectors, the prose-condition
- * answers, the object interactions (display, tools, storeroom door and crates),
- * the pickpocketing of Curator Haig Halen, the item hand-ins, the journal and the
- * completion reward.
+ * Behaviour follows the complete quest in RSProx recording 1695 (revision 226, ticks
+ * 7114-7934); the words come from the "Ethically Acquired Antiquities" transcript page
+ * (OSRS Wiki). Evidence and remaining gaps: docs/p2p-varlamore-group-2-parity.md.
  *
- * Stages live in varbit 11193 "eaa" (varp 4400, bits 0-6). Evidence:
- * `lookup-gameval.ts varbit eaa` -> "11193 eaa varp=4400 bits=0-6", `dump:cs2 4024`
- * maps quest index 3713 (RuneLite Quest.ETHICALLY_ACQUIRED_ANTIQUITIES) to it, and
- * Quest Helper's loadSteps() uses 0,2,...,36. The quest DB (table 0) row 197 for
- * EAA carries 38 as the quest list's completion value, so completion is 38:
+ * Stages live in varbit 11193 "eaa" (varp 4400, bits 0-6), as captured:
  *
  *   0 not started (inspecting the empty display starts the quest)
  *   2 agreed to help; talk to Curator Herminius
- *   4 investigate the museum (tools, then the display again)
- *   6 clue found; question the visitors
- *   8 clue points at the landing site; talk to Regulus Cento
- *  10 Regulus points at the Cothon; ask a trader crewmember
- *  12 favour asked; have the tattered sails repaired by Artima
- *  14 sails returned; the man sailed to Port Sarim
- *  16 ask the Port Sarim trader crewmember
+ *   4 investigate the tools and the display
+ *   6 question the visitors
+ *   8 a visitor saw the thief head for the landing site; ask Regulus Cento
+ *  10 ask a trader crewmember in the Cothon
+ *  12 have the tattered sails repaired by Artima
+ *  14 sails returned
+ *  16 ask the Port Sarim charter crew
  *  18 ask Betty about the rune order
  *  20 read Betty's notes
- *  22 notes point to Varrock; ask Curator Haig Halen
- *  24 pickpocket Haig for the storeroom key
- *  26 search the crate in the museum storeroom
- *  28 diadem found; confront Haig
- *  30 shame Haig into admitting the theft
- *  32 interrogation passed (the explanation cutscene)
+ *  22 ask Curator Haig Halen
+ *  24 pickpocket Haig for the storeroom key and search the crate
+ *  26/28 diadem found (both sent on the crate search); confront Haig
+ *  30 shame Haig (the Shame-o-meter)
+ *  32 the explanation cutscene
  *  34 cutscene ends
  *  36 return to Curator Herminius (completes at 38)
  *
- * Side flags live in one persisted bits attribute and are mirrored to the cache's
- * own varbits: 11194 investigated display, 11195 investigated tools, 11196-11198
- * questioned citizen/tourist/academic, 11199 shame meter (0-100), 11200 crewmember
- * favour asked, 11201 crafting favour asked, 11202 Betty told about the note,
- * 11204 given sails, 11205 fixed sails, 11206 given notes and 11207 diadem (which
- * drives the display multi-loc).
+ * Side flags are mirrored to the cache's own varbits: 11194 investigated display, 11195
+ * tools, 11196-11198 questioned citizen/tourist/academic, 11199 shame (0-100), 11200
+ * crewmember favour, 11201 crafting favour, 11204 given sails, 11205 fixed sails, 11206
+ * given notes and 11207 diadem (the display multi-loc 55377). The capture never sets
+ * 11202 (Betty told about the note) and sets 11207 only after completion.
  *
- * The Grand Museum display and tools are multi-locs 55377/55378 placed at
- * (1721,3165) and (1722,3167) on plane 0: 55377 resolves to 54693 "Empty display"
- * / 54694 "Xerna's Diadem" by varbit 11207, and 55378 to 54700 "Tools" with
- * Investigate only while the stage varbit is exactly 4. The Varrock Museum
- * storeroom objects are map placed: door 54695 at (3266,3456), the diadem crate
- * 54697 and the flavour crates 54698 at (3266/3267,3458).
+ * Every NPC is the world's own (npc-spawns.json). The visitors are any Citizen, Tourist or
+ * Academic in the Grand Museum; the charter crew are matched by name at the Cothon and the
+ * Port Sarim dock, as the Wiki's "any trader crewmember".
  *
- * Rewards per the OSRS Wiki: 1 Quest point, 6,000 Thieving XP and 5,000 coins.
- *
- * Source: https://oldschool.runescape.wiki/w/Ethically_Acquired_Antiquities and
- * /Quick_guide, /Transcript, plus the Xerna's Diadem transcript page. Stage values
- * cross-checked against Quest Helper
- * (helpers/quests/ethicallyacquiredantiquities/EthicallyAcquiredAntiquities.java).
- *
- * Gaps / approximations:
- *   - the cutscene stage directions are played as their transcript lines only; no
- *     camera or scene animation runs (stages 32/34 are set from the cutscene steps);
- *   - the exact shame-meter values are not public, so every wiki "increase" option
- *     adds 25 and every "decrease" option subtracts 25 (clamped 0-100); reaching
- *     100 passes the interrogation, and a failed attempt ends the chat so talking
- *     to Haig again continues the meter where it stopped;
- *   - the informant is chosen per player at random between a citizen and a tourist
- *     (OSRS picks one specific NPC) and all three visitor kinds are questioned;
- *   - the storeroom door is swung open with the Doors plugin's single-door maths and
- *     auto-closes after 500 ticks; without the key it answers "The door is locked."
- *     (that line is not in the transcript dump);
- *   - the two stacked crates replay the wiki random branch the parser reduced to its
- *     first alternative (the Academic lines);
- *   - a completed player inspecting the display gets the Xerna's Diadem wiki page
- *     text, as that page is not part of the quest transcript dump;
- *   - Haig, Betty and the crewmembers have no post-quest variants, so completed
- *     players replay the last applicable variant with state changes guarded;
- *   - Curator Herminius, the visitors, Regulus Cento, Artima and the two EAA trader
- *     crewmembers are per-player owner-only spawns (none are in npc-spawns.json).
+ * Rewards per the capture: 1 Quest point, 6,000 Thieving XP and 5,000 coins.
  */
 module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   const {
+    ActionDialogue,
+    Animation,
+    Boundary,
+    CountdownTask,
+    DialogueChainBuilder,
     GameObject,
     ItemIdentifiers,
     Location,
+    MultiChatboxPrompt,
+    NpcDefinition,
+    NpcDialogue,
     NpcIdentifiers,
     ObjectIdentifiers,
-    ObjectManager,
+    PlayerDialogue,
+    PrivateArea,
     Skill,
-    Sound,
-    Sounds,
-    Task,
+    StatementDialogue,
+    TaskManager,
   } = api.core;
-  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, startTranscript, loadTranscripts } = require("../QuestRuntime");
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
+  const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
+  ObstacleRunner.init(api);
 
   const PAGE = "Ethically Acquired Antiquities";
   const START_HOOK = "quest:ethically-acquired-antiquities:start";
@@ -109,6 +83,8 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   const FIXED_SAILS_VARBIT = 11205;
   const GIVEN_NOTES_VARBIT = 11206;
   const DIADEM_VARBIT = 11207;
+  const CUTSCENE_STATUS_VARBIT = 542; // cutscene_status
+  const MINIMAP_STATE_VARBIT = 6719; // minimap_state
 
   const STAGE_STARTED = 2;
   const STAGE_INVESTIGATE = 4;
@@ -135,29 +111,36 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   const SAILS_ITEM_ID = ItemIdentifiers.SAILS; // 29904
   const BETTYS_NOTES_ITEM_ID = ItemIdentifiers.BETTYS_NOTES; // 29905
   const STOREROOM_KEY_ITEM_ID = ItemIdentifiers.STOREROOM_KEY_3; // 29906
+  const DIADEM_ITEM_ID = 29907; // gameval eaa_diadem: the crate box and completion scroll model
+  const TOOLS_ITEM_ID = 29908; // gameval eaa_tools: the tools box model
 
   const EMPTY_DISPLAY_OBJECT_ID = ObjectIdentifiers.EMPTY_DISPLAY_5; // 54693
   const DIADEM_DISPLAY_OBJECT_ID = ObjectIdentifiers.XERNAS_DIADEM; // 54694
   const TOOLS_OBJECT_ID = ObjectIdentifiers.TOOLS_13; // 54700, Investigate
   const STOREROOM_DOOR_OBJECT_ID = ObjectIdentifiers.DOOR_746; // 54695, Open
   const STOREROOM_DOOR_OPEN_OBJECT_ID = ObjectIdentifiers.DOOR_747; // 54696
+  const STOREROOM_DOORWAY_OBJECT_ID = 38848; // the nameless loc the capture swaps into the doorway
   const DIADEM_CRATE_OBJECT_ID = ObjectIdentifiers.CRATE_340; // 54697, Search
   const FLAVOUR_CRATES_OBJECT_ID = ObjectIdentifiers.CRATES_107; // 54698, Search
   const STOREROOM_DOOR_TILE = { x: 3266, y: 3456 };
 
   const HERMINIUS_NPC_ID = NpcIdentifiers.CURATOR_HERMINIUS; // 13297
   const HAIG_NPC_ID = NpcIdentifiers.CURATOR_HAIG_HALEN; // 5214
-  const REGULUS_NPC_ID = NpcIdentifiers.REGULUS_CENTO_2; // 12884
+  const HAIG_ACTOR_NPC_ID = NpcIdentifiers.CURATOR_HAIG_HALEN_2; // 13816, the cutscene Haig
+  const THIEF_ACTOR_NPC_ID = NpcIdentifiers.THIEF_18; // 13817
+  const REGULUS_NPC_ID = NpcIdentifiers.REGULUS_CENTO_3; // 12885, the Civitas landing site
   const ARTIMA_NPC_ID = NpcIdentifiers.ARTIMA; // 13342
-  const CITIZEN_NPC_ID = NpcIdentifiers.CITIZEN_48; // 13164
-  const TOURIST_NPC_ID = NpcIdentifiers.TOURIST; // 13206
-  const ACADEMIC_NPC_ID = NpcIdentifiers.ACADEMIC; // 13298
-  const FORTIS_CREW_NPC_ID = NpcIdentifiers.TRADER_CREWMEMBER_49; // 9360
-  const SARIM_CREW_NPC_ID = NpcIdentifiers.TRADER_CREWMEMBER_101; // 12799
 
-  const VISITOR_IDS = new Set([CITIZEN_NPC_ID, TOURIST_NPC_ID, ACADEMIC_NPC_ID]);
-  const FORTIS_CREW_IDS = new Set([FORTIS_CREW_NPC_ID]);
-  const SARIM_CREW_IDS = new Set([SARIM_CREW_NPC_ID]);
+  /** Visitor kinds by NPC name, and the varbit questioning each sets. */
+  const VISITORS = {
+    Citizen: { kind: "citizen", bit: 1 << 2, varbit: QUESTIONED_CITIZEN_VARBIT },
+    Tourist: { kind: "tourist", bit: 1 << 3, varbit: QUESTIONED_TOURIST_VARBIT },
+    Academic: { kind: "academic", bit: 1 << 4, varbit: QUESTIONED_ACADEMIC_VARBIT },
+  };
+  const CREW_NAMES = ["Trader Crewmember", "Trader crewmember", "Trader Stan"];
+  const GRAND_MUSEUM = { minX: 1695, maxX: 1730, minY: 3150, maxY: 3175 };
+  const COTHON = { minX: 1720, maxX: 1770, minY: 3110, maxY: 3160 };
+  const PORT_SARIM_DOCK = { minX: 3028, maxX: 3050, minY: 3180, maxY: 3200 };
 
   const FLAGS_ATTRIBUTE = "quest.ethically_acquired_antiquities.flags";
   const INFORMANT_ATTRIBUTE = "quest.ethically_acquired_antiquities.informant";
@@ -167,9 +150,6 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
 
   const BIT_INVESTIGATED_DISPLAY = 1 << 0;
   const BIT_INVESTIGATED_TOOLS = 1 << 1;
-  const BIT_QUESTIONED_CITIZEN = 1 << 2;
-  const BIT_QUESTIONED_TOURIST = 1 << 3;
-  const BIT_QUESTIONED_ACADEMIC = 1 << 4;
   const BIT_CREWMEMBER_FAVOUR_ASKED = 1 << 5;
   const BIT_CRAFTING_FAVOUR_ASKED = 1 << 6;
   const BIT_BETTY_TOLD = 1 << 7;
@@ -180,9 +160,7 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   const FLAG_VARBITS = [
     [BIT_INVESTIGATED_DISPLAY, INVESTIGATED_DISPLAY_VARBIT],
     [BIT_INVESTIGATED_TOOLS, INVESTIGATED_TOOLS_VARBIT],
-    [BIT_QUESTIONED_CITIZEN, QUESTIONED_CITIZEN_VARBIT],
-    [BIT_QUESTIONED_TOURIST, QUESTIONED_TOURIST_VARBIT],
-    [BIT_QUESTIONED_ACADEMIC, QUESTIONED_ACADEMIC_VARBIT],
+    ...Object.values(VISITORS).map(({ bit, varbit }) => [bit, varbit]),
     [BIT_CREWMEMBER_FAVOUR_ASKED, CREWMEMBER_FAVOUR_VARBIT],
     [BIT_CRAFTING_FAVOUR_ASKED, CRAFTING_FAVOUR_VARBIT],
     [BIT_BETTY_TOLD, BETTY_TOLD_VARBIT],
@@ -192,8 +170,58 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     [BIT_DIADEM, DIADEM_VARBIT],
   ];
 
+  // The Grand Museum's display notice (interface 873, filled by clientscript 5006), as captured.
+  const DISPLAY_INTERFACE = 873;
+  const DISPLAY_SCRIPT = 5006;
+  const DISPLAY_SCRIPT_ARGS = [
+    "Xerna's Diadem", 53130,
+    "Be aware that the diadem normally displayed here was recently stolen. The Grand Museum is willing to pay a high price for information that leads to its return.",
+    -3, 135, 0, 1938, 0, 560, 0,
+  ];
+  const DISPLAY_NOTICE_TICKS = 4;
+  // Betty's notes (interface 291): the captured text components; the rest are cleared.
+  const NOTES_INTERFACE = 291;
+  const NOTES_LINES = {
+    8: "One that lets me travel, but not fight.",
+    10: "Three that are needed to grab, but not weaken.",
+    12: "One that doesn't make fruit, but instead makes gold.",
+  };
+  // The diadem appears back on display this long after completion in the capture.
+  const DIADEM_RETURN_TICKS = 64;
+  const PICKPOCKET_ANIMATION = 881;
+  const ARTIMA_STITCH_ANIMATION = 10794;
+  const ARTIMA_STITCH_TICKS = 4;
+  const DOOR_RESET_TICKS = 2;
+  const DOOR_UNLOCK_SOUND = 2419;
+  const DOOR_OPEN_SOUND = 44;
+
+  // The interrogation, as captured: an instance copy of the museum, the meter at 50, the
+  // opening exchange moving it -4 then +4, then three-option rounds until it is full.
   const SHAME_MAX = 100;
-  const SHAME_STEP = 25;
+  const SHAME_START = 50;
+  const SHAME_OPENING = [-4, 4];
+  const SHAME_STEP_MIN = 4;
+  const SHAME_STEP_MAX = 9;
+  const SHAME_INTERFACE = 881;
+  const OVERLAY_UID = (161 << 16) | 1;
+  const FADE_INTERFACE = 174;
+  const CAMERA_RATES = { rate: 232, rate2: 100 };
+  const TURN_YAW = 1024;
+  const TURN_CYCLES = 5;
+  const VARROCK_MUSEUM = [3240, 3280, 3430, 3470];
+  const FORTIS_MUSEUM = [1695, 1730, 3150, 3175];
+  const CONFRONT_TILE = [3258, 3449];
+  const CONFRONT_HAIG_TILE = [3256, 3449];
+  const CONFRONT_CAMERA = [3257, 3449, 221];
+  const LOOK_AT_HAIG = [3256, 3449, 220];
+  const LOOK_AT_PLAYER = [3258, 3449, 220];
+  const SCENE_END_TILE = [3258, 3447];
+  const HAIG_TALK_ANIMATION = 857;
+  const HAIG_PUNCH_ANIMATIONS = [11736, 11737, 11736];
+  const THIEF_SWING_ANIMATION = 11738;
+  const THIEF_FALL_ANIMATION = 9101;
+  const PICKUP_ANIMATION = 827;
+
   const SHAME_INCREASE_OPTIONS = new Set([
     "A real historian would never steal!",
     "Are you even a real historian, or just a petty criminal?",
@@ -231,39 +259,6 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     "You've betrayed the trust of Varlamore.",
     "You've committed a crime.",
   ]);
-  const SHAME_DECREASE_OPTIONS = new Set([
-    "Do you even have room to display this artefact?",
-    "Don't you have enough artefacts of your own?",
-    "Have you no respect for your colleagues in Varlamore?",
-    "How do you explain the other stolen artefacts you have in storage?",
-    "How do you sleep at night?",
-    "I'm sick of your excuses!",
-    "Is the artefact really safer here?",
-    "This artefact doesn't belong to you! It belongs to Varlamore!",
-    "This could destroy your reputation! Everyone will think you're a thief!",
-    "What if I came into your house and stole your stuff?",
-    "What if it's cursed?! It could be dangerous!",
-    "What if Varlamore finds out what you've done?",
-    "What makes you think you know better?",
-    "Why don't you just cooperate with Varlamore?",
-    "Why should you decide who gets to keep their artefacts?",
-    "You don't even have room to display it! It's just sitting in storage!",
-    "You should be ashamed of yourself.",
-    "You should return all these artefacts. It's the only right thing to do.",
-    "You're not preserving anything. You're just a thief.",
-    "You're nothing but a common thief!",
-    "You've ruined Varlamore's museum.",
-    "You've stolen from several other museums, too!",
-  ]);
-
-  const STOREROOM_DOOR_AUTO_CLOSE_TICKS = 500;
-  const STOREROOM_DOOR_TASK_KEY = "eaa:storeroom-door";
-  const DOOR_SWING_OFFSETS = [
-    [-1, 0],
-    [0, 1],
-    [1, 0],
-    [0, -1],
-  ];
 
   // Variant keys on the "Ethically Acquired Antiquities" page.
   const V_DISPLAY_START = "xerna-s-stolen-diadem-inpecting-the-empty-display";
@@ -298,32 +293,62 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   const V_HAIG_FOUND = "in-varrock-museum-talking-to-curator-haig-halen-after-finding-the-diadem";
   const V_HAIG_RETURNED = "in-varrock-museum-talking-to-curator-haig-halen-after-arranging-the-diadem-s-return";
 
-  // Action/message step ids handled with gameplay side effects.
+  // Step ids on the page.
   const SAILS_GIVEN_STEP_IDS = new Set(["1wx5TB", "-1DZ27", "123zW4"]);
-  const SAILS_REPAIRED_STEP_IDS = new Set(["92E3NZ", "6yZD0M"]);
+  const SAILS_REPAIRED_STEP = "92E3NZ";
+  const SAILS_REPLACED_STEP = "6yZD0M";
+  const SAILS_RETURNED_STEP = "7Wg9ig";
   const NOTES_GIVEN_STEP_IDS = new Set(["zLd3nC", "9CiLQ7"]);
+  const TOOLS_STEP = "tNweU6";
+  const DISPLAY_AGAIN_STEP = "Qqjtag";
+  const PICKPOCKET_STEP = "azipeA";
   const CRATE_SEARCH_STEP = "XVW4Mv";
+  const INTERROGATION_START_STEP = "X-XWP3";
+  const INTERROGATION_FAILED_STEP = "f07S0F";
+  const INTERROGATION_PASSED_STEP = "ke5P0h";
   const CUTSCENE_BEGIN_STEP = "xxhjn2";
   const CUTSCENE_END_STEP = "MC3wD2";
   const COMPLETE_STEP = "i2moAx";
-  const VISITOR_SILENT_STEP_IDS = new Set(["YULuAF", "BBOzW9"]);
+  const NO_LEAD_STEP_IDS = ["YULuAF", "BBOzW9"];
+  const CITIZEN_LEAD_STEP = "ZSVQQP";
+  const TOURIST_LEAD_STEP = "HBhK3a";
+  /** Item boxes the capture shows for the page's message steps (an entry of null is a plain box). */
+  const MESSAGE_BOXES = {
+    [TOOLS_STEP]: TOOLS_ITEM_ID,
+    [DISPLAY_AGAIN_STEP]: null,
+    "1wx5TB": TATTERED_SAILS_ITEM_ID,
+    [SAILS_REPAIRED_STEP]: SAILS_ITEM_ID,
+    [SAILS_RETURNED_STEP]: SAILS_ITEM_ID,
+    zLd3nC: BETTYS_NOTES_ITEM_ID,
+    [PICKPOCKET_STEP]: STOREROOM_KEY_ITEM_ID,
+    [CRATE_SEARCH_STEP]: DIADEM_ITEM_ID,
+  };
 
   const VISITOR_QUESTION_LINE = "I was wondering if you'd seen anything unusual around the museum lately?";
-  const HERMINIUS_HANDOFF_LINE = "Thank you, iknami.";
+  const VISITOR_NO_LEAD_LINES = new Set(["No, I don't think so...", "Oh... Sorry, but I don't think I can be much help."]);
+  const HERMINIUS_STARTED_LINE = "Perhaps you'll have better luck though. Maybe you could have a look around for any sort of clues and see if you can find anything wrong.";
+  const DISPLAY_AGAIN_LINE = "I don't think I'm going to find much more just lying around... Maybe I should try asking if anyone nearby saw anything.";
+  const REGULUS_LEAD_LINE = "Yes, I thought it was quite strange. I told him no, and he made his way east, towards the Cothon.";
   const CREW_FAVOUR_LINE = "Although, we could use a hand... Think you could do us a small favour?";
   const CREW_CASE_OPTION = "Have you seen a man with a case?";
-  const CREW_ACCEPT_OPTION = "Sure. What do you need?";
   const NON_OSF_CONDITION_ID = "LgTVfY";
   const OSF_CONDITION_ID = "Vr0XnM";
   const ARTIMA_FAVOUR_LINE = "Oh, in that case, I'll help you out, just so long as you can do me a small favour.";
+  const ARTIMA_STITCH_LINES = ["Let's see... Thread that through there...", "Grab some of that, then pull that through...", "Tie off the end there and..."];
+  const ARTIMA_REPAIRED_LINE = "There we have it! They might not look the prettiest, but they'll be sturdy enough for the job at least.";
   const CREW_PORT_SARIM_LINE = "Well, we explained how it does work and he then asked us to take him to Port Sarim...";
   const SARIM_RUNES_LINE = "Wandered up north, I think. Said something about trying to get hold of some runes.";
-  const HAIG_HANDOFF_LINE = "Thank you. I'll head over there and let them know.";
+  const BETTY_NOTES_LINE = "I did take some notes. It was driving me crazy trying to make sense of it!";
+  const HAIG_DENIAL_LINE = "What awful news! I'm not sure I can help you with that, though...";
+  const HAIG_CONFRONTED_LINE = "Ah...";
+  const HAIG_RETURN_LINE = "Okay... I'll have it sent back at once.";
 
-  /** Per-player owner-only quest spawns, keyed by role. */
-  const trackedNpcs = new WeakMap();
-  /** The storeroom door this plugin currently holds open, as { open, closed }. */
-  let storeroomDoorOpen = null;
+  /** Player -> the running interrogation/cutscene. */
+  const scenes = new Map();
+  /** Players with Betty's notes open for the first time. */
+  const readingNotes = new WeakSet();
+  /** Per-player keys for one-off delays outside a scene. */
+  const playerTasks = new WeakMap();
 
   let quest;
 
@@ -348,14 +373,29 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     return Math.max(0, Math.min(SHAME_MAX, Number(player.getAttribute(SHAME_ATTRIBUTE)) || 0));
   }
 
-  function addShame(player, delta) {
-    const value = Math.max(0, Math.min(SHAME_MAX, shame(player) + delta));
-    player.setAttribute(SHAME_ATTRIBUTE, value);
-    player.getPacketSender().sendVarbit(SHAME_VARBIT, value);
+  function setShame(player, value) {
+    const clamped = Math.max(0, Math.min(SHAME_MAX, value));
+    player.setAttribute(SHAME_ATTRIBUTE, clamped);
+    player.getPacketSender().sendVarbit(SHAME_VARBIT, clamped);
   }
 
   function held(player, itemId, amount = 1) {
     return player.getInventory().getAmount(itemId) >= amount;
+  }
+
+  function within(player, zone) {
+    const location = player.getLocation();
+    return location.getZ() === 0
+      && location.getX() >= zone.minX && location.getX() <= zone.maxX
+      && location.getY() >= zone.minY && location.getY() <= zone.maxY;
+  }
+
+  function npcName(npcId) {
+    return NpcDefinition.forId(npcId)?.getName?.() ?? null;
+  }
+
+  function isCrew(npcId) {
+    return CREW_NAMES.includes(npcName(npcId));
   }
 
   function informantRole(player) {
@@ -365,13 +405,6 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     const role = Math.random() < 0.5 ? "citizen" : "tourist";
     player.setAttribute(INFORMANT_ATTRIBUTE, role);
     return role;
-  }
-
-  function visitorRole(npcId) {
-    if (npcId === CITIZEN_NPC_ID) return "citizen";
-    if (npcId === TOURIST_NPC_ID) return "tourist";
-    if (npcId === ACADEMIC_NPC_ID) return "academic";
-    return null;
   }
 
   function isQuestPage(pages) {
@@ -396,57 +429,40 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     if (quest.getStage(player) < stage) quest.setStage(player, stage);
   }
 
-  function maybeAdvanceInvestigation(player) {
-    if (
-      hasFlag(player, BIT_INVESTIGATED_TOOLS) &&
-      hasFlag(player, BIT_INVESTIGATED_DISPLAY) &&
-      quest.getStage(player) < STAGE_CLUE
-    ) {
-      quest.setStage(player, STAGE_CLUE);
+  function later(key, ticks, callback) {
+    if (key?.isPlayer?.()) {
+      const player = key;
+      key = playerTasks.get(player);
+      if (!key) { key = {}; playerTasks.set(player, key); }
     }
+    TaskManager.submit(new CountdownTask(key, ticks, callback));
   }
 
-  function maybeAdvanceVisitors(player) {
-    if (quest.getStage(player) !== STAGE_CLUE) return;
-    if (
-      hasFlag(player, BIT_QUESTIONED_CITIZEN) &&
-      hasFlag(player, BIT_QUESTIONED_TOURIST) &&
-      hasFlag(player, BIT_QUESTIONED_ACADEMIC)
-    ) {
-      quest.setStage(player, STAGE_REGULUS);
+  function variantSteps(variant) {
+    return loadTranscripts(api)?.[PAGE]?.variants?.[variant] ?? [];
+  }
+
+  /** The step list holding a step id anywhere in a variant, and its index there. */
+  function locate(steps, id) {
+    for (let index = 0; index < steps.length; index++) {
+      const step = steps[index];
+      if (step?.id === id) return { list: steps, index };
+      for (const nested of [step?.steps, ...(step?.options ?? []).map((option) => option.steps)]) {
+        const found = Array.isArray(nested) ? locate(nested, id) : null;
+        if (found) return found;
+      }
     }
+    return null;
   }
 
-  // ==========================================================================
-  // NPC spawns
-  // ==========================================================================
-
-  function spawnTracked(player, key, definition) {
-    const tracked = trackedNpcs.get(player) ?? new Map();
-    trackedNpcs.set(player, tracked);
-    if (tracked.get(key)) return tracked.get(key);
-    const npc = api.spawnNpc({ ...definition, owner: player, ownerOnly: true });
-    if (npc) tracked.set(key, npc);
-    return npc;
+  function stepsAfter(steps, id) {
+    const found = locate(steps, id);
+    return found ? found.list.slice(found.index + 1) : [];
   }
 
-  function ensureQuestNpcs(player) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    spawnTracked(player, "herminius", { id: HERMINIUS_NPC_ID, x: 1712, y: 3163, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "citizen", { id: CITIZEN_NPC_ID, x: 1708, y: 3160, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "tourist", { id: TOURIST_NPC_ID, x: 1712, y: 3160, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "academic", { id: ACADEMIC_NPC_ID, x: 1716, y: 3160, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "regulus", { id: REGULUS_NPC_ID, x: 1701, y: 3143, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "artima", { id: ARTIMA_NPC_ID, x: 1766, y: 3101, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "fortis-crew", { id: FORTIS_CREW_NPC_ID, x: 1742, y: 3135, z: 0, wanderRadius: 0 });
-    spawnTracked(player, "sarim-crew", { id: SARIM_CREW_NPC_ID, x: 3037, y: 3194, z: 0, wanderRadius: 0 });
-  }
-
-  function removeQuestNpcs(player) {
-    const tracked = trackedNpcs.get(player);
-    if (!tracked) return;
-    for (const npc of tracked.values()) api.removeNpc(npc);
-    trackedNpcs.delete(player);
+  function stepById(steps, id) {
+    const found = locate(steps, id);
+    return found ? found.list[found.index] : null;
   }
 
   // ==========================================================================
@@ -456,10 +472,7 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   /** Which variant an NPC plays, by quest stage. Unrelated NPCs fall through. */
   function selectVariant({ npcId, player }) {
     if (npcId === HERMINIUS_NPC_ID) return selectHerminiusVariant(player);
-    if (VISITOR_IDS.has(npcId)) return selectVisitorVariant(player, npcId);
     if (npcId === REGULUS_NPC_ID) return selectRegulusVariant(player);
-    if (FORTIS_CREW_IDS.has(npcId)) return selectFortisCrewVariant(player);
-    if (SARIM_CREW_IDS.has(npcId)) return selectSarimCrewVariant(player);
     if (npcId === ARTIMA_NPC_ID) return selectArtimaVariant(player);
     if (npcId === HAIG_NPC_ID) return selectHaigVariant(player);
     if (npcId === NpcIdentifiers.BETTY) return selectBettyVariant(player);
@@ -472,13 +485,6 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     if (stage >= STAGE_RETURN) return V_HERMINIUS_FINAL;
     if (stage >= STAGE_INVESTIGATE) return V_HERMINIUS_CLUES;
     return V_HERMINIUS_INTRO;
-  }
-
-  function selectVisitorVariant(player, npcId) {
-    if (quest.getStage(player) !== STAGE_CLUE) return null;
-    const role = visitorRole(npcId);
-    if (role !== null && role === informantRole(player)) return V_VISITOR_CLUE;
-    return V_VISITOR_NOTHING;
   }
 
   function selectRegulusVariant(player) {
@@ -522,7 +528,7 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   function selectHaigVariant(player) {
     const stage = quest.getStage(player);
     if (stage < STAGE_HAIG) return null;
-    if (stage >= STAGE_CUTSCENE) return V_HAIG_RETURNED;
+    if (stage >= STAGE_RETURN) return V_HAIG_RETURNED;
     if (stage >= STAGE_CONFRONT) return V_HAIG_FOUND;
     return stage >= STAGE_STOREROOM ? V_HAIG_AGAIN : V_HAIG_FIRST;
   }
@@ -541,9 +547,9 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
       case "UWPNbs":
         return quest.getStage(player) >= STAGE_CLUE && quest.getStage(player) < STAGE_REGULUS;
       case "SsFS8H":
-        return quest.getStage(player) >= STAGE_REGULUS && !hasFlag(player, BIT_DIADEM);
+        return quest.getStage(player) >= STAGE_REGULUS && quest.getStage(player) < STAGE_CONFRONT;
       case "WPK1ZO":
-        return hasFlag(player, BIT_DIADEM);
+        return quest.getStage(player) >= STAGE_CONFRONT;
       case "ZSVQQP":
         return informantRole(player) === "citizen";
       case "HBhK3a":
@@ -573,10 +579,6 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
         return held(player, BETTYS_NOTES_ITEM_ID);
       case "HItAxB":
         return !held(player, BETTYS_NOTES_ITEM_ID);
-      case "f07S0F":
-        return shame(player) < SHAME_MAX;
-      case "ke5P0h":
-        return shame(player) >= SHAME_MAX;
       case "krLq4g":
         return player.getInventory().isFull();
       default:
@@ -585,89 +587,75 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   }
 
   /** The quest-start slug on the display's "Yes." option. */
-  function handleStartHook({ player, npcId, hook }) {
-    if (hook !== START_HOOK || npcId !== HERMINIUS_NPC_ID) return;
-    if (quest.getStage(player) === 0) quest.setStage(player, STAGE_STARTED);
+  function handleStartHook({ player, hook }) {
+    if (hook !== START_HOOK || quest.getStage(player) !== 0) return;
+    quest.setStage(player, STAGE_STARTED);
+    player.sendMessage("You've started a new quest: <col=081190>Ethically Acquired Antiquities</col>");
   }
 
-  /** Dialogue choices that move the state machine along. */
   function handleChoice(event) {
     const { player, npcId, option } = event;
-    const stage = quest.getStage(player);
-    if (npcId === HAIG_NPC_ID) {
-      if (stage === STAGE_HAIG && option === "I'm looking for Xerna's Diadem.") {
-        quest.setStage(player, STAGE_STOREROOM);
-        return;
-      }
-      if (stage === STAGE_CONFRONT && option === "I found Xerna's Diadem...") {
-        quest.setStage(player, STAGE_SHAME);
-        player.setAttribute(SHAME_ATTRIBUTE, 0);
-        player.getPacketSender().sendVarbit(SHAME_VARBIT, 0);
-        return;
-      }
-      if (stage === STAGE_SHAME && SHAME_INCREASE_OPTIONS.has(option)) {
-        addShame(player, SHAME_STEP);
-        return;
-      }
-      if (stage === STAGE_SHAME && SHAME_DECREASE_OPTIONS.has(option)) {
-        addShame(player, -SHAME_STEP);
-      }
-      return;
-    }
-    if (npcId === REGULUS_NPC_ID) {
-      if (stage === STAGE_REGULUS && option === "Have you seen anybody suspicious around?") {
-        quest.setStage(player, STAGE_CREW);
-      }
-      return;
-    }
-    if (FORTIS_CREW_IDS.has(npcId) && stage === STAGE_CREW && option === "Not right now.") {
+    if (isCrew(npcId) && quest.getStage(player) === STAGE_CREW && option === "Not right now.") {
       player.setAttribute(DECLINED_FAVOUR_ATTRIBUTE, true);
     }
   }
 
-  /** Lines that mark a milestone (the wiki has no step ids for these). */
+  /**
+   * Lines that mark a milestone. Line events fire while a run of lines is queued, so
+   * state that the capture changes as a line appears goes in `before`.
+   */
   function handleDialogueLine(event) {
     const { player, npcId, text } = event;
+    const stage = quest.getStage(player);
+    const at = (expected, action) => { if (text === expected) event.before = action; };
     if (npcId === HERMINIUS_NPC_ID) {
-      if (quest.getStage(player) === STAGE_STARTED && text === HERMINIUS_HANDOFF_LINE) {
-        quest.setStage(player, STAGE_INVESTIGATE);
-      }
+      if (stage === STAGE_STARTED) at(HERMINIUS_STARTED_LINE, () => advanceStage(player, STAGE_INVESTIGATE));
+      // The display's second look leads to the visitors once the tools were seen too.
+      if (stage === STAGE_INVESTIGATE) at(DISPLAY_AGAIN_LINE, () => {
+        if (hasFlag(player, BIT_INVESTIGATED_TOOLS) && hasFlag(player, BIT_INVESTIGATED_DISPLAY)) advanceStage(player, STAGE_CLUE);
+      });
       return;
     }
-    if (VISITOR_IDS.has(npcId)) {
-      if (quest.getStage(player) !== STAGE_CLUE || text !== VISITOR_QUESTION_LINE) return;
-      const role = visitorRole(npcId);
-      if (role === "citizen") setFlag(player, BIT_QUESTIONED_CITIZEN, QUESTIONED_CITIZEN_VARBIT);
-      else if (role === "tourist") setFlag(player, BIT_QUESTIONED_TOURIST, QUESTIONED_TOURIST_VARBIT);
-      else if (role === "academic") setFlag(player, BIT_QUESTIONED_ACADEMIC, QUESTIONED_ACADEMIC_VARBIT);
-      maybeAdvanceVisitors(player);
+    if (npcId === HAIG_NPC_ID) {
+      if (stage === STAGE_HAIG) at(HAIG_DENIAL_LINE, () => advanceStage(player, STAGE_STOREROOM));
+      if (stage >= STAGE_CONFRONT && stage < STAGE_CUTSCENE && text === HAIG_CONFRONTED_LINE) {
+        event.after = () => beginInterrogation(player);
+      }
+      if (stage === STAGE_CUTSCENE_END) at(HAIG_RETURN_LINE, () => advanceStage(player, STAGE_RETURN));
       return;
     }
-    if (FORTIS_CREW_IDS.has(npcId)) {
-      const stage = quest.getStage(player);
-      if (stage === STAGE_CREW && text === CREW_FAVOUR_LINE) {
-        setFlag(player, BIT_CREWMEMBER_FAVOUR_ASKED, CREWMEMBER_FAVOUR_VARBIT);
-        return;
-      }
-      if (stage === STAGE_RETURN_SAILS && text === CREW_PORT_SARIM_LINE) {
-        quest.setStage(player, STAGE_PORT_SARIM);
-      }
+    if (npcId === REGULUS_NPC_ID) {
+      if (stage === STAGE_REGULUS) at(REGULUS_LEAD_LINE, () => advanceStage(player, STAGE_CREW));
       return;
     }
     if (npcId === ARTIMA_NPC_ID) {
-      if (quest.getStage(player) === STAGE_REPAIR && text === ARTIMA_FAVOUR_LINE) {
-        setFlag(player, BIT_CRAFTING_FAVOUR_ASKED, CRAFTING_FAVOUR_VARBIT);
-      }
+      if (stage === STAGE_REPAIR) at(ARTIMA_FAVOUR_LINE, () => setFlag(player, BIT_CRAFTING_FAVOUR_ASKED, CRAFTING_FAVOUR_VARBIT));
+      if (ARTIMA_STITCH_LINES.includes(text)) event.before = () => stitch(player, event.npc, text);
+      at(ARTIMA_REPAIRED_LINE, () => repairSails(player));
       return;
     }
-    if (SARIM_CREW_IDS.has(npcId)) {
-      if (quest.getStage(player) === STAGE_PORT_SARIM && text === SARIM_RUNES_LINE) {
-        quest.setStage(player, STAGE_BETTY);
-      }
+    if (npcId === NpcIdentifiers.BETTY) {
+      if (stage === STAGE_BETTY) at(BETTY_NOTES_LINE, () => advanceStage(player, STAGE_READ_NOTES));
       return;
     }
-    if (npcId === HAIG_NPC_ID && quest.getStage(player) === STAGE_CUTSCENE_END && text === HAIG_HANDOFF_LINE) {
-      quest.setStage(player, STAGE_RETURN);
+    if (isCrew(npcId)) {
+      // The Port Sarim lines are typed "Trader Crewmember"; Trader Stan keeps his own head.
+      if (npcName(npcId) === "Trader Stan" && event.step?.speaker) {
+        event.speakerId = npcId;
+        event.speakerName = "Trader Stan";
+      }
+      if (stage === STAGE_CREW) at(CREW_FAVOUR_LINE, () => setFlag(player, BIT_CREWMEMBER_FAVOUR_ASKED, CREWMEMBER_FAVOUR_VARBIT));
+      if (stage === STAGE_RETURN_SAILS) at(CREW_PORT_SARIM_LINE, () => advanceStage(player, STAGE_PORT_SARIM));
+      if (stage === STAGE_PORT_SARIM) at(SARIM_RUNES_LINE, () => advanceStage(player, STAGE_BETTY));
+      return;
+    }
+    const visitor = VISITORS[npcName(npcId)];
+    if (visitor && stage === STAGE_CLUE && within(player, GRAND_MUSEUM)) {
+      if (VISITOR_NO_LEAD_LINES.has(text)) event.before = () => setFlag(player, visitor.bit, visitor.varbit);
+      if (text.startsWith("They left through the front door and turned right")) event.before = () => {
+        setFlag(player, visitor.bit, visitor.varbit);
+        advanceStage(player, STAGE_REGULUS);
+      };
     }
   }
 
@@ -677,39 +665,31 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
    */
   function handleChosenCondition(event) {
     const { player, npcId, stepId } = event;
-    if (npcId === HAIG_NPC_ID && stepId === "ke5P0h") {
-      advanceStage(player, STAGE_CUTSCENE);
-      return;
-    }
-    if (!FORTIS_CREW_IDS.has(npcId)) return;
-    if (stepId === "1yeeSP") {
-      player.setAttribute(PENDING_SAILS_ATTRIBUTE, true);
-      return;
-    }
-    if (stepId === "bnZg2R") {
-      player.setAttribute(PENDING_SAILS_ATTRIBUTE, false);
-    }
+    if (!isCrew(npcId)) return;
+    if (stepId === "1yeeSP") player.setAttribute(PENDING_SAILS_ATTRIBUTE, true);
+    if (stepId === "bnZg2R") player.setAttribute(PENDING_SAILS_ATTRIBUTE, false);
   }
 
-  /** Action/message steps that hand items over or advance the cutscene. */
+  /** Action/message steps that hand items over, with the item box the capture shows. */
   function handleAction(event) {
     const { player, npcId, stepId } = event;
-    if (FORTIS_CREW_IDS.has(npcId) && SAILS_GIVEN_STEP_IDS.has(stepId)) {
+    if (event.kind === "message" && Object.hasOwn(MESSAGE_BOXES, stepId) && isQuestPage(event.pages)) {
+      const item = MESSAGE_BOXES[stepId];
+      event.handled = true;
+      event.box = item === null ? { statement: true } : { items: [item] };
+    }
+    if (isCrew(npcId) && SAILS_GIVEN_STEP_IDS.has(stepId)) {
       if (!held(player, TATTERED_SAILS_ITEM_ID)) player.getInventory().adds(TATTERED_SAILS_ITEM_ID, 1);
       setFlag(player, BIT_GIVEN_SAILS, GIVEN_SAILS_VARBIT);
       player.setAttribute(PENDING_SAILS_ATTRIBUTE, false);
       advanceStage(player, STAGE_REPAIR);
       return;
     }
-    if (npcId === ARTIMA_NPC_ID && SAILS_REPAIRED_STEP_IDS.has(stepId)) {
-      if (held(player, TATTERED_SAILS_ITEM_ID)) {
-        player.getInventory().deleteNumber(TATTERED_SAILS_ITEM_ID, 1);
-        player.getInventory().adds(SAILS_ITEM_ID, 1);
-      }
-      setFlag(player, BIT_FIXED_SAILS, FIXED_SAILS_VARBIT);
+    if (npcId === ARTIMA_NPC_ID && (stepId === SAILS_REPAIRED_STEP || stepId === SAILS_REPLACED_STEP)) {
+      repairSails(player);
       return;
     }
-    if (FORTIS_CREW_IDS.has(npcId) && stepId === "7Wg9ig") {
+    if (isCrew(npcId) && stepId === SAILS_RETURNED_STEP) {
       if (held(player, SAILS_ITEM_ID)) player.getInventory().deleteNumber(SAILS_ITEM_ID, 1);
       advanceStage(player, STAGE_RETURN_SAILS);
       return;
@@ -717,38 +697,42 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     if (npcId === NpcIdentifiers.BETTY && NOTES_GIVEN_STEP_IDS.has(stepId)) {
       if (!held(player, BETTYS_NOTES_ITEM_ID)) player.getInventory().adds(BETTYS_NOTES_ITEM_ID, 1);
       setFlag(player, BIT_GIVEN_NOTES, GIVEN_NOTES_VARBIT);
-      setFlag(player, BIT_BETTY_TOLD, BETTY_TOLD_VARBIT);
       advanceStage(player, STAGE_READ_NOTES);
       return;
     }
     if (npcId === HAIG_NPC_ID && stepId === CRATE_SEARCH_STEP) {
-      setFlag(player, BIT_DIADEM, DIADEM_VARBIT);
+      advanceStage(player, STAGE_SEARCH_CRATE);
       advanceStage(player, STAGE_CONFRONT);
-      return;
-    }
-    if (npcId === HAIG_NPC_ID && stepId === CUTSCENE_BEGIN_STEP) {
-      advanceStage(player, STAGE_CUTSCENE);
-      return;
-    }
-    if (npcId === HAIG_NPC_ID && stepId === CUTSCENE_END_STEP) {
-      advanceStage(player, STAGE_CUTSCENE_END);
       return;
     }
     if (npcId === HERMINIUS_NPC_ID && stepId === COMPLETE_STEP) {
       if (!quest.isComplete(player)) quest.complete(player);
-      return;
-    }
-    if (VISITOR_IDS.has(npcId) && VISITOR_SILENT_STEP_IDS.has(stepId)) {
-      const branch = event.step?.steps;
-      if (Array.isArray(branch)) {
-        event.handled = true;
-        event.steps = branch;
-      }
     }
   }
 
+  /** Artima's three stitching lines play on their own, four ticks each, as she works. */
+  function stitch(player, artima, text) {
+    const manager = player.getDialogueManager();
+    if (text === ARTIMA_STITCH_LINES[0] && held(player, TATTERED_SAILS_ITEM_ID)) {
+      player.getInventory().deleteNumber(TATTERED_SAILS_ITEM_ID, 1);
+    }
+    manager.advance();
+    const line = manager.getCurrent?.();
+    player.getPacketSender().sendString("", (231 << 16) | 5).sendInterfaceFlagsRange((231 << 16) | 5, -1, -1, 0);
+    artima?.performAnimation?.(new Animation(ARTIMA_STITCH_ANIMATION));
+    later(player, ARTIMA_STITCH_TICKS, () => {
+      if (manager.getCurrent?.() === line) manager.advance();
+    });
+  }
+
+  function repairSails(player) {
+    if (held(player, TATTERED_SAILS_ITEM_ID)) player.getInventory().deleteNumber(TATTERED_SAILS_ITEM_ID, 1);
+    if (!held(player, SAILS_ITEM_ID)) player.getInventory().adds(SAILS_ITEM_ID, 1);
+    if (!hasFlag(player, BIT_FIXED_SAILS)) setFlag(player, BIT_FIXED_SAILS, FIXED_SAILS_VARBIT);
+  }
+
   // ==========================================================================
-  // Objects and items
+  // The Grand Museum
   // ==========================================================================
 
   function inspectEmptyDisplay(event) {
@@ -757,55 +741,216 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     const { player } = event;
     const stage = quest.getStage(player);
     if (stage === 0) {
-      startTranscript(api, player, HERMINIUS_NPC_ID, PAGE, V_DISPLAY_START);
+      showDisplayNotice(player);
       return true;
     }
     if (stage === STAGE_INVESTIGATE) {
       setFlag(player, BIT_INVESTIGATED_DISPLAY, INVESTIGATED_DISPLAY_VARBIT);
       startTranscript(api, player, HERMINIUS_NPC_ID, PAGE, V_DISPLAY_AGAIN);
-      maybeAdvanceInvestigation(player);
       return true;
     }
-    if (stage < STAGE_CLUE) {
-      startTranscript(api, player, HERMINIUS_NPC_ID, PAGE, V_DISPLAY_START);
-    }
+    if (stage < STAGE_CLUE) startTranscript(api, player, HERMINIUS_NPC_ID, PAGE, V_DISPLAY_START);
     return true;
+  }
+
+  /** The display's notice, then (four ticks on, as captured) the player's thought. */
+  function showDisplayNotice(player) {
+    player.getPacketSender().sendInterface(DISPLAY_INTERFACE).sendClientScript(DISPLAY_SCRIPT, ...DISPLAY_SCRIPT_ARGS);
+    later(player, DISPLAY_NOTICE_TICKS, () => {
+      if (player.isRegistered?.() === false || quest.getStage(player) !== 0) return;
+      if (player.getInterfaceId?.() === DISPLAY_INTERFACE) player.getPacketSender().sendInterfaceRemoval();
+      startTranscript(api, player, HERMINIUS_NPC_ID, PAGE, V_DISPLAY_START);
+    });
   }
 
   function inspectDiademDisplay(event) {
     if (event.definition?.id !== DIADEM_DISPLAY_OBJECT_ID) return false;
     event.handled = true;
     const { player } = event;
-    if (quest.isComplete(player)) {
-      player.sendMessage("The diadem on display here dates back to the earliest days of Varlamore. It was made for the hero Xerna and it is believed she wore it when she wed her long-time companion, Quoatlos.");
-      player.sendMessage("While the diadem was safely displayed here for many years, it was recently stolen by an unknown party. However, thanks to a helpful adventurer, the diadem was quickly recovered.");
-    } else {
-      player.sendMessage("Be aware that the diadem normally displayed here was recently stolen. However, thanks to a helpful adventurer, the diadem has been recovered and will soon be back on display.");
-    }
+    player.sendMessage("The diadem on display here dates back to the earliest days of Varlamore. It was made for the hero Xerna and it is believed she wore it when she wed her long-time companion, Quoatlos.");
+    player.sendMessage("While the diadem was safely displayed here for many years, it was recently stolen by an unknown party. However, thanks to a helpful adventurer, the diadem was quickly recovered.");
     return true;
   }
 
   function investigateTools(event) {
     if (event.definition?.id !== TOOLS_OBJECT_ID) return false;
     const { player } = event;
-    if (quest.getStage(player) !== STAGE_INVESTIGATE || hasFlag(player, BIT_INVESTIGATED_TOOLS)) return false;
+    if (quest.getStage(player) !== STAGE_INVESTIGATE) return false;
     event.handled = true;
     setFlag(player, BIT_INVESTIGATED_TOOLS, INVESTIGATED_TOOLS_VARBIT);
     startTranscript(api, player, HERMINIUS_NPC_ID, PAGE, V_TOOLS);
-    maybeAdvanceInvestigation(player);
     return true;
+  }
+
+  /**
+   * Any Citizen, Tourist or Academic on the museum floor: a greeting by kind, then either
+   * the lead (one citizen-or-tourist kind per player) or one of the Wiki's random no-leads.
+   */
+  function talkToVisitor(event) {
+    const { player, npcId } = event;
+    const name = npcName(npcId);
+    if (!VISITORS[name] || quest.getStage(player) !== STAGE_CLUE || !within(player, GRAND_MUSEUM)) return false;
+    event.handled = true;
+    startTranscript(api, player, npcId, PAGE, V_VISITOR_NOTHING, () => visitorSteps(player, name));
+    return true;
+  }
+
+  function visitorSteps(player, name) {
+    const spokenBy = (steps) => steps.map((step) => (step.type === "line" ? { ...step, speaker: name } : step));
+    const clue = variantSteps(V_VISITOR_CLUE);
+    const greeting = name === "Tourist" ? clue[1] : variantSteps(V_VISITOR_NOTHING)[1];
+    const opening = spokenBy([{ player: "Hello there." }, greeting, { player: VISITOR_QUESTION_LINE }]);
+    const kind = VISITORS[name].kind;
+    if (kind === informantRole(player)) {
+      const lead = stepById(clue, kind === "citizen" ? CITIZEN_LEAD_STEP : TOURIST_LEAD_STEP)?.steps ?? [];
+      return [...opening, ...spokenBy([clue[3], clue[4], ...lead])];
+    }
+    const id = NO_LEAD_STEP_IDS[Math.floor(Math.random() * NO_LEAD_STEP_IDS.length)];
+    return [...opening, ...spokenBy(stepById(variantSteps(V_VISITOR_NOTHING), id)?.steps ?? [])];
+  }
+
+  // ==========================================================================
+  // The charter crews, Betty and the Varrock Museum
+  // ==========================================================================
+
+  /**
+   * The first-time Cothon variant's favour menu, as captured: the One Small Favour (or
+   * plain) acceptance beside "Not right now.", which the Wiki export split into a menu of
+   * its own. The plain acceptance ends in a "continues" jump the runtime cannot follow, so
+   * it gets the shared sails task from the One Small Favour branch.
+   */
+  function withCrewFavourMenu(player, variant, steps) {
+    if (variant !== V_FORTIS_FIRST || !Array.isArray(steps)) return steps;
+    const clone = JSON.parse(JSON.stringify(steps));
+    const menu = clone.find((step) => step.type === "choice" && step.options?.some((option) => option.text === CREW_CASE_OPTION));
+    const caseSteps = menu?.options.find((option) => option.text === CREW_CASE_OPTION)?.steps;
+    if (!Array.isArray(caseSteps)) return steps;
+    const osf = caseSteps.find((step) => step.type === "condition" && step.id === OSF_CONDITION_ID);
+    const decline = caseSteps.find((step) => step.type === "choice" && step.options?.some((option) => option.text === "Not right now."));
+    const branch = caseSteps.find((step) => step.type === "condition" && step.id === (isQuestComplete(player, "one_small_favour") ? OSF_CONDITION_ID : NON_OSF_CONDITION_ID));
+    const accept = branch?.steps?.find((step) => step.type === "choice")?.options?.[0];
+    if (!accept || !decline || !Array.isArray(osf?.steps)) return steps;
+    accept.steps = [...(accept.steps ?? []).filter((step) => step.type !== "jump"), ...osf.steps.slice(1)];
+    const favourAt = caseSteps.findIndex((step) => step.type === "choice" && !step.options?.length);
+    const head = caseSteps.slice(0, favourAt >= 0 ? favourAt : caseSteps.indexOf(branch));
+    menu.options.find((option) => option.text === CREW_CASE_OPTION).steps = [...head, { type: "choice", options: [accept, ...decline.options] }];
+    return clone;
+  }
+
+  /**
+   * CharterShips claims the charter crew's Talk-to, so play the quest variant first while
+   * EAA needs them: any crewmember at the Cothon, Trader Stan or a crewmember at the Port
+   * Sarim dock. Everyone else, and completed quests, fall through to the charter menu.
+   */
+  function talkToTraderCrewmember(event) {
+    const { player, npcId } = event;
+    const variant = within(player, COTHON)
+      ? selectFortisCrewVariant(player)
+      : within(player, PORT_SARIM_DOCK) ? selectSarimCrewVariant(player) : null;
+    if (!variant) return false;
+    event.handled = true;
+    startTranscript(api, player, npcId, PAGE, variant, (steps) => withCrewFavourMenu(player, variant, steps), event.npc ?? null);
+    return true;
+  }
+
+  /** Using the repaired sails on a Cothon crewmember opens the hand-over. */
+  function handleSailsOnCrewmember(event) {
+    if (event.itemId !== SAILS_ITEM_ID || !isCrew(event.npcId) || !within(event.player, COTHON)) return;
+    event.handled = true;
+    if (quest.getStage(event.player) >= STAGE_RETURN_SAILS) return;
+    startTranscript(api, event.player, event.npcId, PAGE, V_FORTIS_WITH_SAILS);
+  }
+
+  /** Betty's notes open their paper; the first read moves the hunt to Varrock. */
+  function readBettyNotes(event) {
+    const { player } = event;
+    event.handled = true;
+    const sender = player.getPacketSender();
+    for (let child = 5; child <= 16; child++) sender.sendString(NOTES_LINES[child] ?? "", (NOTES_INTERFACE << 16) | child);
+    if (quest.getStage(player) === STAGE_READ_NOTES) {
+      quest.setStage(player, STAGE_HAIG);
+      readingNotes.add(player);
+    }
+    sender.sendInterface(NOTES_INTERFACE);
+    return true;
+  }
+
+  function handleInterfaceClosed({ player, interfaceId }) {
+    if (interfaceId !== NOTES_INTERFACE || !readingNotes.has(player)) return;
+    readingNotes.delete(player);
+    startTranscript(api, player, NpcIdentifiers.BETTY, PAGE, V_NOTES_FIRST);
+  }
+
+  /**
+   * Dig Site's variant hook owns Haig whenever its own quest has not started, so claim his
+   * Talk-to while EAA needs him. A cutscene cut short by a logout resumes with its ending.
+   */
+  function talkToCuratorHaig(event) {
+    if (event.npcId !== HAIG_NPC_ID) return false;
+    const { player } = event;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_HAIG || stage >= STAGE_RETURN || scenes.has(player)) return false;
+    event.handled = true;
+    if (stage >= STAGE_CUTSCENE) {
+      advanceStage(player, STAGE_CUTSCENE_END);
+      playAfterCutscene(player);
+      return true;
+    }
+    startTranscript(api, player, HAIG_NPC_ID, PAGE, selectHaigVariant(player));
+    return true;
+  }
+
+  /** Pickpocketing Haig during the storeroom step always yields the key. */
+  function pickCuratorPocket(event) {
+    if (event.npcId !== HAIG_NPC_ID) return false;
+    const { player } = event;
+    if (quest.getStage(player) !== STAGE_STOREROOM || held(player, STOREROOM_KEY_ITEM_ID)) return false;
+    event.handled = true;
+    player.performAnimation(new Animation(PICKPOCKET_ANIMATION));
+    player.getInventory().adds(STOREROOM_KEY_ITEM_ID, 1);
+    startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_PICKPOCKET);
+    return true;
+  }
+
+  /**
+   * The storeroom door lets its key holder through and shuts behind them: the open door
+   * shows for two ticks while the player walks the doorway, as captured.
+   */
+  function handleStoreroomDoor(request) {
+    if (request.handled || request.objectId !== STOREROOM_DOOR_OBJECT_ID) return;
+    const { player, object } = request;
+    const location = object?.getLocation?.();
+    if (!location || location.getX() !== STOREROOM_DOOR_TILE.x || location.getY() !== STOREROOM_DOOR_TILE.y) return;
+    request.handled = true;
+    const crossing = crossingFor(object, player.getLocation());
+    if (!crossing || ObstacleRunner.isBusy(player)) return;
+    const entering = crossing.destination.x === location.getX() && crossing.destination.y === location.getY();
+    if (entering && !held(player, STOREROOM_KEY_ITEM_ID)) {
+      player.sendMessage("The door is locked.");
+      return;
+    }
+    const sender = player.getPacketSender();
+    if (entering) {
+      player.sendMessage("You use the key to unlock the door.");
+      sender.sendSound(DOOR_UNLOCK_SOUND, 1, 0);
+    }
+    const z = location.getZ(), face = object.getFace();
+    const open = new GameObject(STOREROOM_DOOR_OPEN_OBJECT_ID, new Location(location.getX(), location.getY() - 1, z), 0, 0, null);
+    sender.sendObject(open).sendObject(new GameObject(STOREROOM_DOORWAY_OBJECT_ID, location.clone(), 0, face, null))
+      .sendSound(DOOR_OPEN_SOUND, 1, 0);
+    ObstacleRunner.run({ player, object }, [{ walk: [[crossing.destination.x, crossing.destination.y]] }]);
+    later(player, DOOR_RESET_TICKS, () => {
+      sender.sendObjectRemoval(open).sendObject(new GameObject(STOREROOM_DOOR_OBJECT_ID, location.clone(), 0, face, null));
+    });
   }
 
   function searchDiademCrate(event) {
     if (event.definition?.id !== DIADEM_CRATE_OBJECT_ID) return false;
     const { player } = event;
     if (quest.getStage(player) < STAGE_STOREROOM) return false;
-    // Claim every later search too: the first one set the diadem flag, so repeat
-    // clicks must not replay the transcript or set any state twice.
+    // Claim every later search too, so repeat clicks never replay the find.
     event.handled = true;
-    if (!hasFlag(player, BIT_DIADEM)) {
-      startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_CRATE);
-    }
+    if (quest.getStage(player) < STAGE_CONFRONT) startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_CRATE);
     return true;
   }
 
@@ -818,174 +963,305 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     return true;
   }
 
-  /** The storeroom door is not in the Doors plugin's catalog, so swing it here. */
-  function handleStoreroomDoor(request) {
-    if (request.handled || request.objectId !== STOREROOM_DOOR_OBJECT_ID) return;
-    const object = request.object;
-    const location = object?.getLocation?.();
-    if (!location || location.getX() !== STOREROOM_DOOR_TILE.x || location.getY() !== STOREROOM_DOOR_TILE.y) return;
-    request.handled = true;
-    if (!held(request.player, STOREROOM_KEY_ITEM_ID)) {
-      request.player.sendMessage("The door is locked.");
+  // ==========================================================================
+  // The interrogation and Haig's story
+  // ==========================================================================
+
+  class EaaScene extends PrivateArea {
+    constructor(player, [minX, maxX, minY, maxY]) {
+      super([new Boundary(minX, maxX, minY, maxY, 0)]);
+      this.owner = player;
+    }
+    canAttack() { return false; }
+    canTeleport() { return false; }
+    postLeave(mobile, logout) {
+      const scene = scenes.get(mobile);
+      if (mobile === this.owner && scene?.area === this) {
+        scene.area = null;
+        endScene(mobile, logout);
+      }
+      super.postLeave(mobile, logout);
+    }
+  }
+
+  function fade(player, out) {
+    player.getPacketSender().sendSubInterface(OVERLAY_UID, FADE_INTERFACE, 1, {
+      postScripts: [{ scriptId: 948, args: out ? [0, 255, 0, 0, 50] : [0, 0, 0, 255, 50] }],
+    });
+  }
+
+  function controls(player, active) {
+    player.getMovementQueue().reset().setBlockMovement(active);
+    player.setUntargetable(active);
+    player.getPacketSender().sendVarbit(CUTSCENE_STATUS_VARBIT, active ? 1 : 0).sendVarbit(MINIMAP_STATE_VARBIT, active ? 2 : 0);
+  }
+
+  /** An empty chatbox the player cannot continue: the capture's held moments. */
+  function hold(player) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+      new ActionDialogue(0, { execute: () => StatementDialogue.send(player, "", false) })
+    ));
+  }
+
+  function cameraOn(player, look) {
+    player.getPacketSender().sendCameraMoveTo(...CONFRONT_CAMERA, CAMERA_RATES).sendCameraLookAt(...look, CAMERA_RATES);
+  }
+
+  function turn(player, yaw) {
+    player.getPacketSender().sendCameraRotateBy(0, yaw, TURN_CYCLES, "linear");
+  }
+
+  function actor(player, scene, id, [x, y], face) {
+    const npc = api.spawnNpc({ id, x, y, z: 0, owner: player, ownerOnly: true, wanderRadius: 0 });
+    if (!npc) return null;
+    scene.area.add(npc);
+    scene.actors.push(npc);
+    npc.setPositionToFace(new Location(face[0], face[1], 0));
+    return npc;
+  }
+
+  function enterArea(player, scene, bounds) {
+    scene.area = new EaaScene(player, bounds);
+    scene.area.enter(player);
+  }
+
+  function removeActors(scene) {
+    for (const npc of scene.actors.splice(0)) api.removeNpc(npc);
+  }
+
+  /** Plays scene lines in order; each step can act as its line appears. */
+  function play(player, steps, done) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    const [step, ...rest] = steps;
+    if (!step) {
+      done?.();
       return;
     }
-    openStoreroomDoor(request.player, object);
+    scene.resume = () => play(player, steps, done);
+    step.before?.();
+    const chain = new DialogueChainBuilder();
+    chain.add(step.player ? new PlayerDialogue(0, step.text) : new NpcDialogue(0, HAIG_ACTOR_NPC_ID, step.text));
+    chain.add(new ActionDialogue(1, { execute: () => play(player, rest, done) }));
+    player.getDialogueManager().startDialogues(chain);
   }
 
-  function openStoreroomDoor(player, object) {
-    // A second toggle in the same tick (or a replayed door event) must not leak a
-    // second open object or overwrite the tracked one.
-    if (storeroomDoorOpen) return;
-    const location = object.getLocation();
-    const type = object.getType();
-    const rotation = object.getFace() & 0x3;
-    const openRotation = (rotation + 1) & 0x3;
-    const [dx, dy] = DOOR_SWING_OFFSETS[openRotation];
-    const open = new GameObject(
-      STOREROOM_DOOR_OPEN_OBJECT_ID,
-      new Location(location.getX() + dx, location.getY() + dy, location.getZ()),
-      type,
-      (rotation - 1) & 0x3,
-      null
-    );
-    ObjectManager.register(open, true);
-    ObjectManager.deregister(object, true);
-    Sounds.sendSound(player, Sound.DOOR_OPEN);
-    storeroomDoorOpen = {
-      open,
-      closed: { x: location.getX(), y: location.getY(), z: location.getZ(), type, rotation },
-    };
-    scheduleStoreroomDoorClose();
+  /** A transcript line as a scene step. */
+  function sceneLine(step, before) {
+    return { player: step.player !== undefined, text: step.player ?? step.text, before };
   }
 
-  function scheduleStoreroomDoorClose() {
-    const manager = api.getTaskManager();
-    if (!manager || typeof Task !== "function") return;
-    manager.cancelTasks(STOREROOM_DOOR_TASK_KEY);
-    const task = new Task(STOREROOM_DOOR_AUTO_CLOSE_TICKS, STOREROOM_DOOR_TASK_KEY);
-    task.execute = () => {
-      task.stop();
-      closeStoreroomDoor();
-    };
-    manager.submit(task);
-  }
-
-  function closeStoreroomDoor() {
-    const state = storeroomDoorOpen;
-    storeroomDoorOpen = null;
-    if (!state) return;
-    ObjectManager.deregister(state.open, true);
-    ObjectManager.register(
-      new GameObject(
-        STOREROOM_DOOR_OBJECT_ID,
-        new Location(state.closed.x, state.closed.y, state.closed.z),
-        state.closed.type,
-        state.closed.rotation,
-        null
-      ),
-      true
-    );
-  }
-
-  /** Pickpocketing Haig during the storeroom step always yields the key. */
-  function pickCuratorPocket(event) {
-    if (event.npcId !== HAIG_NPC_ID) return false;
-    const { player } = event;
-    if (quest.getStage(player) !== STAGE_STOREROOM) return false;
-    if (!held(player, STOREROOM_KEY_ITEM_ID)) {
-      player.getInventory().adds(STOREROOM_KEY_ITEM_ID, 1);
-      startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_PICKPOCKET);
-    }
-    quest.setStage(player, STAGE_SEARCH_CRATE);
-    return true;
-  }
-
-  /**
-   * Dig Site's variant hook owns Haig whenever its own quest has not started, so
-   * the EAA variants would never be selected. Claim his Talk-to while the quest
-   * needs him (stages 22-35) and play the page variant directly; every other Haig
-   * talk (and Dig Site/The Golem players) falls through unchanged.
-   */
-  function talkToCuratorHaig(event) {
-    if (event.npcId !== HAIG_NPC_ID) return false;
-    const { player } = event;
-    const stage = quest.getStage(player);
-    if (stage < STAGE_HAIG || stage >= STAGE_RETURN) return false;
-    const variant = selectHaigVariant(player);
-    if (!variant) return false;
-    event.handled = true;
-    startTranscript(api, player, HAIG_NPC_ID, PAGE, variant);
-    return true;
-  }
-
-  /**
-   * The first-time Cothon variant nests the shared sails task only inside the
-   * "has completed One Small Favour" condition (Vr0XnM); its sibling non-OSF
-   * branch ("Sure. What do you need?") ends in a wiki "continues" jump the
-   * runtime cannot resolve, so without One Small Favour the hand-over never
-   * plays. Append the shared task (Vr0XnM's wiki wording after its own OSF
-   * choice) to that option so its branch reaches the sails. The OSF-completed
-   * branch is left exactly as the transcript ships it.
-   */
-  function withNonOsfCrewHandover(player, variant, steps) {
-    if (variant !== V_FORTIS_FIRST || isQuestComplete(player, "one_small_favour")) return steps;
-    if (!Array.isArray(steps)) return steps;
-    const clone = JSON.parse(JSON.stringify(steps));
-    const menu = clone.find(
-      (step) => step.type === "choice" && step.options?.some((option) => option.text === CREW_CASE_OPTION)
-    );
-    const caseSteps = menu?.options.find((option) => option.text === CREW_CASE_OPTION)?.steps;
-    const nonOsf = caseSteps?.find((step) => step.type === "condition" && step.id === NON_OSF_CONDITION_ID);
-    const osf = caseSteps?.find((step) => step.type === "condition" && step.id === OSF_CONDITION_ID);
-    const accept = nonOsf?.steps?.find((step) => step.type === "choice")
-      ?.options?.find((option) => option.text === CREW_ACCEPT_OPTION);
-    if (!accept || !Array.isArray(osf?.steps) || osf.steps.length < 2) return steps;
-    accept.steps = [...(accept.steps ?? []), ...osf.steps.slice(1)];
-    return clone;
-  }
-
-  /**
-   * CharterShips claims Trader Crewmember Talk-to, so play the quest variant first
-   * while EAA needs the crew (the Cothon crew through stage 15, the Port Sarim crew
-   * at 16-17). Every other crewmember and completed quests fall through to the
-   * charter menu. `npc-dialogue:start` keeps the page's jump context (needed by the
-   * "after having returned the sails" variant) and lets the non-OSF hand-over be
-   * spliced into the first-time variant.
-   */
-  function talkToTraderCrewmember(event) {
-    const { player, npcId } = event;
-    const variant = FORTIS_CREW_IDS.has(npcId)
-      ? selectFortisCrewVariant(player)
-      : SARIM_CREW_IDS.has(npcId)
-        ? selectSarimCrewVariant(player)
-        : null;
-    if (!variant) return false;
-    event.handled = true;
-    api.emitCustomEvent("npc-dialogue:start", {
-      player,
-      npcId,
-      variant,
-      select: (steps) => withNonOsfCrewHandover(player, variant, steps),
+  function beginInterrogation(player) {
+    if (scenes.has(player)) return;
+    const scene = { actors: [], area: null, menus: [], resume: null };
+    scenes.set(player, scene);
+    controls(player, true);
+    hold(player);
+    fade(player, true);
+    later(scene, 2, () => {
+      enterArea(player, scene, VARROCK_MUSEUM);
+      player.moveTo(new Location(...CONFRONT_TILE, 0));
+      player.setPositionToFace(new Location(CONFRONT_TILE[0] - 1, CONFRONT_TILE[1], 0));
+      scene.haig = actor(player, scene, HAIG_ACTOR_NPC_ID, CONFRONT_HAIG_TILE, CONFRONT_TILE);
     });
-    return true;
+    later(scene, 3, () => cameraOn(player, LOOK_AT_HAIG));
+    later(scene, 4, () => fade(player, false));
+    later(scene, 6, () => {
+      setShame(player, SHAME_START);
+      cameraOn(player, LOOK_AT_HAIG);
+      play(player, openingSteps(player, scene), () => shameRound(player));
+    });
+    scene.watchdog = () => watch(player, scene);
+    later(scene, 1, scene.watchdog);
   }
 
-  /** Reading Betty's notes advances the clue hunt. */
-  function readBettyNotes(event) {
-    const { player } = event;
-    if (quest.getStage(player) !== STAGE_READ_NOTES) return false;
-    event.handled = true;
-    startTranscript(api, player, NpcIdentifiers.BETTY, PAGE, V_NOTES_FIRST);
-    quest.setStage(player, STAGE_HAIG);
-    return true;
+  /** The recorded opening, from the transcript's lines, with the capture's camera and meter. */
+  function openingSteps(player, scene) {
+    const lines = stepsAfter(variantSteps(V_HAIG_FOUND), INTERROGATION_START_STEP);
+    const opening = lines.slice(0, lines.findIndex((step) => step.type === "choice"));
+    const cues = [
+      () => cameraOn(player, LOOK_AT_HAIG),
+      () => scene.haig?.performAnimation(new Animation(HAIG_TALK_ANIMATION)),
+      () => cameraOn(player, LOOK_AT_PLAYER),
+      () => cameraOn(player, LOOK_AT_HAIG),
+      () => cameraOn(player, LOOK_AT_PLAYER),
+      () => { cameraOn(player, LOOK_AT_HAIG); advanceStage(player, STAGE_SHAME); },
+      () => { cameraOn(player, LOOK_AT_PLAYER); player.getPacketSender().sendSubInterface(OVERLAY_UID, SHAME_INTERFACE, 1); },
+      () => { turn(player, TURN_YAW); setShame(player, shame(player) + SHAME_OPENING[0]); },
+      () => turn(player, -TURN_YAW),
+      () => { turn(player, TURN_YAW); setShame(player, shame(player) + SHAME_OPENING[1]); },
+    ];
+    return opening.map((step, index) => sceneLine(step, cues[index]));
   }
 
-  /** Using the repaired sails on a trader crewmember opens the hand-over. */
-  function handleSailsOnCrewmember(event) {
-    if (event.itemId !== SAILS_ITEM_ID || !FORTIS_CREW_IDS.has(event.npcId)) return;
-    event.handled = true;
-    if (quest.getStage(event.player) >= STAGE_RETURN_SAILS) return;
-    startTranscript(api, event.player, event.npcId, PAGE, V_FORTIS_WITH_SAILS);
+  /** The transcript's argument options, in its fixed groups of three. */
+  function shameMenus() {
+    const options = stepsAfter(variantSteps(V_HAIG_FOUND), INTERROGATION_START_STEP).find((step) => step.type === "choice")?.options ?? [];
+    const menus = [];
+    for (let index = 0; index + 3 <= options.length; index += 3) menus.push(options.slice(index, index + 3));
+    return menus;
+  }
+
+  function shameStep() {
+    return SHAME_STEP_MIN + Math.floor(Math.random() * (SHAME_STEP_MAX - SHAME_STEP_MIN + 1));
+  }
+
+  // ponytail: the capture shows +4..+9 for shaming options; the falls for the Wiki's
+  // "decrease" options and the order of menus are not recorded, so both are random.
+  function shameRound(player) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    if (scene.menus.length === 0) scene.menus = shameMenus().sort(() => Math.random() - 0.5);
+    const menu = scene.menus.shift();
+    turn(player, -TURN_YAW);
+    const present = () => {
+      player.getDialogueManager().reset();
+      api.sendMultiChatboxPrompt(player, "Select an option", ...menu.flatMap((option) => [option.text, () => answer(player, option)]));
+    };
+    scene.resume = present;
+    present();
+  }
+
+  function answer(player, option) {
+    const [said, reply] = option.steps ?? [];
+    const delta = (SHAME_INCREASE_OPTIONS.has(option.text) ? 1 : -1) * shameStep();
+    const steps = [sceneLine(said ?? { player: option.text })];
+    if (reply) steps.push(sceneLine(reply, () => { turn(player, TURN_YAW); setShame(player, shame(player) + delta); }));
+    play(player, steps, () => {
+      if (shame(player) >= SHAME_MAX) interrogationOver(player, true);
+      else if (shame(player) <= 0) interrogationOver(player, false);
+      else shameRound(player);
+    });
+  }
+
+  function interrogationOver(player, passed) {
+    const variant = variantSteps(V_HAIG_FOUND);
+    const lines = stepsAfter(variant, INTERROGATION_START_STEP);
+    const closing = lines[lines.findIndex((step) => step.type === "choice") + 1];
+    const branch = stepById(variant, passed ? INTERROGATION_PASSED_STEP : INTERROGATION_FAILED_STEP)?.steps ?? [];
+    const spoken = branch.slice(0, branch.findIndex((step) => step.type === "action" || step.type === "end"));
+    const steps = [sceneLine(closing, () => {
+      if (passed) advanceStage(player, STAGE_CUTSCENE);
+      turn(player, -TURN_YAW);
+      player.getPacketSender().closeSubInterface(OVERLAY_UID);
+    })];
+    spoken.forEach((step, index) => steps.push(sceneLine(step, () => cameraOn(player, index % 2 === 0 ? LOOK_AT_HAIG : LOOK_AT_PLAYER))));
+    play(player, steps, () => (passed ? flashback(player) : walkOut(player)));
+  }
+
+  /** Haig's story in the Grand Museum, with the capture's actors, timing and pans. */
+  function flashback(player) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    scene.resume = null;
+    hold(player);
+    fade(player, true);
+    const story = stepsAfter(variantSteps(V_HAIG_FOUND), CUTSCENE_BEGIN_STEP).filter((step) => step.type === "line");
+    later(scene, 2, () => {
+      removeActors(scene);
+      const previous = scene.area;
+      scene.area = null;
+      previous?.leave(player, false);
+      enterArea(player, scene, FORTIS_MUSEUM);
+      player.moveTo(new Location(1712, 3167, 0));
+      scene.haig = actor(player, scene, HAIG_ACTOR_NPC_ID, [1704, 3165], [1702, 3165]);
+      scene.thief = actor(player, scene, THIEF_ACTOR_NPC_ID, [1720, 3164], [1722, 3164]);
+    });
+    later(scene, 3, () => player.getPacketSender().sendCameraMoveTo(1712, 3160, 500, CAMERA_RATES).sendCameraLookAt(1702, 3166, 499, CAMERA_RATES));
+    later(scene, 4, () => fade(player, false));
+    later(scene, 6, () => play(player, [
+      sceneLine(story[0], () => scene.haig?.performAnimation(new Animation(HAIG_TALK_ANIMATION))),
+      sceneLine(story[1]),
+      sceneLine(story[2], () => scene.haig?.setPositionToFace(new Location(1720, 3165, 0))),
+    ], () => thiefAppears(player, scene, story)));
+  }
+
+  function thiefAppears(player, scene, story) {
+    scene.resume = null;
+    hold(player);
+    scene.haig?.getMovementQueue().addSteps(new Location(1705, 3164, 0));
+    scene.haig?.getMovementQueue().addSteps(new Location(1710, 3164, 0));
+    scene.thief?.getMovementQueue().addSteps(new Location(1714, 3164, 0));
+    later(scene, 1, () => player.getPacketSender()
+      .sendCameraMoveTo(1712, 3160, 300, { cycles: 210, easing: "ease_out_sine", ignoreTerrain: true })
+      .sendCameraLookAt(1712, 3168, 499, { cycles: 210, easing: "ease_out_sine" }));
+    later(scene, 7, () => play(player, [sceneLine(story[3]), sceneLine(story[4])], () => fight(player, scene, story)));
+  }
+
+  function fight(player, scene, story) {
+    scene.resume = null;
+    hold(player);
+    scene.haig?.setMovementSteps?.(2);
+    scene.haig?.getMovementQueue().addSteps(new Location(1712, 3164, 0));
+    scene.thief?.getMovementQueue().addSteps(new Location(1713, 3164, 0));
+    later(scene, 1, () => {
+      scene.haig?.setMovementSteps?.(1);
+      scene.haig?.performAnimation(new Animation(HAIG_PUNCH_ANIMATIONS[0]));
+      scene.thief?.performAnimation(new Animation(THIEF_SWING_ANIMATION));
+    });
+    later(scene, 2, () => scene.haig?.performAnimation(new Animation(HAIG_PUNCH_ANIMATIONS[1])));
+    later(scene, 3, () => scene.haig?.performAnimation(new Animation(HAIG_PUNCH_ANIMATIONS[2])));
+    later(scene, 4, () => scene.thief?.performAnimation(new Animation(THIEF_FALL_ANIMATION)));
+    later(scene, 5, () => play(player, [sceneLine(story[5]), sceneLine(story[6])], () => storyEnds(player, scene)));
+  }
+
+  function storyEnds(player, scene) {
+    scene.resume = null;
+    hold(player);
+    scene.haig?.performAnimation(new Animation(PICKUP_ANIMATION));
+    later(scene, 3, () => scene.haig?.getMovementQueue().addSteps(new Location(1712, 3161, 0)));
+    later(scene, 4, () => {
+      advanceStage(player, STAGE_CUTSCENE_END);
+      fade(player, true);
+    });
+    later(scene, 6, () => leaveScene(player, true));
+  }
+
+  /** Back to Haig in the Varrock Museum: fade in, then (after the story) his reply. */
+  function leaveScene(player, afterStory) {
+    if (!scenes.has(player)) return;
+    endScene(player, false);
+    later(player, 2, () => fade(player, false));
+    if (afterStory) later(player, 4, () => playAfterCutscene(player));
+  }
+
+  /** A failed interrogation fades back to the museum; talking to Haig again starts over. */
+  function walkOut(player) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    scene.resume = null;
+    hold(player);
+    fade(player, true);
+    later(scene, 2, () => leaveScene(player, false));
+  }
+
+  function playAfterCutscene(player) {
+    startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_FOUND, (steps) => stepsAfter(steps, CUTSCENE_END_STEP));
+  }
+
+  /** Ends any scene: actors gone, controls and camera back, the player back with Haig. */
+  function endScene(player, logout) {
+    const scene = scenes.get(player);
+    if (!scene) return;
+    scenes.delete(player);
+    TaskManager.cancelTasks(scene);
+    removeActors(scene);
+    controls(player, false);
+    player.getPacketSender().closeSubInterface(OVERLAY_UID).sendCameraReset();
+    const area = scene.area;
+    scene.area = null;
+    if (area && player.getArea() === area) area.leave(player, logout);
+    player.moveTo(new Location(...SCENE_END_TILE, 0));
+    player.setPositionToFace(new Location(SCENE_END_TILE[0] - 1, SCENE_END_TILE[1], 0));
+    if (!logout) player.getDialogueManager().reset();
+  }
+
+  /** A scene dialogue or menu closed by the player (Escape, a click) comes back. */
+  function watch(player, scene) {
+    if (scenes.get(player) !== scene) return;
+    const open = player.getDialogueManager().isActive?.() === true || MultiChatboxPrompt.getPending?.(player);
+    if (!open && scene.resume) scene.resume();
+    later(scene, 1, scene.watchdog);
   }
 
   // ==========================================================================
@@ -1141,36 +1417,42 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     player.getSkillManager().addExperiences(Skill.THIEVING, 6000);
     // registerQuest adds one coin; top the stack up to 5,000.
     player.getInventory().adds(COINS_ITEM_ID, 4999);
+    if (held(player, BETTYS_NOTES_ITEM_ID)) player.getInventory().deleteNumber(BETTYS_NOTES_ITEM_ID, 1);
+    later(player, DIADEM_RETURN_TICKS, () => {
+      if (player.isRegistered?.() !== false && !hasFlag(player, BIT_DIADEM)) setFlag(player, BIT_DIADEM, DIADEM_VARBIT);
+    });
   }
 
   // ==========================================================================
   // Login / logout
   // ==========================================================================
 
+  /** Mirrors the side flags. Older saves set the diadem early; it returns only on completion. */
   function syncSideVarbits({ player }) {
     if (!player || player.isPlayerBot?.() === true) return;
+    const complete = quest.isComplete(player);
+    if (hasFlag(player, BIT_DIADEM) !== complete) {
+      player.setAttribute(FLAGS_ATTRIBUTE, complete ? flags(player) | BIT_DIADEM : flags(player) & ~BIT_DIADEM);
+    }
     const bits = flags(player);
     const sender = player.getPacketSender();
-    for (const [bit, varbitId] of FLAG_VARBITS) {
-      sender.sendVarbit(varbitId, (bits & bit) !== 0 ? 1 : 0);
-    }
+    for (const [bit, varbitId] of FLAG_VARBITS) sender.sendVarbit(varbitId, (bits & bit) !== 0 ? 1 : 0);
     sender.sendVarbit(SHAME_VARBIT, shame(player));
   }
 
   function handleLogin({ player }) {
-    ensureQuestNpcs(player);
     refreshQuestList(player);
   }
 
   function handleLogout({ player }) {
-    if (player) removeQuestNpcs(player);
+    if (player) endScene(player, true);
   }
 
-  api.persistAttribute(FLAGS_ATTRIBUTE);
+  api.persistAttribute(FLAGS_ATTRIBUTE, 0);
   api.persistAttribute(INFORMANT_ATTRIBUTE);
-  api.persistAttribute(SHAME_ATTRIBUTE);
-  api.persistAttribute(PENDING_SAILS_ATTRIBUTE);
-  api.persistAttribute(DECLINED_FAVOUR_ATTRIBUTE);
+  api.persistAttribute(SHAME_ATTRIBUTE, 0);
+  api.persistAttribute(PENDING_SAILS_ATTRIBUTE, false);
+  api.persistAttribute(DECLINED_FAVOUR_ATTRIBUTE, false);
 
   quest = registerQuest(api, {
     key: "ethically_acquired_antiquities",
@@ -1182,6 +1464,7 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     questPoints: 1,
     xpRewards: [{ skillId: Skill.THIEVING.getIndex(), amount: 6000, label: "Thieving" }],
     rewardItemId: COINS_ITEM_ID,
+    scrollItemId: DIADEM_ITEM_ID,
     rewardItemLabel: "5,000 Coins",
     buildJournal,
     onReward: grantReward,
@@ -1194,6 +1477,7 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:condition", handleChosenCondition);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("interface:closed", handleInterfaceClosed);
   api.onObjectInteraction("Empty display", { Inspect: inspectEmptyDisplay });
   api.onObjectInteraction("Xerna's Diadem", { Inspect: inspectDiademDisplay });
   api.onObjectInteraction("Tools", { Investigate: investigateTools });
@@ -1204,7 +1488,8 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
     "Talk-to": talkToCuratorHaig,
     Pickpocket: pickCuratorPocket,
   });
-  api.onNpcInteraction("Trader Crewmember", { "Talk-to": talkToTraderCrewmember });
+  for (const name of Object.keys(VISITORS)) api.onNpcInteraction(name, { "Talk-to": talkToVisitor });
+  api.onNpcsInteraction(CREW_NAMES, { "Talk-to": talkToTraderCrewmember });
   // ItemIdentifiers.BETTYS_NOTES (29905): inventory option "Read".
   api.onItemAction("Betty's notes", { Read: readBettyNotes });
   api.onItemOnNpc(handleSailsOnCrewmember, { noted: false });

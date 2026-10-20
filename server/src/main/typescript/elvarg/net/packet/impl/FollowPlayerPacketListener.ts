@@ -10,10 +10,11 @@ export class FollowPlayerPacketListener {
 
     // Keep parity with Java FollowPlayerPacketListener and clear prior follow tasks.
     TaskManager.cancelTasks(player.getIndex());
+    player.setFollowing(null);
 
     if (
       otherPlayersIndex < 0 ||
-      otherPlayersIndex > World.getPlayers().capacityReturn()
+      otherPlayersIndex >= World.getPlayers().capacityReturn()
     ) {
       return;
     }

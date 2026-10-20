@@ -86,3 +86,73 @@ test("an attribute equal to its default isn't saved, and loads as the default wh
   const resaved = PlayerSave.fromPlayer(loaded);
   assert.equal(resaved.attributes["test:keybind"], 0, "an empty value that isn't the default is kept");
 });
+
+test("a saved member rejoins an offline owner's channel with saved settings and rank", () => {
+  const { Misc } = require("../dist/util/Misc");
+  const { FriendsChatManager, CLAN_CHAT_ATTRIBUTE } = require("../plugins/interface/FriendsChatManager");
+  const { GameConstants } = require("../dist/game/GameConstants");
+  const { World } = require("../dist/game/World");
+  const oldPersistence = GameConstants.PLAYER_PERSISTENCE;
+  const oldGetPlayers = World.getPlayers;
+  const { channels, membershipByPlayer, temporaryBans, offlinePlayerIds } = FriendsChatManager;
+  channels.clear();
+  membershipByPlayer.clear();
+  temporaryBans.clear();
+  offlinePlayerIds.clear();
+
+  const session = { write() {}, sendClientPacket() {} };
+  const owner = new Player(session);
+  owner.setUsername("Clan Owner");
+  owner.setLongUsername(Misc.stringToLongBigInt("clan owner"));
+  owner.setIndex(10);
+  const friend = Misc.stringToLongBigInt("friend");
+  owner.getRelations().getFriendList().push(friend);
+  owner.getRelations().loadFriendRanks({ [friend.toString()]: 5 });
+  owner.getRelations().setFriendsChatChannelName("My channel");
+  owner.getRelations().setFriendsChatRanks(1, 4, 6);
+  owner.getRelations().onLogin(owner);
+  const ownerSave = PlayerSave.fromPlayer(owner);
+
+  const beforeLogin = new Player(session);
+  beforeLogin.setUsername("Friend");
+  beforeLogin.setLongUsername(friend);
+  beforeLogin.setIndex(11);
+  beforeLogin.getRelations().setFriendsChatLastOwner("Clan Owner");
+  const memberSave = PlayerSave.fromPlayer(beforeLogin);
+  const member = new Player(session);
+  memberSave.applyToPlayer(member);
+  member.setUsername("Friend");
+  member.setLongUsername(friend);
+  member.setIndex(11);
+
+  try {
+    World.getPlayers = () => ({ search: () => undefined, forEach() {} });
+    GameConstants.PLAYER_PERSISTENCE = {
+      load: () => ownerSave,
+      requestSave() {},
+    };
+    FriendsChatManager.onLogin(member);
+
+    const channel = FriendsChatManager.channelOf(member);
+    assert.equal(channel?.name, "My channel");
+    assert.equal(channel?.ownerName, "Clan Owner");
+    assert.equal(channel?.rankOf(member), 5);
+    assert.equal(member.getRelations().getFriendsChatLastOwner(), "Clan Owner");
+    assert.deepEqual(
+      [ownerSave.getFriendsChatEntryRank(), ownerSave.getFriendsChatTalkRank(), ownerSave.getFriendsChatKickRank()],
+      [1, 4, 6],
+    );
+
+    FriendsChatManager.onLogout(member);
+    assert.equal(FriendsChatManager.channelOf(member), null);
+    assert.equal(member.getAttribute(CLAN_CHAT_ATTRIBUTE), null);
+    assert.equal(member.getRelations().getFriendsChatLastOwner(), "Clan Owner");
+  } finally {
+    channels.clear();
+    membershipByPlayer.clear();
+    temporaryBans.clear();
+    offlinePlayerIds.clear();
+    GameConstants.PLAYER_PERSISTENCE = oldPersistence;
+    World.getPlayers = oldGetPlayers;
+  }
+});

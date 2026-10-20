@@ -467,6 +467,9 @@ module.exports = {
     api.onObjectInteraction("Fairy ring", ringOptions());
     api.onInterfaceActionClick(interfaceAction);
     api.onCustomEvent("interface:closed", interfaceClosed);
+    api.onCustomEvent("fairy-rings:configure", openDial);
+    api.onCustomEvent("fairy-rings:zanaris", zanaris);
+    api.onCustomEvent("fairy-rings:last-destination", lastDestination);
     api.onPlayerLogin(sendLastOnLogin);
     api.log("registered", { rings: rings.size });
   },

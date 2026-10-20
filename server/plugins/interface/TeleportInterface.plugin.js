@@ -85,6 +85,7 @@ const DESTINATIONS = {
     teleport("Count Draynor", location(3077, 9772), TeleportType.NORMAL),
     teleport("Elvarg", location(2852, 9637), TeleportType.NORMAL),
     teleport("Kalphite Queen", location(3508, 9494), TeleportType.NORMAL),
+    teleport("Kraken", location(2280, 10016), TeleportType.NORMAL),
     teleport("Corporeal Beast", location(2966, 4252, 2), TeleportType.NORMAL),
     teleport("Zulrah", location(2196, 3056), TeleportType.NORMAL),
     teleport("Doom of Mokhaiotl", location(1311, 9531, 1), TeleportType.NORMAL),
@@ -92,6 +93,7 @@ const DESTINATIONS = {
     teleport("Araxxor", location(3658, 9816), TeleportType.NORMAL),
     teleport("Yama", location(1439, 10076), TeleportType.NORMAL),
     teleport("Skotizo", location(1662, 10049), TeleportType.NORMAL),
+    teleport("Royal Titans", location(2950, 9574), TeleportType.NORMAL),
   ],
   [TAB.MINIGAMES]: [
     teleport("Barrows", location(3565, 3315), TeleportType.NORMAL),

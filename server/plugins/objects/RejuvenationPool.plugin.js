@@ -1,10 +1,10 @@
 const { CombatSpecial } = require("../../src/main/typescript/elvarg/game/content/combat/CombatSpecial");
-const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
-const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
+const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 
 const ATTR_BLEED_TASK_KEY = "combat:bleed:task-key";
 const POOL_USE_DELAY_MS = 1000;
+const POOL_DRINK = 7305; // poh_pool_drink
 const nextPoolUseAt = new WeakMap();
 
 function isRecentPvpCombat(player) {
@@ -113,8 +113,9 @@ function drinkFromPool(event, tier = 4) {
   }
   nextPoolUseAt.set(player, now + POOL_USE_DELAY_MS);
   restoreFromPool(player, tier);
-  Sounds.sendSound(player, Sound.PRAYER_RECHARGE);
-  player.sendMessage("You feel rejuvenated.");
+  // rsprox captures (poh_pool_regeneration and the lesser pools, 123 drinks): the player faces the
+  // pool and plays poh_pool_drink; no message or sound.
+  player.performAnimation(new Animation(POOL_DRINK));
   event.handled = true;
 }
 

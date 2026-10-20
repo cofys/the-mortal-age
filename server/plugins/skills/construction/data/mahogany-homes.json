@@ -1,0 +1,19 @@
+{
+  "$comment": "Mahogany Homes: what the cache does not hold. Each home's client NPC (by gameval name; the one living there), and the Wiki's planks per piece of furniture (repair-only pieces take one plank, or a steel bar for the sink, range and bath).",
+  "planks": {"bookcase": 2, "cabinet": 2, "chair": 1, "cupboard": 2, "diningtable": 3, "doublebed": 3, "drawers": 2, "dresser": 2, "longtable": 4, "shelves": 2, "sidetable": 2, "singlebed": 2, "table": 3, "wardrobe": 2},
+  "steelRepairs": ["sink", "range", "bath"],
+  "clients": {
+    "varrock_north": "con_contract_client_1",
+    "varrock_mid": "con_contract_client_2",
+    "varrock_south": "con_contract_client_3",
+    "hosidius_north": "con_contract_client_9",
+    "hosidius_east": "con_contract_client_10",
+    "hosidius_south": "con_contract_client_11",
+    "falador_southeast": "con_contract_client_4",
+    "falador_south": "falador_man4",
+    "falador_north": "con_contract_client_5",
+    "ardy_north": "con_contract_client_6",
+    "ardy_west": "con_contract_client_7",
+    "ardy_south": "con_contract_client_8"
+  }
+}

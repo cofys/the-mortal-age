@@ -43,6 +43,8 @@ function defineContainers({ ItemIdentifiers: Items }) {
     [Items.BOWL, { filled: Items.BOWL_OF_WATER, noun: "bowl" }],
     [Items.EMPTY_CUP, { filled: Items.CUP_OF_WATER, noun: "cup" }],
     [Items.EMPTY_FISHBOWL, { filled: Items.FISHBOWL, noun: "fishbowl" }],
+    // A player-owned house's kettle (rsprox captures: "You fill the kettle from the sink.").
+    [Items.KETTLE, { filled: Items.FULL_KETTLE, noun: "kettle" }],
     // Wiki: a water source refills a waterskin to four doses, whatever it held.
     ...[Items.WATERSKIN_0_, Items.WATERSKIN_1_, Items.WATERSKIN_2_, Items.WATERSKIN_3_]
       .map((skin) => [skin, { filled: Items.WATERSKIN_4_, noun: "waterskin" }]),

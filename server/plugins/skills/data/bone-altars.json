@@ -1,0 +1,23 @@
+{
+  "$comment": "Altars that take bones for Prayer experience (docs/bone-altars.md). Names are gamevals. xpScale times the bone's burying experience (plugins/skills/data/bones.json); spareChance: the chance an offering keeps its bone, with spareMessage. Chaos altar from the OSRS Wiki (Chaos Temple (church), Pay-to-play Prayer training). The offering itself (seq, spotanim, sound, the 4-tick repeat, the message) is as captured on a player-owned house altar (rsprox recording 2850, rev 230).",
+  "seq": "human_bone_sacrifice",
+  "spotanim": "poh_bone_sacrifice",
+  "sound": 958,
+  "intervalTicks": 4,
+  "message": "The gods accept your offering.",
+  "zealot": {
+    "$comment": "Zealot's robes (Wiki): 1.25% per piece worn to keep the bone, rolled only when the altar's own spare fails.",
+    "pieces": ["shades_prayer_helm", "shades_prayer_top", "shades_prayer_bottom", "shades_prayer_boots"],
+    "chancePerPiece": 0.0125
+  },
+  "altars": [
+    {
+      "name": "Chaos altar",
+      "loc": "chaosaltar",
+      "x": 2947, "y": 3820, "z": 0,
+      "xpScale": 3.5,
+      "spareChance": 0.5,
+      "spareMessage": "The Dark Lord spares your sacrifice but still rewards you for your efforts."
+    }
+  ]
+}

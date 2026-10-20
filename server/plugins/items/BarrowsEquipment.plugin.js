@@ -117,9 +117,9 @@ function startDegradation(player, TaskManager, CombatFactory, tasks) {
   TaskManager.submit(task);
 }
 
-function repairAll(player) {
+function repairAll(player, costMultiplier = 1) {
   const items = barrowsItems(player);
-  const cost = items.reduce((total, item) => total + repairCost(item), 0);
+  const cost = Math.floor(items.reduce((total, item) => total + repairCost(item), 0) * costMultiplier);
   if (cost <= 0) {
     player.sendMessage("You have no damaged Barrows equipment to repair.");
     return;
@@ -162,6 +162,20 @@ function applyAhrimDamage(hit, target) {
 let BonusManager;
 
 let pluginApi;
+
+/**
+ * `barrows:repair` { player, itemId, costMultiplier }: a repair somewhere other than an NPC (a
+ * player-owned house's armour repair stand, which charges less with Smithing).
+ */
+function repairElsewhere({ player, itemId, costMultiplier = 1 }) {
+  if (!Barrows.isBarrowsItem(itemId)) return;
+  const cost = Math.floor(barrowsItems(player).reduce((total, item) => total + repairCost(item), 0) * costMultiplier);
+  if (cost <= 0) {
+    player.sendMessage("You have no damaged Barrows equipment to repair.");
+    return;
+  }
+  pluginApi.sendMultiChatboxPrompt(player, `Repair all Barrows equipment for ${cost.toLocaleString("en-US")} coins?`, "Repair", () => repairAll(player, costMultiplier), "Cancel", () => {});
+}
 
 function repairEquipment(event) {
   const { player } = event;
@@ -277,5 +291,6 @@ module.exports = {
     api.onNpcInteraction("Aneirin", { Repair: repairEquipment });
     api.onNpcInteraction("Dunstan", { "Talk-to": repairEquipment });
     api.onNpcInteraction("Tindel Marchant", { "Talk-to": repairEquipment });
+    api.onCustomEvent("barrows:repair", repairElsewhere);
   },
 };

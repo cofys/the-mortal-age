@@ -14,7 +14,8 @@ const LAP_COUNTER_OFF_ATTRIBUTE = "agility.lap-counter-off";
 
 /**
  * Marks of grace appear on rooftop courses while a lap is in progress. One roll per
- * lap, at the first obstacle; players 20+ levels over the course get a lower rate.
+ * lap, at the first obstacle (a course's `marks.chance`, else this); players 20+ levels
+ * over the course get a lower rate.
  */
 const MARK_LAP_CHANCE = 1 / 4;
 const MARK_OVERLEVELLED_MULTIPLIER = 0.75;
@@ -107,6 +108,7 @@ function objectContext(player, object) {
     player,
     object,
     core,
+    api: pluginApi,
     obj: {
       x: location.getX(), y: location.getY(), z: location.getZ(),
       face: object.getFace?.() ?? 0, type: object.getType?.() ?? 10, id: object.getId(),
@@ -206,7 +208,7 @@ function advanceCourse(player, obstacle) {
 function rollMarkOfGrace(player, course) {
   const marks = course.marks;
   if (!marks || marks.tiles.length === 0) return;
-  let chance = MARK_LAP_CHANCE;
+  let chance = marks.chance ?? MARK_LAP_CHANCE;
   if (agilityLevel(player) >= marks.level + MARK_OVERLEVEL_THRESHOLD) {
     chance *= MARK_OVERLEVELLED_MULTIPLIER;
   }
@@ -216,16 +218,16 @@ function rollMarkOfGrace(player, course) {
   ItemOnGroundManager.registerNonGlobals(player, new core.Item(core.ItemIds.MARK_OF_GRACE, 1), position);
 }
 
-function finishObstacle(player, obstacle, success, completed) {
+function finishObstacle(player, obstacle, success, completed, fail = obstacle.fail) {
   if (!completed) {
     return;
   }
-  const reward = success ? obstacle.xp : obstacle.fail?.xp;
+  const reward = success ? obstacle.xp : fail?.xp;
   const xp = typeof reward === "function" ? reward(player) : reward;
   if (xp > 0) {
     player.getSkillManager().addExperiences(core.Skill.AGILITY, xp);
   }
-  const endMessage = success ? obstacle.end : obstacle.fail?.end;
+  const endMessage = success ? obstacle.end : fail?.end;
   if (endMessage) {
     player.sendMessage(endMessage);
   }
@@ -327,18 +329,21 @@ function attemptObstacle(player, object, entry) {
     player.sendMessage(blocked);
     return;
   }
-  const success = rollSuccess(player, obstacle, level);
-  const steps = resolve(success ? obstacle.steps : obstacle.fail.steps, context);
+  // `forceFail` gives the failure the player gets whatever they roll (Ape Atoll without a greegree).
+  const forced = obstacle.forceFail?.(context) ?? null;
+  const fail = forced ?? obstacle.fail;
+  const success = !forced && rollSuccess(player, obstacle, level);
+  const steps = resolve(success ? obstacle.steps : fail.steps, context);
   if (!steps) return;
   pluginApi.emitCustomEvent("agility:obstacle-start", { player, objectId: object.getId(), location: context.obj, success });
-  const startMessage = success ? obstacle.start : obstacle.fail?.start ?? obstacle.start;
+  const startMessage = success ? obstacle.start : fail?.start ?? obstacle.start;
   if (startMessage) {
     player.sendMessage(startMessage);
   }
   ObstacleRunner.run(context, steps, {
-    render: success ? obstacle.render : obstacle.fail?.render ?? obstacle.render,
+    render: success ? obstacle.render : fail?.render ?? obstacle.render,
     onFinish: (completed) => {
-      finishObstacle(player, obstacle, success, completed);
+      finishObstacle(player, obstacle, success, completed, fail);
       if (completed && success) {
         pluginApi.emitCustomEvent("agility:obstacle", { player, objectId: object.getId(), location: context.obj });
       }

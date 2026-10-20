@@ -43,9 +43,9 @@
  *  - Waydar's sliding puzzle has no minigame: once Daero has briefed the player
  *    in the hangar (mm_daero 5), operating the Reinitialisation Panel completes
  *    it (or Glough takes 200,000 coins).
- *  - No player transmog: "monkey form" is the Karamjan monkey greegree equipped
- *    in the weapon slot (item 4031) and is checked live; the player's appearance
- *    does not change and monkey NPCs are not made aggressive here.
+ *  - "Monkey form" is the Karamjan monkey greegree equipped in the weapon slot
+ *    (item 4031), checked live; the transformation itself is the Greegrees item
+ *    plugin's. Monkey NPCs are not made aggressive here.
  *  - Jail: no guard patrol or re-capture (the "getting sent back to jail"
  *    counters and the 100-times reward are answered false/never played). The
  *    knock-out zone west of Marim jails the player once; the cell door opens by
@@ -1263,9 +1263,6 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
       }
       startTranscript(api, player, GARKOR_CHATHEAD_ID, PAGE, "chapter-4-equipping-the-sigil");
       return;
-    }
-    if (itemId === KARAMJAN_GREEGREE_ITEM && (option === "Wield" || option === "Wear")) {
-      player.sendMessage("You transform into a monkey.");
     }
   }
 

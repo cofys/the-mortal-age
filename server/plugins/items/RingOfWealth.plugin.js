@@ -4,6 +4,7 @@ const { TeleportType } = require("../../src/main/typescript/elvarg/game/model/te
 const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { ObjectIdentifiers } = require("../../src/main/typescript/elvarg/util/ObjectIdentifiers");
+const { RING_OF_WEALTH_DESTINATIONS } = require("./Teleports.Jewellery");
 
 const RING_OF_WEALTH_SCROLL = 12783;
 const IMBUE_COST = 50000;
@@ -33,12 +34,7 @@ const UNIMBUED_RING_IDS = new Map([
   [21458, 21456], [21459, 21457],
 ]);
 const RING_IDS = new Set([...CHARGED_RINGS.keys(), ...UNCHARGED_RINGS.keys()]);
-const TELEPORTS = [
-  { label: "Grand Exchange", destination: new Location(3163, 3485, 0) },
-  { label: "Miscellania", destination: new Location(2539, 3864, 0) },
-  { label: "Falador Park", destination: new Location(2994, 3377, 0) },
-  { label: "Dondakan", destination: new Location(2824, 10168, 0) },
-];
+const TELEPORTS = RING_OF_WEALTH_DESTINATIONS.map(({ label, tile }) => ({ label, destination: new Location(...tile) }));
 /**
  * The ring's options in the cache's order (item params 451-456: Miscellania, Grand Exchange,
  * Falador, Dondakan, Boss Log, Coin Collection), which both the inventory Rub submenu (by sub-op)

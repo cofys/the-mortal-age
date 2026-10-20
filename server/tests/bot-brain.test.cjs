@@ -932,6 +932,59 @@ const { __testing: loadoutTesting } = require('../plugins/bots/behaviours/polici
 const { getWildernessHotspot, listWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry.PlayerBots');
 const { SkillManager } = require('../dist/game/content/skill/SkillManager');
 
+test('regional PvP bots use varied catalogue gear and favour towns over the levelled Wilderness', (t) => {
+  const { Wilderness } = require('../dist/game/content/wilderness/Wilderness');
+  const { createBotRegistry } = require('../plugins/bots/runtime/Registry.PlayerBots');
+  const { buildRoamingPvpMetadata, assignPvpMetadata } = require('../plugins/bots/behaviours/pvp/PvpAssignment.PlayerBots');
+  const { PVP_BOT_SETTINGS } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry.PlayerBots');
+  let seed = 652;
+  t.mock.method(Math, 'random', () => ((seed = Math.imul(seed, 1664525) + 1013904223 >>> 0) / 2 ** 32));
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  // A PvP world makes the town attackable too; keep the real Wilderness level calculation.
+  t.mock.method(Wilderness, 'intersectsArea', () => true);
+  t.mock.method(Wilderness, 'isInLocation', () => true);
+  let regionsUpdated;
+  const generated = [];
+  const registry = createBotRegistry({
+    botApi: { getRegionManager: () => ({ blocked: () => false, isWater: () => false }) },
+    botCount: 0,
+    wildernessRoamerBotCount: 128,
+    wildernessActiveRegionBotsPerRegion: PVP_BOT_SETTINGS.activeRegionBotsPerRegion,
+    spawn: new Location(3222, 3218),
+    behaviorMode: { PVP: 'pvp' },
+    createBotPlayer: (name, location) => ({ ...fakePlayer(name), getLocation: () => location, isPlayerBot: () => true }),
+    createInitialState: () => ({ pvp: {} }),
+    buildRoamingPvpMetadata: () => buildRoamingPvpMetadata({ config: { pvp: { profileWeights: [{ value: 'elite', weight: 1 }] } } }),
+    assignPvpMetadata,
+    applyInitialPvpLoadout: (player, state) => {
+      generated.push(loadoutTesting.buildGeneratedPreset(player, state));
+      return true;
+    },
+    emitPlayerLogin() {}, ensureBehaviorTaskStarted() {},
+    randomInRange: (min) => min,
+    onActiveRegionsUpdated: (handler) => { regionsUpdated = handler; },
+  });
+  registry.scheduleInitialSpawn();
+  const snapshot = { regions: [
+    { key: '0:50:50', regionX: 50, regionY: 50, z: 0 },
+    { key: '0:50:57', regionX: 50, regionY: 57, z: 0 },
+  ] };
+  for (let batch = 0; batch < 20; batch++) regionsUpdated(snapshot);
+  const counts = new Map();
+  for (const { player } of registry.entries) {
+    const regionY = player.getLocation().getY() >> 6;
+    counts.set(regionY, (counts.get(regionY) ?? 0) + 1);
+  }
+  assert.equal(counts.get(50), 48, 'town PvP regions have more bots than the former 32');
+  assert.equal(counts.get(57), 16, 'levelled Wilderness regions have fewer bots than the former 32');
+  assert.ok(generated.every((entry) => entry && !entry.archetypeId.startsWith('preset:')),
+    'roamers use the varied catalogue instead of the eighteen player presets');
+  assert.ok(new Set(generated.map((entry) => entry.archetypeId)).size > 18);
+  const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+  assert.ok(generated.some((entry) => entry.preset.getInventory().some((item) => item.getId() === ItemIdentifiers.DRAGON_CLAWS)),
+    'valuable gear can appear in the loot');
+});
+
 test('unmatched pvp bots walk between seek retries; overlays return to their activity', () => {
   const calls = [];
   const controller = {
@@ -993,6 +1046,20 @@ test('hotspot clusters fill their band from their loadout catalogue; the ditch s
       const level = SkillManager.prototype.getCombatLevel.call({ skills: { maxLevel: stats } });
       assert.ok(level >= band.min && level <= band.max,
         `${hotspot.id}/${loadoutId}: level ${level} outside ${band.min}-${band.max}`);
+    }
+  }
+});
+
+test('every catalogue archetype builds a full loadout, including optional empty inventory slots', () => {
+  const { PVP_LOADOUTS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
+  for (const loadout of Object.values(PVP_LOADOUTS)) {
+    for (const archetypeId of loadout.archetypes) {
+      const generated = loadoutTesting.buildGeneratedPreset(null, {
+        pvp: { loadoutId: loadout.id, profileId: 'elite', generatedArchetypeId: archetypeId },
+      });
+      assert.equal(generated?.archetypeId, archetypeId, `${loadout.id}/${archetypeId}`);
+      assert.equal(generated.preset.getInventory().length, 28);
+      assert.ok(generated.preset.getEquipment().length > 0);
     }
   }
 });

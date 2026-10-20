@@ -209,9 +209,9 @@ function cloneItem(item) {
     : new Item(item.getId(), item.getAmount());
 }
 
-function spawnPresetItem(item, preset) {
+function spawnPresetItem(item, preset, player) {
   const next = cloneItem(item);
-  if (next && presetsEnabled && (PLAYER_PRESETS.list.includes(preset) || (!preset.getIsGlobal?.() && isSpawnable(next.getId())))) {
+  if (next && !isPlayerBot(player) && presetsEnabled && (PLAYER_PRESETS.list.includes(preset) || (!preset.getIsGlobal?.() && isSpawnable(next.getId())))) {
     next.setMetaValue(Item.UNTRADEABLE_META, true);
     next.setMetaValue(Item.UNBANKABLE_META, true);
     next.setMetaValue(Item.PRESET_META, true);
@@ -616,7 +616,7 @@ function applyPreset(player, preset) {
   }
 
   for (const item of preset.getInventory() ?? []) {
-    const next = spawnPresetItem(item, preset);
+    const next = spawnPresetItem(item, preset, player);
     if (!next) {
       continue;
     }
@@ -625,7 +625,7 @@ function applyPreset(player, preset) {
 
   const wearer = presetWearer(preset);
   for (const item of preset.getEquipment() ?? []) {
-    const next = spawnPresetItem(item, preset);
+    const next = spawnPresetItem(item, preset, player);
     if (!next) {
       continue;
     }

@@ -234,6 +234,8 @@ module.exports = function attachTeleports(pluginApi) {
   api = pluginApi;
   api.persistAttribute(HUNTER_GUILD_ATTRIBUTE, false);
   api.onItemAction(capeTeleportAction);
+  // A mounted cape (house cape hanger) runs its option as the item would: { player, itemId, option }.
+  api.onCustomEvent("skillcape:operate", (request) => { if (!request.handled) capeTeleportAction(request); });
   api.onInterfaceActionClick(chooseMenu);
   api.onCustomEvent("interface:closed", menuClosed);
   api.onNpcDialogueVariant(apaturaVariant);

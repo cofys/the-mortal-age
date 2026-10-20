@@ -40,7 +40,7 @@ const NOT_FOOD = {
     "Black candy", "Blue candy", "Brown candy", "Green candy", "Orange candy", "Pink candy", "Purple candy",
     "Red candy", "White candy",
   ],
-  "Only eaten in one fight or area (Moons of Peril, Vampyrium)": ["Cooked bream", "Cooked moss lizard", "Stymphike tartare"],
+  "Only eaten in one area (Vampyrium)": ["Stymphike tartare"],
   "Unobtainable: only in the game files (Wiki)": [
     "Equa toad's legs", "Odd batta", "Odd crunchies", "Odd gnomebowl", "Seasoned legs", "Spicy toad's legs",
     "Spicy worm", "Tangled toads' legs", "Unfinished batta", "Unfinished bowl", "Unfinished crunchy",
@@ -183,6 +183,14 @@ test("heals and combo foods follow the Wiki (the issue's corrections included)",
   assert.equal(Food._test.healAmount({ flat: 1, percent: 6 }, 99), 6, "strawberry at 99");
   assert.equal(Food._test.healAmount({ flat: 1, percent: 10 }, 99), 10, "sweetcorn at 99");
   assert.equal(Food._test.healAmount({ min: 8, max: 12 }, 99, () => 0.999), 12);
+  // Cooked bream: the lower of Cooking/3 and Fishing/3, to the nearest (Wiki: 7 at 20 Fishing).
+  const levels = (table) => (name) => table[name];
+  const bream = { lowestOf: { cooking: 3, fishing: 3 }, round: "nearest" };
+  assert.equal(Food._test.healAmount(bream, 99, Math.random, levels({ cooking: 99, fishing: 20 })), 7, "bream at 20 Fishing");
+  assert.equal(Food._test.healAmount(bream, 99, Math.random, levels({ cooking: 99, fishing: 99 })), 33, "bream at 99");
+  // Cooked moss lizard: the lower of Cooking/3 and Hunter/2, rounded down (Wiki).
+  const lizard = { lowestOf: { cooking: 3, hunter: 2 } };
+  assert.equal(Food._test.healAmount(lizard, 99, Math.random, levels({ cooking: 106, hunter: 70 })), 35, "lizard at 106/70");
 });
 
 test("bites: cakes, pies and pizzas go bite by bite with their eat delays, and leave the dish", () => {

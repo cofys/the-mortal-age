@@ -1,33 +1,25 @@
 "use strict";
 
 /**
- * Construction plugin wrapper.
+ * Construction plugin.
  *
- * The engine's ConstructionPlugin is TypeScript (player-owned houses:
- * hotspots, rooms, interfaces). It is re-exported here untouched — the
- * `default` export contract the plugin loader expects
- * (`imported.default ?? imported`) is preserved.
+ * Upstream (2026-10-19, PR #693) moved Construction out of the TypeScript
+ * core into plugins/skills/construction/: Core.Construction.init(api) +
+ * House.Construction.attach(api) now register player-owned houses, rooms,
+ * furniture and the house's facilities. This plugin's register does exactly
+ * that — the TS plugin this file used to re-export no longer exists.
  *
- * Added on top: the bot entry point citizen carpenters use to build real
- * furniture for real Construction XP without a house instance. The recipe
- * table is derived from the engine's CONSTRUCTION_BUILDABLES
- * (ConstructionData.ts) — level, XP, materials and result item IDs are the
- * real engine values, so the bot path can never disagree with the hand
- * path on what a build costs or pays. The XP flows through SkillManager,
- * so citizen level-up celebrations fire exactly as they do for players.
- *
- * What a bot build does (mirrors buildFurniture's core, minus the house):
- *   1. Level check against the buildable's real level requirement.
- *   2. Hammer + saw must be in the inventory (the engine requires both).
- *   3. Materials deleted from the inventory (real planks, real nails).
- *   4. The furniture item lands in the inventory (real item ID).
- *   5. Real Construction XP via SkillManager.
- *   6. Build animation (3676, the engine's furniture build anim).
+ * Kept from the fork on top: the bot entry point citizen carpenters use to
+ * build real furniture for real Construction XP without a house instance
+ * (CitizenBuild requires this file directly for CONSTRUCTION_RECIPES,
+ * constructionLevel, findBestBuildable and buildFurnitureBot). The recipe
+ * table was derived from the old engine's CONSTRUCTION_BUILDABLES; its XP
+ * values still match upstream's construction/data/furniture.json (checked
+ * at the 2026-10-20 merge: crude wooden chair 58, wooden bookcase 115,
+ * mahogany dining table 840). Materials are deleted for real, the furniture
+ * item lands in the inventory, and XP flows through SkillManager, so
+ * citizen level-up celebrations fire exactly as they do for players.
  */
-
-const tsModule =
-  require("../../src/main/typescript/elvarg/game/plugin/impl/construction/ConstructionPlugin");
-const base = tsModule?.default ?? tsModule;
 
 let Skill = null;
 try {
@@ -59,11 +51,10 @@ const PLANK_IDS = Object.freeze([960, 8778, 8780, 8782]); // regular/oak/teak/ma
 const BUILD_ANIMATION_ID = 3676; // engine furniture build anim
 
 /**
- * Furniture recipes for bots. Derived from CONSTRUCTION_BUILDABLES in
- * server/src/main/typescript/elvarg/game/plugin/impl/construction/ConstructionData.ts:
- * key, level, experience, materials and menuItemId (result item) are copied
- * verbatim from the engine data. Curated to simple plank furniture a
- * carpenter can build anywhere — no room/hotspot upgrades, no gold leaf.
+ * Furniture recipes for bots: key, level, experience, materials and
+ * menuItemId (result item) are the real engine values, curated to simple
+ * plank furniture a carpenter can build anywhere — no room/hotspot
+ * upgrades, no gold leaf.
  */
 const CONSTRUCTION_RECIPES = Object.freeze([
   { key: "CRUDE_WOODEN_CHAIR", name: "crude wooden chair", level: 1, xp: 58, itemId: 8309, materials: [[960, 2], [4819, 2]] },
@@ -191,10 +182,9 @@ function buildFurnitureBot(player, buildableKey) {
 }
 
 function register(api) {
-  // The engine's own registration — houses, hotspots, interfaces.
-  if (typeof base?.register === "function") {
-    base.register(api);
-  }
+  // Upstream's registration — houses, hotspots, interfaces (PR #693).
+  require("./construction/Core.Construction").init(api);
+  require("./construction/House.Construction").attach(api);
   try {
     api?.log?.("registered", { botRecipes: CONSTRUCTION_RECIPES.length });
   } catch {
@@ -202,15 +192,16 @@ function register(api) {
   }
 }
 
+const plugin = {
+  name: "Construction",
+  members: true,
+  register,
+};
+
 module.exports = {
-  // Everything the TypeScript module exported, untouched.
-  ...tsModule,
-  // The plugin the loader boots (default ?? imported) — same name and
-  // registration as the engine, so house behavior is unchanged.
-  default: {
-    ...base,
-    register,
-  },
+  // The plugin the loader boots (default ?? imported).
+  ...plugin,
+  default: plugin,
   // Bot entry points for citizen carpenters.
   CONSTRUCTION_RECIPES,
   HAMMER_ID,

@@ -93,6 +93,26 @@ export function handleInboundWorld(msg: any): boolean {
                 client.camera.translateScriptedCamera(payload.dx, payload.dy);
                 return true;
             }
+            // cam_moveto_arc: a timed move that swings around a centre tile instead of a straight line.
+            if (payload.mode === "arc") {
+                client.followPlayerCamera = false;
+                const packetHeight = client.camera.resolveScriptedHeight("move", payload.height, false);
+                const controlledIndex = client.playerEcs?.getIndexForServerId?.(client.controlledPlayerServerId) ?? 0;
+                const plane = client.playerEcs?.getLevel?.(controlledIndex) ?? 0;
+                const heightAt = (targetX: number, targetZ: number): number | undefined => {
+                    const ground = client.renderer?.mapManager
+                        ? sampleCameraHeightForWorldTile(client.renderer.mapManager, targetX, targetZ, plane)
+                        : undefined;
+                    return ground === undefined ? undefined : ground - packetHeight / 128;
+                };
+                client.camera.setScriptedPositionArc(payload.centreX + 0.5, payload.centreY + 0.5, payload.x + 0.5, payload.y + 0.5,
+                    payload.cycles, payload.easing, heightAt, packetHeight, payload.ignoreTerrain === true);
+                return true;
+            }
+            if (payload.mode === "rotate") {
+                client.camera.rotateScriptedBy(payload.pitch, payload.yaw, payload.cycles, payload.easing);
+                return true;
+            }
             // Camera packets carry global tile coordinates and height above that tile's
             // ground, in 1/128-tile units. Both movement and look target tile centres.
             if (payload.mode === "move" || payload.mode === "look") {

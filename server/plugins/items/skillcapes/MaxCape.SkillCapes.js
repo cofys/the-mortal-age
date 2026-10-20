@@ -353,6 +353,8 @@ module.exports = function attachMaxCape(pluginApi) {
   api.onCustomEvent("npc-dialogue:action", macAction);
   api.onItemOnNpc(itemOnMac);
   api.onItemAction(maxCapeOption);
+  // A mounted cape (house cape hanger) runs its option as the item would: { player, itemId, option }.
+  api.onCustomEvent("skillcape:operate", (request) => { if (!request.handled) maxCapeOption(request); });
   api.onItemOnItem(combineOnUse);
   api.onItemOnItem(disassembleOnUse);
 };

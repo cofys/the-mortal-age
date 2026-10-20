@@ -57,11 +57,27 @@ function announce(star) {
   }
 }
 
-function landNow(siteIndex = rollSite(), size = rollSize(), site = DATA.sites[siteIndex]) {
+function landNow(siteIndex = upcomingSite(), size = rollSize(), site = DATA.sites[siteIndex]) {
   const star = Star.land(site, size, siteIndex);
   if (star) announce(star);
   world.ticksToLanding = nextInterval();
+  world.nextSiteIndex = rollSite();
   return star;
+}
+
+function upcomingSite() {
+  if (world.nextSiteIndex < 0 || !DATA.sites[world.nextSiteIndex]) world.nextSiteIndex = rollSite();
+  return world.nextSiteIndex;
+}
+
+/**
+ * `shooting-stars:forecast` { player } -> `region` and `minutes` (until the next landing): what a
+ * player-owned house's telescope sees.
+ */
+function forecast(request) {
+  const site = DATA.sites[upcomingSite()];
+  request.region = site?.region ?? null;
+  request.minutes = world.ticksToLanding / Common.TICKS_PER_MINUTE;
 }
 
 function tick() {
@@ -111,6 +127,7 @@ function startScheduler(api) {
 
 module.exports = function attachLanding(api) {
   startScheduler(api);
+  api.onCustomEvent("shooting-stars:forecast", forecast);
   api.registerCommand("star", starCommand, api.core.PlayerRights.OWNER, "Show the shooting star, or land one: ::star spawn [size] [here|site]");
 };
 

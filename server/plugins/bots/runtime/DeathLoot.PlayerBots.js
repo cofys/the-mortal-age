@@ -146,7 +146,6 @@ function getOrCreateDeathLootPlan(victim, killer, runtime) {
 
   plan = {
     killer: canRewardKiller ? killer : null,
-    presetLootNoticeSent: false,
   };
   deathLootPlans.set(victim, plan);
   return plan;
@@ -164,11 +163,6 @@ function handleBotDeathItemDrop(event, runtime) {
     runtime
   );
   const selectedDrop = plan?.killer && event.dropEligible;
-
-  if (event.item?.isUnbankable?.() && isRealPlayer(event.killer) && !plan.presetLootNoticeSent) {
-    event.killer.sendMessage("This bot was using a player preset and therefore has not dropped its items. Regular bots will still drop items");
-    plan.presetLootNoticeSent = true;
-  }
 
   // Use the same skull/protection eligibility for equipped and carried items as players.
   if (selectedDrop && LootKeys.isEligibleKill(event.killer, victim)) {

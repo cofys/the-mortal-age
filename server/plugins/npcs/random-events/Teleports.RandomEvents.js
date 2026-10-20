@@ -6,6 +6,7 @@
 // ship in the world/cache data; a session only owns the player's stay, the dynamic pieces
 // it spawns, the return tile and the teleport refusal inside the area.
 const LUMBRIDGE = { x: 3222, y: 3218 };
+const RETURN_LOCATION_ATTRIBUTE = "random-events:return-location";
 const sessions = new Map();
 // Areas that host players: registered as core Areas so leaving by any route (teleport,
 // death, command) ends the session, exactly once.
@@ -34,6 +35,7 @@ let Hook;
 function initialize(pluginApi, hooks) {
   shutdown();
   api = pluginApi;
+  api.persistAttribute(RETURN_LOCATION_ATTRIBUTE, null);
   Hook = hooks;
 }
 
@@ -73,6 +75,9 @@ function begin(active, spec) {
     finishing: false,
     teleportRefusal: spec.teleportRefusal ?? "You can't leave just like that!",
   };
+  player.setAttribute(RETURN_LOCATION_ATTRIBUTE, {
+    x: session.returnLocation.getX(), y: session.returnLocation.getY(), z: session.returnLocation.getZ(),
+  });
   sessions.set(player, session);
   active.session = session;
   // The invitation lifecycle ends here: the follower NPC is removed without rewarding.
@@ -179,6 +184,13 @@ function returnToStart(session) {
   player.moveTo(returnLocation);
 }
 
+function runCleanup(session) {
+  for (const cleanup of session.cleanup.splice(0)) {
+    try { cleanup(); }
+    catch (error) { console.error("[RandomEvents] session cleanup failed", error); }
+  }
+}
+
 /**
  * Ends the session. `back` moves the player to their original tile first (not for events
  * that end by death or log out), then `reward` is granted there, so anything that no
@@ -188,10 +200,11 @@ function finish(session, { reward = null, message = null, back = true } = {}) {
   if (!session || session.finishing) return false;
   session.finishing = true;
   sessions.delete(session.player);
+  session.player.setAttribute(RETURN_LOCATION_ATTRIBUTE, null);
   if (session.interfaceId && session.player.getInterfaceId?.() === session.interfaceId) {
     session.player.getPacketSender().sendInterfaceRemoval();
   }
-  for (const cleanup of session.cleanup.splice(0)) cleanup();
+  runCleanup(session);
   if (back) returnToStart(session);
   if (reward?.length) grant(session, reward, message);
   else if (message) session.player.sendMessage(message);
@@ -203,7 +216,8 @@ function departed(player, logout) {
   const session = sessions.get(player);
   if (!session) return;
   sessions.delete(player);
-  for (const cleanup of session.cleanup.splice(0)) cleanup();
+  player.setAttribute(RETURN_LOCATION_ATTRIBUTE, null);
+  runCleanup(session);
   // Logging out inside the event must not save the player standing in the event area.
   if (logout) player.setLocation(session.returnLocation);
 }
@@ -216,13 +230,25 @@ function process(player) {
 /** Clears a stale session after a crash-relog: nobody may stand in an event area unbidden. */
 function recover(player) {
   const location = player.getLocation();
-  if (insideAnyDestination(location) && !sessions.has(player)) {
-    player.moveTo(new api.core.Location(LUMBRIDGE.x, LUMBRIDGE.y, 0));
+  if (sessions.has(player)) return;
+  const saved = player.getAttribute(RETURN_LOCATION_ATTRIBUTE);
+  const validReturn = saved && Number.isInteger(saved.x) && saved.x >= 0 && saved.x <= 16_383 &&
+    Number.isInteger(saved.y) && saved.y >= 0 && saved.y <= 16_383 &&
+    Number.isInteger(saved.z) && saved.z >= 0 && saved.z <= 3;
+  player.setAttribute(RETURN_LOCATION_ATTRIBUTE, null);
+  if (!insideAnyDestination(location)) return;
+  if (validReturn) {
+    const returnLocation = new api.core.Location(saved.x, saved.y, saved.z);
+    if (!insideAnyDestination(returnLocation)) {
+      returnToStart({ player, returnLocation });
+      return;
+    }
   }
+  player.moveTo(new api.core.Location(LUMBRIDGE.x, LUMBRIDGE.y, 0));
 }
 
 function shutdown() {
-  sessions.clear();
+  for (const session of [...sessions.values()]) finish(session);
 }
 
 /** The core Areas that hold players: leaving one by any route ends its session. */

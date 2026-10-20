@@ -9,6 +9,9 @@
  * - Read (rsprox captures): the scroll "Kourend the Magnificent" (longscroll).
  * - The vine ladder beside the landing climbs back to the statue's east side. Not captured: the
  *   ladder animation and the tile are ours.
+ * - Bones buried here, or crushed by a bonecrusher, give back their Prayer restore (Wiki: "Bones
+ *   restore 1 Prayer point, big bones 2, dragon bones 4"; per bone in plugins/skills/data/bones.json).
+ *   Demonic ashes don't, and a dragonbone necklace doesn't stack with it.
  *
  * Under areas/ so the vine ladder's handler runs before objects/Ladders, which finds no floor above.
  */
@@ -16,6 +19,8 @@ const STATUE = { x: 1634, y: 3671, size: 5 };
 const LANDING = [1666, 10050, 0];
 const VINE_LADDER = { x: 1666, y: 10051, z: 0 };
 const STATUE_EAST_SIDE = [1639, 3673, 0];
+/** The Catacombs below Kourend Castle, as bounded for their totem drops (plugins/bosses/data/skotizo.json). */
+const CATACOMBS = { minX: 1600, minY: 9984, maxX: 1791, maxY: 10111 };
 
 const PICKUP_FLOOR = 827; // human_pickupfloor
 const READ_SCROLL = 2171; // human_use_wom_telecope
@@ -144,6 +149,17 @@ function climbUp(event) {
   return true;
 }
 
+function inCatacombs(location) {
+  const x = location.getX();
+  const y = location.getY();
+  return x >= CATACOMBS.minX && x <= CATACOMBS.maxX && y >= CATACOMBS.minY && y <= CATACOMBS.maxY;
+}
+
+/** "prayer:bone-restore": bones buried in the Catacombs give back their Prayer points. */
+function boneRestore(event) {
+  if (inCatacombs(event.player.getLocation())) event.restore = Math.max(event.restore, event.points);
+}
+
 module.exports = {
   name: "CatacombsOfKourend",
   members: true,
@@ -151,5 +167,6 @@ module.exports = {
     core = api.core;
     api.onObjectInteraction("Statue", { Investigate: investigate, Read: read });
     api.onObjectInteraction("Vine ladder", { "Climb-up": climbUp });
+    api.onCustomEvent("prayer:bone-restore", boneRestore);
   },
 };

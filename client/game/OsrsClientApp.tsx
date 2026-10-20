@@ -101,11 +101,22 @@ function OsrsClientApp() {
     const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent>();
     const [showInstallPrompt, setShowInstallPrompt] = useState(false);
     const [showIosInstallHint, setShowIosInstallHint] = useState(false);
+    const [graphicsLost, setGraphicsLost] = useState(false);
     const loginUnsubscribers = useMemo<Array<LoginUnsubscriber>>(() => [], []);
     useViewportCssVars();
     // Phones only (not iPad): CSS-rotate when portrait + try orientation.lock.
     // Enabled from login onward — portrait layout is unusable for the classic UI.
     const safariLandscapeLock = useSafariLandscapeLock(checkMobile());
+
+    // A lost WebGL context is never rebuilt, so the canvas goes blank while the game keeps
+    // running. Say what happened instead (#559: the GPU ran out of memory).
+    useEffect(() => {
+        const onContextLost = (event: Event) => {
+            if (event.target instanceof HTMLCanvasElement) setGraphicsLost(true);
+        };
+        document.addEventListener("webglcontextlost", onContextLost, true);
+        return () => document.removeEventListener("webglcontextlost", onContextLost, true);
+    }, []);
 
     const addStorageWarning = useCallback((message: string) => {
         setStorageWarnings((prev) => {
@@ -457,7 +468,42 @@ function OsrsClientApp() {
     }
 
     let bannerContent: JSX.Element | undefined;
-    if (showInstallPrompt) {
+    if (graphicsLost) {
+        bannerContent = (
+            <div
+                style={{
+                    background: "#2a0f12",
+                    color: "#fff3f3",
+                    padding: "18px 24px",
+                    fontSize: "0.95rem",
+                    lineHeight: 1.5,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 16,
+                }}
+            >
+                <span style={{ flex: 1 }}>
+                    The game's graphics stopped: the browser lost its WebGL context, usually because
+                    the GPU ran out of memory. Reload the page to continue.
+                </span>
+                <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    style={{
+                        flex: "0 0 auto",
+                        background: "#4a43ff",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "12px 18px",
+                        borderRadius: 10,
+                        fontWeight: 600,
+                    }}
+                >
+                    Reload
+                </button>
+            </div>
+        );
+    } else if (showInstallPrompt) {
         bannerContent = (
             <div
                 style={{

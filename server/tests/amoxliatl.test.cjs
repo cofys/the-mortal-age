@@ -123,3 +123,19 @@ test("the spikes hurt a player still on one when they come up, not one who stepp
   Fight.prototype.spikesErupt.call(fightOn(1365, 4513), spiked);
   assert.equal(hits.length, 1, "stepped off: no damage");
 });
+
+test('the quest guardian ends its chamber without regular loot, kill counts, personal bests or achievements', () => {
+  assert.deepEqual(require('../data/definitions/npc-drops.json').npcs['13686'].tables, []);
+  let death, ended = false, hidden = false;
+  require('../plugins/bosses/amoxliatl/Kills.Amoxliatl')({
+    persistAttribute() {}, onNpcBeforeDeath() {}, onNpcDeath(handler) { death = handler; },
+    onCustomEvent() {}, onPlayerLogin() {},
+  });
+  emitted.length = 0;
+  const actor = {};
+  death({ npc: { __amoxliatlFight: { stopped: false, player: actor,
+    session: { quest: true, end() { ended = true; } }, hideHud() { hidden = true; },
+  } } });
+  assert.ok(ended && hidden);
+  assert.deepEqual(emitted, [{ name: 'amoxliatl:quest-defeated', payload: { player: actor } }]);
+});

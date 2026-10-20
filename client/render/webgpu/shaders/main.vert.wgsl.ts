@@ -68,6 +68,11 @@ fn vs_main_depth(
     if (modelInfo.contourGround < CONTOUR_GROUND_NONE) {
         localPos.y -= getHeightInterp(interpPos, modelInfo.plane);
     }
+    // Ground-level loc vertices onto the terrain (main.vert.glsl explains).
+    if (modelInfo.priority > 0u && modelInfo.height == 0u
+        && modelInfo.contourGround == CONTOUR_GROUND_CENTER_TILE && abs(vertex.pos.y) <= GROUND_SNAP_RANGE) {
+        localPos.y = min(localPos.y, -getHeightInterp(localPos.xz, modelInfo.plane) - GROUND_SNAP_LIFT);
+    }
 
     localPos /= 128.0;
     localPos += vec3<f32>(mapU.u_mapPos.x, 0.0, mapU.u_mapPos.y) * 64.0;
@@ -141,6 +146,8 @@ struct MapUniforms {
 const TEXTURE_ANIM_UNIT: f32 = 1.0 / 128.0;
 
 const CONTOUR_GROUND_CENTER_TILE: f32 = 0.0;
+const GROUND_SNAP_RANGE: f32 = 4.0;
+const GROUND_SNAP_LIFT: f32 = 1.0;
 const CONTOUR_GROUND_VERTEX: f32 = 1.0;
 const CONTOUR_GROUND_NONE: f32 = 2.0;
 const FOG_CORNER_ROUNDING: f32 = 0.0;
@@ -562,6 +569,11 @@ fn vs_main(
     localPos.y -= f32(modelInfo.height);
     if (modelInfo.contourGround < CONTOUR_GROUND_NONE) {
         localPos.y -= getHeightInterp(interpPos, modelInfo.plane);
+    }
+    // Ground-level loc vertices onto the terrain (main.vert.glsl explains).
+    if (modelInfo.priority > 0u && modelInfo.height == 0u
+        && modelInfo.contourGround == CONTOUR_GROUND_CENTER_TILE && abs(vertex.pos.y) <= GROUND_SNAP_RANGE) {
+        localPos.y = min(localPos.y, -getHeightInterp(localPos.xz, modelInfo.plane) - GROUND_SNAP_LIFT);
     }
 
     localPos /= 128.0;

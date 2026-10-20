@@ -1,0 +1,38 @@
+{
+  "$comment": "Workshop furniture. Tool stores: each rack loc gives unlimited tools of its tier (OSRS Wiki, Tool space; tier 1's menu order from rsprox captures). Clockmaker's bench: menus and messages from rsprox captures, levels from the Wiki; every product is 15 Crafting experience.",
+  "toolStores": {
+    "6786": ["SAW", "HAMMER", "CHISEL", "SHEARS"],
+    "6787": ["BUCKET", "KNIFE", "SPADE", "TINDERBOX"],
+    "6788": ["BROWN_APRON", "GLASSBLOWING_PIPE", "NEEDLE"],
+    "6789": ["AMULET_MOULD", "NECKLACE_MOULD", "RING_MOULD", "HOLY_MOULD", "BRACELET_MOULD", "TIARA_MOULD"],
+    "6790": ["RAKE", "SPADE", "GARDENING_TROWEL", "SEED_DIBBER", "WATERING_CAN_8_", "SECATEURS"]
+  },
+  "clockmaker": {
+    "experience": 15,
+    "menus": {
+      "6796": ["Wooden cat", "Toy horsey"],
+      "6797": ["Clockwork mechanism", "Wooden cat", "Toy horsey"],
+      "6798": ["Clockwork mechanism", "Wooden cat", "Toy horsey", "Clockwork toy"],
+      "6799": ["Sextant", "Watch", "Clockwork mechanism", "Clockwork toy", "More..."]
+    },
+    "more": ["Wooden cat", "Toy horsey"],
+    "toys": ["Clockwork soldier", "Clockwork doll", "Clockwork penguin", "Clockwork mouse", "Clockwork cat"],
+    "horseys": ["Brown", "White", "Black", "Grey"],
+    "products": {
+      "Clockwork mechanism": { "item": 8792, "level": 8, "materials": [[2353, 1]], "missing": "To make that you need a steel bar." },
+      "Sextant": { "item": 2574, "level": 23, "materials": [[2353, 1]], "missing": "To make that you need a steel bar." },
+      "Watch": { "item": 2575, "level": 28, "materials": [[2353, 1], [8792, 1]], "missing": "To make that you need a steel bar and a clockwork mechanism." },
+      "Wooden cat": { "item": 10891, "level": 16, "materials": [[960, 1], ["FUR", 1]], "missing": "You need a wooden plank to make a wooden cat." },
+      "Brown": { "item": 2520, "level": 10, "materials": [[960, 1]], "missing": "You need a wooden plank to make a wooden horsey." },
+      "White": { "item": 2522, "level": 10, "materials": [[960, 1]], "missing": "You need a wooden plank to make a wooden horsey." },
+      "Black": { "item": 2524, "level": 10, "materials": [[960, 1]], "missing": "You need a wooden plank to make a wooden horsey." },
+      "Grey": { "item": 2526, "level": 10, "materials": [[960, 1]], "missing": "You need a wooden plank to make a wooden horsey." },
+      "Clockwork soldier": { "item": 7759, "level": 13, "materials": [[960, 1], [8792, 1]], "missing": "To make that you need a wood plank and a clockwork mechanism." },
+      "Clockwork doll": { "item": 7763, "level": 18, "materials": [[960, 1], [8792, 1]], "missing": "To make that you need a wood plank and a clockwork mechanism." },
+      "Clockwork penguin": { "item": 10595, "level": 30, "materials": [[960, 1], [8792, 1], [950, 1]], "missing": "To make that you need a wood plank, a clockwork mechanism, and a piece of silk." },
+      "Clockwork mouse": { "item": 7767, "level": 33, "materials": [[960, 1], [8792, 1]], "missing": "To make that you need a wood plank and a clockwork mechanism." },
+      "Clockwork cat": { "item": 7771, "level": 85, "materials": [[960, 1], [8792, 1]], "missing": "To make that you need a wood plank and a clockwork mechanism." }
+    },
+    "furs": [948, 958, 6814]
+  }
+}

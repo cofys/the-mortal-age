@@ -150,6 +150,27 @@ export class UseItemPacketListener {
     if (!target || !item || item.getId() !== itemId || !this.canUse(player, itemId)) {
       return;
     }
+    const definition = target.getCurrentDefinition(player);
+    // Item use has no option click, so clickType 0 marks item routes for onNpcRoute
+    // handlers. Every such handler sees these (Death's desk, graves); like the NPC
+    // options they already extend, item use is the same physical reach, so a handler
+    // that extends range applies to both.
+    const routeEvent = {
+      player,
+      npc: target,
+      definition,
+      npcId: target.getContentId(player),
+      npcIndex: targetIndex,
+      clickType: 0,
+      location: {
+        x: target.getLocation().getX(),
+        y: target.getLocation().getY(),
+        z: target.getLocation().getZ(),
+      },
+      handled: false,
+      range: 1,
+    };
+    PluginManager.emitNpcRoute(routeEvent);
     player.getMovementQueue().walkToEntity(target, () => {
       player.setPositionToFace(target.getLocation());
       PluginManager.emitItemOnNpc({
@@ -163,7 +184,7 @@ export class UseItemPacketListener {
         slot,
         handled: false,
       });
-    });
+    }, routeEvent.range);
   }
 
   public static spellOnObject(

@@ -28,6 +28,7 @@ export class ItemIconRenderer {
     private customRevision = -1;
     private static readonly OSRS_SPRITE_W = 36;
     private static readonly OSRS_SPRITE_H = 32;
+    private static readonly ITEM_SPRITE_CACHE_MAX = 2048;
 
     private objModel: ObjModelLoader;
     private objLoader: ObjTypeLoader;
@@ -35,6 +36,7 @@ export class ItemIconRenderer {
     private texCache = new Map<number, { size: number; pixels: Int32Array }>();
     private cacheSystem?: CacheSystem;
     private fontCache = new Map<number, BitmapFont | undefined>();
+    /** Least recently cached first; capped like the GL icon textures (one per quantity). */
     private itemSpriteCache = new Map<
         bigint,
         { pixels: Int32Array; isStackable: boolean; canvas?: HTMLCanvasElement }
@@ -94,7 +96,7 @@ export class ItemIconRenderer {
 
         entry.canvas = canvas;
         // entry may already be cached (same object), but set anyway for clarity.
-        this.itemSpriteCache.set(key, entry);
+        this.cacheItemSprite(key, entry);
         return canvas;
     }
 
@@ -314,8 +316,20 @@ export class ItemIconRenderer {
             isStackable: boolean;
             canvas?: HTMLCanvasElement;
         };
-        if (!var5 && scale === 512) this.itemSpriteCache.set(key, entry);
+        if (!var5 && scale === 512) this.cacheItemSprite(key, entry);
         return entry;
+    }
+
+    private cacheItemSprite(
+        key: bigint,
+        entry: { pixels: Int32Array; isStackable: boolean; canvas?: HTMLCanvasElement },
+    ): void {
+        const cache = this.itemSpriteCache;
+        cache.delete(key);
+        cache.set(key, entry);
+        if (cache.size > ItemIconRenderer.ITEM_SPRITE_CACHE_MAX) {
+            cache.delete(cache.keys().next().value as bigint);
+        }
     }
 
     setFaceVisibilityPredicate(predicate?: FaceVisibilityPredicate) {

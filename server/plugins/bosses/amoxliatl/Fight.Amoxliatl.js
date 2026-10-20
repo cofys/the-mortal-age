@@ -390,6 +390,7 @@ function playerHurt({ target, hit }) {
 
 function attachFight(api) {
   api.registerNpcCombatMethodProvider(Common.data.npcs.boss, combatClass());
+  api.registerNpcCombatMethodProvider(Common.data.npcs.quest, combatClass());
   api.onCombatHitResolved(bossHurt);
   api.onCombatHitResolved(playerHurt);
 }

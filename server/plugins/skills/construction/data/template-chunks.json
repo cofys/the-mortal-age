@@ -1,0 +1,26 @@
+{
+  "groundFloor": {
+    "sourceChunkX": 233,
+    "sourceChunkY": 880
+  },
+  "basementFloor": {
+    "sourceChunkX": 235,
+    "sourceChunkY": 880
+  },
+  "blank": {
+    "sourceChunkX": 236,
+    "sourceChunkY": 881
+  },
+  "roofStraight": {
+    "sourceChunkX": 233,
+    "sourceChunkY": 882
+  },
+  "roofThreeWay": {
+    "sourceChunkX": 235,
+    "sourceChunkY": 882
+  },
+  "roofFourWay": {
+    "sourceChunkX": 237,
+    "sourceChunkY": 882
+  }
+}

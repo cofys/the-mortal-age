@@ -172,9 +172,6 @@ function buildHotspotPvpMetadata({
     profileId: profile.id,
     loadoutId,
     hotspotId,
-    // A hotspot may pin its bots to a player-preset group (::presets), so a cluster's
-    // levels and gear mirror what players actually run there.
-    presetPoolGroup: getWildernessHotspot(hotspotId)?.presetGroup ?? null,
     engagementStyle: hotspotId ? "hotspot" : "roaming",
     preferredCombatStyle:
       getPvpLoadout(loadoutId).tags.includes("hybrid")
@@ -199,9 +196,6 @@ function assignPvpMetadata(state, options = {}) {
   state.pvp.profileId = metadata.profileId;
   state.pvp.loadoutId = metadata.loadoutId;
   state.pvp.hotspotId = metadata.hotspotId;
-  if (metadata.presetPoolGroup !== undefined) {
-    state.pvp.presetPoolGroup = metadata.presetPoolGroup;
-  }
   state.pvp.engagementStyle = metadata.engagementStyle;
   state.pvp.preferredCombatStyle = metadata.preferredCombatStyle;
   state.pvp.escapeThreshold = metadata.escapeThreshold;

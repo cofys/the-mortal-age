@@ -1,143 +1,107 @@
 /**
  * The Heart of Darkness (members).
  *
- * The words come from the "The Heart of Darkness" transcript page (OSRS Wiki); this
- * plugin supplies the NPC variant selector, the start hook, the prose-condition
- * answers, the pub/bed/shopkeeper infiltration, the four Tower of Ascension trials
- * (pickpocket, combat waves, traitor, Prince Itzla), the robes chest, the Twilight
- * Temple initiation, the Tapoyauik mining/statue puzzle and the Amoxliatl fight.
+ * Behaviour follows the complete quest in RSProx recording 1695 (revision 226, ticks 2423-4992);
+ * the words come from "The Heart of Darkness" transcript page (OSRS Wiki), the puzzle rules from
+ * its walkthrough. Evidence and remaining gaps: docs/p2p-varlamore-group-2-parity.md.
  *
- * The stage lives in varbit 11117 "vmq3" (varp 4386 "vmq3_primary", bits 0-6).
- * Evidence: scripts/lookup-gameval.ts varbit vmq3 -> varp=4386 bits=0-6; quest
- * dbrow 3710 ("Heart of Darkness, The", table 0) col 19 = 76 (completion stage),
- * col 25 = 3512 (prereq Twilight's Promise), col 33 = [14,80000,17,80000,
- * 18,80000,16,80000] (Mining/Thieving/Slayer/Agility, tenths). Sibling varbits in
- * the same varp: vmq3_itzla_vis (bits 11-14), vmq3_recruit_1..4 (bits 7-10),
- * vmq3_tower_trial_* / vmq3_ruins_* in varps 4387/4388/4396.
+ * Stages live in varbit 11117 "vmq3" (varp 4386, bits 0-6), as captured:
  *
- * Stages (even checkpoints, completion 76):
- *   0 not started, 2 started (undercover plan agreed), 4 queen cutscene done,
- *   6 slept at the Windbreaker (Itzla revealed), 8 shopkeeper will send word,
- *   10 reported back / Itzla departs for the temple, 12 met Itzla at the Tower,
- *   14 reported the Augur / Janus calls you in, 16 first trial: pickpocket,
- *   18 tower key held, 20 book + first scrap, 22 poem + second scrap,
- *   24 completed note, 26 passphrase accepted, 28 second trial ready,
- *   30 second trial fight, 32 second trial won, 34 third trial ready,
- *   36 questioning the four acolytes, 38 traitor executed, 40 final trial:
- *   fight Prince Itzla, 42 Itzla yielded, 44 back in the lobby, 46 claim the
- *   robes, 48 robed for the temple, 50 initiation ceremony seen, 52 tasked with
- *   Tapoyauik, 54 entered the ruins, 56 blockage cleared (nagua ambush),
- *   58 reunited with Itzla at the frozen door, 60 puzzle (statues touchable),
- *   62 statues solved / door open / Amoxliatl, 64 Amoxliatl defeated,
- *   66 banished to Civitas illa Fortis, 76 complete.
+ *   0 not started (Prince Itzla at the Teomat, after Twilight's Promise)
+ *   2 started          4 told of the plan       6 the Queen's visit ended
+ *   8 sent to the Windbreaker   10 asked for the basement room   12 paid for the room
+ *  14 woke to Itzla   16 heard his reasons   18 sent to the shopkeeper
+ *  20 the shopkeeper sends word   22 Itzla left for the Twilight Temple
+ *  24 met Itzla at the Tower of Ascension   26 spoke to all four recruits
+ *  28 Janus calls them in   30 Janus explains the trials   32 the first trial
+ *  34 the passphrase   36 the second trial   38 survived   40 the third trial
+ *  42 the traitor found   44 the fourth trial   46 Itzla yields   48 sent for the robes
+ *  50 robed   52 initiated   54 Itzla's thoughts   56 sent below by Fides
+ *  58 in Tapoyauik   60 the blockage mined   62 Itzla knocked across the chasm
+ *  64 the four levers pulled   66/68 the frozen door opened   70 Amoxliatl
+ *  72 the fight   74 banished   76 complete (Servius at the Sunrise Palace)
  *
- * Source: OSRS Wiki "The Heart of Darkness" page, quick guide, transcript and
- * journal, plus the cache ids above. Rewards per the wiki (8,000 XP in Mining,
- * Thieving, Slayer and Agility, 2 Quest points, access to Tapoyauik).
+ * Side varbits follow the capture: vmq3_itzla_vis (which Itzla is out: 1 the Teomat, 3 the
+ * Windbreaker, 4 the tower lobby, 5/6 the tower's inner room, 7 the temple, 8 the ruins),
+ * vmq3_recruit_1..4, and the trial and ruins varbits the units set. Itzla's lobby/temple/ruins
+ * places, Janus, Fides, the recruits and Servius are the cache's multi-NPCs in npc-spawns.json.
  *
- * Gaps / approximations:
- *  - The Tower trials and the Amoxliatl fight are instanced in live OSRS. Here the
- *    trial NPCs are per-player owner-only spawns placed on the real tower trial
- *    floor (z=1) next to the real chests (54372/54374/54376) and the lobby robes
- *    chest (54515). The second/fourth trial waves are condensed to the level-74
- *    brawlers and level-71 conjurers (13773/13777); bandages and medical boxes
- *    (54378+) are not simulated, and Itzla cannot actually lose the second trial.
- *  - Pickpocketing the Emissary Ascended (13706, Talk-to only in this cache) is a
- *    Talk-to that plays the pickpocket transcript variant and hands over the key.
- *    The south-west gate is not simulated: the tower key unlocks the chests directly.
- *  - The passphrase is fixed to "Chua Chaki Iknil" instead of being derived from
- *    the book/poem; the traitor is a per-player random pick (persisted attribute).
- *  - The statue puzzle skips the urn/icon stage (no urn or mural objects exist on
- *    the base map): the four west-room statues (base ids 54457/54463/54469/54475)
- *    are swapped for touchable ones (54456/54462/54468/54474) in the fixed order
- *    (1605,9627) -> (1608,9624) -> (1608,9638) -> (1605,9635); touching them in
- *    order opens the door. The mineable rocks (54501) and the frozen door (54451)
- *    are registered at (1695,9629,2) and (1602,9631,0) because the live puzzle room
- *    objects are instanced. The frost nagua already spawn on the base maps.
- *  - The Windbreaker bed (52453) has no actions, so it is swapped for the quest
- *    bed 54513 ("Rest"). Cutscenes are dialogue only: no camera, no instancing and
- *    multi-speaker lines share one chathead (the NPC being talked to).
- *  - Skill/quest requirements are checked at the start (55 Mining, 48 Thieving,
- *    48 Slayer, 46 Agility, Twilight's Promise and Children of the Sun complete).
+ * Rewards per the capture: 2 Quest points, access to Tapoyauik and 8,000 Mining, Thieving, Slayer
+ * and Agility XP.
  */
-module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
+module.exports = function registerTheHeartOfDarknessQuest(api) {
   const {
-    Equipment,
-    GameObject,
-    ItemIdentifiers,
-    Location,
-    MapObjects,
-    NpcIdentifiers,
-    ObjectIdentifiers,
-    ObjectManager,
-    RegionManager,
-    Skill,
-  } = pluginApi.core;
-  const runtime = require("../QuestRuntime");
-  const { registerQuest, startTranscript } = runtime;
-
-  // Varp 4386 "vmq3_primary"; the stage is varbit 11117 "vmq3" (bits 0-6).
-  const VARP_HEART_OF_DARKNESS = 4386;
-  const STAGE_VARBIT = 11117;
+    Animation, DialogueChainBuilder, ActionDialogue, ItemIdentifiers, Location, NpcIdentifiers, Skill, StatementDialogue,
+  } = api.core;
+  const { registerQuest, refreshQuestList, startTranscript, loadTranscripts } = require("../QuestRuntime");
+  const { createQuestScenes } = require("../QuestScenes");
 
   const PAGE = "The Heart of Darkness";
   const QUEST_KEY = "the_heart_of_darkness";
   const START_HOOK = "quest:the-heart-of-darkness:start";
   const TWILIGHTS_PROMISE_KEY = "twilights_promise";
-  const CHILDREN_OF_THE_SUN_KEY = "children_of_the_sun";
   const PERILOUS_MOONS_KEY = "perilous_moons";
 
-  const STAGE = {
-    STARTED: 2,
-    QUEEN_DONE: 4,
-    AT_PUB: 6,
-    SHOP_AGREED: 8,
-    AT_TOWER: 10,
-    MINGLED: 12,
-    RECRUITED_INFO: 14,
-    TRIAL1_KEY: 16,
-    TRIAL1_BOOK: 18,
-    TRIAL1_POEM: 20,
-    TRIAL1_SCRAP3: 22,
-    TRIAL1_NOTE: 24,
-    TRIAL1_DONE: 26,
-    TRIAL2_READY: 28,
-    TRIAL2_FIGHT: 30,
-    TRIAL2_DONE: 32,
-    TRIAL3_READY: 34,
-    TRIAL3_ACTIVE: 36,
-    TRIAL4_READY: 38,
-    TRIAL4_FIGHT: 40,
-    TRIAL4_DONE: 42,
-    LOBBY: 44,
-    ROBES: 46,
-    ROBED: 48,
-    INITIATED: 50,
-    DUTIES: 52,
-    RUINS_ENTERED: 54,
-    BLOCKAGE_CLEARED: 56,
-    DOOR_MET: 58,
-    PUZZLE: 60,
-    DOOR_OPEN: 62,
-    AMOX_DEFEATED: 64,
-    BANISHED: 66,
-    COMPLETE: 76,
+  const VARP_HEART_OF_DARKNESS = 4386;
+  const STAGE_VARBIT = 11117;
+  const RECRUIT_VARBITS = [11118, 11119, 11120, 11121];
+  const ITZLA_VIS_VARBIT = 11123;
+  const SERVIUS_PALACE_VARBIT = 16668; // vmq4_servius_palace_vis: the Sunrise Palace Servius (multi-NPC 14054)
+
+  const S = {
+    STARTED: 2, PLAN: 4, QUEEN_LEFT: 6, TO_GORGE: 8, BASEMENT: 10, PAID: 12, WOKE: 14, REASONS: 16, TO_SHOP: 18,
+    SHOP_AGREED: 20, ITZLA_LEFT: 22, TOWER: 24, MINGLED: 26, CALLED: 28, TRIALS_EXPLAINED: 30, TRIAL_1: 32,
+    PASSPHRASE: 34, TRIAL_2: 36, SURVIVED: 38, TRIAL_3: 40, TRAITOR: 42, TRIAL_4: 44, YIELDED: 46, ROBES: 48,
+    ROBED: 50, INITIATED: 52, THOUGHTS: 54, BELOW: 56, RUINS: 58, MINED: 60, CHASM: 62, LEVERS: 64,
+    DOOR_OPEN: 68, AMOXLIATL: 70, FIGHT: 72, BANISHED: 74, COMPLETE: 76,
   };
-  STAGE.TRIAL3_DONE = STAGE.TRIAL4_READY;
+
+  const NPC = {
+    ITZLA_TEOMAT: NpcIdentifiers.PRINCE_ITZLA_ARKAN_3, // 12896, the Teomat (Twilight's Promise's multi-NPC 13379)
+    ITZLA: 13690, // vmq3_itzla_vis_citizen: disguised (the Windbreaker, the tower lobby, following)
+    ITZLA_ROBED: 13691, // vmq3_itzla_vis_cultist: in the Emissaries' robes
+    ITZLA_FOLLOWER: 14053, // vmq3_itzla_follower: 13690, robed from stage 49
+    ITZLA_QUEEN: 13692, // vmq3_itzla_cutscene
+    ITZLA_CULTIST_ACTOR: 13693, // vmq3_itzla_cultist_cutscene
+    QUEEN: 13695,
+    KUALTI: [13696, 13697, 13698, 13699],
+    BARTENDER: 14020,
+    SHOPKEEPER: 14021,
+    FELIUS: 13700, CARITTA: 13701, SERGIUS: 13702, NOVA: 13704,
+    SERGIUS_JOINED: 13703, NOVA_JOINED: 13705,
+    JANUS: 13714,
+    FIDES: 13715, FIDES_ACTOR: 13716,
+    METZLI_ACTOR: 13717, FURIA_ACTOR: 13718, ENNIUS_ACTOR: 13719,
+    TEMPLE_GUARDS: [13708, 13709],
+    TEMPLE_ACTOR_GUARDS: [13710, 13711, 13712, 13713],
+    RUINS_GUARDS: [13720, 13721],
+    SERVIUS: 13694,
+  };
+  const RECRUITS = [NPC.FELIUS, NPC.CARITTA, NPC.SERGIUS, NPC.NOVA];
+
+  const ITEM = {
+    COINS: ItemIdentifiers.COINS,
+    COINS_BOX: 1000, // the coin pile the capture's item box shows
+    ROBES: [29868, 29870, 29872, 29874], // Emissary hood, robe top, robe bottom, sandals
+  };
+  const ROBE_FEE = 30;
+  const ROBES_CHEST_ID = 54515;
+  const BED_ID = 54513; // the Windbreaker bed while the room is rented (multi-loc 55374)
+  const BED_MULTI_ID = 55374;
+  const TOWER_STAIRS_ID = 54369;
+  const RUINS_STAIRS_ID = 54525;
 
   const V = {
     START: "starting-the-quest-talking-to-prince-itzla-arkan",
     QUEEN: "meeting-with-queen-zyani-arkan-to-begin-planning-the-infiltration",
-    AFTER_MEETING:
-      "meeting-with-queen-zyani-arkan-to-begin-planning-the-infiltration-talking-to-prince-itzla-arkan-after-meeting-with-queen-zyani-arkan",
-    AFTER_MEETING_AGAIN:
-      "meeting-with-queen-zyani-arkan-to-begin-planning-the-infiltration-talking-to-prince-itzla-arkan-after-meeting-with-queen-zyani-arkan-talking-to-itzla-again",
+    AFTER_QUEEN: "meeting-with-queen-zyani-arkan-to-begin-planning-the-infiltration-talking-to-prince-itzla-arkan-after-meeting-with-queen-zyani-arkan",
+    AFTER_QUEEN_AGAIN: "meeting-with-queen-zyani-arkan-to-begin-planning-the-infiltration-talking-to-prince-itzla-arkan-after-meeting-with-queen-zyani-arkan-talking-to-itzla-again",
     BARTENDER: "visiting-the-windbreaker-bar-talking-to-the-bartender-at-quetzacalli-gorge",
     BED: "visiting-the-windbreaker-bar-resting-in-the-bed",
+    BED_AGAIN: "visiting-the-windbreaker-bar-resting-in-the-bed-talking-to-itzla-again-before-fully-going-through-the-initial-dialogue",
     PUB_ITZLA: "visiting-the-windbreaker-bar-resting-in-the-bed-talking-to-itzla-again",
     SHOP: "talking-to-the-quetzacalli-gorge-shopkeeper",
-    SHOP_AGAIN:
-      "talking-to-the-quetzacalli-gorge-shopkeeper-talking-to-him-again-after-getting-directions-to-the-twilight-temple",
+    SHOP_AGAIN: "talking-to-the-quetzacalli-gorge-shopkeeper-talking-to-him-again-after-getting-directions-to-the-twilight-temple",
     REPORT: "talking-to-the-quetzacalli-gorge-shopkeeper-reporting-back-to-prince-itzla-arkan",
     TOWER: "talking-to-prince-itzla-arkan",
     TOWER_AGAIN: "talking-to-prince-itzla-arkan-talking-to-itzla-again",
@@ -146,1635 +110,922 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     FELIUS: "talking-to-prince-itzla-arkan-talking-to-felius",
     SERGIUS: "talking-to-prince-itzla-arkan-talking-to-sergius",
     REPORT_AUGUR: "talking-to-prince-itzla-arkan-reporting-back-to-prince-itzla-arkan",
-    JANUS_INTRO: "descending-into-the-tower-of-ascension",
-    JANUS_FIRST: "descending-into-the-tower-of-ascension-first-trial",
-    PICKPOCKET: "descending-into-the-tower-of-ascension-first-trial-pickpocketing-a-cultist",
-    GATE_CHEST:
-      "descending-into-the-tower-of-ascension-first-trial-unlocking-the-south-west-gate-and-chest",
-    POEM_CHEST: "descending-into-the-tower-of-ascension-first-trial-unlocking-the-south-west-chest",
-    ITZLA_POEM_PRE:
-      "descending-into-the-tower-of-ascension-first-trial-talking-to-prince-itzla-arkan-before-receiving-the-poem",
-    ITZLA_POEM:
-      "descending-into-the-tower-of-ascension-first-trial-talking-to-prince-itzla-arkan-after-reading-the-poem",
-    ITZLA_NOTE:
-      "descending-into-the-tower-of-ascension-first-trial-talking-to-prince-itzla-arkan-with-the-completed-note",
-    JANUS_NOTE:
-      "descending-into-the-tower-of-ascension-first-trial-talking-to-forebearer-janus-with-the-completed-note",
+    JANUS: "descending-into-the-tower-of-ascension",
+    JANUS_STAIRS_EARLY: "descending-into-the-tower-of-ascension-attempting-to-climb-up-before-speaking-to-janus",
+    JANUS_AGAIN: "descending-into-the-tower-of-ascension-speaking-to-forebearer-janus-again",
+    JANUS_RESTART: "descending-into-the-tower-of-ascension-speaking-to-forebearer-janus-in-the-lobby-after-restarting-or-failing-some-trials",
     JANUS_CHEST: "descending-into-the-tower-of-ascension-attempting-to-open-the-chest-in-the-lobby-without-permission",
-    EMISSARY_BEFORE: "descending-into-the-tower-of-ascension-first-trial-talking-to-an-emissary-ascended-before-completing-the-first-trial",
-    EMISSARY_AFTER: "descending-into-the-tower-of-ascension-talking-to-an-emissary-ascended-after-completing-the-first-trial",
-    JANUS_AFTER_T1: "descending-into-the-tower-of-ascension-talking-to-forebearer-janus-after-completing-the-first-trial",
-    TRIAL2: "descending-into-the-tower-of-ascension-second-trial-talking-to-forebearer-janus",
-    ITZLA_T2: "descending-into-the-tower-of-ascension-second-trial-talking-to-itzla-before-beginning-the-fight",
-    T2_AFTER: "descending-into-the-tower-of-ascension-second-trial-after-the-fight",
-    ITZLA_T2_AFTER: "descending-into-the-tower-of-ascension-second-trial-after-the-fight-talking-to-itzla",
-    TRIAL3: "descending-into-the-tower-of-ascension-third-trial",
-    T3_ITZLA: "descending-into-the-tower-of-ascension-third-trial-talking-to-prince-itzla-again",
-    TENOCH: "descending-into-the-tower-of-ascension-third-trial-questioning-tenoch",
-    SILIA: "descending-into-the-tower-of-ascension-third-trial-questioning-silia",
-    ADRIUS: "descending-into-the-tower-of-ascension-third-trial-questioning-adrius",
-    ELEUIA: "descending-into-the-tower-of-ascension-third-trial-questioning-eleuia",
-    CHOOSE: "descending-into-the-tower-of-ascension-third-trial-choosing-the-traitor",
-    T3_ITZLA_EXEC: "descending-into-the-tower-of-ascension-third-trial-talking-to-prince-itzla-arkan-after-the-execution",
-    TRIAL4: "descending-into-the-tower-of-ascension-fourth-trial",
-    T4_ITZLA_FINAL: "descending-into-the-tower-of-ascension-during-the-fight-against-prince-itzla-after-dealing-the-final-blow",
-    JANUS_AFTER_T4: "descending-into-the-tower-of-ascension-speaking-to-forebearer-janus-after-defeating-prince-itzla",
+    STAIRS_DONE: "descending-into-the-tower-of-ascension-attempting-to-head-back-up-the-stairs",
     ITZLA_LOBBY: "descending-into-the-tower-of-ascension-speaking-to-prince-itzla-in-the-lobby",
     JANUS_LOBBY: "descending-into-the-tower-of-ascension-speaking-to-forebearer-janus-in-the-lobby",
-    JANUS_LOBBY_AGAIN:
-      "descending-into-the-tower-of-ascension-speaking-to-forebearer-janus-in-the-lobby-speaking-to-forebearer-janus-again",
-    ITZLA_AFTER_JANUS: "descending-into-the-tower-of-ascension-talking-to-prince-itzla-after-talking-to-forebearer-janus",
-    ITZLA_ROBES: "descending-into-the-tower-of-ascension-talking-to-prince-itzla-after-getting-the-robes",
-    JANUS_ROBES: "descending-into-the-tower-of-ascension-talking-to-forebearer-janus-after-getting-the-robes",
+    JANUS_LOBBY_AGAIN: "descending-into-the-tower-of-ascension-speaking-to-forebearer-janus-in-the-lobby-speaking-to-forebearer-janus-again",
+    ITZLA_ROBES_FIRST: "descending-into-the-tower-of-ascension-talking-to-prince-itzla-after-talking-to-forebearer-janus",
+    ITZLA_ROBED: "descending-into-the-tower-of-ascension-talking-to-prince-itzla-after-getting-the-robes",
+    JANUS_ROBED: "descending-into-the-tower-of-ascension-talking-to-forebearer-janus-after-getting-the-robes",
     CHEST: "descending-into-the-tower-of-ascension-searching-the-chest",
     CHEST_FULL: "descending-into-the-tower-of-ascension-searching-the-chest-without-enough-inventory-space",
     CHEST_RECLAIM: "descending-into-the-tower-of-ascension-reclaiming-the-robes-if-they-re-lost",
-    CHEST_ROBED: "descending-into-the-tower-of-ascension-searching-the-chest-with-the-robes",
+    CHEST_EMPTY: "descending-into-the-tower-of-ascension-searching-the-chest-with-the-robes",
     NO_ROBES: "descending-into-the-tower-of-ascension-attempting-to-enter-the-twilight-temple-without-the-robes-on",
     INITIATION: "initiation",
-    ITZLA_AFTER_INIT: "initiation-talking-to-prince-itzla-after-the-initiation",
-    ITZLA_BEFORE_FIDES: "initiation-talking-to-prince-itzla-after-the-initiation-talking-to-itzla-again-before-fides",
+    FIDES_EARLY: "initiation-talking-to-fides-before-itzla-after-the-initiaion",
+    ITZLA_TEMPLE: "initiation-talking-to-prince-itzla-after-the-initiation",
+    ITZLA_TEMPLE_AGAIN: "initiation-talking-to-prince-itzla-after-the-initiation-talking-to-itzla-again-before-fides",
     FIDES: "initiation-talking-to-forebearer-fides",
     FIDES_AGAIN: "initiation-talking-to-forebearer-fides-talking-to-fides-again",
-    ITZLA_FIDES_AFTER: "initiation-talking-to-forebearer-fides-talking-to-prince-itzla-after-fides",
-    RUINS: "initiation-entering-tapoyauik",
-    VULCAN: "initiation-talking-to-forebearer-vulcan",
-    ROCKS: "initiation-after-clearing-the-rocks",
-    ITZLA_DOOR: "initiation-talking-to-prince-itzla-by-the-frozen-door",
-    ITZLA_WORDS: "initiation-talking-to-prince-itzla-again",
-    DOOR_FROZEN: "initiation-solving-the-puzzle-checking-the-frozen-door",
-    DOOR_OPEN: "initiation-after-opening-the-door",
-    AMOX: "heart-of-the-ruins",
-    AMOX_DONE: "heart-of-the-ruins-after-defeating-amoxliatl",
+    ITZLA_BELOW: "initiation-talking-to-forebearer-fides-talking-to-prince-itzla-after-fides",
+    RUINS_GUARD: "initiation-talking-to-forebearer-fides-talking-to-the-emissary-ascended-by-the-entrance-to-tapoyauik",
+    RUINS_GUARD_ALONE: "initiation-talking-to-forebearer-fides-talking-to-the-emissary-ascended-by-the-entrance-to-tapoyauik-trying-to-descend-without-itzla",
     SERVIUS: "heart-of-the-ruins-talking-to-servius-teokan-of-ralos",
+    RUINS_AGAIN: "heart-of-the-ruins-attempting-to-re-enter-the-ruins",
+    TOWER_AGAIN_DONE: "heart-of-the-ruins-attempting-to-climb-the-tower-again",
   };
 
-  // Prose condition step ids on "The Heart of Darkness" page.
-  const C = {
-    REQS_NO: "PeHbKF",
-    REQS_YES: "Ulgxje",
-    BARTENDER_FIRST: "MYC58N",
-    BARTENDER_AGAIN: "mIUNoa",
-    BARTENDER_POOR: "pJ0LFe",
-    PICKPOCKET_AGAIN: "H00jBZ",
-    CHEST_AGAIN: "-CGqda",
-    POEM_OK: "LKAMzW",
-    POEM_BAD: "g-PPxM",
-    ITZLA_NO_KEY: "pI4GD8",
-    ITZLA_KEY: "EgeN2l",
-    ITZLA_BOOK: "vl7lj7",
-    SCRAP_CHEST: "-TiHOM",
-    COMBO_WRONG: "xOxc9n",
-    COMBO_RIGHT: "QtU6YH",
-    NO_BANDAGE: "sWx0Gp",
-    BANDAGE: "QK5TP0",
-    WAVES_DEAD: "428YHT",
-    JANUS_DURING_TRIAL: "axmZBm",
-    NO_SCRAPS: "HrF8WL",
-    TWO_SCRAPS: "fiET8W",
-    ACCUSED_INNOCENT: "4c5cRY",
-    ACCUSED_TRAITOR: "LdzHnw",
-    FOLLOWED_A: "J075SG",
-    NOT_FOLLOWED_A: "pIohia",
-    FOLLOWED_B: "B4AnfO",
-    NOT_FOLLOWED_B: "suZuGU",
-    FOLLOWED_C: "IouwJx",
-    NOT_FOLLOWED_C: "Cwnadj",
-    FOLLOWED_D: "JSXbIW",
-    NOT_FOLLOWED_D: "AObNnk",
-    HOLDING_ICON: "ZdBNNm",
-    WATER_STATUE: "9iqI2Q",
-    EARTH_STATUE: "C5cbbI",
-    FIRE_STATUE: "XpTrfZ",
-    NO_ICON: "T_rLes",
-    PERILOUS_NO: "KHOHrE",
-    PERILOUS_YES: "MlylVV",
+  const LINE = {
+    PLAN: "Right...",
+    QUEEN_ARRIVES: "Ah... This should be fun.",
+    TO_GORGE: "One of the only people left that I can trust. They'll fill you in on the details of how you'll infiltrate the Emissaries. Good luck, [player name]. May the sun light your way.",
+    BASEMENT: "We don't have a basement room... but I do have a nice big one here on the ground floor that's available. It's 30 coins for the night.",
+    BASEMENT_AGAIN: "Like I said, we don't have a basement room. However, I do have a nice big one here on the ground floor that's available. It's 30 coins for the night.",
+    REASONS: "Okay, I'm still not sure if I like this plan, but I see your point. What's our next move?",
+    TO_SHOP: "Exactly! Return to me here once you've hopefully been successful and we can discuss the next steps.",
+    SHOP_AGREED: "Well... if you're sure, fetch your friend and then head east to the Twilight Temple. I will send word for them to expect you both.",
+    TOWER: "Unlikely, but it would be interesting to know why they woke up one day and decided their calling in life was to join a cult.",
+    RECRUITS: ["Fair enough.", "And you!", "I hope so.", "I see. Thanks for the information."],
+    CALLED: "Itzlan. [player name]. It is time for you to prove your worth. Enter the tower when you're ready.",
+    TRIALS_EXPLAINED: "When you are ready to begin, climb the stairs. Your first trial awaits.",
+    ROBES: "Now the Augur herself will oversee your initiation. You may collect your new robes from that chest over there. Put them on and proceed into the temple.",
+    THOUGHTS: "Let's have a chat to this Forebearer Fides about our new duties. Whatever they are, hopefully they give us a chance to learn more.",
+    BELOW: "We'll get right to it!",
+    COMPLETE: "Timoiva, my child, and may the sun light your way.",
   };
 
-  // Action / message step ids on the page.
-  const A = {
+  const STEP = {
+    QUEEN_BEGINS: "I1YBht",
+    QUEEN_ENDS: "TRlXF8",
     PAY: "j4EUkz",
-    KEY: "aTKPX4",
-    RECEIVE_BOOK: "ae317n",
-    RECEIVE_POEM: "84RaFI",
-    RECEIVE_SCRAP3: "jVGiue",
-    RECEIVE_NOTE: "Sy4-hH",
+    SLEEP: "UAiNxn",
+    DEPARTS: "k39z5U",
     ROBES: "ZDjr4J",
     ROBES_RECLAIM: "eXuLCT",
-    NAGUA_APPEAR: "ncfvjP",
-    VULCAN_DIES: "NekRFe",
-    BANISH: "RO257s",
+    METZLI_WALKS: "r78zhY",
+    TWINS_WALK: "Edntey",
   };
 
-  const FLAG_RENTED = 1 << 0;
-  const FLAG_AUGUR = 1 << 1;
-  const FLAG_PUB_TOLD = 1 << 2;
-  const COMBO_STEP_1 = new Set(["Chua", "Moki", "Lini", "Kualt"]);
-  const COMBO_STEP_2 = new Set(["Chaki", "Koma", "Ueai", "Huka"]);
-  const COMBO_STEP_3 = new Set(["Iknil", "Kemo", "Ami", "Ikam"]);
-  const COMBO_CORRECT = ["Chua", "Chaki", "Iknil"];
-
+  const STAGE_VERSION_ATTRIBUTE = "the-heart-of-darkness:stage-version";
+  const STAGE_VERSION = 1;
+  const RECRUITS_ATTRIBUTE = "the-heart-of-darkness:recruits";
   const FLAGS_ATTRIBUTE = "quest.the_heart_of_darkness.flags";
-  const TRAITOR_ATTRIBUTE = "quest.the_heart_of_darkness.traitor";
-  const ACCUSED_ATTRIBUTE = "quest.the_heart_of_darkness.accused";
-  const STATUE_ATTRIBUTE = "quest.the_heart_of_darkness.statues";
+  const FLAG_RENT_ASKED = 1 << 0;
 
-  // Named cache ids. Filled from api.core in register().
-  const ID = {};
-
-  // Fixed tiles (validated against the cache clipping).
-  const TEOMAT_TILE = { x: 1454, y: 3176, z: 0 };
-  const PUB_ITZLA_TILE = { x: 1500, y: 3226, z: 1 };
-  const PUB_BED_TILE = { x: 1501, y: 3226, z: 1 };
-  const TOWER_ITZLA_TILE = { x: 1660, y: 3219, z: 0 };
-  const TOWER_JANUS_TILE = { x: 1656, y: 3219, z: 0 };
-  const TRIAL_ITZLA_TILE = { x: 1640, y: 3224, z: 1 };
-  const TRIAL_JANUS_TILE = { x: 1646, y: 3216, z: 1 };
-  const LOBBY_ITZLA_TILE = { x: 1638, y: 3219, z: 1 };
-  const LOBBY_JANUS_TILE = { x: 1656, y: 3219, z: 0 };
-  const ASCENDED_TILES = [
-    { x: 1640, y: 3220, z: 1 },
-    { x: 1642, y: 3223, z: 1 },
-    { x: 1644, y: 3222, z: 1 },
-  ];
-  const ACOLYTE_TILES = [
-    { x: 1636, y: 3220, z: 1 },
-    { x: 1638, y: 3220, z: 1 },
-    { x: 1642, y: 3219, z: 1 },
-    { x: 1644, y: 3219, z: 1 },
-  ];
-  const TEMPLE_ITZLA_TILE = { x: 1680, y: 3248, z: 0 };
-  const TEMPLE_LEAVE_TILE = { x: 1680, y: 3258, z: 0 };
-  const RUINS_ITZLA_TILE = { x: 1695, y: 9630, z: 2 };
-  const VULCAN_TILE = { x: 1698, y: 9633, z: 2 };
-  const ROCKS_TILE = { x: 1695, y: 9629, z: 2 };
-  const DOOR_TILE = { x: 1602, y: 9631, z: 0 };
-  const DOOR_ITZLA_TILE = { x: 1607, y: 9631, z: 0 };
-  const AMOX_TILE = { x: 1600, y: 9631, z: 0 };
-  const BANISH_TILE = { x: 1450, y: 3174, z: 0 };
-  const SCRAP_CHEST_TILE = { x: 1644, y: 3217, z: 1 };
-  const SCRAP_CHEST_OPEN_TILE = { x: 1646, y: 3216, z: 1 };
-  const TRIAL2_OFFSETS = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ];
-
-  const STATUE_SWAPS = [
-    { baseId: 54457, touchId: 54456, x: 1605, y: 9627 },
-    { baseId: 54463, touchId: 54462, x: 1608, y: 9624 },
-    { baseId: 54469, touchId: 54468, x: 1608, y: 9638 },
-    { baseId: 54475, touchId: 54474, x: 1605, y: 9635 },
-  ];
-  const TOUCH_ORDER = STATUE_SWAPS.map((entry) => entry.touchId);
-
-  const RUINS_ZONE = { minX: 1590, maxX: 1730, minY: 9590, maxY: 9680, levels: [0, 1, 2, 3] };
-  const TEMPLE_ZONE = { minX: 1666, maxX: 1698, minY: 3241, maxY: 3254, levels: [0] };
+  // Scenes at the captured tiles.
+  const TEOMAT_BOUNDS = [[1425, 1465, 3160, 3200, 0]];
+  const BAR_BOUNDS = [[1495, 1512, 3218, 3232, 0]];
+  const TEMPLE_BOUNDS = [[1672, 1700, 3238, 3258, 0]];
+  const LOBBY_TILE = [1637, 3221, 0];
+  const PALACE_TILE = [1681, 3135, 0];
 
   let quest;
-  const trackedNpcs = new WeakMap();
-  const waveNpcs = new WeakMap();
-  const comboPicks = new WeakMap();
-  const scrapChestPending = new WeakSet();
-  const amoxTalked = new WeakSet();
-  const pendingServiusReport = new WeakSet();
-  let objectsPlaced = false;
-  let statuesSwapped = false;
-  let bedSwapped = false;
-  let chestMoved = false;
+  const followers = new Map();
+  const Scenes = createQuestScenes(api, { onEnd: sceneEnded });
+  const units = {};
 
   // ==========================================================================
-  // State helpers
+  // State
   // ==========================================================================
 
+  const stage = (player) => quest.getStage(player);
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
-  const inventoryFull = (player) => player.getInventory().isFull();
+  const flags = (player) => Number(player.getAttribute(FLAGS_ATTRIBUTE)) || 0;
 
-  function flags(player) {
-    return Number(player.getAttribute(FLAGS_ATTRIBUTE)) || 0;
-  }
-
-  function hasFlag(player, flag) {
-    return (flags(player) & flag) !== 0;
-  }
-
-  function setFlag(player, flag) {
-    player.setAttribute(FLAGS_ATTRIBUTE, flags(player) | flag);
-  }
-
-  function hasAnyScrap(player) {
-    return held(player, ID.SCRAP_1) || held(player, ID.SCRAP_2) || held(player, ID.SCRAP_3);
-  }
-
-  function hasRobes(player) {
-    return ID.ROBES.every((itemId) => held(player, itemId));
-  }
-
-  function wearingRobes(player) {
-    const equipment = player.getEquipment();
-    return equipment.get(Equipment.HEAD_SLOT)?.getId?.() === ID.ROBE_HOOD
-      && equipment.get(Equipment.BODY_SLOT)?.getId?.() === ID.ROBE_TOP
-      && equipment.get(Equipment.LEG_SLOT)?.getId?.() === ID.ROBE_BOTTOM
-      && equipment.get(Equipment.FEET_SLOT)?.getId?.() === ID.ROBE_SANDALS;
+  function advance(player, value) {
+    if (stage(player) < value) quest.setStage(player, value);
+    syncSideVarbits(player);
   }
 
   function isQuestComplete(player, key) {
-    const request = { player, key };
-    pluginApi.emitCustomEvent("quest:is-complete", request);
+    const request = { player, key, complete: null };
+    api.emitCustomEvent("quest:is-complete", request);
     return request.complete === true;
   }
 
   function meetsRequirements(player) {
     const skills = player.getSkillManager();
-    return skills.getMaxLevel(Skill.MINING) >= 55
-      && skills.getMaxLevel(Skill.THIEVING) >= 48
-      && skills.getMaxLevel(Skill.SLAYER) >= 48
-      && skills.getMaxLevel(Skill.AGILITY) >= 46
-      && isQuestComplete(player, TWILIGHTS_PROMISE_KEY)
-      && isQuestComplete(player, CHILDREN_OF_THE_SUN_KEY);
+    return skills.getMaxLevel(Skill.MINING) >= 55 && skills.getMaxLevel(Skill.THIEVING) >= 48
+      && skills.getMaxLevel(Skill.SLAYER) >= 48 && skills.getMaxLevel(Skill.AGILITY) >= 46
+      && isQuestComplete(player, TWILIGHTS_PROMISE_KEY);
   }
 
-  function playTranscript(player, npcId, variant, select) {
-    return startTranscript(pluginApi, player, npcId, PAGE, variant, select);
+  function recruitBits(player) {
+    return Number(player.getAttribute(RECRUITS_ATTRIBUTE)) || 0;
   }
 
-  function giveItem(player, itemId, amount = 1) {
-    if (inventoryFull(player)) {
-      player.sendMessage("You need more inventory space.");
-      return false;
+  /** Which Itzla is out (vmq3_itzla_vis), as the capture sets it by stage. */
+  function itzlaVis(player) {
+    const current = stage(player);
+    if (current < S.BASEMENT) return 1;
+    if (current < S.WOKE) return 0;
+    if (current < S.ITZLA_LEFT) return 3;
+    if (current < S.CALLED) return 4;
+    if (current >= S.INITIATED && current < S.THOUGHTS) return 7;
+    if (current >= S.MINED && current < S.AMOXLIATL) return 8;
+    return 0;
+  }
+
+  function syncSideVarbits(player, override = null) {
+    const sender = player.getPacketSender();
+    if (stage(player) > 0 || isQuestComplete(player, TWILIGHTS_PROMISE_KEY)) sender.sendVarbit(ITZLA_VIS_VARBIT, override ?? itzlaVis(player));
+    const bits = recruitBits(player);
+    RECRUIT_VARBITS.forEach((varbit, index) => sender.sendVarbit(varbit, (bits >> index) & 1));
+    if (stage(player) >= S.BANISHED) sender.sendVarbit(SERVIUS_PALACE_VARBIT, quest.isComplete(player) ? 0 : 1);
+    units.tower?.syncVarbits(player);
+    units.ruins?.syncVarbits(player);
+  }
+
+  function variantSteps(variant) {
+    return loadTranscripts(api)?.[PAGE]?.variants?.[variant] ?? [];
+  }
+
+  function locate(steps, id) {
+    for (let index = 0; index < steps.length; index++) {
+      const step = steps[index];
+      if (step?.id === id) return { list: steps, index };
+      for (const nested of [step?.steps, ...(step?.options ?? []).map((option) => option.steps)]) {
+        const found = Array.isArray(nested) ? locate(nested, id) : null;
+        if (found) return found;
+      }
     }
-    player.getInventory().adds(itemId, amount);
-    return true;
+    return null;
   }
 
-  function advance(player, stage) {
-    if (quest.getStage(player) >= stage) return;
-    quest.setStage(player, stage);
-    ensureQuestNpcs(player);
+  function after(id) {
+    return (steps) => {
+      const found = locate(steps, id);
+      return found ? found.list.slice(found.index + 1) : [];
+    };
+  }
+
+  function play(player, npcId, variant, transform = null, npc = null) {
+    startTranscript(api, player, npcId, PAGE, variant, transform, npc);
+  }
+
+  /** A statement the player can't continue (a held moment under a fade). */
+  function heldStatement(player, text) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+      new ActionDialogue(0, { execute: () => StatementDialogue.send(player, text, false) })
+    ));
+  }
+
+  const shared = {
+    api, PAGE, S, NPC, Scenes, play, after, locate, variantSteps, advance, held, stage,
+    get quest() { return quest; },
+    syncSideVarbits, heldStatement, startFollowing, stopFollowing, follower,
+  };
+  units.tower = require("../hod/Tower.TheHeartOfDarkness")(shared);
+  units.ruins = require("../hod/Ruins.TheHeartOfDarkness")(shared);
+
+  // ==========================================================================
+  // Itzla, following
+  // ==========================================================================
+
+  function follower(player) {
+    const npc = followers.get(player);
+    return npc?.isRegistered?.() ? npc : null;
+  }
+
+  /** Itzla follows (14053, robed from stage 49) where the capture shows him behind the player. */
+  function startFollowing(player, at = null) {
+    if (follower(player)) return follower(player);
+    const tile = at ?? player.getLocation();
+    const npc = api.spawnNpc({ id: NPC.ITZLA_FOLLOWER, x: tile.getX?.() ?? tile[0], y: tile.getY?.() ?? tile[1], z: tile.getZ?.() ?? tile[2] ?? 0,
+      owner: player, ownerOnly: true, wanderRadius: 0 });
+    if (!npc) return null;
+    npc.__skipDefaultRespawn = true;
+    npc.setFollowing(player);
+    npc.setMobileInteraction(player);
+    followers.set(player, npc);
+    return npc;
+  }
+
+  function stopFollowing(player) {
+    const npc = followers.get(player);
+    followers.delete(player);
+    if (npc?.isRegistered?.()) api.removeNpc(npc);
+  }
+
+  /** Itzla follows from Janus's call until the trials, after them until the initiation, and below. */
+  function shouldFollow(player) {
+    const current = stage(player);
+    const where = player.getLocation();
+    const inTower = Scenes.get(player) || units.tower.inTrial(player);
+    if (inTower) return false;
+    if (current >= S.CALLED && current < S.TRIAL_1) return true;
+    if (current >= S.YIELDED && current < S.INITIATED) return where.getZ() === 0;
+    if (current >= S.THOUGHTS && current < S.MINED) return true;
+    return false;
+  }
+
+  function tickFollower(player) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    const want = shouldFollow(player);
+    const npc = follower(player);
+    if (want && !npc) startFollowing(player);
+    else if (!want && npc) stopFollowing(player);
+    else if (npc) {
+      const here = player.getLocation(), there = npc.getLocation();
+      if (here.getZ() !== there.getZ() || Math.max(Math.abs(here.getX() - there.getX()), Math.abs(here.getY() - there.getY())) > 12) {
+        npc.moveTo(new Location(here.getX(), here.getY(), here.getZ()));
+      }
+    }
   }
 
   // ==========================================================================
-  // Per-player quest NPC spawns
+  // Variants
   // ==========================================================================
 
-  function syncTracked(player, key, definition) {
-    const tracked = trackedNpcs.get(player) ?? new Map();
-    trackedNpcs.set(player, tracked);
-    const existing = tracked.get(key);
-    if (!definition) {
-      if (existing?.isRegistered?.()) pluginApi.removeNpc(existing);
-      if (existing) tracked.delete(key);
+  function selectVariant({ npcId, player, npc }) {
+    if (!player) return null;
+    const current = stage(player);
+    if (npcId === NPC.ITZLA_TEOMAT) {
+      if (!isQuestComplete(player, TWILIGHTS_PROMISE_KEY)) return null;
+      if (current === 0) return V.START;
+      if (current < S.QUEEN_LEFT) return V.QUEEN;
+      if (current < S.TO_GORGE) return V.AFTER_QUEEN;
+      if (current < S.BASEMENT) return V.AFTER_QUEEN_AGAIN;
       return null;
     }
-    const location = existing?.getLocation?.();
-    if (
-      existing?.isRegistered?.()
-      && existing.getId?.() === definition.id
-      && location?.getX?.() === definition.x
-      && location?.getY?.() === definition.y
-      && location?.getZ?.() === (definition.z ?? 0)
-    ) return existing;
-    if (existing?.isRegistered?.()) pluginApi.removeNpc(existing);
-    const npc = pluginApi.spawnNpc({ ...definition, owner: player, ownerOnly: true });
-    if (npc) tracked.set(key, npc);
-    return npc;
-  }
-
-  function removeTracked(player, key) {
-    return syncTracked(player, key, null);
-  }
-
-  function removeAllTracked(player) {
-    const tracked = trackedNpcs.get(player);
-    if (!tracked) return;
-    for (const npc of tracked.values()) if (npc?.isRegistered?.()) pluginApi.removeNpc(npc);
-    trackedNpcs.delete(player);
-  }
-
-  function itzlaSpawn(stage) {
-    if (stage >= STAGE.TRIAL4_FIGHT && stage < STAGE.TRIAL4_DONE) return null;
-    if (stage < STAGE.AT_PUB) return { ...TEOMAT_TILE };
-    if (stage < STAGE.AT_TOWER) return { ...PUB_ITZLA_TILE };
-    if (stage < STAGE.TRIAL1_KEY) return { ...TOWER_ITZLA_TILE };
-    if (stage < STAGE.TRIAL4_DONE) return { ...TRIAL_ITZLA_TILE };
-    if (stage < STAGE.ROBES) return { ...LOBBY_ITZLA_TILE };
-    if (stage < STAGE.DUTIES) return { ...TEMPLE_ITZLA_TILE };
-    if (stage < STAGE.BLOCKAGE_CLEARED) return { ...RUINS_ITZLA_TILE };
-    if (stage < STAGE.DOOR_OPEN) return { ...DOOR_ITZLA_TILE };
-    return null;
-  }
-
-  function janusSpawn(stage) {
-    if (stage < STAGE.RECRUITED_INFO || stage >= STAGE.ROBED) return null;
-    if (stage < STAGE.TRIAL1_KEY) return { ...TOWER_JANUS_TILE };
-    if (stage < STAGE.TRIAL4_DONE) return { ...TRIAL_JANUS_TILE };
-    return { ...LOBBY_JANUS_TILE };
-  }
-
-  function ensureQuestNpcs(player) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    const stage = quest.getStage(player);
-    if (quest.isComplete(player)) {
-      removeAllTracked(player);
-      return;
+    if (npcId === NPC.ITZLA || npcId === NPC.ITZLA_ROBED) return selectItzlaVariant(player, npc);
+    if (npcId === NPC.BARTENDER) return current >= S.TO_GORGE && current < S.WOKE ? V.BARTENDER : null;
+    if (npcId === NPC.SHOPKEEPER) {
+      if (current === S.TO_SHOP) return V.SHOP;
+      return current >= S.SHOP_AGREED && current < S.ITZLA_LEFT ? V.SHOP_AGAIN : null;
     }
-
-    const itzla = itzlaSpawn(stage);
-    syncTracked(player, "itzla", itzla ? { id: ID.ITZLA, ...itzla, wanderRadius: 0 } : null);
-
-    const janus = janusSpawn(stage);
-    syncTracked(player, "janus", janus ? { id: ID.JANUS, ...janus, wanderRadius: 0 } : null);
-
-    const trial1 = stage >= STAGE.TRIAL1_KEY && stage < STAGE.TRIAL1_DONE;
-    for (let index = 0; index < ASCENDED_TILES.length; index++) {
-      syncTracked(player, `ascended-${index}`, trial1
-        ? { id: ID.ASCENDED[index % ID.ASCENDED.length], ...ASCENDED_TILES[index], wanderRadius: 0 }
-        : null);
+    const recruit = RECRUITS.indexOf(npcId);
+    if (recruit >= 0) return [V.FELIUS, V.CARITTA, V.SERGIUS, V.NOVA][recruit];
+    if (npcId === NPC.JANUS) return selectJanusVariant(player);
+    if (npcId === NPC.FIDES) {
+      if (current < S.INITIATED) return null;
+      if (current === S.INITIATED) return V.FIDES_EARLY;
+      return current === S.THOUGHTS ? V.FIDES : V.FIDES_AGAIN;
     }
-
-    const trial3 = stage >= STAGE.TRIAL3_ACTIVE && stage < STAGE.TRIAL3_DONE;
-    for (let index = 0; index < ID.ACOLYTES.length; index++) {
-      syncTracked(player, `acolyte-${index}`, trial3
-        ? { id: ID.ACOLYTES[index], ...ACOLYTE_TILES[index], wanderRadius: 0 }
-        : null);
-    }
-
-    syncTracked(player, "vulcan", stage >= STAGE.RUINS_ENTERED && stage < STAGE.BLOCKAGE_CLEARED
-      ? { id: ID.VULCAN, ...VULCAN_TILE, wanderRadius: 0 }
-      : null);
-
-    syncTracked(player, "amox", stage >= STAGE.DOOR_OPEN && stage < STAGE.BANISHED
-      ? { id: ID.AMOX, ...AMOX_TILE, wanderRadius: 0 }
-      : null);
-
-    if (stage >= STAGE.BANISHED) pendingServiusReport.add(player);
-
-    if (stage === STAGE.TRIAL2_FIGHT && !hasWaves(player)) spawnWaves(player);
-    if (stage === STAGE.TRIAL4_FIGHT && !trackedNpcs.get(player)?.get("itzla-fight")?.isRegistered?.()) {
-      spawnItzlaFight(player);
-    }
-    placePuzzleObjects();
+    if (NPC.RUINS_GUARDS.includes(npcId) && current >= S.BELOW && current < S.RUINS) return V.RUINS_GUARD;
+    if (npcId === NPC.SERVIUS && current >= S.BANISHED) return V.SERVIUS;
+    return units.tower.selectVariant({ npcId, player, npc }) ?? units.ruins.selectVariant({ npcId, player, npc });
   }
 
-  // ==========================================================================
-  // World object swaps and quest-only objects
-  // ==========================================================================
-
-  function swapPubBed() {
-    if (bedSwapped) return;
-    bedSwapped = true;
-    RegionManager.loadMapFiles(PUB_BED_TILE.x, PUB_BED_TILE.y);
-    const objects = MapObjects.mapObjects.get(MapObjects.getHash(PUB_BED_TILE.x, PUB_BED_TILE.y, PUB_BED_TILE.z)) ?? [];
-    for (const object of [...objects]) {
-      if (object.getId() !== ID.BED_BASE) continue;
-      ObjectManager.deregister(object, true);
-      ObjectManager.register(
-        new GameObject(ID.BED_REST, new Location(PUB_BED_TILE.x, PUB_BED_TILE.y, PUB_BED_TILE.z),
-          object.getType?.() ?? 10, object.getFace?.() ?? 0, null),
-        true
-      );
-    }
+  function selectItzlaVariant(player, npc) {
+    const current = stage(player);
+    const tower = units.tower.selectVariant({ npcId: NPC.ITZLA, player, npc });
+    if (tower) return tower;
+    if (current < S.REASONS) return V.BED_AGAIN;
+    if (current < S.ITZLA_LEFT) return current === S.SHOP_AGREED ? V.REPORT : V.PUB_ITZLA;
+    if (current === S.ITZLA_LEFT) return V.TOWER;
+    if (current === S.TOWER) return V.TOWER_AGAIN;
+    if (current === S.MINGLED) return V.REPORT_AUGUR;
+    if (current < S.YIELDED) return null;
+    if (current === S.YIELDED) return V.ITZLA_LOBBY;
+    if (current === S.ROBES) return V.ITZLA_ROBES_FIRST;
+    if (current === S.ROBED) return V.ITZLA_ROBED;
+    if (current === S.INITIATED) return V.ITZLA_TEMPLE;
+    if (current === S.THOUGHTS) return V.ITZLA_TEMPLE_AGAIN;
+    if (current === S.BELOW) return V.ITZLA_BELOW;
+    return units.ruins.selectVariant({ npcId: NPC.ITZLA, player, npc });
   }
 
-  function moveScrapChest() {
-    if (chestMoved) return;
-    chestMoved = true;
-    RegionManager.loadMapFiles(SCRAP_CHEST_TILE.x, SCRAP_CHEST_TILE.y);
-    const objects = MapObjects.mapObjects.get(MapObjects.getHash(SCRAP_CHEST_TILE.x, SCRAP_CHEST_TILE.y, SCRAP_CHEST_TILE.z)) ?? [];
-    for (const object of [...objects]) {
-      if (object.getId() !== ID.CHEST_SCRAP) continue;
-      ObjectManager.deregister(object, true);
-      ObjectManager.register(
-        new GameObject(ID.CHEST_SCRAP,
-          new Location(SCRAP_CHEST_OPEN_TILE.x, SCRAP_CHEST_OPEN_TILE.y, SCRAP_CHEST_OPEN_TILE.z),
-          object.getType?.() ?? 10, object.getFace?.() ?? 0, null),
-        true
-      );
-    }
+  function selectJanusVariant(player) {
+    const current = stage(player);
+    if (current < S.CALLED) return null;
+    if (current === S.CALLED) return V.JANUS;
+    if (current < S.YIELDED) return current === S.TRIALS_EXPLAINED ? V.JANUS_AGAIN : V.JANUS_RESTART;
+    if (current === S.YIELDED) return V.JANUS_LOBBY;
+    if (current === S.ROBES) return V.JANUS_LOBBY_AGAIN;
+    return V.JANUS_ROBED;
   }
 
-  function swapStatues() {
-    if (statuesSwapped) return;
-    statuesSwapped = true;
-    for (const swap of STATUE_SWAPS) {
-      RegionManager.loadMapFiles(swap.x, swap.y);
-      const objects = MapObjects.mapObjects.get(MapObjects.getHash(swap.x, swap.y, 0)) ?? [];
-      for (const object of [...objects]) {
-        if (object.getId() !== swap.baseId) continue;
-        ObjectManager.deregister(object, true);
-        ObjectManager.register(
-          new GameObject(swap.touchId, new Location(swap.x, swap.y, 0), object.getType?.() ?? 10, object.getFace?.() ?? 0, null),
-          true
-        );
-      }
-    }
-  }
-
-  function placePuzzleObjects() {
-    if (objectsPlaced) return;
-    objectsPlaced = true;
-    ObjectManager.register(new GameObject(ID.ROCKS, new Location(ROCKS_TILE.x, ROCKS_TILE.y, ROCKS_TILE.z), 10, 0, null), true);
-    ObjectManager.register(new GameObject(ID.FROZEN_DOOR, new Location(DOOR_TILE.x, DOOR_TILE.y, DOOR_TILE.z), 0, 1, null), true);
-    moveScrapChest();
-  }
-
-  function removeFrozenDoor() {
-    const objects = MapObjects.mapObjects.get(MapObjects.getHash(DOOR_TILE.x, DOOR_TILE.y, DOOR_TILE.z)) ?? [];
-    for (const object of [...objects]) {
-      if (object.getId() !== ID.FROZEN_DOOR) continue;
-      ObjectManager.deregister(object, true);
-    }
-  }
-
-  // ==========================================================================
-  // Variant selection for the statically spawned quest NPCs
-  // ==========================================================================
-
-  function selectVariant({ npcId, player }) {
-    if (!player || !npcId) return null;
-    if (quest.isComplete(player)) return null;
-    if (npcId === ID.BARTENDER) return selectBartenderVariant(player);
-    if (npcId === ID.SHOPKEEPER) return selectShopkeeperVariant(player);
-    if (ID.RECRUITS.has(npcId)) return selectRecruitVariant(npcId, player);
-    if (npcId === ID.FIDES) return selectFidesVariant(player);
-    return null;
-  }
-
-  function selectBartenderVariant(player) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE.QUEEN_DONE || stage >= STAGE.AT_TOWER) return null;
-    return V.BARTENDER;
-  }
-
-  function selectShopkeeperVariant(player) {
-    const stage = quest.getStage(player);
-    if (stage === STAGE.AT_PUB) return V.SHOP;
-    if (stage === STAGE.SHOP_AGREED) return V.SHOP_AGAIN;
-    return null;
-  }
-
-  function selectRecruitVariant(npcId, player) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE.MINGLED || stage > STAGE.RECRUITED_INFO) return null;
-    if (npcId === ID.NOVA || npcId === ID.NOVA_2) {
-      setFlag(player, FLAG_AUGUR);
-      return V.NOVA;
-    }
-    if (npcId === ID.CARITTA) return V.CARITTA;
-    if (npcId === ID.FELIUS) return V.FELIUS;
-    if (npcId === ID.SERGIUS || npcId === ID.SERGIUS_2) return V.SERGIUS;
-    return null;
-  }
-
-  function selectFidesVariant(player) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE.INITIATED) return null;
-    if (stage === STAGE.INITIATED) {
-      ID.FIDES_TALKED.add(player);
-      advance(player, STAGE.DUTIES);
-      return V.FIDES;
-    }
-    return V.FIDES_AGAIN;
-  }
-
-  // ==========================================================================
-  // Prose conditions
-  // ==========================================================================
-
-  function traitorIndex(player) {
-    return Number(player.getAttribute(TRAITOR_ATTRIBUTE)) || 0;
-  }
-
-  function accusedIndex(player) {
-    const value = player.getAttribute(ACCUSED_ATTRIBUTE);
-    if (value === null || value === undefined) return -1;
-    const index = Number(value);
-    return Number.isFinite(index) ? index : -1;
-  }
-
-  /** The 8 traitor knowledge conditions per member (question text -> traitor answer). */
   function answerCondition(event) {
-    const { player, stepId } = event;
-    if (!player || !stepId) return null;
-    switch (stepId) {
-      case C.REQS_NO:
-        return !meetsRequirements(player);
-      case C.REQS_YES:
-        return meetsRequirements(player);
-      case C.BARTENDER_FIRST:
-        return !hasFlag(player, FLAG_RENTED);
-      case C.BARTENDER_AGAIN:
-        return hasFlag(player, FLAG_RENTED);
-      case C.BARTENDER_POOR:
-        return !held(player, ID.COINS, 30);
-      case C.PICKPOCKET_AGAIN:
-        return held(player, ID.TOWER_KEY);
-      case C.CHEST_AGAIN:
-        return held(player, ID.BOOK);
-      case C.POEM_OK:
-        return held(player, ID.BOOK);
-      case C.POEM_BAD:
-        return !held(player, ID.BOOK);
-      case C.ITZLA_NO_KEY:
-        return !held(player, ID.TOWER_KEY);
-      case C.ITZLA_KEY:
-        return held(player, ID.TOWER_KEY) && !held(player, ID.BOOK);
-      case C.ITZLA_BOOK:
-        return held(player, ID.BOOK) && !held(player, ID.POEM);
-      case C.SCRAP_CHEST:
-        return scrapChestPending.has(player);
-      case C.COMBO_WRONG:
-        return isComboComplete(player) && !isComboCorrect(player);
-      case C.COMBO_RIGHT:
-        return isComboCorrect(player);
-      case C.NO_BANDAGE:
-        return !held(player, ID.BANDAGES);
-      case C.BANDAGE:
-        return held(player, ID.BANDAGES);
-      case C.WAVES_DEAD:
-        return quest.getStage(player) >= STAGE.TRIAL2_DONE;
-      case C.JANUS_DURING_TRIAL:
-        return true;
-      case C.NO_SCRAPS:
-        return !hasAnyScrap(player) && !held(player, ID.NOTE);
-      case C.TWO_SCRAPS:
-        return held(player, ID.SCRAP_1) && held(player, ID.SCRAP_2) && !held(player, ID.NOTE);
-      case C.ACCUSED_INNOCENT:
-        return accusedIndex(player) !== traitorIndex(player);
-      case C.ACCUSED_TRAITOR:
-        return accusedIndex(player) === traitorIndex(player);
-      case C.FOLLOWED_A:
-      case C.FOLLOWED_B:
-      case C.FOLLOWED_C:
-      case C.FOLLOWED_D:
-        return true;
-      case C.NOT_FOLLOWED_A:
-      case C.NOT_FOLLOWED_B:
-      case C.NOT_FOLLOWED_C:
-      case C.NOT_FOLLOWED_D:
-        return false;
-      case C.HOLDING_ICON:
-      case C.WATER_STATUE:
-      case C.EARTH_STATUE:
-      case C.FIRE_STATUE:
-        return false;
-      case C.NO_ICON:
-        return true;
-      case C.PERILOUS_NO:
-        return !isQuestComplete(player, PERILOUS_MOONS_KEY);
-      case C.PERILOUS_YES:
-        return isQuestComplete(player, PERILOUS_MOONS_KEY);
-      case "DFyb_t":
-      case "rgz6SK":
-        return traitorIndex(player) !== 0;
-      case "eXupGb":
-      case "-Kj4rx":
-        return traitorIndex(player) === 0;
-      case "LX4ceH":
-      case "W981Jm":
-        return traitorIndex(player) !== 1;
-      case "rTbiB-":
-      case "eHBR0T":
-        return traitorIndex(player) === 1;
-      case "gA4fIP":
-      case "V9XCM3":
-        return traitorIndex(player) !== 2;
-      case "xfk_Av":
-      case "JQsjvj":
-        return traitorIndex(player) === 2;
-      case "ahMG0V":
-      case "Rp_XWa":
-        return traitorIndex(player) !== 3;
-      case "BoafeO":
-      case "F-P-z3":
-        return traitorIndex(player) === 3;
-      default:
-        return null;
+    if (!Array.isArray(event.pages) || !event.pages.some((page) => page?.page === PAGE)) return null;
+    const { player } = event;
+    switch (event.stepId) {
+      case "PeHbKF": return !meetsRequirements(player);
+      case "Ulgxje": return meetsRequirements(player);
+      case "MYC58N": return (flags(player) & FLAG_RENT_ASKED) === 0;
+      case "mIUNoa": return (flags(player) & FLAG_RENT_ASKED) !== 0;
+      case "pJ0LFe": return !held(player, ITEM.COINS, ROBE_FEE);
+      case "J075SG": case "B4AnfO": case "IouwJx": case "JSXbIW": return !!follower(player) || stage(player) >= S.CALLED;
+      case "pIohia": case "suZuGU": case "Cwnadj": case "AObNnk": return !follower(player) && stage(player) < S.CALLED;
+      case "KHOHrE": return !isQuestComplete(player, PERILOUS_MOONS_KEY);
+      case "MlylVV": return isQuestComplete(player, PERILOUS_MOONS_KEY);
+      default: return units.tower.answerCondition(event) ?? units.ruins.answerCondition(event);
     }
-  }
-
-  function comboPicksFor(player) {
-    return comboPicks.get(player) ?? [];
-  }
-
-  function isComboComplete(player) {
-    return comboPicksFor(player).length >= 3;
-  }
-
-  function isComboCorrect(player) {
-    const picks = comboPicksFor(player);
-    return picks.length >= 3 && COMBO_CORRECT.every((word, index) => picks[index] === word);
-  }
-
-  function recordComboChoice(player, option) {
-    const word = String(option ?? "").replace(/\.$/, "");
-    if (COMBO_STEP_1.has(word)) {
-      comboPicks.set(player, [word]);
-      return;
-    }
-    const picks = comboPicksFor(player);
-    if (!picks.length) return;
-    if (COMBO_STEP_2.has(word) && picks.length === 1) picks.push(word);
-    else if (COMBO_STEP_3.has(word) && picks.length === 2) picks.push(word);
-  }
-
-  /** The steps of a nested transcript condition (searched through steps and options). */
-  function findConditionSteps(steps, stepId) {
-    for (const step of steps ?? []) {
-      if (step.type === "condition" && step.id === stepId) return step.steps ?? [];
-      const nested = findConditionSteps(step.steps, stepId)
-        ?? (step.options ?? []).map((option) => findConditionSteps(option.steps, stepId)).find(Boolean);
-      if (nested) return nested;
-    }
-    return null;
-  }
-
-  /** The first choice step with an option from `words` (searched recursively). */
-  function findChoice(steps, words) {
-    const hasWord = (option) => words.has(String(option?.text ?? "").replace(/\.$/, ""));
-    for (const step of steps ?? []) {
-      if (step.type === "choice" && (step.options ?? []).some(hasWord)) return step;
-      const nested = findChoice(step.steps, words)
-        ?? (step.options ?? []).map((option) => findChoice(option.steps, words)).find(Boolean);
-      if (nested) return nested;
-    }
-    return null;
-  }
-
-  /**
-   * Repairs the passphrase menu the transcript dump mangled: only "Kualt." carries
-   * a second menu and only "Huka." a third, so the right "Chua Chaki Iknil" combo
-   * can never be picked. Rebuilds every word option with the full ladder and hangs
-   * the right-combo branch (buried inside the wrong-combo condition) off every
-   * third word, so its condition resolves when the third correct word is chosen.
-   */
-  function withComboMenus(steps) {
-    const top = findChoice(steps, COMBO_STEP_1);
-    const second = findChoice(steps, COMBO_STEP_2);
-    const third = findChoice(steps, COMBO_STEP_3);
-    const right = findConditionSteps(steps, C.COMBO_RIGHT);
-    if (!top || !second || !third || !right?.length) return steps;
-    const thirdStep = {
-      ...third,
-      options: (third.options ?? []).map((option) => ({
-        ...option,
-        steps: [{ type: "condition", id: C.COMBO_RIGHT, steps: right }],
-      })),
-    };
-    const secondStep = {
-      ...second,
-      options: (second.options ?? []).map((option) => ({
-        ...option,
-        steps: [{ ...thirdStep }],
-      })),
-    };
-    const rebuilt = {
-      ...top,
-      options: (top.options ?? []).map((option) => ({
-        ...option,
-        steps: [{ ...secondStep }],
-      })),
-    };
-    return steps.map((step) => (step === top ? rebuilt : step));
   }
 
   // ==========================================================================
-  // Dialogue hooks / actions / choices / condition events
+  // Dialogue events
   // ==========================================================================
 
-  function handleDialogueHook(event) {
-    const { player, npcId, hook } = event;
-    if (hook !== START_HOOK || npcId !== ID.ITZLA || !player) return;
-    if (quest.getStage(player) !== 0) return;
-    if (!meetsRequirements(player)) return;
-    player.setAttribute(FLAGS_ATTRIBUTE, 0);
-    player.setAttribute(TRAITOR_ATTRIBUTE, Math.floor(Math.random() * 4));
-    comboPicks.set(player, []);
-    advance(player, STAGE.STARTED);
+  function handleStartHook({ player, hook }) {
+    if (hook !== START_HOOK || stage(player) !== 0 || !meetsRequirements(player)) return;
+    player.setAttribute(STAGE_VERSION_ATTRIBUTE, STAGE_VERSION);
+    player.setAttribute(RECRUITS_ATTRIBUTE, 0);
+    units.tower.reset(player);
+    units.ruins.reset(player);
+    quest.setStage(player, S.STARTED);
+    syncSideVarbits(player);
+    player.sendMessage("You've started a new quest: <col=081190>The Heart of Darkness</col>");
   }
 
-  function handleDialogueAction(event) {
-    const { player, stepId } = event;
-    if (!player || !stepId) return;
-    switch (stepId) {
-      case A.PAY:
-        if (held(player, ID.COINS, 30)) {
-          player.getInventory().deleteNumber(ID.COINS, 30);
-          setFlag(player, FLAG_RENTED);
-          swapPubBed();
-        }
-        return;
-      case A.KEY:
-        if (!held(player, ID.TOWER_KEY) && !inventoryFull(player)) player.getInventory().adds(ID.TOWER_KEY, 1);
-        if (quest.getStage(player) === STAGE.TRIAL1_KEY) advance(player, STAGE.TRIAL1_BOOK);
-        return;
-      case A.RECEIVE_BOOK:
-        if (!held(player, ID.BOOK)) giveItem(player, ID.BOOK);
-        if (!held(player, ID.SCRAP_1)) giveItem(player, ID.SCRAP_1);
-        advance(player, STAGE.TRIAL1_POEM);
-        event.handled = true;
-        return;
-      case A.RECEIVE_POEM:
-        if (!held(player, ID.POEM)) giveItem(player, ID.POEM);
-        if (!held(player, ID.SCRAP_2)) giveItem(player, ID.SCRAP_2);
-        advance(player, STAGE.TRIAL1_SCRAP3);
-        event.handled = true;
-        return;
-      case A.RECEIVE_SCRAP3:
-        if (!held(player, ID.SCRAP_3)) giveItem(player, ID.SCRAP_3);
-        event.handled = true;
-        return;
-      case A.RECEIVE_NOTE:
-        for (const scrap of ID.SCRAPS) if (held(player, scrap)) player.getInventory().deleteNumber(scrap, 1);
-        if (!held(player, ID.NOTE)) giveItem(player, ID.NOTE);
-        advance(player, STAGE.TRIAL1_NOTE);
-        event.handled = true;
-        return;
-      case A.ROBES:
-      case A.ROBES_RECLAIM:
-        for (const itemId of ID.ROBES) if (!held(player, itemId)) giveItem(player, itemId);
-        advance(player, STAGE.ROBED);
-        return;
-      case A.NAGUA_APPEAR:
-        spawnNagua(player);
-        event.handled = true;
-        return;
-      case A.VULCAN_DIES:
-        removeTracked(player, "vulcan");
-        event.handled = true;
-        return;
-      case A.BANISH:
-        player.moveTo(new Location(BANISH_TILE.x, BANISH_TILE.y, BANISH_TILE.z));
-        advance(player, STAGE.BANISHED);
-        event.handled = true;
-        return;
-      default:
-        return;
-    }
-  }
-
-  function handleDialogueConditionEvent(event) {
-    const { player, stepId } = event;
-    if (!player || !stepId) return;
-    if (stepId === C.COMBO_RIGHT) {
-      comboPicks.set(player, []);
-      advance(player, STAGE.TRIAL1_DONE);
-      return;
-    }
-    if (stepId === C.COMBO_WRONG) {
-      comboPicks.set(player, []);
-      return;
-    }
-    if (stepId === C.ACCUSED_TRAITOR) {
-      const index = traitorIndex(player);
-      removeTracked(player, `acolyte-${index}`);
-      for (let slot = 0; slot < ID.ACOLYTES.length; slot++) removeTracked(player, `acolyte-${slot}`);
-      advance(player, STAGE.TRIAL3_DONE);
-      return;
-    }
-  }
-
-  function handleDialogueChoice(event) {
-    const { player, npcId, option } = event;
-    if (!player) return;
-    const stage = quest.getStage(player);
-    if (option === "I hear you can offer help to those in need." && npcId === ID.SHOPKEEPER) {
-      if (stage === STAGE.AT_PUB) advance(player, STAGE.SHOP_AGREED);
-      return;
-    }
-    if (npcId === ID.JANUS) {
-      if (option === "Yes! I'm ready." && stage === STAGE.TRIAL2_READY) {
-        spawnWaves(player);
-        advance(player, STAGE.TRIAL2_FIGHT);
-        return;
-      }
-      if (option === "Yes." && stage === STAGE.TRIAL1_DONE) {
-        advance(player, STAGE.TRIAL2_READY);
-        return;
-      }
-      if (option === "Yes." && stage === STAGE.TRIAL3_READY) {
-        advance(player, STAGE.TRIAL3_ACTIVE);
-        return;
-      }
-      if (option === "Yes." && stage === STAGE.TRIAL4_READY) {
-        spawnItzlaFight(player);
-        advance(player, STAGE.TRIAL4_FIGHT);
-        return;
-      }
-      recordComboChoice(player, option);
-      if (isComboComplete(player) && !isComboCorrect(player)) comboPicks.set(player, []);
-      return;
-    }
-    if ((option === "Yes." || option === "No.") && npcId === ID.SERVIUS && stage === STAGE.BANISHED) {
-      quest.complete(player);
-      pendingServiusReport.delete(player);
-    }
-  }
-
-  /** True while a dialogue or multi-option prompt owns the chatbox. */
-  function chatboxOpen(player) {
-    return player.getDialogueManager?.()?.isActive?.() === true
-      || pluginApi.core.MultiChatboxPrompt?.getPending?.(player) != null;
-  }
-
-  /**
-   * The two Perilous Moons conditional branches in the Servius report end with the
-   * dump's `end` marker, which closes the chatbox before the Final Dawn Yes./No.
-   * choice; the auto-played report would then restart from the top forever. Drop
-   * those branch terminators so the transcript flows on to the choice.
-   */
-  function withoutBranchEnds(steps) {
-    const strip = (list) => (list ?? [])
-      .filter((step) => step?.type !== "end")
-      .map((step) => {
-        const copy = { ...step };
-        if (Array.isArray(step.steps)) copy.steps = strip(step.steps);
-        if (Array.isArray(step.options)) {
-          copy.options = step.options.map((option) => ({ ...option, steps: strip(option.steps) }));
-        }
-        return copy;
-      });
-    return strip(steps);
-  }
-
-  /**
-   * The shared Servius (12652) is owned by The Final Dawn's Talk-to hook, so the
-   * completion report is auto-played once the chatbox is clear and retried if dismissed.
-   */
-  function handlePlayerProcess({ player }) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    if (!pendingServiusReport.has(player)) return;
-    if (quest.isComplete(player) || quest.getStage(player) < STAGE.BANISHED) {
-      pendingServiusReport.delete(player);
-      return;
-    }
-    if (chatboxOpen(player)) return;
-    startTranscript(pluginApi, player, ID.SERVIUS, PAGE, V.SERVIUS, withoutBranchEnds);
-  }
-
-  /** Arms the report the moment the quest reaches BANISHED, whatever set the stage. */
-  function handleStageChanged({ player, key, stage }) {
-    if (!player || player.isPlayerBot?.() === true || key !== QUEST_KEY) return;
-    if (stage >= STAGE.COMPLETE) pendingServiusReport.delete(player);
-    else if (stage >= STAGE.BANISHED) pendingServiusReport.add(player);
-  }
-
-  // ==========================================================================
-  // NPC talk routing for the quest's own spawns
-  // ==========================================================================
-
-  function handleNpcTalk(event) {
+  function handleLine(event) {
+    if (!isQuestEvent(event)) return;
     const { player, npcId } = event;
-    if (!player || !npcId) return;
-    const action = event.definition?.getActions?.()[event.clickType - 1];
-    const clickType = event.clickType;
-    if (npcId === ID.AMOX && clickType === 2) {
-      if (quest.getStage(player) === STAGE.DOOR_OPEN && !amoxTalked.has(player)) {
-        amoxTalked.add(player);
-        playTranscript(player, ID.AMOX, V.AMOX);
-      }
-      return;
-    }
-    if (action !== "Talk-to") return;
-    if (!ID.OWN_TALK.has(npcId)) return;
-    if (event.npc?.getOwner?.() !== player) return;
-    if (npcId === ID.ITZLA) itzlaTalk(player);
-    else if (npcId === ID.ITZLA_LOBBY) playTranscript(player, npcId, V.ITZLA_LOBBY);
-    else if (npcId === ID.JANUS) janusTalk(player);
-    else if (npcId === ID.VULCAN) playTranscript(player, npcId, V.VULCAN);
-    else if (ID.ASCENDED.includes(npcId)) ascendedTalk(player, npcId);
-    else if (ID.ACOLYTES.includes(npcId)) memberTalk(player, npcId);
-    event.handled = true;
+    const text = event.step?.text ?? event.step?.player ?? event.step?.npc ?? event.text;
+    const at = (line, minStage, maxStage, action, when = "before") => {
+      if (text !== line) return;
+      const previous = event[when];
+      event[when] = () => {
+        previous?.();
+        const now = stage(player);
+        if (now >= minStage && now <= maxStage) action();
+      };
+    };
+    at(LINE.PLAN, S.STARTED, S.STARTED, () => advance(player, S.PLAN));
+    at(LINE.QUEEN_ARRIVES, S.PLAN, S.PLAN, () => beginQueen(player), "after");
+    at(LINE.TO_GORGE, S.QUEEN_LEFT, S.QUEEN_LEFT, () => advance(player, S.TO_GORGE));
+    at(LINE.BASEMENT, S.TO_GORGE, S.TO_GORGE, () => basementAsked(player));
+    at(LINE.BASEMENT_AGAIN, S.TO_GORGE, S.TO_GORGE, () => basementAsked(player));
+    at(LINE.REASONS, S.WOKE, S.WOKE, () => advance(player, S.REASONS));
+    at(LINE.TO_SHOP, S.REASONS, S.REASONS, () => advance(player, S.TO_SHOP), "after");
+    at(LINE.SHOP_AGREED, S.TO_SHOP, S.TO_SHOP, () => advance(player, S.SHOP_AGREED));
+    at(LINE.TOWER, S.ITZLA_LEFT, S.ITZLA_LEFT, () => advance(player, S.TOWER), "after");
+    LINE.RECRUITS.forEach((line, index) => {
+      if (text === line && RECRUITS[index] === npcId) at(line, S.TOWER, S.MINGLED, () => recruitTalked(player, index));
+    });
+    at(LINE.CALLED, S.MINGLED, S.MINGLED, () => {
+      advance(player, S.CALLED);
+      startFollowing(player, event.npc?.getLocation?.());
+    });
+    if (npcId === NPC.JANUS) at(LINE.TRIALS_EXPLAINED, S.CALLED, S.CALLED, () => advance(player, S.TRIALS_EXPLAINED));
+    at(LINE.ROBES, S.YIELDED, S.YIELDED, () => advance(player, S.ROBES));
+    at(LINE.THOUGHTS, S.INITIATED, S.INITIATED, () => advance(player, S.THOUGHTS));
+    if (npcId === NPC.FIDES) at(LINE.BELOW, S.THOUGHTS, S.THOUGHTS, () => advance(player, S.BELOW));
+    at(LINE.COMPLETE, S.BANISHED, S.BANISHED, () => quest.complete(player), 'after');
+    units.tower.handleLine(event);
+    units.ruins.handleLine(event);
   }
 
-  function itzlaTalk(player) {
-    const stage = quest.getStage(player);
-    if (stage === 0) return playTranscript(player, ID.ITZLA, V.START);
-    if (stage === STAGE.STARTED) {
-      playTranscript(player, ID.ITZLA, V.QUEEN);
-      advance(player, STAGE.QUEEN_DONE);
-      return;
-    }
-    if (stage === STAGE.QUEEN_DONE) {
-      if (!hasFlag(player, FLAG_PUB_TOLD)) {
-        setFlag(player, FLAG_PUB_TOLD);
-        playTranscript(player, ID.ITZLA, V.AFTER_MEETING);
-      } else {
-        playTranscript(player, ID.ITZLA, V.AFTER_MEETING_AGAIN);
-      }
-      return;
-    }
-    if (stage < STAGE.AT_TOWER) {
-      if (stage === STAGE.SHOP_AGREED) {
-        playTranscript(player, ID.ITZLA, V.REPORT);
-        advance(player, STAGE.AT_TOWER);
+  function basementAsked(player) {
+    player.setAttribute(FLAGS_ATTRIBUTE, flags(player) | FLAG_RENT_ASKED);
+    advance(player, S.BASEMENT);
+  }
+
+  function recruitTalked(player, index) {
+    const bits = recruitBits(player) | (1 << index);
+    player.setAttribute(RECRUITS_ATTRIBUTE, bits);
+    if (bits === 0b1111) advance(player, S.MINGLED);
+    syncSideVarbits(player);
+  }
+
+  function isQuestEvent(event) {
+    return Array.isArray(event.pages) && event.pages.some((page) => page?.page === PAGE);
+  }
+
+  function handleAction(event) {
+    if (!isQuestEvent(event)) return;
+    const { player, stepId } = event;
+    switch (stepId) {
+      case STEP.QUEEN_BEGINS:
+        event.handled = true;
         return;
-      }
-      return playTranscript(player, ID.ITZLA, V.PUB_ITZLA);
+      case STEP.QUEEN_ENDS:
+        event.handled = true;
+        event.end = true;
+        endQueen(player);
+        return;
+      case STEP.PAY:
+        event.handled = true;
+        if (!held(player, ITEM.COINS, ROBE_FEE) || stage(player) !== S.BASEMENT) { event.end = true; return; }
+        player.getInventory().deleteNumber(ITEM.COINS, ROBE_FEE);
+        advance(player, S.PAID);
+        event.handled = true;
+        event.box = { items: [ITEM.COINS_BOX] };
+        return;
+      case STEP.SLEEP:
+        event.handled = true;
+        event.end = true;
+        sleep(player);
+        return;
+      case STEP.DEPARTS:
+        event.handled = true;
+        event.end = true;
+        itzlaDeparts(player);
+        return;
+      case STEP.ROBES:
+      case STEP.ROBES_RECLAIM:
+        event.handled = true;
+        event.end = true;
+        takeRobes(player, stepId === STEP.ROBES);
+        return;
+      case STEP.METZLI_WALKS:
+      case STEP.TWINS_WALK:
+        event.handled = true;
+        event.end = true;
+        initiationCue(player, stepId);
+        return;
+      default:
+        units.tower.handleAction(event);
+        units.ruins.handleAction(event);
     }
-    if (stage < STAGE.MINGLED) {
-      playTranscript(player, ID.ITZLA, V.TOWER);
-      advance(player, STAGE.MINGLED);
-      return;
-    }
-    if (stage === STAGE.MINGLED) {
-      if (hasFlag(player, FLAG_AUGUR)) {
-        playTranscript(player, ID.ITZLA, V.REPORT_AUGUR);
-        advance(player, STAGE.RECRUITED_INFO);
-      } else {
-        playTranscript(player, ID.ITZLA, V.TOWER_AGAIN);
-      }
-      return;
-    }
-    if (stage < STAGE.TRIAL1_KEY) return playTranscript(player, ID.ITZLA, V.TOWER_AGAIN);
-    if (stage < STAGE.TRIAL1_DONE) {
-      if (held(player, ID.NOTE)) {
-        playTranscript(player, ID.ITZLA, V.ITZLA_NOTE);
-      } else if (held(player, ID.BOOK)) {
-        playTranscript(player, ID.ITZLA, V.ITZLA_POEM);
-      } else {
-        playTranscript(player, ID.ITZLA, V.ITZLA_POEM_PRE);
-      }
-      return;
-    }
-    if (stage < STAGE.TRIAL2_DONE) return playTranscript(player, ID.ITZLA, V.ITZLA_T2);
-    if (stage < STAGE.TRIAL3_ACTIVE) return playTranscript(player, ID.ITZLA, V.ITZLA_T2_AFTER);
-    if (stage < STAGE.TRIAL4_READY) return playTranscript(player, ID.ITZLA, V.T3_ITZLA);
-    if (stage < STAGE.TRIAL4_FIGHT) return playTranscript(player, ID.ITZLA, V.T3_ITZLA_EXEC);
-    if (stage < STAGE.LOBBY) return playTranscript(player, ID.ITZLA, V.ITZLA_LOBBY);
-    if (stage < STAGE.ROBES) return playTranscript(player, ID.ITZLA, V.ITZLA_AFTER_JANUS);
-    if (stage < STAGE.INITIATED) return playTranscript(player, ID.ITZLA, V.ITZLA_ROBES);
-    if (stage === STAGE.INITIATED) return playTranscript(player, ID.ITZLA, V.ITZLA_AFTER_INIT);
-    if (stage === STAGE.DUTIES) {
-      return playTranscript(player, ID.ITZLA, ID.FIDES_TALKED.has(player) ? V.ITZLA_FIDES_AFTER : V.ITZLA_BEFORE_FIDES);
-    }
-    if (stage < STAGE.BLOCKAGE_CLEARED) return undefined;
-    if (stage === STAGE.BLOCKAGE_CLEARED) {
-      playTranscript(player, ID.ITZLA, V.ITZLA_DOOR);
-      advance(player, STAGE.DOOR_MET);
-      return;
-    }
-    if (stage === STAGE.DOOR_MET) {
-      playTranscript(player, ID.ITZLA, V.ITZLA_WORDS);
-      advance(player, STAGE.PUZZLE);
-      swapStatues();
-      return;
-    }
-    if (stage < STAGE.DOOR_OPEN) return playTranscript(player, ID.ITZLA, V.ITZLA_WORDS);
-    return undefined;
   }
 
-  function janusTalk(player) {
-    const stage = quest.getStage(player);
-    if (stage >= STAGE.RECRUITED_INFO && stage < STAGE.TRIAL1_KEY) {
-      playTranscript(player, ID.JANUS, V.JANUS_INTRO);
-      advance(player, STAGE.TRIAL1_KEY);
-      return;
-    }
-    if (stage < STAGE.TRIAL1_NOTE) return playTranscript(player, ID.JANUS, V.JANUS_FIRST);
-    if (stage < STAGE.TRIAL1_DONE) return playTranscript(player, ID.JANUS, V.JANUS_NOTE, withComboMenus);
-    if (stage === STAGE.TRIAL1_DONE) return playTranscript(player, ID.JANUS, V.JANUS_AFTER_T1);
-    if (stage < STAGE.TRIAL2_DONE) return playTranscript(player, ID.JANUS, V.TRIAL2);
-    if (stage === STAGE.TRIAL2_DONE) {
-      playTranscript(player, ID.JANUS, V.T2_AFTER);
-      advance(player, STAGE.TRIAL3_READY);
-      return;
-    }
-    if (stage === STAGE.TRIAL3_READY || stage === STAGE.TRIAL3_ACTIVE) {
-      return playTranscript(player, ID.JANUS, V.TRIAL3);
-    }
-    if (stage === STAGE.TRIAL4_READY) return playTranscript(player, ID.JANUS, V.TRIAL4);
-    if (stage === STAGE.TRIAL4_FIGHT) return playTranscript(player, ID.JANUS, V.JANUS_LOBBY_AGAIN);
-    if (stage === STAGE.TRIAL4_DONE) {
-      playTranscript(player, ID.JANUS, V.JANUS_AFTER_T4);
-      advance(player, STAGE.LOBBY);
-      return;
-    }
-    if (stage < STAGE.ROBES) {
-      playTranscript(player, ID.JANUS, V.JANUS_LOBBY);
-      advance(player, STAGE.ROBES);
-      return;
-    }
-    return playTranscript(player, ID.JANUS, hasRobes(player) ? V.JANUS_ROBES : V.JANUS_LOBBY_AGAIN);
+  // ==========================================================================
+  // The Queen's visit
+  // ==========================================================================
+
+  function beginQueen(player) {
+    if (Scenes.get(player)) return;
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true, true);
+    Scenes.later(player, 2, () => {
+      const scene = Scenes.open(player, "queen", TEOMAT_BOUNDS);
+      Scenes.controls(player, true, true);
+      player.moveTo(new Location(1440, 3184, 0));
+      Scenes.face(player, [1440, 3183]);
+      Scenes.actor(scene, NPC.KUALTI[0], [1439, 3178], [1441, 3178]);
+      Scenes.actor(scene, NPC.KUALTI[1], [1440, 3173], [1440, 3175]);
+      Scenes.actor(scene, NPC.KUALTI[2], [1442, 3173], [1442, 3175]);
+      Scenes.actor(scene, NPC.QUEEN, [1441, 3174], [1441, 3176]);
+      Scenes.actor(scene, NPC.KUALTI[3], [1442, 3178], [1440, 3178]);
+      scene.itzla = Scenes.actor(scene, NPC.ITZLA_QUEEN, [1441, 3183], [1441, 3181]);
+      Scenes.later(scene, 1, () => Scenes.camera(player, [1434, 3171, 740], [1437, 3173, 739]));
+      Scenes.later(scene, 2, () => {
+        Scenes.fade(player, false);
+        scene.itzla?.getMovementQueue().addSteps(new Location(1441, 3176, 0));
+      });
+      Scenes.later(scene, 10, () => play(player, NPC.ITZLA_TEOMAT, V.QUEEN, after(STEP.QUEEN_BEGINS)));
+    });
   }
 
-  function ascendedTalk(player, npcId) {
-    const stage = quest.getStage(player);
-    if (stage >= STAGE.TRIAL1_DONE) return playTranscript(player, npcId, V.EMISSARY_AFTER);
-    if (held(player, ID.TOWER_KEY)) return playTranscript(player, npcId, V.EMISSARY_BEFORE);
-    playTranscript(player, npcId, V.PICKPOCKET);
+  function endQueen(player) {
+    const scene = Scenes.get(player);
+    advance(player, S.QUEEN_LEFT);
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    scene?.itzla?.getMovementQueue().addSteps(new Location(1441, 3177, 0));
+    Scenes.later(scene ?? player, 3, () => {
+      Scenes.end(player, false);
+      player.moveTo(new Location(1453, 3173, 0));
+      Scenes.face(player, [1454, 3173]);
+      Scenes.controls(player, true, true);
+      Scenes.later(player, 2, () => Scenes.fade(player, false));
+      Scenes.later(player, 4, () => {
+        Scenes.controls(player, false);
+        Scenes.closeFade(player);
+        play(player, NPC.ITZLA_TEOMAT, V.AFTER_QUEEN);
+      });
+    });
   }
 
-  function memberTalk(player, npcId) {
-    if (npcId === ID.TENOCH) return playTranscript(player, npcId, V.TENOCH);
-    if (npcId === ID.SILIA) return playTranscript(player, npcId, V.SILIA);
-    if (npcId === ID.ADRIUS) return playTranscript(player, npcId, V.ADRIUS);
-    return playTranscript(player, npcId, V.ELEUIA);
-  }
+  // ==========================================================================
+  // The Windbreaker and the shopkeeper
+  // ==========================================================================
 
-  function accuse(player, index) {
-    if (quest.getStage(player) !== STAGE.TRIAL3_ACTIVE) return false;
-    player.setAttribute(ACCUSED_ATTRIBUTE, index);
-    playTranscript(player, ID.JANUS, V.CHOOSE);
+  function restInBed(event) {
+    const id = event.objectId ?? event.definition?.id;
+    if (id !== BED_ID && id !== BED_MULTI_ID) return false;
+    const { player } = event;
+    event.handled = true;
+    if (stage(player) !== S.PAID) return true;
+    play(player, NPC.ITZLA, V.BED);
     return true;
   }
 
-  function chooseTenoch({ player }) {
-    return accuse(player, 0);
+  /** As captured: the statement and fade out, Itzla in the room four ticks on, then the fade back. */
+  function sleep(player) {
+    const text = "You lie down on the bed and quickly fall asleep.";
+    heldStatement(player, text);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true);
+    Scenes.later(player, 4, () => advance(player, S.WOKE));
+    Scenes.later(player, 6, () => {
+      Scenes.fade(player, false);
+      Scenes.controls(player, false);
+      play(player, NPC.ITZLA, V.BED, (steps) => [{ type: "message", text, id: "hod-slept" }, ...after(STEP.SLEEP)(steps)]);
+    });
+    Scenes.later(player, 8, () => Scenes.closeFade(player));
   }
 
-  function chooseSilia({ player }) {
-    return accuse(player, 1);
+  /** "Itzla departs.": fade out, he's at the tower three ticks on, and the fade back. */
+  function itzlaDeparts(player) {
+    const text = "Itzla departs.";
+    heldStatement(player, text);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true);
+    Scenes.later(player, 3, () => advance(player, S.ITZLA_LEFT));
+    Scenes.later(player, 4, () => {
+      Scenes.fade(player, false);
+      Scenes.controls(player, false);
+      play(player, NPC.ITZLA, V.REPORT, () => [{ type: "message", text, id: "hod-departed" }]);
+    });
+    Scenes.later(player, 7, () => Scenes.closeFade(player));
   }
 
-  function chooseAdrius({ player }) {
-    return accuse(player, 2);
-  }
-
-  function chooseEleuia({ player }) {
-    return accuse(player, 3);
-  }
-
-  // ==========================================================================
-  // Combat spawns
-  // ==========================================================================
-
-  function spawnNpcAt(player, key, id, x, y, z) {
-    const tracked = trackedNpcs.get(player) ?? new Map();
-    trackedNpcs.set(player, tracked);
-    const npc = pluginApi.spawnNpc({ id, x, y, z, wanderRadius: 0, owner: player, ownerOnly: true });
-    if (npc) tracked.set(key, npc);
-    return npc;
-  }
-
-  function spawnWaves(player) {
-    removeWaves(player);
-    const here = player.getLocation();
-    const list = [];
-    for (let index = 0; index < TRIAL2_OFFSETS.length; index++) {
-      const id = index % 2 === 0 ? ID.BRAWLER : ID.CONJURER;
-      const [dx, dy] = TRIAL2_OFFSETS[index];
-      const npc = spawnNpcAt(player, `wave-${index}`, id, here.getX() + dx, here.getY() + dy, here.getZ());
-      if (npc) list.push(npc);
-    }
-    waveNpcs.set(player, list);
-  }
-
-  function removeWaves(player) {
-    const list = waveNpcs.get(player);
-    if (Array.isArray(list)) for (const npc of list) if (npc?.isRegistered?.()) pluginApi.removeNpc(npc);
-    waveNpcs.delete(player);
-    const tracked = trackedNpcs.get(player);
-    if (tracked) {
-      for (const key of [...tracked.keys()]) if (key.startsWith("wave-")) removeTracked(player, key);
+  function handleStatementBoxes(event) {
+    if (event.stepId === "hod-slept" || event.stepId === "hod-departed") {
+      event.handled = true;
+      event.box = { statement: true };
     }
   }
 
-  function hasWaves(player) {
-    const list = waveNpcs.get(player);
-    return Array.isArray(list) && list.some((npc) => npc?.isRegistered?.());
+  // ==========================================================================
+  // The tower lobby and the robes
+  // ==========================================================================
+
+  function climbTower(event) {
+    const id = event.objectId ?? event.definition?.id;
+    if (id !== TOWER_STAIRS_ID) return false;
+    const { player } = event;
+    const current = stage(player);
+    if (current < S.CALLED || current >= S.COMPLETE) return false;
+    event.handled = true;
+    if (current < S.TRIALS_EXPLAINED) {
+      play(player, NPC.JANUS, V.JANUS_STAIRS_EARLY);
+      return true;
+    }
+    if (current >= S.YIELDED) {
+      if (current >= S.BANISHED) play(player, NPC.JANUS, V.TOWER_AGAIN_DONE);
+      else play(player, NPC.JANUS, V.STAIRS_DONE);
+      return true;
+    }
+    stopFollowing(player);
+    units.tower.climb(player);
+    return true;
   }
 
-  function removeWave(player, npc) {
-    const list = waveNpcs.get(player);
-    if (!Array.isArray(list)) return;
-    const index = list.indexOf(npc);
-    if (index >= 0) list.splice(index, 1);
-    const tracked = trackedNpcs.get(player);
-    if (tracked) {
-      for (const [key, value] of [...tracked.entries()]) {
-        if (value === npc) tracked.delete(key);
+  function claimClimb(event) {
+    if (climbTower(event) || descendRuins(event)) event.handled = true;
+  }
+
+  function wearsRobes(player) {
+    const equipment = player.getEquipment?.();
+    const worn = new Set();
+    for (const item of equipment?.getItems?.() ?? []) if (item) worn.add(item.getId());
+    return ITEM.ROBES.every((id) => worn.has(id));
+  }
+
+  function missingRobes(player) {
+    const worn = new Set((player.getEquipment?.()?.getItems?.() ?? []).filter(Boolean).map(item => item.getId()));
+    return ITEM.ROBES.filter(id => !worn.has(id) && !held(player, id));
+  }
+
+  function openRobesChest(event) {
+    const id = event.objectId ?? event.definition?.id;
+    if (id !== ROBES_CHEST_ID) return false;
+    const { player } = event;
+    const current = stage(player);
+    event.handled = true;
+    if (current < S.ROBES) {
+      play(player, NPC.JANUS, V.JANUS_CHEST);
+      return true;
+    }
+    if (!missingRobes(player).length) {
+      play(player, NPC.JANUS, V.CHEST_EMPTY);
+      return true;
+    }
+    const missing = missingRobes(player).length;
+    if (player.getInventory().getFreeSlots() < missing) {
+      play(player, NPC.JANUS, V.CHEST_FULL);
+      return true;
+    }
+    player.performAnimation(new Animation(536));
+    Scenes.later(player, 1, () => play(player, NPC.JANUS, current === S.ROBES ? V.CHEST : V.CHEST_RECLAIM));
+    return true;
+  }
+
+  /** The robes: the box, a fade while Itzla changes, the robes and the box again. */
+  function takeRobes(player, first) {
+    const text = first
+      ? "You search the chest and find some cultist robes for yourself and Itzla. Itzla puts his on."
+      : "You search the chest and find some cultist robes.";
+    const give = () => { for (const itemId of missingRobes(player)) player.getInventory().adds(itemId, 1); };
+    if (!first || stage(player) !== S.ROBES) {
+      give();
+      play(player, NPC.JANUS, V.CHEST_RECLAIM, () => [{ type: "message", text, id: "hod-robes" }]);
+      return;
+    }
+    play(player, NPC.JANUS, V.CHEST, () => [{ type: "message", text, id: "hod-robes-held" }]);
+    Scenes.fade(player, true);
+    Scenes.later(player, 3, () => {
+      give();
+      advance(player, S.ROBED);
+      stopFollowing(player);
+      Scenes.fade(player, false);
+      play(player, NPC.JANUS, V.CHEST, () => [{ type: "message", text, id: "hod-robes" }]);
+    });
+    Scenes.later(player, 5, () => Scenes.closeFade(player));
+  }
+
+  function handleRobeBoxes(event) {
+    if (event.stepId === "hod-robes" || event.stepId === "hod-robes-held") {
+      event.handled = true;
+      event.box = { items: [ITEM.ROBES[0], ITEM.ROBES[1]] };
+      if (event.stepId === "hod-robes-held") event.end = true;
+    }
+  }
+
+  // ==========================================================================
+  // The initiation
+  // ==========================================================================
+
+  function talkToFides(event) {
+    if (event.npcId !== NPC.FIDES) return false;
+    const { player } = event;
+    if (stage(player) !== S.ROBED) return false;
+    event.handled = true;
+    if (!wearsRobes(player)) {
+      play(player, NPC.TEMPLE_GUARDS[0], V.NO_ROBES);
+      return true;
+    }
+    beginInitiation(player);
+    return true;
+  }
+
+  function beginInitiation(player) {
+    if (Scenes.get(player)) return;
+    stopFollowing(player);
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true, true);
+    Scenes.later(player, 2, () => {
+      const scene = Scenes.open(player, "initiation", TEMPLE_BOUNDS);
+      Scenes.controls(player, true, true);
+      syncSideVarbits(player, 6);
+      player.moveTo(new Location(1691, 3248, 0));
+      Scenes.face(player, [1690, 3248]);
+      const guards = [
+        [NPC.TEMPLE_ACTOR_GUARDS[0], [1681, 3244], [1683, 3244], [1686, 3244]],
+        [NPC.TEMPLE_ACTOR_GUARDS[1], [1681, 3251], [1683, 3251], [1686, 3251]],
+        [NPC.TEMPLE_ACTOR_GUARDS[3], [1691, 3245], [1689, 3245], [1686, 3245]],
+        [NPC.TEMPLE_ACTOR_GUARDS[2], [1691, 3250], [1689, 3250], [1686, 3250]],
+      ].map(([id, tile, face, turn]) => ({ npc: Scenes.actor(scene, id, tile, face), turn }));
+      scene.kneelers = guards.map((guard) => guard.npc);
+      scene.sergius = Scenes.actor(scene, NPC.SERGIUS_JOINED, [1687, 3246], [1685, 3246]);
+      scene.nova = Scenes.actor(scene, NPC.NOVA_JOINED, [1687, 3249], [1685, 3249]);
+      scene.fides = Scenes.actor(scene, NPC.FIDES_ACTOR, [1684, 3247], [1686, 3247]);
+      scene.itzla = Scenes.actor(scene, NPC.ITZLA_CULTIST_ACTOR, [1691, 3247], [1689, 3247]);
+      Scenes.later(scene, 1, () => {
+        for (const guard of guards) if (guard.npc) Scenes.face(guard.npc, guard.turn);
+        Scenes.camera(player, [1693, 3245, 520], [1686, 3247, 519]);
+      });
+      Scenes.later(scene, 2, () => {
+        Scenes.fade(player, false);
+        scene.itzla?.getMovementQueue().addSteps(new Location(1687, 3247, 0));
+      });
+      Scenes.later(scene, 7, () => play(player, NPC.FIDES, V.INITIATION));
+    });
+  }
+
+  /** Metzli walks on; then Ennius and Furia, and everyone kneels (11554), the player too. */
+  function initiationCue(player, stepId) {
+    const scene = Scenes.get(player);
+    if (!scene) return;
+    Scenes.hold(player);
+    const walk = (npc, path) => { for (const [x, y] of path) npc?.getMovementQueue().addSteps(new Location(x, y, 0)); };
+    if (stepId === STEP.METZLI_WALKS) {
+      scene.metzli = Scenes.actor(scene, NPC.METZLI_ACTOR, [1678, 3246], [1678, 3244]);
+      walk(scene.fides, [[1681, 3247], [1681, 3249]]);
+      Scenes.later(scene, 2, () => walk(scene.metzli, [[1678, 3245], [1681, 3245], [1681, 3247], [1684, 3247]]));
+      Scenes.later(scene, 6, () => scene.fides && Scenes.face(scene.fides, [1684, 3247]));
+      Scenes.later(scene, 14, () => play(player, NPC.FIDES, V.INITIATION, after(STEP.METZLI_WALKS)));
+      return;
+    }
+    const kneel = (npc, delay) => npc?.performAnimation(new Animation(11554, delay));
+    for (const npc of scene.kneelers) kneel(npc, 230);
+    kneel(scene.fides, 210);
+    scene.furia = Scenes.actor(scene, NPC.FURIA_ACTOR, [1678, 3246], [1678, 3244]);
+    Scenes.later(scene, 2, () => {
+      scene.ennius = Scenes.actor(scene, NPC.ENNIUS_ACTOR, [1678, 3246], [1678, 3244]);
+      walk(scene.furia, [[1678, 3245], [1681, 3245], [1681, 3247], [1683, 3247], [1683, 3246], [1684, 3246]]);
+    });
+    Scenes.later(scene, 4, () => walk(scene.ennius, [[1678, 3245], [1681, 3245], [1681, 3247], [1683, 3247], [1683, 3248], [1684, 3249]]));
+    Scenes.later(scene, 14, () => { kneel(scene.sergius, 0); kneel(scene.nova, 5); });
+    Scenes.later(scene, 16, () => player.performAnimation(new Animation(11554, 20)));
+    Scenes.later(scene, 17, () => kneel(scene.itzla, 15));
+    Scenes.later(scene, 18, () => play(player, NPC.FIDES, V.INITIATION, after(STEP.TWINS_WALK)));
+  }
+
+  /** After Metzli's last line: back in the temple with Itzla at his place there. */
+  function endInitiation(player) {
+    advance(player, S.INITIATED);
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.later(Scenes.get(player) ?? player, 3, () => {
+      Scenes.end(player, false);
+      player.moveTo(new Location(1688, 3247, 0));
+      Scenes.face(player, [1687, 3248]);
+      Scenes.controls(player, true, true);
+      Scenes.later(player, 2, () => Scenes.fade(player, false));
+      Scenes.later(player, 4, () => {
+        Scenes.controls(player, false);
+        Scenes.closeFade(player);
+        play(player, NPC.ITZLA_ROBED, V.ITZLA_TEMPLE);
+      });
+    });
+  }
+
+  const INITIATION_LAST_LINE = "You all have a part to play in what is to come. Forebearer Fides will assign you your duties. Speak with her and then go forth. Go forth and serve our gods!";
+
+  function handleInitiationEnd(event) {
+    if (event.text !== INITIATION_LAST_LINE || stage(event.player) !== S.ROBED || Scenes.get(event.player)?.name !== "initiation") return;
+    event.after = () => endInitiation(event.player);
+  }
+
+  // ==========================================================================
+  // Into Tapoyauik, and back to Fortis
+  // ==========================================================================
+
+  function descendRuins(event) {
+    const id = event.objectId ?? event.definition?.id;
+    if (id !== RUINS_STAIRS_ID) return false;
+    const { player } = event;
+    const current = stage(player);
+    if (current < S.BELOW) return false;
+    event.handled = true;
+    if (current >= S.BANISHED && !quest.isComplete(player)) {
+      play(player, NPC.SERVIUS, V.RUINS_AGAIN);
+      return true;
+    }
+    if (current === S.BELOW && !follower(player)) {
+      play(player, NPC.RUINS_GUARDS[0], V.RUINS_GUARD_ALONE);
+      return true;
+    }
+    stopFollowing(player);
+    units.ruins.enter(player);
+    return true;
+  }
+
+  function talkToServius(event) {
+    if (event.npcId !== NPC.SERVIUS || stage(event.player) !== S.BANISHED) return false;
+    event.handled = true;
+    play(event.player, NPC.SERVIUS, V.SERVIUS, (steps) => {
+      const captured = [];
+      for (const step of steps) {
+        if (step.player === 'What about me?') break;
+        captured.push(step.type === 'condition' ? { ...step, steps: step.steps.filter(part => part.type !== 'end') } : step);
       }
-    }
+      return [...captured,
+        { type: 'line', speaker: 'Servius, Teokan of Ralos', text: 'I would suggest you make yourself scarce. The Queen will not take kindly to this development. I would hate for you to face her fire, my child.' },
+        { player: 'But I want to help.' },
+        { type: 'line', speaker: 'Servius, Teokan of Ralos', text: 'And help you will. I will ensure you are involved in whatever plans are made for dealing with this cult, but for now, you should leave this to me.' },
+        { player: 'Okay, thank you, Servius.' },
+        { type: 'line', speaker: 'Servius, Teokan of Ralos', text: LINE.COMPLETE },
+      ];
+    }, event.npc);
+    return true;
   }
 
-  function spawnItzlaFight(player) {
-    const here = player.getLocation();
-    spawnNpcAt(player, "itzla-fight", ID.ITZLA_FIGHT, here.getX() + 1, here.getY(), here.getZ());
-  }
-
-  function spawnNagua(player) {
-    const here = player.getLocation();
-    spawnNpcAt(player, "nagua-1", ID.NAGUA, here.getX() + 1, here.getY(), here.getZ());
-    spawnNpcAt(player, "nagua-2", ID.NAGUA, here.getX() - 1, here.getY(), here.getZ());
-  }
-
-  function handleNpcDeath(event) {
-    const killer = event?.killer?.isPlayer?.() ? event.killer : null;
-    if (!killer || !event.npc) return;
-    const owner = event.npc.getOwner?.();
-    if (owner && owner !== killer) return;
-
-    const list = waveNpcs.get(killer);
-    if (Array.isArray(list) && list.includes(event.npc)) {
-      removeWave(killer, event.npc);
-      if (!hasWaves(killer) && quest.getStage(killer) === STAGE.TRIAL2_FIGHT) {
-        advance(killer, STAGE.TRIAL2_DONE);
-      }
-      return;
-    }
-
-    if (event.npcId === ID.ITZLA_FIGHT && quest.getStage(killer) === STAGE.TRIAL4_FIGHT) {
-      removeTracked(killer, "itzla-fight");
-      advance(killer, STAGE.TRIAL4_DONE);
-      playTranscript(killer, ID.ITZLA_FIGHT, V.T4_ITZLA_FINAL);
-      return;
-    }
-
-    if (event.npcId === ID.AMOX) {
-      const stage = quest.getStage(killer);
-      if (stage === STAGE.DOOR_OPEN) {
-        removeTracked(killer, "amox");
-        advance(killer, STAGE.AMOX_DEFEATED);
-        playTranscript(killer, ID.AMOX, V.AMOX_DONE);
-      } else if (stage === STAGE.AMOX_DEFEATED) {
-        playTranscript(killer, ID.AMOX, V.AMOX_DONE);
-      }
-    }
+  function sceneEnded(player, scene, logout) {
+    if (!logout) return;
+    const back = { queen: [1453, 3173, 0], initiation: [1688, 3247, 0] }[scene.name];
+    if (back) player.moveTo(new Location(...back));
   }
 
   // ==========================================================================
-  // Object interactions
+  // Journal, reward and saves
   // ==========================================================================
 
-  function isAt(location, tile) {
-    return location && location.x === tile.x && location.y === tile.y;
-  }
-
-  function handleObjectInteraction(event) {
-    const { player, objectId } = event;
-    if (!player || !objectId) return;
-    const location = event.location;
-    const stage = quest.getStage(player);
-
-    if (objectId === ID.BED_REST && isAt(location, PUB_BED_TILE)) {
-      event.handled = true;
-      if (stage !== STAGE.QUEEN_DONE && stage !== STAGE.AT_PUB) return;
-      if (stage === STAGE.QUEEN_DONE) advance(player, STAGE.AT_PUB);
-      playTranscript(player, ID.ITZLA, V.BED);
-      return;
-    }
-
-    if (objectId === ID.BARREL && isAt(location, { x: 1696, y: 9633 })) {
-      event.handled = true;
-      if (stage < STAGE.RUINS_ENTERED) return;
-      if (!held(player, ID.PICKAXE)) giveItem(player, ID.PICKAXE);
-      return;
-    }
-
-    if (objectId === ID.ROCKS && isAt(location, ROCKS_TILE)) {
-      event.handled = true;
-      if (stage !== STAGE.RUINS_ENTERED) return;
-      if (!held(player, ID.PICKAXE) || player.getSkillManager().getMaxLevel(Skill.MINING) < 55) {
-        playTranscript(player, ID.VULCAN, V.VULCAN);
-        return;
-      }
-      playTranscript(player, ID.VULCAN, V.ROCKS);
-      advance(player, STAGE.BLOCKAGE_CLEARED);
-      return;
-    }
-
-    if (objectId === ID.FROZEN_DOOR && isAt(location, DOOR_TILE)) {
-      event.handled = true;
-      if (stage < STAGE.DOOR_OPEN) playTranscript(player, ID.ITZLA, V.DOOR_FROZEN);
-      return;
-    }
-
-    if (TOUCH_ORDER.includes(objectId) && STATUE_SWAPS.some((swap) => isAt(location, swap))) {
-      event.handled = true;
-      touchStatue(player, objectId);
-      return;
-    }
-
-    if (ID.TOWER_CHESTS.has(objectId) && location && location.z === 1) {
-      event.handled = true;
-      openTrialChest(player, objectId);
-      return;
-    }
-
-    if (objectId === ID.ROBES_CHEST && isAt(location, { x: 1638, y: 3217 })) {
-      event.handled = true;
-      openRobesChest(player);
-    }
-  }
-
-  function touchStatue(player, objectId) {
-    if (quest.getStage(player) !== STAGE.PUZZLE) return;
-    const progress = Number(player.getAttribute(STATUE_ATTRIBUTE)) || 0;
-    if (TOUCH_ORDER[progress] !== objectId) {
-      player.setAttribute(STATUE_ATTRIBUTE, 0);
-      player.setHitpoints(Math.max(1, player.getHitpoints() - 5));
-      return;
-    }
-    const next = progress + 1;
-    player.setAttribute(STATUE_ATTRIBUTE, next);
-    if (next < TOUCH_ORDER.length) return;
-    removeFrozenDoor();
-    advance(player, STAGE.DOOR_OPEN);
-    playTranscript(player, ID.ITZLA, V.DOOR_OPEN);
-  }
-
-  function openTrialChest(player, objectId) {
-    const stage = quest.getStage(player);
-    if (stage >= STAGE.TRIAL1_DONE) {
-      playTranscript(player, ID.JANUS, V.JANUS_CHEST);
-      return;
-    }
-    if (!held(player, ID.TOWER_KEY)) {
-      playTranscript(player, ID.JANUS, V.JANUS_CHEST);
-      return;
-    }
-    if (objectId === ID.CHEST_BOOK && stage >= STAGE.TRIAL1_BOOK && !held(player, ID.BOOK)) {
-      if (inventoryFull(player)) return player.sendMessage("You need more inventory space.");
-      playTranscript(player, ID.ASCENDED[0], V.GATE_CHEST);
-      return;
-    }
-    if (objectId === ID.CHEST_POEM && held(player, ID.BOOK) && !held(player, ID.POEM)) {
-      if (inventoryFull(player)) return player.sendMessage("You need more inventory space.");
-      playTranscript(player, ID.ASCENDED[0], V.POEM_CHEST);
-      return;
-    }
-    if (objectId === ID.CHEST_SCRAP && held(player, ID.POEM) && !held(player, ID.NOTE)) {
-      if (inventoryFull(player)) return player.sendMessage("You need more inventory space.");
-      scrapChestPending.add(player);
-      playTranscript(player, ID.ASCENDED[0], V.ITZLA_POEM, (steps) =>
-        steps.filter((step) => step?.type === "condition" && step?.id === C.SCRAP_CHEST)
-      );
-      scrapChestPending.delete(player);
-      return;
-    }
-    playTranscript(player, ID.ASCENDED[0], V.GATE_CHEST);
-  }
-
-  function openRobesChest(player) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE.ROBES) {
-      playTranscript(player, ID.JANUS, V.JANUS_CHEST);
-      return;
-    }
-    if (hasRobes(player)) {
-      playTranscript(player, ID.ITZLA, V.CHEST_ROBED);
-      return;
-    }
-    if (inventoryFull(player)) {
-      playTranscript(player, ID.ITZLA, V.CHEST_FULL);
-      return;
-    }
-    if (ID.ROBES.some((itemId) => held(player, itemId))) {
-      playTranscript(player, ID.ITZLA, V.CHEST_RECLAIM);
-      return;
-    }
-    playTranscript(player, ID.ITZLA, V.CHEST);
-  }
-
-  // ==========================================================================
-  // Zones
-  // ==========================================================================
-
-  function handleRuinsZoneEnter({ player }) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    const stage = quest.getStage(player);
-    if (stage !== STAGE.DUTIES) return;
-    advance(player, STAGE.RUINS_ENTERED);
-    playTranscript(player, ID.ITZLA, V.RUINS);
-  }
-
-  function handleTempleZoneEnter({ player }) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    const stage = quest.getStage(player);
-    if (stage !== STAGE.ROBED) return;
-    if (!wearingRobes(player)) {
-      playTranscript(player, ID.ASCENDED[0], V.NO_ROBES);
-      player.moveTo(new Location(TEMPLE_LEAVE_TILE.x, TEMPLE_LEAVE_TILE.y, TEMPLE_LEAVE_TILE.z));
-      return;
-    }
-    playTranscript(player, ID.FIDES, V.INITIATION);
-    advance(player, STAGE.INITIATED);
-  }
-
-  // ==========================================================================
-  // Login / logout
-  // ==========================================================================
-
-  function handleLogin({ player }) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    ensureQuestNpcs(player);
-    runtime.refreshQuestList(player);
-  }
-
-  function handleLogout({ player }) {
-    if (!player) return;
-    removeAllTracked(player);
-    waveNpcs.delete(player);
-    comboPicks.delete(player);
-    scrapChestPending.delete(player);
-    amoxTalked.delete(player);
-    pendingServiusReport.delete(player);
-  }
-
-  // ==========================================================================
-  // Journal and rewards
-  // ==========================================================================
+  const JOURNAL = [
+    [S.BANISHED, ["Amoxliatl banished me from Tapoyauik after the cult took Itzla.", "", "I should tell <col=800000>Servius</col> at the Sunrise Palace."]],
+    [S.FIGHT, ["Metzli, Ennius and Furia took Itzla and left me to Amoxliatl.", "", "I must defeat <col=800000>Amoxliatl</col>."]],
+    [S.DOOR_OPEN, ["The statues melted the ice on the door.", "", "I should go through it with <col=800000>Itzla</col>."]],
+    [S.CHASM, ["The nagua knocked Itzla across a chasm.", "", "I should find a way through the ruins to him."]],
+    [S.RUINS, ["Fides sent us into Tapoyauik to clear the blockage.", "", "I should mine the <col=800000>rocks</col> with a pickaxe from the barrel."]],
+    [S.THOUGHTS, ["I should speak to <col=800000>Forebearer Fides</col> about our duties."]],
+    [S.INITIATED, ["The Augur is Metzli, and she names Ennius and Furia gods reborn.", "", "I should speak to <col=800000>Itzla</col>."]],
+    [S.ROBED, ["I should wear the robes and speak to <col=800000>Forebearer Fides</col>", "in the Twilight Temple."]],
+    [S.ROBES, ["I should take the robes from the <col=800000>chest</col> in the tower lobby."]],
+    [S.YIELDED, ["We passed the trials.", "", "I should speak to <col=800000>Forebearer Janus</col> in the lobby."]],
+    [S.TRIAL_4, ["The fourth trial: I must defeat <col=800000>Itzla</col>."]],
+    [S.TRAITOR, ["I found the traitor.", "", "I should speak to <col=800000>Forebearer Janus</col> about the final trial."]],
+    [S.TRIAL_3, ["The third trial: I must find the traitor among the four acolytes."]],
+    [S.SURVIVED, ["We survived the second trial.", "", "I should speak to <col=800000>Forebearer Janus</col>."]],
+    [S.TRIAL_2, ["The second trial: we must survive the Emissaries' fighters."]],
+    [S.PASSPHRASE, ["I spoke the passphrase.", "", "I should speak to <col=800000>Forebearer Janus</col> about the next trial."]],
+    [S.TRIAL_1, ["The first trial: I must find the passphrase and tell Janus."]],
+    [S.CALLED, ["Forebearer Janus is ready for us.", "", "I should climb the tower's stairs."]],
+    [S.MINGLED, ["One of the recruits spoke of a new leader, the Augur.", "", "I should tell <col=800000>Itzla</col>."]],
+    [S.TOWER, ["I should speak to the other <col=800000>recruits</col> at the Tower of Ascension."]],
+    [S.ITZLA_LEFT, ["Itzla went ahead to the Twilight Temple.", "", "I should meet him at the <col=800000>Tower of Ascension</col>."]],
+    [S.SHOP_AGREED, ["The shopkeeper will send word to the Emissaries.", "", "I should tell <col=800000>Itzla</col> at the Windbreaker."]],
+    [S.TO_SHOP, ["I should pose as a recruit to the <col=800000>shopkeeper</col> in Quetzacalli Gorge."]],
+    [S.WOKE, ["Itzla himself was the contact.", "", "I should speak to <col=800000>Itzla</col>."]],
+    [S.PAID, ["I rented the room at the Windbreaker.", "", "I should rest in the <col=800000>bed</col>."]],
+    [S.TO_GORGE, ["I should ask to rent the basement room at the <col=800000>Windbreaker</col>", "in Quetzacalli Gorge."]],
+    [S.STARTED, ["Itzla wants to infiltrate the Twilight Emissaries.", "", "I should speak to <col=800000>Prince Itzla</col> at the Teomat."]],
+  ];
 
   function buildJournal(player, questHandle) {
-    const stage = questHandle.getStage(player);
-    if (stage >= STAGE.COMPLETE) {
+    const current = questHandle.getStage(player);
+    if (current >= S.COMPLETE) {
       return [
-        "<str>Itzla and I infiltrated the Twilight Emissaries and passed the</str>",
-        "<str>trials of the Tower of Ascension.</str>",
-        "<str>At the initiation we learned the Augur is Metzli, with Ennius and</str>",
-        "<str>Furia at her side. In the ruins of Tapoyauik we opened the frozen</str>",
-        "<str>door and fought Amoxliatl, who banished me from the ruins.</str>",
-        "<str>I reported the attack to Servius at the Sunrise Palace.</str>",
+        "<str>Itzla and I joined the Twilight Emissaries, found Metzli leading</str>",
+        "<str>them and lost Itzla to them in Tapoyauik.</str>",
         "",
         "<col=ff0000>QUEST COMPLETE!</col>",
       ];
     }
-    if (stage >= STAGE.BANISHED) {
-      return [
-        "Amoxliatl banished me from Tapoyauik.",
-        "",
-        "I should head to the <col=800000>Sunrise Palace</col> in Civitas illa Fortis",
-        "and report to <col=800000>Servius</col>.",
-      ];
-    }
-    if (stage >= STAGE.DOOR_OPEN) {
-      return [
-        "I progressed through the Ruins of Tapoyauik and met up with Itzla.",
-        "We opened the door and found a nagua called Amoxliatl beyond it.",
-        "",
-        "I must fight <col=800000>Amoxliatl</col>.",
-      ];
-    }
-    if (stage >= STAGE.PUZZLE) {
-      return [
-        "I met up with Itzla again in the Ruins of Tapoyauik.",
-        "",
-        "The door is frozen shut. I should touch the four",
-        "<col=800000>statues</col> in the right order to open it.",
-      ];
-    }
-    if (stage >= STAGE.DOOR_MET) {
-      return [
-        "I met up with Itzla again in the Ruins of Tapoyauik.",
-        "",
-        "We found a <col=800000>frozen door</col> blocking the way and",
-        "I should look around for a way to open it.",
-      ];
-    }
-    if (stage >= STAGE.BLOCKAGE_CLEARED) {
-      return [
-        "I mined through the blockage in the Ruins of Tapoyauik, but nagua",
-        "ambushed us, killing Forebearer Vulcan and separating me from Itzla.",
-        "",
-        "I should progress through the ruins and meet up with <col=800000>Itzla</col>.",
-      ];
-    }
-    if (stage >= STAGE.RUINS_ENTERED) {
-      return [
-        "Fides tasked me with clearing a path into the Old One ruins of",
-        "Tapoyauik beneath the Temple.",
-        "",
-        "I should mine the <col=800000>blockage</col> in the ruins.",
-      ];
-    }
-    if (stage >= STAGE.DUTIES) {
-      return [
-        "Itzla and I attended our initiation. The Augur is Metzli, with",
-        "Ennius and Furia claiming to be Ralos and Ranul reborn.",
-        "",
-        "I should speak to <col=800000>Forebearer Fides</col> about our duties.",
-      ];
-    }
-    if (stage >= STAGE.INITIATED) {
-      return [
-        "Itzla and I attended our initiation ceremony in the Temple.",
-        "",
-        "We should wear our <col=800000>cultist robes</col> for the ceremony.",
-      ];
-    }
-    if (stage >= STAGE.ROBES) {
-      return [
-        "We completed all four trials. Forebearer Janus invited us to",
-        "the initiation ceremony.",
-        "",
-        "I should collect our robes from the <col=800000>chest</col> in the tower lobby.",
-      ];
-    }
-    if (stage >= STAGE.LOBBY) {
-      return [
-        "We completed all four trials. I should speak to",
-        "<col=800000>Forebearer Janus</col> in the lobby.",
-      ];
-    }
-    if (stage >= STAGE.TRIAL4_DONE) {
-      return [
-        "I defeated Prince Itzla in the final trial.",
-        "",
-        "I should speak to <col=800000>Forebearer Janus</col>.",
-      ];
-    }
-    if (stage >= STAGE.TRIAL4_FIGHT) {
-      return ["It is my turn to face <col=800000>Prince Itzla</col> in the final trial."];
-    }
-    if (stage >= STAGE.TRIAL3_DONE) {
-      return ["We found the traitor. One more trial remains.",
-        "", "I should speak to <col=800000>Forebearer Janus</col>."];
-    }
-    if (stage >= STAGE.TRIAL3_ACTIVE) {
-      return [
-        "One of the four acolytes is a traitor. I should question",
-        "<col=800000>Tenoch</col>, <col=800000>Silia</col>, <col=800000>Adrius</col> and <col=800000>Eleuia</col>.",
-        "",
-        "Use the <col=800000>Choose</col> option on the one I believe is the traitor.",
-      ];
-    }
-    if (stage >= STAGE.TRIAL2_DONE) {
-      return ["We survived the second trial. Two more remain."];
-    }
-    if (stage >= STAGE.TRIAL2_FIGHT) {
-      return ["Itzla and I must survive the second trial."];
-    }
-    if (stage >= STAGE.TRIAL1_DONE) {
-      return ["We completed the first trial. Three more remain.",
-        "", "I should speak to <col=800000>Forebearer Janus</col>."];
-    }
-    if (stage >= STAGE.TRIAL1_NOTE) {
-      return ["I have the completed note with the passphrase.",
-        "", "I should say it to <col=800000>Forebearer Janus</col>."];
-    }
-    if (stage >= STAGE.TRIAL1_KEY) {
-      return [
-        "The first trial needs the correct pass phrase.",
-        "I should pickpocket a cultist for the key, open the chests and",
-        "combine what I find.",
-      ];
-    }
-    if (stage >= STAGE.RECRUITED_INFO) {
-      return ["Itzla and I were called into the Tower of Ascension by",
-        "<col=800000>Forebearer Janus</col>."];
-    }
-    if (stage >= STAGE.MINGLED) {
-      return ["I met Itzla outside the Tower of Ascension.",
-        "", "I should speak to the other <col=800000>recruits</col>."];
-    }
-    if (stage >= STAGE.AT_TOWER) {
-      return ["I met with Itzla at the Twilight Temple east of Quetzacalli Gorge,",
-        "outside the Tower of Ascension."];
-    }
-    if (stage >= STAGE.SHOP_AGREED) {
-      return ["The Quetzacalli Gorge Shopkeeper agreed to send word to the",
-        "Emissaries. I should let <col=800000>Itzla</col> know."];
-    }
-    if (stage >= STAGE.AT_PUB) {
-      return ["I met Itzla's contact, who turned out to be Itzla himself.",
-        "",
-        "I should speak to the <col=800000>Shopkeeper</col> about joining the Emissaries."];
-    }
-    if (stage >= STAGE.QUEEN_DONE) {
-      return ["Itzla asked me to rent the basement room in the Quetzacalli Gorge",
-        "Pub. His contact will meet me there."];
-    }
-    if (stage >= STAGE.STARTED) {
-      return ["Queen Zyanyi Arkan arrived and admonished Itzla for failing to",
-        "stop the attack on the Teomat.",
-        "",
-        "I should discuss this with <col=800000>Itzla</col>."];
-    }
-    return ["I can start this quest by talking to <col=800000>Prince Itzla Arkan</col>",
-      "in the Teomat atop Ralos' Rise."];
+    const entry = JOURNAL.find(([minimum]) => current >= minimum);
+    if (entry) return entry[1];
+    return [
+      "I can start this quest by talking to <col=800000>Prince Itzla</col> at the Teomat.",
+      "",
+      "I need 55 Mining, 48 Thieving, 48 Slayer and 46 Agility, and to have",
+      "completed Twilight's Promise.",
+    ];
   }
 
   function grantReward(player) {
     const skills = player.getSkillManager();
-    skills.addExperiences(Skill.MINING, 8000);
-    skills.addExperiences(Skill.THIEVING, 8000);
-    skills.addExperiences(Skill.SLAYER, 8000);
-    skills.addExperiences(Skill.AGILITY, 8000);
+    for (const skill of [Skill.MINING, Skill.THIEVING, Skill.SLAYER, Skill.AGILITY]) skills.addExperiences(skill, 8000);
   }
 
-  // ==========================================================================
-  // Registration
-  // ==========================================================================
+  /** Saves from the old plugin used other stage numbers; map them once. */
+  function migrate(player) {
+    if (player.getAttribute(STAGE_VERSION_ATTRIBUTE) === STAGE_VERSION) return;
+    player.setAttribute(STAGE_VERSION_ATTRIBUTE, STAGE_VERSION);
+    const old = stage(player);
+    if (old <= 0) return;
+    const mapped = {
+      2: S.STARTED, 4: S.QUEEN_LEFT, 6: S.WOKE, 8: S.SHOP_AGREED, 10: S.ITZLA_LEFT, 12: S.TOWER, 14: S.MINGLED,
+      16: S.TRIALS_EXPLAINED, 18: S.TRIALS_EXPLAINED, 20: S.TRIALS_EXPLAINED, 22: S.TRIALS_EXPLAINED, 24: S.TRIALS_EXPLAINED,
+      26: S.PASSPHRASE, 28: S.PASSPHRASE, 30: S.PASSPHRASE, 32: S.SURVIVED, 34: S.SURVIVED, 36: S.SURVIVED,
+      38: S.TRAITOR, 40: S.TRAITOR, 42: S.YIELDED, 44: S.YIELDED, 46: S.ROBES, 48: S.ROBED, 50: S.INITIATED,
+      52: S.BELOW, 54: S.RUINS, 56: S.CHASM, 58: S.CHASM, 60: S.LEVERS, 62: S.DOOR_OPEN, 64: S.BANISHED, 66: S.BANISHED,
+    }[old] ?? old;
+    if (mapped !== old) quest.setStage(player, mapped);
+    if (mapped >= S.MINGLED) player.setAttribute(RECRUITS_ATTRIBUTE, 0b1111);
+  }
 
-  Object.assign(ID, {
-    ITZLA: NpcIdentifiers.PRINCE_ITZLA_ARKAN_24, // 14286
-    ITZLA_FIGHT: NpcIdentifiers.PRINCE_ITZLA_ARKAN_13, // 13784
-    ITZLA_LOBBY: NpcIdentifiers.PRINCE_ITZLA_ARKAN_15, // 13786
-    JANUS: NpcIdentifiers.FOREBEARER_JANUS, // 13714
-    FIDES: NpcIdentifiers.FOREBEARER_FIDES, // 13715
-    VULCAN: NpcIdentifiers.FOREBEARER_VULCAN, // 13726
-    AMOX: NpcIdentifiers.AMOXLIATL, // 13685
-    NAGUA: NpcIdentifiers.FROST_NAGUA_2, // 13787
-    BRAWLER: NpcIdentifiers.EMISSARY_BRAWLER, // 13773, level 74
-    CONJURER: NpcIdentifiers.EMISSARY_CONJURER, // 13777
-    SERVIUS: NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS, // 12652
-    BARTENDER: NpcIdentifiers.BARTENDER_17, // 14020
-    SHOPKEEPER: NpcIdentifiers.SHOPKEEPER_7, // 14021
-    NOVA: NpcIdentifiers.NOVA, // 13704
-    NOVA_2: NpcIdentifiers.NOVA_2, // 13705
-    CARITTA: NpcIdentifiers.CARITTA, // 13701
-    FELIUS: NpcIdentifiers.FELIUS, // 13700
-    SERGIUS: NpcIdentifiers.SERGIUS, // 13702
-    SERGIUS_2: NpcIdentifiers.SERGIUS_2, // 13703
-    TENOCH: NpcIdentifiers.TENOCH, // 13780
-    SILIA: NpcIdentifiers.SILIA, // 13781
-    ADRIUS: NpcIdentifiers.ADRIUS, // 13782
-    ELEUIA: NpcIdentifiers.ELEUIA, // 13783
-    ASCENDED: [
-      NpcIdentifiers.EMISSARY_ASCENDED, // 13706
-      NpcIdentifiers.EMISSARY_ASCENDED_2, // 13707
-      NpcIdentifiers.EMISSARY_ASCENDED_3, // 13708
-    ],
-    ACOLYTES: [
-      NpcIdentifiers.TENOCH, // 13780
-      NpcIdentifiers.SILIA, // 13781
-      NpcIdentifiers.ADRIUS, // 13782
-      NpcIdentifiers.ELEUIA, // 13783
-    ],
-    TOWER_KEY: ItemIdentifiers.TOWER_KEY_3, // 29877
-    BOOK: ItemIdentifiers.BOOK_7, // 29878
-    POEM: ItemIdentifiers.POEM, // 29879
-    SCRAP_1: ItemIdentifiers.SCRAP_OF_PAPER, // 29880
-    SCRAP_2: ItemIdentifiers.SCRAP_OF_PAPER_2, // 29881
-    SCRAP_3: ItemIdentifiers.SCRAP_OF_PAPER_3, // 29882
-    SCRAPS: [
-      ItemIdentifiers.SCRAP_OF_PAPER,
-      ItemIdentifiers.SCRAP_OF_PAPER_2,
-      ItemIdentifiers.SCRAP_OF_PAPER_3,
-    ],
-    NOTE: ItemIdentifiers.COMPLETED_NOTE, // 29883
-    BANDAGES: ItemIdentifiers.BANDAGES_5, // 29884
-    ROBE_HOOD: ItemIdentifiers.EMISSARY_HOOD, // 29868
-    ROBE_TOP: ItemIdentifiers.EMISSARY_ROBE_TOP, // 29870
-    ROBE_BOTTOM: ItemIdentifiers.EMISSARY_ROBE_BOTTOM, // 29872
-    ROBE_SANDALS: ItemIdentifiers.EMISSARY_SANDALS, // 29874
-    ROBES: [
-      ItemIdentifiers.EMISSARY_HOOD,
-      ItemIdentifiers.EMISSARY_ROBE_TOP,
-      ItemIdentifiers.EMISSARY_ROBE_BOTTOM,
-      ItemIdentifiers.EMISSARY_SANDALS,
-    ],
-    COINS: ItemIdentifiers.COINS, // 995
-    PICKAXE: ItemIdentifiers.BRONZE_PICKAXE, // 1265
-    BED_BASE: ObjectIdentifiers.BED_224, // 52453
-    BED_REST: ObjectIdentifiers.BED_231, // 54513
-    CHEST_BOOK: ObjectIdentifiers.CHEST_261, // 54376
-    CHEST_POEM: ObjectIdentifiers.CHEST_259, // 54374
-    CHEST_SCRAP: ObjectIdentifiers.CHEST_257, // 54372
-    ROBES_CHEST: ObjectIdentifiers.CHEST_263, // 54515
-    ROCKS: ObjectIdentifiers.ROCKS_160, // 54501
-    FROZEN_DOOR: ObjectIdentifiers.FROZEN_DOOR_5, // 54451
-    BARREL: ObjectIdentifiers.BARREL_200, // 54517
-  });
+  function syncOnBootstrap({ player }) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    migrate(player);
+    syncSideVarbits(player);
+    units.ruins.resume(player);
+  }
 
-  ID.OWN_TALK = new Set([ID.ITZLA, ID.ITZLA_LOBBY, ID.JANUS, ID.VULCAN, ...ID.ASCENDED, ...ID.ACOLYTES]);
-  ID.TOWER_CHESTS = new Set([ID.CHEST_BOOK, ID.CHEST_POEM, ID.CHEST_SCRAP]);
-  ID.RECRUITS = new Set([ID.NOVA, ID.NOVA_2, ID.CARITTA, ID.FELIUS, ID.SERGIUS, ID.SERGIUS_2]);
-  ID.FIDES_TALKED = new WeakSet();
+  function handleLogin({ player }) {
+    refreshQuestList(player);
+  }
 
-  pluginApi.persistAttribute(FLAGS_ATTRIBUTE);
-  pluginApi.persistAttribute(TRAITOR_ATTRIBUTE);
-  pluginApi.persistAttribute(ACCUSED_ATTRIBUTE);
-  pluginApi.persistAttribute(STATUE_ATTRIBUTE);
+  function handleLogout({ player }) {
+    if (!player) return;
+    stopFollowing(player);
+    Scenes.end(player, true);
+    Scenes.cancel(player);
+    units.tower.logout(player);
+    units.ruins.logout(player);
+  }
 
-  quest = registerQuest(pluginApi, {
+  function handleProcess({ player }) {
+    if (stage(player) >= S.CALLED && stage(player) < S.MINED) tickFollower(player);
+  }
+
+  api.persistAttribute(STAGE_VERSION_ATTRIBUTE, 0);
+  api.persistAttribute(RECRUITS_ATTRIBUTE, 0);
+  api.persistAttribute(FLAGS_ATTRIBUTE, 0);
+
+  quest = registerQuest(api, {
     key: QUEST_KEY,
     name: "The Heart of Darkness",
     varpId: VARP_HEART_OF_DARKNESS,
     varbitId: STAGE_VARBIT,
-    startedValue: STAGE.STARTED,
-    completionValue: STAGE.COMPLETE,
+    startedValue: S.STARTED,
+    completionValue: S.COMPLETE,
     questPoints: 2,
-    xpRewards: [
-      { skillId: Skill.MINING.getIndex(), amount: 8000, label: "Mining" },
-      { skillId: Skill.THIEVING.getIndex(), amount: 8000, label: "Thieving" },
-      { skillId: Skill.SLAYER.getIndex(), amount: 8000, label: "Slayer" },
-      { skillId: Skill.AGILITY.getIndex(), amount: 8000, label: "Agility" },
-    ],
-    otherRewards: ["Access to Tapoyauik"],
+    scrollItemId: ITEM.ROBES[1],
+    otherRewards: ["Access to Tapoyauik", "8,000 Mining XP", "8,000 Thieving XP", "8,000 Slayer XP", "8,000 Agility XP"],
     buildJournal,
     onReward: grantReward,
   });
 
-  pluginApi.onNpcInteraction(handleNpcTalk);
-  pluginApi.onNpcDialogueVariant(selectVariant);
-  pluginApi.onNpcDialogueCondition(answerCondition);
-  pluginApi.onCustomEvent("npc-dialogue:hook", handleDialogueHook);
-  pluginApi.onCustomEvent("npc-dialogue:action", handleDialogueAction);
-  pluginApi.onCustomEvent("npc-dialogue:condition", handleDialogueConditionEvent);
-  pluginApi.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
-  pluginApi.onCustomEvent("quest:stage-changed", handleStageChanged);
-  pluginApi.onNpcInteraction("Tenoch", { Choose: chooseTenoch });
-  pluginApi.onNpcInteraction("Silia", { Choose: chooseSilia });
-  pluginApi.onNpcInteraction("Adrius", { Choose: chooseAdrius });
-  pluginApi.onNpcInteraction("Eleuia", { Choose: chooseEleuia });
-  pluginApi.onObjectInteraction(handleObjectInteraction);
-  pluginApi.onNpcDeath(handleNpcDeath);
-  pluginApi.onZoneEnter(RUINS_ZONE, handleRuinsZoneEnter);
-  pluginApi.onZoneEnter(TEMPLE_ZONE, handleTempleZoneEnter);
-  pluginApi.onPlayerLogin(handleLogin);
-  pluginApi.onPlayerLogout(handleLogout);
-  pluginApi.onPlayerProcess(handlePlayerProcess);
+  api.onNpcDialogueVariant(selectVariant);
+  api.onNpcDialogueCondition(answerCondition);
+  api.onCustomEvent("npc-dialogue:hook", handleStartHook);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("npc-dialogue:line", handleInitiationEnd);
+  api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:action", handleStatementBoxes);
+  api.onCustomEvent("npc-dialogue:action", handleRobeBoxes);
+  api.onCustomEvent("player:bootstrap-complete", syncOnBootstrap);
+  api.onObjectInteraction("Bed", { Rest: restInBed });
+  api.onCustomEvent("ladders:climb", claimClimb);
+  api.onObjectInteraction("Staircase", { "Climb-up": climbTower });
+  api.onObjectInteraction("Stairs", { "Climb-down": descendRuins });
+  api.onObjectInteraction("Chest", { Open: openRobesChest });
+  api.onNpcInteraction("Forebearer Fides", { "Talk-to": talkToFides });
+  api.onNpcInteraction("Servius, Teokan of Ralos", { "Talk-to": talkToServius });
+  api.onPlayerProcess(handleProcess);
+  api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
+  units.tower.register();
+  units.ruins.register();
 };

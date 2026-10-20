@@ -93,6 +93,13 @@ export function isEditableElementFocused(): boolean {
     );
 }
 
+export function isMobileChatKeyboardFocused(): boolean {
+    return (
+        typeof document !== "undefined" &&
+        (document.activeElement as HTMLElement | null)?.dataset.mobileChatInput === "true"
+    );
+}
+
 /**
  * Decide whether a new viewport measurement should be ignored because it only reflects
  * the on-screen keyboard shrinking the visual viewport (iOS/Android). Resizing the app
@@ -104,7 +111,9 @@ export function isEditableElementFocused(): boolean {
 export function shouldFreezeViewportForVirtualKeyboard(
     prev: { width: number; height: number } | undefined,
     next: { width: number; height: number },
+    allowChatResize: boolean = false,
 ): boolean {
+    if (allowChatResize && isMobileChatKeyboardFocused()) return false;
     if (!prev || prev.width <= 0 || prev.height <= 0) return false;
     if (!isEditableElementFocused()) return false;
     const widthUnchanged = Math.abs(next.width - prev.width) <= 40;

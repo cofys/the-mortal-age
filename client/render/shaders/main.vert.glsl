@@ -5,6 +5,8 @@
 #define TEXTURE_ANIM_UNIT (1.0f / 128.0f)
 
 #define CONTOUR_GROUND_CENTER_TILE 0.0
+#define GROUND_SNAP_RANGE 4.0
+#define GROUND_SNAP_LIFT 1.0
 #define CONTOUR_GROUND_VERTEX 1.0
 #define CONTOUR_GROUND_NONE 2.0
 #define FOG_CORNER_ROUNDING 0.0
@@ -120,6 +122,13 @@ void main() {
     localPos.y -= float(modelInfo.height);
     if (modelInfo.contourGround < CONTOUR_GROUND_NONE) {
         localPos.y -= getHeightInterp(interpPos, modelInfo.plane);
+    }
+    // The OSRS client paints a tile's scenery after its ground, so a loc's faces at ground
+    // level always show (glowing symbols, rugs, rings). With a depth buffer they sink into
+    // sloped or uneven ground: lift the ground-level vertices of plain locs onto the terrain.
+    if (modelInfo.priority > 0u && modelInfo.height == 0u
+        && modelInfo.contourGround == CONTOUR_GROUND_CENTER_TILE && abs(vertex.pos.y) <= GROUND_SNAP_RANGE) {
+        localPos.y = min(localPos.y, -getHeightInterp(localPos.xz, modelInfo.plane) - GROUND_SNAP_LIFT);
     }
 
     localPos /= 128.0;

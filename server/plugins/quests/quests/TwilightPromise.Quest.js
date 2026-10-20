@@ -1,782 +1,548 @@
 /**
  * Twilight's Promise (members).
  *
- * The words come from the "Twilight's Promise" transcript page (OSRS Wiki); this
- * plugin supplies the NPC variant selector, the start hook, the prose-condition
- * answers, the knight recruitment (bazaar amulet, cothon crate, colosseum spar,
- * pub escort), the crest hand-out, the Kualti Headquarters letter, the Regulus /
- * Renu quetzal travel and the Teomat cultist attack.
+ * Behaviour follows the complete quest in RSProx recording 1695 (revision 226, ticks 400-2423);
+ * the words come from the "Twilight's Promise" transcript page (OSRS Wiki). Evidence and
+ * remaining gaps: docs/p2p-varlamore-group-2-parity.md.
  *
- * The stage lives in varbit 9649 "vmq2" (varp 4076 "vmq2_primary", bits 0-6).
- * Evidence: scripts/lookup-gameval.ts varbit vmq2 -> varp=4076 bits=0-6; quest
- * dbrow 3512 ("Twilight's Promise", table 0) col 19 = 50 (completion stage) and
- * col 33 = [17, 30000] (Thieving, tenths); the cache's quest-transformer NPCs
- * 13372/13374 (Furia/Ennius) switch on varbit 9649 at 0-4 (outside the palace),
- * 13373/13375 at 12-38 (inside the palace), 13376 (Metzli, Civitas) at 4-8,
- * 13378/13381 (Itzla/Servius) at 8-12 and 13377 (Metzli, Teomat) at 24-44.
- * The sibling varbits are 9651 "vmq2_message_read", 9652 "vmq2_first_travel",
- * 9829 "vmq2_bazaar_knights", 9830 "vmq2_cothon_knight", 9831 "vmq2_pub_knights",
- * 9832 "vmq2_colosseum_knight", 9833 "vmq2_given_crest" and 9834 "vmq2_drunk_knight_vis".
+ * Stages live in varbit 9649 "vmq2" (varp 4076, bits 0-6), as captured:
  *
- * Stages (even checkpoints, aligned with the live quest's varbit values):
- *   0 not started, 2 started at the Tullus twins, 4 met Metzli (she is visible from 4;
- *   live checkpoint 6 "met, not asked" is not written by this plugin), 8 asked Metzli
- *   about the prince / crypt NPCs (13378/13381) and the crypt gate become available,
- *   10 heard the full plot, 12 return to the twins in the palace (palace NPCs 12-38),
- *   14 crest given / recruiting, 16-20 knight groups finished, 22 all six knights,
- *   24 search the Kualti Headquarters, 26 letter found, 28 judgement cutscene begins,
- *   30 cutscene ends, 32 Regulus Cento, 36 feed Renu, 38 travel to the Teomat,
- *   40 talk to prince Itzla, 42 talk to Metzli, 44 cultist attack, 46 cultists
- *   defeated, 50 complete.
+ *   0 not started (the Tullus twins by the palace stairs start it)
+ *   2 started            4 told to find the Prince at the temple
+ *   6 met Metzli         8 asked about the Prince; the crypt gate opens
+ *  10 met Itzla and Servius in the crypt   12 sent back to the twins
+ *  14 Furia gave the crest; 16, 18 and 20 as each group of knights agrees to return
+ *  22 all four groups agreed   24 search the Kualti Headquarters (the crest is taken back)
+ *  26 found the letter   28 read it   30 the judgement cutscene   32 it ended
+ *  34 sent to Regulus Cento   36 given the quetzal feed   38 Renu fed
+ *  40 told Itzla at the Teomat   42 sent to Metzli   44 the cultist attack
+ *  46 the cultists are defeated   48 the guard has left with Servius   50 complete
  *
- * Source: OSRS Wiki "Twilight's Promise" page, quick guide, transcript and the cache
- * ids above. Rewards per the wiki: 1 Quest point, 3,000 Thieving XP, the Civitas illa
- * Fortis Teleport spell and the Quetzal Transport System.
+ * Side varbits as captured: 9829 bazaar, 9830 cothon, 9831 pub and 9832 colosseum knights (1
+ * asked, 2 task done, 3 returning), 9833 given the crest, 9834 Azali (1 at the pub, 2
+ * following, 3 sober at the fountain) and vmq3_itzla_vis (the Teomat Prince, until The Heart of
+ * Darkness takes it over). The quest's NPCs are the cache's multi-NPCs placed in npc-spawns.json
+ * at the captured tiles; these varbits show and hide them for each player, as live does.
  *
- * Gaps / approximations:
- *  - Quest-only NPC placements (the crypt prince/Servius, the inner-palace twins, the
- *    Teomat prince/Metzli, Mezan, Renu, the follower Azali and the 8 cultists) are
- *    per-player owner-only spawns (most have no npc-spawns.json entry, and the static
- *    ones sit at their non-quest spots). The field knights, Regulus, Metzli, Servius
- *    and the pickpocket citizen already have static spawns and are not respawned.
- *  - Cutscenes are dialogue only: no camera, no instancing, and multi-speaker lines
- *    (the knighting, the Teomat guards) share the chathead of the NPC being talked to.
- *    The two partial-cutscene relog variants are unreachable; the full judgement
- *    variant replays instead.
- *  - Azali's escort is a simplified owner-only follow (no follower-slot varp): she
- *    walks to the player, gives up when the player is more than 12 tiles away, and
- *    the "already has a follower" condition reads the Pets plugin's `pets:current`
- *    attribute. The "azali-occasionally" and "leaving-the-battle-area" flavour
- *    variants are unused.
- *  - The Quetzal Transport System interface (action step 0GSFPb) does not exist here;
- *    feeding Renu plays the wiki tail and Renu's Travel option teleports to the
- *    Teomat landing site (1440,3168,0), gated on stage 38+ (and kept after completion).
- *  - The letter's equal chance of being in either south-east chest is collapsed: both
- *    south-east chests (50865/50866) hand it over. Reading the letter sends a plain
- *    message (the transcript has no letter text) and sets varbit 9651.
- *  - Mezan's protection-prayer mechanic is not simulated; he is the cache's level 81
- *    12916 and simply has to be defeated.
+ * Rewards per the capture: 1 Quest point, the Quetzal Transport System, the Civitas illa Fortis
+ * Teleport and 3,000 Thieving XP.
  */
 module.exports = function registerTwilightPromiseQuest(api) {
   const {
+    ActionDialogue,
+    Animation,
+    DialogueChainBuilder,
     GameObject,
     ItemIdentifiers,
     Location,
-    MapObjects,
     NpcIdentifiers,
-    ObjectDefinition,
     ObjectIdentifiers,
-    ObjectManager,
-    RegionManager,
+    PrayerHandler,
     Skill,
   } = api.core;
-  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
-
-  // Varp 4076 "vmq2_primary"; the stage is varbit 9649 "vmq2" (bits 0-6).
-  const VARP_TWILIGHTS_PROMISE = 4076;
-  const STAGE_VARBIT = 9649;
-  const MESSAGE_READ_VARBIT = 9651;
-  const FIRST_TRAVEL_VARBIT = 9652;
-  const BAZAAR_VARBIT = 9829;
-  const COTHON_VARBIT = 9830;
-  const PUB_VARBIT = 9831;
-  const COLOSSEUM_VARBIT = 9832;
-  const CREST_VARBIT = 9833;
-  const DRUNK_VIS_VARBIT = 9834;
+  const { registerQuest, refreshQuestList, startTranscript, loadTranscripts } = require("../QuestRuntime");
+  const { createQuestScenes } = require("../QuestScenes");
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
+  const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
   const PAGE = "Twilight's Promise";
   const START_HOOK = "quest:twilight-s-promise:start";
   const CHILDREN_OF_THE_SUN_KEY = "children_of_the_sun";
   const GARDEN_OF_DEATH_KEY = "the_garden_of_death";
+  const HEART_OF_DARKNESS_KEY = "the_heart_of_darkness";
+
+  // Varp 4076; the stage is varbit 9649 "vmq2" (bits 0-6).
+  const VARP_TWILIGHTS_PROMISE = 4076;
+  const STAGE_VARBIT = 9649;
+  const BAZAAR_VARBIT = 9829;
+  const COTHON_VARBIT = 9830;
+  const PUB_VARBIT = 9831;
+  const COLOSSEUM_VARBIT = 9832;
+  const CREST_VARBIT = 9833;
+  const AZALI_VARBIT = 9834;
+  const ITZLA_VIS_VARBIT = 11123; // vmq3_itzla_vis
 
   const STAGE_STARTED = 2;
-  const STAGE_METZLI = 4;
-  const STAGE_METZLI_ASKED = 6;
+  const STAGE_TEMPLE = 4;
+  const STAGE_METZLI = 6;
   const STAGE_CRYPT = 8;
-  const STAGE_PRINCE = 10;
+  const STAGE_MET_PRINCE = 10;
   const STAGE_TWINS = 12;
   const STAGE_RECRUIT = 14;
-  const STAGE_KNIGHTS_1 = 16;
-  const STAGE_KNIGHTS_2 = 18;
-  const STAGE_KNIGHTS_3 = 20;
   const STAGE_JUDGEMENT = 22;
   const STAGE_HQ = 24;
   const STAGE_LETTER = 26;
-  const STAGE_CUTSCENE = 28;
-  const STAGE_CUTSCENE_DONE = 30;
-  const STAGE_REGULUS = 32;
+  const STAGE_LETTER_READ = 28;
+  const STAGE_VERDICT = 30;
+  const STAGE_VERDICT_DONE = 32;
+  const STAGE_REGULUS = 34;
   const STAGE_FEED = 36;
-  const STAGE_TRAVEL = 38;
+  const STAGE_FED = 38;
   const STAGE_TEOMAT = 40;
   const STAGE_LIBRARY = 42;
-  const STAGE_CULTISTS = 44;
-  const STAGE_FINISH = 46;
+  const STAGE_BATTLE = 44;
+  const STAGE_AFTERMATH = 46;
+  const STAGE_GUARD_LEFT = 48;
   const STAGE_COMPLETE = 50;
 
-  const FURIA_IDS = new Set([
-    NpcIdentifiers.FURIA_TULLUS, // 12653
-    NpcIdentifiers.FURIA_TULLUS_2, // 12890
-    NpcIdentifiers.FURIA_TULLUS_3, // 12891
-    NpcIdentifiers.FURIA_TULLUS_4, // 13718
-    NpcIdentifiers.FURIA_TULLUS_10, // 14330
-  ]);
-  const ENNIUS_IDS = new Set([
-    NpcIdentifiers.ENNIUS_TULLUS, // 12654
-    NpcIdentifiers.ENNIUS_TULLUS_2, // 12892
-    NpcIdentifiers.ENNIUS_TULLUS_3, // 12893
-  ]);
-  const TWIN_IDS = new Set([...FURIA_IDS, ...ENNIUS_IDS]);
-  const METZLI_IDS = new Set([NpcIdentifiers.METZLI_TEOKAN_OF_RANUL]); // 12894
-  const ITZLA_IDS = new Set([
-    NpcIdentifiers.PRINCE_ITZLA_ARKAN, // 12650
-    NpcIdentifiers.PRINCE_ITZLA_ARKAN_2, // 12651
-    NpcIdentifiers.PRINCE_ITZLA_ARKAN_24, // 14286
-  ]);
-  const SERVIUS_IDS = new Set([
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS, // 12652
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_2, // 12899
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_3, // 12900
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_4, // 12901
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_5, // 13694
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_6, // 14307
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_7, // 14374
-    NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_8, // 14377
-  ]);
-  const BAZAAR_KNIGHT_IDS = new Set([
-    NpcIdentifiers.KNIGHT_OF_VARLAMORE_3, // 12655
-    NpcIdentifiers.KNIGHT_OF_VARLAMORE_4, // 12656
-  ]);
-  const COTHON_KNIGHT_IDS = new Set([NpcIdentifiers.KNIGHT_OF_VARLAMORE_5]); // 12657
-  const PUB_KNIGHT_IDS = new Set([
-    NpcIdentifiers.KNIGHT_OF_VARLAMORE_6, // 12658
-    NpcIdentifiers.KNIGHT_OF_VARLAMORE_7, // 12659
-  ]);
-  const MEZAN_TALK_IDS = new Set([NpcIdentifiers.KNIGHT_OF_VARLAMORE_8]); // 12660, spawned
-  const AZALI_DRUNK_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_19; // 12912
+  // The visible variants the multi-NPCs resolve to (the ids the dialogue events carry).
+  const FURIA_NPC_ID = NpcIdentifiers.FURIA_TULLUS_2; // 12890
+  const ENNIUS_NPC_ID = NpcIdentifiers.ENNIUS_TULLUS_2; // 12892
+  const METZLI_NPC_ID = NpcIdentifiers.METZLI_TEOKAN_OF_RANUL; // 12894
+  const ITZLA_NPC_ID = NpcIdentifiers.PRINCE_ITZLA_ARKAN_3; // 12896
+  const SERVIUS_NPC_ID = NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_2; // 12899
+  const ARRUN_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_9; // 12902
+  const CLAUDIA_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_11; // 12904
+  const NEL_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_13; // 12906
+  const VELAM_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_15; // 12908
   const AZALI_SOBER_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_17; // 12910
-  const MEZAN_FIGHT_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_23; // 12916
+  const AZALI_DRUNK_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_19; // 12912
+  const MEZAN_NPC_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_21; // 12914
   const CITIZEN_NPC_ID = NpcIdentifiers.CITIZEN_27; // 12929
-  const REGULUS_IDS = new Set([
-    NpcIdentifiers.REGULUS_CENTO_2, // 12884
-    NpcIdentifiers.REGULUS_CENTO_3, // 12885
-  ]);
-  const RENU_IDS = new Set([
-    NpcIdentifiers.RENU, // 13348
-    NpcIdentifiers.RENU_2, // 13349
-    NpcIdentifiers.RENU_3, // 13350
-  ]);
+  const REGULUS_NPC_ID = NpcIdentifiers.REGULUS_CENTO_3; // 12885
   const RENU_FEED_NPC_ID = NpcIdentifiers.RENU_2; // 13349
-  const RENU_TRAVEL_NPC_ID = NpcIdentifiers.RENU_3; // 13350
-  const CULTIST_IDS = new Set([
-    NpcIdentifiers.CULTIST, // 12918
-    NpcIdentifiers.CULTIST_2, // 12919
-    NpcIdentifiers.CULTIST_3, // 12920
-    NpcIdentifiers.CULTIST_4, // 12921
-    NpcIdentifiers.CULTIST_5, // 12922
-    NpcIdentifiers.CULTIST_6, // 12923
-  ]);
+  const AZALI_FOLLOWER_ROOT_ID = 13393; // vmq2_knight_5_follower, shown while Azali follows
+  const AZALI_PUB_ROOT_ID = 13392; // vmq2_knight_5_pub
+  const AZALI_PUB_TILE = [1721, 3075];
+  // Scene actors.
+  const FURIA_ACTOR_ID = NpcIdentifiers.FURIA_TULLUS_3; // 12891
+  const ENNIUS_ACTOR_ID = NpcIdentifiers.ENNIUS_TULLUS_3; // 12893
+  const ITZLA_ACTOR_ID = NpcIdentifiers.PRINCE_ITZLA_ARKAN_4; // 12897
+  const ITZLA_FIGHTER_ID = 12898; // vmq2_itzla_combat
+  const SERVIUS_BATTLE_ID = 12900; // vmq2_servius_battle
+  const SERVIUS_INJURED_ID = NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_4; // 12901
+  const METZLI_BATTLE_ID = NpcIdentifiers.METZLI_TEOKAN_OF_RANUL_2; // 12895
+  const AZALI_ACTOR_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_20; // 12913, vmq2_knight_5_cutscene_drunk
+  const FOUNTAIN_ACTOR_ID = NpcIdentifiers.COL_00FFFF_FOUNTAIN_COL; // 12930
+  const MEZAN_FIGHTER_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_23; // 12916
+  const MEZAN_DONE_ID = NpcIdentifiers.KNIGHT_OF_VARLAMORE_24; // 12917
+  const GUARD_ACTOR_ID = NpcIdentifiers.GUARD_229; // 12928
+  const KNIGHT_ACTORS = [12903, 12905, 12907, 12909, 12911, 12915]; // vmq2_knight_1..6_cutscene
+  const VELAM_ACTOR_ID = 12909;
 
   const CREST_ITEM_ID = ItemIdentifiers.VARLAMORE_CREST; // 28973
   const LETTER_ITEM_ID = ItemIdentifiers.INCRIMINATING_LETTER; // 28974
   const FEED_ITEM_ID = ItemIdentifiers.QUETZAL_FEED; // 28975
   const AMULET_ITEM_ID = ItemIdentifiers.STOLEN_AMULET; // 28976
-  const LETTER_ITEM_NAME = "Incriminating letter";
+  const WEAPON_BOX_ITEMS = [1279, 1311]; // the crate's two weapons, as captured
 
-  const TEMPLE_GATE_OBJECT_ID = ObjectIdentifiers.GATE_295; // 50861 at 1698,9496
-  const TEMPLE_GATE_OPEN_OBJECT_ID = ObjectIdentifiers.GATE_296; // 50862
-  const HQ_CHEST_OBJECT_IDS = new Set([
-    ObjectIdentifiers.CHEST_239, // 50863
-    ObjectIdentifiers.CHEST_240, // 50864
-    ObjectIdentifiers.CHEST_241, // 50865
-    ObjectIdentifiers.CHEST_242, // 50866
-    ObjectIdentifiers.CHEST_243, // 50867
-    ObjectIdentifiers.CHEST_244, // 50868
-  ]);
-  const CORRECT_CHEST_OBJECT_IDS = new Set([
-    ObjectIdentifiers.CHEST_241, // 50865
-    ObjectIdentifiers.CHEST_242, // 50866
-  ]);
-  const COTHON_CRATE_OBJECT_ID = ObjectIdentifiers.CRATE_323; // 50870
-  const COTHON_CRATES_OBJECT_ID = ObjectIdentifiers.CRATES_106; // 52432
-  const COTHON_CRATE_TILE = { x: 1778, y: 3149 };
-  const TEMPLE_GATE_TILE = { x: 1698, y: 9496 };
-  const RENU_TILE = { x: 1703, y: 3139 };
-  const SOBER_AZALI_TILE = { x: 1756, y: 3069 };
-  const TEOMAT_LANDING = { x: 1440, y: 3168, z: 0 };
-  const CRYPT_PRINCE_TILE = { x: 1685, y: 9514 };
-  const CRYPT_SERVIUS_TILE = { x: 1686, y: 9514 };
-  const TEOMAT_PRINCE_TILE = { x: 1454, y: 3173 };
-  const TEOMAT_METZLI_TILE = { x: 1448, y: 3196 };
-  const INNER_ENNIUS_TILE = { x: 1684, y: 3156 };
-  const INNER_FURIA_TILE = { x: 1686, y: 3156 };
-  const MEZAN_TILE = { x: 1805, y: 9522 };
-  const CULTIST_TILES = [
-    { x: 1443, y: 3196 },
-    { x: 1444, y: 3194 },
-    { x: 1448, y: 3194 },
-    { x: 1449, y: 3193 },
-    { x: 1450, y: 3194 },
-    { x: 1454, y: 3195 },
-    { x: 1454, y: 3196 },
-    { x: 1455, y: 3196 },
+  const GATE_OBJECT_ID = ObjectIdentifiers.GATE_295; // 50861, vmq2_temple_gate
+  const GATE_OPEN_OBJECT_ID = ObjectIdentifiers.GATE_296; // 50862
+  const GATEWAY_OBJECT_ID = 38848; // the nameless loc the capture swaps onto the gate
+  const GATE_TILE = { x: 1698, y: 9496 };
+  const CRATE_OBJECT_ID = 50870; // vmq2_cothon_crate
+  const CRATES_OBJECT_ID = 50871; // vmq2_cothon_crates
+  const WEAPON_CRATE_TILE = { x: 1778, y: 3149 };
+  const CHEST_OBJECT_IDS = [50863, 50864, 50865, 50866, 50867, 50868]; // vmq2_knight_1..6_chest
+  const LETTER_CHEST_IDS = [50865, 50866]; // the south-eastern room's two chests
+  const OPEN_CHEST_OBJECT_ID = 50869;
+  const CHEST_OPEN_TICKS = 2;
+
+  const LETTER_INTERFACE = 291;
+  const LETTER_LINES = {
+    6: "Velam,",
+    8: "Long have you waited. So patiently. So dutifully. Now,",
+    9: "at long last, you have been graced with the most glorious",
+    10: "of duties, for the day of our destiny is fast approaching.",
+    11: "The Teokan will soon travel to the east and you will be",
+    12: "selected to accompany him. You must ensure he never",
+    13: "returns. Only with his demise can Twilight's Promise",
+    14: "begin. Only with his demise will we see the Final Dawn.",
+  };
+
+  const RENU_FEED_PLAYER_ANIMATION = 10939;
+  const RENU_FEED_ANIMATION = 10951;
+  const RENU_FEED_TICKS = 9;
+  const FOUNTAIN_SPLASH_ANIMATION = 10942;
+  const ENNIUS_STRIKE_ANIMATION = 390;
+  const VELAM_FALL_ANIMATION = 836;
+  const VELAM_DAMAGE = 50;
+  const SPAR_ATTACKS = { guard: 401, guardBlock: 403, cultist: 386, cultistBlock: 388, itzla: 390, itzlaBlock: 388 };
+  const SPAR_TICKS = 4;
+
+  // Azali's escort.
+  const FOLLOW_STRAY_DISTANCE = 10;
+  const FOLLOW_REST_MIN_TICKS = 15;
+  const FOLLOW_REST_MAX_TICKS = 25;
+  const FOUNTAIN_TILE = [1757, 3068];
+  const FOUNTAIN_REACH = 2;
+
+  // Mezan prays against a style used four times running (Wiki); his three prayer calls.
+  const MEZAN_PRAYER_STREAK = 4;
+  const MEZAN_PRAYER_LINES = ["Ralos will defend me!", "Ralos' light protects me!", "Shield me, Ralos!"];
+
+  // Scenes, at the capture's tiles (the live game plays them in instances).
+  const PALACE_BOUNDS = [[1665, 1700, 3145, 3170, 0]];
+  const FOUNTAIN_BOUNDS = [[1745, 1770, 3058, 3080, 0]];
+  const ARENA_BOUNDS = [[1806, 1842, 3088, 3128, 0]];
+  const TEOMAT_BOUNDS = [[1425, 1465, 3140, 3205, 0]];
+  const COLOSSEUM_LOBBY_TILE = [1803, 9521, 0];
+  const BATTLE_CULTISTS = [
+    { id: 12921, tile: [1434, 3167], face: [1440, 3172] },
+    { id: 12923, tile: [1438, 3172], face: [1440, 3172], partner: 1 },
+    { id: 12922, tile: [1445, 3166], face: [1445, 3168], partner: 0 },
+    { id: 12920, tile: [1444, 3172], face: [1444, 3174], partner: "itzla" },
+    { id: 12919, tile: [1441, 3169], face: [1441, 3171], partner: 2 },
+    { id: 12918, tile: [1440, 3175], face: [1441, 3179], player: true },
+    { id: 12922, tile: [1443, 3176], face: [1444, 3176], partner: 3 },
+    { id: 12920, tile: [1448, 3168], face: [1445, 3168], partner: 0 },
   ];
-  const CULTIST_SPAWN_IDS = [
-    NpcIdentifiers.CULTIST,
-    NpcIdentifiers.CULTIST_2,
-    NpcIdentifiers.CULTIST_3,
-    NpcIdentifiers.CULTIST_4,
-    NpcIdentifiers.CULTIST_5,
-    NpcIdentifiers.CULTIST_6,
-    NpcIdentifiers.CULTIST,
-    NpcIdentifiers.CULTIST_2,
+  const BATTLE_GUARDS = [
+    { id: 12924, tile: [1445, 3168], face: [1445, 3166] },
+    { id: 12925, tile: [1440, 3172], face: [1438, 3172] },
+    { id: 12926, tile: [1441, 3171], face: [1441, 3169] },
+    { id: 12927, tile: [1444, 3176], face: [1443, 3176] },
+  ];
+  const BATTLE_LOCS = [
+    { id: 52800, x: 1433, y: 3142, face: 0 }, { id: 52639, x: 1437, y: 3181, face: 3 },
+    { id: 52639, x: 1442, y: 3181, face: 1 }, { id: 52617, x: 1440, y: 3190, face: 1 },
+    { id: 53019, x: 1457, y: 3187, face: 2 }, { id: 52617, x: 1458, y: 3195, face: 2 },
+  ];
+  const AFTERMATH_LOCS = [
+    { id: 52413, x: 1449, y: 3171, face: 2 }, { id: 29733, x: 1449, y: 3177, face: 0 },
+    { id: 29733, x: 1452, y: 3177, face: 0 }, { id: 50055, x: 1449, y: 3176, type: 4, face: 1 },
+    { id: 50055, x: 1452, y: 3176, type: 4, face: 1 },
   ];
 
-  const FOUNTAIN_ZONE = { minX: 1754, maxX: 1760, minY: 3066, maxY: 3072, levels: [0] };
+  const V = {
+    TWINS_START: "with-friends-like-these-talking-to-either-ennius-or-furia-tullus",
+    TWINS_STARTED: "with-friends-like-these-talking-to-either-ennius-or-furia-tullus-talking-to-either-again-after-starting-the-quest",
+    TWINS_WAIT: "with-friends-like-these-talking-to-either-ennius-or-furia-tullus-talking-to-either-again",
+    GATE_LOCKED: "with-friends-like-these-attempting-to-open-the-gate-in-the-temple-basement-before-talking-to-metzli",
+    METZLI_INTRO: "with-friends-like-these-talking-to-metzli-teokan-of-ranul",
+    METZLI_RETURN: "with-friends-like-these-talking-to-metzli-teokan-of-ranul-talking-to-metzli-before-asking-about-prince-itzla",
+    METZLI_AGAIN: "with-friends-like-these-talking-to-metzli-teokan-of-ranul-talking-to-metzli-again",
+    PRINCE: "with-friends-like-these-talking-to-prince-itzla-or-servius",
+    PRINCE_BACK: "with-friends-like-these-talking-to-prince-itzla-or-servius-talking-to-either-after-hearing-about-the-assassination-attempt",
+    PRINCE_TWINS: "with-friends-like-these-talking-to-prince-itzla-or-servius-talking-to-either-again",
+    TWINS_CREST: "oh-brother-talking-to-the-tullus-twins",
+    TWINS_RECRUITING: "oh-brother-talking-to-the-tullus-twins-talking-to-either-again",
+    BAZAAR: "oh-brother-arrun-and-claudia",
+    BAZAAR_PICKPOCKET: "oh-brother-arrun-and-claudia-pickpocketing-the-citizen",
+    BAZAAR_AGAIN: "oh-brother-arrun-and-claudia-talking-to-arrun-or-claudia-after-speaking-to-them-once",
+    BAZAAR_DONE: "oh-brother-arrun-and-claudia-talking-to-either-again-after-giving-the-amulet",
+    COTHON: "oh-brother-nel",
+    COTHON_BEFORE: "oh-brother-nel-searching-the-correct-crate-before-talking-to-nel",
+    COTHON_WRONG: "oh-brother-nel-searching-an-incorrect-crate",
+    COTHON_WRONG_PLURAL: "oh-brother-nel-searching-incorrect-crates",
+    COTHON_FOUND: "oh-brother-nel-searching-the-correct-crate",
+    COTHON_AGAIN: "oh-brother-nel-talking-to-nel-after-speaking-to-her-once",
+    COTHON_DONE: "oh-brother-nel-talking-to-her-again-after-finding-the-crate",
+    COTHON_ANY: "oh-brother-nel-searching-any-crate-after-nel-s-work-is-done",
+    COTHON_ANY_PLURAL: "oh-brother-nel-searching-any-crates-after-nel-s-work-is-done",
+    MEZAN: "oh-brother-mezan",
+    MEZAN_AGAIN: "oh-brother-mezan-talking-to-mezan-again",
+    MEZAN_FIGHT: "oh-brother-mezan-while-fighting-mezan",
+    MEZAN_DEFEATED: "oh-brother-mezan-after-defeating-mezan",
+    MEZAN_DONE: "oh-brother-mezan-talking-to-mezan-after-he-agrees-to-return-to-the-palace",
+    PUB: "oh-brother-velam-and-azali",
+    PUB_FOLLOWING: "oh-brother-velam-and-azali-talking-to-velam-while-azali-is-following",
+    AZALI_RESTS: "oh-brother-velam-and-azali-azali-occasionally",
+    AZALI_FOLLOWING: "oh-brother-velam-and-azali-talking-to-azali-while-she-s-following-you",
+    AZALI_FOUNTAIN: "oh-brother-velam-and-azali-after-leading-azali-to-the-fountain",
+    AZALI_SOBER: "oh-brother-velam-and-azali-talking-to-azali-after-sobering-up",
+    VELAM_SOBER: "oh-brother-velam-and-azali-talking-to-velam-after-azali-sobered-up",
+    TWINS_JUDGEMENT: "oh-brother-judgement",
+    TWINS_HQ: "oh-brother-judgement-talking-to-the-twins-again",
+    CHEST_WRONG: "oh-brother-judgement-searching-a-wrong-chest-or-the-correct-chest-before-and-after-the-quest",
+    CHEST: "oh-brother-judgement-searching-the-correct-chest",
+    TWINS_LETTER: "oh-brother-judgement-talking-to-the-tullus-twins",
+    TWINS_VERDICT: "oh-brother-judgement-talking-to-the-tullus-twins-after-starting-the-cutscene",
+    TWINS_VERDICT_DONE: "oh-brother-judgement-talking-to-the-tullus-twins-after-finishing-the-cutscene",
+    TWINS_REGULUS: "oh-brother-judgement-talking-to-either-again",
+    REGULUS: "the-twilight-emissaries-talking-to-regulus",
+    REGULUS_AGAIN: "the-twilight-emissaries-talking-to-regulus-talking-to-regulus-again",
+    REGULUS_FED: "the-twilight-emissaries-talking-to-regulus-talking-to-regulus-after-feeding-renu",
+    METZLI_TEOMAT_WAIT: "the-twilight-emissaries-talking-to-metzli-before-speaking-to-the-prince",
+    PRINCE_EARLY: "the-twilight-emissaries-talking-to-prince-itzla-without-speaking-to-regulus",
+    PRINCE_TEOMAT: "the-twilight-emissaries-talking-to-prince-itzla",
+    PRINCE_TEOMAT_AGAIN: "the-twilight-emissaries-talking-to-prince-itzla-talking-to-prince-itzla-or-servius-again",
+    METZLI_TEOMAT: "the-twilight-emissaries-talking-to-metzli",
+    AFTER_CULTISTS: "the-twilight-emissaries-after-defeating-the-cultists",
+    AFTER_GUARD: "the-twilight-emissaries-talking-to-prince-itzla-arkan-after-the-guard-leaves",
+    POST_QUEST: "post-quest-dialogue-talking-to-prince-itzla-arkan",
+  };
 
-  const V_TWINS_START = "with-friends-like-these-talking-to-either-ennius-or-furia-tullus";
-  const V_TWINS_STARTED =
-    "with-friends-like-these-talking-to-either-ennius-or-furia-tullus-talking-to-either-again-after-starting-the-quest";
-  const V_TWINS_WAIT = "with-friends-like-these-talking-to-either-ennius-or-furia-tullus-talking-to-either-again";
-  const V_GATE_LOCKED =
-    "with-friends-like-these-attempting-to-open-the-gate-in-the-temple-basement-before-talking-to-metzli";
-  const V_METZLI_INTRO = "with-friends-like-these-talking-to-metzli-teokan-of-ranul";
-  const V_METZLI_RETURN =
-    "with-friends-like-these-talking-to-metzli-teokan-of-ranul-talking-to-metzli-before-asking-about-prince-itzla";
-  const V_METZLI_AGAIN =
-    "with-friends-like-these-talking-to-metzli-teokan-of-ranul-talking-to-metzli-again";
-  const V_PRINCE = "with-friends-like-these-talking-to-prince-itzla-or-servius";
-  const V_PRINCE_AGAIN =
-    "with-friends-like-these-talking-to-prince-itzla-or-servius-talking-to-either-after-hearing-about-the-assassination-attempt";
-  const V_PRINCE_TWINS =
-    "with-friends-like-these-talking-to-prince-itzla-or-servius-talking-to-either-again";
-  const V_TWINS_CREST = "oh-brother-talking-to-the-tullus-twins";
-  const V_TWINS_RECRUITING = "oh-brother-talking-to-the-tullus-twins-talking-to-either-again";
-  const V_BAZAAR = "oh-brother-arrun-and-claudia";
-  const V_BAZAAR_PICKPOCKET = "oh-brother-arrun-and-claudia-pickpocketing-the-citizen";
-  const V_BAZAAR_AGAIN =
-    "oh-brother-arrun-and-claudia-talking-to-arrun-or-claudia-after-speaking-to-them-once";
-  const V_BAZAAR_DONE = "oh-brother-arrun-and-claudia-talking-to-either-again-after-giving-the-amulet";
-  const V_COTHON = "oh-brother-nel";
-  const V_COTHON_BEFORE = "oh-brother-nel-searching-the-correct-crate-before-talking-to-nel";
-  const V_COTHON_WRONG = "oh-brother-nel-searching-an-incorrect-crate";
-  const V_COTHON_WRONG_PLURAL = "oh-brother-nel-searching-incorrect-crates";
-  const V_COTHON_FOUND = "oh-brother-nel-searching-the-correct-crate";
-  const V_COTHON_AGAIN = "oh-brother-nel-talking-to-nel-after-speaking-to-her-once";
-  const V_COTHON_DONE = "oh-brother-nel-talking-to-her-again-after-finding-the-crate";
-  const V_COTHON_ANY = "oh-brother-nel-searching-any-crate-after-nel-s-work-is-done";
-  const V_COTHON_ANY_PLURAL = "oh-brother-nel-searching-any-crates-after-nel-s-work-is-done";
-  const V_MEZAN = "oh-brother-mezan";
-  const V_MEZAN_AGAIN = "oh-brother-mezan-talking-to-mezan-again";
-  const V_MEZAN_FIGHT = "oh-brother-mezan-while-fighting-mezan";
-  const V_MEZAN_DONE = "oh-brother-mezan-after-defeating-mezan";
-  const V_PUB = "oh-brother-velam-and-azali";
-  const V_PUB_FOLLOWING = "oh-brother-velam-and-azali-talking-to-velam-while-azali-is-following";
-  const V_AZALI_FOLLOWING = "oh-brother-velam-and-azali-talking-to-azali-while-she-s-following-you";
-  const V_AZALI_FOUNTAIN = "oh-brother-velam-and-azali-after-leading-azali-to-the-fountain";
-  const V_AZALI_SOBER = "oh-brother-velam-and-azali-talking-to-azali-after-sobering-up";
-  const V_VELAM_SOBER = "oh-brother-velam-and-azali-talking-to-velam-after-azali-sobered-up";
-  const V_TWINS_JUDGEMENT = "oh-brother-judgement";
-  const V_TWINS_HQ_REMIND = "oh-brother-judgement-talking-to-the-twins-again";
-  const V_TWINS_LETTER = "oh-brother-judgement-talking-to-the-tullus-twins";
-  const V_TWINS_REGULUS = "oh-brother-judgement-talking-to-either-again";
-  const V_CHEST_WRONG =
-    "oh-brother-judgement-searching-a-wrong-chest-or-the-correct-chest-before-and-after-the-quest";
-  const V_CHEST = "oh-brother-judgement-searching-the-correct-chest";
-  const V_REGULUS = "the-twilight-emissaries-talking-to-regulus";
-  const V_REGULUS_AGAIN = "the-twilight-emissaries-talking-to-regulus-talking-to-regulus-again";
-  const V_REGULUS_FED = "the-twilight-emissaries-talking-to-regulus-talking-to-regulus-after-feeding-renu";
-  const V_METZLI_TEOMAT_WAIT = "the-twilight-emissaries-talking-to-metzli-before-speaking-to-the-prince";
-  const V_METZLI_TEOMAT = "the-twilight-emissaries-talking-to-metzli";
-  const V_PRINCE_TEOMAT_EARLY = "the-twilight-emissaries-talking-to-prince-itzla-without-speaking-to-regulus";
-  const V_PRINCE_TEOMAT = "the-twilight-emissaries-talking-to-prince-itzla";
-  const V_PRINCE_TEOMAT_AGAIN =
-    "the-twilight-emissaries-talking-to-prince-itzla-talking-to-prince-itzla-or-servius-again";
-  const V_AFTER_CULTISTS = "the-twilight-emissaries-after-defeating-the-cultists";
-  const V_POST_QUEST = "post-quest-dialogue-talking-to-prince-itzla-arkan";
+  // Lines that move the quest on as they appear (the capture's varbit ticks).
+  const LINES = {
+    TEMPLE: "On the other side of the bazaar, south of here.",
+    METZLI_MET: "Yes. As Teokan of Ranul, I lead the Sect of Ranul. My counterpart, Servius, leads the Church of Ralos.",
+    CRYPT: "Yes you are. He is speaking with Servius, down in the crypt. Not a place you'd normally find the Teokan of Ralos, but the Prince desired the privacy only Ranul can offer.",
+    MET_PRINCE: "You're quite right, of course. But anyway, shall we get down to business?",
+    TWINS: "Then it sounds like we're all set. Timoiva, and may the sun light your way!",
+    BAZAAR_ASKED: "Well this doesn't sound totally orthodox, but fair enough. I'll be back soon.",
+    COTHON_ASKED: "Good to know. I'll get to it and let you know what I find.",
+    COTHON_DONE: "Perfect! That's my work here done then. I'll return to the palace shortly. Timoiva!",
+    PUB_ASKED: "Well there's nothing like a little dunk to sober you up a bit. Azali, come with me.",
+    AZALI_COMES: "Ohh... We're going somewhere new? How exciting!",
+    PUB_DONE: "This day is the worst. Fine, I'll head over there soon.",
+    MEZAN_ASKED: "Oh, and bring two attack styles in with you. I want some variety, and it will help me test my faith in Ralos.",
+    MEZAN_READY: "Kuani!",
+    MEZAN_DONE: "Yes, I'll head over there shortly.",
+    HQ: "We'll keep the knights busy until you're done.",
+    VERDICT: "Then it sounds like Velam has some explaining to do. This should be fun.",
+    REGULUS: "You should not waste time. The Prince will be eager to hear what you've discovered.",
+    TEOMAT: "Now, [player name], did your investigation uncover anything else?",
+    LIBRARY: "Right, I'll go and see if she can help me.",
+    BATTLE: "I guess I'd better...",
+    CALL_OUT: "[player name]! I need you outside, now! We have a little bit of an issue!",
+    COMPLETE: "However, let's not worry about that just now. Instead, I wanted to thank you for all that you've done. You may be an outsider, but you've already proven yourself to be a true friend to Varlamore. Thank you, iknami.",
+  };
+
+  // Transcript steps the plugin plays itself.
+  const STEP = {
+    CREST: new Set(["Ev2lHZ", "wqRY6L", "xxd9qj"]),
+    SHOW_CREST: new Set(["o6WA7o", "MvE-PO", "IsCa0z", "ZdVwjS"]),
+    AMULET_FOUND: "D0l_R6",
+    AMULET_GIVEN: "VgHiDe",
+    WEAPONS: "ibPuw6",
+    AZALI_STOPS: "sqN3PN",
+    AZALI_FOLLOWS: "M9yTX1",
+    DUNK: "ktO5Kb",
+    LETTER: "nUVL01",
+    VERDICT: new Set(["yqVhSV", "OYWyE3"]),
+    VELAM_STEPS: "y1B9YC",
+    VELAM_KILLED: "90Dila",
+    KNIGHTS_LEAVE: "T86ZS5",
+    RENU_PERKS_UP: "00eVwW",
+    FEED: new Set(["V6x6Qr", "2fRkv2"]),
+    RENU_FED: "OlyLnC",
+    OPEN_MAP: "0GSFPb",
+    AFTERMATH: "Nmr-Yg",
+    GUARD_LEAVES: "rp2e-K",
+    COMPLETE: "NyygQH",
+    FEED_TAIL: "BN2pDG",
+  };
 
   const RECRUITS_ATTRIBUTE = "quest.twilights_promise.recruits";
   const FLAGS_ATTRIBUTE = "quest.twilights_promise.flags";
-  const CULTIST_KILLS_ATTRIBUTE = "quest.twilights_promise.cultist-kills";
-  const FLAG_MESSAGE_READ = 1 << 0;
-  const FLAG_FIRST_TRAVEL = 1 << 1;
-  const FLAG_FOLLOWING = 1 << 2;
-  const FLAG_SOBERED = 1 << 3;
-  const FLAG_TOO_FAST = 1 << 4;
-  const FOLLOW_GIVE_UP_DISTANCE = 12;
-  const METZLI_TEOMAT_MAX_X = 1600;
+  const LETTER_CHEST_ATTRIBUTE = "quest.twilights_promise.letter-chest";
+  const STAGE_VERSION_ATTRIBUTE = "twilights-promise:stage-version";
+  const STAGE_VERSION = 1;
+  const OLD_FLAG_MESSAGE_READ = 1 << 0;
+  const RECRUIT_VARBITS = [BAZAAR_VARBIT, COTHON_VARBIT, PUB_VARBIT, COLOSSEUM_VARBIT];
+  const BAZAAR = 0;
+  const COTHON = 1;
+  const PUB = 2;
+  const COLOSSEUM = 3;
 
-  const trackedNpcs = new WeakMap();
-  const mezanFights = new WeakSet();
-  const pendingVictory = new WeakSet();
-  let gateOpened = false;
   let quest;
+  const followers = new Map();
+  const mezanStreaks = new WeakMap();
+  const Scenes = createQuestScenes(api, { onEnd: sceneEnded });
 
   // ==========================================================================
-  // State helpers
+  // State
   // ==========================================================================
 
+  const stage = (player) => quest.getStage(player);
   const held = (player, itemId) => player.getInventory().getAmount(itemId) >= 1;
   const inventoryFull = (player) => player.getInventory().isFull();
 
-  function flags(player) {
-    return Number(player.getAttribute(FLAGS_ATTRIBUTE)) || 0;
+  function advance(player, value) {
+    if (stage(player) < value) quest.setStage(player, value);
+    syncSideVarbits(player);
   }
 
-  function hasFlag(player, flag) {
-    return (flags(player) & flag) !== 0;
+  function recruit(player, group) {
+    return ((Number(player.getAttribute(RECRUITS_ATTRIBUTE)) || 0) >> (2 * group)) & 3;
   }
 
-  function setFlag(player, flag) {
-    player.setAttribute(FLAGS_ATTRIBUTE, flags(player) | flag);
+  /** A knight group's progress; the stage counts the groups that agreed to return. */
+  function setRecruit(player, group, value) {
+    const packed = Number(player.getAttribute(RECRUITS_ATTRIBUTE)) || 0;
+    player.setAttribute(RECRUITS_ATTRIBUTE, (packed & ~(3 << (2 * group))) | ((value & 3) << (2 * group)));
+    if (value >= 3 && stage(player) >= STAGE_RECRUIT && stage(player) < STAGE_JUDGEMENT) {
+      const agreed = [BAZAAR, COTHON, PUB, COLOSSEUM].filter((index) => recruit(player, index) >= 3).length;
+      quest.setStage(player, STAGE_RECRUIT + agreed * 2);
+    }
+    syncSideVarbits(player);
   }
 
-  function clearFlag(player, flag) {
-    player.setAttribute(FLAGS_ATTRIBUTE, flags(player) & ~flag);
-  }
-
-  function recruits(player) {
-    return Number(player.getAttribute(RECRUITS_ATTRIBUTE)) || 0;
-  }
-
-  function recruit(player, index) {
-    return (recruits(player) >> (2 * index)) & 3;
-  }
-
-  function setRecruit(player, index, value) {
-    const shift = 2 * index;
-    const packed = recruits(player);
-    player.setAttribute(RECRUITS_ATTRIBUTE, (packed & ~(3 << shift)) | ((value & 3) << shift));
-    player.getPacketSender().sendVarbit(
-      [BAZAAR_VARBIT, COTHON_VARBIT, PUB_VARBIT, COLOSSEUM_VARBIT][index],
-      value & 3
-    );
-    syncRecruitStage(player);
-  }
-
-  function finishedRecruits(player) {
-    let count = 0;
-    for (let index = 0; index < 4; index++) if (recruit(player, index) >= 3) count++;
-    return count;
-  }
-
-  function syncRecruitStage(player) {
-    const finished = finishedRecruits(player);
-    if (finished === 0) return;
-    if (finished === 4) advance(player, STAGE_JUDGEMENT);
-    else advance(player, STAGE_RECRUIT + finished * 2);
+  function azaliState(player) {
+    const current = stage(player);
+    if (current < STAGE_RECRUIT || current >= STAGE_HQ) return 0;
+    if (recruit(player, PUB) >= 2) return 3;
+    return following(player) ? 2 : 1;
   }
 
   function isQuestComplete(player, key) {
-    const request = { player, key };
+    const request = { player, key, complete: null };
     api.emitCustomEvent("quest:is-complete", request);
     return request.complete === true;
   }
 
-  function hasFollower(player) {
-    const current = player.getAttribute?.("pets:current");
-    return current?.isRegistered?.() === true;
+  function isQuestStarted(player, key) {
+    const request = { player, key, started: null };
+    api.emitCustomEvent("quest:is-started", request);
+    return request.started === true;
   }
 
-  function isFollowing(player) {
-    return hasFlag(player, FLAG_FOLLOWING);
-  }
-
-  function isQuestPage(pages) {
-    return Array.isArray(pages) && pages.some((page) => page?.page === PAGE);
-  }
-
-  function playTranscript(player, npcId, variant) {
-    startTranscript(api, player, npcId, PAGE, variant);
-  }
-
-  function syncSelfVarbits(player) {
+  /** Side varbits as captured; vmq3_itzla_vis is The Heart of Darkness's once it starts. */
+  function syncSideVarbits(player, itzla = null) {
     const sender = player.getPacketSender();
-    sender.sendVarbit(BAZAAR_VARBIT, recruit(player, 0));
-    sender.sendVarbit(COTHON_VARBIT, recruit(player, 1));
-    sender.sendVarbit(PUB_VARBIT, recruit(player, 2));
-    sender.sendVarbit(COLOSSEUM_VARBIT, recruit(player, 3));
-    sender.sendVarbit(CREST_VARBIT, quest.getStage(player) >= STAGE_RECRUIT ? 1 : 0);
-    sender.sendVarbit(MESSAGE_READ_VARBIT, hasFlag(player, FLAG_MESSAGE_READ) ? 1 : 0);
-    sender.sendVarbit(FIRST_TRAVEL_VARBIT, hasFlag(player, FLAG_FIRST_TRAVEL) ? 1 : 0);
-    sender.sendVarbit(
-      DRUNK_VIS_VARBIT,
-      isFollowing(player) ? 1 : hasFlag(player, FLAG_SOBERED) ? 2 : 0
-    );
-  }
-
-  function advance(player, stage) {
-    if (quest.getStage(player) >= stage) return;
-    quest.setStage(player, stage);
-    syncSelfVarbits(player);
-    ensureQuestNpcs(player);
-  }
-
-  // ==========================================================================
-  // Spawns
-  // ==========================================================================
-
-  function syncTracked(player, key, definition) {
-    const tracked = trackedNpcs.get(player) ?? new Map();
-    trackedNpcs.set(player, tracked);
-    const existing = tracked.get(key);
-    if (!definition) {
-      if (existing?.isRegistered?.()) api.removeNpc(existing);
-      if (existing) tracked.delete(key);
-      return null;
-    }
-    if (existing?.isRegistered?.() && existing.getId?.() === definition.id) return existing;
-    if (existing?.isRegistered?.()) api.removeNpc(existing);
-    const npc = api.spawnNpc({ ...definition, owner: player, ownerOnly: true });
-    if (npc) tracked.set(key, npc);
-    return npc;
-  }
-
-  function removeTracked(player, key) {
-    return syncTracked(player, key, null);
-  }
-
-  function tracked(player, key) {
-    return trackedNpcs.get(player)?.get(key) ?? null;
-  }
-
-  function ensureQuestNpcs(player) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    const stage = quest.getStage(player);
-
-    // The twins hand out the job from the palace at (1688/1686, 3139/3141);
-    // the world shells there carry no Talk-to, so spawn owner-only copies.
-    const palaceTwins = stage < STAGE_TWINS;
-    syncTracked(player, "ennius-palace", palaceTwins
-      ? { id: NpcIdentifiers.ENNIUS_TULLUS_2, x: 1688, y: 3139, z: 0, wanderRadius: 0 }
-      : null);
-    syncTracked(player, "furia-palace", palaceTwins
-      ? { id: NpcIdentifiers.FURIA_TULLUS_2, x: 1686, y: 3141, z: 0, wanderRadius: 0 }
-      : null);
-
-    // The twins move inside the palace from stage 12 until the Teomat trip.
-    const innerTwins = stage >= STAGE_TWINS && stage < STAGE_TRAVEL;
-    syncTracked(player, "ennius-inner", innerTwins
-      ? { id: NpcIdentifiers.ENNIUS_TULLUS_2, ...INNER_ENNIUS_TILE, z: 0, wanderRadius: 0 }
-      : null);
-    syncTracked(player, "furia-inner", innerTwins
-      ? { id: NpcIdentifiers.FURIA_TULLUS_2, ...INNER_FURIA_TILE, z: 0, wanderRadius: 0 }
-      : null);
-
-    // Prince Itzla and Servius wait in the temple crypt for stages 8-11.
-    const inCrypt = stage >= STAGE_CRYPT && stage < STAGE_TWINS;
-    syncTracked(player, "itzla-crypt", inCrypt
-      ? { id: NpcIdentifiers.PRINCE_ITZLA_ARKAN, ...CRYPT_PRINCE_TILE, z: 0, wanderRadius: 0 }
-      : null);
-    syncTracked(player, "servius-crypt", inCrypt
-      ? { id: NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_2, ...CRYPT_SERVIUS_TILE, z: 0, wanderRadius: 0 }
-      : null);
-
-    // The Teomat hosts the prince and Metzli from the travel onwards (post-quest too).
-    const atTeomat = stage >= STAGE_TRAVEL;
-    syncTracked(player, "itzla-teomat", atTeomat
-      ? { id: NpcIdentifiers.PRINCE_ITZLA_ARKAN, ...TEOMAT_PRINCE_TILE, z: 0, wanderRadius: 0 }
-      : null);
-    syncTracked(player, "metzli-teomat", atTeomat
-      ? { id: NpcIdentifiers.METZLI_TEOKAN_OF_RANUL, ...TEOMAT_METZLI_TILE, z: 0, wanderRadius: 0 }
-      : null);
-
-    // Mezan spars in the colosseum training room.
-    const mezanStage = stage >= STAGE_RECRUIT && stage <= STAGE_KNIGHTS_3;
-    const mezanValue = recruit(player, 3);
-    if (!mezanStage || mezanValue >= 3) {
-      removeTracked(player, "mezan");
-      removeTracked(player, "mezan-fight");
-    } else if (mezanValue === 2) {
-      removeTracked(player, "mezan-fight");
-      syncTracked(player, "mezan", { id: NpcIdentifiers.KNIGHT_OF_VARLAMORE_8, ...MEZAN_TILE, z: 0, wanderRadius: 0 });
-    } else if (mezanFights.has(player)) {
-      removeTracked(player, "mezan");
-      syncTracked(player, "mezan-fight", { id: MEZAN_FIGHT_NPC_ID, ...MEZAN_TILE, z: 0, wanderRadius: 0 });
-    } else {
-      removeTracked(player, "mezan-fight");
-      syncTracked(player, "mezan", { id: NpcIdentifiers.KNIGHT_OF_VARLAMORE_8, ...MEZAN_TILE, z: 0, wanderRadius: 0 });
-    }
-
-    // Renu is fed at stage 36 and offers travel from 38 on.
-    const renuId = stage >= STAGE_TRAVEL ? RENU_TRAVEL_NPC_ID : stage >= STAGE_FEED ? RENU_FEED_NPC_ID : null;
-    syncTracked(player, "renu", renuId ? { id: renuId, ...RENU_TILE, z: 0, wanderRadius: 0 } : null);
-
-    // Drunk Azali follows during the escort, then waits sober at the fountain.
-    if (isFollowing(player) && stage >= STAGE_RECRUIT && stage <= STAGE_KNIGHTS_3) {
-      const here = player.getLocation();
-      syncTracked(player, "azali-follow", {
-        id: AZALI_DRUNK_NPC_ID,
-        x: here.getX(),
-        y: here.getY(),
-        z: here.getZ(),
-        wanderRadius: 0,
-      });
-    } else {
-      removeTracked(player, "azali-follow");
-    }
-    const sober = recruit(player, 2) === 2;
-    syncTracked(player, "azali-sober", sober
-      ? { id: AZALI_SOBER_NPC_ID, ...SOBER_AZALI_TILE, z: 0, wanderRadius: 0 }
-      : null);
-
-    if (stage === STAGE_CULTISTS) ensureCultists(player);
-    else clearCultists(player);
-  }
-
-  // ==========================================================================
-  // Cultist attack
-  // ==========================================================================
-
-  function cultistKills(player) {
-    return Number(player.getAttribute(CULTIST_KILLS_ATTRIBUTE)) || 0;
-  }
-
-  function ensureCultists(player) {
-    const kills = cultistKills(player);
-    const tracked = trackedNpcs.get(player) ?? new Map();
-    trackedNpcs.set(player, tracked);
-    let list = tracked.get("cultists");
-    if (!Array.isArray(list)) {
-      list = [];
-      tracked.set("cultists", list);
-    }
-    for (let index = list.length; index < 8 - kills; index++) {
-      const spot = CULTIST_TILES[kills + index];
-      const npc = api.spawnNpc({
-        id: CULTIST_SPAWN_IDS[kills + index],
-        x: spot.x,
-        y: spot.y,
-        z: 0,
-        wanderRadius: 0,
-        owner: player,
-        ownerOnly: true,
-      });
-      if (npc) list.push(npc);
+    RECRUIT_VARBITS.forEach((varbit, group) => sender.sendVarbit(varbit, recruit(player, group)));
+    sender.sendVarbit(CREST_VARBIT, stage(player) >= STAGE_RECRUIT ? 1 : 0);
+    sender.sendVarbit(AZALI_VARBIT, azaliState(player));
+    if (!isQuestStarted(player, HEART_OF_DARKNESS_KEY)) {
+      sender.sendVarbit(ITZLA_VIS_VARBIT, itzla ?? (stage(player) >= STAGE_HQ ? 1 : 0));
     }
   }
 
-  function clearCultists(player) {
-    const tracked = trackedNpcs.get(player);
-    const list = tracked?.get("cultists");
-    if (!Array.isArray(list)) return;
-    for (const npc of list) if (npc?.isRegistered?.()) api.removeNpc(npc);
-    tracked.delete("cultists");
+  function variantSteps(variant) {
+    return loadTranscripts(api)?.[PAGE]?.variants?.[variant] ?? [];
   }
 
-  function removeCultist(player, npc) {
-    const list = trackedNpcs.get(player)?.get("cultists");
-    if (!Array.isArray(list)) return;
-    const index = list.indexOf(npc);
-    if (index >= 0) list.splice(index, 1);
-  }
-
-  function startCultistAttack(player) {
-    if (quest.getStage(player) >= STAGE_CULTISTS) return;
-    player.setAttribute(CULTIST_KILLS_ATTRIBUTE, 0);
-    advance(player, STAGE_CULTISTS);
-    ensureCultists(player);
-  }
-
-  function handleCultistDeath(event, killer) {
-    if (event.npc?.getOwner?.() !== killer) return;
-    removeCultist(killer, event.npc);
-    const kills = cultistKills(killer) + 1;
-    killer.setAttribute(CULTIST_KILLS_ATTRIBUTE, kills);
-    if (kills >= 8) {
-      advance(killer, STAGE_FINISH);
-      clearCultists(killer);
-      pendingVictory.add(killer);
-    } else {
-      ensureQuestNpcs(killer);
+  /** The step list holding a step id anywhere in a variant, and its index there. */
+  function locate(steps, id) {
+    for (let index = 0; index < steps.length; index++) {
+      const step = steps[index];
+      if (step?.id === id) return { list: steps, index };
+      for (const nested of [step?.steps, ...(step?.options ?? []).map((option) => option.steps)]) {
+        const found = Array.isArray(nested) ? locate(nested, id) : null;
+        if (found) return found;
+      }
     }
-  }
-
-  // ==========================================================================
-  // Variant selection
-  // ==========================================================================
-
-  function selectVariant(context) {
-    const { npcId, player } = context;
-    if (!player || !npcId) return null;
-    if (TWIN_IDS.has(npcId)) return selectTwinVariant(player);
-    if (METZLI_IDS.has(npcId)) return selectMetzliVariant(context, player);
-    if (SERVIUS_IDS.has(npcId)) return selectServiusVariant(player);
-    if (BAZAAR_KNIGHT_IDS.has(npcId)) return selectBazaarVariant(player);
-    if (COTHON_KNIGHT_IDS.has(npcId)) return selectCothonVariant(player);
-    if (MEZAN_TALK_IDS.has(npcId)) return selectMezanVariant(player);
-    if (AZALI_DRUNK_NPC_ID === npcId) return selectAzaliVariant(player);
-    if (AZALI_SOBER_NPC_ID === npcId) {
-      finishPub(player);
-      return V_AZALI_SOBER;
-    }
-    if (PUB_KNIGHT_IDS.has(npcId)) return selectPubVariant(player);
-    if (REGULUS_IDS.has(npcId)) return selectRegulusVariant(player);
     return null;
   }
 
-  function selectTwinVariant(player) {
-    const stage = quest.getStage(player);
-    if (stage === STAGE_JUDGEMENT) {
-      advance(player, STAGE_HQ);
-      return V_TWINS_JUDGEMENT;
-    }
-    if (stage >= STAGE_REGULUS) return V_TWINS_REGULUS;
-    if (stage >= STAGE_HQ) {
-      if (held(player, LETTER_ITEM_ID) || hasFlag(player, FLAG_MESSAGE_READ)) return V_TWINS_LETTER;
-      return V_TWINS_HQ_REMIND;
-    }
-    if (stage >= STAGE_RECRUIT) return V_TWINS_RECRUITING;
-    if (stage >= STAGE_TWINS) return V_TWINS_CREST;
-    if (stage >= STAGE_STARTED) return V_TWINS_WAIT;
-    return V_TWINS_START;
+  function after(id) {
+    return (steps) => {
+      const found = locate(steps, id);
+      return found ? found.list.slice(found.index + 1) : [];
+    };
   }
 
-  function selectMetzliVariant(context, player) {
-    const stage = quest.getStage(player);
-    const location = context.npc?.getLocation?.();
-    const atTeomat = location ? location.getX() < METZLI_TEOMAT_MAX_X : false;
-    if (atTeomat) return stage >= STAGE_LIBRARY ? V_METZLI_TEOMAT : V_METZLI_TEOMAT_WAIT;
-    if (stage >= STAGE_METZLI_ASKED) return V_METZLI_AGAIN;
-    if (stage === STAGE_STARTED) {
-      advance(player, STAGE_METZLI);
-      return V_METZLI_INTRO;
+  /** The steps after the line with this text. */
+  function afterLine(text) {
+    return (steps) => {
+      const index = steps.findIndex((step) => (step.text ?? step.player ?? step.npc) === text);
+      return index === -1 ? steps : steps.slice(index + 1);
+    };
+  }
+
+  function play(player, npcId, variant, transform, npc = null) {
+    startTranscript(api, player, npcId, PAGE, variant, transform, npc);
+  }
+
+  /** An item box the player cannot continue (Renu eating). */
+  function heldItemBox(player, itemId, text) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ActionDialogue(0, {
+      execute: () => player.getPacketSender()
+        .sendChatboxInterface(193)
+        .sendClientScript(2868, "")
+        .sendItemOnInterfaces((193 << 16) | 1, itemId, 400)
+        .sendString(text, (193 << 16) | 2),
+    })));
+  }
+
+  // ==========================================================================
+  // Variants
+  // ==========================================================================
+
+  function selectVariant({ npcId, player, npc }) {
+    if (!player) return null;
+    if (npcId === FURIA_NPC_ID || npcId === ENNIUS_NPC_ID) return selectTwinsVariant(player);
+    if (npcId === METZLI_NPC_ID) return selectMetzliVariant(player, npc);
+    if (npcId === ITZLA_NPC_ID || npcId === SERVIUS_NPC_ID) return selectPrinceVariant(player, npc);
+    if (npcId === ARRUN_NPC_ID || npcId === CLAUDIA_NPC_ID) return [V.BAZAAR, V.BAZAAR_AGAIN, V.BAZAAR_AGAIN, V.BAZAAR_DONE][recruit(player, BAZAAR)];
+    if (npcId === NEL_NPC_ID) return [V.COTHON, V.COTHON_AGAIN, V.COTHON_AGAIN, V.COTHON_DONE][recruit(player, COTHON)];
+    if (npcId === MEZAN_NPC_ID) return [V.MEZAN, V.MEZAN_AGAIN, V.MEZAN_DEFEATED, V.MEZAN_DONE][recruit(player, COLOSSEUM)];
+    if (npcId === VELAM_NPC_ID) {
+      if (recruit(player, PUB) >= 2) return V.VELAM_SOBER;
+      return following(player) ? V.PUB_FOLLOWING : V.PUB;
     }
-    if (stage >= STAGE_METZLI) return V_METZLI_RETURN;
-    return V_METZLI_INTRO;
+    if (npcId === AZALI_SOBER_NPC_ID) return recruit(player, PUB) >= 3 ? V.AZALI_SOBER : null;
+    if (npcId === AZALI_DRUNK_NPC_ID) return recruit(player, PUB) === 0 ? V.PUB : null;
+    if (npcId === REGULUS_NPC_ID) return selectRegulusVariant(player);
+    return null;
   }
 
-  function selectServiusVariant(player) {
-    if (!quest.isStarted(player)) return null; // the standard "Servius, Teokan of Ralos" page
-    const stage = quest.getStage(player);
-    if (quest.isComplete(player)) return V_POST_QUEST;
-    if (stage >= STAGE_TEOMAT) return V_PRINCE_TEOMAT_AGAIN;
-    if (stage >= STAGE_TWINS) return V_PRINCE_TWINS;
-    return V_PRINCE;
+  function selectTwinsVariant(player) {
+    const current = stage(player);
+    if (current === 0) return V.TWINS_START;
+    if (current < STAGE_TEMPLE) return V.TWINS_STARTED;
+    if (current < STAGE_TWINS) return V.TWINS_WAIT;
+    if (current === STAGE_TWINS) return V.TWINS_CREST;
+    if (current < STAGE_JUDGEMENT) return V.TWINS_RECRUITING;
+    if (current === STAGE_JUDGEMENT) return V.TWINS_JUDGEMENT;
+    if (current === STAGE_HQ) return V.TWINS_HQ;
+    if (current < STAGE_VERDICT) return V.TWINS_LETTER;
+    if (current === STAGE_VERDICT) return V.TWINS_VERDICT;
+    if (current === STAGE_VERDICT_DONE) return V.TWINS_VERDICT_DONE;
+    return V.TWINS_REGULUS;
   }
 
-  function selectBazaarVariant(player) {
-    const value = recruit(player, 0);
-    if (value >= 3) return V_BAZAAR_DONE;
-    if (value >= 1) return V_BAZAAR_AGAIN;
-    return V_BAZAAR;
+  function atTeomat(npc) {
+    return (npc?.getLocation?.()?.getX?.() ?? 9999) < 1600;
   }
 
-  function selectCothonVariant(player) {
-    const value = recruit(player, 1);
-    if (value >= 3) return V_COTHON_DONE;
-    if (value === 2) {
-      // Nel agrees to return once told about the Fortis Spark.
-      setRecruit(player, 1, 3);
-      return V_COTHON_AGAIN;
+  function selectMetzliVariant(player, npc) {
+    const current = stage(player);
+    if (atTeomat(npc)) return current >= STAGE_LIBRARY ? V.METZLI_TEOMAT : V.METZLI_TEOMAT_WAIT;
+    if (current <= STAGE_TEMPLE) return V.METZLI_INTRO;
+    return current === STAGE_METZLI ? V.METZLI_RETURN : V.METZLI_AGAIN;
+  }
+
+  function selectPrinceVariant(player, npc) {
+    const current = stage(player);
+    if (!atTeomat(npc)) {
+      if (current === STAGE_CRYPT) return V.PRINCE;
+      return current === STAGE_MET_PRINCE ? V.PRINCE_BACK : V.PRINCE_TWINS;
     }
-    if (value === 1) return V_COTHON_AGAIN;
-    return V_COTHON;
-  }
-
-  function selectMezanVariant(player) {
-    const value = recruit(player, 3);
-    if (value === 2) {
-      // "You fought well in there... I'll head over there shortly."
-      setRecruit(player, 3, 3);
-      return V_MEZAN_DONE;
-    }
-    if (value === 1) return V_MEZAN_AGAIN;
-    return V_MEZAN;
-  }
-
-  function selectAzaliVariant(player) {
-    const value = recruit(player, 2);
-    if (value >= 2) {
-      finishPub(player);
-      return V_AZALI_SOBER;
-    }
-    return V_AZALI_FOLLOWING;
-  }
-
-  function selectPubVariant(player) {
-    const value = recruit(player, 2);
-    if (value >= 2) {
-      finishPub(player);
-      return V_VELAM_SOBER;
-    }
-    if (value === 1 && isFollowing(player)) return V_PUB_FOLLOWING;
-    return V_PUB;
+    if (current >= STAGE_COMPLETE) return isQuestStarted(player, HEART_OF_DARKNESS_KEY) ? null : V.POST_QUEST;
+    if (current < STAGE_FED) return V.PRINCE_EARLY;
+    if (current === STAGE_FED) return V.PRINCE_TEOMAT;
+    return V.PRINCE_TEOMAT_AGAIN;
   }
 
   function selectRegulusVariant(player) {
-    if (!quest.isStarted(player)) return null; // the standard "Regulus Cento" quetzal dialogue
-    const stage = quest.getStage(player);
-    if (stage >= STAGE_TRAVEL || quest.isComplete(player)) return V_REGULUS_FED;
-    if (stage >= STAGE_FEED) return V_REGULUS_AGAIN;
-    return V_REGULUS;
+    const current = stage(player);
+    if (current < STAGE_REGULUS) return null; // the standard quetzal keeper dialogue
+    if (current === STAGE_REGULUS) return V.REGULUS;
+    return current === STAGE_FEED ? V.REGULUS_AGAIN : V.REGULUS_FED;
   }
-
-  function finishPub(player) {
-    if (recruit(player, 2) === 2) {
-      setRecruit(player, 2, 3);
-      clearFlag(player, FLAG_SOBERED);
-      removeTracked(player, "azali-sober");
-      removeTracked(player, "azali-follow");
-      syncSelfVarbits(player);
-    }
-  }
-
-  // ==========================================================================
-  // Prose conditions
-  // ==========================================================================
 
   function answerCondition(event) {
-    const { player, stepId } = event;
-    if (!isQuestPage(event.pages)) return null;
-    switch (stepId) {
-      // "If the player has no inventory space:" (crest, letter, feed)
-      case "Jwc6oN":
-      case "UpukqI":
-      case "3-gual":
-      case "HtVsID":
-      case "YcOYw7":
-      case "ICTu93":
+    if (!Array.isArray(event.pages) || !event.pages.some((page) => page?.page === PAGE)) return null;
+    const { player } = event;
+    switch (event.stepId) {
+      case "Jwc6oN": case "UpukqI": case "3-gual": case "YcOYw7": case "ICTu93": case "HtVsID":
         return inventoryFull(player);
-      case "zxDa7F":
-      case "fFIaV6":
+      case "zxDa7F": case "fFIaV6":
         return !inventoryFull(player);
-      case "e6vbnR": // lost the Varlamore crest
-        return quest.getStage(player) >= STAGE_RECRUIT && !held(player, CREST_ITEM_ID);
-      case "CPKPtM":
-      case "H6QjGy":
-      case "8SXxJI":
-      case "P67pO2":
+      case "e6vbnR":
         return !held(player, CREST_ITEM_ID);
-      case "dzUYzM":
-      case "vPKkGs":
-      case "wdwt5t":
-      case "8fYJOI":
+      case "CPKPtM": case "H6QjGy": case "8SXxJI": case "P67pO2":
+        return !held(player, CREST_ITEM_ID);
+      case "dzUYzM": case "vPKkGs": case "wdwt5t": case "8fYJOI":
         return held(player, CREST_ITEM_ID);
-      case "MN8Uyn": // does not have the amulet
+      case "MN8Uyn":
         return !held(player, AMULET_ITEM_ID);
-      case "ufM8D1": // has the amulet
+      case "ufM8D1":
         return held(player, AMULET_ITEM_ID);
-      case "OQXGae": // did not find the weapons crate
-        return recruit(player, 1) < 2;
-      case "A3sZDd": // found the weapons crate
-        return recruit(player, 1) >= 2;
-      case "1sNdXO": // already has a follower (a pet)
-        return hasFollower(player);
-      case "o4HOCh": // does not have a follower
-        return !hasFollower(player);
-      case "3coEs9": // Azali fell too far behind
-        return hasFlag(player, FLAG_TOO_FAST);
-      case "fXNTWu": // already holding the letter
+      case "OQXGae":
+        return recruit(player, COTHON) < 2;
+      case "A3sZDd":
+        return recruit(player, COTHON) >= 2;
+      case "1sNdXO":
+        return hasPet(player);
+      case "o4HOCh":
+        return !hasPet(player);
+      case "3coEs9":
+        return false;
+      case "fXNTWu":
         return held(player, LETTER_ITEM_ID);
-      case "H8ndzT": // hasn't read the letter
-        return !hasFlag(player, FLAG_MESSAGE_READ);
-      case "EFAiy1": // no feed and has not fed Renu yet
-        return !held(player, FEED_ITEM_ID) && !hasFlag(player, FLAG_FIRST_TRAVEL);
-      case "NPlTJc": // no feed after feeding Renu once: Regulus replaces it
-        return !held(player, FEED_ITEM_ID) && hasFlag(player, FLAG_FIRST_TRAVEL);
-      case "Al2qgC": // has not completed The Garden of Death
+      case "H8ndzT":
+        return stage(player) < STAGE_LETTER_READ;
+      // Both of Regulus's feed branches are typed "does not have"; the first is the one with it.
+      case "EFAiy1":
+        return held(player, FEED_ITEM_ID);
+      case "NPlTJc":
+        return !held(player, FEED_ITEM_ID);
+      case "Al2qgC":
         return !isQuestComplete(player, GARDEN_OF_DEATH_KEY);
-      case "kmDUvy": // has completed The Garden of Death
+      case "kmDUvy":
         return isQuestComplete(player, GARDEN_OF_DEATH_KEY);
       default:
         return null;
@@ -784,548 +550,880 @@ module.exports = function registerTwilightPromiseQuest(api) {
   }
 
   // ==========================================================================
-  // Dialogue hooks
+  // Dialogue events
   // ==========================================================================
 
-  function handleStartHook({ player, npcId, hook }) {
-    if (hook !== START_HOOK || !TWIN_IDS.has(npcId)) return;
-    if (quest.getStage(player) !== 0) return;
+  function handleStartHook({ player, hook }) {
+    if (hook !== START_HOOK || stage(player) !== 0) return;
     if (!isQuestComplete(player, CHILDREN_OF_THE_SUN_KEY)) {
       player.sendMessage("You must have completed Children of the Sun to start this quest.");
       return;
     }
     player.setAttribute(RECRUITS_ATTRIBUTE, 0);
-    player.setAttribute(FLAGS_ATTRIBUTE, 0);
-    player.setAttribute(CULTIST_KILLS_ATTRIBUTE, 0);
-    advance(player, STAGE_STARTED);
+    player.setAttribute(STAGE_VERSION_ATTRIBUTE, STAGE_VERSION);
+    quest.setStage(player, STAGE_STARTED);
+    player.sendMessage("You've started a new quest: <col=081190>Twilight's Promise</col>");
   }
 
-  /** The prince's second conversation is a shortcut tail the engine's "above" jump cannot reach. */
-  function handlePrinceTalk(event) {
+  function handleChoice({ player, npcId, option }) {
+    if (npcId === MEZAN_NPC_ID && option === "I'm ready. Let's do this.") player.__tpMezanReady = true;
+  }
+
+  /** Line events fire as a run of lines is queued, so a change made as a line shows goes in `before`. */
+  function handleLine(event) {
     const { player, npcId } = event;
-    if (!ITZLA_IDS.has(npcId)) return false;
-    const stage = quest.getStage(player);
-    if (stage === STAGE_CRYPT) {
-      playTranscript(player, npcId, V_PRINCE);
+    const text = event.step?.text ?? event.step?.player ?? event.step?.npc ?? event.text;
+    // The stage is read as the line shows: a run of lines is queued before its first one plays.
+    const at = (line, minStage, maxStage, action) => {
+      if (text !== line) return;
+      const previous = event.before;
+      event.before = () => {
+        previous?.();
+        const now = stage(player);
+        if (now >= minStage && now <= maxStage) action();
+      };
+    };
+    at(LINES.TEMPLE, STAGE_STARTED, STAGE_STARTED, () => advance(player, STAGE_TEMPLE));
+    at(LINES.METZLI_MET, STAGE_TEMPLE, STAGE_TEMPLE, () => advance(player, STAGE_METZLI));
+    at(LINES.CRYPT, STAGE_TEMPLE, STAGE_METZLI, () => advance(player, STAGE_CRYPT));
+    at(LINES.MET_PRINCE, STAGE_CRYPT, STAGE_CRYPT, () => advance(player, STAGE_MET_PRINCE));
+    at(LINES.TWINS, STAGE_MET_PRINCE, STAGE_MET_PRINCE, () => advance(player, STAGE_TWINS));
+    at(LINES.BAZAAR_ASKED, STAGE_RECRUIT, STAGE_JUDGEMENT, () => recruit(player, BAZAAR) === 0 && setRecruit(player, BAZAAR, 1));
+    at(LINES.COTHON_ASKED, STAGE_RECRUIT, STAGE_JUDGEMENT, () => recruit(player, COTHON) === 0 && setRecruit(player, COTHON, 1));
+    if (text === "Great!" && npcId === NEL_NPC_ID) at("Great!", STAGE_RECRUIT, STAGE_JUDGEMENT, () => recruit(player, COTHON) === 2 && setRecruit(player, COTHON, 3));
+    at(LINES.PUB_ASKED, STAGE_RECRUIT, STAGE_JUDGEMENT, () => recruit(player, PUB) === 0 && setRecruit(player, PUB, 1));
+    if (text === LINES.AZALI_COMES) event.before = () => recruit(player, PUB) === 1 && startFollowing(player, event.npc);
+    at(LINES.PUB_DONE, STAGE_RECRUIT, STAGE_JUDGEMENT, () => recruit(player, PUB) === 2 && setRecruit(player, PUB, 3));
+    at(LINES.MEZAN_ASKED, STAGE_RECRUIT, STAGE_JUDGEMENT, () => recruit(player, COLOSSEUM) === 0 && setRecruit(player, COLOSSEUM, 1));
+    if (text === LINES.MEZAN_READY && npcId === MEZAN_NPC_ID && player.__tpMezanReady) {
+      player.__tpMezanReady = false;
+      event.after = () => beginMezanFight(player);
+    }
+    if (text === "Perfect! Thanks." && npcId === MEZAN_NPC_ID) {
+      at(text, STAGE_RECRUIT, STAGE_JUDGEMENT, () => recruit(player, COLOSSEUM) === 2 && setRecruit(player, COLOSSEUM, 3));
+    }
+    at(LINES.HQ, STAGE_JUDGEMENT, STAGE_JUDGEMENT, () => {
+      if (held(player, CREST_ITEM_ID)) player.getInventory().deleteNumber(CREST_ITEM_ID, 1);
+      advance(player, STAGE_HQ);
+    });
+    at(LINES.VERDICT, STAGE_LETTER_READ, STAGE_LETTER_READ, () => advance(player, STAGE_VERDICT));
+    at(LINES.REGULUS, STAGE_VERDICT_DONE, STAGE_VERDICT_DONE, () => advance(player, STAGE_REGULUS));
+    at(LINES.TEOMAT, STAGE_FED, STAGE_FED, () => advance(player, STAGE_TEOMAT));
+    at(LINES.LIBRARY, STAGE_TEOMAT, STAGE_TEOMAT, () => advance(player, STAGE_LIBRARY));
+    at(LINES.BATTLE, STAGE_LIBRARY, STAGE_LIBRARY, () => advance(player, STAGE_BATTLE));
+    if (text === LINES.CALL_OUT) event.after = () => stage(player) === STAGE_BATTLE && beginBattle(player);
+    at(LINES.COMPLETE, STAGE_GUARD_LEFT, STAGE_GUARD_LEFT, () => quest.complete(player));
+  }
+
+  const MESSAGE_BOXES = {
+    Ev2lHZ: CREST_ITEM_ID, wqRY6L: CREST_ITEM_ID, xxd9qj: CREST_ITEM_ID,
+    o6WA7o: CREST_ITEM_ID, "MvE-PO": CREST_ITEM_ID, IsCa0z: CREST_ITEM_ID, ZdVwjS: CREST_ITEM_ID,
+    D0l_R6: AMULET_ITEM_ID, VgHiDe: AMULET_ITEM_ID,
+    ibPuw6: WEAPON_BOX_ITEMS,
+    nUVL01: LETTER_ITEM_ID,
+    "00eVwW": null,
+    V6x6Qr: FEED_ITEM_ID, "2fRkv2": FEED_ITEM_ID,
+  };
+
+  function isQuestEvent(event) {
+    return Array.isArray(event.pages) && event.pages.some((page) => page?.page === PAGE);
+  }
+
+  function handleAction(event) {
+    if (!isQuestEvent(event)) return;
+    const { player, stepId } = event;
+    if (event.kind === "message" && Object.hasOwn(MESSAGE_BOXES, stepId)) {
+      const items = MESSAGE_BOXES[stepId];
+      event.handled = true;
+      event.box = items === null ? { statement: true } : { items: Array.isArray(items) ? items : [items] };
+    }
+    if (STEP.CREST.has(stepId)) {
+      if (!held(player, CREST_ITEM_ID)) player.getInventory().adds(CREST_ITEM_ID, 1);
+      advance(player, STAGE_RECRUIT);
+      return;
+    }
+    switch (stepId) {
+      case STEP.AMULET_FOUND:
+        if (!held(player, AMULET_ITEM_ID)) player.getInventory().adds(AMULET_ITEM_ID, 1);
+        setRecruit(player, BAZAAR, 2);
+        return;
+      case STEP.AMULET_GIVEN:
+        if (held(player, AMULET_ITEM_ID)) player.getInventory().deleteNumber(AMULET_ITEM_ID, 1);
+        setRecruit(player, BAZAAR, 3);
+        return;
+      case STEP.WEAPONS:
+        if (recruit(player, COTHON) === 1) setRecruit(player, COTHON, 2);
+        return;
+      case STEP.AZALI_FOLLOWS:
+        startFollowing(player, event.npc);
+        return;
+      case STEP.LETTER:
+        if (!held(player, LETTER_ITEM_ID)) player.getInventory().adds(LETTER_ITEM_ID, 1);
+        advance(player, STAGE_LETTER);
+        return;
+      case STEP.VELAM_STEPS:
+      case STEP.VELAM_KILLED:
+      case STEP.KNIGHTS_LEAVE:
+      case STEP.GUARD_LEAVES:
+        event.handled = true;
+        event.end = true;
+        verdictOrAftermathCue(player, stepId);
+        return;
+      case STEP.RENU_FED:
+        event.handled = true;
+        event.end = true;
+        feedRenu(player, event.npc);
+        return;
+      case STEP.OPEN_MAP:
+        event.handled = true;
+        event.end = true;
+        api.emitCustomEvent("quetzal:open", { player });
+        return;
+      case STEP.COMPLETE:
+        event.handled = true;
+        return;
+      default:
+        break;
+    }
+    if (STEP.FEED.has(stepId)) {
+      if (!held(player, FEED_ITEM_ID)) player.getInventory().adds(FEED_ITEM_ID, 1);
+      advance(player, STAGE_FEED);
+      api.emitCustomEvent("quetzal:introduce", { player });
+      return;
+    }
+    if (STEP.VERDICT.has(stepId)) {
+      event.handled = true;
+      event.end = true;
+      beginVerdict(player);
+      return;
+    }
+    if (stepId === STEP.AFTERMATH) {
+      event.handled = true;
+      event.end = true;
+      beginAftermath(player);
+    }
+  }
+
+  // ==========================================================================
+  // The crest's errands: the bazaar, the Cothon and the Kualti Headquarters
+  // ==========================================================================
+
+  /** The man in blue: two ticks of "You attempt..." then the amulet. */
+  function pickpocketCitizen(event) {
+    if (event.npcId !== CITIZEN_NPC_ID) return false;
+    const { player } = event;
+    if (recruit(player, BAZAAR) !== 1 || held(player, AMULET_ITEM_ID)) return false;
+    event.handled = true;
+    player.sendMessage("You attempt to pick the man's pocket.");
+    Scenes.later(player, 1, () => {
+      player.sendMessage("You pick the man's pocket and find the stolen amulet.");
+      play(player, CITIZEN_NPC_ID, V.BAZAAR_PICKPOCKET, null, event.npc);
+    });
+    return true;
+  }
+
+  function searchCrate(event) {
+    const id = event.definition?.id ?? event.objectId;
+    if (id !== CRATE_OBJECT_ID && id !== CRATES_OBJECT_ID) return false;
+    const { player } = event;
+    if (stage(player) < STAGE_RECRUIT || stage(player) >= STAGE_HQ) return false;
+    event.handled = true;
+    const plural = id === CRATES_OBJECT_ID;
+    const location = event.location ?? event.object?.getLocation?.();
+    const x = location?.x ?? location?.getX?.();
+    const y = location?.y ?? location?.getY?.();
+    const correct = !plural && x === WEAPON_CRATE_TILE.x && y === WEAPON_CRATE_TILE.y;
+    const progress = recruit(player, COTHON);
+    let variant;
+    if (progress >= 2) variant = plural ? V.COTHON_ANY_PLURAL : V.COTHON_ANY;
+    else if (!correct) variant = plural ? V.COTHON_WRONG_PLURAL : V.COTHON_WRONG;
+    else variant = progress === 0 ? V.COTHON_BEFORE : V.COTHON_FOUND;
+    play(player, NEL_NPC_ID, variant);
+    return true;
+  }
+
+  function letterChest(player) {
+    let chest = player.getAttribute(LETTER_CHEST_ATTRIBUTE);
+    if (!LETTER_CHEST_IDS.includes(chest)) {
+      chest = LETTER_CHEST_IDS[Math.floor(Math.random() * LETTER_CHEST_IDS.length)];
+      player.setAttribute(LETTER_CHEST_ATTRIBUTE, chest);
+    }
+    return chest;
+  }
+
+  /** The letter's chest opens for two ticks as it is searched (equal odds of either south-eastern chest). */
+  function openChest(event) {
+    const id = event.definition?.id ?? event.objectId;
+    if (!CHEST_OBJECT_IDS.includes(id)) return false;
+    event.handled = true;
+    const { player } = event;
+    const current = stage(player);
+    if (current !== STAGE_HQ && !(current >= STAGE_LETTER && current < STAGE_VERDICT_DONE) || id !== letterChest(player)) {
+      play(player, ENNIUS_NPC_ID, V.CHEST_WRONG);
       return true;
     }
-    if (stage === STAGE_PRINCE) {
-      playTranscript(player, npcId, V_PRINCE_AGAIN);
-      advance(player, STAGE_TWINS);
+    const object = event.object;
+    if (current === STAGE_HQ && !inventoryFull(player) && object) {
+      const location = object.getLocation();
+      const sender = player.getPacketSender();
+      sender.sendObject(new GameObject(OPEN_CHEST_OBJECT_ID, location.clone(), object.getType(), object.getFace(), null));
+      Scenes.later(player, CHEST_OPEN_TICKS, () => sender.sendObject(new GameObject(id, location.clone(), object.getType(), object.getFace(), null)));
+    }
+    play(player, ENNIUS_NPC_ID, V.CHEST);
+    return true;
+  }
+
+  /** The letter in its paper; the first read is what the twins wait for. */
+  function readLetter(event) {
+    const { player } = event;
+    event.handled = true;
+    const sender = player.getPacketSender();
+    for (let child = 5; child <= 16; child++) sender.sendString(LETTER_LINES[child] ?? "", (LETTER_INTERFACE << 16) | child);
+    if (stage(player) === STAGE_LETTER) advance(player, STAGE_LETTER_READ);
+    sender.sendInterface(LETTER_INTERFACE);
+    return true;
+  }
+
+  /** The crypt gate lets the player through and shuts behind them, as captured. */
+  function handleGate(request) {
+    if (request.handled || request.objectId !== GATE_OBJECT_ID) return;
+    const { player, object } = request;
+    const location = object?.getLocation?.();
+    if (!location || location.getX() !== GATE_TILE.x || location.getY() !== GATE_TILE.y) return;
+    request.handled = true;
+    if (stage(player) < STAGE_CRYPT) {
+      play(player, ENNIUS_NPC_ID, V.GATE_LOCKED);
+      return;
+    }
+    const crossing = crossingFor(object, player.getLocation());
+    if (!crossing || ObstacleRunner.isBusy(player)) return;
+    const sender = player.getPacketSender();
+    const open = new GameObject(GATE_OPEN_OBJECT_ID, new Location(location.getX(), location.getY() - 1, location.getZ()), 0, 0, null);
+    sender.sendObject(open).sendObject(new GameObject(GATEWAY_OBJECT_ID, location.clone(), 0, object.getFace(), null));
+    ObstacleRunner.run({ player, object }, [{ walk: [[crossing.destination.x, crossing.destination.y]] }]);
+    Scenes.later(player, 2, () => {
+      sender.sendObjectRemoval(open).sendObject(new GameObject(GATE_OBJECT_ID, location.clone(), 0, object.getFace(), null));
+    });
+  }
+
+  function openGate(event) {
+    const request = { player: event.player, object: event.object, objectId: event.definition?.id ?? event.objectId, handled: false };
+    handleGate(request);
+    if (request.handled) event.handled = true;
+    return request.handled;
+  }
+
+  // ==========================================================================
+  // Azali's escort to the fountain
+  // ==========================================================================
+
+  function hasPet(player) {
+    return player.getAttribute?.("pets:current")?.isRegistered?.() === true;
+  }
+
+  function following(player) {
+    return followers.get(player)?.npc?.isRegistered?.() === true;
+  }
+
+  /** Azali leaves the pub and follows; she rests now and then, and gives up on a runaway. */
+  function startFollowing(player, from) {
+    if (hasPet(player) || recruit(player, PUB) !== 1) return;
+    let entry = followers.get(player);
+    if (!entry?.npc?.isRegistered?.()) {
+      // She leaves from her seat at the pub, wherever the conversation was had.
+      const at = from?.getId?.() === AZALI_PUB_ROOT_ID || from?.getContentId?.(player) === AZALI_DRUNK_NPC_ID ? from.getLocation() : new Location(...AZALI_PUB_TILE, 0);
+      const npc = api.spawnNpc({ id: AZALI_FOLLOWER_ROOT_ID, x: at.getX(), y: at.getY(), z: at.getZ(), owner: player, ownerOnly: true, wanderRadius: 0 });
+      if (!npc) return;
+      npc.__skipDefaultRespawn = true;
+      entry = { npc, restIn: restTicks() };
+      followers.set(player, entry);
+    }
+    entry.resting = false;
+    entry.restIn = restTicks();
+    entry.npc.setFollowing(player);
+    entry.npc.setMobileInteraction(player);
+    syncSideVarbits(player);
+  }
+
+  function restTicks() {
+    return FOLLOW_REST_MIN_TICKS + Math.floor(Math.random() * (FOLLOW_REST_MAX_TICKS - FOLLOW_REST_MIN_TICKS + 1));
+  }
+
+  function stopFollowing(player, toPub) {
+    const entry = followers.get(player);
+    if (!entry) return;
+    followers.delete(player);
+    if (entry.npc?.isRegistered?.()) api.removeNpc(entry.npc);
+    if (toPub) syncSideVarbits(player);
+  }
+
+  function tickFollower(player) {
+    const entry = followers.get(player);
+    if (!entry?.npc?.isRegistered?.() || entry.leaving) return;
+    const npc = entry.npc;
+    const distance = npc.getLocation().getDistance?.(player.getLocation())
+      ?? Math.max(Math.abs(npc.getLocation().getX() - player.getLocation().getX()), Math.abs(npc.getLocation().getY() - player.getLocation().getY()));
+    // As captured: the call, the follower gone three ticks later and Azali back at the pub three after that.
+    if (distance > FOLLOW_STRAY_DISTANCE || npc.getLocation().getZ() !== player.getLocation().getZ()) {
+      entry.leaving = true;
+      npc.setFollowing(null);
+      npc.forceChat("Hey! You're going too fast!");
+      Scenes.later(player, 3, () => { if (followers.get(player) === entry) api.removeNpc(npc); });
+      Scenes.later(player, 6, () => { if (followers.get(player) === entry) stopFollowing(player, true); });
+      return;
+    }
+    const tile = npc.getLocation();
+    if (Math.max(Math.abs(tile.getX() - FOUNTAIN_TILE[0]), Math.abs(tile.getY() - FOUNTAIN_TILE[1])) <= FOUNTAIN_REACH) {
+      beginFountain(player);
+      return;
+    }
+    if (entry.resting) return;
+    if (--entry.restIn > 0) return;
+    entry.resting = true;
+    npc.setFollowing(null);
+    npc.getMovementQueue().reset();
+    const lines = variantSteps(V.AZALI_RESTS)[0]?.options ?? [];
+    const said = lines[Math.floor(Math.random() * lines.length)]?.steps?.[0]?.text;
+    if (said) npc.forceChat(said);
+  }
+
+  /** The follower answers "This way, Azali." and comes along again. */
+  function talkToFollower(event) {
+    const entry = followers.get(event.player);
+    if (!entry || event.npc !== entry.npc) return false;
+    event.handled = true;
+    play(event.player, AZALI_DRUNK_NPC_ID, V.AZALI_FOLLOWING, null, event.npc);
+    return true;
+  }
+
+  /** Azali at the pub after straying: "Azali, come with me." */
+  function talkToAzaliAtPub(event) {
+    if (event.npcId !== AZALI_DRUNK_NPC_ID || followers.get(event.player)?.npc === event.npc) return false;
+    const { player } = event;
+    if (recruit(player, PUB) !== 1) return false;
+    event.handled = true;
+    play(player, AZALI_DRUNK_NPC_ID, V.PUB, (steps) => {
+      const offer = locate(steps, "8fYJOI")?.list?.[locate(steps, "8fYJOI").index]?.steps ?? [];
+      const condition = offer.findIndex((step) => step.id === "1sNdXO");
+      return [{ player: "Azali, come with me." }, ...offer.slice(condition)];
+    }, event.npc);
+    return true;
+  }
+
+  function talkToAzali(event) {
+    return talkToFollower(event) || talkToAzaliAtPub(event) || talkToSoberAzali(event);
+  }
+
+  /** Sober Azali before her answer: the dunk's tail, from "Oh boy...". */
+  function talkToSoberAzali(event) {
+    if (event.npcId !== AZALI_SOBER_NPC_ID || recruit(event.player, PUB) !== 2) return false;
+    event.handled = true;
+    play(event.player, AZALI_SOBER_NPC_ID, V.AZALI_FOUNTAIN, after(STEP.DUNK), event.npc);
+    return true;
+  }
+
+  /** The dunk: Azali walks into the fountain, the splash, and her answer back at the fountain. */
+  function beginFountain(player) {
+    if (Scenes.get(player)) return;
+    stopFollowing(player, false);
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true, true);
+    Scenes.later(player, 2, () => {
+      const scene = Scenes.open(player, "fountain", FOUNTAIN_BOUNDS);
+      Scenes.controls(player, true, true);
+      player.moveTo(new Location(1756, 3070, 0));
+      Scenes.face(player, [1757, 3069]);
+      syncSideVarbits(player);
+      const azali = Scenes.actor(scene, AZALI_ACTOR_ID, [1753, 3068], [1755, 3068]);
+      const fountain = Scenes.actor(scene, FOUNTAIN_ACTOR_ID, [1757, 3068], [1787, 3069]);
+      Scenes.loc(scene, { id: 29733, x: 1757, y: 3068 });
+      Scenes.loc(scene, { id: 52870, x: 1757, y: 3069, type: 22 });
+      Scenes.later(scene, 1, () => Scenes.camera(player, [1760, 3060, 650], [1757, 3072, 350]));
+      Scenes.later(scene, 3, () => {
+        Scenes.fade(player, false);
+        azali?.getMovementQueue().addSteps(new Location(1755, 3068, 0));
+      });
+      Scenes.later(scene, 5, () => azali?.moveTo(new Location(1757, 3068, 0)));
+      Scenes.later(scene, 7, () => {
+        fountain?.performAnimation(new Animation(FOUNTAIN_SPLASH_ANIMATION));
+        if (azali) Scenes.removeActor(scene, azali);
+      });
+      Scenes.later(scene, 15, () => {
+        setRecruit(player, PUB, 2);
+        Scenes.fade(player, true);
+      });
+      Scenes.later(scene, 17, () => {
+        Scenes.end(player, false);
+        player.moveTo(new Location(1756, 3070, 0));
+        Scenes.face(player, [1756, 3069]);
+        Scenes.controls(player, true, true);
+        Scenes.later(player, 2, () => Scenes.fade(player, false));
+        Scenes.later(player, 4, () => {
+          Scenes.controls(player, false);
+          Scenes.closeFade(player);
+          play(player, AZALI_SOBER_NPC_ID, V.AZALI_FOUNTAIN, after(STEP.DUNK));
+        });
+      });
+    });
+  }
+
+  // ==========================================================================
+  // Mezan's sparring match
+  // ==========================================================================
+
+  function beginMezanFight(player) {
+    if (Scenes.get(player) || recruit(player, COLOSSEUM) !== 1) return;
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true);
+    Scenes.later(player, 2, () => {
+      player.getDialogueManager().reset();
+      const scene = Scenes.open(player, "mezan", ARENA_BOUNDS, { canAttack: canAttackInArena });
+      player.moveTo(new Location(1824, 3102, 0));
+      Scenes.face(player, [1824, 3103]);
+      scene.mezan = Scenes.actor(scene, MEZAN_FIGHTER_ID, [1824, 3108], [1824, 3102]);
+      Scenes.loc(scene, { id: 50872, x: 1823, y: 3091, face: 1 });
+      mezanStreaks.delete(scene.mezan);
+      Scenes.later(scene, 2, () => {
+        Scenes.fade(player, false);
+        Scenes.controls(player, false);
+      });
+      Scenes.later(scene, 4, () => Scenes.closeFade(player));
+    });
+  }
+
+  function canAttackInArena(attacker, target) {
+    const scene = Scenes.get(attacker?.isPlayer?.() ? attacker : target?.isPlayer?.() ? target : null);
+    if (!scene || scene.name !== "mezan") return null;
+    return target === scene.mezan || attacker === scene.mezan ? (scene.defeated ? false : true) : null;
+  }
+
+  function styleOf(hit) {
+    const { CombatType } = api.core;
+    const type = hit?.getCombatType?.();
+    if (type === CombatType.MELEE) return "melee";
+    if (type === CombatType.RANGED) return "ranged";
+    if (type === CombatType.MAGIC) return "magic";
+    return null;
+  }
+
+  const PROTECTIONS = { melee: "PROTECT_FROM_MELEE", ranged: "PROTECT_FROM_MISSILES", magic: "PROTECT_FROM_MAGIC" };
+
+  function nullify(hit) {
+    for (const part of hit.getHits()) part.setDamage(0);
+    hit.updateTotalDamage();
+  }
+
+  /** Each attack counts toward a streak; the fourth in a style has him pray against it next tick. */
+  function countMezanAttack({ player, target, hit }) {
+    const scene = Scenes.get(player);
+    if (!scene || target !== scene.mezan || scene.defeated) return;
+    const style = styleOf(hit);
+    if (!style) return;
+    if (scene.mezan.__tpProtecting === style) {
+      nullify(hit);
+      return;
+    }
+    const streak = mezanStreaks.get(scene.mezan) ?? { style: null, count: 0 };
+    streak.count = streak.style === style ? streak.count + 1 : 1;
+    streak.style = style;
+    mezanStreaks.set(scene.mezan, streak);
+    if (streak.count < MEZAN_PRAYER_STREAK) return;
+    streak.count = 0;
+    Scenes.later(scene, 1, () => {
+      if (scene.defeated) return;
+      const npc = scene.mezan;
+      PrayerHandler.activatePrayerPrayerId(npc, PrayerHandler[PROTECTIONS[style]]);
+      npc.__tpProtecting = style;
+      npc.forceChat(MEZAN_PRAYER_LINES[Math.floor(Math.random() * MEZAN_PRAYER_LINES.length)]);
+    });
+  }
+
+  function blockMezanHit({ npc, hit }) {
+    if (!npc?.__tpProtecting || npc.getId() !== MEZAN_FIGHTER_ID) return;
+    if (styleOf(hit) === npc.__tpProtecting && !hit.bypassesProtectionPrayer?.()) nullify(hit);
+  }
+
+  /** He falls without dying: the done knight, then back to the lobby for his answer. */
+  function keepMezanStanding(event) {
+    const npc = event.npc;
+    const player = npc?.__questSceneOwner;
+    const scene = player ? Scenes.get(player) : null;
+    if (!scene || scene.mezan !== npc) return;
+    event.preventDeath = true;
+    if (scene.defeated) return;
+    scene.defeated = true;
+    npc.getCombat().reset?.();
+    player.getCombat().reset?.();
+    PrayerHandler.deactivatePrayers?.(npc);
+    Scenes.later(scene, 1, () => npc.setNpcTransformationId?.(MEZAN_DONE_ID));
+    Scenes.later(scene, 2, () => {
+      setRecruit(player, COLOSSEUM, 2);
+      Scenes.fade(player, true);
+      Scenes.controls(player, true);
+    });
+    Scenes.later(scene, 4, () => {
+      Scenes.end(player, false);
+      player.moveTo(new Location(...COLOSSEUM_LOBBY_TILE));
+      Scenes.controls(player, true);
+      Scenes.later(player, 2, () => Scenes.fade(player, false));
+      Scenes.later(player, 4, () => {
+        Scenes.controls(player, false);
+        Scenes.closeFade(player);
+        play(player, MEZAN_NPC_ID, V.MEZAN_DEFEATED);
+      });
+    });
+  }
+
+  function leaveArena(event) {
+    const { player } = event;
+    if (Scenes.get(player)?.name !== "mezan") return false;
+    event.handled = true;
+    Scenes.end(player, false);
+    player.moveTo(new Location(...COLOSSEUM_LOBBY_TILE));
+    return true;
+  }
+
+  // ==========================================================================
+  // The judgement
+  // ==========================================================================
+
+  function beginVerdict(player) {
+    if (Scenes.get(player)) return;
+    advance(player, STAGE_VERDICT);
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true, true);
+    Scenes.later(player, 2, () => {
+      const scene = Scenes.open(player, "verdict", PALACE_BOUNDS);
+      Scenes.controls(player, true, true);
+      player.moveTo(new Location(1684, 3157, 0));
+      Scenes.face(player, [1680, 3159]);
+      scene.knights = KNIGHT_ACTORS.map((id, index) =>
+        Scenes.actor(scene, id, [1677, 3156 + index], [1679, 3156 + index]));
+      scene.velam = scene.knights[KNIGHT_ACTORS.indexOf(VELAM_ACTOR_ID)];
+      scene.furia = Scenes.actor(scene, FURIA_ACTOR_ID, [1684, 3156], [1686, 3158]);
+      scene.ennius = Scenes.actor(scene, ENNIUS_ACTOR_ID, [1682, 3156], [1684, 3156]);
+      Scenes.later(scene, 1, () => Scenes.camera(player, [1684, 3161, 420], [1671, 3156, 220]));
+      Scenes.later(scene, 2, () => Scenes.fade(player, false));
+      Scenes.later(scene, 6, () => scene.ennius && Scenes.face(scene.ennius, [1676, 3158]));
+      Scenes.later(scene, 7, () => play(player, ENNIUS_NPC_ID, V.TWINS_LETTER, after("yqVhSV")));
+    });
+  }
+
+  /** The cutscene's narrated beats, played on the capture's ticks before the lines go on. */
+  function verdictOrAftermathCue(player, stepId) {
+    const scene = Scenes.get(player);
+    if (!scene) {
+      // Replayed without its scene (after a relog): the guard has gone, the Prince goes on.
+      if (stepId === STEP.GUARD_LEAVES) {
+        advance(player, STAGE_GUARD_LEFT);
+        play(player, ITZLA_NPC_ID, V.AFTER_CULTISTS, after(STEP.GUARD_LEAVES));
+      }
+      return;
+    }
+    Scenes.hold(player);
+    if (stepId === STEP.VELAM_STEPS) {
+      scene.velam?.getMovementQueue().addSteps(new Location(1679, 3159, 0));
+      Scenes.later(scene, 2, () => scene.velam && Scenes.face(scene.velam, [1679, 3149]));
+      Scenes.later(scene, 3, () => play(player, ENNIUS_NPC_ID, V.TWINS_LETTER, after(STEP.VELAM_STEPS)));
+      return;
+    }
+    if (stepId === STEP.VELAM_KILLED) {
+      scene.ennius?.performAnimation(new Animation(ENNIUS_STRIKE_ANIMATION));
+      Scenes.later(scene, 1, () => {
+        scene.velam?.performAnimation(new Animation(VELAM_FALL_ANIMATION));
+        scene.velam?.showHitsplat?.(VELAM_DAMAGE, { mine: 17, others: 17 }, { current: 0, max: VELAM_DAMAGE });
+      });
+      Scenes.later(scene, 4, () => scene.velam && Scenes.removeActor(scene, scene.velam));
+      Scenes.later(scene, 6, () => scene.ennius && Scenes.face(scene.ennius, [1675, 3159]));
+      Scenes.later(scene, 7, () => play(player, ENNIUS_NPC_ID, V.TWINS_LETTER, after(STEP.VELAM_KILLED)));
+      return;
+    }
+    if (stepId === STEP.KNIGHTS_LEAVE) {
+      // As captured: up the line to its first knight's tile, east, then out to the south.
+      for (const knight of scene.knights.filter((npc) => npc && npc !== scene.velam)) {
+        for (const [x, y] of [[1677, 3156], [1680, 3156], [1681, 3150]]) knight.getMovementQueue().addSteps(new Location(x, y, 0));
+      }
+      Scenes.later(scene, 3, () => {
+        advance(player, STAGE_VERDICT_DONE);
+        if (held(player, LETTER_ITEM_ID)) player.getInventory().deleteNumber(LETTER_ITEM_ID, 1);
+        Scenes.fade(player, true);
+      });
+      Scenes.later(scene, 5, () => {
+        Scenes.end(player, false);
+        player.moveTo(new Location(1683, 3156, 0));
+        Scenes.face(player, [1684, 3156]);
+        Scenes.controls(player, true, true);
+        Scenes.later(player, 2, () => Scenes.fade(player, false));
+        Scenes.later(player, 4, () => {
+          Scenes.controls(player, false);
+          Scenes.closeFade(player);
+          play(player, ENNIUS_NPC_ID, V.TWINS_LETTER, after(STEP.KNIGHTS_LEAVE));
+        });
+      });
+      return;
+    }
+    if (stepId === STEP.GUARD_LEAVES) {
+      advance(player, STAGE_GUARD_LEFT);
+      syncSideVarbits(player, 1);
+      Scenes.fade(player, true);
+      Scenes.later(scene, 2, () => {
+        Scenes.end(player, false);
+        player.moveTo(new Location(1453, 3173, 0));
+        Scenes.face(player, [1454, 3173]);
+        Scenes.controls(player, true, true);
+        Scenes.later(player, 2, () => Scenes.fade(player, false));
+        Scenes.later(player, 4, () => {
+          Scenes.controls(player, false);
+          Scenes.closeFade(player);
+          play(player, ITZLA_NPC_ID, V.AFTER_CULTISTS, after(STEP.GUARD_LEAVES));
+        });
+      });
+    }
+  }
+
+  // ==========================================================================
+  // Renu and the Teomat
+  // ==========================================================================
+
+  /** Feeding Renu: she eats (the box can't be continued), and nine ticks later takes it. */
+  function feedRenu(player, renu) {
+    if (!held(player, FEED_ITEM_ID)) return;
+    const text = "Renu eagerly takes the feed from you.";
+    player.performAnimation(new Animation(RENU_FEED_PLAYER_ANIMATION));
+    renu?.performAnimation?.(new Animation(RENU_FEED_ANIMATION));
+    heldItemBox(player, FEED_ITEM_ID, text);
+    Scenes.later(player, RENU_FEED_TICKS, () => {
+      if (held(player, FEED_ITEM_ID)) player.getInventory().deleteNumber(FEED_ITEM_ID, 1);
+      advance(player, STAGE_FED);
+      api.emitCustomEvent("quetzal:unlock", { player });
+      play(player, REGULUS_NPC_ID, V.REGULUS_AGAIN, (steps) => [
+        { type: "message", text, id: "renu-fed-box" },
+        ...after(STEP.RENU_FED)(steps),
+      ]);
+    });
+  }
+
+  const FED_BOX_STEP = "renu-fed-box";
+
+  function handleFedBox(event) {
+    if (event.stepId !== FED_BOX_STEP) return;
+    event.handled = true;
+    event.box = { items: [FEED_ITEM_ID] };
+  }
+
+  function talkToRenu(event) {
+    const { player } = event;
+    if (event.npcId !== RENU_FEED_NPC_ID || stage(player) !== STAGE_FEED) return false;
+    event.handled = true;
+    if (!held(player, FEED_ITEM_ID)) {
+      player.sendMessage("Renu looks at you hungrily.");
       return true;
     }
-    if (stage >= STAGE_TRAVEL) {
-      const variant = stage === STAGE_TEOMAT ? V_PRINCE_TEOMAT : quest.isComplete(player) ? V_POST_QUEST : V_PRINCE_TEOMAT_AGAIN;
-      playTranscript(player, npcId, variant);
+    play(player, REGULUS_NPC_ID, V.REGULUS_AGAIN, after(STEP.FEED_TAIL), event.npc);
+    return true;
+  }
+
+  function feedOnRenu(event) {
+    if (event.itemId !== FEED_ITEM_ID || (event.npcId ?? event.target?.getId?.()) !== RENU_FEED_NPC_ID) return;
+    return talkToRenu({ ...event, npcId: RENU_FEED_NPC_ID, npc: event.target ?? event.npc, handled: false }) && (event.handled = true);
+  }
+
+  /** The Prince, mid-quest at the Teomat: the battle and its aftermath come back where they stopped. */
+  function talkToPrince(event) {
+    const { player, npcId } = event;
+    if (npcId !== ITZLA_NPC_ID || !atTeomat(event.npc)) return false;
+    const current = stage(player);
+    if (current === STAGE_TEOMAT) {
+      event.handled = true;
+      play(player, ITZLA_NPC_ID, V.PRINCE_TEOMAT, afterLine(LINES.TEOMAT), event.npc);
+      return true;
+    }
+    if (current === STAGE_BATTLE) {
+      event.handled = true;
+      beginBattle(player);
+      return true;
+    }
+    if (current === STAGE_AFTERMATH) {
+      event.handled = true;
+      beginAftermath(player);
+      return true;
+    }
+    if (current === STAGE_GUARD_LEFT) {
+      event.handled = true;
+      play(player, ITZLA_NPC_ID, V.AFTER_GUARD, null, event.npc);
       return true;
     }
     return false;
   }
 
-  function handleDialogueChoice(event) {
-    const { player, npcId, option } = event;
-    if (METZLI_IDS.has(npcId) && option === "I'm meant to be meeting Prince Itzla here.") {
-      if (quest.getStage(player) >= STAGE_STARTED && quest.getStage(player) < STAGE_CRYPT) {
-        advance(player, STAGE_CRYPT);
-      }
-      return;
-    }
-    if (MEZAN_TALK_IDS.has(npcId) && option === "I'm ready. Let's do this.") {
-      if (quest.getStage(player) >= STAGE_RECRUIT && quest.getStage(player) <= STAGE_KNIGHTS_3 && recruit(player, 3) === 1) {
-        startMezanFight(player);
-      }
-    }
-  }
-
-  function handleDialogueLine(event) {
-    const { player, npcId, text } = event;
-    if (!player || !npcId) return;
-    const line = String(text ?? "");
-    if (line === "Timoiva, my child." && (ITZLA_IDS.has(npcId) || SERVIUS_IDS.has(npcId))) {
-      if (quest.getStage(player) === STAGE_CRYPT) advance(player, STAGE_PRINCE);
-      return;
-    }
-    if (line === "Right, I'll go and see if she can help me." && ITZLA_IDS.has(npcId)) {
-      if (quest.getStage(player) === STAGE_TEOMAT) advance(player, STAGE_LIBRARY);
-      return;
-    }
-    if (line.includes("I need you outside, now!") && METZLI_IDS.has(npcId)) {
-      if (quest.getStage(player) >= STAGE_LIBRARY && quest.getStage(player) < STAGE_CULTISTS) {
-        startCultistAttack(player);
-      }
-      return;
-    }
-    if (line === "Alright, I'll go and see Regulus." && TWIN_IDS.has(npcId)) {
-      if (quest.getStage(player) === STAGE_CUTSCENE_DONE) advance(player, STAGE_REGULUS);
-    }
-  }
-
-  function handleDialogueAction(event) {
-    const { player, stepId } = event;
-    switch (stepId) {
-      // Furia hands over the Varlamore crest.
-      case "Ev2lHZ":
-      case "wqRY6L":
-      case "xxd9qj":
-        if (!held(player, CREST_ITEM_ID) && !inventoryFull(player)) {
-          player.getInventory().adds(CREST_ITEM_ID, 1);
-        }
-        advance(player, STAGE_RECRUIT);
-        return;
-      // Knights show the crest; record the first contact.
-      case "o6WA7o":
-        if (recruit(player, 0) === 0) setRecruit(player, 0, 1);
-        return;
-      case "MvE-PO":
-        if (recruit(player, 1) === 0) setRecruit(player, 1, 1);
-        return;
-      case "IsCa0z":
-        if (recruit(player, 3) === 0) setRecruit(player, 3, 1);
-        return;
-      case "ZdVwjS":
-        if (recruit(player, 2) === 0) setRecruit(player, 2, 1);
-        if (recruit(player, 2) === 1 && !isFollowing(player) && !hasFollower(player)) startAzaliFollow(player);
-        return;
-      // Bazaar: pickpocket the amulet, give it back.
-      case "D0l_R6":
-        if (!held(player, AMULET_ITEM_ID) && !inventoryFull(player)) {
-          player.getInventory().adds(AMULET_ITEM_ID, 1);
-        }
-        setRecruit(player, 0, 2);
-        return;
-      case "VgHiDe":
-        if (held(player, AMULET_ITEM_ID)) player.getInventory().deleteNumber(AMULET_ITEM_ID, 1);
-        setRecruit(player, 0, 3);
-        return;
-      // Cothon crate.
-      case "ibPuw6":
-        if (recruit(player, 1) < 2) setRecruit(player, 1, 2);
-        return;
-      // Azali escort.
-      case "sqN3PN":
-        clearFlag(player, FLAG_FOLLOWING);
-        return;
-      case "M9yTX1":
-        setFlag(player, FLAG_FOLLOWING);
-        clearFlag(player, FLAG_TOO_FAST);
-        return;
-      case "ktO5Kb":
-        clearFlag(player, FLAG_FOLLOWING);
-        setFlag(player, FLAG_SOBERED);
-        clearFlag(player, FLAG_TOO_FAST);
-        if (recruit(player, 2) < 2) setRecruit(player, 2, 2);
-        removeTracked(player, "azali-follow");
-        ensureQuestNpcs(player);
-        return;
-      // Kualti Headquarters chest.
-      case "nUVL01":
-        if (!held(player, LETTER_ITEM_ID) && !inventoryFull(player)) {
-          player.getInventory().adds(LETTER_ITEM_ID, 1);
-        }
-        advance(player, STAGE_LETTER);
-        return;
-      // The judgement cutscene.
-      case "yqVhSV":
-        advance(player, STAGE_CUTSCENE);
-        return;
-      case "T86ZS5":
-        advance(player, STAGE_CUTSCENE_DONE);
-        return;
-      // Regulus hands over the quetzal feed.
-      case "V6x6Qr":
-      case "2fRkv2":
-        if (!held(player, FEED_ITEM_ID) && !inventoryFull(player)) {
-          player.getInventory().adds(FEED_ITEM_ID, 1);
-        }
-        advance(player, STAGE_FEED);
-        return;
-      // Renu takes the feed; the transport system is not an interface here.
-      case "OlyLnC":
-        if (held(player, FEED_ITEM_ID)) player.getInventory().deleteNumber(FEED_ITEM_ID, 1);
-        setFlag(player, FLAG_FIRST_TRAVEL);
-        advance(player, STAGE_TRAVEL);
-        ensureQuestNpcs(player);
-        return;
-      case "0GSFPb":
-        event.handled = true;
-        event.end = true;
-        player.sendMessage("Renu is ready to take you to the Teomat.");
-        return;
-      case "NyygQH":
-        quest.complete(player);
-        return;
-      default:
-        return;
-    }
-  }
-
-  // ==========================================================================
-  // NPC interactions
-  // ==========================================================================
-
-  function startAzaliFollow(player) {
-    setFlag(player, FLAG_FOLLOWING);
-    clearFlag(player, FLAG_TOO_FAST);
-    const here = player.getLocation();
-    syncTracked(player, "azali-follow", {
-      id: AZALI_DRUNK_NPC_ID,
-      x: here.getX(),
-      y: here.getY(),
-      z: here.getZ(),
-      wanderRadius: 0,
-    });
-    syncSelfVarbits(player);
-  }
-
-  function startMezanFight(player) {
-    if (recruit(player, 3) !== 1) return;
-    mezanFights.add(player);
-    ensureQuestNpcs(player);
-  }
-
-  function handleCitizenPickpocket(event) {
-    if (event.npcId !== CITIZEN_NPC_ID) return false;
-    const { player } = event;
-    const stage = quest.getStage(player);
-    if (stage < STAGE_RECRUIT || stage > STAGE_KNIGHTS_3) return false;
-    if (recruit(player, 0) < 1 || recruit(player, 0) >= 3) return false;
+  function talkToTeomatMetzli(event) {
+    if (event.npcId !== METZLI_NPC_ID || !atTeomat(event.npc) || stage(event.player) !== STAGE_BATTLE) return false;
     event.handled = true;
-    playTranscript(player, CITIZEN_NPC_ID, V_BAZAAR_PICKPOCKET);
+    beginBattle(event.player);
     return true;
   }
 
-  function handleFeedRenu(event) {
-    const { player } = event;
-    if (quest.getStage(player) !== STAGE_FEED) return;
-    event.handled = true;
-    if (!held(player, FEED_ITEM_ID)) {
-      player.sendMessage("You need quetzal feed to do that.");
-      return;
-    }
-    playFeedTail(player);
-  }
+  // ==========================================================================
+  // The cultist attack
+  // ==========================================================================
 
-  function playFeedTail(player) {
-    startTranscript(api, player, RENU_FEED_NPC_ID, PAGE, V_REGULUS_AGAIN, (steps) => {
-      const index = steps.findIndex((step) => step?.type === "unavailable");
-      return index === -1 ? steps : steps.slice(index + 1);
+  function beginBattle(player) {
+    if (Scenes.get(player) || stage(player) !== STAGE_BATTLE) return;
+    Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true);
+    Scenes.later(player, 2, () => {
+      player.getDialogueManager().reset();
+      const scene = Scenes.open(player, "battle", TEOMAT_BOUNDS, { multi: true, canAttack: canAttackInBattle });
+      scene.kills = 0;
+      player.moveTo(new Location(1441, 3179, 0));
+      Scenes.face(player, [1441, 3178]);
+      scene.guards = BATTLE_GUARDS.map(({ id, tile, face }) => Scenes.actor(scene, id, tile, face));
+      scene.itzla = Scenes.actor(scene, ITZLA_FIGHTER_ID, [1444, 3174], [1444, 3172]);
+      Scenes.actor(scene, SERVIUS_BATTLE_ID, [1453, 3172], [1453, 3177]);
+      Scenes.actor(scene, METZLI_BATTLE_ID, [1449, 3195], [1449, 3194]);
+      scene.cultists = BATTLE_CULTISTS.map((entry) => {
+        const npc = Scenes.actor(scene, entry.id, entry.tile, entry.face);
+        if (npc) npc.__tpPartner = entry.partner === "itzla" ? scene.itzla : scene.guards[entry.partner] ?? null;
+        return npc;
+      });
+      for (const loc of BATTLE_LOCS) Scenes.loc(scene, loc);
+      Scenes.later(scene, 1, () => {
+        const attacker = scene.cultists[BATTLE_CULTISTS.findIndex((entry) => entry.player)];
+        attacker?.getCombat().attack(player);
+      });
+      Scenes.later(scene, 2, () => {
+        Scenes.fade(player, false);
+        Scenes.controls(player, false);
+      });
+      Scenes.later(scene, 4, () => Scenes.closeFade(player));
+      spar(player, scene, 0);
     });
   }
 
-  function handleTravelRenu(event) {
-    const { player, npcId } = event;
-    if (!RENU_IDS.has(npcId)) return;
-    if (!quest.isComplete(player) && quest.getStage(player) < STAGE_TRAVEL) return;
-    event.handled = true;
-    player.moveTo(new Location(TEOMAT_LANDING.x, TEOMAT_LANDING.y, TEOMAT_LANDING.z));
-    advance(player, STAGE_TEOMAT);
+  function canAttackInBattle(attacker, target) {
+    const player = attacker?.isPlayer?.() ? attacker : target?.isPlayer?.() ? target : null;
+    const scene = player ? Scenes.get(player) : null;
+    if (!scene || scene.name !== "battle") return null;
+    const npc = attacker === player ? target : attacker;
+    return scene.cultists.includes(npc) ? true : false;
+  }
+
+  // shortcut: allied sparring is cosmetic; add allied kills when this scene has captured NPC combat rules.
+  function spar(player, scene, beat) {
+    Scenes.later(scene, SPAR_TICKS / 2, () => {
+      if (Scenes.get(player) !== scene) return;
+      for (const cultist of scene.cultists) {
+        const partner = cultist?.__tpPartner;
+        if (!cultist?.isRegistered?.() || (cultist.getHitpoints?.() ?? 1) <= 0 || !partner?.isRegistered?.()) continue;
+        if (cultist.getCombat().getTarget?.()) continue;
+        const itzla = partner === scene.itzla;
+        const [hitter, hit, swing, block] = beat % 2 === 0
+          ? [partner, cultist, itzla ? SPAR_ATTACKS.itzla : SPAR_ATTACKS.guard, SPAR_ATTACKS.cultistBlock]
+          : [cultist, partner, SPAR_ATTACKS.cultist, itzla ? SPAR_ATTACKS.itzlaBlock : SPAR_ATTACKS.guardBlock];
+        hitter.performAnimation(new Animation(swing));
+        hit.performAnimation(new Animation(block));
+        Scenes.face(hitter, [hit.getLocation().getX(), hit.getLocation().getY()]);
+        hit.showHitsplat?.(Math.floor(Math.random() * 5), { mine: 17, others: 17 });
+      }
+      spar(player, scene, beat + 1);
+    });
   }
 
   function handleNpcDeath(event) {
-    const killer = event?.killer?.isPlayer?.() ? event.killer : null;
-    if (!killer) return;
-    if (event.npcId === MEZAN_FIGHT_NPC_ID) {
-      if (event.npc?.getOwner?.() !== killer) return;
-      mezanFights.delete(killer);
-      if (recruit(killer, 3) !== 1) return;
-      setRecruit(killer, 3, 2);
-      removeTracked(killer, "mezan-fight");
-      ensureQuestNpcs(killer);
-      return;
-    }
-    if (CULTIST_IDS.has(event.npcId)) handleCultistDeath(event, killer);
+    const npc = event.npc;
+    const player = npc?.__questSceneOwner;
+    const scene = player ? Scenes.get(player) : null;
+    if (!scene || scene.name !== "battle" || !scene.cultists.includes(npc)) return;
+    scene.kills++;
+    player.sendMessage(`Enemies Defeated: ${scene.kills}/${BATTLE_CULTISTS.length}`);
+    if (scene.kills >= BATTLE_CULTISTS.length) Scenes.later(scene, 3, () => beginAftermath(player));
   }
 
-  function handlePlayerProcess({ player }) {
-    if (!player || player.isPlayerBot?.() === true) return;
-    if (pendingVictory.has(player)) {
-      pendingVictory.delete(player);
-      if (quest.getStage(player) >= STAGE_FINISH && !quest.isComplete(player)) {
-        startTranscript(api, player, NpcIdentifiers.PRINCE_ITZLA_ARKAN, PAGE, V_AFTER_CULTISTS);
-      }
-      return;
-    }
-    if (!isFollowing(player)) return;
-    const follower = tracked(player, "azali-follow");
-    if (!follower?.isRegistered?.()) return;
-    const here = player.getLocation();
-    const there = follower.getLocation();
-    const distance = Math.max(Math.abs(here.getX() - there.getX()), Math.abs(here.getY() - there.getY()));
-    if (distance > FOLLOW_GIVE_UP_DISTANCE) {
-      clearFlag(player, FLAG_FOLLOWING);
-      setFlag(player, FLAG_TOO_FAST);
-      removeTracked(player, "azali-follow");
-      syncSelfVarbits(player);
-      return;
-    }
-    const movement = follower.getMovementQueue();
-    if (distance > 1 && !movement.hasPendingWork()) movement.addFirstStep(here);
+  /** Servius, gravely wounded: the guard's report, then he is carried away. */
+  function beginAftermath(player) {
+    const current = Scenes.get(player);
+    if (current) current.handingOver = true;
+    advance(player, STAGE_AFTERMATH);
+    syncSideVarbits(player, 2);
+    if (current?.name !== "battle") Scenes.hold(player);
+    Scenes.fade(player, true);
+    Scenes.controls(player, true, true);
+    Scenes.later(current ?? player, 2, () => {
+      const scene = Scenes.open(player, "aftermath", TEOMAT_BOUNDS);
+      Scenes.controls(player, true, true);
+      player.moveTo(new Location(1447, 3173, 0));
+      Scenes.face(player, [1448, 3173]);
+      Scenes.actor(scene, SERVIUS_INJURED_ID, [1453, 3171], [1453, 3175]);
+      scene.guard = Scenes.actor(scene, GUARD_ACTOR_ID, [1455, 3172], [1453, 3172]);
+      Scenes.actor(scene, ITZLA_ACTOR_ID, [1453, 3177], [1453, 3175]);
+      for (const loc of AFTERMATH_LOCS) Scenes.loc(scene, loc);
+      Scenes.later(scene, 1, () => Scenes.camera(player, [1450, 3178, 420], [1453, 3171, 20]));
+      Scenes.later(scene, 3, () => Scenes.fade(player, false));
+      Scenes.later(scene, 6, () => {
+        if (scene.guard) Scenes.face(scene.guard, [1452, 3174]);
+        play(player, ITZLA_NPC_ID, V.AFTER_CULTISTS, after(STEP.AFTERMATH));
+      });
+    });
   }
 
-  function handleZoneEnter(event) {
-    const { player } = event;
-    if (!player || player.isPlayerBot?.() === true) return;
-    if (!isFollowing(player)) return;
-    if (quest.getStage(player) < STAGE_RECRUIT || quest.getStage(player) > STAGE_KNIGHTS_3) return;
-    if (recruit(player, 2) !== 1) return;
-    const follower = tracked(player, "azali-follow");
-    if (!follower?.isRegistered?.()) return;
-    playTranscript(player, AZALI_DRUNK_NPC_ID, V_AZALI_FOUNTAIN);
+  function sceneEnded(player, scene, logout) {
+    if (scene.name === "battle" && !logout && stage(player) === STAGE_BATTLE && !scene.handingOver) {
+      player.sendMessage("You leave the battle.");
+    }
+    if (scene.name === "mezan") player.__tpMezanReady = false;
+    if (logout) {
+      const back = { fountain: [1756, 3070, 0], mezan: COLOSSEUM_LOBBY_TILE, verdict: [1683, 3156, 0], battle: [1441, 3179, 0], aftermath: [1453, 3173, 0] }[scene.name];
+      if (back) player.moveTo(new Location(...back));
+    }
   }
 
   // ==========================================================================
-  // Objects and items
+  // Journal, reward and saves
   // ==========================================================================
 
-  /** The crypt gate's open loc (50862) has no actions, so Doors cannot pair it. */
-  function openTempleGate() {
-    if (gateOpened) return;
-    gateOpened = true;
-    RegionManager.loadMapFiles(TEMPLE_GATE_TILE.x, TEMPLE_GATE_TILE.y);
-    const objects = MapObjects.mapObjects.get(MapObjects.getHash(TEMPLE_GATE_TILE.x, TEMPLE_GATE_TILE.y, 0)) ?? [];
-    for (const object of [...objects]) {
-      if (object.getId() !== TEMPLE_GATE_OBJECT_ID) continue;
-      ObjectManager.deregister(object, true);
-      // The open loc is the same model turned a quarter; the closed face (3) blocks
-      // the tile, the turned one (0) does not.
-      ObjectManager.register(
-        new GameObject(
-          TEMPLE_GATE_OPEN_OBJECT_ID,
-          new Location(TEMPLE_GATE_TILE.x, TEMPLE_GATE_TILE.y, 0),
-          object.getType?.() ?? 0,
-          ((object.getFace?.() ?? 0) + 1) & 3,
-          null
-        ),
-        true
-      );
-    }
-  }
-
-  function handleGateOpen(event) {
-    const location = event.location;
-    if (event.objectId !== TEMPLE_GATE_OBJECT_ID) return false;
-    if (!location || location.x !== TEMPLE_GATE_TILE.x || location.y !== TEMPLE_GATE_TILE.y) return false;
-    event.handled = true;
-    if (quest.getStage(event.player) < STAGE_METZLI) {
-      startTranscript(
-        api,
-        event.player,
-        NpcIdentifiers.ENNIUS_TULLUS,
-        PAGE,
-        V_GATE_LOCKED
-      );
-      return true;
-    }
-    openTempleGate();
-    return true;
-  }
-
-  function handleDoorToggle(request) {
-    if (request.handled) return;
-    if (request.objectId !== TEMPLE_GATE_OBJECT_ID) return;
-    const location = request.location;
-    if (!location || location.x !== TEMPLE_GATE_TILE.x || location.y !== TEMPLE_GATE_TILE.y) return;
-    request.handled = true;
-    if (quest.getStage(request.player) < STAGE_METZLI) {
-      startTranscript(api, request.player, NpcIdentifiers.ENNIUS_TULLUS, PAGE, V_GATE_LOCKED);
-      return;
-    }
-    openTempleGate();
-  }
-
-  function handleCrateSearch(player, objectId, location) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE_RECRUIT || stage > STAGE_KNIGHTS_3) return;
-    const plural = objectId === COTHON_CRATES_OBJECT_ID;
-    const correct =
-      objectId === COTHON_CRATE_OBJECT_ID &&
-      location &&
-      location.x === COTHON_CRATE_TILE.x &&
-      location.y === COTHON_CRATE_TILE.y;
-    const value = recruit(player, 1);
-    if (value >= 3) {
-      playTranscript(player, NpcIdentifiers.KNIGHT_OF_VARLAMORE_5, plural ? V_COTHON_ANY_PLURAL : V_COTHON_ANY);
-      return;
-    }
-    if (correct && value < 1) {
-      playTranscript(player, NpcIdentifiers.KNIGHT_OF_VARLAMORE_5, V_COTHON_BEFORE);
-      return;
-    }
-    if (correct && value < 2) {
-      playTranscript(player, NpcIdentifiers.KNIGHT_OF_VARLAMORE_5, V_COTHON_FOUND);
-      return;
-    }
-    if (correct) {
-      playTranscript(player, NpcIdentifiers.KNIGHT_OF_VARLAMORE_5, V_COTHON_ANY);
-      return;
-    }
-    playTranscript(player, NpcIdentifiers.KNIGHT_OF_VARLAMORE_5, plural ? V_COTHON_WRONG_PLURAL : V_COTHON_WRONG);
-  }
-
-  function handleChestOpen(player, objectId) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE_HQ || stage >= STAGE_CUTSCENE) {
-      playTranscript(player, NpcIdentifiers.ENNIUS_TULLUS, V_CHEST_WRONG);
-      return;
-    }
-    if (CORRECT_CHEST_OBJECT_IDS.has(objectId)) {
-      playTranscript(player, NpcIdentifiers.ENNIUS_TULLUS, V_CHEST);
-      return;
-    }
-    playTranscript(player, NpcIdentifiers.ENNIUS_TULLUS, V_CHEST_WRONG);
-  }
-
-  function handleObjectInteraction(event) {
-    const { player } = event;
-    const definition = event.definition ?? ObjectDefinition.forPlayer(event.objectId, player);
-    const objectId = definition?.id ?? event.objectId;
-    if (objectId === COTHON_CRATE_OBJECT_ID || objectId === COTHON_CRATES_OBJECT_ID) {
-      const stage = quest.getStage(player);
-      if (stage < STAGE_RECRUIT || stage > STAGE_KNIGHTS_3) return;
-      event.handled = true;
-      handleCrateSearch(player, objectId, event.location);
-      return;
-    }
-    if (HQ_CHEST_OBJECT_IDS.has(objectId)) {
-      event.handled = true;
-      handleChestOpen(player, objectId);
-    }
-  }
-
-  function handleItemOnNpc(event) {
-    const { player, itemId } = event;
-    const npcId = event.npcId ?? event.target?.getId?.();
-    if (!RENU_IDS.has(npcId) || itemId !== FEED_ITEM_ID) return;
-    if (quest.getStage(player) !== STAGE_FEED) return;
-    event.handled = true;
-    playFeedTail(player);
-  }
-
-  function handleReadLetter(event) {
-    if (event.itemId !== LETTER_ITEM_ID) return;
-    event.handled = true;
-    if (hasFlag(event.player, FLAG_MESSAGE_READ)) return;
-    setFlag(event.player, FLAG_MESSAGE_READ);
-    event.player.getPacketSender().sendVarbit(MESSAGE_READ_VARBIT, 1);
-    event.player.sendMessage("You read the incriminating letter.");
-  }
-
-  // ==========================================================================
-  // Login / logout
-  // ==========================================================================
-
-  function handleLogin({ player }) {
-    ensureQuestNpcs(player);
-    syncSelfVarbits(player);
-    refreshQuestList(player);
-  }
-
-  function handleLogout({ player }) {
-    if (!player) return;
-    const tracked = trackedNpcs.get(player);
-    if (tracked) {
-      for (const npc of tracked.values()) {
-        if (Array.isArray(npc)) {
-          for (const entry of npc) if (entry?.isRegistered?.()) api.removeNpc(entry);
-        } else if (npc?.isRegistered?.()) {
-          api.removeNpc(npc);
-        }
-      }
-      trackedNpcs.delete(player);
-    }
-    mezanFights.delete(player);
-  }
-
-  // ==========================================================================
-  // Journal and rewards
-  // ==========================================================================
+  const GROUP_NAMES = [
+    "<col=800000>Arrun and Claudia</col> at the bazaar",
+    "<col=800000>Nel</col> at the cothon",
+    "<col=800000>Velam and Azali</col> at the pub",
+    "<col=800000>Mezan</col> at the colosseum",
+  ];
 
   function buildJournal(player, questHandle) {
-    const stage = questHandle.getStage(player);
-    if (stage >= STAGE_COMPLETE) {
+    const current = questHandle.getStage(player);
+    if (current >= STAGE_COMPLETE) {
       return [
-        "<str>Prince Itzla asked me to investigate the knights who plotted</str>",
-        "<str>against Servius, and I found Velam's incriminating letter.</str>",
-        "<str>At the Teomat the cultists attacked and gravely wounded Servius.</str>",
+        "<str>I helped Prince Itzla find the traitor among the knights who",
+        "<str>went to Varrock, and saw cultists attack the Teomat.</str>",
         "",
         "<col=ff0000>QUEST COMPLETE!</col>",
       ];
     }
-    if (stage >= STAGE_CULTISTS) {
-      return [
-        "The Twilight Emissaries attacked the Teomat.",
-        "",
-        "I must defeat the eight <col=800000>cultists</col> outside.",
-      ];
+    if (current >= STAGE_AFTERMATH) return ["The cultists are defeated, but Servius has been gravely", "wounded. I should speak to <col=800000>Prince Itzla</col>."];
+    if (current >= STAGE_BATTLE) return ["Cultists are attacking the Teomat.", "", "I must defeat the eight <col=800000>cultists</col> outside."];
+    if (current >= STAGE_LIBRARY) return ["I should ask <col=800000>Metzli</col> in the Teomat's library about", "the Final Dawn."];
+    if (current >= STAGE_FED) return ["Renu can take me to the Teomat now.", "", "I should tell <col=800000>Prince Itzla</col> there what I found."];
+    if (current >= STAGE_FEED) return ["Regulus Cento gave me some <col=800000>quetzal feed</col>.", "", "I should feed it to <col=800000>Renu</col> by the landing site."];
+    if (current >= STAGE_REGULUS) return ["Ennius killed Velam before he could be questioned.", "", "I should ask <col=800000>Regulus Cento</col> about getting to the Teomat."];
+    if (current >= STAGE_VERDICT) return ["The twins summoned the knights to the palace.", "", "I should speak to <col=800000>Ennius and Furia Tullus</col>."];
+    if (current >= STAGE_LETTER_READ) return ["The letter names Velam as the traitor.", "", "I should show it to <col=800000>Ennius and Furia Tullus</col>."];
+    if (current >= STAGE_LETTER) return ["I found a letter in the Kualti Headquarters.", "", "I should read it."];
+    if (current >= STAGE_HQ) return ["The knights stayed in the <col=800000>Kualti Headquarters</col> west of", "the palace. I should search their chests upstairs."];
+    if (current >= STAGE_JUDGEMENT) return ["All six knights are returning to the palace.", "", "I should speak to <col=800000>Ennius and Furia Tullus</col>."];
+    if (current >= STAGE_RECRUIT) {
+      return ["I need to send the knights back to the palace:", ...GROUP_NAMES.map((name, group) =>
+        recruit(player, group) >= 3 ? `<str>${name.replace(/<[^>]+>/g, "")}</str>` : name)];
     }
-    if (stage >= STAGE_LIBRARY) {
-      return ["I should speak to <col=800000>Metzli</col> in the northern building", "of the Teomat."];
-    }
-    if (stage >= STAGE_TEOMAT) {
-      return ["I travelled to the Teomat with Renu.",
-        "", "I should speak to <col=800000>Prince Itzla Arkan</col> in the temple."];
-    }
-    if (stage >= STAGE_TRAVEL) {
-      return ["Renu is fed and ready.", "",
-        "I should travel to the <col=800000>Teomat</col> and speak to the prince."];
-    }
-    if (stage >= STAGE_FEED) {
-      return ["Regulus Cento gave me some <col=800000>quetzal feed</col>.",
-        "", "I should feed it to <col=800000>Renu</col> outside the palace."];
-    }
-    if (stage >= STAGE_REGULUS) {
-      return ["Ennius killed Velam before he could be questioned.",
-        "", "I should speak to <col=800000>Regulus Cento</col> about travelling to the Teomat."];
-    }
-    if (stage >= STAGE_CUTSCENE) {
-      return ["A cutscene played out at the palace and Velam was executed.",
-        "", "I should finish speaking to the <col=800000>Tullus twins</col>."];
-    }
-    if (stage >= STAGE_LETTER) {
-      const lines = ["I found an incriminating letter in the Kualti Headquarters."];
-      if (!hasFlag(player, FLAG_MESSAGE_READ)) lines.push("", "I should read it.");
-      else lines.push("", "I should take it to <col=800000>Ennius and Furia</col> in the palace.");
-      return lines;
-    }
-    if (stage >= STAGE_HQ) {
-      return ["The twins told me the knights stayed in the <col=800000>Kualti",
-        "Headquarters</col> west of the palace.",
-        "", "I should search the chests on the top floor for evidence."];
-    }
-    if (stage >= STAGE_JUDGEMENT) {
-      return ["All six knights have agreed to return to the palace.",
-        "", "I should speak to <col=800000>Ennius and Furia</col>."];
-    }
-    if (stage >= STAGE_RECRUIT) {
-      return [
-        `I have returned ${finishedRecruits(player)} of the four groups of knights:`,
-        "<col=800000>Arrun and Claudia</col> (bazaar), <col=800000>Nel</col> (cothon),",
-        "<col=800000>Mezan</col> (colosseum) and <col=800000>Velam and Azali</col> (pub).",
-      ];
-    }
-    if (stage >= STAGE_TWINS) {
-      return ["The prince suspects one of the delegation's knights.",
-        "", "I should speak to the <col=800000>Tullus twins</col> in the palace."];
-    }
-    if (stage >= STAGE_CRYPT) {
-      return ["I met the prince in the temple crypt.",
-        "", "I should speak to <col=800000>Prince Itzla</col> about the investigation."];
-    }
-    if (stage >= STAGE_METZLI_ASKED) {
-      return ["Metzli said the prince is in the crypt below the temple.",
-        "", "I should enter the crypt and find <col=800000>Prince Itzla</col>."];
-    }
-    if (stage >= STAGE_METZLI) {
-      return ["I should speak to <col=800000>Metzli</col> in the temple about",
-        "the prince."];
-    }
-    if (stage >= STAGE_STARTED) {
-      return ["The Tullus twins told me the prince is waiting at the temple",
-        "beyond the bazaar in Civitas illa Fortis."];
-    }
+    if (current >= STAGE_TWINS) return ["Prince Itzla suspects one of the delegation's knights.", "", "I should speak to the <col=800000>Tullus twins</col> in the palace."];
+    if (current >= STAGE_CRYPT) return ["Metzli said the Prince is in the crypt below the temple.", "", "I should speak to <col=800000>Prince Itzla</col> there."];
+    if (current >= STAGE_TEMPLE) return ["The Prince is waiting for me at the temple, south of", "the bazaar. I should speak to <col=800000>Metzli</col> there."];
+    if (current >= STAGE_STARTED) return ["I met the <col=800000>Tullus twins</col> outside the Sunrise Palace."];
     return [
       "I can start this quest by talking to <col=800000>Ennius</col> or",
-      "<col=800000>Furia Tullus</col> in front of the Sunrise Palace.",
+      "<col=800000>Furia Tullus</col> outside the Sunrise Palace.",
       "",
       "I need to have completed Children of the Sun.",
     ];
@@ -1335,9 +1433,45 @@ module.exports = function registerTwilightPromiseQuest(api) {
     player.getSkillManager().addExperiences(Skill.THIEVING, 3000);
   }
 
-  api.persistAttribute(RECRUITS_ATTRIBUTE);
+  /** Saves from the old plugin used other stage numbers; map them once. */
+  function migrate(player) {
+    if (player.getAttribute(STAGE_VERSION_ATTRIBUTE) === STAGE_VERSION) return;
+    player.setAttribute(STAGE_VERSION_ATTRIBUTE, STAGE_VERSION);
+    const old = stage(player);
+    if (old <= 0) return;
+    const read = ((Number(player.getAttribute(FLAGS_ATTRIBUTE)) || 0) & OLD_FLAG_MESSAGE_READ) !== 0;
+    const mapped = { 4: STAGE_METZLI, 10: STAGE_TWINS, 26: read ? STAGE_LETTER_READ : STAGE_LETTER, 28: STAGE_VERDICT,
+      30: STAGE_VERDICT_DONE, 32: STAGE_REGULUS, 40: STAGE_FED }[old] ?? old;
+    player.setAttribute(FLAGS_ATTRIBUTE, null);
+    if (mapped !== old) quest.setStage(player, mapped);
+    if (mapped >= STAGE_FED) api.emitCustomEvent("quetzal:unlock", { player });
+  }
+
+  function syncOnBootstrap({ player }) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    migrate(player);
+    syncSideVarbits(player);
+  }
+
+  function handleLogin({ player }) {
+    refreshQuestList(player);
+  }
+
+  function handleLogout({ player }) {
+    if (!player) return;
+    stopFollowing(player, false);
+    Scenes.end(player, true);
+    Scenes.cancel(player);
+  }
+
+  function handleProcess({ player }) {
+    if (followers.has(player)) tickFollower(player);
+  }
+
+  api.persistAttribute(RECRUITS_ATTRIBUTE, 0);
   api.persistAttribute(FLAGS_ATTRIBUTE);
-  api.persistAttribute(CULTIST_KILLS_ATTRIBUTE);
+  api.persistAttribute(LETTER_CHEST_ATTRIBUTE);
+  api.persistAttribute(STAGE_VERSION_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "twilights_promise",
@@ -1347,11 +1481,8 @@ module.exports = function registerTwilightPromiseQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
-    xpRewards: [{ skillId: Skill.THIEVING.getIndex(), amount: 3000, label: "Thieving" }],
-    otherRewards: [
-      "Ability to use the Civitas illa Fortis Teleport spell",
-      "Ability to use the Quetzal Transport System",
-    ],
+    scrollItemId: CREST_ITEM_ID,
+    otherRewards: ["Ability to use Quetzals", "Civitas illa Fortis Teleport", "3,000 Thieving XP"],
     buildJournal,
     onReward: grantReward,
   });
@@ -1359,20 +1490,28 @@ module.exports = function registerTwilightPromiseQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
-  api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
-  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
-  api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
-  api.onCustomEvent("door:toggle", handleDoorToggle);
-  api.onNpcInteraction("Prince Itzla Arkan", { "Talk-to": handlePrinceTalk });
-  api.onNpcInteraction("Citizen", { Pickpocket: handleCitizenPickpocket });
-  api.onNpcInteraction("Renu", { Feed: handleFeedRenu, Travel: handleTravelRenu });
-  api.onObjectInteraction("Gate", { Open: handleGateOpen });
-  api.onObjectInteraction(handleObjectInteraction);
-  api.onItemOnNpc(handleItemOnNpc);
-  api.onItemAction(LETTER_ITEM_NAME, { Read: handleReadLetter });
+  api.onCustomEvent("npc-dialogue:choice", handleChoice);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:action", handleFedBox);
+  api.onCustomEvent("door:toggle", handleGate);
+  api.onCustomEvent("player:bootstrap-complete", syncOnBootstrap);
+  api.onObjectInteraction("Gate", { Open: openGate, Exit: leaveArena, "Quick-exit": leaveArena });
+  api.onObjectInteraction("Crate", { Search: searchCrate });
+  api.onObjectInteraction("Crates", { Search: searchCrate });
+  api.onObjectInteraction("Chest", { Open: openChest });
+  api.onNpcInteraction("Citizen", { Pickpocket: pickpocketCitizen });
+  api.onNpcInteraction("Knight of Varlamore", { "Talk-to": talkToAzali });
+  api.onNpcInteraction("Prince Itzla Arkan", { "Talk-to": talkToPrince });
+  api.onNpcInteraction("Metzli, Teokan of Ranul", { "Talk-to": talkToTeomatMetzli });
+  api.onNpcInteraction("Renu", { Feed: talkToRenu });
+  api.onItemOnNpc(feedOnRenu);
+  api.onItemAction("Incriminating letter", { Read: readLetter });
+  api.onPlayerDealtDamage(countMezanAttack);
+  api.onNpcHitModify(blockMezanHit);
+  api.onNpcBeforeDeath(keepMezanStanding);
   api.onNpcDeath(handleNpcDeath);
-  api.onPlayerProcess(handlePlayerProcess);
-  api.onZoneEnter(FOUNTAIN_ZONE, handleZoneEnter);
+  api.onPlayerProcess(handleProcess);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

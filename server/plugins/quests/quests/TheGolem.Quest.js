@@ -7,7 +7,7 @@
  * the soft-clay repairs, the letter/statuette hunt, the temple statue puzzle,
  * the demon's lair and the reprogramming that completes the quest.
  *
- * Stages (varp 346): 0 unstarted, 1 repair golem, 2 open portal, 3 find
+ * Stages (varbit 346 golem_a, varp 437 golem_quest bits 0-4): 0 unstarted, 1 repair golem, 2 open portal, 3 find
  * statuette, 4 statuette replaced, 5 portal opened, 6 demon dead, 7 convince
  * golem, 10 complete. Letter progress, clay used, statue pattern, throne gems,
  * the retrieved statuette and the skeleton sighting live in persisted player
@@ -26,7 +26,9 @@ module.exports = function registerTheGolemQuest(api) {
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "The Golem";
-  const VARP_THE_GOLEM = 346; // OSRS varp, unused in this repo.
+  const VARP_THE_GOLEM = 437; // golem_quest
+  // golem_a: the stage the cache reads, e.g. Uzer's Rug Merchant (NPC 21) shows at 10.
+  const VARBIT_THE_GOLEM = 346;
 
   const STAGE_NOT_STARTED = 0;
   const STAGE_REPAIR_GOLEM = 1;
@@ -748,6 +750,7 @@ module.exports = function registerTheGolemQuest(api) {
     key: "the_golem",
     name: "The Golem",
     varpId: VARP_THE_GOLEM,
+    varbitId: VARBIT_THE_GOLEM,
     startedValue: STAGE_REPAIR_GOLEM,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,

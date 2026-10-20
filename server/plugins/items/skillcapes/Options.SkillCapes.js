@@ -276,6 +276,8 @@ module.exports = function attachOptions(pluginApi) {
   api.persistAttribute(VORKATH_UPGRADE_ATTRIBUTE, false);
   api.persistAttribute(Capes.DAILY_ATTRIBUTE, null);
   api.onItemAction(capeOption);
+  // A mounted cape (house cape hanger) runs its option as the item would: { player, itemId, option }.
+  api.onCustomEvent("skillcape:operate", (request) => { if (!request.handled) capeOption(request); });
   api.onCustomEvent("skillcape:ring-of-life", ringOfLife);
   api.onCustomEvent("skillcape:accumulator-junk", accumulatorJunk);
   api.onCustomEvent("skillcape:ammo-recovery", ammoRecovery);

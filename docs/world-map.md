@@ -25,3 +25,12 @@ From a second capture of a player opening the map, boarding a boat, and sailing 
   - **On land:** the start-of-tick position.
   - **Aboard:** boats move after the players, so the player is queued and a `BoatManager.onAfterTick` listener sends the boat's tile once it has moved.
 - `server/tests/world-map-position.test.cjs` replays both captures' ticks and checks the same sends.
+
+## Tile loading and recovery
+
+The minimap keeps its last rendered image and icon list when a streamed map update omits the
+corresponding minimap data. An explicit empty icon list still clears old icons. The world map
+requests visible archive tiles asynchronously, displays `Loading map...` while requests are in
+flight, and retries failed or malformed tiles after a short delay. It accepts only RGBA buffers
+large enough for their declared dimensions, so incomplete decoded data cannot reach the texture
+renderer. Existing cached tiles remain usable while a new tile request fails.

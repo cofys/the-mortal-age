@@ -1,0 +1,105 @@
+# Ectofuntus
+
+`server/plugins/skills/Ectofuntus.plugin.js` (members), with one unit per part in
+`server/plugins/skills/ectofuntus/`: the ectophial, the pool of slime, the bone grinder, worship and
+the ghost disciples. Bones and bonemeal come from `server/plugins/skills/data/bones.json`
+([prayer-bones.md](prayer-bones.md)). Ghosts Ahoy keeps only its quest.
+
+Behaviour follows the OSRS Wiki (Ectofuntus, Ectophial, Bonemeal); messages, animations, sounds,
+varbits and ticks follow rsprox captures (https://rsprox.net/database).
+
+## Ectophial
+
+Recordings 361, 371, 375-377, 390-392, 703, 1440, 2765, 3031, 3929, 3931 (rev 224-236). Ticks count
+from the click on Empty:
+
+| Tick | Captured |
+| --- | --- |
+| 0 | `ahoy_ecto_teleport` (878, which loops until stopped) with `ectophial_pour_spotanim` (1273); the full phial becomes the empty one (4252); "You empty the ectoplasm onto the ground around your feet..." |
+| 3 | the sequence is reset; lands on one of (3658-3661, 3522, 0); "...and the world changes around you." |
+| 4 | faces (3659, 3520); `human_pickupfloor` (827) with synth 1132 |
+| 5 | the phial is full again; "You refill the ectophial from the Ectofuntus."; the sequence is reset |
+
+Clicks don't stop it: in recording 703 the player clicks on tick 5, the phial refills that tick and
+they move on the next. So movement is held until the refill. Using an empty phial on the Ectofuntus
+refills it too (Wiki). The teleport takes the usual checks (level 20 Wilderness).
+
+## Pool of slime
+
+Recording 377. A bucket used on the pool fills every bucket carried (Wiki). It plays
+`quest_ahoy_human_filling_bucket` (4471) at once. Two ticks later a bucket becomes a bucket of slime
+with synth 1132; the first fill also says "You fill the bucket with ectoplasm." The next bucket's
+animation comes two ticks after that, then a tick after each fill.
+
+## Bone grinder
+
+Recordings 376, 377 (rev 231). Bones on the loader run the whole round, then start the next bone
+after each pot, until bones or pots run out or the player clicks. The player walks between the
+three parts:
+
+| Part (player's tile, facing north) | Captured | Then |
+| --- | --- | --- |
+| Loader (3660, 3524, 1) | `ahoy_bone_dump` (1649), synth 1133, "You put some big bones in the grinder's hopper.", `ahoy_grinder_status` 1 | +3 steps west, +5 winds |
+| Handle (3659, 3524, 1) | `ahoy_bone_grind` (1648), synth 1131, "You wind the grinder handle."; +3 "Some crushed big bones pour into the bin.", status 2 | +6 steps west, +8 fills |
+| Bin (3658, 3524, 1) | `ahoy_fillbucket_bonedust` (1650), synth 1136, "You fill a pot with crushed big bones.", the pot becomes bonemeal, status 0 | +5 runs to the loader, +7 loads the next bone |
+
+The other answers, also captured:
+
+- No pot at the bin: "You need an empty pot to put the crushed big bones into." The round stops
+  with the bones in the bin.
+- Bones on the loader while the bin is full: "You need to empty the grinder's bin before you put
+  more bones in it."
+- Status: "The grinder is empty." / "There are some big bones in the hopper." / "There are some
+  crushed big bones in the bin."
+- Empty, or a pot on the bin: "The grinder is already empty." / "You need to wind the handle to
+  grind the big bones." / a full bin fills the pot and carries on.
+- Winding an empty grinder only turns the handle.
+
+What's in the grinder is saved (`ectofuntus:grinder-status`, `ectofuntus:grinder-bone`) and sent in
+`ahoy_grinder_status` (varbit 210) on login. Not captured: bones on the loader while the hopper is
+full. They are wound, as the handle does.
+
+## Worship
+
+Recordings 375-377, 703 (rev 229-231). One worship per click; a bucket of slime or bonemeal used on
+the Ectofuntus does the same:
+
+- `ahoy_prayer` (1651), synth 2671, "You put some ectoplasm and bonemeal into the Ectofuntus, and
+  worship it." The bucket and pot are emptied in their slots, and `ahoy_ectotokens_base` goes up 5.
+  The experience is four times the bones' burying experience (Wiki, Bonemeal).
+- Missing either, a message box: "You don't have any ectoplasm or crushed bones to put into
+  the<br>Ectofuntus." / "You need a bucket of ectoplasm to put into the Ectofuntus." / "You need a
+  pot of crushed bones to put into the Ectofuntus."
+
+The disciples hold up to 1000 unclaimed tokens (Wiki). Past that, the Wiki's "There isn't room to
+put any more in." shows in a message box (not captured). Superior dragon bonemeal is passed over
+below 70 Prayer. The count is saved in `ectofuntus:tokens` and shown in `ahoy_ectotokens_base`
+(4769) and `ahoy_ectotokens_more` (5671), which only hold 255.
+
+The captures' experience values are scrubbed, so the Wiki's are used.
+
+## Ghost disciples
+
+Recordings 376, 377, 703, 1857. Their Wiki transcript (`npc-dialogues.json`) has the words; the
+plugin picks the variant:
+
+1. Without a ghostspeak amulet or Morytania legs 2 or better: "Woooo wooo wooooo woooo".
+2. With tokens waiting: "Can I have the tokens I have earned?", then "Certainly, mortal. Here's 5
+   ectotokens." as they're handed over, or, with no room, "I have 5 ectotokens waiting for you
+   mortal, but you do not have room in your inventory for them."
+3. After the hard Morytania diary: "Can I have another bonecrusher, please?". Without one in the
+   inventory or bank, the bonecrusher is handed over as "Compliments of Morytania for your efforts
+   throughout the tasks set." shows; otherwise "You already appear to own such a device, mortal."
+4. Otherwise the standard questions about the Ectofuntus.
+
+## Varp 408
+
+Ghosts Ahoy's stage is varbit 217 (bits 28-31 of varp 408); the grinder and the tokens are other
+bits of the same varp. The quest now writes its varbit rather than the whole varp, so the stage no
+longer wipes them.
+
+## Not built
+
+- Robin's daily bones-to-bonemeal and slime conversion for the Morytania diaries.
+- The diary's teleport to the pool of slime.
+- The weathered wall shortcut (58 Agility).

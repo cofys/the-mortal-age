@@ -129,3 +129,18 @@ test("issue #461: scimitars stab on Lunge, and the Colossal blade has the giant 
   // human_weapon_giant01_ready / _walk / _run, released with the blade (Giants' Foundry).
   assert.deepEqual([blade.standAnim, blade.walkAnim, blade.runAnim], [9460, 9461, 9459]);
 });
+
+test("Tumeken's shadow is held two-handed, all four variants", () => {
+  // The wiki's equipped image holds the staff in both hands; the cache's TOA_SOT_READY
+  // sits with its cast anims (TOA_SOT_CAST_A/B), like the godsword's DH_SWORD_UPDATE_READY.
+  // No TOA_SOT run exists in the cache, so running uses the generic double-handed run
+  // (human_dh_weapon_run, as the 2h swords do) to keep both hands on the staff; the walk
+  // stays human 819.
+  for (const id of [27275, 27277, 28547, 28549]) {
+    const shadow = rows.find((row) => row.id === id);
+    assert.equal(shadow.standAnim, 9494, `${id} toa_sot_ready`);
+    assert.equal(shadow.walkAnim, 819, `${id} human walk`);
+    assert.equal(shadow.runAnim, 2563, `${id} human_dh_weapon_run`);
+    assert.equal(shadow.doubleHanded, true, `${id} two-handed`);
+  }
+});

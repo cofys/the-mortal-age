@@ -1,0 +1,34 @@
+{
+  "$comment": "Study lecterns. Each lectern's tablets are the cache enum the interface lists (teletab_enum); levels, runes and Magic experience per tablet are from the OSRS Wiki (Magic tablet). Every tablet also takes one soft clay.",
+  "lecterns": {
+    "OAK_LECTERN": 4108,
+    "EAGLE_LECTERN": 4178,
+    "DEMON_LECTERN": 4179,
+    "TEAK_EAGLE_LECTERN": 5267,
+    "TEAK_DEMON_LECTERN": 5268,
+    "MAHOGANY_EAGLE_LECTERN": 5269,
+    "MAHOGANY_DEMON_LECTERN": 5270,
+    "MARBLE_LECTERN": 5271
+  },
+  "tablets": {
+    "8007": { "level": 25, "experience": 35, "runes": [["AIR_RUNE", 3], ["FIRE_RUNE", 1], ["LAW_RUNE", 1]] },
+    "8008": { "level": 31, "experience": 41, "runes": [["AIR_RUNE", 3], ["EARTH_RUNE", 1], ["LAW_RUNE", 1]] },
+    "8009": { "level": 37, "experience": 48, "runes": [["AIR_RUNE", 3], ["WATER_RUNE", 1], ["LAW_RUNE", 1]] },
+    "8010": { "level": 45, "experience": 55.5, "runes": [["AIR_RUNE", 5], ["LAW_RUNE", 1]] },
+    "28790": { "level": 48, "experience": 58, "runes": [["FIRE_RUNE", 1], ["WATER_RUNE", 1], ["LAW_RUNE", 2]] },
+    "8011": { "level": 51, "experience": 61, "runes": [["WATER_RUNE", 2], ["LAW_RUNE", 2]] },
+    "28824": { "level": 54, "experience": 64, "runes": [["EARTH_RUNE", 1], ["FIRE_RUNE", 1], ["LAW_RUNE", 2]] },
+    "8012": { "level": 58, "experience": 68, "runes": [["EARTH_RUNE", 2], ["LAW_RUNE", 2]] },
+    "8013": { "level": 40, "experience": 30, "runes": [["AIR_RUNE", 1], ["EARTH_RUNE", 1], ["LAW_RUNE", 1]] },
+    "31441": { "level": 56, "experience": 66, "runes": [["EARTH_RUNE", 1], ["WATER_RUNE", 1], ["LAW_RUNE", 2]] },
+    "31443": { "level": 67, "experience": 77, "runes": [["EARTH_RUNE", 2], ["WATER_RUNE", 2], ["LAW_RUNE", 2]] },
+    "8016": { "level": 7, "experience": 17.5, "runes": [["WATER_RUNE", 1], ["COSMIC_RUNE", 1]] },
+    "8017": { "level": 27, "experience": 27.8, "runes": [["AIR_RUNE", 3], ["COSMIC_RUNE", 1]] },
+    "8018": { "level": 49, "experience": 44.5, "runes": [["FIRE_RUNE", 5], ["COSMIC_RUNE", 1]] },
+    "8019": { "level": 57, "experience": 50.3, "runes": [["EARTH_RUNE", 10], ["COSMIC_RUNE", 1]] },
+    "8020": { "level": 68, "experience": 58.5, "runes": [["EARTH_RUNE", 15], ["WATER_RUNE", 15], ["COSMIC_RUNE", 1]] },
+    "8021": { "level": 87, "experience": 73, "runes": [["EARTH_RUNE", 20], ["FIRE_RUNE", 20], ["COSMIC_RUNE", 1]] },
+    "8014": { "level": 15, "experience": 25, "runes": [["EARTH_RUNE", 2], ["WATER_RUNE", 2], ["NATURE_RUNE", 1]] },
+    "8015": { "level": 60, "experience": 35.5, "runes": [["EARTH_RUNE", 4], ["WATER_RUNE", 4], ["NATURE_RUNE", 2]] }
+  }
+}

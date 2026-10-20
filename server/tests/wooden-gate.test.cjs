@@ -19,7 +19,7 @@ const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
 const { PrivateArea } = require('../dist/game/model/areas/impl/PrivateArea');
 const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
-const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
+const { crossingFor: shantayCrossingFor } = require('../plugins/areas/shantaypass/Gate.ShantayPass');
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
 let mapCollisionInitialized = false;
@@ -1235,6 +1235,9 @@ test('the Shantay pass crosses the desert fence in the right direction', () => {
     path: [[3303, 3116], [3303, 3117]],
   });
   assert.equal(shantayCrossingFor({ x: 3303, y: 3115, z: 1 }), null);
+  // The gate is 4 tiles wide (3302-3305): live crossed from 3304 too.
+  assert.deepEqual(shantayCrossingFor({ x: 3305, y: 3117, z: 0 }).path, [[3305, 3116], [3305, 3115]]);
+  assert.equal(shantayCrossingFor({ x: 3306, y: 3117, z: 0 }), null);
 });
 
 

@@ -9,6 +9,7 @@ const COURSES = [
   require("./BarbarianOutpost.Agility"),
   require("./CanifisRooftop.Agility"),
   require("./ShayzienAdvanced.Agility"),
+  require("./ApeAtoll.Agility"),
   require("./FaladorRooftop.Agility"),
   require("./ColossalWyrmBasic.Agility"),
   require("./WildernessCourse.Agility"),

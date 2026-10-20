@@ -695,5 +695,49 @@
     }
    ]
   }
- ]
+ ],
+ "sceptre": {
+  "$comment": "The skull sceptre. The three combine messages, Invoke's teleport and its charges message: rsprox captures. Charges, piece values, bone fragments and the Wilderness limit: Wiki (Skull sceptre, Bone fragments). Items are ItemIdentifiers names; the teleport lands on `surface`.",
+  "source": "https://oldschool.runescape.wiki/w/Skull_sceptre",
+  "baseCharges": 10,
+  "chargesPerDiaryTier": 4,
+  "imbuedVarbit": 5638,
+  "pieces": {
+   "RIGHT_SKULL_HALF": 3,
+   "LEFT_SKULL_HALF": 5,
+   "TOP_OF_SCEPTRE": 3,
+   "BOTTOM_OF_SCEPTRE": 3
+  },
+  "combines": [
+   {
+    "items": [
+     "RIGHT_SKULL_HALF",
+     "LEFT_SKULL_HALF"
+    ],
+    "result": "STRANGE_SKULL",
+    "message": "The two halves of the skull fit perfectly, they appear to have a fixing point, perhaps they are to be mounted on something?"
+   },
+   {
+    "items": [
+     "TOP_OF_SCEPTRE",
+     "BOTTOM_OF_SCEPTRE"
+    ],
+    "result": "RUNED_SCEPTRE",
+    "message": "The two halves of the sceptre fit perfectly. It appears to be designed to have something on top."
+   },
+   {
+    "items": [
+     "STRANGE_SKULL",
+     "RUNED_SCEPTRE"
+    ],
+    "result": "SKULL_SCEPTRE",
+    "message": "The skull fits perfectly atop the sceptre. You feel there is great magical power at work here, and that the sceptre has {charges} charges."
+   }
+  ],
+  "chargesMessage": "<col=7f00ff>Your Skull Sceptre has {charges} charges left.</col>",
+  "diaryTask": {
+   "diary": "varrock",
+   "task": "teleport-to-barbarian-village-with-a-skull-scept"
+  }
+ }
 }

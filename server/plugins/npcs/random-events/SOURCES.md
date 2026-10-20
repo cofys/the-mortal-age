@@ -31,12 +31,38 @@ Cache 237 verified NPCs 326/5510/322 and their Talk-to/Dismiss actions, lamp 252
 and reward Eat actions. `yarn dump:widget 297` and `yarn dump:cs2 1358`/`2267`
 confirm sandwich tray root/title2/selectors6–12 and model angle initialization.
 
-The original OSRS scheduling formula is unpublished. This first batch uses Void's
-60–120 minute cooldown, three-minute lifetime and 18-second reminders. Busy/combat,
-bots, instances, duels and Tutorial Island are excluded. Tutorial's bounds are copied
-from the existing TutorialIsland plugin. Managed areas are conservatively excluded
-except ordinary PvP ground; full activity-specific eligibility is deferred. No events
-spawn while the `random-events:enabled` config is false; existing events still expire.
+The [Random events Wiki page](https://oldschool.runescape.wiki/w/Random_events) records
+Mod Ash's timing details: pick a real-time due timestamp 60–120 minutes after the last
+event, check every five minutes of in-game time, and if it became due offline, move it
+forward by 10–70 minutes. The next timestamp is persisted as `random-events:next-at`;
+the due check stays armed while busy and is re-armed before a spawn attempt. Event
+definitions are selected uniformly after filtering; teleporting events are excluded in
+PvP Wilderness, and transformed players are ineligible. Ignored events expire after
+one minute; an event's dismissal or completion does not reset its timer. A due event
+stalled by a busy action remains pending and is attempted when that action clears. The
+18-second attention reminder has no published interval and remains an implementation detail.
+
+Combat is not a blanket scheduler veto. This interprets the Wiki's
+[Trivia](https://oldschool.runescape.wiki/w/Random_events#Trivia), which describes the
+post-2014 events as independent of the player's activity, alongside Spawn mechanics'
+location/transformation exclusions and interface/Make-X stalls. The Wiki does not state
+a separate combat eligibility rule; no packet capture verifies that edge case. Spawning
+an invitation never teleports the player: `Teleports.begin` runs only after accepting
+the event's dialogue. A regression covers a Mime invitation with combat target, attacker
+and combat-following set, including ignoring and declining it without movement.
+
+Normal-world rsprox captures 3147/rev232 and 2483 show an emote-unlock interface and
+initial Count Check placement only; they provide no spawn-timing evidence.
+
+The Wiki also lists many no-event zones and says old Hunter areas block teleporting
+events. Managed `Area` instances are conservatively treated as unavailable, except the
+Wilderness where only non-teleporting events remain eligible. This avoids spawning in
+unclassified managed boss/minigame/bank areas but also suppresses events in safe managed
+areas. The server exposes no shared zone metadata for ordinary banks or old Hunter
+areas, so their exact boundaries and exceptions remain unimplemented pending reliable
+coordinates or flags.
+No events spawn while the `random-events:enabled` world config is false; active events
+still expire.
 
 Rewards require inventory capacity and retain the event on failure. Stackable gifts
 can join an existing stack; Jekyll's exchange frees its exact herb slot. State clears
@@ -168,8 +194,9 @@ accepting dialogue starts a **session** (`Teleports.RandomEvents.js`): the retur
 remembered, the player is moved to the event area, the invitation NPC is removed
 without a reward, and a `RandomEventArea` per destination ends the session when
 the player leaves by any route (teleport, death, command). Teleports inside a
-session are refused; logging out moves the player back before the save and a
-crash-relog inside an area falls back to Lumbridge. Event areas, scenery and the
+session are refused; the return tile is persisted before moving, logout restores it
+before save, and crash recovery restores the exact tile (Lumbridge is only the fallback
+when no return tile was saved). Event areas, scenery and the
 static NPCs (Mime, Sergeant Damien, the forester and pheasants, Evil Bob, the
 servant, Prison Pete, the graves, maze and pinball props, the beehive field, the
 quiz room, the exam classroom and the pillory cages) already ship in the world
@@ -215,10 +242,11 @@ Jekyll, 7 Count Check, 8 Kiss the frog, 9 Capt' Arnav, 10 Beekeeper, 11 Quiz
 Master, 12 Drill Demon, 13 Freaky Forester, 14 Gravedigger, 15 Pinball, 16 Evil
 Bob, 17 Prison Pete, 18 Evil twin, 19 Maze, 20 Mime, 21 Pillory, 22 Surprise
 Exam, 23 Strange Plant. F2P omits Jekyll, so its indices shift down by one after
-index 5. The command still bypasses the cooldown and the enabled flag but not
-combat, interface, instance or tutorial eligibility.
+index 5. The command still bypasses the cooldown and enabled flag but requires the
+player to be outside restricted actions and areas, including private instances and
+Tutorial Island.
 
-Verify after build: `node --test tests/random-events.test.cjs`. The 45 tests
+Verify after build: `node --test tests/random-events.test.cjs`. The 54 tests
 cover every new event's registration, dialogues, interfaces, mechanisms, reward
 progression, owner checks, wrong-answer paths, expiry and cleanup, plus the
 Mystery box and Book of Knowledge reward paths. From `client/`, `yarn tsx

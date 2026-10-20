@@ -41,7 +41,7 @@ function playerWithAttributes(attributes = new Map()) {
   return { attributes, player, strings };
 }
 
-test("disabled presets leave bot inventory and equipment lootable on the ground or in keys", () => {
+function assertBotPresetLoot() {
   const { Location } = require("../dist/game/model/Location");
   const lootKeys = require("../plugins/items/LootKeys.plugin");
   const botDeathLoot = require("../plugins/bots/runtime/DeathLoot.PlayerBots");
@@ -51,10 +51,10 @@ test("disabled presets leave bot inventory and equipment lootable on the ground 
     getWorld: () => ({}),
     getItemOnGroundManager: () => ({ registerNonGlobals: (_player, item) => ground.push(item) }),
   });
-  assert.equal(presets.isEnabled(), false);
+  const bot = { isPlayerBot: () => true };
   const preset = presets.getGlobalPresetPool()[0];
   const items = [...preset.getInventory(), ...preset.getEquipment()].map((source) => {
-    const item = presets._test.spawnPresetItem(source, preset);
+    const item = presets._test.spawnPresetItem(source, preset, bot);
     assert.notEqual(item, source);
     assert.deepEqual(item.getMeta(), source.getMeta());
     assert.equal(item.isLostOnDeath(), false);
@@ -84,6 +84,11 @@ test("disabled presets leave bot inventory and equipment lootable on the ground 
       isPlayer: () => true, isPlayerBot: () => true,
       getLocation: () => location, setAttribute() {},
     };
+    const protectedDrop = { player: victim, killer, item: drops[0], location, dropEligible: false, handled: false };
+    lootKeys._test.queueDrop(protectedDrop);
+    botDeathLoot.handleBotDeathItemDrop(protectedDrop);
+    assert.equal(protectedDrop.handled, true, "protected items cannot reach the ground or a key");
+    assert.equal(ground.length, 0);
     for (const item of drops) {
       const event = { player: victim, killer, item, location, dropEligible: true, handled: false };
       lootKeys._test.queueDrop(event);
@@ -103,6 +108,11 @@ test("disabled presets leave bot inventory and equipment lootable on the ground 
     }
     botDeathLoot.clearBotDeathLootPlan(victim);
   }
+}
+
+test("disabled presets leave bot inventory and equipment lootable on the ground or in keys", () => {
+  assert.equal(presets.isEnabled(), false);
+  assertBotPresetLoot();
 });
 
 test("custom presets rehydrate from their persisted attribute", () => {
@@ -351,6 +361,12 @@ test("loading a preset only puts on what the preset's own levels can wear", () =
   let loaded;
   try {
     loaded = presets.applyPreset(player, preset);
+    assert.ok(worn.get(Equipment.WEAPON_SLOT).isPresetItem(), "human preset gear keeps its restrictions");
+    messages.length = 0;
+    player.isPlayerBot = () => true;
+    assert.equal(presets.applyPreset(player, preset), true);
+    assert.ok([...worn.values()].every((item) => !item.isPresetItem() && !item.isUnbankable() && !item.isLostOnDeath()),
+      "bots receive ordinary equipment through the real preset loader");
   } finally {
     patched.forEach(([owner, name]) => { owner[name] = owner[`_${name}_original`]; delete owner[`_${name}_original`]; });
   }
@@ -363,7 +379,6 @@ test("loading a preset only puts on what the preset's own levels can wear", () =
   assert.ok(!worn.has(Equipment.CAPE_SLOT), "no cape at 1 Magic");
   assert.ok(!worn.has(Equipment.LEG_SLOT), "no chaps at 60 Ranged");
   assert.equal(worn.size, preset.getEquipment().length - 2, "everything else goes on");
-  assert.ok(worn.get(Equipment.WEAPON_SLOT).isPresetItem(), "the spawned gear keeps its preset meta");
   assert.ok(messages.includes("Preset loaded!"));
 });
 
@@ -470,28 +485,9 @@ test("quest-owned deposit boxes open the native bank deposit interface", () => {
   assert.ok(calls.some((call) => call[0] === (161 << 16 | 16)), "the native deposit modal is opened");
 });
 
-test("a player preset bot announces its suppressed drops once", () => {
-  const botDeathLoot = require("../plugins/bots/runtime/DeathLoot.PlayerBots");
-  const messages = [];
-  const killer = {
-    isRegistered: () => true,
-    isPlayerBot: () => false,
-    sendMessage: (message) => messages.push(message),
-  };
-  const victim = { isPlayerBot: () => true };
-  const event = {
-    player: victim,
-    killer,
-    item: { isUnbankable: () => true },
-    dropEligible: false,
-    handled: false,
-  };
-
-  botDeathLoot.handleBotDeathItemDrop(event);
-  botDeathLoot.handleBotDeathItemDrop(event);
-  botDeathLoot.clearBotDeathLootPlan(victim);
-
-  assert.deepEqual(messages, ["This bot was using a player preset and therefore has not dropped its items. Regular bots will still drop items"]);
+test("enabled presets leave bot inventory and equipment lootable on the ground or in keys", () => {
+  assert.equal(presets.isEnabled(), true);
+  assertBotPresetLoot();
 });
 
 test('preset combat levels in the list match the skill manager formula', () => {

@@ -1,0 +1,264 @@
+{
+  "about": "The Abyssal Sire (https://oldschool.runescape.wiki/w/Abyssal_Sire) in the Abyssal Nexus, as captured (rsprox captures 572, 1762 and 2188, Leagues V, rev 227-228; 2121-2136 for the Nexus) with the Wiki's numbers after Poll 84 (30 April 2025), which came after the captures. Tiles are absolute on the cache map. See docs/abyssal-sire.md.",
+  "npcs": {
+    "sleeping": 5886,
+    "awake": 5887,
+    "stunned": 5888,
+    "puppet": 5889,
+    "wandering": 5890,
+    "panicking": 5891,
+    "apocalypse": 5908,
+    "tentacleNorth": 5909,
+    "tentacleSouth": 5910,
+    "tentacleUpright": 5911,
+    "tentacleActive": 5912,
+    "tentacleStunned": 5913,
+    "lung": 5914,
+    "lungDying": 5915,
+    "spawn": 5916,
+    "spawnDying": 5917,
+    "scion": 5918,
+    "scionDying": 6177,
+    "eyeYellow": 6479,
+    "eyeGreen": 6480
+  },
+  "locs": {
+    "about": "The map has every vent as the dead one (26954); live OSRS puts the wheezing vent (26953) on each living lung's tile, the invisible blocker (26209) as it dies and the dead vent back 7 ticks later.",
+    "ventAlive": 26953,
+    "ventDead": 26954,
+    "ventDying": 26209,
+    "ventShape": 10,
+    "font": 27029,
+    "overseer": 27044,
+    "overseerBook": 27047,
+    "passageIn": 27054,
+    "appendage": 27027
+  },
+  "lairs": [
+    {
+      "name": "south-west",
+      "sire": [2967, 4791],
+      "bounds": [2946, 2994, 4755, 4800],
+      "lungs": [[2957, 4770, 0], [2954, 4780, 2], [2985, 4769, 0], [2982, 4779, 2]],
+      "tentacles": [[2958, 4762, "north"], [2975, 4762, "north"], [2960, 4771, "upright"], [2972, 4771, "upright"], [2957, 4780, "south"], [2974, 4780, "south"]],
+      "eye": [3024, 4770]
+    },
+    {
+      "name": "north-west",
+      "sire": [2977, 4855],
+      "bounds": [2956, 3004, 4819, 4864],
+      "lungs": [[2967, 4834, 0], [2964, 4844, 2], [2995, 4833, 0], [2992, 4843, 2]],
+      "tentacles": [[2968, 4826, "north"], [2985, 4826, "north"], [2970, 4835, "upright"], [2982, 4835, "upright"], [2967, 4844, "south"], [2984, 4844, "south"]],
+      "eye": [3027, 4786]
+    },
+    {
+      "name": "north-east",
+      "sire": [3102, 4855],
+      "bounds": [3081, 3129, 4819, 4864],
+      "lungs": [[3092, 4834, 0], [3089, 4844, 2], [3120, 4833, 0], [3117, 4843, 2]],
+      "tentacles": [[3093, 4826, "north"], [3110, 4826, "north"], [3095, 4835, "upright"], [3107, 4835, "upright"], [3092, 4844, "south"], [3109, 4844, "south"]],
+      "eye": [3051, 4790]
+    },
+    {
+      "name": "south-east",
+      "sire": [3107, 4791],
+      "bounds": [3086, 3134, 4755, 4800],
+      "lungs": [[3097, 4770, 0], [3094, 4780, 2], [3125, 4769, 0], [3122, 4779, 2]],
+      "tentacles": [[3098, 4762, "north"], [3115, 4762, "north"], [3100, 4771, "upright"], [3112, 4771, "upright"], [3097, 4780, "south"], [3114, 4780, "south"]],
+      "eye": [3051, 4771]
+    }
+  ],
+  "offsets": {
+    "about": "From the Sire's sleeping tile (south-west corner), the same in every lair (captured): where it stands in phase 2 and in phase 3, and the tile the explosion pulls the player to.",
+    "phase2": [0, -10],
+    "phase3": [0, -18],
+    "explosionTile": [2, -19]
+  },
+  "anims": {
+    "sleeping": 4527,
+    "waking": 4528,
+    "idleAwake": 4529,
+    "spawnsAwake": 4530,
+    "miasmaAwake": 4531,
+    "mobilising": 4532,
+    "idleWandering": 4533,
+    "rightHook": 5366,
+    "miasmaWandering": 5367,
+    "teleportPlayer": 5368,
+    "rightWhip": 5369,
+    "doubleHook": 5751,
+    "doubleWhips": 5755,
+    "spawnsWandering": 7095,
+    "panicMode": 7096,
+    "idlePanicking": 7097,
+    "apocalypse": 7098,
+    "idleApocalypse": 7099,
+    "death": 7100,
+    "lungDeath": 7102,
+    "tentacleWaking": 7108,
+    "tentacleAttack": 7109,
+    "tentacleWakingReversed": 7111,
+    "tentacleStunned": 7112,
+    "tentacleUnstunned": 7114,
+    "spawnDeath": 4521,
+    "spawnAttack": 4522,
+    "scionSpawn": 7123,
+    "scionMelee": 7126,
+    "scionRanged": 7127,
+    "scionDeath": 7129,
+    "playerTeleported": 1816,
+    "fontPlace": 827
+  },
+  "spotanims": {
+    "miasma": 1275,
+    "playerTeleported": 342,
+    "playerTeleportedHeight": 92,
+    "fontSplash": 1276
+  },
+  "projectiles": {
+    "spawn": { "id": 1274, "start": 108, "end": 180, "angle": 5, "progress": 0, "startHeight": 91, "endHeight": 0 },
+    "spawnRanged": { "id": 32, "start": 20, "end": 60, "angle": 10, "progress": 64, "startHeight": 6, "endHeight": 16 },
+    "scionRanged": { "id": 32, "start": 20, "end": 60, "angle": 10, "progress": 128, "startHeight": 6, "endHeight": 16 }
+  },
+  "sounds": {
+    "stun": 2727,
+    "miasma": { "id": 1930, "delay": 15, "radius": 4 },
+    "spawnLand": { "id": 232, "delay": 108, "radius": 5 },
+    "spawnAttack": { "id": 236, "radius": 5 },
+    "spawnRangedAttack": { "id": 2693, "delay": 18, "radius": 5 },
+    "spawnDeath": 237,
+    "playerTeleported": 200,
+    "explosion": { "id": 2720, "delay": 15, "radius": 10 },
+    "fontSplash": { "id": 2496, "radius": 0 }
+  },
+  "messages": {
+    "noTask": "The Sire takes no interest in you.",
+    "stunned": "The Sire has been disorientated temporarily.",
+    "alreadyStunned": "The Sire is disoriented. Maybe you can do something useful while it's unable to control the tentacles.",
+    "tentaclesInTheWay": "You can't deal much damage with those tentacles getting in the way.",
+    "poisoned": "You have been poisoned!",
+    "killCount": "Your Abyssal Sire kill count is: <col=ff0000>{kills}</col>."
+  },
+  "phase1": {
+    "about": "Waking: tentacles 2 ticks after the Sire (captured). A stun is 46 ticks (captured; Wiki 27 seconds); the tentacles calm 3-4 ticks into it. 75 ranged or magic damage, or a shadow spell by its tier (Wiki), stuns; on a sleeping Sire the spell's stun waits out its 10-tick waking (Wiki). The awake Sire throws spawns or a pool every 7 ticks (attack speed, Wiki).",
+    "tentaclesWakeTicks": 2,
+    "stunTicks": 46,
+    "tentaclesCalmTicks": 3,
+    "stunDamage": 75,
+    "sleepingStunDelayTicks": 10,
+    "shadowSpells": { "SHADOW_RUSH": 0.25, "SHADOW_BURST": 0.5, "SHADOW_BLITZ": 0.75, "SHADOW_BARRAGE": 1 },
+    "attackTicks": 7,
+    "lungRegenTicks": 8,
+    "lungSlayerXp": 50,
+    "blockedDamage": [0, 3],
+    "lungDyingTicks": 7,
+    "lungHalberd": "halberd",
+    "toPhase2": {
+      "about": "After the last lung: the Sire turns to its puppet form with sire_mobilising, sets off 7 ticks later at the player's running pace (Wiki, Poll 84; captured at 1 tile a tick before it) and stands up 1 tick after arriving.",
+      "startTicks": 7,
+      "tilesPerTick": 2,
+      "arriveTicks": 1
+    }
+  },
+  "phase2": {
+    "about": "Melee within 2 tiles of its body (Wiki), every 7 ticks, in the captured mix. Prayed maxima are the Wiki's (6, 6, 26); unprayed are the Wiki's 66 for the double whip and the same ratio for the other two (no source gives them). Further than 2 tiles: spawns or a pool; attacked from there: the player is pulled in (busy for 3 ticks) and hit by the double hook. Below half its hitpoints it walks to the middle.",
+    "reach": 2,
+    "attackTicks": 7,
+    "attacks": [
+      { "name": "rightHook", "anim": "rightHook", "weight": 197, "max": 15, "prayedMax": 6 },
+      { "name": "rightWhip", "anim": "rightWhip", "weight": 31, "max": 15, "prayedMax": 6 },
+      { "name": "doubleWhips", "anim": "doubleWhips", "weight": 39, "max": 66, "prayedMax": 26 }
+    ],
+    "rangedAttacks": { "spawnsWeight": 1, "miasmaWeight": 3 },
+    "teleport": { "busyTicks": 3, "max": 60, "prayedMax": 26 },
+    "threshold": 0.5,
+    "phase1Floor": 0.4,
+    "idleResetTicks": 100,
+    "toPhase3": {
+      "about": "It walks to its phase 3 tile, plays sire_panic_mode 1 tick after arriving and panics 7 ticks after that, with four spawns (Wiki) and its tentacles awake.",
+      "tilesPerTick": 2,
+      "panicModeTicks": 1,
+      "panicTicks": 7,
+      "floor": 0.2
+    }
+  },
+  "phase3": {
+    "about": "Panicking: a pool every 6-11 ticks (captured), no melee. Below 35% (Wiki): sire_apocalypse, the player pulled to the explosion tile 3 ticks later, the explosion 3 ticks after that: up to 96 within 4 tiles of its body (captured: hit at 1-4, never at 5 or more). Then a flood of spawns and pools until 15 minions are out and 3 pools are done (Wiki).",
+    "spawnsOnPanic": 4,
+    "poolTicks": [6, 11],
+    "explosionThreshold": 0.35,
+    "teleportTicks": 3,
+    "explodeTicks": 6,
+    "explosionMax": 96,
+    "explosionReach": 4,
+    "spawnsOnExplosion": 6,
+    "spawnWaveTicks": [4, 7],
+    "minionCap": 15,
+    "poolsAfterExplosion": 3
+  },
+  "miasma": {
+    "about": "Captured: the pool hurts on its 3rd, 4th and 5th ticks, less each time, on its tile and the 8 around it. Its first hit can poison, 8 damage (Wiki).",
+    "damageTicks": [2, 3, 4],
+    "centre": [[8, 26], [6, 17], [3, 9]],
+    "outer": [[2, 9], [1, 8], [1, 5]],
+    "poison": 8
+  },
+  "tentacles": {
+    "about": "Active tentacles strike a player within a tile of their footprint every 4 ticks (Wiki), the hit a tick later (captured); typeless, up to 30 (Wiki), Protect from Melee taking a little off (assumed a fifth).",
+    "reach": 1,
+    "attackTicks": 4,
+    "max": 30,
+    "prayedFactor": 0.8
+  },
+  "minions": {
+    "about": "A spawn lands 6 ticks after it is thrown (projectile end 180 cycles). Spawns and scions pick melee next to the player, ranged otherwise (Wiki), every 4 ticks. A spawn matures after 20 ticks (Wiki: 12 seconds) and a minion that can't attack for 50 ticks dies (Wiki: about 30 seconds). Max hits are the Wiki's.",
+    "landTicks": 6,
+    "attackTicks": 4,
+    "matureTicks": 20,
+    "idleDeathTicks": 50,
+    "spawn": { "melee": 4, "ranged": 9 },
+    "scion": { "melee": 10, "ranged": 16 },
+    "dyingTicks": 2
+  },
+  "kill": {
+    "about": "Captured: the kill count and the Sire's removal 2 ticks after its death animation starts, its lungs, tentacles and the sleeping Sire back a tick later. Slayer experience is the Wiki's 478.",
+    "killCountVarp": 1526,
+    "respawnTicks": 1,
+    "slayerXp": 478
+  },
+  "font": {
+    "about": "Captured: the object box, the font's splash and sound at 2, the reward at 4. Rolls (Wiki: Unsired): out of 128 without the pet (5 of them the pet), out of 123 with it; no bludgeon piece twice until all three are had.",
+    "placeText": "You place the Unsired into the Font of Consumption...",
+    "rewardText": "The Font consumes the Unsired and returns you a<br>reward.",
+    "splashTicks": 2,
+    "rewardTicks": 4,
+    "table": [
+      { "item": "bludgeon", "weight": 62 },
+      { "item": 13265, "weight": 26 },
+      { "item": 4151, "weight": 12 },
+      { "item": 13277, "weight": 13 },
+      { "item": 7979, "weight": 10 },
+      { "item": 13262, "weight": 5 }
+    ],
+    "bludgeonPieces": [13274, 13275, 13276]
+  },
+  "overseer": {
+    "about": "Varbit 3261 (abyssalsire_lore) picks the Overseer's loc (0-3) or his residue and book (4-7); varbit 3262 (abyssalsire_parts_stored) holds the parts he has: spine 1, claw 2, axon 4. Lines: Wiki, Transcript:The Overseer.",
+    "loreVarbit": 3261,
+    "partsVarbit": 3262,
+    "departed": 4,
+    "bludgeon": 13263,
+    "book": 13279
+  },
+  "eyes": {
+    "about": "Captured with nobody inside; the other lines are the Wiki's.",
+    "empty": "There are no adventurers in this chamber.",
+    "occupied": "There is an adventurer in this chamber.",
+    "emptyForAWhile": "The area feels like it's been empty for a while now."
+  },
+  "nexus": {
+    "about": "The one-way passage in the Abyss's outer ring (Wiki: Abyssal Nexus) and the appendage that teleports to Lumbridge (Wiki: Appendage).",
+    "passageArrival": [3039, 4800, 0],
+    "appendageDestination": [3222, 3218, 0]
+  }
+}

@@ -13,6 +13,7 @@ const UNITS = [
   require("./slayer/Equipment.Slayer"),
   require("./slayer/Finishers.Slayer"),
   require("./slayer/Superiors.Slayer"),
+  require("./slayer/Keys.Slayer"),
   require("./slayer/Dev.Slayer"),
 ];
 

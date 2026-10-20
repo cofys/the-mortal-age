@@ -130,6 +130,8 @@ export class Player extends Mobile {
     public forceMovement: ForceMovement;
     private skillAnimation: number;
     private renderAnimations: number[] | null = null;
+    /** Equipment slot -> item id shown in the appearance instead of the worn item (-1 shows the slot empty). */
+    private displayedEquipment: Map<number, number> | null = null;
     private drainingPrayer = false;
     private prayerPointDrain = 0;
     /**
@@ -577,6 +579,9 @@ export class Player extends Mobile {
 
         // Return offered items to both players before this player is saved.
         this.getTrading().closeTrade();
+        this.setFollowing(null);
+        this.setMobileInteraction(null);
+        this.setPositionToFace(null);
         // Record a boat at sea (and step ashore) before this player is saved.
         (require("../../../content/sailing/Sailing") as typeof import("../../../content/sailing/Sailing"))
             .Sailing.onLogout(this);
@@ -875,6 +880,15 @@ export class Player extends Mobile {
         return this;
     }
 
+    /** A transformed appearance carries no items, so the equipment tab gets the worn inventory. */
+    public setNpcTransformationId(npcTransformationId: number): this {
+        super.setNpcTransformationId(npcTransformationId);
+        if (npcTransformationId >= 0) {
+            this.getEquipment()?.sendWornInventory();
+        }
+        return this;
+    }
+
     public getFrameUpdater(): FrameUpdater {
         return this.frameUpdater;
     }
@@ -933,6 +947,28 @@ export class Player extends Mobile {
     public setRenderAnimations(animations: number[] | null): Player {
         this.renderAnimations = animations;
         return this;
+    }
+
+    public getDisplayedEquipment(): ReadonlyMap<number, number> | null {
+        return this.displayedEquipment;
+    }
+
+    /**
+     * Shows other items in some equipment slots without touching the worn equipment, as live
+     * shows a magic carpet in the weapon slot for a ride; null shows what is worn again.
+     */
+    public setDisplayedEquipment(overrides: Record<number, number> | null): Player {
+        this.displayedEquipment = overrides
+            ? new Map(Object.entries(overrides).map(([slot, itemId]) => [Number(slot), itemId]))
+            : null;
+        this.getUpdateFlag().flag(Flag.APPEARANCE);
+        return this;
+    }
+
+    /** The item id each equipment slot shows in the appearance. */
+    public getAppearanceEquipmentIds(): number[] {
+        return this.getEquipment().getItems().map((item, slot) =>
+            this.displayedEquipment?.get(slot) ?? item?.getId?.() ?? -1);
     }
 
     public getRunEnergy(): number {

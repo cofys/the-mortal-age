@@ -1,0 +1,206 @@
+{
+  "_description": "Chests opened with a key (docs/key-chests.md). Loot from the OSRS Wiki's pages for each chest; item names are cache obj gamevals. An item is [obj, amount] or [obj, [min, max]], with \"noted\" when the Wiki gives the amount as noted. A hit pre-roll is the whole reward; otherwise the always items and one main roll out of outOf (the rest of outOf is nothing). A main entry gives its items, one of its oneOf, or a fish (fish: the quantity scale, see fishTable).",
+  "chests": {
+    "crystal": {
+      "name": "Crystal chest",
+      "loc": "crystal_chestclosed",
+      "openLoc": "crystal_chestopen",
+      "key": "crystal_key",
+      "locked": "This chest is securely locked shut.",
+      "lockedSound": true,
+      "diaryTask": { "diary": "falador", "task": "unlock-the-crystal-chest-in-taverley" },
+      "loot": {
+        "always": [["uncut_dragonstone", 1]],
+        "outOf": 128,
+        "main": [
+          { "weight": 34, "items": [["spinach_roll", 1], ["coins", 2000]] },
+          { "weight": 12, "items": [["airrune", 50], ["waterrune", 50], ["earthrune", 50], ["firerune", 50], ["bodyrune", 50], ["mindrune", 50], ["chaosrune", 10], ["deathrune", 10], ["cosmicrune", 10], ["naturerune", 10], ["lawrune", 10]] },
+          { "weight": 12, "items": [["ruby", 2], ["diamond", 2]] },
+          { "weight": 12, "items": [["runite_bar", 3]] },
+          { "weight": 5, "items": [["coins", 750], ["keyhalf2", 1]] },
+          { "weight": 5, "items": [["coins", 750], ["keyhalf1", 1]] },
+          { "weight": 10, "items": [["iron_ore", 150, "noted"]] },
+          { "weight": 10, "items": [["coal", 100, "noted"]] },
+          { "weight": 8, "items": [["raw_swordfish", 5], ["coins", 1000]] },
+          { "weight": 2, "items": [["adamant_sq_shield", 1]] },
+          { "weight": 1, "oneOf": [["rune_platelegs", 1], ["rune_plateskirt", 1]] }
+        ]
+      }
+    },
+    "brimstone": {
+      "name": "Brimstone chest",
+      "loc": "brimstone_konar_chest_closed",
+      "varbit": "brimstone_opening_konar_chest",
+      "key": "konar_key",
+      "locked": "You need a special key that'll fit that keyhole to unlock the chest.",
+      "count": { "message": "You have opened the Brimstone chest {count}." },
+      "loot": {
+        "preRolls": [
+          { "chance": [1, 100], "oneOf": [["broken_dragon_hasta", 1, 5], ["mystic_hat_dusk", 1, 1], ["mystic_robe_top_dusk", 1, 1], ["mystic_robe_bottom_dusk", 1, 1], ["mystic_gloves_dusk", 1, 1], ["mystic_boots_dusk", 1, 1]] }
+        ],
+        "outOf": 60,
+        "main": [
+          { "weight": 5, "items": [["uncut_diamond", [25, 35], "noted"]] },
+          { "weight": 5, "items": [["uncut_ruby", [25, 35], "noted"]] },
+          { "weight": 5, "items": [["coal", [300, 500], "noted"]] },
+          { "weight": 5, "items": [["coins", [50000, 150000]]] },
+          { "weight": 4, "items": [["gold_ore", [100, 200], "noted"]] },
+          { "weight": 4, "items": [["dragon_arrowheads", [50, 200]]] },
+          { "weight": 3, "items": [["iron_ore", [350, 500], "noted"]] },
+          { "weight": 3, "items": [["rune_full_helm", [2, 4], "noted"]] },
+          { "weight": 3, "items": [["rune_platebody", [1, 2], "noted"]] },
+          { "weight": 3, "items": [["rune_platelegs", [1, 2], "noted"]] },
+          { "weight": 3, "fish": 1 },
+          { "weight": 2, "items": [["runite_ore", [10, 15], "noted"]] },
+          { "weight": 2, "items": [["steel_bar", [300, 500], "noted"]] },
+          { "weight": 2, "items": [["magic_logs", [120, 160], "noted"]] },
+          { "weight": 2, "items": [["dragon_dart_tip", [40, 160]]] },
+          { "weight": 1, "items": [["palm_tree_seed", [2, 4]]] },
+          { "weight": 1, "items": [["magic_tree_seed", [2, 3]]] },
+          { "weight": 1, "items": [["celastrus_tree_seed", [2, 4]]] },
+          { "weight": 1, "items": [["dragonfruit_tree_seed", [2, 4]]] },
+          { "weight": 1, "items": [["redwood_tree_seed", 1]] },
+          { "weight": 1, "items": [["torstol_seed", [3, 5]]] },
+          { "weight": 1, "items": [["snapdragon_seed", [3, 5]]] },
+          { "weight": 1, "items": [["ranarr_seed", [3, 5]]] },
+          { "weight": 1, "items": [["blankrune_high", [3000, 6000], "noted"]] }
+        ]
+      }
+    },
+    "larranSmall": {
+      "name": "Larran's small chest",
+      "loc": "slayer_larran_chest_small_closed",
+      "varbit": "brimstone_opening_konar_chest",
+      "key": "slayer_wilderness_key",
+      "slayerChest": true,
+      "locked": "You need a special key that'll fit that keyhole to unlock the chest.",
+      "count": { "message": "You have opened Larran's small chest {count}." },
+      "loot": {
+        "outOf": 60,
+        "main": [
+          { "weight": 5, "items": [["uncut_diamond", [15, 25], "noted"]] },
+          { "weight": 5, "items": [["uncut_ruby", [20, 30], "noted"]] },
+          { "weight": 5, "items": [["coal", [282, 480], "noted"]] },
+          { "weight": 3, "items": [["coins", [40534, 114792]]] },
+          { "weight": 4, "items": [["gold_ore", [81, 179], "noted"]] },
+          { "weight": 4, "items": [["dragon_arrowheads", [41, 182]]] },
+          { "weight": 3, "items": [["iron_ore", [300, 449], "noted"]] },
+          { "weight": 3, "items": [["rune_full_helm", [1, 3], "noted"]] },
+          { "weight": 3, "items": [["rune_platebody", [1, 2], "noted"]] },
+          { "weight": 3, "items": [["rune_platelegs", [1, 2], "noted"]] },
+          { "weight": 3, "fish": 1 },
+          { "weight": 2, "items": [["runite_ore", [5, 10], "noted"]] },
+          { "weight": 2, "items": [["steel_bar", [253, 450], "noted"]] },
+          { "weight": 2, "items": [["magic_logs", [80, 120], "noted"]] },
+          { "weight": 2, "items": [["dragon_dart_tip", [31, 149]]] },
+          { "weight": 1, "items": [["palm_tree_seed", [1, 3]]] },
+          { "weight": 1, "items": [["magic_tree_seed", [1, 2]]] },
+          { "weight": 1, "items": [["celastrus_tree_seed", [1, 3]]] },
+          { "weight": 1, "items": [["dragonfruit_tree_seed", [1, 3]]] },
+          { "weight": 1, "items": [["redwood_tree_seed", 1]] },
+          { "weight": 1, "items": [["torstol_seed", [2, 4]]] },
+          { "weight": 1, "items": [["snapdragon_seed", [2, 4]]] },
+          { "weight": 1, "items": [["ranarr_seed", [2, 4]]] },
+          { "weight": 3, "items": [["blankrune_high", [3041, 5989], "noted"]] }
+        ]
+      }
+    },
+    "larranBig": {
+      "name": "Larran's big chest",
+      "loc": "slayer_larran_chest_big_closed",
+      "varbit": "brimstone_opening_konar_chest",
+      "key": "slayer_wilderness_key",
+      "slayerChest": true,
+      "locked": "You need a special key that'll fit that keyhole to unlock the chest.",
+      "count": { "message": "You have opened Larran's big chest {count}." },
+      "loot": {
+        "preRolls": [
+          { "chance": [3, 256], "oneOf": [["dagonhai_hat", 1, 1], ["dagonhai_robe_top", 1, 1], ["dagonhai_robe_bottom", 1, 1]] }
+        ],
+        "outOf": 60,
+        "main": [
+          { "weight": 5, "items": [["uncut_diamond", [35, 45], "noted"]] },
+          { "weight": 5, "items": [["uncut_ruby", [35, 45], "noted"]] },
+          { "weight": 5, "items": [["coal", [450, 650], "noted"]] },
+          { "weight": 4, "items": [["gold_ore", [150, 250], "noted"]] },
+          { "weight": 4, "items": [["dragon_arrowheads", [100, 250]]] },
+          { "weight": 3, "items": [["coins", [75000, 175000]]] },
+          { "weight": 3, "items": [["iron_ore", [500, 650], "noted"]] },
+          { "weight": 3, "items": [["rune_full_helm", [3, 5], "noted"]] },
+          { "weight": 3, "items": [["rune_platebody", [2, 3], "noted"]] },
+          { "weight": 3, "items": [["rune_platelegs", [2, 3], "noted"]] },
+          { "weight": 3, "items": [["blankrune_high", [4500, 7500], "noted"]] },
+          { "weight": 3, "fish": 1.5 },
+          { "weight": 2, "items": [["runite_ore", [15, 20], "noted"]] },
+          { "weight": 2, "items": [["steel_bar", [350, 550], "noted"]] },
+          { "weight": 2, "items": [["magic_logs", [180, 220], "noted"]] },
+          { "weight": 2, "items": [["dragon_dart_tip", [80, 200]]] },
+          { "weight": 1, "items": [["palm_tree_seed", [3, 5]]] },
+          { "weight": 1, "items": [["magic_tree_seed", [3, 4]]] },
+          { "weight": 1, "items": [["celastrus_tree_seed", [3, 5]]] },
+          { "weight": 1, "items": [["dragonfruit_tree_seed", [3, 5]]] },
+          { "weight": 1, "items": [["redwood_tree_seed", 1]] },
+          { "weight": 1, "items": [["torstol_seed", [4, 6]]] },
+          { "weight": 1, "items": [["snapdragon_seed", [4, 6]]] },
+          { "weight": 1, "items": [["ranarr_seed", [4, 6]]] }
+        ]
+      }
+    },
+    "elven": {
+      "name": "Elven Crystal Chest",
+      "loc": "prif_crystal_chest_closed",
+      "varbit": "prif_crystal_chest_open",
+      "key": "prif_crystal_key",
+      "locked": "This chest is securely locked shut.",
+      "lockedSound": true,
+      "countWithLoot": true,
+      "count": { "message": "You have opened the crystal chest {count}." },
+      "loot": {
+        "preRolls": [
+          { "chance": [1, 10000], "oneOf": [["uncut_onyx", 1, 1]] },
+          { "chance": [1, 500], "oneOf": [["dragonstone_helmet", 1, 1], ["dragonstone_platebody", 1, 1], ["dragonstone_platelegs", 1, 1], ["dragonstone_gauntlets", 1, 1], ["dragonstone_armoured_boots", 1, 1]] }
+        ],
+        "always": [["uncut_dragonstone", 1]],
+        "outOf": 256,
+        "main": [
+          { "weight": 64, "items": [["coins", [10000, 15000]]], "oneOf": [["keyhalf2", 1, 1], ["keyhalf1", 1, 1]] },
+          { "weight": 32, "items": [["uncut_ruby", [8, 13], "noted"], ["uncut_diamond", [5, 8], "noted"]] },
+          { "weight": 26, "items": [["crystal_key", 1]] },
+          { "weight": 20, "items": [["coins", [30000, 50000]], ["prif_crystal_shard", [13, 19]]] },
+          { "weight": 17, "items": [["prif_crystal_shard", [25, 35]]] },
+          { "weight": 17, "items": [["prif_crystal_shard", [7, 9]]], "oneOf": [["rune_platelegs", 1, 1], ["rune_plateskirt", 1, 1]] },
+          { "weight": 17, "items": [["cosmicrune", [50, 100]], ["chaosrune", [50, 100]], ["naturerune", [50, 100]], ["lawrune", [50, 100]], ["deathrune", [50, 100]]] },
+          { "weight": 16, "items": [["yew_seed", 1]] },
+          { "weight": 16, "items": [["raw_shark", [50, 100], "noted"]] },
+          { "weight": 12, "items": [["gold_ore", [350, 500], "noted"]] },
+          { "weight": 9, "items": [["runite_ore", [7, 10]]] },
+          { "weight": 7, "items": [["crystal_tree_seed", [4, 6]]] },
+          { "weight": 3, "oneOf": [["dragon_platelegs", 1, 1], ["dragon_plateskirt", 1, 1], ["dragonshield_a", 1, 1]] }
+        ]
+      }
+    }
+  },
+  "fishTable": {
+    "_description": "Wiki (Brimstone chest, Fish drop table; Module:Slayer chest fish chart): rolls in this order at the player's Fishing level, each a skilling-success chance interpolated from low (level 1) to high (level 99) out of 256; the first that succeeds is the fish, and raw lobsters if none does. A manta ray, sea turtle or shark roll gives that fish 2/8 of the time, raw sharks 3/8 and shark lures (twice a shark amount) 3/8. Amounts are the brimstone chest's, times the chest's fish scale, rounded down.",
+    "rolls": [
+      { "fish": "raw_mantaray", "low": -10, "high": 20, "amount": [80, 160], "sharkTable": true },
+      { "fish": "raw_seaturtle", "low": -10, "high": 50, "amount": [80, 200], "sharkTable": true },
+      { "fish": "raw_shark", "low": -60, "high": 40, "amount": [80, 250], "sharkTable": true },
+      { "fish": "raw_monkfish", "low": 0, "high": 170, "amount": [100, 300] },
+      { "fish": "raw_swordfish", "low": 25, "high": 200, "amount": [100, 300] },
+      { "fish": "raw_tuna", "low": 160, "high": 0, "amount": [100, 350] }
+    ],
+    "fallback": { "fish": "raw_lobster", "amount": [100, 350] },
+    "shark": { "fish": "raw_shark", "amount": [80, 250] },
+    "lure": "shark_lure",
+    "sharkTable": { "same": 2, "shark": 3, "lure": 3 }
+  },
+  "enhancedKey": {
+    "_description": "Wiki (Enhanced crystal key): a crystal key and 10 crystal shards at a Prifddinas singing bowl, 80 Smithing and Crafting (boostable), 500 XP in each.",
+    "bowl": "prif_singing_bowl",
+    "product": "prif_crystal_key",
+    "needs": [["crystal_key", 1], ["prif_crystal_shard", 10]],
+    "level": 80,
+    "xp": 500
+  }
+}

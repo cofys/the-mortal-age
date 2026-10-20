@@ -36,7 +36,7 @@ export function useViewportCssVars(): void {
             // Keep the app at its pre-keyboard size while the on-screen keyboard is open;
             // otherwise the whole layout (and the canvas-rendered login panel) collapses
             // into the sliver of viewport left above the keyboard.
-            if (shouldFreezeViewportForVirtualKeyboard(lastApplied, { width, height })) {
+            if (shouldFreezeViewportForVirtualKeyboard(lastApplied, { width, height }, true)) {
                 return;
             }
             lastApplied = { width, height };

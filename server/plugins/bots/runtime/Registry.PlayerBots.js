@@ -369,7 +369,15 @@ function createBotRegistry(options) {
     let totalDesired = 0;
     for (const region of activeRegions) {
       const hotspotCount = hotspotCountsByRegion?.get?.(region.key) ?? 0;
-      const desiredCount = Math.max(0, wildernessActiveRegionBotsPerRegion - hotspotCount);
+      // Keep levelled Wilderness encounters sparser than town fights on PvP worlds.
+      const wildernessLevel = Wilderness.levelAt(
+        region.regionX * WILDERNESS_REGION_SIZE + WILDERNESS_REGION_SIZE / 2,
+        region.regionY * WILDERNESS_REGION_SIZE + WILDERNESS_REGION_SIZE / 2
+      );
+      const targetCount = wildernessLevel > 0
+        ? Math.ceil(wildernessActiveRegionBotsPerRegion / 3)
+        : wildernessActiveRegionBotsPerRegion;
+      const desiredCount = Math.max(0, targetCount - hotspotCount);
       desiredCountsByRegion.set(region.key, desiredCount);
       totalDesired += desiredCount;
     }
@@ -572,9 +580,6 @@ function createBotRegistry(options) {
       assignPvpMetadata(state, {
         metadata: pvpMetadata,
       });
-      // Hotspot clusters use their loadout catalogue bands (wide variety inside a level
-      // band); only the free-roaming region bots wear a player preset.
-      state.pvp.presetPoolEnabled = assignedHotspotId == null;
       syncBotProfileAttribute(bot, state);
       if (!applyInitialPvpLoadout(bot, state)) state.pvp.loadoutPending = true;
     }

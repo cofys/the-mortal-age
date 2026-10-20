@@ -66,8 +66,9 @@ function areaClass() {
 }
 
 class Session {
-  constructor(player) {
+  constructor(player, quest = false) {
     this.player = player;
+    this.quest = quest;
     this.area = new (areaClass())();
     this.area.session = this;
     const { sourceChunkX, sourceChunkY, chunks } = Common.data.instance;
@@ -115,7 +116,7 @@ class Session {
   spawnBoss() {
     if (this.ended || this.boss) return;
     const { npcs, spawn } = Common.data;
-    const boss = this.spawn(npcs.boss, spawn.tile, Common.core.Direction[spawn.direction].getId());
+    const boss = this.spawn(this.quest ? npcs.quest : npcs.boss, spawn.tile, Common.core.Direction[spawn.direction].getId());
     if (!boss) return;
     this.boss = boss;
     require("./Fight.Amoxliatl").begin(this, boss);
@@ -158,6 +159,22 @@ function passThrough({ player, objectId }) {
     Common.later(spawn.afterArrivalTicks, () => session.spawnBoss());
   });
   return true;
+}
+
+/** The quest reuses the same chamber and hazards with the cache's 400-HP guardian. */
+function questFight(request) {
+  if (sessionOf(request.player)) return;
+  const session = new Session(request.player, true);
+  sessions.set(request.player, session);
+  request.handled = true;
+  Common.travel(request.player, () => {
+    if (session.ended) return;
+    session.area.enter(request.player);
+    request.player.moveTo(session.tile([1371, 4511, 0]));
+    request.player.setAttribute(Common.INSIDE_ATTRIBUTE, true);
+    session.placeExits();
+    Common.later(Common.data.spawn.afterArrivalTicks, () => session.spawnBoss());
+  });
 }
 
 /** Back outside the door; the area's postLeave ends the chamber. */
@@ -207,6 +224,7 @@ function attachChamber(api) {
   api.persistAttribute(Common.INSIDE_ATTRIBUTE);
   api.onPlayerLogin(recoverOnLogin);
   api.onCustomEvent("gravestones:grave-location", graveOutside);
+  api.onCustomEvent('amoxliatl:quest-fight', questFight);
   api.onObjectInteraction("Door", { "Pass-through": passThrough });
   api.onObjectInteraction("Ice blockage", { Exit: exit, "Quick-exit": quickExit });
 }

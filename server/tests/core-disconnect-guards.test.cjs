@@ -1,6 +1,8 @@
 // Run after `yarn build`: node --test tests/core-disconnect-guards.test.cjs
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const { once } = require('node:events');
+const { WebSocket, WebSocketServer } = require('ws');
 
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
@@ -16,7 +18,8 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { decodeClientPackets } = require('../dist/net/protocol/ClientProtocol');
 const { Location } = require('../dist/game/model/Location');
 const net = require('../dist/net/NetworkBuilder');
-const { WebSocketBinaryChannel } = require('../dist/net/BinaryChannel');
+const { WebSocketBinaryChannel, MAX_GAME_MESSAGE_BYTES } = require('../dist/net/BinaryChannel');
+const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
 
 const REVISION = 435;
 
@@ -51,9 +54,10 @@ function stubChannel() {
     remoteAddress: '127.0.0.1',
     data: null,
     closeCb: null,
+    closes: [],
     isOpen: () => true,
     send() { return true; },
-    close() {},
+    close(code, reason) { this.closes.push({ code, reason }); },
     onData(callback) { this.data = callback; },
     onError() {},
     onClose(callback) { this.closeCb = callback; },
@@ -89,6 +93,80 @@ test('interaction stop cancels queued walking without routing back to an old til
   connection.inject([{ type: 'interaction_stop' }]);
   await connection.idle();
   assert.deepEqual(stopped, ['route', 'walk-task']);
+});
+
+test('player teleports clear follow-owned interaction and facing across relocation paths', () => {
+  const { Mobile } = require('../dist/game/entity/impl/Mobile');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Boundary } = require('../dist/game/model/Boundary');
+  const originalBlocked = RegionManager.blocked;
+  const makePlayer = () => new Player(new PlayerSession(stubChannel()));
+  RegionManager.blocked = () => false;
+  try {
+    for (const relocate of [
+      (player) => player.moveTo(new Location(3200, 3200, 0)),
+      (player) => player.smartMove(new Location(3200, 3200, 0), 0),
+      (player) => player.smartMoves(new Boundary(3200, 3200, 3200, 3200, 0)),
+    ]) {
+      const player = makePlayer();
+      player.getMovementQueue().handleRegionChange = () => {};
+      const leader = { getLocation: () => new Location(3201, 3201, 0) };
+      player.setFollowing(leader);
+      player.setMobileInteraction(leader);
+      player.setPositionToFace(leader.getLocation());
+      relocate(player);
+      assert.equal(player.getFollowing(), null);
+      assert.equal(player.getInteractingMobile(), null);
+      assert.equal(player.getPositionToFace(), null);
+    }
+  } finally {
+    RegionManager.blocked = originalBlocked;
+  }
+
+  const player = makePlayer();
+  const unrelatedFace = new Location(3300, 3300, 0);
+  player.setFollowing({ getLocation: () => new Location(3201, 3201, 0) });
+  player.setPositionToFace(unrelatedFace);
+  player.moveTo(new Location(3200, 3200, 0));
+  assert.equal(player.getPositionToFace(), unrelatedFace, 'relocation preserves a face target unrelated to following');
+
+  const mobile = new Mobile(new Location(3200, 3200, 0));
+  const owner = { getLocation: () => new Location(3201, 3201, 0) };
+  mobile.setFollowing(owner);
+  mobile.moveTo(new Location(3202, 3202, 0));
+  assert.equal(mobile.getFollowing(), owner, 'non-player follower behavior is unchanged');
+});
+
+test('follow rejects the first index outside player-list capacity before lookup', () => {
+  const { FollowPlayerPacketListener } = require('../dist/net/packet/impl/FollowPlayerPacketListener');
+  const originalGetPlayers = World.getPlayers;
+  let lookups = 0;
+  World.getPlayers = () => ({ capacityReturn: () => 2, get() { lookups++; } });
+  try {
+    FollowPlayerPacketListener.request({ busy: () => false, getIndex: () => 1, setFollowing() {} }, 2);
+  } finally {
+    World.getPlayers = originalGetPlayers;
+  }
+  assert.equal(lookups, 0);
+});
+
+test('invalid player-option indices leave follow state untouched', () => {
+  const { PlayerOptionPacketListener } = require('../dist/net/packet/impl/PlayerOptionPacketListener');
+  const originalGetPlayers = World.getPlayers;
+  let cleared = false;
+  let lookups = 0;
+  World.getPlayers = () => ({ get() { lookups++; return { getHitpoints: () => 99 }; } });
+  try {
+    PlayerOptionPacketListener.executeClientOption({
+      getHitpoints: () => 99,
+      busy: () => false,
+      setFollowing() { cleared = true; },
+    }, 1, 9);
+  } finally {
+    World.getPlayers = originalGetPlayers;
+  }
+  assert.equal(cleared, false);
+  assert.equal(lookups, 0, 'invalid options are rejected before target lookup');
 });
 
 test('a throwing removal hook cannot corrupt list size or leak its slot', () => {
@@ -134,6 +212,159 @@ test('synchronous packets coalesce into a single browser frame', async () => {
   assert.deepEqual([...frames[0]], [1, 2]);
 });
 
+test('outbound batches stay bounded and close if backpressure builds before the microtask flush', async () => {
+  const channel = stubChannel();
+  const frames = [];
+  channel.bufferedAmount = 0;
+  channel.send = (frame) => frames.push(frame);
+  const session = new PlayerSession(channel);
+  session.sendClientPacket(Buffer.alloc(MAX_GAME_MESSAGE_BYTES - 1, 1));
+  session.sendClientPacket(Buffer.from([2, 3]));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(frames.map((frame) => frame.length), [MAX_GAME_MESSAGE_BYTES - 1, 2]);
+  assert.deepEqual([...frames[1]], [2, 3], 'batch boundaries preserve packet order');
+
+  frames.length = 0;
+  session.sendClientPacket(Buffer.from([4]));
+  channel.bufferedAmount = NetworkConstants.OUTBOUND_WS_BUFFER_CRITICAL_BYTES;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(frames, [], 'queued data is discarded when the channel becomes slow');
+  assert.deepEqual(channel.closes, [{ code: 1013, reason: 'backpressure' }]);
+  assert.equal(session.pendingPacketBytes, 0);
+});
+
+test('WebSocket fragments reassemble and coalesced packets wait for earlier input', { timeout: 5000 }, async (t) => {
+  const server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  await once(server, 'listening');
+  const accepted = new Promise((resolve) => server.once('connection', (socket, request) => {
+    resolve({ socket, connection: new net.ClientConnection(new WebSocketBinaryChannel(socket, request)) });
+  }));
+  const client = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  t.after(async () => {
+    client.terminate();
+    for (const socket of server.clients) socket.terminate();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  await once(client, 'open');
+  const { socket, connection } = await accepted;
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  connection.dispatch = async (packets) => {
+    calls.push(...packets);
+    if (calls.length === 1) await held;
+  };
+  const received = new Promise((resolve) => {
+    let count = 0;
+    socket.on('message', () => { if (++count === 2) resolve(); });
+  });
+  // PING has a fixed four-byte payload; HELLO contains two null-terminated strings.
+  const ping = Buffer.from([201, 0, 0, 0, 1]);
+  client.send(ping.subarray(0, 1), { fin: false });
+  client.send(ping.subarray(1, 3), { fin: false });
+  client.send(ping.subarray(3), { fin: true });
+  client.send(Buffer.concat([ping, Buffer.from([200, 2, 0, 0])]));
+  await received;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, [{ type: 'ping' }], 'the second message waits for the slow handler');
+  release();
+  await connection.idle();
+  assert.deepEqual(calls, [{ type: 'ping' }, { type: 'ping' }, { type: 'hello' }]);
+  assert.equal(connection.closed, false);
+});
+
+test('an input backlog is bounded while an earlier handler is awaiting persistence', async () => {
+  const channel = stubChannel();
+  const connection = new net.ClientConnection(channel);
+  let release;
+  let dispatched = 0;
+  connection.dispatch = async () => {
+    dispatched++;
+    await new Promise((resolve) => { release = resolve; });
+  };
+  const ping = Buffer.from([201, 0, 0, 0, 1]);
+  channel.data(ping);
+  await new Promise((resolve) => setImmediate(resolve));
+  for (let index = 0; index < NetworkConstants.PACKET_QUEUE_LIMIT + 10; index++) channel.data(ping);
+  assert.equal(connection.queuedInputFrames, NetworkConstants.PACKET_QUEUE_LIMIT);
+  assert.deepEqual(channel.closes, [{ code: 1008, reason: 'input limit' }]);
+  release();
+  await connection.idle();
+  assert.equal(dispatched, 1, 'queued packets cannot act after the disconnect');
+  assert.equal(connection.queuedInputFrames, 0);
+});
+
+test('oversized and truncated game messages cannot continue into later actions', async () => {
+  for (const frame of [Buffer.alloc(MAX_GAME_MESSAGE_BYTES + 1), Buffer.from([201, 0])]) {
+    const channel = stubChannel();
+    const connection = new net.ClientConnection(channel);
+    let dispatched = 0;
+    connection.dispatch = async () => { dispatched++; };
+    channel.data(frame);
+    channel.data(Buffer.from([203])); // A later valid LOGOUT must not be dispatched.
+    await connection.idle();
+    assert.equal(dispatched, 0);
+    assert.equal(channel.closes.length, 1);
+    assert.equal(connection.closed, true);
+  }
+});
+
+test('input overflow releases a name reserved by an unfinished login', async (t) => {
+  t.mock.method(CachePipeline, 'getActive', () => ({ revision: REVISION }));
+  const originalPersistence = GameConstants.PLAYER_PERSISTENCE;
+  t.after(() => { GameConstants.PLAYER_PERSISTENCE = originalPersistence; });
+  let release;
+  GameConstants.PLAYER_PERSISTENCE = stubPersistence({
+    encryptPassword: () => new Promise((resolve) => { release = resolve; }),
+  });
+  const channel = stubChannel();
+  const connection = new net.ClientConnection(channel);
+  const credentials = Buffer.from('backlogguard\0secret\0');
+  const revision = Buffer.alloc(5);
+  revision.writeInt32BE(REVISION);
+  const header = Buffer.from([204, 0, credentials.length + revision.length]);
+  channel.data(Buffer.concat([header, credentials, revision]));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(typeof release, 'function');
+  assert.ok(net.ClientConnection.pendingNames.has('backlogguard'));
+  for (let index = 0; index < NetworkConstants.PACKET_QUEUE_LIMIT; index++) channel.data(Buffer.from([201, 0, 0, 0, 0]));
+  assert.equal(net.ClientConnection.pendingNames.has('backlogguard'), false);
+  release('hash');
+  await connection.idle();
+  connection.inject([{ type: 'handshake', name: 'backlogguard', clientType: 0 }]);
+  await connection.idle();
+  assert.equal(connection.getPlayer(), undefined);
+  assert.deepEqual(channel.closes, [{ code: 1008, reason: 'input limit' }]);
+});
+
+test('a malformed logged-in session is removed even when trade cleanup or saving throws', async (t) => {
+  const originalPersistence = GameConstants.PLAYER_PERSISTENCE;
+  t.after(() => { GameConstants.PLAYER_PERSISTENCE = originalPersistence; });
+  for (const failure of ['trade', 'save']) {
+    let saveRequested = false;
+    GameConstants.PLAYER_PERSISTENCE = stubPersistence({
+      requestSave() {
+        saveRequested = true;
+        if (failure === 'save') throw new Error('save request failed');
+      },
+    });
+    const channel = stubChannel();
+    const connection = new net.ClientConnection(channel);
+    const { player } = stubLoggedInPlayer('badpacket', {
+      getTrading: () => ({ closeTrade() { if (failure === 'trade') throw new Error('trade cleanup failed'); } }),
+    });
+    connection.player = player;
+    channel.data(Buffer.from([0]));
+    await connection.idle();
+    channel.closeCb();
+    assert.equal(player.getDisconnectSource(), 'malformed_packet');
+    assert.equal(World.getRemovePlayerQueue().filter((entry) => entry === player).length, 1);
+    assert.equal(saveRequested, true);
+    assert.deepEqual(channel.closes, [{ code: 1002, reason: 'malformed packet' }]);
+    World.getRemovePlayerQueue().splice(World.getRemovePlayerQueue().indexOf(player), 1);
+  }
+});
+
 test('an accepted logout first sets clicks back to walking, then logs out', () => {
   const frames = [];
   const channel = {
@@ -161,22 +392,48 @@ test('malformed client frames are rejected at the boundary without a throw downs
   channel.data(Buffer.from([255, 0, 8]));
   await connection.idle();
   assert.equal(connection.getPlayer(), undefined, 'no session was desynced by the bad frames');
+  assert.deepEqual(channel.closes, [{ code: 1002, reason: 'malformed packet' }]);
+  assert.equal(connection.closed, true, 'later frames cannot continue a malformed session');
 });
 
 function stubNpc(index, overrides = {}) {
-  return {
-    getIndex: () => index,
-    isRegistered: () => true,
+  return stubMobile({
+    index,
     isVisible: () => true,
     isNeedsPlacement: () => false,
     getLocation: () => new Location(3201, 3200, 0),
     getPrivateArea: () => null,
     getArea: () => undefined,
     ...overrides,
-  };
+  });
 }
 
-test('NPC visibility honours the cap, private areas and owner-only actors', () => {
+function registerVisibilityActors(t, players = [], npcs = []) {
+  const playerList = new MobileList(2048);
+  const npcList = new MobileList(65534);
+  for (const player of players) assert.equal(playerList.add(player), true);
+  for (const npc of npcs) assert.equal(npcList.add(npc), true);
+  t.mock.method(World, 'getPlayers', () => playerList);
+  t.mock.method(World, 'getNpcs', () => npcList);
+  return { playerList, npcList };
+}
+
+function visibilityPlayer(overrides = {}) {
+  return stubMobile({
+    getLocation: () => new Location(3200, 3200, 0),
+    getPrivateArea: () => null,
+    getArea: () => undefined,
+    isNeedsPlacement: () => false,
+    resizeViewDistance() {},
+    getViewDistance: () => 16,
+    getLocalPlayers: () => [],
+    getLocalNpcs: () => [],
+    getAttribute: () => undefined,
+    ...overrides,
+  });
+}
+
+test('NPC visibility honours the cap, private areas and owner-only actors', (t) => {
   const makePlayer = (localNpcs) => ({
     getIndex: () => 1,
     getLocation: () => new Location(3200, 3200, 0),
@@ -187,7 +444,9 @@ test('NPC visibility honours the cap, private areas and owner-only actors', () =
   });
 
   const crowdView = [];
-  World.updateLocalNpcs(makePlayer(crowdView), Array.from({ length: 300 }, (_, index) => stubNpc(index + 10)));
+  const crowd = Array.from({ length: 300 }, (_, index) => stubNpc(index + 10));
+  const { npcList } = registerVisibilityActors(t, [], crowd);
+  World.updateLocalNpcs(makePlayer(crowdView), crowd);
   assert.equal(crowdView.length, 255, 'the list never exceeds MAX_LOCAL_NPCS');
 
   const otherArea = { countsAsMainWorld: () => false };
@@ -196,29 +455,102 @@ test('NPC visibility honours the cap, private areas and owner-only actors', () =
   const filteredView = [];
   const owner = makePlayer(filteredView);
   const ownedPet = stubNpc(402, { isOwnerOnly: () => true, getOwner: () => owner });
+  for (const npc of [outsider, foreignOwner, ownedPet]) assert.equal(npcList.add(npc), true);
   World.updateLocalNpcs(owner, [outsider, foreignOwner, ownedPet]);
-  assert.deepEqual(filteredView.map((npc) => npc.getIndex()), [402],
+  assert.deepEqual(filteredView, [ownedPet],
     'only same-area, player-owned actors are added');
 });
 
-test('player visibility adds at most MAX_NEW_LOCAL_PLAYERS_PER_CYCLE per tick', () => {
-  const candidate = (index) => ({
-    getIndex: () => index,
-    getLocation: () => new Location(3200, 3200, 0),
-    getPrivateArea: () => null,
-    getArea: () => undefined,
-    isNeedsPlacement: () => false,
-    resizeViewDistance() {},
-    getViewDistance: () => 16,
-  });
-  const registered = Array.from({ length: 300 }, (_, index) => candidate(index + 1000));
+test('player visibility caps every tick and retains adaptive view distance', (t) => {
+  const registered = Array.from({ length: 300 }, () => visibilityPlayer());
+  registerVisibilityActors(t, registered);
   World.playerUpdateBuckets.set('0:400:400', registered);
+  t.after(() => World.playerUpdateBuckets.clear());
 
   const localPlayers = [];
-  World.updateLocalPlayers({ ...candidate(99), getLocalPlayers: () => localPlayers });
+  const player = visibilityPlayer({
+    getLocalPlayers: () => localPlayers,
+    resizeViewDistance: Player.prototype.resizeViewDistance,
+    viewDistance: 16,
+    viewDistanceQuietCycles: 0,
+  });
+  World.updateLocalPlayers(player);
   assert.equal(localPlayers.length, 25, 'one tick adds at most the new-player budget');
-
+  for (let tick = 0; tick < 15; tick++) {
+    const previous = localPlayers.length;
+    World.updateLocalPlayers(player);
+    assert.ok(localPlayers.length <= 255);
+    assert.ok(localPlayers.length - previous <= 25);
+  }
+  assert.equal(localPlayers.length, 255);
+  assert.ok(player.viewDistance < 16, 'crowding reduces the view distance');
+  const crowdedDistance = player.viewDistance;
   World.playerUpdateBuckets.clear();
+  localPlayers.length = 0;
+  for (let tick = 0; tick < 10; tick++) World.updateLocalPlayers(player);
+  assert.equal(player.viewDistance, crowdedDistance + 1, 'a quiet view regrows after ten ticks');
+});
+
+test('foreign instances cannot consume the nearby-player candidate budget', (t) => {
+  const instance = { countsAsMainWorld: () => false };
+  const outsiders = Array.from({ length: 300 }, () => visibilityPlayer({ getPrivateArea: () => instance }));
+  const local = visibilityPlayer();
+  registerVisibilityActors(t, [...outsiders, local]);
+  World.playerUpdateBuckets.set('0:400:400', [...outsiders, local]);
+  t.after(() => World.playerUpdateBuckets.clear());
+  const localPlayers = [];
+  World.updateLocalPlayers(visibilityPlayer({ getLocalPlayers: () => localPlayers }));
+  assert.deepEqual(localPlayers, [local]);
+});
+
+test('player views discard duplicates, departed instances and reused world slots', (t) => {
+  const stale = visibilityPlayer();
+  const replaced = visibilityPlayer();
+  let area = null;
+  const leaving = visibilityPlayer({ getPrivateArea: () => area });
+  const { playerList } = registerVisibilityActors(t, [stale, leaving]);
+  playerList.remove(stale);
+  playerList.add(replaced);
+  assert.equal(stale.getIndex(), replaced.getIndex());
+  area = { countsAsMainWorld: () => false };
+  const locals = [stale, leaving, replaced, replaced];
+  World.updateLocalPlayers(visibilityPlayer({ getLocalPlayers: () => locals }));
+  assert.deepEqual(locals, [replaced]);
+});
+
+test('NPC views discard stale, duplicate and hidden actors and always reserve the owner pet', (t) => {
+  const crowd = Array.from({ length: 300 }, (_, index) => stubNpc(index));
+  const stale = stubNpc(400);
+  const hidden = stubNpc(401);
+  const { npcList } = registerVisibilityActors(t, [], [stale, hidden, ...crowd]);
+  npcList.remove(stale);
+  const pet = stubNpc(402);
+  npcList.add(pet);
+  assert.equal(stale.getIndex(), pet.getIndex(), 'the stale slot was reused');
+  const localNpcs = [stale, hidden, crowd[0], ...crowd];
+  const owner = visibilityPlayer({ getLocalNpcs: () => localNpcs, getAttribute: () => pet });
+  pet.getOwner = () => owner;
+  t.mock.method(BoatManager, 'canSeeAboard', (_viewer, actor) => actor !== hidden);
+  World.updateLocalNpcs(owner, [stale, hidden, ...crowd]);
+  assert.equal(localNpcs.length, 255);
+  assert.equal(new Set(localNpcs).size, 255);
+  assert.ok(localNpcs.includes(pet), 'the pet replaces the last ordinary actor in a full view');
+  assert.ok(!localNpcs.includes(stale));
+  assert.ok(!localNpcs.includes(hidden));
+  World.updateLocalNpcs(owner, [hidden, ...crowd]);
+  assert.equal(localNpcs.length, 255);
+  assert.ok(localNpcs.includes(pet), 'the pet survives later crowded ticks');
+});
+
+test('a pet in another instance is not moved or exposed by visibility updates', (t) => {
+  const instance = { countsAsMainWorld: () => false };
+  const pet = stubNpc(1, { getPrivateArea: () => instance, setArea() { throw new Error('visibility must not move actors'); } });
+  registerVisibilityActors(t, [], [pet]);
+  const locals = [];
+  const owner = visibilityPlayer({ getLocalNpcs: () => locals, getAttribute: () => pet });
+  pet.getOwner = () => owner;
+  World.updateLocalNpcs(owner, [pet]);
+  assert.deepEqual(locals, []);
 });
 
 test('a throwing player removal cannot abort the world remove phase', () => {

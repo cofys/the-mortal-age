@@ -4711,8 +4711,9 @@ export class OsrsClient {
         if (Number.isFinite(rawHeadIcons.skull)) {
             headIcons.skull = (rawHeadIcons.skull as number) | 0;
         }
-        // Sync equipment inventory for CS2 scripts if this is for the local player
-        if (syncEquipment) {
+        // Sync equipment inventory for CS2 scripts if this is for the local player. A transformed
+        // player's appearance carries the NPC, not the items: the server sends inventory 94 then.
+        if (syncEquipment && !(Number(payload?.npcTransformationId) >= 0)) {
             this.syncEquipmentInventory(equip, equipQty);
         }
         return new PlayerAppearance(gender, colors, kits, equip, headIcons, payload?.npcTransformationId);

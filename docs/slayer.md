@@ -19,6 +19,7 @@ The plugin is `server/plugins/skills/Slayer.plugin.js`; its units are in
 | `Equipment.Slayer.js` | Protective gear; kurask and turoth weaknesses |
 | `Finishers.Slayer.js` | Rock hammer, bag of salt, ice cooler, fungicide spray |
 | `Superiors.Slayer.js` | Superior monsters |
+| `Keys.Slayer.js` | Brimstone and Larran's keys from Konar's and Krystilia's task kills |
 
 ## From the cache
 
@@ -82,6 +83,13 @@ levels for, 3-35 kills (Wiki; in OSRS the player chooses the amount).
 - **Counting:** a kill counts when the monster counts for the task. Konar's kills must be in her
   area, and Krystilia's in the Wilderness.
 - **XP:** a monster's hitpoints in Slayer XP.
+- **Keys (Wiki: Brimstone key, Larran's key):** a kill that counts for a Konar task may drop a
+  brimstone key, one for a Krystilia task a Larran's key, at a chance set by the monster's combat
+  level (1 in 2,060 at level 1 up to 1 in 50 from level 350 for brimstone; 1 in 1,972 to 1 in 50
+  for Larran's). Monsters with a Slayer level are 20% likelier, and Larran's keys a further 15%
+  inside the Wilderness Slayer Cave. A superior on such a task always drops its key. The keys are
+  on no monster's drop table: `NpcDrops` strips the Wiki's "Konar task bonus" rows, which dropped
+  a brimstone key from every superior kill, on task or not.
 
 ### Completing
 
