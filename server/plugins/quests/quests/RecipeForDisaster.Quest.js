@@ -455,8 +455,8 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       mejHA0: !has(player, ItemIdentifiers.GREENMANS_ALE) && ingredients.filter((id) => id !== ItemIdentifiers.GREENMANS_ALE).every((id) => has(player, id)),
       "5Ks1A9": !has(player, ItemIdentifiers.DIRTY_BLAST) && ingredients.filter((id) => id !== ItemIdentifiers.DIRTY_BLAST).every((id) => has(player, id)) };
     if (Object.prototype.hasOwnProperty.call(counts, stepId)) return counts[stepId];
-    if (value.includes("doesn't have a fishbowl")) return !has(player, ItemIdentifiers.FISHBOWL);
-    if (value.includes("has a fishbowl")) return has(player, ItemIdentifiers.FISHBOWL);
+    if (value.includes("doesn't have a fishbowl")) return !has(player, ItemIdentifiers.EMPTY_FISHBOWL);
+    if (value.includes("has a fishbowl")) return has(player, ItemIdentifiers.EMPTY_FISHBOWL);
     if (value.includes("lost their diving helmet")) return !hasOrEquipped(player, ItemIdentifiers.FISHBOWL_HELMET, api.core.Equipment.HEAD_SLOT);
     if (value.includes("lost their diving apparatus")) return !hasOrEquipped(player, ItemIdentifiers.DIVING_APPARATUS, api.core.Equipment.CAPE_SLOT);
     if (value.includes("all their equipment")) return hasOrEquipped(player, ItemIdentifiers.FISHBOWL_HELMET, api.core.Equipment.HEAD_SLOT)
@@ -801,13 +801,13 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       return;
     }
     if (stepId === "rfd-murphy-fit-gear") {
-      if (!has(player, ItemIdentifiers.FISHBOWL) || !hasSpace(player)) {
+      if (!has(player, ItemIdentifiers.EMPTY_FISHBOWL) || !hasSpace(player)) {
         player.sendMessage("Make room and bring Murphy a fishbowl before he prepares your diving gear.");
         event.handled = true;
         event.end = true;
         return;
       }
-      player.getInventory().deleteNumber(ItemIdentifiers.FISHBOWL, 1);
+      player.getInventory().deleteNumber(ItemIdentifiers.EMPTY_FISHBOWL, 1);
       player.getInventory().adds(ItemIdentifiers.DIVING_APPARATUS, 1);
       player.getInventory().adds(ItemIdentifiers.FISHBOWL_HELMET, 1);
       setPirateState(player, pirateState(player) | 2);
@@ -2478,24 +2478,6 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       "getting-the-recipe-cooling-the-rock-cake-by-killing-an-icefiend");
   }
 
-  function handleFishbowl(event) {
-    const { player } = event;
-    if (!isItemPair(event, ItemIdentifiers.MOLTEN_GLASS, ItemIdentifiers.GLASSBLOWING_PIPE)) return;
-    event.handled = true;
-    if (level(player, Skill.CRAFTING) < 42) {
-      player.sendMessage("You need level 42 Crafting to blow a fishbowl.");
-      return;
-    }
-    if (!hasSpace(player)) {
-      player.sendMessage("You need an empty inventory slot to make a fishbowl.");
-      return;
-    }
-    player.getInventory().deleteNumber(ItemIdentifiers.MOLTEN_GLASS, 1);
-    player.getInventory().adds(ItemIdentifiers.FISHBOWL, 1);
-    player.getSkillManager().addExperiences(Skill.CRAFTING, 42);
-    player.sendMessage("You blow the molten glass into a fishbowl.");
-  }
-
   function buildJournal(player) {
     if (quest.isComplete(player)) return ["I freed the Lumbridge council and defeated the Culinaromancer.", "", "<col=ff0000>QUEST COMPLETE!</col>"];
     if (stage(player) >= STAGE_OPENING_COMPLETE) {
@@ -2563,7 +2545,6 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   api.onItemOnItem(handleDwarfItems, { noted: false });
   api.onItemOnItem(handleAmikItems, { noted: false });
   api.onItemOnItem(handleAwowogeiItems, { noted: false });
-  api.onItemOnItem(handleFishbowl, { noted: false });
   api.onItemOnItem(handleGuideCakeItems, { noted: false });
   api.onItemOnItem(handleDaveStewMix, { noted: false });
   api.onItemOnNpc(rescueByItem);

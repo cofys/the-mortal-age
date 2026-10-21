@@ -608,6 +608,16 @@ export interface PluginSpellOnObjectEvent {
   handled: boolean;
 }
 
+/** A spell cast from the spellbook on nothing: utility spells, self-casts, teleports. */
+export interface PluginSpellCastEvent {
+  player: any;
+  /** Spellbook name of the cast spell, e.g. "Superglass Make". */
+  spellName: string;
+  spellWidget: number;
+  spellItemId: number;
+  handled: boolean;
+}
+
 export interface PluginSpellOnItemEvent {
   player: any;
   /** Spellbook name of the cast spell, e.g. "Lvl-1 Enchant"; undefined if the cache has none. */
@@ -971,6 +981,8 @@ export interface PluginApi {
   onItemOnGroundItem(handler: (event: PluginItemOnGroundItemEvent) => void, filter?: PluginItemUseFilter): void;
   onSpellOnObject(handler: (event: PluginSpellOnObjectEvent) => void): void;
   onSpellOnItem(handler: (event: PluginSpellOnItemEvent) => void): void;
+  /** A spellbook spell cast on nothing, before the core spellbooks handle it. Set `handled` to own it. */
+  onSpellCast(handler: (event: PluginSpellCastEvent) => void): void;
   onItemAction(handler: (event: PluginItemActionEvent) => void): void;
   /** Exact item name and inventory option matching. Return false to fall through. */
   onItemAction(itemName: string, actions: Record<string, (event: PluginItemActionEvent) => void | boolean>): void;

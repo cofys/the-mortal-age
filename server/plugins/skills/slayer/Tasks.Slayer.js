@@ -336,6 +336,20 @@ function currentTaskEvent(request) {
   request.task = { master: task.masterId, taskId: task.taskId, name: taskName(task.task), count: task.count, area: task.area?.text ?? null };
 }
 
+/**
+ * "slayer:has-unlock" { player, name, unlocked: false }: sets `unlocked` when the player bought the
+ * Rewards unlock with that slayer_unlock name ("Broader Fletching").
+ */
+function hasUnlockEvent(request) {
+  if (!request?.player || !request.name) return;
+  for (const unlock of Data.get().unlocks.values()) {
+    if (unlock.name === request.name) {
+      request.unlocked = hasUnlockBit(request.player, unlock.bit);
+      return;
+    }
+  }
+}
+
 /** "slayer:grant-points" { player, points }: a quest or reward adding points. */
 function grantPointsEvent({ player, points }) {
   if (player && Number.isFinite(points)) grantPoints(player, points);
@@ -348,6 +362,7 @@ function attach(pluginApi) {
   pluginApi.onCustomEvent("slayer:on-task", onTaskEvent);
   pluginApi.onCustomEvent("slayer:grant-points", grantPointsEvent);
   pluginApi.onCustomEvent("slayer:current-task", currentTaskEvent);
+  pluginApi.onCustomEvent("slayer:has-unlock", hasUnlockEvent);
 }
 
 module.exports = {

@@ -133,7 +133,9 @@ module.exports = function registerDoricsQuestQuest(api) {
 
   function handleSmithy(event) {
     const objectId = event.objectId ?? event.object?.getId();
-    if (objectId !== DORICS_ANVIL_ID && objectId !== DORICS_WHETSTONE_ID || quest.isComplete(event.player)) return;
+    // false: an object hook that returns anything else claims the click, and Smith on every
+    // other anvil would never reach the Smithing plugin.
+    if (objectId !== DORICS_ANVIL_ID && objectId !== DORICS_WHETSTONE_ID || quest.isComplete(event.player)) return false;
     event.handled = true;
     event.denied = true;
     startTranscript(api, event.player, NpcIdentifiers.DORIC, "Doric's Quest", objectId === DORICS_ANVIL_ID

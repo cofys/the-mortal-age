@@ -1,3 +1,18 @@
+/**
+ * Herblore (https://oldschool.runescape.wiki/w/Herblore): cleaning grimy herbs, mixing potions
+ * and grinding secondaries with a pestle and mortar, from plugins/skills/data/herblore.json and
+ * rsprox captures. See docs/herblore.md; the custom events it answers are in
+ * herblore/Events.Herblore.js.
+ *
+ * Fork graft (2026-10-21 upstream merge): upstream split Herblore into the
+ * ./herblore/ units below; the fork's citizen bot entry point (CitizenHerb
+ * and others require HERBLORE_RECIPES / startBotHerblore /
+ * isHerbloreActive from this file) is kept below as a self-contained
+ * session task with the fork's ItemIds tables verbatim (including the
+ * fork's toadflax/lantadyme rows and extra finished potions the old hand
+ * path carried). Upstream's herblore.json uses cache gameval names that
+ * only resolve at runtime, so it cannot feed this static table.
+ */
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
@@ -6,7 +21,6 @@ const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 
-const HERB_CLEAN_DELAY_MS = 150;
 const HERBLORE_ANIM = new Animation(363);
 
 // Ticks between herb actions in a bot session (matches the hand-click pace).
@@ -15,8 +29,6 @@ const HERB_INITIAL_DELAY_TICKS = 2;
 
 // Active bot herblore sessions: player -> { recipe, remaining, nextActionTick }
 const ACTIVE_HERBLORE_SESSIONS = new Map();
-let pluginApi = null;
-let TaskManager = null;
 let herbloreTick = 0;
 
 const CLEANABLE_HERBS = new Map([
@@ -239,50 +251,55 @@ class HerbloreTask extends Task {
   }
 }
 
+// Data-driven recipes for bots: derived from the hand-path tables so the
+// hand-clean/unf/finish and bot paths never disagree on level/xp.
+const HERBLORE_RECIPES = [
+  ...[...CLEANABLE_HERBS.entries()].map(([grimyId, herb]) => ({
+    kind: "clean",
+    name: "Clean herb",
+    inputId: grimyId,
+    needsId: null,
+    outputId: herb.clean,
+    level: herb.level,
+    xp: herb.xp,
+  })),
+  ...[...UNFINISHED_POTIONS.entries()].map(([herbId, unf]) => ({
+    kind: "unfinished",
+    name: "Mix unfinished potion",
+    inputId: herbId,
+    needsId: ItemIds.VIAL_OF_WATER,
+    outputId: unf.potion,
+    level: unf.level,
+    xp: 10,
+  })),
+  ...[...FINISHED_POTIONS.entries()].map(([key, fin]) => {
+    const [inputId, needsId] = key.split(":").map(Number);
+    return {
+      kind: "finished",
+      name: "Mix potion",
+      inputId,
+      needsId,
+      outputId: fin.potion,
+      level: fin.level,
+      xp: fin.xp,
+    };
+  }),
+];
+
 module.exports = {
   name: "Herblore",
   members: true,
-  // Data-driven recipes for bots: derived from the hand-path tables so the
-  // hand-clean/unf/finish and bot paths never disagree on level/xp.
-  HERBLORE_RECIPES: [
-    ...[...CLEANABLE_HERBS.entries()].map(([grimyId, herb]) => ({
-      kind: "clean",
-      name: "Clean herb",
-      inputId: grimyId,
-      needsId: null,
-      outputId: herb.clean,
-      level: herb.level,
-      xp: herb.xp,
-    })),
-    ...[...UNFINISHED_POTIONS.entries()].map(([herbId, unf]) => ({
-      kind: "unfinished",
-      name: "Mix unfinished potion",
-      inputId: herbId,
-      needsId: ItemIds.VIAL_OF_WATER,
-      outputId: unf.potion,
-      level: unf.level,
-      xp: 10,
-    })),
-    ...[...FINISHED_POTIONS.entries()].map(([key, fin]) => {
-      const [inputId, needsId] = key.split(":").map(Number);
-      return {
-        kind: "finished",
-        name: "Mix potion",
-        inputId,
-        needsId,
-        outputId: fin.potion,
-        level: fin.level,
-        xp: fin.xp,
-      };
-    }),
-  ],
+  HERBLORE_RECIPES,
   startBotHerblore,
   isHerbloreActive,
   register(api) {
-    pluginApi = api;
-    TaskManager = api.getTaskManager();
-    TaskManager.submit(new HerbloreTask(ACTIVE_HERBLORE_SESSIONS));
+    require("./herblore/Events.Herblore")(api);
+    require("./herblore/Cleaning.Herblore")(api);
+    require("./herblore/Mixing.Herblore")(api);
+    require("./herblore/Grinding.Herblore")(api);
 
+    // Fork bot session task + cleanup (upstream units manage their own).
+    api.getTaskManager().submit(new HerbloreTask(ACTIVE_HERBLORE_SESSIONS));
     api.onPlayerDisconnect(({ player }) => {
       stopHerblore(ACTIVE_HERBLORE_SESSIONS, player, false);
     });
@@ -290,102 +307,6 @@ module.exports = {
       if (skill === Skill.HERBLORE) {
         stopHerblore(ACTIVE_HERBLORE_SESSIONS, player, false);
       }
-    });
-
-    api.onCustomEvent("herblore:unfinished", answerUnfinished);
-    api.onItemFirstAction((event) => {
-      const { player, itemId, slot } = event;
-      const herb = CLEANABLE_HERBS.get(itemId);
-      if (!herb) {
-        return false;
-      }
-
-      if (!player.getClickDelay().elapsedTime(HERB_CLEAN_DELAY_MS)) {
-        return true;
-      }
-
-      if (player.getSkillManager().getCurrentLevel(Skill.HERBLORE) < herb.level) {
-        player.sendMessage(
-          `You need a Herblore level of at least ${herb.level} to clean this leaf.`
-        );
-        return true;
-      }
-
-      player.getInventory().deleteAtSlot(slot, 1);
-      player.getInventory().addItem(new Item(herb.clean, 1));
-      player.getSkillManager().addExperiences(Skill.HERBLORE, herb.xp);
-      player.sendMessage("You clean the dirt off the leaf.");
-      player.getClickDelay().reset();
-      return true;
-    });
-
-    api.onItemOnItem((event) => {
-      const { player, usedItemId, usedWithItemId } = event;
-      const hasVialWater =
-        usedItemId === ItemIds.VIAL_OF_WATER ||
-        usedWithItemId === ItemIds.VIAL_OF_WATER;
-      if (hasVialWater) {
-        const herbId =
-          usedItemId === ItemIds.VIAL_OF_WATER ? usedWithItemId : usedItemId;
-        // Wiki (Herblore cape): wearing it, a grimy herb goes straight in, with its cleaning XP.
-        const grimy = CLEANABLE_HERBS.get(herbId);
-        const cleanedByCape = grimy && wearsHerbloreCape(api, player) &&
-          player.getSkillManager().getCurrentLevel(Skill.HERBLORE) >= grimy.level ? grimy : null;
-        const unfinished = UNFINISHED_POTIONS.get(cleanedByCape ? grimy.clean : herbId);
-        if (!unfinished) {
-          return;
-        }
-
-        if (
-          player.getSkillManager().getCurrentLevel(Skill.HERBLORE) <
-          unfinished.level
-        ) {
-          player.sendMessage(
-            `You need a Herblore level of at least ${unfinished.level} to do this.`
-          );
-          event.handled = true;
-          return;
-        }
-
-        player.performAnimation(HERBLORE_ANIM);
-        Sounds.sendSound(player, Sound.POTION_MIX);
-        player.getInventory().deleteNumber(ItemIds.VIAL_OF_WATER, 1);
-        player.getInventory().deleteNumber(herbId, 1);
-        player.getInventory().addItem(new Item(unfinished.potion, 1));
-        if (cleanedByCape) player.getSkillManager().addExperiences(Skill.HERBLORE, cleanedByCape.xp);
-        player.getSkillManager().addExperiences(Skill.HERBLORE, 10);
-        event.handled = true;
-        return;
-      }
-
-      const key1 = finishedPotionKey(usedItemId, usedWithItemId);
-      const key2 = finishedPotionKey(usedWithItemId, usedItemId);
-      const finished = FINISHED_POTIONS.get(key1) || FINISHED_POTIONS.get(key2);
-      if (!finished) {
-        return;
-      }
-
-      if (player.getSkillManager().getCurrentLevel(Skill.HERBLORE) < finished.level) {
-        player.sendMessage(
-          `You need a Herblore level of at least ${finished.level} to do this.`
-        );
-        event.handled = true;
-        return;
-      }
-
-      player.performAnimation(HERBLORE_ANIM);
-      Sounds.sendSound(player, Sound.POTION_MIX);
-      player.getInventory().deleteNumber(usedItemId, 1);
-      player.getInventory().deleteNumber(usedWithItemId, 1);
-      player.getInventory().addItem(new Item(finished.potion, 1));
-      player.getSkillManager().addExperiences(Skill.HERBLORE, finished.xp);
-      event.handled = true;
-    }, { noted: false });
-
-    api.log("registered", {
-      cleanables: CLEANABLE_HERBS.size,
-      unfinisheds: UNFINISHED_POTIONS.size,
-      finisheds: FINISHED_POTIONS.size,
     });
   },
 };

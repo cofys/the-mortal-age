@@ -42,6 +42,7 @@ import {
   PluginItemOnObjectEvent,
   PluginSpellOnObjectEvent,
   PluginSpellOnItemEvent,
+  PluginSpellCastEvent,
   PluginNpcDeathEvent,
   PluginNpcBeforeDeathEvent,
   PluginNpcHitModifyEvent,
@@ -270,6 +271,7 @@ export class PluginManager {
     [];
   private static spellOnObjectHooks: PluginHook<PluginSpellOnObjectEvent>[] = [];
   private static spellOnItemHooks: PluginHook<PluginSpellOnItemEvent>[] = [];
+  private static spellCastHooks: PluginHook<PluginSpellCastEvent>[] = [];
   private static groundItemInteractionHooks: PluginHook<PluginGroundItemInteractionEvent>[] =
     [];
   private static groundItemPickupHooks: PluginHook<PluginGroundItemInteractionEvent>[] = [];
@@ -1629,6 +1631,14 @@ export class PluginManager {
     for (const hook of PluginManager.spellOnItemHooks) {
       if (event.handled) break;
       PluginManager.executeHook(hook, event, "spell_on_item", "spell_on_item");
+    }
+    return event.handled === true;
+  }
+
+  public static emitSpellCast(event: PluginSpellCastEvent): boolean {
+    for (const hook of PluginManager.spellCastHooks) {
+      if (event.handled) break;
+      PluginManager.executeHook(hook, event, "spell_cast", "spell_cast");
     }
     return event.handled === true;
   }
@@ -3545,6 +3555,20 @@ export class PluginManager {
           return;
         }
         PluginManager.spellOnItemHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (!event || event.handled || !event.player) {
+              return;
+            }
+            handler(event);
+          },
+        });
+      },
+      onSpellCast: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.spellCastHooks.push({
           pluginName,
           handler: (event) => {
             if (!event || event.handled || !event.player) {

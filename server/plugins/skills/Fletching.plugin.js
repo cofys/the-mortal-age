@@ -1,534 +1,73 @@
+/**
+ * Fletching (docs/fletching.md): every recipe on the Wiki's Fletching page, from
+ * data/fletching.json, with menus, messages and animations from rsprox captures.
+ *
+ * Fork graft (2026-10-21 upstream merge): upstream split Fletching into the
+ * ./fletching/ units below; the fork's citizen log-fletching bot entry point
+ * (CitizenFletch requires FLETCHING_RECIPES / startBotFletching /
+ * isFletchingActive from this file) is kept below as a self-contained
+ * session task. FLETCHING_RECIPES is derived from upstream's
+ * data/fletching.json "logs" group (single-material recipes only — the
+ * multi-material hunters' spear is not bot-fletchable), so bot and hand
+ * paths never disagree on level/xp/output. One log every 3 ticks matches
+ * the upstream logs group's timing.
+ */
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
-const { CreationMenu } = require("../../src/main/typescript/elvarg/game/model/menu/CreationMenu");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 
-// Cutting and stringing sequences carry their OSRS sound in their frames.
-const CUTTING_ANIMATION = new Animation(1248);
+const UNITS = [
+  require("./fletching/Shared.Fletching"),
+  require("./fletching/Recipes.Fletching"),
+  require("./fletching/Spool.Fletching"),
+  require("./fletching/Diaries.Fletching"),
+];
 
-// OSRS timing references:
-// - Unstrung bows / crossbows: 3 ticks per item.
-// - Bow / crossbow stringing: 2 ticks per item.
-// - Arrows and darts: 2 ticks per set.
-// - Feathering bolts: 1 tick per set.
-const TICKS_CUT_LOGS = 3;
-const TICKS_STRING_BOWS = 2;
-const TICKS_ARROWS_AND_DARTS = 2;
-const TICKS_FEATHER_BOLTS = 1;
-const CREATION_ALL_SENTINEL = 28;
+const FLETCH_ANIMATION = new Animation(1248);
+const FLETCH_INTERVAL_TICKS = 3;
+const FLETCH_INITIAL_DELAY_TICKS = 2;
 
+// Active bot fletching sessions: player -> { recipe, remaining, nextActionTick }
+const ACTIVE_FLETCHING_SESSIONS = new Map();
+let pluginApi = null;
 let fletchingTick = 0;
 
-// Bot sessions live at module level so the bot entry point shares the map
-// with register()'s task — same shape as Crafting/Herblore.
-const ACTIVE_FLETCHING_SESSIONS = new Map();
-
-function itemId(name) {
-  const id = ItemIds[name];
-  return Number.isInteger(id) ? id : null;
-}
-
-// The fletching knife does everything a knife does, and held or worn it cuts logs
-// 1 tick faster after the first item (https://oldschool.runescape.wiki/w/Fletching_knife).
-const KNIFE_IDS = [itemId("KNIFE"), itemId("FLETCHING_KNIFE")];
-
-function fletchingKnifeBonus(player, recipe) {
-  const id = KNIFE_IDS[1];
-  return recipe.fletchingKnifeBonus &&
-    (player.getInventory().contains(id) || player.getEquipment().contains(id)) ? 1 : 0;
-}
-
-function buildRecipe(config) {
-  const outputId = itemId(config.output);
-  if (!Number.isInteger(outputId)) {
-    return null;
-  }
-
-  const requirements = [];
-  for (const req of config.requirements || []) {
-    const reqItemId = itemId(req.item);
-    if (!Number.isInteger(reqItemId)) {
-      return null;
-    }
-    requirements.push({
-      id: reqItemId,
-      ids: reqItemId === KNIFE_IDS[0] ? KNIFE_IDS : [reqItemId],
-      amount: Number.isInteger(req.amount) && req.amount > 0 ? req.amount : 1,
-      consume: req.consume !== false,
-    });
-  }
-
-  return {
-    key: config.key,
-    outputId,
-    outputAmount:
-      Number.isInteger(config.outputAmount) && config.outputAmount > 0
-        ? config.outputAmount
-        : 1,
-    level: config.level,
-    xp: config.xp,
-    intervalTicks: config.intervalTicks,
-    fletchingKnifeBonus: config.fletchingKnifeBonus === true,
-    animation:
-      Number.isInteger(config.animationId) && config.animationId >= 0
-        ? new Animation(config.animationId)
-        : CUTTING_ANIMATION,
-    requirements,
-  };
-}
-
-function indexBy(recipeList, keyExtractor) {
-  const map = new Map();
-  for (const recipe of recipeList) {
-    if (!recipe) {
-      continue;
-    }
-    const key = keyExtractor(recipe);
-    if (!map.has(key)) {
-      map.set(key, []);
-    }
-    map.get(key).push(recipe);
-  }
-  return map;
-}
-
-const LOG_RECIPE_DEFINITIONS = [
-  { log: "LOGS", output: "ARROW_SHAFT", outputAmount: 15, level: 1, xp: 5 },
-  { log: "LOGS", output: "WOODEN_STOCK", level: 9, xp: 6 },
-  { log: "LOGS", output: "SHORTBOW_U_", level: 5, xp: 5 },
-  { log: "LOGS", output: "LONGBOW_U_", level: 10, xp: 10 },
-
-  { log: "OAK_LOGS", output: "ARROW_SHAFT", outputAmount: 30, level: 15, xp: 10 },
-  { log: "OAK_LOGS", output: "OAK_STOCK", level: 24, xp: 16 },
-  { log: "OAK_LOGS", output: "OAK_SHORTBOW_U_", level: 20, xp: 16.5 },
-  { log: "OAK_LOGS", output: "OAK_LONGBOW_U_", level: 25, xp: 25 },
-
-  { log: "WILLOW_LOGS", output: "ARROW_SHAFT", outputAmount: 45, level: 30, xp: 15 },
-  { log: "WILLOW_LOGS", output: "WILLOW_STOCK", level: 39, xp: 22 },
-  { log: "WILLOW_LOGS", output: "WILLOW_SHORTBOW_U_", level: 35, xp: 33.3 },
-  { log: "WILLOW_LOGS", output: "WILLOW_LONGBOW_U_", level: 40, xp: 41.5 },
-
-  { log: "TEAK_LOGS", output: "TEAK_STOCK", level: 46, xp: 27 },
-
-  { log: "MAPLE_LOGS", output: "ARROW_SHAFT", outputAmount: 60, level: 45, xp: 20 },
-  { log: "MAPLE_LOGS", output: "MAPLE_STOCK", level: 54, xp: 32 },
-  { log: "MAPLE_LOGS", output: "MAPLE_SHORTBOW_U_", level: 50, xp: 50 },
-  { log: "MAPLE_LOGS", output: "MAPLE_LONGBOW_U_", level: 55, xp: 58.3 },
-
-  { log: "MAHOGANY_LOGS", output: "MAHOGANY_STOCK", level: 61, xp: 41 },
-
-  { log: "YEW_LOGS", output: "ARROW_SHAFT", outputAmount: 75, level: 60, xp: 25 },
-  { log: "YEW_LOGS", output: "YEW_STOCK", level: 69, xp: 50 },
-  { log: "YEW_LOGS", output: "YEW_SHORTBOW_U_", level: 65, xp: 67.5 },
-  { log: "YEW_LOGS", output: "YEW_LONGBOW_U_", level: 70, xp: 75 },
-
-  { log: "MAGIC_LOGS", output: "ARROW_SHAFT", outputAmount: 90, level: 75, xp: 30 },
-  { log: "MAGIC_LOGS", output: "MAGIC_STOCK", level: 78, xp: 70 },
-  { log: "MAGIC_LOGS", output: "MAGIC_SHORTBOW_U_", level: 80, xp: 83.3 },
-  { log: "MAGIC_LOGS", output: "MAGIC_LONGBOW_U_", level: 85, xp: 91.5 },
-].map((entry) =>
-  buildRecipe({
-    key: `log:${entry.log}:${entry.output}`,
-    output: entry.output,
-    outputAmount: entry.outputAmount,
-    level: entry.level,
-    xp: entry.xp,
-    intervalTicks: TICKS_CUT_LOGS,
-    fletchingKnifeBonus: true,
-    animationId: 1248,
-    requirements: [
-      { item: "KNIFE", amount: 1, consume: false },
-      { item: entry.log, amount: 1, consume: true },
-    ],
-  })
-);
-
-const LOG_RECIPES_BY_LOG = indexBy(LOG_RECIPE_DEFINITIONS, (recipe) =>
-  recipe.requirements[1].id
-);
-
-const STRINGING_RECIPE_DEFINITIONS = [
-  {
-    unstrung: "SHORTBOW_U_",
-    string: "BOW_STRING",
-    output: "SHORTBOW",
-    level: 5,
-    xp: 5,
-    animationId: 6678,
-  },
-  {
-    unstrung: "LONGBOW_U_",
-    string: "BOW_STRING",
-    output: "LONGBOW",
-    level: 10,
-    xp: 10,
-    animationId: 6684,
-  },
-  {
-    unstrung: "OAK_SHORTBOW_U_",
-    string: "BOW_STRING",
-    output: "OAK_SHORTBOW",
-    level: 20,
-    xp: 16.5,
-    animationId: 6679,
-  },
-  {
-    unstrung: "OAK_LONGBOW_U_",
-    string: "BOW_STRING",
-    output: "OAK_LONGBOW",
-    level: 25,
-    xp: 25,
-    animationId: 6685,
-  },
-  {
-    unstrung: "WILLOW_SHORTBOW_U_",
-    string: "BOW_STRING",
-    output: "WILLOW_SHORTBOW",
-    level: 35,
-    xp: 33.3,
-    animationId: 6680,
-  },
-  {
-    unstrung: "WILLOW_LONGBOW_U_",
-    string: "BOW_STRING",
-    output: "WILLOW_LONGBOW",
-    level: 40,
-    xp: 41.5,
-    animationId: 6686,
-  },
-  {
-    unstrung: "MAPLE_SHORTBOW_U_",
-    string: "BOW_STRING",
-    output: "MAPLE_SHORTBOW",
-    level: 50,
-    xp: 50,
-    animationId: 6681,
-  },
-  {
-    unstrung: "MAPLE_LONGBOW_U_",
-    string: "BOW_STRING",
-    output: "MAPLE_LONGBOW",
-    level: 55,
-    xp: 58.3,
-    animationId: 6687,
-  },
-  {
-    unstrung: "YEW_SHORTBOW_U_",
-    string: "BOW_STRING",
-    output: "YEW_SHORTBOW",
-    level: 65,
-    xp: 67.5,
-    animationId: 6682,
-  },
-  {
-    unstrung: "YEW_LONGBOW_U_",
-    string: "BOW_STRING",
-    output: "YEW_LONGBOW",
-    level: 70,
-    xp: 75,
-    animationId: 6688,
-  },
-  {
-    unstrung: "MAGIC_SHORTBOW_U_",
-    string: "BOW_STRING",
-    output: "MAGIC_SHORTBOW",
-    level: 80,
-    xp: 83.3,
-    animationId: 6683,
-  },
-  {
-    unstrung: "MAGIC_LONGBOW_U_",
-    string: "BOW_STRING",
-    output: "MAGIC_LONGBOW",
-    level: 85,
-    xp: 91.5,
-    animationId: 6689,
-  },
-  {
-    unstrung: "BRONZE_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "BRONZE_CROSSBOW",
-    level: 9,
-    xp: 6,
-    animationId: 6671,
-  },
-  {
-    unstrung: "BLURITE_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "BLURITE_CROSSBOW",
-    level: 24,
-    xp: 16,
-    animationId: 6672,
-  },
-  {
-    unstrung: "IRON_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "IRON_CROSSBOW",
-    level: 39,
-    xp: 22,
-    animationId: 6673,
-  },
-  {
-    unstrung: "STEEL_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "STEEL_CROSSBOW",
-    level: 46,
-    xp: 27,
-    animationId: 6674,
-  },
-  {
-    unstrung: "MITHRIL_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "MITH_CROSSBOW",
-    level: 54,
-    xp: 32,
-    animationId: 6675,
-  },
-  {
-    unstrung: "ADAMANT_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "ADAMANT_CROSSBOW",
-    level: 61,
-    xp: 41,
-    animationId: 6676,
-  },
-  {
-    unstrung: "RUNITE_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "RUNE_CROSSBOW",
-    level: 69,
-    xp: 50,
-    animationId: 6677,
-  },
-  {
-    unstrung: "DRAGON_CROSSBOW_U_",
-    string: "CROSSBOW_STRING",
-    output: "DRAGON_CROSSBOW",
-    level: 78,
-    xp: 70,
-    animationId: 6677,
-  },
-]
-  .map((entry) =>
-    buildRecipe({
-      key: `string:${entry.unstrung}`,
-      output: entry.output,
-      level: entry.level,
-      xp: entry.xp,
-      intervalTicks: TICKS_STRING_BOWS,
-      animationId: entry.animationId,
-      requirements: [
-        { item: entry.unstrung, amount: 1, consume: true },
-        { item: entry.string, amount: 1, consume: true },
-      ],
-    })
-  )
-  .filter(Boolean);
-
-const STRINGING_RECIPES_BY_UNSTRUNG = new Map(
-  STRINGING_RECIPE_DEFINITIONS.map((recipe) => [recipe.requirements[0].id, recipe])
-);
-
-const CROSSBOW_LIMB_RECIPE_DEFINITIONS = [
-  {
-    stock: "WOODEN_STOCK",
-    limbs: "BRONZE_LIMBS",
-    output: "BRONZE_CROSSBOW_U_",
-    level: 9,
-    xp: 12,
-  },
-  {
-    stock: "OAK_STOCK",
-    limbs: "BLURITE_LIMBS",
-    output: "BLURITE_CROSSBOW_U_",
-    level: 24,
-    xp: 16,
-  },
-  {
-    stock: "OAK_STOCK",
-    limbs: "IRON_LIMBS",
-    output: "IRON_CROSSBOW_U_",
-    level: 39,
-    xp: 22,
-  },
-  {
-    stock: "WILLOW_STOCK",
-    limbs: "STEEL_LIMBS",
-    output: "STEEL_CROSSBOW_U_",
-    level: 46,
-    xp: 27,
-  },
-  {
-    stock: "MAPLE_STOCK",
-    limbs: "MITHRIL_LIMBS",
-    output: "MITHRIL_CROSSBOW_U_",
-    level: 54,
-    xp: 32,
-  },
-  {
-    stock: "MAHOGANY_STOCK",
-    limbs: "ADAMANTITE_LIMBS",
-    output: "ADAMANT_CROSSBOW_U_",
-    level: 61,
-    xp: 41,
-  },
-  {
-    stock: "YEW_STOCK",
-    limbs: "RUNITE_LIMBS",
-    output: "RUNITE_CROSSBOW_U_",
-    level: 69,
-    xp: 50,
-  },
-  {
-    stock: "MAGIC_STOCK",
-    limbs: "DRAGON_LIMBS",
-    output: "DRAGON_CROSSBOW_U_",
-    level: 78,
-    xp: 70,
-  },
-]
-  .map((entry) =>
-    buildRecipe({
-      key: `crossbow_limb:${entry.stock}:${entry.limbs}`,
-      output: entry.output,
-      level: entry.level,
-      xp: entry.xp,
-      intervalTicks: TICKS_CUT_LOGS,
-      animationId: 1248,
-      requirements: [
-        { item: "HAMMER", amount: 1, consume: false },
-        { item: entry.stock, amount: 1, consume: true },
-        { item: entry.limbs, amount: 1, consume: true },
-      ],
-    })
-  )
-  .filter(Boolean);
-
-const CROSSBOW_LIMB_RECIPES_BY_COMPONENTS = new Map();
-for (const recipe of CROSSBOW_LIMB_RECIPE_DEFINITIONS) {
-  const stockId = recipe.requirements[1].id;
-  const limbsId = recipe.requirements[2].id;
-  CROSSBOW_LIMB_RECIPES_BY_COMPONENTS.set(`${stockId}:${limbsId}`, recipe);
-  CROSSBOW_LIMB_RECIPES_BY_COMPONENTS.set(`${limbsId}:${stockId}`, recipe);
-}
-
-const HEADLESS_RECIPE = buildRecipe({
-  key: "ammo:headless_arrows",
-  output: "HEADLESS_ARROW",
-  outputAmount: 15,
-  level: 1,
-  xp: 15,
-  intervalTicks: TICKS_ARROWS_AND_DARTS,
-  animationId: 1248,
-  requirements: [
-    { item: "ARROW_SHAFT", amount: 15, consume: true },
-    { item: "FEATHER", amount: 15, consume: true },
-  ],
-});
-
-const ARROW_RECIPES_BY_TIP = new Map(
-  [
-    { tip: "BRONZE_ARROWTIPS", output: "BRONZE_ARROW", level: 1, xp: 19.5 },
-    { tip: "IRON_ARROWTIPS", output: "IRON_ARROW", level: 15, xp: 37.5 },
-    { tip: "STEEL_ARROWTIPS", output: "STEEL_ARROW", level: 30, xp: 75 },
-    { tip: "MITHRIL_ARROWTIPS", output: "MITHRIL_ARROW", level: 45, xp: 112.5 },
-    { tip: "ADAMANT_ARROWTIPS", output: "ADAMANT_ARROW", level: 60, xp: 150 },
-    { tip: "RUNE_ARROWTIPS", output: "RUNE_ARROW", level: 75, xp: 187.5 },
-    { tip: "BROAD_ARROWHEADS", output: "BROAD_ARROWS", level: 52, xp: 150 },
-    { tip: "AMETHYST_ARROWTIPS", output: "AMETHYST_ARROW", level: 82, xp: 202.5 },
-    { tip: "DRAGON_ARROWTIPS", output: "DRAGON_ARROW", level: 90, xp: 225 },
-  ]
-    .map((entry) => {
-      const recipe = buildRecipe({
-        key: `ammo:arrow:${entry.tip}`,
-        output: entry.output,
-        outputAmount: 15,
-        level: entry.level,
-        xp: entry.xp,
-        intervalTicks: TICKS_ARROWS_AND_DARTS,
-        animationId: 1248,
-        requirements: [
-          { item: "HEADLESS_ARROW", amount: 15, consume: true },
-          { item: entry.tip, amount: 15, consume: true },
-        ],
-      });
-      if (!recipe) {
-        return null;
-      }
-      return [recipe.requirements[1].id, recipe];
-    })
-    .filter(Boolean)
-);
-
-const DART_RECIPES_BY_TIP = new Map(
-  [
-    { tip: "BRONZE_DART_TIP", output: "BRONZE_DART", level: 10, xp: 18 },
-    { tip: "IRON_DART_TIP", output: "IRON_DART", level: 22, xp: 38 },
-    { tip: "STEEL_DART_TIP", output: "STEEL_DART", level: 37, xp: 75 },
-    { tip: "MITHRIL_DART_TIP", output: "MITHRIL_DART", level: 52, xp: 112 },
-    { tip: "ADAMANT_DART_TIP", output: "ADAMANT_DART", level: 67, xp: 150 },
-    { tip: "RUNE_DART_TIP", output: "RUNE_DART", level: 81, xp: 188 },
-    { tip: "AMETHYST_DART_TIP", output: "AMETHYST_DART", level: 90, xp: 210 },
-    { tip: "DRAGON_DART_TIP", output: "DRAGON_DART", level: 95, xp: 250 },
-  ]
-    .map((entry) => {
-      const recipe = buildRecipe({
-        key: `ammo:dart:${entry.tip}`,
-        output: entry.output,
-        outputAmount: 10,
-        level: entry.level,
-        xp: entry.xp,
-        intervalTicks: TICKS_ARROWS_AND_DARTS,
-        animationId: 1248,
-        requirements: [
-          { item: "FEATHER", amount: 10, consume: true },
-          { item: entry.tip, amount: 10, consume: true },
-        ],
-      });
-      if (!recipe) {
-        return null;
-      }
-      return [recipe.requirements[1].id, recipe];
-    })
-    .filter(Boolean)
-);
-
-const BOLT_RECIPES_BY_UNFINISHED = new Map(
-  [
-    { unf: "BRONZE_BOLTS_UNF_", output: "BRONZE_BOLTS", level: 9, xp: 5 },
-    { unf: "BLURITE_BOLTS_UNF_", output: "BLURITE_BOLTS", level: 24, xp: 10 },
-    { unf: "IRON_BOLTS_UNF_", output: "IRON_BOLTS", level: 39, xp: 15 },
-    { unf: "SILVER_BOLTS_UNF_", output: "SILVER_BOLTS", level: 43, xp: 25 },
-    { unf: "STEEL_BOLTS_UNF_", output: "STEEL_BOLTS", level: 46, xp: 35 },
-    { unf: "MITHRIL_BOLTS_UNF_", output: "MITHRIL_BOLTS", level: 54, xp: 50 },
-    { unf: "UNFINISHED_BROAD_BOLTS", output: "BROAD_BOLTS", level: 55, xp: 30 },
-    { unf: "ADAMANT_BOLTS_UNF_", output: "ADAMANT_BOLTS", level: 61, xp: 70 },
-    { unf: "RUNITE_BOLTS_UNF_", output: "RUNITE_BOLTS", level: 69, xp: 100 },
-    { unf: "DRAGON_BOLTS_UNF_", output: "DRAGON_BOLTS", level: 84, xp: 120 },
-  ]
-    .map((entry) => {
-      const recipe = buildRecipe({
-        key: `ammo:bolt:${entry.unf}`,
-        output: entry.output,
-        outputAmount: 10,
-        level: entry.level,
-        xp: entry.xp,
-        intervalTicks: TICKS_FEATHER_BOLTS,
-        animationId: 1248,
-        requirements: [
-          { item: "FEATHER", amount: 10, consume: true },
-          { item: entry.unf, amount: 10, consume: true },
-        ],
-      });
-      if (!recipe) {
-        return null;
-      }
-      return [recipe.requirements[1].id, recipe];
-    })
-    .filter(Boolean)
-);
+const FLETCHING_RECIPES = [
+  { name: "log:LOGS:ARROW_SHAFT", inputId: ItemIds.LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.ARROW_SHAFT, outputAmount: 15, level: 1, xp: 5 },
+  { name: "log:LOGS:JAVELIN_SHAFT", inputId: ItemIds.LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.JAVELIN_SHAFT, outputAmount: 15, level: 3, xp: 5 },
+  { name: "log:LOGS:SHORTBOW_U_", inputId: ItemIds.LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.SHORTBOW_U_, outputAmount: 1, level: 5, xp: 5 },
+  { name: "log:LOGS:LONGBOW_U_", inputId: ItemIds.LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.LONGBOW_U_, outputAmount: 1, level: 10, xp: 10 },
+  { name: "log:LOGS:WOODEN_STOCK", inputId: ItemIds.LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.WOODEN_STOCK, outputAmount: 1, level: 9, xp: 6 },
+  { name: "log:OAK_LOGS:ARROW_SHAFT", inputId: ItemIds.OAK_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.ARROW_SHAFT, outputAmount: 30, level: 15, xp: 10 },
+  { name: "log:OAK_LOGS:OAK_SHORTBOW_U_", inputId: ItemIds.OAK_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.OAK_SHORTBOW_U_, outputAmount: 1, level: 20, xp: 16.5 },
+  { name: "log:OAK_LOGS:OAK_LONGBOW_U_", inputId: ItemIds.OAK_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.OAK_LONGBOW_U_, outputAmount: 1, level: 25, xp: 25 },
+  { name: "log:OAK_LOGS:OAK_STOCK", inputId: ItemIds.OAK_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.OAK_STOCK, outputAmount: 1, level: 24, xp: 16 },
+  { name: "log:WILLOW_LOGS:ARROW_SHAFT", inputId: ItemIds.WILLOW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.ARROW_SHAFT, outputAmount: 45, level: 30, xp: 15 },
+  { name: "log:WILLOW_LOGS:WILLOW_SHORTBOW_U_", inputId: ItemIds.WILLOW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.WILLOW_SHORTBOW_U_, outputAmount: 1, level: 35, xp: 33.3 },
+  { name: "log:WILLOW_LOGS:WILLOW_LONGBOW_U_", inputId: ItemIds.WILLOW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.WILLOW_LONGBOW_U_, outputAmount: 1, level: 40, xp: 41.5 },
+  { name: "log:WILLOW_LOGS:WILLOW_STOCK", inputId: ItemIds.WILLOW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.WILLOW_STOCK, outputAmount: 1, level: 39, xp: 22 },
+  { name: "log:TEAK_LOGS:TEAK_STOCK", inputId: ItemIds.TEAK_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.TEAK_STOCK, outputAmount: 1, level: 46, xp: 27 },
+  { name: "log:MAPLE_LOGS:ARROW_SHAFT", inputId: ItemIds.MAPLE_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.ARROW_SHAFT, outputAmount: 60, level: 45, xp: 20 },
+  { name: "log:MAPLE_LOGS:MAPLE_SHORTBOW_U_", inputId: ItemIds.MAPLE_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.MAPLE_SHORTBOW_U_, outputAmount: 1, level: 50, xp: 50 },
+  { name: "log:MAPLE_LOGS:MAPLE_LONGBOW_U_", inputId: ItemIds.MAPLE_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.MAPLE_LONGBOW_U_, outputAmount: 1, level: 55, xp: 58.3 },
+  { name: "log:MAPLE_LOGS:MAPLE_STOCK", inputId: ItemIds.MAPLE_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.MAPLE_STOCK, outputAmount: 1, level: 54, xp: 32 },
+  { name: "log:MAHOGANY_LOGS:MAHOGANY_STOCK", inputId: ItemIds.MAHOGANY_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.MAHOGANY_STOCK, outputAmount: 1, level: 61, xp: 41 },
+  { name: "log:YEW_LOGS:ARROW_SHAFT", inputId: ItemIds.YEW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.ARROW_SHAFT, outputAmount: 75, level: 60, xp: 25 },
+  { name: "log:YEW_LOGS:YEW_SHORTBOW_U_", inputId: ItemIds.YEW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.YEW_SHORTBOW_U_, outputAmount: 1, level: 65, xp: 67.5 },
+  { name: "log:YEW_LOGS:YEW_LONGBOW_U_", inputId: ItemIds.YEW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.YEW_LONGBOW_U_, outputAmount: 1, level: 70, xp: 75 },
+  { name: "log:YEW_LOGS:YEW_STOCK", inputId: ItemIds.YEW_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.YEW_STOCK, outputAmount: 1, level: 69, xp: 50 },
+  { name: "log:MAGIC_LOGS:ARROW_SHAFT", inputId: ItemIds.MAGIC_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.ARROW_SHAFT, outputAmount: 90, level: 75, xp: 30 },
+  { name: "log:MAGIC_LOGS:MAGIC_SHORTBOW_U_", inputId: ItemIds.MAGIC_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.MAGIC_SHORTBOW_U_, outputAmount: 1, level: 80, xp: 83.3 },
+  { name: "log:MAGIC_LOGS:MAGIC_LONGBOW_U_", inputId: ItemIds.MAGIC_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.MAGIC_LONGBOW_U_, outputAmount: 1, level: 85, xp: 91.5 },
+  { name: "log:MAGIC_LOGS:MAGIC_STOCK", inputId: ItemIds.MAGIC_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.MAGIC_STOCK, outputAmount: 1, level: 78, xp: 70 },
+  { name: "log:REDWOOD_LOGS:ARROW_SHAFT", inputId: ItemIds.REDWOOD_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.ARROW_SHAFT, outputAmount: 105, level: 90, xp: 35 },
+  { name: "log:REDWOOD_LOGS:REDWOOD_HIKING_STAFF", inputId: ItemIds.REDWOOD_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.REDWOOD_HIKING_STAFF, outputAmount: 1, level: 90, xp: 10.5 },
+  { name: "log:ACHEY_TREE_LOGS:OGRE_ARROW_SHAFT", inputId: ItemIds.ACHEY_TREE_LOGS, needsId: ItemIds.KNIFE, outputId: ItemIds.OGRE_ARROW_SHAFT, outputAmount: 2, level: 5, xp: 6.4 },
+  { name: "log:CELASTRUS_BARK:BATTLESTAFF", inputId: ItemIds.CELASTRUS_BARK, needsId: ItemIds.KNIFE, outputId: ItemIds.BATTLESTAFF, outputAmount: 1, level: 40, xp: 80 },
+  { name: "log:ENT_BRANCH:ATLATL_DART_SHAFT", inputId: ItemIds.ENT_BRANCH, needsId: ItemIds.KNIFE, outputId: ItemIds.ATLATL_DART_SHAFT, outputAmount: 100, level: 74, xp: 30 },
+];
 
 function getFletchingLevel(player) {
   try {
@@ -542,34 +81,21 @@ function getFletchingLevel(player) {
  * Bot entry point — fletch logs for real Fletching XP, no interface clicking.
  * Finds the best knife-on-logs recipe the player's level allows that they
  * actually hold (plus a knife), and works `amount` logs, one per interval
- * tick. Same shape as upstream Smelt.js and our Crafting/Herblore
- * startBotX: the brain calls this once, the task drives the session.
- *
- * Citizens chain from woodcutting: chop logs -> fletch arrow shafts/bows.
- * Highest level recipe wins — a human fletches the best thing they've got
- * the level and logs for.
+ * tick. Citizens chain from woodcutting: chop logs -> fletch arrow
+ * shafts/bows. Highest level recipe wins — a human fletches the best thing
+ * they've got the level and logs for.
  */
 function findBestFletchingRecipe(player) {
   const inventory = player.getInventory?.();
   if (!inventory) return null;
+  if (!inventory.contains(ItemIds.KNIFE)) return null;
   const level = getFletchingLevel(player);
-  const knifeId = itemId("KNIFE");
-  if (!Number.isInteger(knifeId)) return null;
-  let hasKnife = false;
-  try {
-    hasKnife = inventory.getAmount(knifeId) > 0;
-  } catch {
-    hasKnife = false;
-  }
-  if (!hasKnife) return null;
   let best = null;
-  for (const recipe of LOG_RECIPE_DEFINITIONS) {
-    if (!recipe || recipe.level > level) continue;
-    const logId = recipe.requirements?.[1]?.id;
-    if (!Number.isInteger(logId)) continue;
+  for (const recipe of FLETCHING_RECIPES) {
+    if (recipe.level > level) continue;
     let logCount = 0;
     try {
-      logCount = inventory.getAmount(logId);
+      logCount = inventory.getAmount(recipe.inputId);
     } catch {
       logCount = 0;
     }
@@ -582,416 +108,113 @@ function findBestFletchingRecipe(player) {
 }
 
 function startBotFletching(player, amount) {
+  if (!player || !Number.isInteger(amount) || amount <= 0) {
+    return false;
+  }
   const recipe = findBestFletchingRecipe(player);
   if (!recipe) return false;
-  return startFletchingSession(
-    ACTIVE_FLETCHING_SESSIONS,
-    player,
+
+  stopFletching(ACTIVE_FLETCHING_SESSIONS, player, false);
+  ACTIVE_FLETCHING_SESSIONS.set(player, {
     recipe,
-    amount
-  );
+    remaining: amount,
+    nextActionTick: fletchingTick + FLETCH_INITIAL_DELAY_TICKS,
+  });
+  player.performAnimation(FLETCH_ANIMATION);
+  return true;
 }
 
 function isFletchingActive(player) {
   return player != null && ACTIVE_FLETCHING_SESSIONS.has(player);
 }
 
-function stopFletchingSession(activeSessions, player, resetAnimation = true) {
-  const task = activeSessions.get(player);
-  if (!task) {
-    return;
-  }
-  activeSessions.delete(player);
-  task.stop();
-  if (resetAnimation) {
-    player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+function stopFletching(activeSessions, player, sendMessage = true) {
+  if (activeSessions.delete(player) && sendMessage) {
+    player.sendMessage("You stop fletching.");
   }
 }
 
-function heldAmount(inventory, req) {
-  return req.ids.reduce((total, id) => total + inventory.getAmount(id), 0);
-}
-
-function hasRequirements(inventory, recipe) {
-  for (const req of recipe.requirements) {
-    if (heldAmount(inventory, req) < req.amount) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function maxCraftable(inventory, recipe) {
-  let max = Number.MAX_SAFE_INTEGER;
-  for (const req of recipe.requirements) {
-    if (!req.consume) {
-      if (heldAmount(inventory, req) <= 0) {
-        return 0;
-      }
-      continue;
-    }
-    max = Math.min(max, Math.floor(inventory.getAmount(req.id) / req.amount));
-  }
-  return max === Number.MAX_SAFE_INTEGER ? 0 : Math.max(0, max);
-}
-
-function consumeRequirements(inventory, recipe) {
-  for (const req of recipe.requirements) {
-    if (req.consume) {
-      inventory.deleteNumber(req.id, req.amount);
-    }
-  }
-}
-
-function performFletchingAction(player, recipe) {
-  const inventory = player.getInventory();
-  const level = getFletchingLevel(player);
-  if (level < recipe.level) {
-    player.sendMessage(`You need a Fletching level of at least ${recipe.level} to do this.`);
-    return false;
-  }
-
-  if (!hasRequirements(inventory, recipe)) {
-    player.sendMessage("You don't have the required materials to fletch that item.");
-    return false;
-  }
-
-  consumeRequirements(inventory, recipe);
-  const fletched = new Item(recipe.outputId, recipe.outputAmount);
-  pluginApi?.emitCustomEvent("crafting:produced", {
-    player,
-    item: fletched,
-    skill: Skill.FLETCHING,
-    requiredLevel: recipe.level,
-  });
-  inventory.addItem(fletched);
-  player.performAnimation(recipe.animation);
-  player.getSkillManager().addExperiences(Skill.FLETCHING, recipe.xp);
-
-  return true;
-}
-
-function startFletchingSession(activeSessions, player, recipe, requestedAmount) {
-  if (!recipe || !Number.isInteger(requestedAmount) || requestedAmount <= 0) {
-    return false;
-  }
-
-  const level = getFletchingLevel(player);
-  if (level < recipe.level) {
-    player.sendMessage(`You need a Fletching level of at least ${recipe.level} to do this.`);
-    return false;
-  }
-
-  const inventory = player.getInventory();
-  const available = maxCraftable(inventory, recipe);
-  if (available <= 0) {
-    player.sendMessage("You don't have the required materials to fletch that item.");
-    return false;
-  }
-
-  const targetAmount =
-    requestedAmount === CREATION_ALL_SENTINEL
-      ? available
-      : Math.min(requestedAmount, available);
-  if (!Number.isInteger(targetAmount) || targetAmount <= 0) {
-    return false;
-  }
-
-  stopFletchingSession(activeSessions, player, false);
-  const task = new FletchingTask(activeSessions, player, recipe, targetAmount);
-  activeSessions.set(player, task);
-  TaskManager.submit(task);
-
-  player.performAnimation(recipe.animation);
-
-  return true;
-}
-
-function sendCreationMenuForRecipes(activeSessions, player, title, recipes) {
-  const validRecipes = (recipes || []).filter(Boolean);
-  if (validRecipes.length <= 0) {
-    return false;
-  }
-
-  stopFletchingSession(activeSessions, player, false);
-
-  const recipeByOutput = new Map();
-  for (const recipe of validRecipes) {
-    recipeByOutput.set(recipe.outputId, recipe);
-  }
-
-  player.getPacketSender().sendCreationMenu(
-    new CreationMenu(
-      title,
-      validRecipes.map((recipe) => recipe.outputId),
-      {
-        execute: (outputId, amount) => {
-          const recipe = recipeByOutput.get(outputId);
-          if (!recipe) {
-            return;
-          }
-          startFletchingSession(activeSessions, player, recipe, amount);
-        },
-      }
-    )
-  );
-
-  return true;
-}
-
-// Keyed to the player, so their next walk or interaction cancels it (walkToReset). Moving
-// does not: live OSRS keeps fletching while the player walks or runs.
-class FletchingTask extends Task {
-  constructor(activeSessions, player, recipe, remaining) {
-    super(1, player.getIndex(), false);
+class FletchingBotTask extends Task {
+  constructor(activeSessions) {
+    super(1);
     this.activeSessions = activeSessions;
-    this.player = player;
-    this.recipe = recipe;
-    this.remaining = remaining;
-    this.ticksUntilAction = recipe.intervalTicks;
-  }
-
-  stop() {
-    super.stop();
-    if (this.activeSessions.get(this.player) === this) {
-      this.activeSessions.delete(this.player);
-    }
   }
 
   execute() {
-    const { player, recipe } = this;
-    if (!player.isRegistered?.() || player.getHitpoints() <= 0) {
-      this.stop();
-      return;
+    fletchingTick++;
+
+    for (const [player, session] of this.activeSessions) {
+      if (!player || !player.isRegistered?.() || player.getHitpoints?.() <= 0) {
+        this.activeSessions.delete(player);
+        continue;
+      }
+
+      try {
+        if (player.getForceMovement?.() != null) {
+          stopFletching(this.activeSessions, player, false);
+          continue;
+        }
+      } catch {
+        // engine read failed; try next tick
+      }
+
+      if (fletchingTick < session.nextActionTick) continue;
+      session.nextActionTick = fletchingTick + FLETCH_INTERVAL_TICKS;
+
+      // Fletch one log: the same inventory/XP/animation writes as the hand
+      // path, plus the fork's crafting:produced event CraftingQuality
+      // stamps quality from (the hand path emits it in Shared.Fletching).
+      try {
+        const inventory = player.getInventory();
+        const { recipe } = session;
+        if (!inventory.contains(recipe.inputId) || !inventory.contains(ItemIds.KNIFE)) {
+          stopFletching(this.activeSessions, player, false);
+          continue;
+        }
+        inventory.deleteNumber(recipe.inputId, 1);
+        const fletched = new Item(recipe.outputId, recipe.outputAmount);
+        pluginApi?.emitCustomEvent("crafting:produced", {
+          player,
+          item: fletched,
+          skill: Skill.FLETCHING,
+          requiredLevel: recipe.level,
+        });
+        inventory.addItem(fletched);
+        player.performAnimation(FLETCH_ANIMATION);
+        player.getSkillManager().addExperiences(Skill.FLETCHING, recipe.xp);
+        session.remaining -= 1;
+        if (session.remaining <= 0) {
+          stopFletching(this.activeSessions, player, false);
+        }
+      } catch {
+        stopFletching(this.activeSessions, player, false);
+      }
     }
-
-    if (player.getForceMovement() != null) {
-      stopFletchingSession(this.activeSessions, player);
-      return;
-    }
-
-    if (--this.ticksUntilAction > 0) {
-      return;
-    }
-    this.ticksUntilAction = recipe.intervalTicks - fletchingKnifeBonus(player, recipe);
-
-    if (!performFletchingAction(player, recipe)) {
-      stopFletchingSession(this.activeSessions, player);
-      return;
-    }
-
-    if (--this.remaining <= 0) {
-      stopFletchingSession(this.activeSessions, player, false);
-    }
   }
 }
-
-function resolveKnifeOnLogsRecipe(logId) {
-  return LOG_RECIPES_BY_LOG.get(logId) || null;
-}
-
-function resolveStringingRecipe(itemA, itemB) {
-  const bowStringId = itemId("BOW_STRING");
-  const crossbowStringId = itemId("CROSSBOW_STRING");
-
-  const isStringPair =
-    itemA === bowStringId ||
-    itemB === bowStringId ||
-    itemA === crossbowStringId ||
-    itemB === crossbowStringId;
-  if (!isStringPair) {
-    return null;
-  }
-
-  const unstrungId =
-    itemA === bowStringId || itemA === crossbowStringId ? itemB : itemA;
-  const recipe = STRINGING_RECIPES_BY_UNSTRUNG.get(unstrungId);
-  if (!recipe) {
-    return null;
-  }
-
-  const requiredStringId = recipe.requirements[1].id;
-  const usedStringId = unstrungId === itemA ? itemB : itemA;
-  return requiredStringId === usedStringId ? recipe : null;
-}
-
-function resolveCrossbowLimbRecipe(itemA, itemB) {
-  return CROSSBOW_LIMB_RECIPES_BY_COMPONENTS.get(`${itemA}:${itemB}`) || null;
-}
-
-function resolveHeadlessRecipe(itemA, itemB) {
-  if (!HEADLESS_RECIPE) {
-    return null;
-  }
-  const shaftId = itemId("ARROW_SHAFT");
-  const featherId = itemId("FEATHER");
-  if (
-    (itemA === shaftId && itemB === featherId) ||
-    (itemA === featherId && itemB === shaftId)
-  ) {
-    return HEADLESS_RECIPE;
-  }
-  return null;
-}
-
-function resolveArrowRecipe(itemA, itemB) {
-  const headlessId = itemId("HEADLESS_ARROW");
-  if (itemA !== headlessId && itemB !== headlessId) {
-    return null;
-  }
-  const tipId = itemA === headlessId ? itemB : itemA;
-  return ARROW_RECIPES_BY_TIP.get(tipId) || null;
-}
-
-function resolveDartRecipe(itemA, itemB) {
-  const featherId = itemId("FEATHER");
-  if (itemA !== featherId && itemB !== featherId) {
-    return null;
-  }
-  const tipId = itemA === featherId ? itemB : itemA;
-  return DART_RECIPES_BY_TIP.get(tipId) || null;
-}
-
-function resolveBoltRecipe(itemA, itemB) {
-  const featherId = itemId("FEATHER");
-  if (itemA !== featherId && itemB !== featherId) {
-    return null;
-  }
-  const unfId = itemA === featherId ? itemB : itemA;
-  return BOLT_RECIPES_BY_UNFINISHED.get(unfId) || null;
-}
-
-let TaskManager;
-let pluginApi;
 
 module.exports = {
   name: "Fletching",
   members: true,
-  register(api) {
-    TaskManager = api.getTaskManager();
-    pluginApi = api;
-    const activeSessions = ACTIVE_FLETCHING_SESSIONS;
-    TaskManager.submit(new FletchingTask(activeSessions));
-
-    api.onPlayerDisconnect(({ player }) => {
-      stopFletchingSession(activeSessions, player, false);
-    });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopFletchingSession(activeSessions, player, false);
-    });
-
-    api.onItemOnItem((event) => {
-      const { player, usedItemId, usedWithItemId } = event;
-
-      if (KNIFE_IDS.includes(usedItemId) || KNIFE_IDS.includes(usedWithItemId)) {
-        const logId = KNIFE_IDS.includes(usedItemId) ? usedWithItemId : usedItemId;
-        const recipes = resolveKnifeOnLogsRecipe(logId);
-        if (!recipes) {
-          return;
-        }
-        sendCreationMenuForRecipes(
-          activeSessions,
-          player,
-          "What would you like to make?",
-          recipes
-        );
-        event.handled = true;
-        return;
-      }
-
-      const stringingRecipe = resolveStringingRecipe(usedItemId, usedWithItemId);
-      if (stringingRecipe) {
-        sendCreationMenuForRecipes(
-          activeSessions,
-          player,
-          "How many would you like to make?",
-          [stringingRecipe]
-        );
-        event.handled = true;
-        return;
-      }
-
-      const crossbowLimbRecipe = resolveCrossbowLimbRecipe(usedItemId, usedWithItemId);
-      if (crossbowLimbRecipe) {
-        sendCreationMenuForRecipes(
-          activeSessions,
-          player,
-          "How many would you like to make?",
-          [crossbowLimbRecipe]
-        );
-        event.handled = true;
-        return;
-      }
-
-      const headlessRecipe = resolveHeadlessRecipe(usedItemId, usedWithItemId);
-      if (headlessRecipe) {
-        sendCreationMenuForRecipes(
-          activeSessions,
-          player,
-          "How many would you like to make?",
-          [headlessRecipe]
-        );
-        event.handled = true;
-        return;
-      }
-
-      const arrowRecipe = resolveArrowRecipe(usedItemId, usedWithItemId);
-      if (arrowRecipe) {
-        sendCreationMenuForRecipes(
-          activeSessions,
-          player,
-          "How many would you like to make?",
-          [arrowRecipe]
-        );
-        event.handled = true;
-        return;
-      }
-
-      const dartRecipe = resolveDartRecipe(usedItemId, usedWithItemId);
-      if (dartRecipe) {
-        sendCreationMenuForRecipes(
-          activeSessions,
-          player,
-          "How many would you like to make?",
-          [dartRecipe]
-        );
-        event.handled = true;
-        return;
-      }
-
-      const boltRecipe = resolveBoltRecipe(usedItemId, usedWithItemId);
-      if (boltRecipe) {
-        sendCreationMenuForRecipes(
-          activeSessions,
-          player,
-          "How many would you like to make?",
-          [boltRecipe]
-        );
-        event.handled = true;
-      }
-    }, { noted: false });
-
-    api.log("registered", {
-      logMenus: LOG_RECIPES_BY_LOG.size,
-      stringables: STRINGING_RECIPES_BY_UNSTRUNG.size,
-      crossbows: CROSSBOW_LIMB_RECIPE_DEFINITIONS.length,
-      arrowTips: ARROW_RECIPES_BY_TIP.size,
-      darts: DART_RECIPES_BY_TIP.size,
-      bolts: BOLT_RECIPES_BY_UNFINISHED.size,
-    });
-  },
-  // Bot entry points + recipe table for citizen brains (same shape as
-  // Herblore.plugin's HERBLORE_RECIPES export).
-  FLETCHING_RECIPES: LOG_RECIPE_DEFINITIONS.filter(Boolean).map((recipe) => ({
-    name: recipe.key,
-    inputId: recipe.requirements?.[1]?.id ?? null,
-    needsId: recipe.requirements?.[0]?.id ?? null,
-    outputId: recipe.outputId,
-    outputAmount: recipe.outputAmount,
-    level: recipe.level,
-    xp: recipe.xp,
-  })),
+  // Bot entry points + recipe table for citizen brains.
+  FLETCHING_RECIPES,
   startBotFletching,
   isFletchingActive,
   findBestFletchingRecipe,
+  register(api) {
+    pluginApi = api;
+    for (const unit of UNITS) unit.init?.(api);
+    for (const unit of UNITS) unit.attach?.(api);
+
+    // Fork bot session task + cleanup (upstream units manage their own).
+    api.getTaskManager().submit(new FletchingBotTask(ACTIVE_FLETCHING_SESSIONS));
+    api.onPlayerDisconnect(({ player }) => {
+      stopFletching(ACTIVE_FLETCHING_SESSIONS, player, false);
+    });
+    api.onCustomEvent("level-up:popup-opened", ({ player, skill }) => {
+      if (skill === Skill.FLETCHING) {
+        stopFletching(ACTIVE_FLETCHING_SESSIONS, player, false);
+      }
+    });
+  },
 };

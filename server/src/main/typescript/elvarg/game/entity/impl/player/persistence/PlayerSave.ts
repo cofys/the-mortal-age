@@ -39,6 +39,11 @@ export class PlayerSave {
         points: "shop:points",
         pcPoints: "pest-control:points",
         pouches: "runecrafting:pouches",
+        bankNoteWithdrawal: Player.BANK_NOTE_WITHDRAWAL_ATTRIBUTE,
+        bankInsertMode: Player.BANK_INSERT_MODE_ATTRIBUTE,
+        bankQuantityMode: Player.BANK_QUANTITY_MODE_ATTRIBUTE,
+        bankCustomQuantity: Player.BANK_CUSTOM_QUANTITY_ATTRIBUTE,
+        bankPlaceholders: Player.BANK_PLACEHOLDERS_ATTRIBUTE,
     };
     /** Core state kept as attributes: logging out doesn't reset aggression tolerance (Wiki). */
     private static readonly persistentAttributeKeys = new Set<string>([
@@ -692,6 +697,12 @@ export class PlayerSave {
             if (inventory.getFreeSlots() < slots) throw new Error("Cannot snapshot trade escrow: inventory is full");
             inventory.add(item.clone(), false);
         }
+
+        PlayerSave.persistAttribute(Player.BANK_NOTE_WITHDRAWAL_ATTRIBUTE, false);
+        PlayerSave.persistAttribute(Player.BANK_INSERT_MODE_ATTRIBUTE, false);
+        PlayerSave.persistAttribute(Player.BANK_QUANTITY_MODE_ATTRIBUTE, 0);
+        PlayerSave.persistAttribute(Player.BANK_CUSTOM_QUANTITY_ATTRIBUTE, 0);
+        PlayerSave.persistAttribute(Player.BANK_PLACEHOLDERS_ATTRIBUTE, false);
         playerSave.inventory = inventory.getCopiedItems();
         playerSave.equipment = player.getEquipment().getCopiedItems();
         playerSave.appearance = PlayerSave.sanitizeAppearance(player.getAppearance().getLook());

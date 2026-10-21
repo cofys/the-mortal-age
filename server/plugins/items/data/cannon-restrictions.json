@@ -1363,6 +1363,33 @@
    "message": "Dusty Aliv won't be happy if you set up a cannon here."
   },
   {
+   "name": "Smoke Devil Dungeon boss room",
+   "message": "You can't set up a cannon here.",
+   "areas": [
+    {
+     "points": [
+      [
+       2351,
+       9438
+      ],
+      [
+       2378,
+       9438
+      ],
+      [
+       2378,
+       9461
+      ],
+      [
+       2351,
+       9461
+      ]
+     ]
+    }
+   ],
+   "source": "OSRS Wiki (Thermonuclear smoke devil: a cannon cannot be used inside the boss room); outline from the boss room polygon extremes"
+  },
+  {
    "name": "Theatre of Blood",
    "message": "The vampyres won't be happy if you set up a cannon here."
   },

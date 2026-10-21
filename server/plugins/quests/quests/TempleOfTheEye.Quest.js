@@ -517,29 +517,30 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       { id: PERSTEN_TEMPLE_NPC_ID, x: PERSTEN_TEMPLE_TILE.x, y: PERSTEN_TEMPLE_TILE.y, z: PERSTEN_TEMPLE_TILE.z, wanderRadius: 0 },
       stage === STAGE_TEMPLE
     );
+    // The temple's apprentices and Great Guardian are the minigame's world spawns once the quest is done.
     setSpawn(
       player,
       "cordelia-temple",
       { id: CORDELIA_TEMPLE_NPC_ID, x: CORDELIA_TEMPLE_TILE.x, y: CORDELIA_TEMPLE_TILE.y, z: CORDELIA_TEMPLE_TILE.z, wanderRadius: 0 },
-      stage >= STAGE_TEMPLE
+      stage >= STAGE_TEMPLE && stage < STAGE_COMPLETE
     );
     setSpawn(
       player,
       "felix-temple",
       { id: FELIX_TEMPLE_NPC_ID, x: FELIX_TEMPLE_TILE.x, y: FELIX_TEMPLE_TILE.y, z: FELIX_TEMPLE_TILE.z, wanderRadius: 0 },
-      stage >= STAGE_TEMPLE
+      stage >= STAGE_TEMPLE && stage < STAGE_COMPLETE
     );
     setSpawn(
       player,
       "tamara-temple",
       { id: TAMARA_TEMPLE_NPC_ID, x: TAMARA_TEMPLE_TILE.x, y: TAMARA_TEMPLE_TILE.y, z: TAMARA_TEMPLE_TILE.z, wanderRadius: 0 },
-      stage >= STAGE_TEMPLE
+      stage >= STAGE_TEMPLE && stage < STAGE_COMPLETE
     );
     setSpawn(
       player,
       "great-guardian",
       { id: GREAT_GUARDIAN_NPC_ID, x: GREAT_GUARDIAN_TILE.x, y: GREAT_GUARDIAN_TILE.y, z: GREAT_GUARDIAN_TILE.z, wanderRadius: 0 },
-      stage >= STAGE_GUARDIAN
+      stage >= STAGE_GUARDIAN && stage < STAGE_COMPLETE
     );
   }
 

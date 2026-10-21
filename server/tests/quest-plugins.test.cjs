@@ -11396,16 +11396,26 @@ test('Thaerisk offers an explicit choice before the Port Sarim teleport after gi
 
 
 test('Lantern lenses and unpowered orbs are glassblown without consuming the pipe', () => {
- const {api}=mockApi(),handlers=[],items=new Map([[1785,1],[1775,2]]);let choices,level=48,xp=0;
- api.onItemOnItem=h=>handlers.push(h);api.sendMultiChatboxPrompt=(p,title,...opts)=>choices=opts;
- require('../plugins/skills/Crafting.plugin').register(api);
- const inventory={contains:id=>(items.get(id)||0)>0,deleteNumber:(id,n)=>items.set(id,items.get(id)-n),addItem:i=>items.set(i.getId(),(items.get(i.getId())||0)+i.getAmount())};
- const player={getInventory:()=>inventory,getSkillManager:()=>({getCurrentLevel:()=>level,addExperiences:(s,n)=>xp+=n}),sendMessage(){}};
- const e={player,usedItemId:1785,usedWithItemId:1775};handlers.forEach(h=>h(e));assert.equal(e.handled,true);
- assert.deepEqual([choices[0],choices[2]],['unpowered orb','lantern lens']);choices[3]();assert.equal(items.get(1775),2);
- level=49;choices[3]();assert.equal(items.get(4542),1);assert.equal(xp,55);assert.equal(items.get(1785),1);
- choices[1]();assert.equal(items.get(567),1);assert.equal(items.get(1775),0);assert.equal(xp,107.5);
- choices[3]();assert.equal(items.get(4542),1,'a stale menu cannot create more glass');
+ const {api}=mockApi(),handlers=[],tasks=[],items=new Map([[1785,1],[1775,2]]),messages=[];let menu,level=48,xp=0;
+ api.onItemOnItem=h=>handlers.push(h);api.getTaskManager=()=>({submit:t=>tasks.push(t)});
+ const members=api.core.WorldDefinition.isMembersWorld;api.core.WorldDefinition.isMembersWorld=()=>true;
+ try{
+  require('../plugins/skills/Crafting.plugin').register(api);
+  const inventory={contains:id=>(items.get(id)||0)>0,getAmount:id=>items.get(id)||0,deleteNumber:(id,n)=>items.set(id,items.get(id)-n),addItem:i=>items.set(i.getId(),(items.get(i.getId())||0)+i.getAmount())};
+  const sender={sendCreationMenu:m=>{menu=m;return sender;},sendSoundEffect:()=>sender};
+  const player={getInventory:()=>inventory,getSkillManager:()=>({getCurrentLevel:()=>level,addExperiences:(s,n)=>xp+=n}),sendMessage:m=>messages.push(m),
+   getPacketSender:()=>sender,performAnimation(){},getAttribute:()=>null,setAttribute(){},isRegistered:()=>true,getHitpoints:()=>99,
+   getMovementQueue:()=>({size:()=>0}),getForceMovement:()=>null,getInterfaceId:()=>-1,isPlayerBot:()=>false};
+  const e={player,usedItemId:1785,usedWithItemId:1775};for(const h of handlers){h(e);if(e.handled)break;}assert.equal(e.handled,true);
+  // rsprox 1842: all eight items, whatever the level, under the captured labels.
+  assert.deepEqual(menu.getOptions().labels,['Beer glass','Candle lantern','Oil lamp','Vial','Fishbowl','Unpowered staff orb','Lantern lens','Light orb']);
+  menu.execute(4542,1);assert.equal(tasks.length,0);assert.equal(messages.at(-1),'You need level 49 Crafting to make a lantern lens.');
+  level=49;menu.execute(4542,1);tasks.at(-1).execute();tasks.at(-1).execute();
+  assert.equal(items.get(4542),1);assert.equal(xp,55);assert.equal(items.get(1785),1);assert.equal(messages.at(-1),'You make a lantern lens.');
+  menu.execute(567,1);tasks.at(-1).execute();tasks.at(-1).execute();
+  assert.equal(items.get(567),1);assert.equal(items.get(1775),0);assert.equal(xp,107.5);
+  menu.execute(4542,1);assert.equal(items.get(4542),1,'a stale menu cannot create more glass');
+ }finally{api.core.WorldDefinition.isMembersWorld=members;}
 });
 
 

@@ -97,5 +97,6 @@ The bow shows the arrow being drawn: the ammunition's `<ammo>_arrow_launch` spot
 
 - **Bladed staffs (Jab, Swipe, Fend):** no capture. They keep the staff animations they had (401 / 406).
 - **Staffs, wands and sceptres** attack with spells, and spells use their cast animations. The captures' main rows for them are the player blocking. The Warped sceptre's `pog_warped_sceptre_attack` (10501) is captured but not used: its attacks are spells.
+- The Warped sceptre spell uses `VFX_WARPED_SCEPTRE_CAST` (10500), with cast/projectile/impact spotanims 2567/2569/2568 and charge-count varbit `CHARGES_WARPED_SCEPTRE_QUANTITY` (16155), from the client gameval definitions. Its 4-tick speed, 7-tile range (9 on Longrange), 62 Magic requirement, and base max-hit formula are from the [OSRS Wiki item page](https://oldschool.runescape.wiki/w/Warped_sceptre), not another RSPS.
 - **Weak captures, left alone:** banners (`human_banner_spike`, 3 recordings, one style), the Bone mace (`barrow_guthan_crush`, half the attacks), the Twinflame staff.
 - **Weapons outside the captures' coverage** keep their type's animations. 69 weapons have attacks in 3 or more recordings; the rest need a capture or the Wiki.

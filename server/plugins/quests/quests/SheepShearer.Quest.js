@@ -13,7 +13,7 @@
  * Wool collection follows the Wiki; fast-path handover and rewards follow rsprox 1718.
  */
 module.exports = function registerSheepShearerQuest(api) {
-  const { Skill, Animation, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, TaskManager, CountdownTask } = api.core;
+  const { Skill, Animation, ItemIdentifiers, NpcIdentifiers, TaskManager, CountdownTask } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
 
   const FRED_THE_FARMER_NPC_ID = NpcIdentifiers.FRED_THE_FARMER;
@@ -31,7 +31,6 @@ module.exports = function registerSheepShearerQuest(api) {
   const COINS_ITEM_ID = ItemIdentifiers.COINS;
 
   const SHEAR_ANIMATION = new Animation(893);
-  const SPIN_ANIMATION = new Animation(13138);
 
   /** Shearable variants verified against the revision 241 cache. */
   const SHEARABLE_SHEEP_IDS = new Set([
@@ -46,17 +45,6 @@ module.exports = function registerSheepShearerQuest(api) {
     NpcIdentifiers.SHEEP_6,
     NpcIdentifiers.SHEEP_7,
     NpcIdentifiers.SHEEP_8,
-  ]);
-
-  const SPINNING_WHEEL_IDS = new Set([
-    ObjectIdentifiers.SPINNING_WHEEL,
-    ObjectIdentifiers.SPINNING_WHEEL_2,
-    ObjectIdentifiers.SPINNING_WHEEL_3,
-    ObjectIdentifiers.SPINNING_WHEEL_4,
-    ObjectIdentifiers.SPINNING_WHEEL_5,
-    ObjectIdentifiers.SPINNING_WHEEL_6,
-    ObjectIdentifiers.SPINNING_WHEEL_7,
-    ObjectIdentifiers.SPINNING_WHEEL_8,
   ]);
 
   const SAW_THING_ATTRIBUTE = "sheep-shearer:saw-thing";
@@ -321,56 +309,6 @@ module.exports = function registerSheepShearerQuest(api) {
     }
   }
 
-  const spinning = new WeakMap();
-
-  function spinWool(player) {
-    if (player.getInventory().getAmount(WOOL_ITEM_ID) <= 0) {
-      player.sendMessage("You need some wool to spin.");
-      return;
-    }
-    player.getPacketSender().sendCreationMenu(new api.core.CreationMenu(
-      "What would you like to spin?", [BALL_OF_WOOL_ITEM_ID], {
-        execute(_itemId, amount) {
-          const token = {};
-          const from = player.getLocation().clone();
-          let remaining = Math.min(Math.max(0, Math.trunc(amount)), player.getInventory().getAmount(WOOL_ITEM_ID));
-          spinning.set(player, token);
-          player.getPacketSender().sendInterfaceRemoval();
-          TaskManager.submit(new (class extends api.core.Task {
-            constructor() { super(3, player, false); }
-            execute() {
-              if (spinning.get(player) !== token || player.isRegistered() === false ||
-                  !player.getLocation().equals(from) || remaining <= 0 || player.getInventory().getAmount(WOOL_ITEM_ID) <= 0) {
-                this.stop();
-                return;
-              }
-              player.performAnimation(SPIN_ANIMATION);
-              player.getInventory().deleteNumber(WOOL_ITEM_ID, 1);
-              player.getInventory().adds(BALL_OF_WOOL_ITEM_ID, 1);
-              player.getSkillManager().addExperiences(Skill.CRAFTING, 2.5);
-              remaining--;
-              if (remaining === 0) this.stop();
-            }
-          })());
-        },
-      }
-    ));
-  }
-
-  function handleItemOnObject(event) {
-    if (event.itemId !== WOOL_ITEM_ID || !SPINNING_WHEEL_IDS.has(event.objectId)) return;
-    spinWool(event.player);
-    event.handled = true;
-  }
-
-  function handleObjectInteraction(event) {
-    if (!SPINNING_WHEEL_IDS.has(event.objectId)) return;
-    const action = (event.definition?.getInteractions?.() ?? [])[event.clickType - 1];
-    if (String(action).toLowerCase() !== "spin") return;
-    spinWool(event.player);
-    event.handled = true;
-  }
-
   function handlePlayerLogin({ player }) {
     refreshQuestList(player);
   }
@@ -402,9 +340,6 @@ module.exports = function registerSheepShearerQuest(api) {
   api.onNpcInteraction(handleNpcInteraction);
   api.onItemOnNpc(handleItemOnNpc);
 
-  // Spinning: wool used on a spinning wheel, or its Spin option.
-  api.onItemOnObject(handleItemOnObject, { noted: false });
-  api.onObjectInteraction(handleObjectInteraction);
 
   api.onPlayerLogin(handlePlayerLogin);
 };

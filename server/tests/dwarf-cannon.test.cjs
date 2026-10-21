@@ -331,7 +331,7 @@ test("the ornament kit on each part, Dismantle back; an ornament cannon uses its
 
 test("restrictions: every Wiki area has its message; outlines are polygons; instances refuse", () => {
   const data = Restrictions.load();
-  assert.equal(data.restrictions.length, 71);
+  assert.equal(data.restrictions.length, 72);
   for (const r of data.restrictions) {
     assert.ok(r.name && r.message, r.name);
     for (const area of r.areas ?? []) assert.ok(area.points.length >= 3 && r.source, r.name);

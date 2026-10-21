@@ -638,6 +638,8 @@ export class ClientConnection {
               this.player, actionPacket.groupId, actionPacket.childId, actionPacket.slot
             )) {
               // Cache-native combat autocast controls reuse the existing spell state.
+            } else if (this.emitSpellCast(actionPacket)) {
+              // Plugins own the self-cast spells they register for, by cache spell name.
             } else if (SpellTeleports.handleSelf(
               this.player,
               this.resolveSpellName(actionPacket.widgetId, actionPacket.groupId, actionPacket.childId, actionPacket.itemId),
@@ -1189,6 +1191,13 @@ export class ClientConnection {
       // Invalid cache-backed selections are rejected by the combat listener.
     }
     return -1;
+  }
+
+  private emitSpellCast(packet: { widgetId: number; groupId: number; childId: number; itemId?: number }): boolean {
+    const spellName = this.resolveSpellName(packet.widgetId, packet.groupId, packet.childId, packet.itemId);
+    return spellName !== undefined && PluginManager.emitSpellCast({
+      player: this.player, spellName, spellWidget: packet.widgetId, spellItemId: packet.itemId ?? -1, handled: false,
+    });
   }
 
   private resolveSpellName(widgetId: number, groupId: number, childId: number, itemId?: number): string | undefined {
