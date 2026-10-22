@@ -32,19 +32,23 @@ module.exports = function registerSheepShearerQuest(api) {
 
   const SHEAR_ANIMATION = new Animation(893);
 
-  /** Shearable variants verified against the revision 241 cache. */
-  const SHEARABLE_SHEEP_IDS = new Set([
-    NpcIdentifiers.SHEEP_18,
-    NpcIdentifiers.SHEEP_19,
-    NpcIdentifiers.SHEEP_20,
-    NpcIdentifiers.SHEEP_21,
-    NpcIdentifiers.SHEEP_BALD_BLACK_HEAD,
-    NpcIdentifiers.SHEEP_3,
-    NpcIdentifiers.SHEEP_BALD_WHITE_HEAD,
-    NpcIdentifiers.SHEEP_5,
-    NpcIdentifiers.SHEEP_6,
-    NpcIdentifiers.SHEEP_7,
-    NpcIdentifiers.SHEEP_8,
+  /**
+   * The revision-241 shearable sheep, each mapped to the sheared npc of the same
+   * wool colour. The pairs are the cache gamevals' matching SHEEPUNSHEERED and
+   * SHEEPSHEERED names.
+   */
+  const SHEARED_SHEEP_BY_ID = new Map([
+    [NpcIdentifiers.SHEEP_18, NpcIdentifiers.SHEEP_2],
+    [NpcIdentifiers.SHEEP_19, NpcIdentifiers.SHEEP_4],
+    [NpcIdentifiers.SHEEP_20, NpcIdentifiers.SHEEP_9],
+    [NpcIdentifiers.SHEEP_21, NpcIdentifiers.SHEEP_10],
+    [NpcIdentifiers.SHEEP_BALD_BLACK_HEAD, NpcIdentifiers.SHEEP_11],
+    [NpcIdentifiers.SHEEP_3, NpcIdentifiers.SHEEP_12],
+    [NpcIdentifiers.SHEEP_BALD_WHITE_HEAD, NpcIdentifiers.SHEEP_13],
+    [NpcIdentifiers.SHEEP_5, NpcIdentifiers.SHEEP_14],
+    [NpcIdentifiers.SHEEP_6, NpcIdentifiers.SHEEP_15],
+    [NpcIdentifiers.SHEEP_7, NpcIdentifiers.SHEEP_16],
+    [NpcIdentifiers.SHEEP_8, NpcIdentifiers.SHEEP_17],
   ]);
 
   const SAW_THING_ATTRIBUTE = "sheep-shearer:saw-thing";
@@ -138,8 +142,8 @@ module.exports = function registerSheepShearerQuest(api) {
     player.getInventory().adds(WOOL_ITEM_ID, 1);
     player.sendMessage("You get some wool.");
     shornSheep.add(npc);
-    const whiteSheep = npc.getDefinition().getId() >= NpcIdentifiers.SHEEP_21;
-    npc.setNpcTransformationId(whiteSheep ? NpcIdentifiers.SHEEP_17 : NpcIdentifiers.SHEEP_16);
+    const shearedId = SHEARED_SHEEP_BY_ID.get(npc.getDefinition().getId());
+    npc.setNpcTransformationId(shearedId ?? -1);
     TaskManager.submit(new CountdownTask(npc, 100, () => {
       shornSheep.delete(npc);
       if (npc.isRegistered()) npc.setNpcTransformationId(-1);
@@ -211,11 +215,20 @@ module.exports = function registerSheepShearerQuest(api) {
     if (event.text === "Yes, okay. I can do that." && pendingStart.has(event.player)) {
       event.after = () => {
         pendingStart.delete(event.player);
-        if (quest.getStage(event.player) === 0) quest.setStage(event.player, STAGE_STARTED);
+        if (quest.getStage(event.player) !== 0) return;
+        // Fred's start gives shears unless the player already has them or has all 20 balls.
+        // Do not commit the start when that handout cannot fit.
+        if (!hasShears(event.player) && woolBalls(event.player) < TOTAL_BALLS_OF_WOOL
+          && event.player.getInventory().isFull()) {
+          event.player.getInventory().full();
+          return;
+        }
+        quest.setStage(event.player, STAGE_STARTED);
       };
     }
     const remaining = remainingWool(quest.getStage(event.player));
     event.text = event.text.replace("20 more balls of wool", `${remaining} more ${remaining === 1 ? "ball" : "balls"} of wool`)
+      .replace("[1-19]", String(remaining))
       .replace("[#]", String(remaining));
   }
 
@@ -289,7 +302,7 @@ module.exports = function registerSheepShearerQuest(api) {
       event.handled = true;
       return;
     }
-    if (SHEARABLE_SHEEP_IDS.has(event.npcId)) {
+    if (SHEARED_SHEEP_BY_ID.has(event.npcId)) {
       shearSheep(event.player, event.npc ?? event.target);
       event.handled = true;
     }
@@ -303,7 +316,7 @@ module.exports = function registerSheepShearerQuest(api) {
       event.handled = true;
       return;
     }
-    if (SHEARABLE_SHEEP_IDS.has(npcId)) {
+    if (SHEARED_SHEEP_BY_ID.has(npcId)) {
       shearSheep(event.player, event.npc ?? event.target);
       event.handled = true;
     }

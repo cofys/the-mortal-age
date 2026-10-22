@@ -17,7 +17,7 @@ import type { FriendsChatSnapshot } from "../../common/social/FriendsChat";
 import type { WorldEntityBuildArea } from "../../common/worldentity/WorldEntityTypes";
 
 /** Camera easing ids, in the order the server encodes them (ClientProtocol CAMERA_EASINGS). */
-const CAMERA_EASINGS = ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine"] as const;
+const CAMERA_EASINGS = ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine", "ease_in_sine"] as const;
 
 /**
  * Binary packet buffer for client decoding

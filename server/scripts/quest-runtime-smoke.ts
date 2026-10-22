@@ -20,6 +20,7 @@ const player = {
     setAttribute: (key: string, value: unknown) => attributes.set(key, value),
     sendMessage: (message: string) => sent.messages.push(message),
     getInventory: () => ({
+        isFull: () => false,
         adds: (id: number, amount: number) => sent.granted.push([id, amount]),
     }),
     getPacketSender: () => ({

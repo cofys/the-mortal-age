@@ -29,16 +29,16 @@ const FADE_OUT_SCRIPT = 2889;
 const CLEAR_SCRIPT = 2249;
 const HP = uid(5);
 const CONTAINER = uid(1);
-const OPEN_COMPONENTS = [0, 2, 4, 5, 8, 10, 20, 13, 14, 15, 9, 6, 7, 11, 18, 19, 16, 17, 3].map(uid);
-const REDRAW_COMPONENTS = [5, 20, 13, 14, 15, 8, 9, 18, 19, 16, 17].map(uid);
+const OPEN_COMPONENTS = [0, 2, 4, 5, 8, 10, 21, 14, 15, 16, 9, 6, 7, 12, 19, 20, 17, 18, 3].map(uid);
+const REDRAW_COMPONENTS = [5, 21, 14, 15, 16, 8, 9, 19, 20, 17, 18].map(uid);
 /**
  * The fade scripts take 14 components and the transparency to start from: hp, name_area,
  * outer_border, name_backing, creature_name, inner_border, the bar's back, sliding and remaining
  * parts, its text, its thresholds and hp_bar_1/2.
  */
-const FADE_COMPONENTS = [5, 8, 6, 7, 9, 11, 13, 14, 15, 20, 18, 19, 16, 17].map(uid);
+const FADE_COMPONENTS = [5, 8, 6, 7, 9, 12, 14, 15, 16, 21, 19, 20, 17, 18].map(uid);
 /** The bar's back, sliding and remaining parts, and their usual colours (15-bit RGB, captured). */
-const COLOUR_COMPONENTS = [13, 14, 15].map(uid);
+const COLOUR_COMPONENTS = [14, 15, 16].map(uid);
 const COLOURS = [25600, 576, 800];
 /**
  * 2887 returns at once if told to start from the transparency the HUD already has, and a

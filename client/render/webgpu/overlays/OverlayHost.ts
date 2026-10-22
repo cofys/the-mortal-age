@@ -1,4 +1,5 @@
 import { getClientCycle } from "../../../network/ServerConnection";
+import { hintArrow } from "../../../game/HintArrow";
 import { baseNpcTypeId } from "../../../custom/npcs/NpcModelOverrideRegistry";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { Scene } from "../../../rs/scene/Scene";
@@ -380,6 +381,7 @@ export class OverlayHost {
         for (const entry of this.overheadPrayerOutput) {
             entry.headIconPk = -1;
             entry.headIconPrayer = -1;
+            entry.headIconHint = false;
             entry.npcHeadIcons = undefined;
             entry.customHeadIcons = undefined;
             entry.heightOffsetTiles = 0.9;
@@ -1328,7 +1330,11 @@ export class OverlayHost {
                     const headIconPk = pe.getHeadIconPk(i);
                     const headIconPrayer = pe.getHeadIconPrayer(i);
                     const customHeadIcons = osrsClient.clientPlugins.playerHeadIcons(pe.getServerIdForIndex(i) ?? -1);
-                    if (headIconPk < 0 && headIconPrayer < 0 && customHeadIcons.length === 0) continue;
+                    // The yellow Castle Wars flag arrow rides the carrier as a head icon.
+                    const isHinted =
+                        hintArrow.type === 3 &&
+                        (pe.getServerIdForIndex?.(i) ?? -1) === hintArrow.playerId;
+                    if (headIconPk < 0 && headIconPrayer < 0 && !isHinted && customHeadIcons.length === 0) continue;
 
                     const px = pe.getX(i) | 0;
                     const py = pe.getY(i) | 0;
@@ -1347,6 +1353,7 @@ export class OverlayHost {
                     );
                     entry.headIconPk = headIconPk;
                     entry.headIconPrayer = headIconPrayer;
+                    entry.headIconHint = isHinted;
                     entry.customHeadIcons = customHeadIcons;
                     entry.heightOffsetTiles = this.resolvePlayerHeadIconOffset(
                         i,

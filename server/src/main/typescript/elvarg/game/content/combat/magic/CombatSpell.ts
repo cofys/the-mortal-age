@@ -10,6 +10,16 @@ import { Projectile } from "../../../model/Projectile";
 import { PendingHit } from "../hit/PendingHit";
 
 
+/**
+ * OSRS casts these with a staff variant while a staff is wielded (human_cast*_staff), which hides
+ * the staff instead of waving the unarmed animation around it: entangle, strike, confuse, weaken,
+ * curse, crumble undead, wave, enfeeble, stun and Tele Block.
+ */
+const STAFF_CAST_ANIMATIONS: Readonly<Record<number, number>> = {
+  710: 1161, 711: 1162, 716: 1163, 717: 1164, 718: 1165,
+  724: 1166, 727: 1167, 728: 1168, 729: 1169, 1819: 1820,
+};
+
 export abstract class CombatSpell extends Spell {
   protected usesSharedCastDelay(): boolean {
     return true;
@@ -28,7 +38,11 @@ export abstract class CombatSpell extends Spell {
     let castAnimation = -1;
 
     const npc = cast.isNpc() ? (cast as NPC) : null;
-    const castAnim = this.castAnimation();
+    let castAnim = this.castAnimation();
+    const staffAnim = castAnim ? STAFF_CAST_ANIMATIONS[castAnim.getId()] : undefined;
+    if (staffAnim !== undefined && cast.isPlayer() && cast.getAsPlayer().getEquipment().hasStaffEquipped()) {
+      castAnim = new Animation(staffAnim);
+    }
     if (castAnim !== null && castAnim !== undefined && castAnimation == -1) {
       cast.performAnimation(castAnim);
     } else {
@@ -61,6 +75,11 @@ export abstract class CombatSpell extends Spell {
     }
   }
 
+
+  /** XP a splash pays instead of the base XP; most spells pay the same either way. */
+  public splashExperience(): number {
+    return this.baseExperience();
+  }
 
   public getAttackSpeed(): number {
     return 5;

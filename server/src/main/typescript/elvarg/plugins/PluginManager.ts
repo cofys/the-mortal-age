@@ -48,6 +48,7 @@ import {
   PluginNpcHitModifyEvent,
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
+  PluginWorldEntityInteractionEvent,
   PluginNpcInteractionDefinition,
   PluginNpcDialogueContext,
   PluginNpcDialogueConditionEvent,
@@ -169,6 +170,56 @@ const COMMAND_PERMISSION_RIGHTS: Record<string, number> = {
   DEVELOPER: PlayerRights.DEVELOPER.getId(),
 };
 
+function applyPluginRegionReplacement(
+  pluginName: string,
+  regionId: number,
+  result: { source: string; terrainBytes: number; objectBytes: number; objectCount: number }
+): void {
+  let clippingReloaded = false;
+  try {
+    const collisionModule = require("../game/collision/RegionManager");
+    clippingReloaded =
+      collisionModule?.RegionManager?.reloadRegion?.(regionId) === true;
+  } catch (reloadErr) {
+    console.error(
+      `[plugins] ${pluginName} failed to reload clipping for region ${regionId}`,
+      reloadErr
+    );
+  }
+
+  let streamedPlayers = 0;
+  try {
+    const worldModule = require("../game/World");
+    const World = worldModule?.World;
+    if (World?.getPlayers && World?.isPlayerSessionConnected) {
+      const players = World.getPlayers();
+      players?.forEach?.((player: any) => {
+        if (!player || !World.isPlayerSessionConnected(player)) {
+          return;
+        }
+        if (MapRegionReplacementManager.sendReplacementToPlayer(player, regionId)) {
+          streamedPlayers++;
+        }
+      });
+    }
+  } catch (streamErr) {
+    console.error(
+      `[plugins] ${pluginName} failed to stream region replacement ${regionId}`,
+      streamErr
+    );
+  }
+
+  console.info(`[plugins] ${pluginName} replaced map region`, {
+    regionId,
+    source: result.source,
+    terrainBytes: result.terrainBytes,
+    objectBytes: result.objectBytes,
+    objectCount: result.objectCount,
+    clippingReloaded,
+    streamedPlayers,
+  });
+}
+
 export class PluginManager {
   private static readonly PERF_EVENT_SAMPLE_LIMIT = 128;
   private static readonly MAX_PLUGIN_DEPTH = 2;
@@ -201,6 +252,7 @@ export class PluginManager {
   private static objectHooksByName = new Map<string, ObjectInteractionHook[]>();
   private static nextObjectHookOrder = 0;
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
    * transcript handler (e.g. NpcDialogues) never outruns a specific plugin that
@@ -999,6 +1051,18 @@ export class PluginManager {
         }
         PluginManager.executeHook(hook, event, "npc_interaction", "npc_interaction");
       }
+    }
+    return event.handled === true;
+  }
+
+  /** Runs a world entity menu option through plugins; true when one handled it. */
+  public static emitWorldEntityInteraction(event: PluginWorldEntityInteractionEvent): boolean {
+    if (!event || !event.player || !Number.isInteger(event.entityIndex)) {
+      return false;
+    }
+    for (const hook of PluginManager.worldEntityInteractionHooks) {
+      if (event.handled) break;
+      PluginManager.executeHook(hook, event, "world_entity_interaction", "world_entity_interaction");
     }
     return event.handled === true;
   }
@@ -2106,6 +2170,8 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      Barrows: require(`${combat}/Barrows`).Barrows,
+      applyPrayerDrainModifiers: require(`${combat}/EquipmentEffects`).applyPrayerDrainModifiers,
       CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,
       CombatRange: require(`${combat}/CombatRange`).CombatRange,
       CanAttackResponse: require(`${combat}/CombatFactory`).CanAttackResponse,
@@ -2168,6 +2234,9 @@ export class PluginManager {
         isEnabled: () => PluginManager.isPluginPerformanceProfilingEnabled(),
       }),
       World: require("../game/World").World,
+      BoatManager: require("../game/content/sailing/BoatManager").BoatManager,
+      BOAT_VIEW_DISTANCE: require("../game/content/sailing/WorldEntitySync").BOAT_VIEW_DISTANCE,
+      Sailing: require("../game/content/sailing/Sailing").Sailing,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
       PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
       TemplatedInstanceArea: require(`${model}/areas/impl/TemplatedInstanceArea`).TemplatedInstanceArea,
@@ -2851,6 +2920,11 @@ export class PluginManager {
       },
       onNpcRoute: (handler) => {
         if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
+      },
+      onWorldEntityInteraction: (handler: (event: PluginWorldEntityInteractionEvent) => void) => {
+        if (typeof handler === "function") {
+          PluginManager.worldEntityInteractionHooks.push({ pluginName, handler });
+        }
       },
       onNpcInteraction: (
         handler: string | ((event: PluginNpcInteractionEvent) => void),
@@ -3846,50 +3920,7 @@ export class PluginManager {
             regionId,
             source as string | [string, string]
           );
-
-          let clippingReloaded = false;
-          try {
-            const collisionModule = require("../game/collision/RegionManager");
-            clippingReloaded =
-              collisionModule?.RegionManager?.reloadRegion?.(regionId) === true;
-          } catch (reloadErr) {
-            console.error(
-              `[plugins] ${pluginName} failed to reload clipping for region ${regionId}`,
-              reloadErr
-            );
-          }
-
-          let streamedPlayers = 0;
-          try {
-            const worldModule = require("../game/World");
-            const World = worldModule?.World;
-            if (World?.getPlayers && World?.isPlayerSessionConnected) {
-              const players = World.getPlayers();
-              players?.forEach?.((player: any) => {
-                if (!player || !World.isPlayerSessionConnected(player)) {
-                  return;
-                }
-                if (MapRegionReplacementManager.sendReplacementToPlayer(player, regionId)) {
-                  streamedPlayers++;
-                }
-              });
-            }
-          } catch (streamErr) {
-            console.error(
-              `[plugins] ${pluginName} failed to stream region replacement ${regionId}`,
-              streamErr
-            );
-          }
-
-          console.info(`[plugins] ${pluginName} replaced map region`, {
-            regionId,
-            source: result.source,
-            terrainBytes: result.terrainBytes,
-            objectBytes: result.objectBytes,
-            objectCount: result.objectCount,
-            clippingReloaded,
-            streamedPlayers,
-          });
+          applyPluginRegionReplacement(pluginName, regionId, result);
         } catch (err) {
           console.error(
             `[plugins] ${pluginName} failed to replace map region ${regionId}`,
@@ -3994,6 +4025,7 @@ export class PluginManager {
       emitFiremakingBlocked: (event) => PluginManager.emitFiremakingBlocked(event),
       emitObjectInteraction: (event) => PluginManager.emitObjectInteraction(event),
       emitNpcInteraction: (event) => PluginManager.emitNpcInteraction(event),
+      emitWorldEntityInteraction: (event) => PluginManager.emitWorldEntityInteraction(event),
       emitItemOnObject: (event) => PluginManager.emitItemOnObject(event),
       emitPlayerLogin: (event) => PluginManager.emitPlayerLogin(event),
       emitCustomEvent: (eventName, payload) =>
@@ -4051,8 +4083,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerRunEnergyRestoreModifier(
           modifier
         ),
+      registerRunEnergyDrainModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerRunEnergyDrainModifier(
+          modifier
+        ),
+      registerSpecialEnergyRestoreModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
+          modifier
+        ),
+      registerPrayerDrainModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
           modifier
         ),
       setCombatEngine: (engine) => {

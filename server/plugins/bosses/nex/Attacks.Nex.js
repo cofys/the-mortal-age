@@ -13,17 +13,11 @@
  */
 const Common = require("./Common.Nex");
 
-const SPECTRAL_SPIRIT_SHIELD = "Spectral spirit shield";
-
-function hasSpectral(player) {
-  const { ItemDefinition } = Common.core;
-  const shield = player.getEquipment().getItems()[5];
-  return shield?.getId?.() > 0 && ItemDefinition.forId(shield.getId())?.getName?.() === SPECTRAL_SPIRIT_SHIELD;
-}
-
 function drainPrayer(player, amount) {
   if (amount <= 0) return;
-  player.getSkillManager().decreaseCurrentLevel(Common.core.Skill.PRAYER, amount, 0);
+  const apply = Common.core.applyPrayerDrainModifiers;
+  if (typeof apply === "function") amount = apply(player, amount, { source: "nex" });
+  if (amount > 0) player.getSkillManager().decreaseCurrentLevel(Common.core.Skill.PRAYER, amount, 0);
 }
 
 /** Next to her body on a side, not at a corner diagonal. */
@@ -128,10 +122,10 @@ function landed(fight, key, player, damage, accurate) {
   } else if (key === "shadow") {
     drainPrayer(player, Math.ceil(damage / 10));
   } else if (key === "ice") {
-    drainPrayer(player, Math.floor(damage / (hasSpectral(player) ? 3 : 2)));
+    drainPrayer(player, Math.floor(damage / 2));
     require("./Specials.Nex").iceFreeze(fight, player);
   } else if (key === "zaros") {
-    drainPrayer(player, hasSpectral(player) ? 2 : 5);
+    drainPrayer(player, 5);
   }
   zarosHit(fight, player, damage, false);
 }
@@ -167,7 +161,7 @@ function blood(fight, target) {
         sender.sendSoundEffect(style.impactSound, 1, 0);
         fight.noteHit(player, "blood", damage);
         if (damage <= 0) return;
-        drainPrayer(player, hasSpectral(player) ? 2 : 5);
+        drainPrayer(player, 5);
         Common.later(1, () => {
           if (fight.stage !== "fighting") return;
           Common.healNpc(fight.boss, Math.floor(damage / 4), data.hitpoints);
@@ -211,4 +205,4 @@ function turmoil(fight, player) {
   });
 }
 
-module.exports = { attack, hasSpectral, drainPrayer, inMeleeReach, shadowMax };
+module.exports = { attack, drainPrayer, inMeleeReach, shadowMax };

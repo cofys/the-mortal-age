@@ -136,6 +136,16 @@ export interface PluginNpcInteractionEvent {
 
 export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   range: number;
+  /** A plugin-owned interaction that ignores the normal projectile clip within `range`. */
+  ignoreProjectileClip?: boolean;
+}
+
+/** A world entity (static ship or boat) menu option, such as Board or Attack. */
+export interface PluginWorldEntityInteractionEvent {
+  player: any;
+  entityIndex: number;
+  clickType: number;
+  handled: boolean;
 }
 
 /** Context handed to dialogue plugins when a Talk-to transcript is about to play. */
@@ -615,6 +625,8 @@ export interface PluginSpellCastEvent {
   spellName: string;
   spellWidget: number;
   spellItemId: number;
+  /** The spellbook option clicked, from 1 ("Cast"); e.g. 2 is Varrock Teleport's "Grand Exchange". */
+  opId?: number;
   handled: boolean;
 }
 
@@ -846,6 +858,8 @@ export interface PluginApi {
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** World entity (static ship/boat) options, by op number (1-6). */
+  onWorldEntityInteraction(handler: (event: PluginWorldEntityInteractionEvent) => void): void;
   /** Set a non-combat NPC option's approach range before movement starts. */
   onNpcRoute(handler: (event: PluginNpcRouteEvent) => void): void;
   /** Exact, case-sensitive NPC name and option matching. Return false to fall through. */
@@ -1143,6 +1157,7 @@ export interface PluginApi {
   emitObjectInteraction(event: PluginObjectInteractionEvent): boolean;
   /** Runs the NPC option handlers as a click would (a bot fishing a spot). */
   emitNpcInteraction(event: PluginNpcInteractionEvent): boolean;
+  emitWorldEntityInteraction(event: PluginWorldEntityInteractionEvent): boolean;
   /** Runs the item-on-object handlers as a use would (a bot cooking on a range). */
   emitItemOnObject(event: PluginItemOnObjectEvent): boolean;
   emitPlayerLogin(event: PluginPlayerLoginEvent): void;
@@ -1201,8 +1216,20 @@ export interface PluginApi {
   registerRunEnergyRestoreModifier(
     modifier: (entity: any, delayMs: number) => number
   ): void;
+  /** Run energy spent per movement step; return 0 to skip the drain. */
+  registerRunEnergyDrainModifier(
+    modifier: (entity: any, amount: number) => number
+  ): void;
+  /** Ticks between special-attack restores; a rate-doubling effect halves this. */
+  registerSpecialEnergyRestoreModifier(
+    modifier: (entity: any, delayTicks: number) => number
+  ): void;
   registerIncomingDamageModifier(
     modifier: (entity: any, hitDamage: any) => void
+  ): void;
+  /** Reduces an NPC/environmental Prayer drain; return the points actually drained. */
+  registerPrayerDrainModifier(
+    modifier: (entity: any, amount: number, context: any) => number
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
@@ -1250,6 +1277,8 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  Barrows: any;
+  applyPrayerDrainModifiers(entity: any, amount: number, context?: any): number;
   CombatEquipment: any;
   CanAttackResponse: any;
   CombatType: any;
@@ -1312,6 +1341,9 @@ export interface PluginCoreApi {
     isEnabled(): boolean;
   };
   World: any;
+  BoatManager: any;
+  Sailing: any;
+  BOAT_VIEW_DISTANCE: number;
   GameObject: any;
   PrivateArea: any;
   TemplatedInstanceArea: any;

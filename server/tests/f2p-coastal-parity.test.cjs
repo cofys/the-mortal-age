@@ -72,6 +72,7 @@ function player() {
   const inventory = {
     getAmount: (id) => items.get(id) || 0,
     adds: (id, amount) => items.set(id, (items.get(id) || 0) + amount),
+    forceAdd: (_player, item) => items.set(item.getId(), (items.get(item.getId()) || 0) + item.getAmount()),
     deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) || 0) - amount)),
     getFreeSlots: () => 28 - [...items].reduce((sum, [id, amount]) => sum + (id === 995 ? Number(amount > 0) : amount), 0),
     isFull: () => inventory.getFreeSlots() <= 0,

@@ -80,7 +80,7 @@ class Effects {
       player.performGraphic(Common.graphic(virus.graphic[0], { height: virus.graphic[1] }));
       player.getPacketSender().sendSoundEffect(virus.coughSound, 1, 0);
       const amount = wearsGasProtection(player) ? Math.ceil(virus.drain / 2) : virus.drain;
-      Attacks.drainPrayer(player, Attacks.hasSpectral(player) ? Math.ceil(amount / 2) : amount);
+      Attacks.drainPrayer(player, amount);
       const { Skill } = Common.core;
       for (const skill of bestStyleSkills(player)) player.getSkillManager().decreaseCurrentLevel(Skill[skill], amount, 1);
       for (const other of players) {

@@ -50,7 +50,7 @@ export class WebgpuUiPresentation {
         this.systemUpdateOverlay = new SystemUpdateOverlay({
             getChatboxRect: () => getChatboxScreenRect({ osrsClient }),
         });
-        this.mobileLoginInput = createMobileLoginInput(renderer);
+        this.mobileLoginInput = createMobileLoginInput(renderer, computeMetrics);
     }
 
     /** Appended after the widget overlay exists, so the title always composites on top. */

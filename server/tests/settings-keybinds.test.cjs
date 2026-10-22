@@ -53,6 +53,7 @@ function registered() {
     onInterfaceActionButton: (id, handler) => ids(id).forEach((one) => buttons.set(one, handler)),
     onCustomEvent: (name, handler) => events.set(name, handler),
     onPlayerLogin: (handler) => logins.push(handler),
+    core: { CacheDefinitions },
   };
   Settings.register(new Proxy(api, { get: (target, prop) => (prop in target ? target[prop] : () => {}) }));
   return { buttons, events, logins };
@@ -92,6 +93,7 @@ test('XP orb mounts the counter only while enabled, and Setup opens the cached s
   sender.sendSubInterface = (uid, group, type) => { player.sent.push(`open ${uid}:${group}:${type}`); return sender; };
   sender.closeSubInterface = (uid) => { player.sent.push(`close ${uid}`); return sender; };
   const click = buttons.get((160 << 16) | 6);
+  assert.equal(buttons.get((897 << 16) | 2), click, "orbs_osm:xp_drops, the mobile orb, as well");
   logins[0]({ player });
   assert.deepEqual(player.sent, ['varbit 4702=0'], 'fresh accounts have XP drops off');
   player.sent.length = 0;

@@ -152,12 +152,23 @@ test("Ava's attractor recovers 60% and Ava's accumulator 72%", () => {
   shot(attractor, 0.30);
   assert.equal(attractor.ammo().getAmount(), 4);
 
-  // The plugin only claims what it knows: other capes fall through to core.
+  // The assembler recovers 80% itself, so the other 20% breaks and nothing lands.
   const assembler = ammoHarness({ capeId: Items.AVAS_ASSEMBLER });
-  assert.equal(avaRecovery.recovery(assembler.player), null);
+  assert.equal(avaRecovery.recovery(assembler.player), 80);
   drops.length = 0;
   shot(assembler, 0.50);
+  assert.equal(assembler.ammo().getAmount(), 5);
+  assert.equal(drops.length, 0);
+  shot(assembler, 0.10);
   assert.equal(assembler.ammo().getAmount(), 4);
+  assert.equal(drops.length, 0);
+
+  // Unknown capes fall through to core.
+  const other = ammoHarness({ capeId: Items.AVAS_DEVICE });
+  assert.equal(avaRecovery.recovery(other.player), null);
+  drops.length = 0;
+  shot(other, 0.50);
+  assert.equal(other.ammo().getAmount(), 4);
   assert.equal(drops.length, 1);
 });
 

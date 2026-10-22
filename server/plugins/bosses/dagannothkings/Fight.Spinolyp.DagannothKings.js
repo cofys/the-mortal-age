@@ -58,21 +58,14 @@ function methodClass() {
       if (!target?.isPlayer?.() || !hit.isAccurate() || hit.getTotalDamage() <= 0) return;
       if (this.style !== CombatType.MAGIC) return;
       // Mod Ash: the magic drains 1 prayer; the spectral shield halves it (coin flip).
-      let drain = Common.SPINOLYP_PRAYER_DRAIN;
-      if (wearsSpectral(target)) drain = Common.core.Misc.randomInclusive(0, 1);
+      const apply = Common.core.applyPrayerDrainModifiers;
+      const drain = typeof apply === "function"
+        ? apply(target, Common.SPINOLYP_PRAYER_DRAIN, { attacker: hit.getAttacker?.() })
+        : Common.SPINOLYP_PRAYER_DRAIN;
       if (drain > 0) target.getSkillManager().decreaseCurrentLevel(Common.core.Skill.PRAYER, drain, 0);
     }
   };
   return SpinolypMethod;
-}
-
-function wearsSpectral(player) {
-  const { Equipment, ItemIdentifiers } = Common.core;
-  const shield = player.getEquipment?.()?.getItems?.()?.[Equipment.SHIELD_SLOT];
-  const id = shield?.getId?.() ?? -1;
-  return id === ItemIdentifiers.SPECTRAL_SPIRIT_SHIELD
-    || id === ItemIdentifiers.SPECTRAL_SPIRIT_SHIELD_2
-    || id === ItemIdentifiers.SPECTRAL_SPIRIT_SHIELD_3;
 }
 
 // One method instance per spinolyp: the style lives on `this` between start() and
@@ -81,4 +74,4 @@ function attach(api) {
   api.registerNpcCombatMethodProvider([...Common.SPINOLYP_IDS], methodClass(), { singleton: false });
 }
 
-module.exports = { attach, methodClass, wearsSpectral };
+module.exports = { attach, methodClass };

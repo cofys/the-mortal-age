@@ -489,7 +489,7 @@ function landCatch(player, tool, variant, caught) {
   let stop = false;
   for (const fish of new Set(landed)) {
     const event = {
-      player, skill: Skill.FISHING, petBase: fish.petBase, stop: false,
+      player, skill: Skill.FISHING, itemId: fish.id, petBase: fish.petBase, stop: false,
       fishId: fish.id, toolId: tool.id, variantBonus: variant.bonus, baitId: bait ?? null,
       fish: { id: fish.id, experience: fish.experience, name: fish.caught },
     };

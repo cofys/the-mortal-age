@@ -1734,6 +1734,7 @@
   {"id":1734,"location":{"x":1244,"y":3684,"z":1},"amt":1,"respawn":100,"description":"Kebos Lowlands"},
   {"id":1734,"location":{"x":3229,"y":6069,"z":0},"amt":1,"respawn":100,"description":"Prifddinas"},
   {"id":1734,"location":{"x":1511,"y":3591,"z":0},"amt":1,"respawn":100,"description":"UNDIFINED"},
+  {"id":1735,"location":{"x":3192,"y":3272,"z":0},"amt":1,"respawn":100,"description":"Lumbridge"},
   {"id":5523,"location":{"x":2935,"y":3282,"z":1},"amt":1,"respawn":100,"description":"UNDIFINED"},
   {"id":966,"location":{"x":3271,"y":3656,"z":0},"amt":1,"respawn":100,"description":"Wilderness"},
   {"id":966,"location":{"x":3278,"y":3664,"z":0},"amt":1,"respawn":100,"description":"Wilderness"},

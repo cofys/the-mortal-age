@@ -164,6 +164,8 @@ export type NpcView = Tile & ActorUpdateView & {
   modelCustomisation?: { slot: number; modelId: number }[];
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
+  /** The boat/static ship this NPC stands on (its deck) rather than the main world. */
+  worldView?: number;
   rotation: number;
   walkDirection: number;
   runDirection: number;
@@ -175,6 +177,7 @@ export type NpcSyncState = {
   typeIds: Map<number, number>;
   headIcons: Map<number, number>;
   interactionIndices: Map<number, number>;
+  worldViews: Map<number, number>;
 };
 
 export type ProjectileView = {
@@ -254,6 +257,7 @@ export type ClientMessage =
   | { type: "move"; worldX: number; worldY: number; modifierFlags: number; run?: boolean }
   | { type: "npc_option"; index: number; clickType: number }
   | { type: "object_option"; id: number; x: number; y: number; clickType?: number; action?: string }
+  | { type: "world_entity_option"; index: number; clickType: number }
   | { type: "chat"; text: string; messageType: "public" | "game" | "friends_chat" }
   | { type: "friends_chat_action"; action: FriendsChatAction }
   | { type: "private_message"; recipient: string; text: string }
@@ -641,6 +645,31 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
     }
     case NativeClientPacket.SET_HEADING:
       return { type: "set_heading", heading: reader.byte() & 15 };
+    case NativeClientPacket.OPWORLDENTITY1: {
+      const index = reader.shortLE();
+      reader.byteSub();
+      return { type: "world_entity_option", index, clickType: 1 };
+    }
+    case NativeClientPacket.OPWORLDENTITY2: {
+      const index = reader.shortAdd();
+      reader.byteAdd();
+      return { type: "world_entity_option", index, clickType: 2 };
+    }
+    case NativeClientPacket.OPWORLDENTITY3: {
+      const index = reader.short();
+      reader.byteNeg();
+      return { type: "world_entity_option", index, clickType: 3 };
+    }
+    case NativeClientPacket.OPWORLDENTITY4: {
+      reader.byteSub();
+      return { type: "world_entity_option", index: reader.short(), clickType: 4 };
+    }
+    case NativeClientPacket.OPWORLDENTITY5: {
+      reader.byteAdd();
+      return { type: "world_entity_option", index: reader.shortLE(), clickType: 5 };
+    }
+    case NativeClientPacket.OPWORLDENTITY6:
+      return { type: "world_entity_option", index: reader.shortAddLE(), clickType: 6 };
     case NativeClientPacket.IF_BUTTOND: {
       return {
         type: "widget_drag", targetItemId: reader.shortLE(), targetWidgetId: reader.intLE(),
@@ -1226,7 +1255,7 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
 }
 
 /** Camera easings by wire id; the client decodes the same order. */
-export const CAMERA_EASINGS = ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine"] as const;
+export const CAMERA_EASINGS = ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine", "ease_in_sine"] as const;
 export type CameraEasing = typeof CAMERA_EASINGS[number];
 
 export type CameraMovementOptions = {
@@ -2131,11 +2160,20 @@ export function resolveGameframeRoot(
   return STANDARD_GAMEFRAME_ROOTS.has(saved) ? saved : fallback;
 }
 
+// Minimap orbs: desktop `orbs`, and the mobile toplevel's own `orbs_osm`, laid out for the
+// mobile orb art (live's Android client mounts it at toplevel_osm:orbs).
+export const ORBS_GROUP_ID = 160;
+export const MOBILE_ORBS_GROUP_ID = 897;
+
+export function orbsGroupFor(root: number): number {
+  return root === MOBILE_GAMEFRAME_ROOT ? MOBILE_ORBS_GROUP_ID : ORBS_GROUP_ID;
+}
+
 export function encodeGameframeBootstrap(playerName: string, root: number = 161, xpDropsEnabled = false): Buffer[] {
   const mounts = [
     // pm_chat -> toplevel_osrs_stretch:pm_container (93), xp_drops -> :xp_drops (9).
     // 161:7 (hud_container_back) has no fixed-layout pane, so XP drops mounted there vanished.
-    [96, 162], [93, 163], [33, 160], ...(xpDropsEnabled ? [[9, 122]] : []), [6, 651, 5929],
+    [96, 162], [93, 163], [33, orbsGroupFor(root)], ...(xpDropsEnabled ? [[9, 122]] : []), [6, 651, 5929],
     [76, 593], [77, 320], [78, 629], [79, MAIN_INVENTORY_GROUP_ID], [80, 387], [81, 541],
     [82, 218], [83, 7], [84, 109], [85, 429], [86, 182], [87, 116],
     [88, 216], [89, 239],
@@ -2360,7 +2398,10 @@ export function createPlayerSyncState(
 }
 
 export function createNpcSyncState(): NpcSyncState {
-  return { indices: [], lastTiles: new Map(), typeIds: new Map(), headIcons: new Map(), interactionIndices: new Map() };
+  return {
+    indices: [], lastTiles: new Map(), typeIds: new Map(), headIcons: new Map(),
+    interactionIndices: new Map(), worldViews: new Map(),
+  };
 }
 
 export function encodePlayerAppearance(
@@ -2960,7 +3001,9 @@ export function encodeNpcSync(
   loopCycle: number,
   local: Tile,
   views: NpcView[],
-  state: NpcSyncState
+  state: NpcSyncState,
+  deckLocal?: Tile,
+  deckBase?: (worldView: number) => Tile | undefined,
 ): Buffer {
   const writer = new BitWriter();
   const desired = new Map<number, NpcView>();
@@ -2975,7 +3018,8 @@ export function encodeNpcSync(
   for (const index of state.indices.slice(0, 255)) {
     const view = desired.get(index);
     const last = state.lastTiles.get(index);
-    if (!view || !last || view.level !== local.level || state.typeIds.get(index) !== view.typeId) {
+    if (!view || !last || view.level !== local.level || state.typeIds.get(index) !== view.typeId
+      || (state.worldViews.get(index) ?? -1) !== (view.worldView ?? -1)) {
       writer.writeBits(1, 1);
       writer.writeBits(2, 3);
       if (view) readd.add(index);
@@ -3026,23 +3070,32 @@ export function encodeNpcSync(
 
   const nextSet = new Set(nextIndices);
   const additions = Array.from(desired.values()).filter((view) => !nextSet.has(view.index));
+  // Main-world NPCs are relative to the root tile; deck NPCs to the player's deck tile, with
+  // the boat's entity index as their world view.
+  const baseFor = (view: NpcView): Tile => view.worldView != null
+    ? (deckBase?.(view.worldView) ?? deckLocal ?? local)
+    : local;
   const large = additions.some((view) => {
-    const dx = view.x - local.x;
-    const dy = view.y - local.y;
+    const base = baseFor(view);
+    const dx = view.x - base.x;
+    const dy = view.y - base.y;
     return dx < -16 || dx > 15 || dy < -16 || dy > 15;
   });
   const signed = (value: number, bits: number) => (value < 0 ? value + (1 << bits) : value) & ((1 << bits) - 1);
   for (const view of additions) {
+    const base = baseFor(view);
     if (nextIndices.length >= 255 || view.level !== local.level) break;
     writer.writeBits(16, view.index);
     const writeInteraction = (view.interactionIndex ?? -1) >= 0;
     const writeHeadIcon = (view.headIcon ?? -1) >= 0;
     const block = npcUpdateMask(view, writeInteraction, writeHeadIcon) !== 0;
     writer.writeBits(1, block ? 1 : 0);
-    writer.writeBits(1, 0); // no world view
+    const worldView = view.worldView;
+    writer.writeBits(1, worldView != null ? 1 : 0);
+    if (worldView != null) writer.writeBits(32, worldView & 0xffff);
     writer.writeBits(1, readd.has(view.index) ? 1 : 0);
-    writer.writeBits(large ? 8 : 5, signed(view.y - local.y, large ? 8 : 5));
-    writer.writeBits(large ? 8 : 5, signed(view.x - local.x, large ? 8 : 5));
+    writer.writeBits(large ? 8 : 5, signed(view.y - base.y, large ? 8 : 5));
+    writer.writeBits(large ? 8 : 5, signed(view.x - base.x, large ? 8 : 5));
     writer.writeBits(3, view.rotation & 7);
     writer.writeBits(16, view.typeId & 0xffff);
     nextIndices.push(view.index);
@@ -3056,6 +3109,7 @@ export function encodeNpcSync(
   state.typeIds.clear();
   state.headIcons.clear();
   state.interactionIndices.clear();
+  state.worldViews.clear();
   for (const index of nextIndices) {
     const view = desired.get(index);
     if (view) {
@@ -3063,6 +3117,7 @@ export function encodeNpcSync(
       state.typeIds.set(index, view.typeId);
       state.headIcons.set(index, view.headIcon ?? -1);
       state.interactionIndices.set(index, view.interactionIndex ?? -1);
+      state.worldViews.set(index, view.worldView ?? -1);
     }
   }
   const sync = Buffer.concat([writer.toBuffer(), ...updateBlocks]);

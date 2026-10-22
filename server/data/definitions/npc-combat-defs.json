@@ -748,7 +748,11 @@
     "15627": {"name": "Brutus", "respawn": 36},
     "16296": {"name": "Wyrmling", "anims": {"attack": 8270, "block": -1, "death": 8272}, "deathTicks": 4},
     "16297": {"name": "Wyrmling", "anims": {"attack": 8270, "block": -1, "death": 8272}, "deathTicks": 4},
-    "16305": {"name": "Mad Angel", "anims": {"attack": 4589, "block": -1, "death": 14448}, "deathTicks": 7}
+    "16305": {"name": "Mad Angel", "anims": {"attack": 4589, "block": -1, "death": 14448}, "deathTicks": 7},
+    "16659": {"name": "Archive Guardian", "anims": {"attack": 14751, "block": -1, "death": 14749}},
+    "16660": {"name": "Archive Guardian", "anims": {"attack": 14752, "block": -1, "death": 14749}},
+    "16662": {"name": "Inert Guardian", "anims": {"block": -1, "death": 15025}},
+    "16664": {"name": "Vine", "anims": {"attack": 14768, "block": -1, "death": 14769}}
   },
   "refs": {
     "$comment": "Additional NPC combat sequences inferred from cache-backed reference sequence names.",

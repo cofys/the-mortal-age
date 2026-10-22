@@ -901,29 +901,20 @@ export class CombatFactory {
         // OSRS pays 4 XP per damage to a melee or ranged style, and the other
         // hit skills are fixed fractions of that same 4 XP: magic 2 (4/2),
         // hitpoints 1.33 (4/3), defensive-autocast magic 1.33 (4/3) and
-        // defensive-autocast defence 1 (4/4). Multiply by the base before
-        // dividing so low hits are not floored away.
+        // defensive-autocast defence 1 (4/4). addExperience keeps the tenths
+        // (1 damage is 1.3 hitpoints XP), so nothing is floored here.
         // Some NPCs give less (the Gemstone Crab 87.5%: 3.5 per damage).
         const target = hit.getTarget?.();
         const OSRS_DAMAGE_XP = 4 * (target?.isNpc?.() ? target.getAsNpc().getCombatXpMultiplier?.() ?? 1 : 1);
-        // Add magic exp, even if total damage is 0.
-        // Since spells have a base exp reward
+        // A spell's base XP is paid once per cast by MagicCombatMethod.hits (a splash
+        // gets only that), so each target's hit adds just its per-damage Magic XP.
         if (hit.getCombatType() === CombatType.MAGIC) {
             // The hit is queued before MagicCombatMethod.finished() moves the
             // active cast into previousCast, so the first cast of a session
             // must read castSpell or it would award no Magic XP at all.
             if ((player.getCombat().getCastSpell() ?? player.getCombat().getPreviousCast()) != null) {
-                if (hit.isAccurate()) {
-                    if (!defensiveMagicSplit) {
-                        player.getSkillManager().addExperience(
-                            Skill.MAGIC,
-                            Math.floor((hitDamage * OSRS_DAMAGE_XP) / 2)/* + player.getCombat().getPreviousCast().baseExperience() */,
-                            true
-                        );
-                    }
-                } else {
-                    // Splash should only give 52 exp..
-                    player.getSkillManager().addExperience(Skill.MAGIC, 52, false);
+                if (hit.isAccurate() && !defensiveMagicSplit) {
+                    player.getSkillManager().addExperience(Skill.MAGIC, (hitDamage * OSRS_DAMAGE_XP) / 2, true);
                 }
             }
         }
@@ -934,7 +925,7 @@ export class CombatFactory {
         }
 
         // Add hp xp (1.33/damage)
-        player.getSkillManager().addExperience(Skill.HITPOINTS, Math.floor((hitDamage * OSRS_DAMAGE_XP) / 3), true);
+        player.getSkillManager().addExperience(Skill.HITPOINTS, (hitDamage * OSRS_DAMAGE_XP) / 3, true);
 
         // Magic xp was already added
         if (hit.getCombatType() === CombatType.MAGIC) {
@@ -942,7 +933,7 @@ export class CombatFactory {
                 return;
             }
             // Defensive casting is not an even split: 1.33 magic / 1.0 defence.
-            player.getSkillManager().addExperience(Skill.MAGIC, Math.floor((hitDamage * OSRS_DAMAGE_XP) / 3), true);
+            player.getSkillManager().addExperience(Skill.MAGIC, (hitDamage * OSRS_DAMAGE_XP) / 3, true);
             player.getSkillManager().addExperience(Skill.DEFENCE, hitDamage, true);
             return;
         }
@@ -954,7 +945,7 @@ export class CombatFactory {
             if (!skill) {
                 continue;
             }
-            player.getSkillManager().addExperience(skill, Math.floor((hitDamage * OSRS_DAMAGE_XP) / exp.length), true);
+            player.getSkillManager().addExperience(skill, (hitDamage * OSRS_DAMAGE_XP) / exp.length, true);
         }
     }
 

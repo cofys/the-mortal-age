@@ -315,10 +315,11 @@ export class NPC extends Mobile {
                 || this.movementCoordinator.getCoordinateState() == CoordinateState.RETREATING)) {
                 const max = this.getMaxHitpoints();
                 if (max > this.hitpoints) {
-                    this.setHitpoints(this.hitpoints + (max * 0.1));
-                    if (this.hitpoints > max) {
-                        this.setHitpoints(max);
-                    }
+                    // OSRS hitpoints are integers. Floor the 10% step and the stored value so
+                    // regeneration can never leave a fractional HP (the old code produced
+                    // 1.5 from max 5 and a fractional target could no longer be finished).
+                    const regen = Math.max(1, Math.floor(max * 0.1));
+                    this.setHitpoints(Math.min(max, Math.floor(this.hitpoints + regen)));
                 }
             }
         }

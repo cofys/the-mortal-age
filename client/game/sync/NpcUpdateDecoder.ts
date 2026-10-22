@@ -90,6 +90,8 @@ export class NpcUpdateDecoder {
             /** Reference for main-world NPCs; the local tile unless the player is on a boat. */
             rootTileX?: number;
             rootTileY?: number;
+            /** Deck-scene base of a world view (the boat's deckBase); main-world NPCs use root. */
+            worldViewBase?: (worldViewId: number) => { x: number; y: number } | undefined;
             level: number;
         },
     ): NpcInfoFrame {
@@ -216,10 +218,16 @@ export class NpcUpdateDecoder {
             const rot = (typeof defaultRot === "number" ? defaultRot : 0) & 2047;
             const typeId = stream.readBits(16) | 0;
 
-            // Deck NPCs are relative to the player's deck tile, main-world NPCs to the root tile.
+            // Main-world NPCs are relative to the viewer's root tile; deck NPCs to the deck
+            // scene base of their own world view (not necessarily the player's boat).
             const inMainWorld = worldViewId < 0;
-            const baseX = inMainWorld ? (opts.rootTileX ?? opts.localTileX) : opts.localTileX;
-            const baseY = inMainWorld ? (opts.rootTileY ?? opts.localTileY) : opts.localTileY;
+            const viewBase = inMainWorld ? undefined : opts.worldViewBase?.(worldViewId);
+            const baseX = inMainWorld
+                ? (opts.rootTileX ?? opts.localTileX)
+                : (viewBase?.x ?? opts.localTileX);
+            const baseY = inMainWorld
+                ? (opts.rootTileY ?? opts.localTileY)
+                : (viewBase?.y ?? opts.localTileY);
             const tileX = (baseX | 0) + (dx | 0);
             const tileY = (baseY | 0) + (dy | 0);
 

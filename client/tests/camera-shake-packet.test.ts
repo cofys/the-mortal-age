@@ -33,7 +33,7 @@ for (const [encode, mode] of [[encodeCameraMoveTo, "move"], [encodeCameraLookAt,
             type: "camera", payload: { mode, x: 2850, y: 10230, height: -200, ...options },
         });
     }
-    for (const easing of ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine"] as const) {
+    for (const easing of ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine", "ease_in_sine"] as const) {
         const options = { cycles: 210, easing, heightRelative: false, ignoreTerrain: true, trackTarget: false };
         assert.deepEqual(decodeServerPacket(new Uint8Array(encode(3128, 3476, 400, options))), {
             type: "camera", payload: { mode, x: 3128, y: 3476, height: 400, ...options },

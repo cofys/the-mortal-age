@@ -5,6 +5,7 @@ import { Dueling, DuelRule } from "../../content/Duelling";
 import { ObjectDefinition } from "../../definition/ObjectDefinition";
 import type { NPC } from "../../entity/impl/npc/NPC";
 import { GameObject } from "../../entity/impl/object/GameObject";
+import { MapObjects } from "../../entity/impl/object/MapObjects";
 import type { Player } from "../../entity/impl/player/Player";
 import { Direction, Directions } from "../Direction";
 import { Location } from "../Location";
@@ -21,11 +22,14 @@ import { GameConstants } from "../../GameConstants";
 import { FastDeque } from "../../../util/FastDeque";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { Wilderness } from "../../content/wilderness/Wilderness";
-import { applyRunEnergyRestoreModifiers } from "../../content/combat/EquipmentEffects";
+import { applyRunEnergyDrainModifiers, applyRunEnergyRestoreModifiers } from "../../content/combat/EquipmentEffects";
 import { PluginManager } from "../../../plugins/PluginManager";
 import type { PluginObjectRouteEvent } from "../../../plugins/PluginTypes";
 import * as fs from "fs";
 import * as path from "path";
+const getBoatManager = () =>
+    require("../../content/sailing/BoatManager").BoatManager as typeof import("../../content/sailing/BoatManager").BoatManager;
+
 export class MovementQueue {
     private static readonly BOT_FOLLOW_REPATH_COOLDOWN_MS = 500;
 
@@ -688,7 +692,7 @@ export class MovementQueue {
             return;
         }
         if (player.isRunningReturn()) {
-            player.setRunEnergy(player.getRunEnergy() - 1);
+            player.setRunEnergy(player.getRunEnergy() - applyRunEnergyDrainModifiers(player, 1));
             if (player.getRunEnergy() <= 0) {
                 player.setRunEnergy(0);
                 player.setRunning(false);
@@ -1108,7 +1112,9 @@ export class MovementQueue {
         const direction = object.getFace();
 
         if (type === 10 || type === 11 || type === 22) {
-            const def = ObjectDefinition.forId(id);
+            // Multi-locs expose their real footprint/mask only after the player's
+            // varbits resolve the MORPH child; raw ids can carry the parent's size.
+            const def = ObjectDefinition.forPlayer(id, this.player) ?? ObjectDefinition.forId(id);
             const xLength = def.getSizeX();
             const yLength = def.getSizeY();
             const blockingMask = def.getBlockingMask() | blockAccessFlags;
@@ -1151,7 +1157,51 @@ export class MovementQueue {
         };
     }
 
-    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1) {
+    /**
+     * A wall-mounted decoration is operable through the wall it is mounted on only when the
+     * resolved access mask declares exactly one front edge, the player is on that edge, and a
+     * wall with the matching orientation occupies that same edge tile on the same plane.
+     */
+    private isMountedDecorationReachable(object: GameObject, blockAccessFlags: number, angle: number): boolean {
+        const type = object.getType();
+        if (type !== 10 && type !== 11 && type !== 22) return false;
+        const location = object.getLocation();
+        if (this.player.getLocation().getZ() !== location.getZ()) return false;
+        const def = ObjectDefinition.forPlayer(object.getId(), this.player) ?? ObjectDefinition.forId(object.getId());
+        if (!def) return false;
+        const rotated = angle === 0 ? (blockAccessFlags & 0xf)
+            : (((blockAccessFlags << angle) & 0xf) | (blockAccessFlags >> (4 - angle))) & 0xf;
+        // Exactly one allowed front: 1 north, 2 east, 4 south, 8 west.
+        const allowed = (~rotated) & 0xf;
+        if (allowed !== 0x1 && allowed !== 0x2 && allowed !== 0x4 && allowed !== 0x8) return false;
+        const player = this.player.getLocation();
+        const x = location.getX(), y = location.getY(), z = location.getZ();
+        const swapped = (angle & 1) === 1;
+        const width = swapped ? def.getSizeY() : def.getSizeX();
+        const height = swapped ? def.getSizeX() : def.getSizeY();
+        const source = { x: player.getX(), y: player.getY() };
+        let sourceWall = 0, destWall = 0, destX = 0, destY = 0;
+        if (source.x === x - 1 && source.y >= y && source.y < y + height && allowed === 0x8) {
+            sourceWall = 0x8; destWall = 0x80; destX = x; destY = source.y; // west
+        } else if (source.x === x + width && source.y >= y && source.y < y + height && allowed === 0x2) {
+            sourceWall = 0x80; destWall = 0x8; destX = x + width - 1; destY = source.y; // east
+        } else if (source.y === y - 1 && source.x >= x && source.x < x + width && allowed === 0x1) {
+            sourceWall = 0x20; destWall = 0x2; destX = source.x; destY = y; // north
+        } else if (source.y === y + height && source.x >= x && source.x < x + width && allowed === 0x4) {
+            sourceWall = 0x2; destWall = 0x20; destX = source.x; destY = y + height - 1; // south
+        } else {
+            return false;
+        }
+        const edge = MapObjects.mapObjects.get(MapObjects.getHash(destX, destY, z)) ?? [];
+        const wallFaces = allowed === 0x8 || allowed === 0x2 ? [0, 2] : [1, 3];
+        if (!edge.some((entry) => entry !== object && entry.getType() >= 0 && entry.getType() <= 3
+            && wallFaces.includes(entry.getFace()))) return false;
+        const area = this.player.getPrivateArea();
+        return (RegionManager.getClipping(source.x, source.y, z, area) & sourceWall) !== 0
+            && (RegionManager.getClipping(destX, destY, z, area) & destWall) !== 0;
+    }
+
+    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1, ignoreProjectileClip = false) {
         let mobility = this.getMobility();
         if (!mobility.canMove()) {
             mobility.sendMessage(this.player);
@@ -1164,13 +1214,27 @@ export class MovementQueue {
             return;
         }
 
+        // A main-world NPC seen from a boat deck lives in the world's coordinate space while
+        // the player stands in the deck scene. Resolve that interaction from the boat's root
+        // tile instead of trying to path the deck scene across the map and timing out.
+        if (this.isProjectedMainWorldNpc(entity)) {
+            if (this.reachedProjectedNpc(entity, range)) {
+                this.player.setMobileInteraction(entity);
+                runnable?.();
+            } else {
+                this.reset();
+                this.player.sendMessage("I can't reach that!");
+            }
+            return;
+        }
+
         this.reset();
 
         this.walkToReset();
 
         const reached = () => range <= 1 ? PathFinder.reachedEntity(this.player, entity) :
             this.isInteractionTargetValid(entity) && this.player.getLocation().isWithinDistance(entity.getLocation(), range)
-            && RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation());
+            && (ignoreProjectileClip || RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation()));
         if (reached()) {
             this.player.setMobileInteraction(entity);
             runnable?.();
@@ -1276,6 +1340,35 @@ export class MovementQueue {
             entity.getLocation().getZ() === this.player.getLocation().getZ();
     }
 
+    /** An NPC in the main world that a player aboard a boat can see and talk to from its root. */
+    private isProjectedMainWorldNpc(entity: Mobile): boolean {
+        const boatManager = getBoatManager();
+        if (!entity?.isNpc?.() || !boatManager.getBoatAboard(this.player)) return false;
+        // Same-deck and other-boat NPCs keep local deck routing; only main-world actors project.
+        if (boatManager.getBoatAboard(entity)) return false;
+        if (entity.getPrivateArea()) return false;
+        const owner = (entity as NPC).getOwner?.();
+        return !owner || owner === this.player;
+    }
+
+    private reachedProjectedNpc(entity: Mobile, range: number): boolean {
+        const root = getBoatManager().rootLocation(this.player);
+        const target = entity.getLocation();
+        const reach = Math.max(1, range) + Math.max(0, entity.getSize() - 1);
+        if (!root.isWithinDistance(target, reach)) return false;
+        // Main-world clipping, not the deck's private area: the boat is only a viewpoint here.
+        return RegionManager.canProjectileMove(
+            root.getX(),
+            root.getY(),
+            target.getX(),
+            target.getY(),
+            root.getZ(),
+            Math.max(1, this.player.getSize()),
+            Math.max(1, this.player.getSize()),
+            null
+        );
+    }
+
     public walkToObject(object: GameObject, action: Action, clickType = 0) {
         const location = this.player.getLocation();
         const routeEvent: PluginObjectRouteEvent = {
@@ -1350,7 +1443,7 @@ export class MovementQueue {
             }
             // The reach check already respects shape, rotation and access flags.
             // Accept either reachable side, even if the original route ended elsewhere.
-            if (this.points.length === 0 && PathFinder.reachedObject(
+            if (this.points.length === 0 && (PathFinder.reachedObject(
                 this.player,
                 objectX,
                 objectY,
@@ -1359,7 +1452,7 @@ export class MovementQueue {
                 routeSpec.reachAngle,
                 routeSpec.reachShape,
                 routeSpec.reachBlockAccessFlags
-            )) {
+            ) || this.isMountedDecorationReachable(object, routeSpec.reachBlockAccessFlags, routeSpec.reachAngle))) {
                 // Arrival is not a failed route: operate on the following cycle.
                 // No extra arriveDelay here: in OSRS that delay only applies to actions that
                 // move you. Banks, tables, shops and NPCs fire the tick after you arrive, which

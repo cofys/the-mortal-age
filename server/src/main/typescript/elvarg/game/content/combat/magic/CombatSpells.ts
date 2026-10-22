@@ -346,7 +346,7 @@ export class CombatSpells {
             return new Graphic(90, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 5;
+            return 5.5;
         },
         equipmentRequired(player) {
             return null;
@@ -422,7 +422,7 @@ export class CombatSpells {
             return new Graphic(93, GraphicHeight.HIGH);
         },
         baseExperience: () => {
-            return 7;
+            return 7.5;
         },
         equipmentRequired: (player) => {
             return null;
@@ -455,7 +455,7 @@ export class CombatSpells {
             return new Graphic(96, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 9;
+            return 9.5;
         },
         equipmentRequired(player) {
             return undefined;
@@ -473,7 +473,7 @@ export class CombatSpells {
 
     public static WEAKEN = new CombatEffectSpell({
         castAnimation() {
-            return new Animation(716);
+            return new Animation(717);
         },
 
         castProjectile(cast: Mobile, castOn: Mobile) {
@@ -567,7 +567,7 @@ export class CombatSpells {
         },
 
         baseExperience() {
-            return 11;
+            return 11.5;
         },
 
         equipmentRequired(player) {
@@ -609,7 +609,7 @@ export class CombatSpells {
         },
 
         baseExperience: () => {
-            return 13;
+            return 13.5;
         },
 
         equipmentRequired: (player: Player) => {
@@ -631,7 +631,7 @@ export class CombatSpells {
 
     public static CURSE = new CombatEffectSpell({
         castAnimation() {
-            return new Animation(710);
+            return new Animation(718);
         },
 
         castProjectile(cast, castOn) {
@@ -715,8 +715,9 @@ export class CombatSpells {
         },
 
         baseExperience: () => {
-            return 30;
+            return 31;
         },
+        splashExperience: () => 30,
 
         itemsRequired: (player) => {
             return [new Item(555, 3), new Item(557, 3), new Item(561, 2)];
@@ -748,7 +749,7 @@ export class CombatSpells {
             return new Graphic(120, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 16;
+            return 16.5;
         },
         equipmentRequired(player) {
             return null;
@@ -781,7 +782,7 @@ export class CombatSpells {
             return new Graphic(123, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 19;
+            return 19.5;
         },
         equipmentRequired(player) {
             return null;
@@ -814,7 +815,7 @@ export class CombatSpells {
             return new Graphic(126, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 22;
+            return 22.5;
         },
         equipmentRequired(player) {
             return null;
@@ -848,7 +849,7 @@ export class CombatSpells {
             return new Graphic(145, 6553600);
         },
         baseExperience() {
-            return 24;
+            return 24.5;
         },
         equipmentRequired(player) {
             return null;
@@ -885,7 +886,7 @@ export class CombatSpells {
             return new Graphic(132, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 25;
+            return 25.5;
         },
         equipmentRequired(player) {
             return null;
@@ -921,7 +922,7 @@ export class CombatSpells {
             return new Graphic(135, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 28;
+            return 28.5;
         },
         equipmentRequired(player) {
             return null;
@@ -993,8 +994,9 @@ export class CombatSpells {
             return new Graphic(177, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 60;
+            return 61;
         },
+        splashExperience: () => 60,
         itemsRequired(player) {
             return [new Item(555, 3), new Item(557, 4), new Item(561, 3)];
         },
@@ -1057,7 +1059,7 @@ export class CombatSpells {
             return new Graphic(138, GraphicHeight.HIGH);
         },
         baseExperience: () => {
-            return 31;
+            return 31.5;
         },
         equipmentRequired: (player: Player) => {
             return undefined;
@@ -1090,7 +1092,7 @@ export class CombatSpells {
             return new Graphic(129, GraphicHeight.HIGH);
         },
         baseExperience: () => {
-            return 34;
+            return 34.5;
         },
         equipmentRequired: (player: Player) => {
             return undefined;
@@ -1260,7 +1262,7 @@ export class CombatSpells {
             return new Graphic(161, GraphicHeight.MIDDLE);
         },
         baseExperience() {
-            return 37;
+            return 37.5;
         },
         equipmentRequired(player) {
             return null;
@@ -1279,7 +1281,7 @@ export class CombatSpells {
     public static VULNERABILITY = new CombatEffectSpell({
         members: true,
         castAnimation() {
-            return new Animation(729);
+            return new Animation(718);
         },
         castProjectile(cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 168, 0, 20, 43, 31);
@@ -1370,7 +1372,7 @@ export class CombatSpells {
     public static ENFEEBLE = new CombatEffectSpell({
         members: true,
         castAnimation: function () {
-            return new Animation(729);
+            return new Animation(728);
         },
         castProjectile: function (cast, castOn) {
             return Projectile.createProjectile(cast, castOn, 171, 0, 20, 43, 31);
@@ -1444,7 +1446,7 @@ export class CombatSpells {
         },
 
         baseExperience() {
-            return 42;
+            return 42.5;
         },
 
         equipmentRequired(player) {
@@ -1497,7 +1499,7 @@ export class CombatSpells {
         endGraphic: () => new Graphic(1463, GraphicHeight.HIGH),
         maximumHit: () => 23,
         startGraphic: () => new Graphic(1461, GraphicHeight.MIDDLE),
-        baseExperience: () => 48.5,
+        baseExperience: () => 48.2,
         itemsRequired: () => [new Item(556, 7), new Item(557, 10), new Item(21880)],
         levelRequired: () => 90,
         spellId: () => 21878,
@@ -1668,8 +1670,9 @@ export class CombatSpells {
             return new Graphic(177, GraphicHeight.HIGH);
         },
         baseExperience() {
-            return 91;
+            return 89;
         },
+        splashExperience: () => 70,
         itemsRequired(player) {
             return [new Item(555, 5), new Item(557, 5), new Item(561, 4)];
         },
@@ -1775,9 +1778,11 @@ export class CombatSpells {
         startGraphic: function () {
             return null;
         },
+        // OSRS update of 2 March 2017: 95 on a successful cast, 84 on a failed one.
         baseExperience: function () {
-            return 65;
+            return 95;
         },
+        splashExperience: () => 84,
         itemsRequired: function (player) {
             return [new Item(563, 1), new Item(562, 1), new Item(560, 1)];
         },
@@ -2129,7 +2134,7 @@ export class CombatSpells {
         },
 
         baseExperience(): number {
-            return 50;
+            return 0;
         },
 
         equipmentRequired(player: Player): Item[] {
@@ -2171,7 +2176,7 @@ export class CombatSpells {
         },
 
         baseExperience(): number {
-            return 50;
+            return 0;
         },
 
         equipmentRequired(player: Player): Item[] {

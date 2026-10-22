@@ -107,6 +107,11 @@ module.exports = function registerDoricsQuestQuest(api) {
     if (event.npcId !== NpcIdentifiers.DORIC || !String(event.text).startsWith("Clay is what I use more than anything")) return;
     event.before = () => {
       if (quest.getStage(event.player) >= STAGE_STARTED) return;
+      // Do not commit the start when Doric's promised pickaxe cannot be handed over.
+      if (event.player.getInventory().isFull()) {
+        event.player.getInventory().full();
+        return;
+      }
       quest.setStage(event.player, STAGE_STARTED);
       event.player.sendMessage("You've started a new quest: <col=081190>Doric's Quest</col>");
       event.player.getInventory().adds(ItemIdentifiers.BRONZE_PICKAXE, 1);

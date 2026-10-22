@@ -577,6 +577,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
 
   function searchStoreCrate(player) {
     if (!isEmployed(player, 2)) { player.sendMessage("Wydin won't let you into the stock room."); return; }
+    if (!wearingApron(player)) { player.sendMessage("You need to put your white apron on first."); return; }
     player.sendMessage("There are a lot of bananas in the crate.");
     if (attr(player, RUM_ATTRIBUTE) >= 2 && giveItem(player, RUM_ITEM_ID)) {
       setAttr(player, RUM_ATTRIBUTE, 0);

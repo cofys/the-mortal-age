@@ -385,6 +385,8 @@ export class Player extends Mobile {
         const timed = <T>(phase: string, fn: () => T): T =>
             ServerPerf.measurePhase(`player.process.${phase}`, fn);
 
+        // Client input first: packets received since the last turn act now, on the tick.
+        timed("client_input", () => this.getSession()?.processPackets());
         // Queued impacts land before this player acts, matching LostCity's
         // processQueues-then-processInteraction order. A hit that kills them here
         // stops the rest of this turn via the isDying/hitpoints guards below.

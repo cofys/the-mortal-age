@@ -1,4 +1,3 @@
-const registerCrystalArmourEffects = require("./effects/CrystalArmour.EquipmentEffects");
 const registerDharoksArmourEffects = require("./effects/DharoksArmour.EquipmentEffects");
 const registerObsidianEffects = require("./effects/ObsidianArmour.EquipmentEffects");
 const registerInquisitorsArmourEffects = require("./effects/InquisitorsArmour.EquipmentEffects");
@@ -9,12 +8,11 @@ const registerSalveAmuletEffects = require("./effects/SalveAmulet.EquipmentEffec
 const registerDragonHunterEffects = require("./effects/DragonHunter.EquipmentEffects");
 const registerDemonbaneEffects = require("./effects/Demonbane.EquipmentEffects");
 const registerVampyrebaneEffects = require("./effects/Vampyrebane.EquipmentEffects");
+const registerSpiritShieldEffects = require("./effects/SpiritShields.EquipmentEffects");
 
 module.exports = {
   name: "EquipmentEffects",
   register(api) {
-    // Crystal armour first: the Wiki applies it to the bow's base roll and max hit.
-    registerCrystalArmourEffects(api);
     registerDharoksArmourEffects(api);
     registerObsidianEffects(api);
     registerInquisitorsArmourEffects(api);
@@ -25,5 +23,6 @@ module.exports = {
     registerDragonHunterEffects(api);
     registerDemonbaneEffects(api);
     registerVampyrebaneEffects(api);
+    registerSpiritShieldEffects(api);
   },
 };

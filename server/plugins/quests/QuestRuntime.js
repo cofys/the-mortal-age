@@ -299,6 +299,11 @@ function answerIsStarted(request) {
   if (quest && request.player) request.started = quest.isStarted(request.player);
 }
 
+function answerGetStage(request) {
+  const quest = quests.find((entry) => entry.key === request?.key);
+  if (quest && request.player) request.stage = quest.getStage(request.player);
+}
+
 function registerQuestWidgets(api) {
   coreApi = api.core;
   if (widgetsRegistered) return;
@@ -326,6 +331,7 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:list-refresh", ({ player }) => refreshQuestList(player));
   api.onCustomEvent("quest:is-complete", answerIsComplete);
   api.onCustomEvent("quest:is-started", answerIsStarted);
+  api.onCustomEvent("quest:get-stage", answerGetStage);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
   api.onPlayerLogin(sendQuestVarps);
@@ -458,7 +464,11 @@ function registerQuest(api, def) {
       player.getPacketSender().sendConfig(QUEST_POINTS_VARP, points | 0);
 
       if (def.onReward) def.onReward(player, quest);
-      if (def.rewardItemId !== undefined) player.getInventory().adds(def.rewardItemId, 1);
+      if (def.rewardItemId !== undefined) {
+        const inventory = player.getInventory();
+        if (inventory.isFull()) inventory.forceAdd(player, new coreApi.Item(def.rewardItemId, 1));
+        else inventory.adds(def.rewardItemId, 1);
+      }
       player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
       player.sendMessage(`Congratulations, you've completed a quest: <col=081190>${def.name}</col>`);
       showCompletedScroll(player, quest, points | 0);

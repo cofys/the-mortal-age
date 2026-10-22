@@ -126,10 +126,11 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     [29654, 4041],
     [29655, 4042],
   ]);
+  // 29659 resolves to 30136 unlit at stage90 and 30137 once revealed. 30138 is
+  // the manor's decorative lit fireplaces, which are not the riddle.
   const FIREPLACE_LOC_IDS = new Set([
     ObjectIdentifiers.FIREPLACE_24, // 30136
     ObjectIdentifiers.FIREPLACE_25, // 30137
-    ObjectIdentifiers.FIREPLACE_26, // 30138
   ]);
   const PIANO_LOC_IDS = new Set([
     ObjectIdentifiers.PIANO_9, // 30134

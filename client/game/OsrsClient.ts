@@ -178,6 +178,7 @@ import { Cs2Vm, ScriptArgMagic, type ScriptEvent, createScriptEvent } from "../r
 import { setSpawnSearch } from "../rs/cs2/spawnSearch";
 import { Opcodes as Cs2Opcodes } from "../rs/cs2/Opcodes";
 import { BitmapFont } from "../rs/font/BitmapFont";
+import { resolveTextTemplates } from "../rs/font/textTemplates";
 import { encodeInteractionIndex } from "../rs/interaction/InteractionIndex";
 import { Inventory, InventorySlotInput } from "../rs/inventory/Inventory";
 import type { InventorySlot } from "../rs/inventory/Inventory";
@@ -214,7 +215,7 @@ import { markWidgetInteractionDirty } from "../widgets/WidgetInteraction";
 import { WidgetManager } from "../widgets/WidgetManager";
 import { WidgetSessionManager } from "../widgets/WidgetSessionManager";
 import { applyQuestListWidgetGroups } from "../widgets/custom/questList";
-import { cleanupInterfaceClickTargets } from "../widgets/gl/widgets-gl";
+import { cleanupInterfaceClickTargets, cleanupWidgetClickTarget } from "../widgets/gl/widgets-gl";
 import { layoutWidgets } from "../widgets/layout/WidgetLayout";
 import { sanitizeText } from "../widgets/menu/utils";
 import { Js5RangeClient } from "../rs/cache/js5/Js5RangeClient";
@@ -255,6 +256,8 @@ import { MusicSystem } from "./audio/MusicSystem";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
+import { KeyboardButtonProbe } from "./chat/keyboardButtonProbe";
+import { collectInputWidgetsAtPoint } from "./widgets/interaction/widgetClickProbe";
 import { CombatOptionsController } from "./combat/CombatOptionsController";
 import { HitsplatFlushController } from "./combat/HitsplatFlushController";
 import { ClientScriptLoader } from "./cs2/ClientScriptLoader";
@@ -295,6 +298,7 @@ import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
 import { headingIndicator } from "./sailing/HeadingIndicator";
 import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
+import type { GraphicsDefaults } from "../rs/config/defaults/GraphicsDefaults";
 import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
@@ -453,6 +457,10 @@ const SCRIPT_CHATBOX_SEARCH = 750;
 const SCRIPT_CHATBOX_SEARCH_CLOSE = 138;
 
 // Use shared OSRS rotation scale
+
+/** The account type (an Ironman mode), and the enum of its chat icon tags ("<img=N>"). */
+const ACCOUNT_TYPE_VARBIT = 1777;
+const ACCOUNT_TYPE_ICON_ENUM = 1894;
 
 /** logout:world_switcher (182:3). */
 const LOGOUT_WORLD_SWITCHER_UID = (182 << 16) | 3;
@@ -1036,6 +1044,20 @@ export class OsrsClient {
     /** Server NPC id -> synthetic render type id for its model customisation (enrage legs). */
     private readonly npcModelOverrides = new Map<number, number>();
 
+    /** The icon the cache's chat scripts show for the account type (varbit 1777), or -1. */
+    private getAccountTypeChatIcon(): number {
+        try {
+            const accountType = this.varManager.getVarbit(ACCOUNT_TYPE_VARBIT) | 0;
+            const enumType = this.loaderFactory?.getEnumTypeLoader()?.load(ACCOUNT_TYPE_ICON_ENUM);
+            const index = enumType?.keys?.indexOf(accountType) ?? -1;
+            const tag = index >= 0 ? enumType?.stringValues?.[index] : undefined;
+            const match = /^<img=(\d+)>$/i.exec(tag ?? "");
+            return match ? Number(match[1]) : -1;
+        } catch {
+            return -1;
+        }
+    }
+
     private resolveChatPlayerNameForScript(_scriptId: number): string {
         let baseName = this.localPlayerName ?? "";
         const handshakeName = baseName;
@@ -1055,8 +1077,12 @@ export class OsrsClient {
                 }
             }
         } catch {}
+        // The chatbox name line (script 223) puts the account type's icon (enum 1894 by varbit
+        // 1777, an Ironman's helmet) before chat_playername itself: leave that one out here, or
+        // it showed twice once the login sent it as a chat icon.
+        const accountTypeIcon = this.getAccountTypeChatIcon();
         const iconPrefix = this.localChatNameIcons
-            .filter((icon) => Number.isFinite(icon) && (icon | 0) >= 0)
+            .filter((icon) => Number.isFinite(icon) && (icon | 0) >= 0 && (icon | 0) !== accountTypeIcon)
             .map((icon) => `<img=${icon | 0}>`)
             .join("");
         const textPrefix = this.localChatNamePrefix || "";
@@ -1838,7 +1864,7 @@ export class OsrsClient {
                     this.chatTextMetrics.measureTextWidthOsrsMarkup(s, font);
 
                 // Handle <br> tags and newlines first
-                const normalized = text.replace(/<br\s*\/?>/gi, "\n");
+                const normalized = resolveTextTemplates(text).replace(/<br\s*\/?>/gi, "\n");
                 const paragraphs = normalized.split(/\n/);
                 const lines: string[] = [];
 
@@ -2248,6 +2274,22 @@ export class OsrsClient {
             this.mobileChatKeyboard.show(hint, keyboardType);
         };
         this.cs2Vm.context.hideMobileKeyboard = () => this.mobileChatKeyboard.hide();
+        // That script runs in the frame loop, after the tap, where iOS will not open the
+        // keyboard: focus it from the touch itself when the tapped widget's script would.
+        const keyboardButtons = new KeyboardButtonProbe((id) => this.cs2Vm.context.loadScript(id));
+        this.inputManager.onCanvasTouchStart = (x, y) => {
+            const widgetManager = this.widgetManager;
+            if (!this.isLoggedIn() || !widgetManager) return;
+            const hits = collectInputWidgetsAtPoint(widgetManager, x, y);
+            for (let i = hits.length - 1; i >= 0; i--) {
+                const widget = hits[i];
+                if (widgetManager.isEffectivelyHidden((widget?.uid ?? 0) | 0)) continue;
+                if (keyboardButtons.widgetShowsKeyboard(widget)) {
+                    this.mobileChatKeyboard.show();
+                    return;
+                }
+            }
+        };
 
         // Wire up the deferred callbacks - triggers queued var changes after script execution
         this.cs2Vm.onVarpChange = (varpId) => {
@@ -2347,6 +2389,11 @@ export class OsrsClient {
             if (glCanvas) {
                 cleanupInterfaceClickTargets(glCanvas, groupId);
             }
+        };
+        // Deleted dynamic widgets never draw again, so nothing else drops their click targets.
+        this.widgetManager.onWidgetUnregistered = (uid) => {
+            const glCanvas = (this.renderer as any)?.getWidgetsGLCanvas?.();
+            if (glCanvas) cleanupWidgetClickTarget(glCanvas, uid);
         };
 
         this.playerAnimController = new PlayerAnimController(
@@ -5923,7 +5970,7 @@ export class OsrsClient {
             }
 
             case "forget_remembered_login": {
-                // "Switch account" on the remembered-account screen: the server drops the token too.
+                // "Sign out" on the remembered-account screen: the server drops the token too.
                 const remembered = this.loginState.getRememberedLogin();
                 if (remembered) {
                     forgetRememberedLogin(remembered.username, remembered.token);
@@ -6589,7 +6636,7 @@ export class OsrsClient {
             // Phase 1: Loading title background (network fetch)
             await showPhase(5, "Loading title...");
             try {
-                await this.loginRenderer.loadTitleBackground();
+                await this.loginRenderer.loadTitleBackground(this.cacheSystem);
             } catch (e) {
                 console.warn("[OsrsClient] Title background load failed:", e);
             }
@@ -6604,7 +6651,18 @@ export class OsrsClient {
 
             // Phase 3: Loading sprites (cache parse)
             await showPhase(25, "Loading sprites...");
-            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem);
+            // The graphics defaults, decoded once: the login flames' colours, then the compass,
+            // scrollbars and heading arrows below.
+            let graphicsDefaults: GraphicsDefaults | undefined;
+            try {
+                graphicsDefaults = require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(
+                    cache.info,
+                    this.cacheSystem,
+                );
+            } catch (e) {
+                console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
+            }
+            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem, graphicsDefaults?.flamePalettes);
             if (!spritesLoaded) {
                 console.warn("[OsrsClient] Title sprites failed to load");
             }
@@ -6818,25 +6876,22 @@ export class OsrsClient {
             this.widgetManager.onGroupLoaded = (groupId) => {
                 for (const held of this.heldWidgetProperties.take(groupId)) this.handleWidgetPayload?.(held);
             };
-            try {
-                const { GraphicsDefaults } = require("../rs/config/defaults/GraphicsDefaults");
-                const graphicsDefaults = GraphicsDefaults.load(cache.info, this.cacheSystem);
-                if (graphicsDefaults?.compass >= 0) {
-                    this.widgetManager.compassSpriteId = graphicsDefaults.compass;
-                }
-                if (graphicsDefaults?.scrollBars >= 0) {
-                    this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
-                }
-            } catch (e) {
-                console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
+            if (graphicsDefaults && graphicsDefaults.compass >= 0) {
+                this.widgetManager.compassSpriteId = graphicsDefaults.compass;
             }
-            // The helm's heading arrows. Read apart from the above, waiting for the group to
-            // stream in: on a fresh browser cache it isn't there yet, and the arrows would be
-            // missing for the whole session.
+            if (graphicsDefaults && graphicsDefaults.scrollBars >= 0) {
+                this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
+            }
+            // The helm's heading arrows. When the load above failed, the group may not have
+            // streamed in yet (a fresh browser cache): wait for it, or the arrows would be missing
+            // for the whole session.
             const cacheInfo = cache.info;
+            const loadedDefaults = graphicsDefaults;
             headingIndicator.loadStatus = "loading";
-            void retryOnMissingGroup(() =>
-                require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
+            void retryOnMissingGroup(
+                () =>
+                    loadedDefaults ??
+                    require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
             ).then((defaults) => {
                 headingIndicator.loadStatus = defaults
                     ? `loaded ${JSON.stringify(defaults.headingIndicatorModels)} (${cacheInfo.game} ${cacheInfo.revision}, index 17 ${this.cacheSystem.indexExists(17) ? "present" : "missing"})`
@@ -7181,8 +7236,14 @@ export class OsrsClient {
     }
 
     /** Display an item's cache-defined Examine text in game chat. */
-    examineWidgetItem(widget: { itemId?: number } | null | undefined): boolean {
-        const itemId = widget?.itemId ?? -1;
+    examineWidgetItem(widget: { itemId?: number; fileId?: number } | null | undefined): boolean {
+        // A worn-equipment slot (387, 84) keeps its ops on a static layer and draws the item in a
+        // CC_CREATE child (script 546), so a static widget without an item examines its child's.
+        const own = widget?.itemId ?? -1;
+        const itemId = own > 0 || widget?.fileId === -1
+            ? own
+            : this.widgetManager?.getDynamicChildrenByParent(widget as any)
+                .find((child) => (child.itemId ?? -1) > 0)?.itemId ?? -1;
         if (!(itemId > 0)) return false;
         try {
             const examine = this.objTypeLoader?.load?.(itemId)?.examine;
@@ -7500,6 +7561,10 @@ export class OsrsClient {
             localTileY: decodeBase.tileY | 0,
             rootTileX: payload.rootTileX | 0,
             rootTileY: payload.rootTileY | 0,
+            worldViewBase: (worldViewId: number) => {
+                const view = this.worldViewManager.getWorldView(worldViewId | 0);
+                return view && !view.isTopLevel() ? { x: view.regionX * 8, y: view.regionY * 8 } : undefined;
+            },
             level: decodeBase.level | 0,
         });
 
@@ -7645,9 +7710,16 @@ export class OsrsClient {
             );
             this.npcEcs.setLevel(existingEcs, spawn.level | 0);
             this.npcEcs.setOccTile(existingEcs, localTileX, localTileY, spawn.level | 0);
-            if ((spawn as any).worldViewId !== undefined && (spawn as any).worldViewId >= 0) {
-                this.npcEcs.setWorldViewId(existingEcs, (spawn as any).worldViewId);
-                this.worldViewManager.addNpcToWorldView((spawn as any).worldViewId, existingEcs);
+            const nextWorldView = (spawn as any).worldViewId ?? -1;
+            const previousWorldView = this.npcEcs.getWorldViewId(existingEcs) | 0;
+            if (previousWorldView !== nextWorldView) {
+                if (previousWorldView >= 0) {
+                    this.worldViewManager.removeNpcFromWorldView(previousWorldView, existingEcs);
+                }
+                this.npcEcs.setWorldViewId(existingEcs, nextWorldView);
+                if (nextWorldView >= 0) {
+                    this.worldViewManager.addNpcToWorldView(nextWorldView, existingEcs);
+                }
             }
 
             // Keep the instance map entry up to date for geometry streaming.
@@ -8020,6 +8092,8 @@ export class OsrsClient {
         } catch {}
         const ecsId = this.npcEcs.getEcsIdForServer(sid);
         if (ecsId !== undefined) {
+            const worldViewId = this.npcEcs.getWorldViewId(ecsId) | 0;
+            if (worldViewId >= 0) this.worldViewManager.removeNpcFromWorldView(worldViewId, ecsId);
             this.npcEcs.destroyNpc(ecsId);
         }
         this.npcInstances.instanceMap.delete(instanceKey);

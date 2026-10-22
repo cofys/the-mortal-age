@@ -155,7 +155,7 @@ test('shearing makes a sheep bald for one minute and never yields wool twice', (
   const event = { player: p, npc: sheep, npcId: N.SHEEP_18, clickType: 1, definition: { getActions: () => ['Shear'] } };
   h.hooks.onNpcInteraction[0](event); h.hooks.onNpcInteraction[0](event);
   assert.equal(p.items.get(I.WOOL), 1);
-  assert.deepEqual(transforms, [N.SHEEP_16]);
+  assert.deepEqual(transforms, [N.SHEEP_2]);
   const regrow = h.tasks.at(-1); assert.equal(regrow.getDelay(), 100); regrow.execute();
   h.hooks.onNpcInteraction[0](event);
   assert.equal(p.items.get(I.WOOL), 2);

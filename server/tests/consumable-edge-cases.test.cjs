@@ -17,21 +17,22 @@ before(async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
+  // Register after the cache is up: the potion plugin resolves its orb components at register.
+  Potions.register(new Proxy({}, {
+    get: (_, key) => key === "core" ? core : (...args) => {
+      if (key === "onItemAction") emptyVessel = args[0];
+      if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
+      // The Skillcapes plugin answers this; a worn Prayer cape is all these tests need.
+      if (key === "emitCustomEvent" && args[0] === "skillcape:has-perk" && args[1].skill === "PRAYER") {
+        args[1].result = args[1].player.getEquipment().contains(ItemIdentifiers.PRAYER_CAPE);
+      }
+      if (key === "onItemOnItem") {
+        combinePotions = args[0];
+        assert.deepEqual(args[1], { noted: false });
+      }
+    },
+  }));
 });
-Potions.register(new Proxy({}, {
-  get: (_, key) => key === "core" ? core : (...args) => {
-    if (key === "onItemAction") emptyVessel = args[0];
-    if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
-    // The Skillcapes plugin answers this; a worn Prayer cape is all these tests need.
-    if (key === "emitCustomEvent" && args[0] === "skillcape:has-perk" && args[1].skill === "PRAYER") {
-      args[1].result = args[1].player.getEquipment().contains(ItemIdentifiers.PRAYER_CAPE);
-    }
-    if (key === "onItemOnItem") {
-      combinePotions = args[0];
-      assert.deepEqual(args[1], { noted: false });
-    }
-  },
-}));
 const {
   applyPrayerRestore, applySanfewRestore, applyAncientBrew, applyDivine, processDivine,
   applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration,
@@ -240,9 +241,15 @@ SpellTeleports.register({
       teleport: (player, destination, type, warning, onArrival, onMiddle) =>
         teleports.push({ destination, type, onArrival, onMiddle }),
     },
-    TeleportType: { TELE_TAB: "TELE_TAB" },
+    TeleportType: { TELE_TAB: "TELE_TAB", TELE_SCROLL: "TELE_SCROLL" },
+    SpellTeleports: require("../dist/game/content/combat/magic/SpellTeleports").SpellTeleports,
+    LunarSpells: { getTeleportDestinations: () => [] },
+    ArceuusSpells: { getTeleportDestinations: () => [] },
   },
+  persistAttribute() {},
   onItemAction: (handler) => { breakTablet = handler; },
+  onPlayerLogin() {},
+  onSpellCast() {},
   emitCustomEvent: (name, request) => houseTablet(request),
   onInterfaceActionClick() {},
 });
@@ -251,6 +258,7 @@ function tabletHolder(count) {
   const items = new Array(count).fill(ItemIdentifiers.VARROCK_TELEPORT);
   return {
     items,
+    getAttribute: () => undefined,
     getInventory: () => ({
       contains: (id) => items.includes(id),
       deleteNumber: (id) => items.splice(items.indexOf(id), 1),
@@ -288,7 +296,7 @@ test("a redirected Rellekka house tablet goes to the portal outside the Fremenni
   assert.equal(teleports[0].type, "TELE_TAB");
 });
 
-test("a Nardah scroll uses its Teleport action and consumes only after teleport starts", () => {
+test("a Nardah scroll uses its Teleport action and is used up on the click", () => {
   teleports.length = 0;
   allowTeleport = true;
   const player = tabletHolder(1);
@@ -301,10 +309,8 @@ test("a Nardah scroll uses its Teleport action and consumes only after teleport 
     [teleports[0].destination.getX(), teleports[0].destination.getY(), teleports[0].destination.getZ()],
     [3401, 2918, 0]
   );
-  assert.equal(teleports[0].type, "TELE_TAB");
-  assert.equal(player.items.length, 1, "scroll is consumed two ticks into the teleport");
-  teleports[0].onMiddle();
-  assert.equal(player.items.length, 0);
+  assert.equal(teleports[0].type, "TELE_SCROLL");
+  assert.equal(player.items.length, 0, "scrolls go on the click (docs/teleport-tablets.md)");
 });
 
 test("a refused tablet (teleblock, deep Wilderness, busy) is not used up", () => {

@@ -1,0 +1,95 @@
+{
+  "$comment": "The Fractured Archive's own data (plugins/minigames/tfa/), from rsprox captures: docs/fractured-archive.md. Ticks are counted from the arrival in the lobby.",
+  "intro": {
+    "actors": [
+      { "npc": "ARMACUS_CUTSCENE", "tile": [4137, 5547], "face": [4136, 5548] },
+      { "npc": "EVA_CUTSCENE", "tile": [4136, 5550], "face": [4135, 5549] },
+      { "npc": "IVY_CUTSCENE", "tile": [4137, 5549], "face": [4136, 5548] }
+    ],
+    "shots": [
+      { "tick": 1, "move": [4123, 5551, 1100], "look": [4123, 5562, 500] },
+      { "tick": 2, "glide": [4132, 5551, 1100], "cycles": 500, "easing": "ease_in_sine" },
+      { "tick": 17, "move": [4127, 5542, 1100], "look": [4127, 5562, 900] },
+      { "tick": 17, "glide": [4127, 5532, 1000], "cycles": 555, "easing": "ease_out_sine" },
+      { "tick": 27, "move": [4119, 5545, 500], "look": [4113, 5550, 200] },
+      { "tick": 32, "move": [4129, 5539, 800], "look": [4133, 5545, 500] }
+    ],
+    "walkTick": 32,
+    "walk": [[4131, 5544], [4135, 5548]],
+    "linesTick": 41,
+    "lines": [
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 588, "text": "Hello agai-", "cutOffAfter": 3 },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 568, "text": "Greetings, adventurer! Have you come to join the ranks of the Alliance?" },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 589, "text": "Armacus, this is <player>, the adventurer I told you about." },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 567, "text": "Aha! Well met, young <player>." },
+      { "speaker": "EVA_CUTSCENE", "name": "Eva Cashien", "anim": 589, "text": "I have heard good things from my uncle. It is good to meet you, <player>." },
+      { "player": true, "anim": 588, "text": "Well met, and likewise." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 591, "text": "Thank you. This is Eva Cashien and Armacus Selles. They are leading the Temple Knights and the Guardians of Armadyl who have mobilised to defend the Archive." },
+      { "player": true, "anim": 554, "text": "The Archive? What do you mean?" },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 576, "text": "Did you not receive my message? Concerning... Let me get you up to speed..." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 591, "text": "It seems the Stone of Jas wasn't the only thing Guthix hid down here. This Archive was built to house various other powerful artefacts, to stop them falling into the wrong hands." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 591, "text": "However, thanks to Lucien, it is now at risk. His followers are preparing to attack the Archive. Not only that, but it seems various other groups are also mobilising their forces." },
+      { "player": true, "anim": 555, "text": "I see. What's the current situation? Have your soldiers entered the Archive already?" },
+      { "speaker": "EVA_CUTSCENE", "name": "Eva Cashien", "anim": 589, "text": "No, they are still on their way. We came ahead of time to scout out the situation." },
+      { "player": true, "anim": 588, "text": "And what do you make of it?" },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 569, "text": "It's quite the pickle we're in, I'm afraid! Our enemies approach from all sides. We have identified six vulnerable chambers altogether." },
+      { "speaker": "EVA_CUTSCENE", "name": "Eva Cashien", "anim": 590, "text": "What's more, the central chamber we intended to use to establish fortifications appears to be guarded by some sort of hostile creature." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 589, "text": "It is likely one of Guthix's creations, left behind to defend the Archive from intruders." },
+      { "player": true, "anim": 554, "text": "Could we leverage it to help us?" },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 613, "text": "I'm afraid not... It might hold off some of the intruders, but it won't manage all of them. And without getting in there to establish defences of our own, we won't stand a much better of a chance." },
+      { "player": true, "anim": 13958, "text": "I see... That's unfortunate." },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 569, "text": "Indeed! But not all is bad news. Several of our enemies have clashed on their way to the Archive, and it's bought us some time." },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 569, "text": "If a brave young adventurer were to appear and clear the way for us to set up our defences, whilst we gathered our troops..." },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 567, "text": "But wait! We have one right here!" },
+      { "speaker": "EVA_CUTSCENE", "name": "Eva Cashien", "anim": 13968, "text": "Armacus' jesting aside, we're hoping you might be able to help us establish a foothold.", "actorAnim": { "npc": "ARMACUS_CUTSCENE", "seq": "LAUGH" } },
+      { "player": true, "anim": 555, "text": "I see. And do we know anything specific about what artefacts are hidden here?" },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 13954, "text": "It seems to be all manner of things. Most of them likely aren't too valuable to our foes, but the Archive has an inner vault." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 13954, "text": "We're not sure exactly what's inside, but we can't take any risks. We need to assume that the contents could have the potential to be on par with the Stone of Jas itself." },
+      { "player": true, "anim": 554, "text": "And our foes? What do we know about them?" },
+      { "speaker": "EVA_CUTSCENE", "name": "Eva Cashien", "anim": 13954, "text": "Lucien's forces are being led by someone called Moia. Our records have little information on her, but if Lucien has trusted her with this task, we must assume she is very dangerous." },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 570, "text": "However, luckily for us, there does seem to have been some splintering within Lucien's ranks. The Dagon'hai no longer appear to be working with him. Instead, they seem intent on raiding the Archive for themselves." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 590, "text": "There is also a goblin warband that has somehow found out about this place. I fear we may have other foes as well that have not yet revealed themselves." },
+      { "player": true, "anim": 588, "text": "Sounds like we'd best not waste any time then." },
+      { "speaker": "EVA_CUTSCENE", "name": "Eva Cashien", "anim": 590, "text": "Thank you, <player>. Once you've cleared the central chamber, we'll split up and tackle our enemies one at a time." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 591, "text": "We'll be leaning heavily on you once again, <player>. Our forces will do what they can to lift your burden, but our enemies are powerful, and you have more experience than most." },
+      { "player": true, "anim": 588, "text": "Thank you, I'll-", "cutOffAfter": 3 },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 570, "text": "Indeed! They are powerful. But! You need not face them alone. I have no doubt that an enterprising young adventurer such as yourself has many capable and jolly allies." },
+      { "speaker": "ARMACUS_CUTSCENE", "name": "Armacus Selles", "anim": 13954, "text": "Now is the time to unite, and leverage the strength of our co-operation against the weakness of our foes' greed." },
+      { "player": true, "anim": 13968, "text": "I'll see what I can do." },
+      { "speaker": "EVA_CUTSCENE", "name": "Eva Cashien", "anim": 589, "text": "We must go and ready our forces. We will see you inside." },
+      { "speaker": "IVY_CUTSCENE", "name": "Ivy Sophista", "anim": 588, "text": "Good luck, <player>." }
+    ],
+    "exit": {
+      "bow": { "npc": "IVY_CUTSCENE", "afterTicks": 1 },
+      "walks": [
+        { "npc": "IVY_CUTSCENE", "to": [4134, 5546] },
+        { "npc": "EVA_CUTSCENE", "to": [4134, 5549] },
+        { "npc": "ARMACUS_CUTSCENE", "to": [4136, 5547] }
+      ],
+      "fadeAfterTicks": 2,
+      "endAfterTicks": 4
+    }
+  },
+  "gathering": {
+    "rocks": [
+      { "tile": [4111, 5538], "variant": 0, "face": 0 },
+      { "tile": [4113, 5533], "variant": 0, "face": 3 },
+      { "tile": [4116, 5535], "variant": 0, "face": 0 },
+      { "tile": [4116, 5537], "variant": 1, "face": 2 },
+      { "tile": [4113, 5538], "variant": 1, "face": 2 },
+      { "tile": [4115, 5532], "variant": 1, "face": 1 },
+      { "tile": [4117, 5534], "variant": 2, "face": 3 },
+      { "tile": [4114, 5539], "variant": 2, "face": 1 },
+      { "tile": [4110, 5536], "variant": 2, "face": 1 },
+      { "tile": [4111, 5535], "variant": 2, "face": 0 }
+    ],
+    "activeCount": 3,
+    "rotateTicks": 289,
+    "sprite": { "spawn": [4115, 5536], "chancePerMinute": 0.25, "lifeTicks": 40 },
+    "builders": [
+      "This bridge will hold a thousand marching soldiers once I'm done with it!",
+      "Stop boasting and get back to work, pal.",
+      "I am!"
+    ]
+  }
+}

@@ -596,6 +596,8 @@ export class PlayerRenderer {
             return cached ?? undefined;
         }
         let matrices: Float32Array | null = null;
+        // A frame still streaming in leaves the rest pose: draw it, but don't keep it.
+        let keep = true;
         try {
             const rig = this.rigFor(baseRec.baseModel);
             // The CPU path re-centres the posed model on the base centre; GPU poses assume none.
@@ -608,7 +610,7 @@ export class PlayerRenderer {
                         : undefined;
                 if (!seqType?.isSkeletalSeq?.() && !overlayType?.isSkeletalSeq?.()) {
                     const pose = new LabelPose(rig);
-                    this.applySequenceTransformationsToModel(
+                    keep = this.applySequenceTransformationsToModel(
                         pose,
                         seqType,
                         group.seqId | 0,
@@ -618,13 +620,14 @@ export class PlayerRenderer {
                         (group.overlayFrameIdx ?? -1) | 0,
                         mv,
                         group.interpolation,
-                    );
+                    ) || group.seqId < 0;
                     if (!pose.needsCpu) matrices = pose.finish(0, 0);
                 }
             }
         } catch {
             matrices = null;
         }
+        if (!keep) return matrices ?? undefined;
         this.poseCache.set(batchKey, matrices);
         while (this.poseCache.size > PlayerRenderer.POSE_CACHE_MAX_ENTRIES) {
             this.poseCache.delete(this.poseCache.keys().next().value as string);
@@ -841,8 +844,10 @@ export class PlayerRenderer {
                     const duration = Math.max(1, seq.getSkeletalDuration?.() | 0);
                     const resolvedFrameIdx = (((frameIdx | 0) % duration) + duration) % duration;
                     const skeletal = mv.skeletalSeqLoader?.load?.(seq.skeletalId | 0);
-                    out = Model.copyAnimated(base, !skeletal?.hasAlphaTransform, true);
-                    if (skeletal) out.animateSkeletal(skeletal, resolvedFrameIdx | 0);
+                    // Still streaming in: draw nothing rather than cache the unanimated model.
+                    if (!skeletal) return undefined;
+                    out = Model.copyAnimated(base, !skeletal.hasAlphaTransform, true);
+                    out.animateSkeletal(skeletal, resolvedFrameIdx | 0);
                 } else if (seq?.frameIds && seq.frameIds.length > 0) {
                     const ids = seq.frameIds;
                     const idx = Math.max(
@@ -851,16 +856,13 @@ export class PlayerRenderer {
                     );
                     const frameKey = ids[idx] | 0;
                     const seqFrame = mv.seqFrameLoader?.load?.(frameKey);
-                    if (seqFrame) {
-                        out = Model.copyAnimated(
-                            base,
-                            !seqFrame.hasAlphaTransform,
-                            !seqFrame.hasColorTransform,
-                        );
-                        out.animate(seqFrame, undefined, !!seq.op14);
-                    } else {
-                        out = Model.copyAnimated(base, true, true);
-                    }
+                    if (!seqFrame) return undefined;
+                    out = Model.copyAnimated(
+                        base,
+                        !seqFrame.hasAlphaTransform,
+                        !seqFrame.hasColorTransform,
+                    );
+                    out.animate(seqFrame, undefined, !!seq.op14);
                 } else {
                     out = Model.copyAnimated(base, true, true);
                 }
