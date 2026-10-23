@@ -34,15 +34,21 @@ export abstract class CombatSpell extends Spell {
     return true;
   }
 
+  /** The cast animation this caster plays: the staff variant while a player wields a staff. */
+  public castAnimationFor(cast: Mobile): Animation | undefined {
+    const castAnim = this.castAnimation();
+    const staffAnim = castAnim ? STAFF_CAST_ANIMATIONS[castAnim.getId()] : undefined;
+    if (staffAnim !== undefined && cast.isPlayer() && cast.getAsPlayer().getEquipment().hasStaffEquipped()) {
+      return new Animation(staffAnim);
+    }
+    return castAnim;
+  }
+
   public startCast(cast: Mobile, castOn: Mobile): void {
     let castAnimation = -1;
 
     const npc = cast.isNpc() ? (cast as NPC) : null;
-    let castAnim = this.castAnimation();
-    const staffAnim = castAnim ? STAFF_CAST_ANIMATIONS[castAnim.getId()] : undefined;
-    if (staffAnim !== undefined && cast.isPlayer() && cast.getAsPlayer().getEquipment().hasStaffEquipped()) {
-      castAnim = new Animation(staffAnim);
-    }
+    const castAnim = this.castAnimationFor(cast);
     if (castAnim !== null && castAnim !== undefined && castAnimation == -1) {
       cast.performAnimation(castAnim);
     } else {
@@ -99,12 +105,14 @@ export abstract class CombatSpell extends Spell {
     if (!hit.isAccurate()) {
       return;
     }
-    const effect = { attacker: hit.getAttacker(), target: hit.getTarget(), spell: this, hit, allowed: true };
+    const effect = { attacker: hit.getAttacker(), target: hit.getTarget(), spell: this, hit, allowed: true, effectMultiplier: 1 };
     PluginManager.emitCustomEvent("magic:hit-effects", effect);
-    if (effect.allowed) this.spellEffectOnHitCalc(effect.attacker, effect.target, hit.getTotalDamage());
+    if (!effect.allowed) return;
+    this.spellEffectOnHitCalc(effect.attacker, effect.target, hit.getTotalDamage(), effect.effectMultiplier);
+    PluginManager.emitCustomEvent("magic:hit-effects-applied", effect);
   }
 
-  public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number): void { }
+  public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number, effectMultiplier = 1): void { }
 
   public impactSound(): Sound {
     return null;

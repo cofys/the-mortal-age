@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { RenderStatsOverlay } from "../components/RenderStatsOverlay";
 import { OsrsLoadingBar } from "../components/OsrsLoadingBar";
@@ -13,9 +13,6 @@ import "./GameContainer.css";
 import { GameRenderer } from "./GameRenderer";
 import { GameState } from "./login/GameState";
 import { OsrsClient } from "./OsrsClient";
-import { SplitPrivateChatOverlay } from "./plugins/splitprivatechat/SplitPrivateChatOverlay";
-import { VengeanceTimerOverlay } from "./plugins/vengeancetimer/VengeanceTimerOverlay";
-import { FreezeTimerOverlay, PoisonTimerOverlay } from "./plugins/statustimer/StatusTimerOverlay";
 import { OriginOverlay } from "./plugins/origins/OriginOverlay";
 import { QuestOverlay } from "./plugins/quests/QuestOverlay";
 import { WarTableOverlay } from "./plugins/wartable/WarTableOverlay";
@@ -28,7 +25,6 @@ import { OnboardingOverlay } from "./plugins/onboarding/OnboardingOverlay";
 import { ShopOverlay } from "./plugins/shop/ShopOverlay";
 import { StewardOverlay } from "./plugins/steward/StewardOverlay";
 import { NewspaperOverlay } from "./plugins/newspaper/NewspaperOverlay";
-import { WeatherOverlay } from "./plugins/weather/WeatherOverlay";
 import { Sidebar } from "./sidebar/Sidebar";
 
 interface OsrsContainerProps {
@@ -381,15 +377,11 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                     <div className="game-canvas-stage">
                         {loadingBarOverlay}
 
-                        {!hideUi && <VengeanceTimerOverlay osrsClient={osrsClient} />}
-
-                        {!hideUi && <PoisonTimerOverlay osrsClient={osrsClient} />}
-
-                        {!hideUi && <FreezeTimerOverlay osrsClient={osrsClient} />}
-
-                        {!hideUi && <WeatherOverlay plugin={osrsClient.weatherPlugin} />}
-
-                        {!hideUi && <SplitPrivateChatOverlay osrsClient={osrsClient} />}
+                        {!hideUi && (
+                            <Suspense fallback={null}>
+                                {osrsClient.clientPlugins.renderHud(osrsClient)}
+                            </Suspense>
+                        )}
 
                         <OriginOverlay osrsClient={osrsClient} />
 

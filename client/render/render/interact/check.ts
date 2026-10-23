@@ -1013,7 +1013,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                         plane,
                     );
                     if (!stacks || stacks.length === 0) continue;
-                    const groundItemsPlugin = host.osrsClient.groundItemsPlugin;
+                    const plugins = host.osrsClient.clientPlugins;
 
                     const tileKey = `${localX}:${localY}`;
                     if (objIds.has(tileKey)) continue;
@@ -1026,7 +1026,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                         for (const stack of stacks) {
                             const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                             if (!objType || objType.name === "null") continue;
-                            const menuName = groundItemsPlugin.getMenuTargetName(
+                            const menuName = plugins.groundItemMenuName(
                                 stack,
                                 objType.name,
                             );
@@ -1059,7 +1059,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                             for (const stack of stacks) {
                                 const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                                 if (!objType || objType.name === "null") continue;
-                                const menuName = groundItemsPlugin.getMenuTargetName(
+                                const menuName = plugins.groundItemMenuName(
                                     stack,
                                     objType.name,
                                 );
@@ -1089,12 +1089,12 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                     for (const stack of stacks) {
                         const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                         if (!objType || objType.name === "null") continue;
-                        const menuName = groundItemsPlugin.getMenuTargetName(stack, objType.name);
-                        const menuTarget = groundItemsPlugin.getMenuTargetColorized(
+                        const menuName = plugins.groundItemMenuName(stack, objType.name);
+                        const menuTarget = plugins.groundItemMenuTarget(
                             stack,
                             menuName,
                         );
-                        const deprioritized = groundItemsPlugin.shouldDeprioritizeInMenu(stack);
+                        const deprioritized = plugins.deprioritizeGroundItem(stack);
 
                         const actions = objType.groundActions ?? [];
                         for (let actionIdx = 4; actionIdx >= 0; actionIdx--) {

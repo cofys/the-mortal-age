@@ -318,7 +318,7 @@ export class WebGPUOverlays {
         currentTileColor: number;
     } {
         try {
-            const config = this.renderer.osrsClient.tileMarkersPlugin.getConfig();
+            const config = this.renderer.osrsClient.clientPlugins.tileMarkersConfig();
             return {
                 destinationTileColor: config.destinationTileColor,
                 currentTileColor: config.currentTileColor,

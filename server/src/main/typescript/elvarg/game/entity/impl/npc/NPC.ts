@@ -1,3 +1,4 @@
+import { Skill } from "../../../model/Skill";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { Mobile } from "../Mobile";
 import { Sound } from "../../../Sound";
@@ -152,9 +153,7 @@ export class NPC extends Mobile {
     private healthBarOverride: { id: number; width: number } | null = null;
     /** Scales the combat XP players get for damaging this NPC (OSRS gives some bosses less). */
     private combatXpMultiplier: number = 1;
-    private defenceLevel: number | null = null;
-    private defenceRestoreCycle = 0;
-    // ponytail: standard regeneration; add encounter-specific rates/caps with those bosses.
+    private readonly drainedLevels = new Map<Skill, { level: number; cycle: number }>();
     private static readonly STAT_RESTORE_TICKS = 100;
     /** Ticks per level a drained stat comes back; a boss can restore faster (the Corporeal Beast). */
     private statRestoreTicks = NPC.STAT_RESTORE_TICKS;
@@ -447,9 +446,10 @@ export class NPC extends Mobile {
      * A defence bonus (BonusManager.DEFENCE_STAB..DEFENCE_RANGE) as this NPC has it now: the
      * definition's, unless a fight has changed it for this NPC (setDefenceBonusOverrides).
      */
-    public getDefenceBonus(index: number): number {
+    public getDefenceBonus(index: number, rangedType: "light" | "standard" | "heavy" = "standard"): number {
         const override = this.defenceBonusOverrides?.[index];
         if (typeof override === "number") return override;
+        if (index === 4) return this.getCurrentDefinition().getRangedDefenceBonus(rangedType);
         return this.getCurrentDefinition().getStats()[10 + index] ?? 0;
     }
 
@@ -477,29 +477,56 @@ export class NPC extends Mobile {
         return base;
     }
 
-    /** Temporary Defence belongs to this NPC, never its shared definition. */
+    /** Temporary combat stats belong to this NPC, never its shared definition. */
+    public getMaxLevel(skill: Skill): number {
+        const slot = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED, Skill.MAGIC].indexOf(skill);
+        if (slot < 0) throw new RangeError("Unsupported NPC combat skill");
+        return this.getCurrentDefinition().getStats()[slot];
+    }
+
+    public getCurrentLevel(skill: Skill): number {
+        const base = this.getMaxLevel(skill);
+        const drained = this.drainedLevels.get(skill);
+        if (!drained) return base;
+        const restored = Math.max(0, Math.floor((World.getProcessCycle() - drained.cycle) / this.statRestoreTicks));
+        drained.level = Math.min(base, drained.level + restored);
+        drained.cycle += restored * this.statRestoreTicks;
+        if (drained.level === base) this.drainedLevels.delete(skill);
+        return drained.level;
+    }
+
+    public setCurrentLevels(skill: Skill, level: number): void {
+        if (!Number.isFinite(level)) throw new RangeError("Invalid NPC combat level");
+        const base = this.getMaxLevel(skill);
+        this.getCurrentLevel(skill);
+        const cycle = this.drainedLevels.get(skill)?.cycle ?? World.getProcessCycle();
+        level = Math.max(0, Math.min(base, Math.floor(level)));
+        if (level === base) this.drainedLevels.delete(skill);
+        else this.drainedLevels.set(skill, { level, cycle });
+    }
+
     public getDefenceLevel(): number {
-        const base = this.getCurrentDefinition().getStats()[2];
-        if (this.defenceLevel === null) return base;
-        const restored = Math.floor((World.getProcessCycle() - this.defenceRestoreCycle) / this.statRestoreTicks);
-        if (restored > 0) {
-            this.defenceLevel = Math.min(base, this.defenceLevel + restored);
-            this.defenceRestoreCycle += restored * this.statRestoreTicks;
-            if (this.defenceLevel === base) this.defenceLevel = null;
-        }
-        return this.defenceLevel ?? base;
+        return this.getCurrentLevel(Skill.DEFENCE);
+    }
+
+    public setDefenceLevel(level: number): void {
+        this.setCurrentLevels(Skill.DEFENCE, level);
     }
 
     public setStatRestoreTicks(ticks: number): void {
         this.statRestoreTicks = Math.max(1, Math.trunc(ticks));
     }
 
-    public setDefenceLevel(level: number): void {
-        if (!Number.isFinite(level)) throw new RangeError("Invalid NPC Defence level");
-        if (this.defenceLevel === null) this.defenceRestoreCycle = World.getProcessCycle();
-        const base = this.getCurrentDefinition().getStats()[2];
-        this.defenceLevel = Math.max(0, Math.min(base, Math.floor(level)));
-        if (this.defenceLevel === base) this.defenceLevel = null;
+    /** Wiki NPC damage formula; configured caps still bound scripted attacks. */
+    public getCurrentMaxHit(type: CombatType): number {
+        const definition = this.getCurrentDefinition();
+        const maximum = definition.getMaxHit();
+        if (type === CombatType.MAGIC) return maximum;
+        const skill = type === CombatType.MELEE ? Skill.STRENGTH : Skill.RANGED;
+        const current = this.getCurrentLevel(skill);
+        if (current === this.getMaxLevel(skill)) return maximum;
+        const bonus = definition.getStats()[type === CombatType.MELEE ? 6 : 8] ?? 0;
+        return Math.min(maximum, Math.floor(0.5 + (current + 9) * (bonus + 64) / 640));
     }
 
     public getBaseAttackSpeed(): number {

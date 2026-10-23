@@ -968,10 +968,12 @@ test("disconnecting before a pickpocket's outcome tick cancels it", () => {
   // (thieving-pickpocket.test.cjs). A player gone by then gets nothing.
   const { PluginManager } = require("../dist/plugins/PluginManager");
   const core = PluginManager.getCoreApi(), tasks = [], npcHooks = {};
-  registerFeedbackPlugin("skills/Thieving", core, {
-    getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
-    getCombatFactory: () => ({ inCombat: () => false }),
+  registerFeedbackPlugin("skills/Thieving", { ...core,
+    TaskManager: { submit(task) { task.setRunning(true); tasks.push(task); } },
+    CombatFactory: { inCombat: () => false },
+  }, {
     onNpcInteraction: (name, actions) => { npcHooks[name] = actions; },
+    onNpcsInteraction: (names, actions) => { for (const name of names) npcHooks[name] = { ...npcHooks[name], ...actions }; },
   });
   const p = feedbackPlayer(core);
   p.getIndex = () => 1; p.getTimers = () => ({ has: () => false, getTicks: () => 0 });

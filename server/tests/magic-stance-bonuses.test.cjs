@@ -307,12 +307,14 @@ test('accurate combat spells expose a typed generic hit-effects event to plugins
         const target = {};
         const hit = { isAccurate: () => true, getAttacker: () => attacker, getTarget: () => target, getTotalDamage: () => 9 };
         CombatSpells.FIRE_WAVE.onHitCalc(hit);
-        assert.equal(events.length, 1);
+        assert.equal(events.length, 2);
         assert.equal(events[0][0], 'magic:hit-effects');
-        assert.deepEqual(events[0][1], { attacker, target, spell: CombatSpells.FIRE_WAVE, hit, allowed: true });
+        assert.deepEqual(events[0][1], { attacker, target, spell: CombatSpells.FIRE_WAVE, hit, allowed: true, effectMultiplier: 1 });
+        assert.equal(events[1][0], 'magic:hit-effects-applied');
+        assert.equal(events[1][1], events[0][1], 'post-effect handlers see the final shared context');
 
         CombatSpells.FIRE_WAVE.onHitCalc({ ...hit, isAccurate: () => false });
-        assert.equal(events.length, 1, 'misses do not trigger spell-specific effects');
+        assert.equal(events.length, 2, 'misses do not trigger spell-specific effects');
     } finally {
         PluginManager.emitCustomEvent = emit;
     }

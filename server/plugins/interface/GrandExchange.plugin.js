@@ -49,6 +49,13 @@ function validItem(id) {
   return Boolean(name && name !== "null");
 }
 
+/** What the GE trades: tradeable items (a note sells as its item). */
+function exchangeable(id) {
+  if (!validItem(id)) return false;
+  const definition = ItemDefinition.forId(id);
+  return ItemDefinition.forId(definition.unNote()).isTradeable();
+}
+
 function price(id) {
   // OSRS market quote from item-prices.json; store value for unquoted/custom items.
   const base = ItemDefinition.forId(id).unNote();
@@ -217,14 +224,16 @@ function chooseItem(player, offer) {
   player.setEnteredSyntaxAction({ execute: (input) => {
     if (!active(player, offer)) return;
     const id = Number(input);
-    if (!validItem(id)) return;
+    // The client search lists tradeable, unnoted items only; anything else is not a real pick.
+    if (!exchangeable(id) || ItemDefinition.forId(id).isNoted()) return;
     closeSearch(player);
     offer.itemId = id;
     offer.quantity = 1;
     refresh(player, offer);
   } });
   searching.add(player);
-  player.getPacketSender().sendInterfaceScript(750, ["Grand Exchange Item Search", 0, -1, 0]);
+  // Script 750's first int reaches oc_find (via 752) as its tradable-only flag.
+  player.getPacketSender().sendInterfaceScript(750, ["Grand Exchange Item Search", 1, -1, 0]);
 }
 
 function start(player, sell, slot = 0, itemId = -1) {
@@ -249,7 +258,7 @@ function start(player, sell, slot = 0, itemId = -1) {
 }
 
 function confirm(player, offer) {
-  if (!active(player, offer) || !validItem(offer.itemId)) return;
+  if (!active(player, offer) || !exchangeable(offer.itemId)) return;
   const amount = offer.quantity;
   const total = amount * price(offer.itemId);
   const sender = player.getPacketSender();
@@ -462,6 +471,10 @@ function handleInventoryItem(event) {
   if (event.player.getInterfaceId() !== GE) return false;
   const item = event.player.getInventory().getItems()[event.slot];
   if (item?.getId() === event.itemId && validItem(event.itemId)) {
+    if (!exchangeable(event.itemId)) {
+      event.player.sendMessage("That item can't be traded on the Grand Exchange.");
+      return true;
+    }
     start(event.player, true, offers.get(event.player)?.slot ?? 0, event.itemId);
     return true;
   }

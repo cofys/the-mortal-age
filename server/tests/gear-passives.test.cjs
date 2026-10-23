@@ -46,6 +46,7 @@ function buildApi({ onTask = false } = {}) {
         },
         onItemOnItem: () => {},
         onItemAction: () => {},
+        onCombatHitResolved: () => {},
         getCombatFactory: () => ({ fullDharoks: () => false }),
     };
     api.onCustomEvent('slayer:on-task', (request) => { request.onTask = onTask; });

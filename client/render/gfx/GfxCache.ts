@@ -216,7 +216,7 @@ export class GfxCache {
     smoothingCycle(spotId: number, frameIdx: number, frameCycle: number): number {
         if (!(frameCycle > 0)) return 0;
         const mv: any = this.renderer.osrsClient as any;
-        if (!mv.animationSmoothingPlugin?.smoothsGraphics?.()) return 0;
+        if (!mv.clientPlugins.smoothsGraphics()) return 0;
         const spot = this.getSpotType(spotId);
         const seqId: number = typeof spot?.sequenceId === "number" ? spot.sequenceId | 0 : -1;
         if (seqId < 0) return 0;

@@ -281,8 +281,8 @@ export class CombatAncientSpellExtend extends CombatSpell {
         return this.endGraphicFunction();
     }
 
-    public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number): void {
-        this.spellEffectOnHitCalcFunction(cast, castOn, damage);
+    public spellEffectOnHitCalc(cast: Mobile, castOn: Mobile, damage: number, effectMultiplier = 1): void {
+        this.spellEffectOnHitCalcFunction(cast, castOn, damage, effectMultiplier);
     }
 
     public impactSound(): Sound {
@@ -1794,10 +1794,12 @@ export class CombatSpells {
         }
     });
 
+    // Base effects: https://oldschool.runescape.wiki/w/Ancient_Magicks#Combat_spells
+    // Ice durations are ticks, rounded down after modifiers: https://oldschool.runescape.wiki/w/Ice_spells
     public static SMOKE_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 10); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(10 * multiplier)); } },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 384, 0, 20, 43, 31); },
         () => { return new Graphic(385); },
@@ -1811,13 +1813,13 @@ export class CombatSpells {
     public static SHADOW_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player = castOn as Player;
                 if (player.getSkillManager().getCurrentLevel(Skill.ATTACK) < player.getSkillManager().getMaxLevel(Skill.ATTACK)) {
                     return;
                 }
-                const decrease = Math.floor(0.1 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
+                const decrease = Math.floor(0.1 * multiplier * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -1839,7 +1841,7 @@ export class CombatSpells {
     public static BLOOD_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 372, 0, 20, 43, 31); },
         () => { return new Graphic(373); },
@@ -1860,7 +1862,7 @@ export class CombatSpells {
     public static ICE_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 5); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(8 * multiplier)); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 360, 0, 20, 43, 31); },
         () => { return new Graphic(361); },
@@ -1880,7 +1882,7 @@ export class CombatSpells {
     public static SMOKE_BURST = new CombatAncientSpellExtend(
         () => { return new Animation(1979); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 10); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(10 * multiplier)); } },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(389); },
@@ -1895,7 +1897,7 @@ export class CombatSpells {
     public static SHADOW_BURST = new CombatAncientSpellExtend(
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player = castOn as Player;
 
@@ -1904,7 +1906,7 @@ export class CombatSpells {
                     return;
                 }
 
-                const decrease = Math.floor(0.1 * player.getSkillManager().getCurrentLevel(Skill.ATTACK));
+                const decrease = Math.floor(0.1 * multiplier * player.getSkillManager().getCurrentLevel(Skill.ATTACK));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -1924,7 +1926,7 @@ export class CombatSpells {
     public static BLOOD_BURST = new CombatAncientSpellExtend(
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(376); },
@@ -1940,7 +1942,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 10); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(16 * multiplier)); },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(363) },
@@ -1962,7 +1964,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 20); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(20 * multiplier)); } },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 386, 0, 20, 43, 31); },
         () => { return new Graphic(387) },
@@ -1978,7 +1980,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player = castOn as Player;
 
@@ -1986,7 +1988,7 @@ export class CombatSpells {
                     return;
                 }
 
-                const decrease = Math.floor(0.15 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
+                const decrease = Math.floor(0.15 * multiplier * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -2006,7 +2008,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 374, 0, 20, 43, 31); },
         () => { return new Graphic(375) },
@@ -2022,7 +2024,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return new Graphic(366, 6553600); },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 15); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(24 * multiplier)); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(367) },
@@ -2038,7 +2040,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, 20); } },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { if (Misc.getRandom(7) === 0) { getCombatFactory().poisonEntity(castOn, Math.floor(20 * multiplier)); } },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(391) },
@@ -2054,7 +2056,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => {
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => {
             if (castOn.isPlayer()) {
                 const player: Player = castOn as Player;
 
@@ -2063,7 +2065,7 @@ export class CombatSpells {
                     return;
                 }
 
-                const decrease: number = Math.floor(0.15 * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
+                const decrease: number = Math.floor(0.15 * multiplier * (player.getSkillManager().getCurrentLevel(Skill.ATTACK)));
                 player.getSkillManager().setCurrentLevelCombat(Skill.ATTACK, player.getSkillManager().getCurrentLevel(Skill.ATTACK) - decrease);
                 player.getSkillManager().updateSkill(Skill.ATTACK);
             }
@@ -2083,7 +2085,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { cast.heal(Math.floor(damage * 0.25)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { cast.heal(Math.floor(damage * (0.25 * multiplier))); },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(377) },
@@ -2100,7 +2102,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number) => { getCombatFactory().freeze(castOn, 20); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(32 * multiplier)); },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(369) },

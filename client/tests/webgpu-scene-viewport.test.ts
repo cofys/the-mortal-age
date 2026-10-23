@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import { Camera } from "../game/Camera";
+import { ClientPluginManager } from "../game/plugins/ClientPluginManager";
 
 // The renderer shares the client shell; only its bundled assets need Node loaders.
 require.extensions[".glsl"] = (module, file) => { module.exports = fs.readFileSync(file, "utf8"); };
@@ -34,6 +35,7 @@ Object.assign(renderer, {
     },
     world: { selectExtension: noop, sceneData: new Float32Array(66) },
     osrsClient: {
+        clientPlugins: new ClientPluginManager(),
         isLoggedIn: () => loggedIn,
         camera: new Camera(0, 0, 0, 256, 0),
         inputManager: { wheelDeltaY: 0 },

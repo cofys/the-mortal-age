@@ -174,7 +174,7 @@ export function updateFollowCamera(
     // drives the view, or in ortho) this stays exactly as before: raw pitch override, raw yaw
     // and an unscaled follow distance.
     const hdCameraFeel =
-        osrsClient.hdPlugin?.isEnabled() === true &&
+        osrsClient.clientPlugins.hdEnabled() === true &&
         camera.getViewPitchOverride() === undefined &&
         camera.projectionType === ProjectionType.PERSPECTIVE;
     const dtSec = Math.max(0, deltaTimeMs) / 1000;

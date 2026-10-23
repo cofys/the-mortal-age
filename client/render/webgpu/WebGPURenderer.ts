@@ -310,7 +310,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
      * rebuilds the loaded scenery. The first call only records the state they were built with.
      */
     private syncLocAnimationSmoothing(): void {
-        const settings = this.osrsClient.animationSmoothingPlugin?.objectSettings();
+        const settings = this.osrsClient.clientPlugins.objectSettings();
         const smooth = settings?.smoothLocAnimations ? settings.smoothLocAnimationSteps : -1;
         if (this.smoothLocAnimations === smooth) return;
         const first = this.smoothLocAnimations === undefined;
@@ -345,7 +345,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, Scene.MAX_LEVELS - 1)),
             loadNpcs: false,
             smoothTerrain: true,
-            ...this.osrsClient.animationSmoothingPlugin?.objectSettings(),
+            ...this.osrsClient.clientPlugins.objectSettings(),
             minimizeDrawCalls: true,
             loadedTextureIds: this.world?.loadedTextureIds ?? new Set<number>(),
             locOverrides: this.locOverrides,
@@ -601,7 +601,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         const renderDistance = resolveWebGPURenderDistance(this);
         // HD spreads haze over long views, as on WebGL (render/render/frame/render.ts).
         const { fogEnd, fogDepth } = resolveFogRange({ renderDistance, autoFogDepth: true,
-            autoFogDepthFactor: AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: this.osrsClient.hdPlugin?.isEnabled() });
+            autoFogDepthFactor: AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: this.osrsClient.clientPlugins.hdEnabled() });
 
         const data = this.world.sceneData;
         data.set(camera.viewProjMatrix as Float32Array, 0);
@@ -619,7 +619,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         data[62] = timeSec;
         data[63] = this.brightness;
         // colorBanding: the GPU plugin's, else WebGL's default (the shader divides by it).
-        data[64] = this.osrsClient.gpuPlugin?.settings()?.colorBanding ?? 255.0;
+        data[64] = this.osrsClient.clientPlugins.gpuSettings()?.colorBanding ?? 255.0;
         data[65] = this.osrsClient.isNewTextureAnim ? 1.0 : 0.0;
         this.world.flushSceneUniforms();
     }
@@ -646,7 +646,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             // consumes and clears it.
             const inputManager = this.osrsClient.inputManager;
             if (
-                this.osrsClient.hdPlugin?.isEnabled() === true &&
+                this.osrsClient.clientPlugins.hdEnabled() === true &&
                 this.osrsClient.followPlayerCamera &&
                 inputManager.wheelDeltaY !== 0 &&
                 inputManager.mouseX >= 0 &&
@@ -692,7 +692,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
                 -1,
                 -1,
                 Math.max(this.osrsClient.expandedMapLoading | 0,
-                    this.osrsClient.hdPlugin?.isEnabled() ? Math.ceil((resolveWebGPURenderDistance(this) - 25) / 8) : 0),
+                    this.osrsClient.clientPlugins.hdEnabled() ? Math.ceil((resolveWebGPURenderDistance(this) - 25) / 8) : 0),
                 resolveWebGPURenderDistance(this),
             );
             this.updateSkyColor();
@@ -718,7 +718,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         // A scene extension (e.g. 117 HD) is a runtime toggle: pick the pipeline pair once per
         // frame, before any map draw.
         const extension = world.extension;
-        const gpu = this.osrsClient.gpuPlugin?.settings();
+        const gpu = this.osrsClient.clientPlugins.gpuSettings();
         const sampleCount = gpu && gpu.msaaSamples > 0 ? WEBGPU_MSAA_SAMPLES : 1;
         world.selectExtension(!!extension?.isActive(), sampleCount);
 

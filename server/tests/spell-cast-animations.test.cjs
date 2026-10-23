@@ -28,5 +28,8 @@ test('combat spells cast their OSRS animation, and the staff variant while a sta
     for (const [name, [unarmed, staffed]] of Object.entries(expected)) {
         assert.equal(castAnimation(CombatSpells[name], false), unarmed, `${name} unarmed`);
         assert.equal(castAnimation(CombatSpells[name], true), staffed, `${name} with a staff`);
+        // Casts outside combat (the POH elemental balance) pick the same animation.
+        const wielder = { isPlayer: () => true, getAsPlayer: () => ({ getEquipment: () => ({ hasStaffEquipped: () => true }) }) };
+        assert.equal(CombatSpells[name].castAnimationFor(wielder).getId(), staffed, `${name} castAnimationFor`);
     }
 });

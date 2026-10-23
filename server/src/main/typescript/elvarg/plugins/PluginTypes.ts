@@ -1277,6 +1277,8 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  BonusManager: any;
+  WeaponInterfaces: any;
   Barrows: any;
   applyPrayerDrainModifiers(entity: any, amount: number, context?: any): number;
   CombatEquipment: any;

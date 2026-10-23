@@ -137,7 +137,7 @@ export class SceneRaycaster {
 
     /** The draw distance in tiles, the GPU plugin's while it is on. */
     private drawDistance(): number {
-        return this.osrsClient.gpuPlugin?.settings()?.drawDistance ?? this.osrsClient.renderDistance;
+        return this.osrsClient.clientPlugins.gpuSettings()?.drawDistance ?? this.osrsClient.renderDistance;
     }
 
     private getControlledPlayerWorldViewId(): number {

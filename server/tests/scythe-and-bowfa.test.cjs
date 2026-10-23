@@ -31,7 +31,7 @@ function player(worn) {
     return entity;
 }
 
-const npcOfSize = (size) => ({ isNpc: () => true, getAsNpc: () => ({ getSize: () => size }) });
+const npcOfSize = (size) => ({ getHitpoints: () => 1000, isNpc: () => true, getAsNpc: () => ({ getSize: () => size }) });
 
 // One registration against a fake core; each swing resets what it records.
 let rerolled = [];
@@ -45,6 +45,7 @@ class PendingHit {
     getTotalDamage() {
         return this.damage;
     }
+    setTotalDamage(value) { this.damage = value; }
 }
 Scythe.register({
     core: {
@@ -57,6 +58,7 @@ Scythe.register({
         DamageFormulas: { calculateMaxMeleeHit: () => maxHit },
     },
     registerCombatMethodResolver: (r) => { resolver = r; },
+    onServerStartup: (handler) => handler(),
     onItemAction: () => {},
     onItemOnItem: () => {},
 });

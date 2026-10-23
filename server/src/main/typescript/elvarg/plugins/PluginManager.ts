@@ -1137,13 +1137,14 @@ export class PluginManager {
       return null;
     }
     const event: PluginCanAttackEvent = { attacker, target, method, allow: null };
+    let allowed = false;
     for (const hook of PluginManager.canAttackHooks) {
+      event.allow = null;
       PluginManager.executeHook(hook, event, "can_attack", "can_attack");
-      if (event.allow !== null) {
-        return event.allow;
-      }
+      if (event.allow === false) return false;
+      if (event.allow === true) allowed = true;
     }
-    return null;
+    return allowed ? true : null;
   }
 
   public static emitCanTeleport(player: any, wildernessLevelLimit: number = 20, destination?: any): boolean | null {
@@ -2170,6 +2171,8 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      BonusManager: require(`${model}/equipment/BonusManager`).BonusManager,
+      WeaponInterfaces: require(`${combat}/WeaponInterfaces`).WeaponInterfaces,
       Barrows: require(`${combat}/Barrows`).Barrows,
       applyPrayerDrainModifiers: require(`${combat}/EquipmentEffects`).applyPrayerDrainModifiers,
       CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,

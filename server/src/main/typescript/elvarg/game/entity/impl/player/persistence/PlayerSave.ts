@@ -127,6 +127,8 @@ export class PlayerSave {
         [0, 5],  // feet
         [0, 7],  // skin
     ];
+    /** The name as the player first typed it, capitals included; later logins keep it. */
+    private displayName: string;
     private passwordHashWithSalt: string;
     private isDiscordLogin: boolean;
     private cachedDiscordAccessToken: string;
@@ -169,6 +171,9 @@ export class PlayerSave {
     private flags: string[];
     public sailing?: SailingState;
 
+    public getDisplayName(): string {
+        return this.displayName;
+    }
     public getPasswordHashWithSalt(): string {
         return this.passwordHashWithSalt;
     }
@@ -657,6 +662,7 @@ export class PlayerSave {
         }
         let playerSave = new PlayerSave();
 
+        playerSave.displayName = player.getUsername();
         playerSave.passwordHashWithSalt = (player.getPasswordHashWithSalt() || "").trim();
         playerSave.isDiscordLogin = player.isDiscordLoginReturn();
         playerSave.cachedDiscordAccessToken = player.getCachedDiscordAccessToken();

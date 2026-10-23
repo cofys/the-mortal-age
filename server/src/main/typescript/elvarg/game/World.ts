@@ -130,7 +130,8 @@ export class World {
     }
 
     public static getPlayerByName(username: string): Player | undefined {
-        return this.players.search(p => p && p.getUsername && p.getUsername() === Misc.formatText(username));
+        const name = Misc.formatNameForProtocol(Misc.formatDisplayName(username));
+        return this.players.search(p => p && p.getUsername && Misc.formatNameForProtocol(p.getUsername()) === name);
     }
 
     public static isPlayerSessionConnected(player: Player): boolean {
