@@ -172,7 +172,7 @@ function titheItem(event) {
     redraw(game, plot);
 }
 function titheItemOnNpc(event) {
-    if (event.target.getDefinition()?.getName() !== "Farmer Gricoller") return;
+    if ((event.definition ?? event.target.getDefinition())?.getName() !== "Farmer Gricoller") return;
     const reward = REWARDS.find(([name]) => name.startsWith("Farmer's") && Data.itemId(name) === event.itemId);
     if (!reward) return;
     event.handled = true;

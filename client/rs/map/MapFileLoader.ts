@@ -49,7 +49,9 @@ export class MapFileLoader {
 
     getLocData(mapX: number, mapY: number, xteasMap?: XteaMap): Int8Array | undefined {
         const replacement = this.regionReplacements.get((mapX << 8) | mapY);
-        if (replacement) return replacement.objectData;
+        // Terrain-only replacements carry no object data: fall back to the cache
+        // so its objects stay, the same as the map editor's pack builder does.
+        if (replacement?.objectData) return replacement.objectData;
         const archiveId = this.mapFileIndex.getLocArchiveId(mapX, mapY);
         if (archiveId === -1) {
             return undefined;

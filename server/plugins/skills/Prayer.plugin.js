@@ -99,6 +99,15 @@ const SCATTER_SOUND = 2444; // farming_sprinkle
 let api = null;
 let bones = null;
 let ashes = null;
+const burials = new WeakMap();
+
+/**
+ * world.json `pluginConfig` `"Prayer:sequentialBurying": true` (overridable in world.local.json)
+ * makes one Bury click continue through the inventory's bones (docs/prayer-bones.md). Off by
+ * default: one bone per click, as OSRS.
+ */
+const SEQUENTIAL_CONFIG = "Prayer:sequentialBurying";
+const sequentialBurying = () => api.getPluginConfig(SEQUENTIAL_CONFIG, false) === true;
 
 /** Rows keyed by item id, resolved from their obj gamevals on first use. */
 function rowsByItemId(rows) {
@@ -157,6 +166,15 @@ function boneRequest(request) {
   if (request) request.bone = boneFor(request.itemId);
 }
 
+function stopBurial({ player }) {
+  burials.get(player)?.stop();
+}
+
+function interruptBurialForItem(event) {
+  // Merely calculating worn-item bonuses is not a player action.
+  if (event.action !== "bonus") stopBurial(event);
+}
+
 function buryBone({ player, itemId, slot }) {
   const core = api.core;
   const bone = boneFor(itemId);
@@ -168,7 +186,32 @@ function buryBone({ player, itemId, slot }) {
     player.sendMessage(`You need a Prayer level of ${bone.level} to bury these bones.`);
     return true;
   }
+  if (sequentialBurying()) burySequence(player, itemId, slot, bone);
+  else buryOnce(player, itemId, slot, bone);
+  return true;
+}
 
+/** Still online, alive and standing where the burial started. */
+function stillBurying(player, location) {
+  return player.isRegistered() && player.getHitpoints() > 0 &&
+    player.getLocation().equals(location) && player.getMovementQueue().size() === 0 &&
+    player.getForceMovement() == null;
+}
+
+/** Consumes the bone at `slot` with its messages and experience; false when it is no longer there. */
+function resolveBurial(player, itemId, slot, bone) {
+  const inventory = player.getInventory();
+  if (inventory.get(slot)?.getId() !== itemId) return false;
+  inventory.deleteAtSlot(slot, 1);
+  player.sendMessage("You dig a hole in the ground..");
+  player.sendMessage(`..and bury the ${api.core.ItemDefinition.forId(itemId).getName()}.`);
+  award(player, itemId, bone, 1);
+  return true;
+}
+
+/** One bone per Bury click, as OSRS (the default). */
+function buryOnce(player, itemId, slot, bone) {
+  const core = api.core;
   player.getSkillManager().stopSkillable();
   player.getPacketSender().sendInterfaceRemoval();
   player.performAnimation(new core.Animation(BURY_ANIMATION));
@@ -177,18 +220,9 @@ function buryBone({ player, itemId, slot }) {
   // Consume and award XP together on the resolving tick. An interrupted burial
   // keeps its bone, including on logout before the account is saved.
   const task = new core.CountdownTask(player, 2, () => {
-    if (!canComplete() || inventory.get(slot)?.getId() !== itemId) return;
-    inventory.deleteAtSlot(slot, 1);
-    player.sendMessage("You dig a hole in the ground..");
-    player.sendMessage(`..and bury the ${core.ItemDefinition.forId(itemId).getName()}.`);
-    award(player, itemId, bone, 1);
+    if (stillBurying(player, location)) resolveBurial(player, itemId, slot, bone);
   });
-  function canComplete() {
-    return player.isRegistered() && player.getHitpoints() > 0 &&
-      player.getLocation().equals(location) && player.getMovementQueue().size() === 0 &&
-      player.getForceMovement() == null;
-  }
-  task.onTick = () => { if (!canComplete()) task.stop(); };
+  task.onTick = () => { if (!stillBurying(player, location)) task.stop(); };
   const stop = task.stop.bind(task);
   task.stop = () => {
     stop();
@@ -196,7 +230,64 @@ function buryBone({ player, itemId, slot }) {
   };
   api.getTaskManager().submit(task);
   player.getClickDelay().reset();
-  return true;
+}
+
+/**
+ * With `Prayer:sequentialBurying`: the clicked bone, then every eligible bone left in the
+ * inventory in slot order, one every two ticks, until the player does anything else.
+ */
+function burySequence(player, itemId, slot, bone) {
+  const core = api.core;
+  const inventory = player.getInventory();
+  stopBurial({ player });
+  player.getSkillManager().stopSkillable();
+  player.getPacketSender().sendInterfaceRemoval();
+  const location = player.getLocation().clone();
+  // Consume and award XP together on the resolving tick. An interrupted burial
+  // keeps its bone, including on logout before the account is saved.
+  const task = new (class extends core.Task {
+    constructor() { super(2, player, false); }
+    execute() {
+      if (!canComplete() || !resolveBurial(player, itemId, slot, bone)) return this.stop();
+      // Awarding XP can open a level-up popup and cancel this sequence.
+      if (!this.isRunning() || !canComplete()) return this.stop();
+      const next = inventory.getItems().findIndex(item => {
+        if (!item || item.getAmount() <= 0) return false;
+        if (!core.WorldDefinition.isMembersWorld() && core.CacheDefinitions.getItem(item.getId()).isMembers) return false;
+        const row = boneFor(item.getId());
+        return row && (!row.level || player.getSkillManager().getMaxLevel(core.Skill.PRAYER) >= row.level);
+      });
+      if (next < 0) return this.stop();
+      slot = next;
+      itemId = inventory.get(slot).getId();
+      bone = boneFor(itemId);
+      animate();
+    }
+    onTick() { if (!canComplete()) this.stop(); }
+    stop() {
+      super.stop();
+      if (burials.get(player) !== this) return;
+      burials.delete(player);
+      if (player.getSkill() === action) {
+        player.setSkill(null);
+        if (player.isRegistered()) player.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
+      }
+    }
+  })();
+  // Register as a cancellable skilling action so ordinary interactions can stop it.
+  const action = { cancel: () => task.stop() };
+  function canComplete() {
+    return stillBurying(player, location) && player.getSkill() === action;
+  }
+  function animate() {
+    player.performAnimation(new core.Animation(BURY_ANIMATION));
+    core.Sounds.sendSound(player, core.Sound.BURY_BONES);
+    player.getClickDelay().reset();
+  }
+  burials.set(player, task);
+  player.setSkill(action);
+  animate();
+  api.getTaskManager().submit(task);
 }
 
 /**
@@ -236,5 +327,10 @@ module.exports = {
     if (typeof api.onItemOnObject === "function") {
       api.onItemOnObject(offerBone, { noted: false });
     }
+    api.onCanUseItem(interruptBurialForItem);
+    api.onPlayerLogout(stopBurial);
+    api.onPlayerDisconnect(stopBurial);
+    api.onPlayerDeath(stopBurial);
+    api.onCustomEvent("level-up:popup-opened", stopBurial);
   },
 };

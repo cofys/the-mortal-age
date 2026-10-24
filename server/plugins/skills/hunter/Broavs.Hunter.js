@@ -80,7 +80,7 @@ function use(event) {
 }
 
 function train(event) {
-  if (event.itemId !== H.core.ItemIdentifiers.UNCONSCIOUS_BROAV || event.target.getDefinition().getName() !== "Hunting expert") return;
+  if (event.itemId !== H.core.ItemIdentifiers.UNCONSCIOUS_BROAV || (event.definition ?? event.target.getDefinition()).getName() !== "Hunting expert") return;
   event.handled = true;
   if (C.nearby(event.player, event.target) && C.exchange(event.player, [[event.itemId, 1]], [[H.core.ItemIdentifiers.BROAV, 1]]))
     event.player.sendMessage("The hunting expert trains your broav to track scents.");

@@ -109,6 +109,9 @@ export class MenuSwapperPlugin extends Plugin {
         entries: SimpleMenuEntry[],
         context: MenuTransformContext,
     ): SimpleMenuEntry[] {
+        // Swaps are keyed per world target and inventory item; other interfaces' item menus
+        // (worn equipment, bank side...) keep their own order.
+        if (context.surface === "widget") return entries;
         return applyMenuSwaps(
             entries,
             { ...context, isShiftHeld: ClientState.isShiftPressed() },

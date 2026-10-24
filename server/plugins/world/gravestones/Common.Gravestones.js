@@ -181,11 +181,7 @@ function sendInventory(player, invId, capacity, records) {
 
 /** Whether the player's inventory can take `entry` whole. */
 function fits(player, entry) {
-  const inventory = player.getInventory();
-  if (definition(entry.id).isStackable()) {
-    return inventory.getFreeSlots() > 0 || inventory.getAmount(entry.id) > 0;
-  }
-  return inventory.getFreeSlots() >= entry.amount;
+  return player.getInventory().getAddableAmount(toItem(entry)) >= entry.amount;
 }
 
 /** The ironman mode, through the Ironman plugin; null for a normal account. */

@@ -25,13 +25,14 @@ import {
 } from "../../../../render/webgpu/sceneExtension";
 import type { WebGPURenderer } from "../../../../render/webgpu/WebGPURenderer";
 import { environmentAt } from "../../../../render/render/environment";
-import { collectHdLights } from "../HdLights";
+import { HdLights } from "../HdLights";
 import { HD_GROUND_MATERIALS, HD_MATERIALS, HD_DETAIL_TEXTURES, type HdMaterial } from "../HdMaterialData";
 import { HD_LOOKUP_WIDTH, HD_TEXTURE_FILES, HD_TEXTURE_SIZE, HD_DETAIL_TEXTURE_SIZE } from "../HdMaterials";
 import { HdClutterLayer } from "./hd-clutter";
 import { HD_SCENE_SHADERS } from "./hdSceneShaders";
 import type { HdOptions } from "../HdConfig";
 import { HdMist } from "../HdMist";
+import { HdSceneInputs } from "../HdSceneInputs";
 import { HdPostProcess } from "./hdPostProcess";
 
 /** group(1) bindings, matching HD_BINDINGS_WGSL. */
@@ -223,6 +224,8 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
     private readonly uniformBuffer: GPUBuffer;
     private readonly uniforms = new Float32Array(HD_UNIFORM_FLOATS);
     private readonly mist = new HdMist();
+    private readonly inputs = new HdSceneInputs();
+    private readonly lights = new HdLights();
     private readonly uniformInts = new DataView(this.uniforms.buffer);
     private readonly lightPositions = new Float32Array(LIGHT_LIMIT * 4);
     private readonly lightColors = new Float32Array(LIGHT_LIMIT * 4);
@@ -234,13 +237,15 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
     private readonly worldShadowTexture: GPUTexture;
     private readonly worldShadowView: GPUTextureView;
     private readonly shadowFrustum = new Frustum();
+    private shadowPrepared = false;
+    private refreshWorldShadow = false;
     private lastShadow?: { time: number; x: number; z: number; plane: number;
         environment: unknown; distance: number; roof: number };
     /** Binding 9 is a 1x1 placeholder while drawing the shadow map into its own texture. */
     readonly depthBindGroupEntries: GPUBindGroupEntry[];
     private readonly shadowPlaceholder: GPUTexture;
     private lightCount = 0;
-    private lastLights?: { time: number; x: number; z: number; plane: number };
+    private lastLights?: { time: number; x: number; z: number; plane: number; revision: number };
     private post?: HdPostProcess;
     private clutter?: HdClutterLayer;
     private destroyed = false;
@@ -332,12 +337,21 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         return this.isEnabled();
     }
 
+    prepareActorVisibility(renderer: WebGPURenderer): Frustum | undefined {
+        if (this.destroyed) return undefined;
+        this.refreshWorldShadow = this.update(renderer);
+        this.shadowPrepared = true;
+        return this.shadowFrustum;
+    }
+
     /**
      * Cache world depth at 15 Hz, then replace actor depth every frame, as WebGL does.
      */
     beforeScene(renderer: WebGPURenderer, encoder: GPUCommandEncoder): void {
         if (this.destroyed) return;
-        if (this.update(renderer)) {
+        const refreshShadow = this.shadowPrepared ? this.refreshWorldShadow : this.update(renderer);
+        this.shadowPrepared = false;
+        if (refreshShadow) {
             const worldPass = encoder.beginRenderPass({
                 colorAttachments: [],
                 depthStencilAttachment: { view: this.worldShadowView,
@@ -415,6 +429,7 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         const fogEnd = Math.max(1, resolveWebGPURenderDistance(renderer));
         const plane = renderer.getPlayerRawPlane();
         const now = performance.now();
+        const revision = this.inputs.update(renderer, plane, environment, options);
         const roof = renderer.getRoofPlaneLimit();
         const previous = this.lastShadow;
         const refreshShadow = !previous || now - previous.time >= SHADOW_INTERVAL_MS ||
@@ -422,8 +437,7 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
             plane !== previous.plane || environment !== previous.environment ||
             fogEnd !== previous.distance || roof !== previous.roof;
 
-        this.uniforms.set(this.mist.uniform(x, z, (mx, mz) => renderer.sampleHeightAtExactPlane(mx, mz, plane),
-            now, options.surfaceFog), OFF_MIST);
+        this.uniforms.set(this.mist.uniform(x, z, this.inputs.groundAt, now, options.surfaceFog, revision), OFF_MIST);
         if (refreshShadow) {
             const target = vec3.fromValues(x, renderer.sampleHeightAtExactPlane(x, z, plane), z);
             const eye = vec3.scaleAndAdd(vec3.create(), target, direction, 100);
@@ -475,9 +489,10 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
 
         const lastLights = this.lastLights;
         if (!lastLights || now - lastLights.time >= LIGHT_INTERVAL_MS ||
-            Math.abs(x - lastLights.x) >= 1 || Math.abs(z - lastLights.z) >= 1 || plane !== lastLights.plane) {
-            this.lightCount = collectHdLights(renderer, this.lightPositions, this.lightColors, Date.now());
-            this.lastLights = { time: now, x, z, plane };
+            Math.abs(x - lastLights.x) >= 1 || Math.abs(z - lastLights.z) >= 1 || plane !== lastLights.plane ||
+            revision !== lastLights.revision) {
+            this.lightCount = this.lights.collect(renderer, this.lightPositions, this.lightColors, Date.now(), revision);
+            this.lastLights = { time: now, x, z, plane, revision };
         }
         this.uniformInts.setInt32(OFF_LIGHT_COUNT * 4, this.lightCount, true);
         this.uniforms.set(this.lightPositions, OFF_LIGHT_POSITIONS);
@@ -499,6 +514,8 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         this.worldShadowTexture.destroy();
         this.shadowPlaceholder.destroy();
         this.materials.dispose();
+        this.inputs.dispose();
+        this.lights.dispose();
     }
 }
 

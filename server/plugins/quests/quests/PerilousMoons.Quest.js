@@ -1961,6 +1961,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
   api.onCustomEvent("moons-of-peril:can-enter", handleCanEnter);
   api.onCustomEvent("moons-of-peril:killed", handleMoonKilled);
   api.onCustomEvent("moons-of-peril:camps-open", handleCampsOpen);
+  api.onServerStartup(installCampSuppliesCrate);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

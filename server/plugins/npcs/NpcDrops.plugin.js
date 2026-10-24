@@ -46,6 +46,13 @@ const KALPHITE_QUEEN_NOTED_ITEMS = new Set([
 const LOOTING_BAG = "Looting bag";
 const LOOTING_BAG_EXCLUDED = new Set(["Aviansie", "Abyssal demon", "Black chinchompa"]);
 
+/** NPC param the cache sets on bosses. */
+const NPC_BOSS_PARAM = 1361;
+/** world.json pluginConfig: how many times likelier a boss's rare drops are (1, the default, is OSRS). */
+const BOSS_RARE_MULTIPLIER_CONFIG = "NpcDrops:bossRareMultiplier";
+/** Rarer than this is a rare drop for that multiplier: uniques, pets, jars, not the commons. */
+const RARE_CHANCE = 1 / 100;
+
 function lootingBagDrops(npc) {
   if (!Wilderness.isInLocation(npc?.getLocation?.())) return false;
   const name = (npc.getCurrentDefinition?.() ?? npc.getDefinition?.())?.getName?.();
@@ -282,6 +289,7 @@ function loadDrops() {
     }
     if (resolved.length > 0) {
       tablesByNpc.set(id, resolved);
+      if (isBoss(id)) for (const table of resolved) table.boss = true;
     }
   }
   const tableCount = Object.keys(tableById).length;
@@ -349,6 +357,22 @@ function hits(entry, multiplier = 1) {
   }
   const weight = Number.isInteger(entry.weight) ? entry.weight : 1;
   return Math.random() * outOf < Math.min(outOf, weight * multiplier);
+}
+
+function isBoss(npcId) {
+  return Number.isInteger(pluginApi?.core?.CacheDefinitions?.getNpc(npcId)?.params?.get?.(NPC_BOSS_PARAM));
+}
+
+/**
+ * How many times likelier an independent roll (pre-roll, separate or tertiary) is: the world's
+ * boss rare multiplier for a boss table's entries rarer than RARE_CHANCE, otherwise 1. The main
+ * table is left alone, since raising one weight there only crowds out the others.
+ */
+function rareMultiplier(table, entry) {
+  const weight = Number.isInteger(entry.weight) ? entry.weight : 1;
+  if (!table.boss || !(weight / Number(entry.out_of) < RARE_CHANCE)) return 1;
+  const multiplier = Number(pluginApi?.getPluginConfig(BOSS_RARE_MULTIPLIER_CONFIG, 1));
+  return Number.isFinite(multiplier) && multiplier > 1 ? multiplier : 1;
 }
 
 const WILDERNESS_CLUE = /^clue scroll \((?!beginner\))/i;
@@ -447,7 +471,7 @@ function rollOnce(table, entries, player, first = true) {
     if (entry.always) {
       continue;
     } else if (entry.pre_roll) {
-      if (!preRollHit && hits(entry)) {
+      if (!preRollHit && hits(entry, rareMultiplier(table, entry))) {
         drops.push(...resolveEntry(entry, player));
         preRollHit = true;
       }
@@ -457,7 +481,7 @@ function rollOnce(table, entries, player, first = true) {
         const group = separateGroups.get(entry.roll_group) || [];
         group.push(entry);
         separateGroups.set(entry.roll_group, group);
-      } else if (hits(entry)) {
+      } else if (hits(entry, rareMultiplier(table, entry))) {
         drops.push(...resolveEntry(entry, player));
       }
     } else if (Number.isInteger(entry.weight)) {
@@ -524,7 +548,7 @@ function rollTable(table, player, npc) {
       continue;
     }
     if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
-    if (hits(entry, tertiaryMultiplier(entry, rules))) {
+    if (hits(entry, tertiaryMultiplier(entry, rules) * rareMultiplier(table, entry))) {
       drops.push(...resolveEntry(entry, player));
     }
   }

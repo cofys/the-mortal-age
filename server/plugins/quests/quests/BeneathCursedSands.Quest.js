@@ -2193,6 +2193,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   api.onInterfaceActionButton(CHEMISTRY_BUTTONS, handleChemistryButton);
   api.onInterfaceActionButton(PILLAR_BUTTONS, handlePillarButton);
   api.onNpcDeath(handleNpcDeath);
+  api.onServerStartup(installTombLevers);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);

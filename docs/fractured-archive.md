@@ -7,7 +7,11 @@ Sources:
   - the lobby, with the first visit and mining;
   - a session that forms a party and makes five attempts at the Archive Guardian;
   - a second session of Guardian attempts.
-- The OSRS Wiki pages [The Fractured Archive](https://oldschool.runescape.wiki/w/The_Fractured_Archive) and [Archive Guardian](https://oldschool.runescape.wiki/w/Archive_Guardian), which were still mostly empty at the time.
+- The Wiki's [strategies page](https://oldschool.runescape.wiki/w/The_Fractured_Archive/Strategies) and five YouTube boss guides (transcripts), for what a spectator can't see: player-side mechanics such as rolling, absorbing cracks and the tank.
+- Five rsprox sessions recorded as a **spectator** on 2026-10-21/22 (rev 241.1): four full clears and two partial runs, parties of two to five. They show the Guardian's kill, the Nexus and its doors, Bork and the Smorks, Ezekiel, Dreadnoth the Jellied with the Quartermaster, Xarth, Ocellus, the vault, and spectating from the Strategy board.
+  - A spectator sees every NPC and loc change, map animation, projectile, the boss bar (with its second bar) and the party's health slots, and the followed player's inventory.
+  - It sees no fighter's hitsplats, prayers, equipment, experience or messages, no door choice, no shop and no loot. **Every damage figure on players is an estimate.**
+- The OSRS Wiki pages [The Fractured Archive](https://oldschool.runescape.wiki/w/The_Fractured_Archive), [Archive Guardian](https://oldschool.runescape.wiki/w/Archive_Guardian), [Chest (The Fractured Archive)](https://oldschool.runescape.wiki/w/Chest_(The_Fractured_Archive)) and [Quartermaster (The Fractured Archive)](https://oldschool.runescape.wiki/w/Quartermaster_(The_Fractured_Archive)).
 - The cache: gamevals for every id, and the client scripts for the interfaces.
 
 **Estimate** marks what none of these show.
@@ -26,9 +30,18 @@ Sources:
 | `RaidState.*` | `Raid` and the `Room` base class: the private copy of the Archive, the HUD (974), deaths, spectating, wipes, abandoning and logouts. |
 | `Raid.*` | The Archive Door, the Passageway, the death, item and login hooks, and the room hooks. |
 | `Guardian.*` | The Archive Guardian's room. |
-| `Commands.*` | `::tfa`, `::tfaguardian`, `::tfaintro`, `::tfacomplete` and `::tfahp <n>`, all for developers. |
+| `Hub.*` | The Nexus between rooms: its section doors, the path taken, the Alliance staff and the Navigator back. |
+| `Bork.*` | Bork and the Smorks. |
+| `Ezekiel.*` | Ezekiel. |
+| `Dreadnoth.*` | Dreadnoth the Jellied. |
+| `Quartermaster.*` | The Quartermaster's Alliance Supplies shop and the Supply Credits. |
+| `Xarth.*` | Xarth. |
+| `Ocellus.*` | Ocellus, his three phases and the four censers. |
+| `Vault.*` | The inner vault: the chests, the loot and the Rift out. |
+| `Spectate.*` | Spectating a party from the lobby's Strategy board. |
+| `Commands.*` | `::tfa`, `::tfaguardian`, `::tfaroom <ROOM>`, `::tfaintro`, `::tfacomplete` and `::tfahp <n> [2]`, all for developers. `::tfaroom` (BORK, EZEKIEL, DREADNOTH, XARTH, OCELLUS, VAULT, HUB) goes in first when needed, marks everything before the room done (the Guardian, each section won along the east side, and for VAULT the raid won) and takes the party there. |
 
-Plugin data lives in `server/plugins/minigames/data/fractured-archive.json`: the intro's actors, camera shots, walk and lines, plus the rock tiles and the builders' lines. The lobby NPCs are in `npc-spawns.json` at their captured tiles (`"source":"rsprox"`). The Record Keeper's and General Montoya's conversations are in `npc-dialogues.json`.
+Plugin data lives in `server/plugins/minigames/data/fractured-archive.json`: the intro's actors, camera shots, walk and lines, the rock tiles and the builders' lines, the Nexus staff for each visit, and the vault's loot table. The lobby NPCs are in `npc-spawns.json` at their captured tiles (`"source":"rsprox"`). The Record Keeper's and General Montoya's conversations are in `npc-dialogues.json`.
 
 ## Engine changes
 
@@ -37,6 +50,21 @@ Plugin data lives in `server/plugins/minigames/data/fractured-archive.json`: the
   - The raid keeps its dead in the room with their items and takes them only when the party wipes, as live does.
   - The death task calls the same methods, so nothing changed for other deaths.
 - **The `ease_in_sine` camera easing**: the intro's first glide uses it. Added to both the server encoder and the client decoder.
+- **BossHud's second bar** (`boss-hud:extra` `{ player, current, maximum, colours, hidden }`): `hpbar_hud_show_extra_bar` (varp 5991), the extra bar's base and current (varbits 16571 and 16570), its colours on 303:24-26, and script 10152 every tick while it shows, as live sends it for Bork's Smorks and Ocellus' charge.
+- **NPC base animations** (`NPC.setBaseAnimations({ idle, walk, turnLeft, turnRight })`): live changes an NPC's stand, walk and turn sequences on the fly (rsprox's `[bas]`): the grounded Guardian's ground idle, Ezekiel's weakened stance and finale loop, his swords' idles, Ocellus' loops. A new NPC update block (mask 0x2000: a count, then slot and sequence pairs; slots 0 idle, 1 walk, 2 turn left, 3 turn right; empty resets) is sent while set, as model customisation is, and the client feeds it into its movement overrides. Without it the client falls back to the cache's stand pose whenever an animation ends (the grounded Guardian rising).
+- **Loc animations across instance rebuilds** (`LocAnimated.carryOver` in `replaceSceneWithInstance` and WebGPU's `applyInstanceScene`): a loc change in an instance rebuilds the whole scene, which started every animated loc again from frame 0. A held loc animation (a frame-step sequence such as Ocellus' fallen slices, `dungeonkit_guthixian03_collapse_01`) then replayed each time locs were added nearby: the earlier quadrant fell again when the next one did. The rebuilt scene now carries the old one's animations over, as a square rebuilt in place already did.
+- **Turned spot graphics** (`GfxCache.placeAsSpot`): a spot graphic's scale and orientation (its `_90`, `_180`, `_270` versions) are applied after its animation, as OSRS's spot animation model does. The client turned the base model first, so the frames moved and scaled the pieces along the wrong axes: on Ocellus' lines (one model, 62692, for the crack, its green flow and the slam debris) the green ran across its line instead of along it, and the slam's debris landed off its ring.
+- **Sampled sound effects** (`SoundEffectLoader`, `decodeWithOwnSetup` in `VorbisSample`): from 11988 on (171 sounds in rev 241), a sound effect's archive holds file 1 instead of file 0: an int length, its own Vorbis setup (4,032 bytes, not the music's), then a Vorbis sample (44.1 kHz). The client read only file 0, so these were silent, among them Ocellus' transformations (12819, 12825), his phase two to three (12814), the quadrant destruction loop (12837) and his death (12826). They decode now against their own setup, switched in around the decode so the music samples' shared setup is untouched. Ocellus' other sounds are animation frame sounds (range 31), all synths, which played already.
+- **Large NPCs step diagonally** (`MovementQueue.validatedStep`): a step is tried diagonally first for actors of any size, when their whole footprint can make it, then east/west, then north/south. Before, only 1x1 actors took diagonals, so the 3x3 Ocellus walked a diagonal as a staircase; live walks it a tile a tick (captured).
+- **NPC fades** (`NPC.fade(to, { from, startCycles, endCycles })`, rsprox's `[transparency]`): live fades NPCs in and out, from 0 opaque to 255 invisible over client cycles of the tick, and they stay at the end value. A new NPC update block (mask 0x8000: start and end cycles as shorts, the value it fades from as a short, 0xffff for its current look, then the value it fades to) is sent the tick it's set. The client keeps each NPC's fade and both renderers draw a fading NPC screen-door dithered (a 4x4 ordered dither on its transparency, in the actor data texture's free channel), which needs no re-sorting between the opaque and alpha passes. `Room.spawn(..., { fadeIn })` fades a new NPC in. A teleported NPC is normally left out of view the tick it moves and added back the next; with a fade (as with an exact move) it stays, so the fade-in reaches the client with the teleport. `::tfafade <0-255> [cycles]` fades the current boss and leaves it there, to check the client.
+  - Captured and used: Ocellus' teleports to the middle (out over cycles 30-45, in over 0-20) and his moves between third-phase quadrants (out 0-30 or 0-28, in 0-28); Ezekiel's swords (in as they appear, out over 30-60 of their flight), his fence swords (out the tick before they go) and his death (out over 210-270); the Smork's death (out two ticks before it goes); Xarth's corpses, the Navigator (in over 30) and the vault's rift (in over 90).
+  - Not built yet, so not faded: the Alliance escorts (knights, Guardians of Armadyl, druids, Armacus) that fade in at the Nexus.
+- **Projectiles**: rsprox prints `map_projanim_v2` heights at four times the packet's, so `Shared.projectile` divides them; and it names the firing actor as the packet's source, as live does, so the client starts the projectile from the model.
+- **`MovementQueue.getDestination()`**: where a player's walk ends, for rolling them there (Ezekiel).
+- **`Area.handleForcedWalk`**: a walk click the engine refuses because the player is mid forced move (or being placed after one) goes to the player's area first, so the room can chain a roll or a hop at once; other movement blocks still refuse it. The raid's area passes it to the room: Ezekiel's dodges (with `onWalkRoute`, so the click itself rolls the player, with no normal step or wait first) and Ocellus' stepping stones.
+- **Camera target** (`PacketSender.sendCameraTarget`, CAMERA_CONTROL subtype 12; OSRS's `cam_target`): the client's follow camera, scene centre, roofs and sound listener follow a tile or another player instead of the local player until a camera reset. `Player.setFixedViewDistance` holds a player's view distance (up to 64) for a spectator.
+- **Locs seen below the floor** (`render/loc/SunkenLocs.ts`): Ocellus' void locs (62701-62705) have faces down to 50 units under the floor. OSRS paints a loc after its floor with no depth test, so you see down into them, and their depth shows as the camera turns. Both renderers draw these locs again after the opaque scene. First their faces reset the depth under them to the far plane with no colour (depth range or viewport depth 1). Then they are drawn normally, and their translucent faces follow in the transparent pass.
+- **Omnishop buy amounts**: a shop row's `omnishop_buy_q1-4` are codes into enum 5844 (1→1, 2→5, 3→10, 4→50, 5→2, 6→3; client script 10163). Rows without them keep 1/5/10/50, so the existing shops are unchanged; Alliance Supplies buys 1, 2, 3 or 5.
 
 ## Getting in
 
@@ -153,7 +181,36 @@ Captured details:
 
 *Estimates:* needing a party, and the late-join message.
 
-**Instancing.** The Archive's first map square (region 16471, levels 0-1) is one `PrivateArea` per raid, at the real coordinates. Live copies it into an instance. The area is multi-combat, and teleports are refused ("You can't teleport out of the Archive.", *estimate*).
+**The Nexus instance.** Between bosses the party is in the Nexus: map square 64,87's levels 2 and 3, which live copies onto its instance's levels 0 and 1 (captured build_area). On the real map those levels stand on the Guardian's, and the Guardian's level 1 is 392 height units higher under most of the Nexus than under the Archive Door's end (y 5619 north), so drawn in place that end sank a level and a half. The Nexus is therefore a `TemplatedInstanceArea` of its own, copied as live does; the Hub unit keeps using real-map tiles, which the room maps into the instance (and door clicks back). A logout there is saved on the lobby tile.
+
+**Instancing.** One `PrivateArea` per raid covers every other room's map square at the real coordinates. Live copies each room into an instance of its own (each room change is a `rebuild_region`). The area is multi-combat, and teleports are refused ("You can't teleport out of the Archive.", *estimate*).
+
+| Room | Map square | Level | Arrival | Music |
+| --- | --- | --- | --- | --- |
+| Archive Guardian | 64,87 | 0 | 4127,5571 | 887 |
+| The Nexus | 64,87 | 2 | beside the door taken | none |
+| Bork | 65,87 | 0 | 4173,5599 | 888 "Bork's Beats" |
+| Ezekiel | 63,86 | 0 | 4079,5536 | 890 "Blade of Forgotten Justice" |
+| Dreadnoth | 65,88 | 0 | 4174,5664 | 895 "Hellatine" |
+| Xarth | 65,86 | 0 | 4175,5535 | 896 "Forged Through Fire" |
+| Ocellus | 64,88 | 1 | 4127,5656 (*estimate*) | 893 "Artifacts of Old", then 894 "Ascension" |
+| The vault | 64,90 | 2 | 4127,5779 | 147 |
+
+**Moving between rooms.**
+- A fade, then the move four ticks later, then the HUD again two ticks after that. A member's slot reads 31 while they move.
+- The four boss rooms have an **Archive transporter** (63087; Dreadnoth's is 63134, "Use" / "Quick-use") between the arrival and the arena. It puts the player in the arena: Bork 4184,5599, Ezekiel 4067,5535, Dreadnoth 4184,5663, Xarth 4184,5535. *Estimate:* an instant move, to the tile the captures first show fighters on.
+- The leader going through the transporter starts the challenge (the first member if the leader isn't in the room).
+- None of the bosses plays a block animation when hit (captured), so each has a combat definition with block -1; the jellies attack with `jelly_attack` and die with `jelly_death`.
+
+**Damage timing.** The rooms' ticks run after each player's turn, where queued damage is applied, so damage queued for "now" landed a tick after its graphic. Damage to players from the rooms and hits due at once are applied on the spot instead, so a ground attack lands on the tick its impact shows (Ezekiel's barrage at the impact's tick, his star at tick 3, the Guardian's ranged at tick 4). Hits with a travel time are still queued for their own tick. NPCs keep the queue, whose death handling the rooms' phase changes use.
+
+**After a win.**
+- "Challenge complete: <name>. Duration: <col=ef1020>m:ss.ss</col>. Total: <col=ef1020>m:ss.ss</col>". The Guardian's duration counts from the raid's start, the others from their boss bar.
+- Everyone, the dead too, is back to full hitpoints and prayer.
+- Music 147, and the Alliance Navigator (16700, "Follow" / "Quick-follow") appears in the arena three ticks later. Following it goes back to the Nexus beside the door the party took.
+- After Ocellus: "The Fractured Archive: Total completion time: <col=ef1020>m:ss.ss</col>".
+
+**The timer** (script 10036): `(0, 1)` before the first challenge, `(ticks, 0)` from the raid's start on, never reset between rooms and not sent during fades, and `(ticks, 1)` once Ocellus falls.
 
 **Deaths** in a challenge:
 - "You have died. Total deaths: N." The others see the name in red.
@@ -175,7 +232,24 @@ Captured details:
 
 **Logouts.** *Estimate*, as the Theatre of Blood: a logout in a challenge counts as a death. Logging back in returns the player to the raid while it lasts. If it has ended, they lose their items as the wipe would have.
 
-**Records.** These are counted, as the boards show them: attempts on arrival, deaths, wipes and failures on a wipe, failures on abandoning, and the Guardian's attempts and completions. The Wiki's death-fee discount for the first five clears is not done.
+**Records.** These are counted, as the boards show them: attempts on arrival, deaths, wipes and failures on a wipe, failures on abandoning, each boss's attempts, completions, deaths and best time per party size, and the overall completions and times. The Wiki's death-fee discount for the first five clears is not done.
+
+**Party scaling.** One player counts as two (Wiki). The captured hitpoints for two to five players are below; other sizes follow the last step (*estimate*).
+
+| Boss | 2 | 3 | 4 | 5 |
+| --- | --- | --- | --- | --- |
+| Guardian shield | 550 | 800 | 1,030 | 1,260 |
+| Guardian ground (twice the shield) | 1,100 | 1,600 | 2,060 | 2,520 |
+| Guardian battery | 180 | 250 | 330 | 400 |
+| Bork | 1,500 | 2,180 | 2,810 | – |
+| The Smorks | 600 | 870 | 1,120 | – |
+| Ezekiel | 3,000 (cache) | – | – | 6,870 |
+| Dreadnoth | 2,100 | 3,050 | 3,930 | 4,810 |
+| Xarth | 2,600 | 3,770 | 4,860 | 5,950 |
+| Ocellus, first phase | 2,500 (cache) | 3,630 | 4,680 | 5,730 (6,780 for six) |
+| Ocellus, second and third (one bar) | 5,250 (cache) | 7,610 | 9,820 | 12,020 |
+
+Ezekiel's three and four, and the two-player Ocellus and Ezekiel figures past the cache's, follow Dreadnoth's steps (*estimate*).
 
 ## The Archive Guardian
 
@@ -185,8 +259,8 @@ Captured details:
 
 **Starting it.** "Touch" asks "Begin the challenge?":
 - "Challenge started: Archive Guardian.", music 887 unlocked, `npc_archive_guardian_spawn01` with `vfx_guardian_spawn_spotanim01`.
-- Five ticks later it becomes `tfa_guardian` (16659, 550 shield) and the batteries become active (16662, 180 hitpoints).
-- The boss bar shows npc 16659, 550/550, in the shield's blue (back 132, sliding 623, remaining 853).
+- Five ticks later it becomes `tfa_guardian` (16659) and the batteries become active (16662). The shield, the batteries and its health scale with the party (the table above).
+- The boss bar shows npc 16659 on its shield, in the shield's blue (back 132, sliding 623, remaining 853).
 
 **Flying.** It acts every five ticks:
 - **Ranged.**
@@ -204,48 +278,242 @@ Captured details:
 
 **The shield at 0.**
 - Three ticks later: `idle_to_ground01`, `vfx_guardian_idletoground_spotanim01`, and the landing blast on its centre.
-- It becomes `tfa_guardian_unshielded` (16660). The boss bar moves to its 1,100 hitpoints, which carry over between landings, in red (25600/576/800).
+- It becomes `tfa_guardian_unshielded` (16660), and its stand pose changes to `npc_archive_guardian_ground_idle01` (a base animation change; the cache's stand pose is the flying one). The boss bar moves to its health (twice the shield), which carries over between landings, in red (25600/576/800).
 - On the ground it doesn't attack. From five ticks in, a Vine (16664) rises beside each player every three ticks: spawn, attacks at +3, +6 and +9, despawn at +12, gone at +13.
-- The landings last 35, 41, 47, 53... ticks, six longer each time.
+- The first landing lasts 35 ticks (41 for five players). Later ones end three or four ticks after its health drops below a third (two thirds, then one third).
 - Then `ground_to_flying01` and a full shield.
 
-**Enraged** (seen at 316 of 1,100):
+**Enraged**, once its health is below a third:
 - It takes off at once and stops its ranged attacks.
 - Every 20 ticks a special, and five ticks later `enraged_phase01` with "@mes_hl_ora@The Archive Guardian focuses intently on you!". Ten ticks later 43 damage lands on that player's tile, through prayer.
 - With a live battery about four tiles away, the battery takes it:
-  - The battery is hit for 180, plays `guthixian_battery_despawn` and shakes the camera, and is destroyed (16663) two ticks later.
+  - The battery is hit for its full hitpoints, plays `guthixian_battery_despawn` and shakes the camera, and is destroyed (16663) two ticks later.
   - The player takes 20.
-  - Four ticks after the beam the Guardian loses 220 shield, 40%.
+  - Four ticks after the beam the Guardian loses 40% of its shield.
+- The second battery broken grounds it at once: the rest of its shield goes, and as much again comes off its health.
+- Players can hit the batteries too (captured hitsplats): the Wiki calls it charging them, for "~40% damage to shield". A battery charged to its full hitpoints breaks as the beam breaks it.
+- It faces its target as an entity (captured), its laser's target included: scripted raid NPCs carry `interaction:keep`, else the engine turns an NPC whose target is far off back to its spawn facing. The vines' hits carry no attacker, so they don't pull a player's auto retaliate. The camera shake stops three ticks after a battery breaks (*estimate*: a spectator never sees it).
+- **On the ground for good** it has no vines: every 20 ticks its special, a dive three ticks later and the beam five after that.
 
 **Estimates:**
-- The enrage threshold: 30% here.
 - The ranged and melee damage: 25 and 35, with prayer letting through 40% and 50%. The Wiki gives a max hit of 25.
 - The vines: 20, halved by Protect from Melee. The captures show 17-19, and 6-11 under the prayer.
 - The swoop's trigger and landing, and the mushroom and battery reach.
-- A player's own hits on a battery doing nothing.
-- No scaling past two players. The Wiki says hitpoints scale with the party, from at least two, but gives no figures; 550/1,100 is what a duo met.
 
-**The kill was never captured.** Its end here is a guess:
-- `npc_archive_guardian_death01`, then the dead Guardian (16658).
-- "Challenge complete: Archive Guardian." The dead get up, and the Passageway works again.
+**The kill** (all four captured):
+- At 0: `npc_archive_guardian_death01` with `vfx_ocellus_null` (4345) in graphic slot 2, height 200.
+- Seven ticks later: the dead Guardian (16658), the batteries gone, "Challenge complete: Archive Guardian.", music 147, and section 1's two doors "slightly" open (63089 / 63092), fully three ticks later (63090 / 63093). The Passageway works again.
+- The boss bar fades at +11 and is gone at +15.
+- Armacus Selles and four Guardians of Armadyl (16724, 16720-16723) fade in at 4126-4128,5573-5577 and run north.
 - A `fractured-archive:room-complete` event `{ raid, room, players }`.
-- "The way onward is not open yet: the Archive's other chambers are still to come."
+
+## The Nexus
+
+Level 2 of the Guardian's map square, between the rooms.
+- **Doors.** Three sections, each with a west door (x 4113, facing 3) and an east one (x 4141, facing 1), at y 5584, 5597 and 5610. The Archive Door to Ocellus is at 4124,5621. Section 1 is on the Guardian's own level; the others and the Ocellus door are on level 2.
+  - The doors show the next section: section 2 is 63098 / 63101, section 3 63103 / 63104 and 63106 / 63107. The Ocellus door opens (63111) after the third boss.
+  - "Enter" asks "Enter this chamber?" (Yes. / No.); "Quick-enter" goes straight in.
+- **The path.** West leads to Ezekiel, Moia, the Dagon'hai; east to Bork, Dreadnoth, Xarth. The first member through a door chooses for the party, and the other door of that section closes. *Estimate:* no door choice reached the spectator, and every capture went east after section 1. Moia's and the Dagon'hai's doors stay shut ("That way isn't open yet.").
+- **Coming back** beside the door taken: east 4139, west 4116, two tiles north of the door's row.
+- **Staff.** The Alliance stand about the Nexus on each visit, with their captured lines every 12 ticks. The Quartermaster (16761, 4129,5609) and his loot wheelbarrow (63302, 4130,5608) are there only on the visit after the second boss.
+
+## Bork and the Smorks
+
+From the captures of four fights (two to four players) and the Wiki's strategy, Bork and Smorks pages.
+
+- **Spawns.** Bork (16640, 4x4) at 4194,5603 and the Smorks' tower (16641, 3x3) at 4190,5598, both facing the entrance, with nine `invisible_type8_blockrange` on the tower's tiles. The boss bar is on `tfa_bork_smork_hp_ui_handler` (16642) with Bork's hitpoints, and the second bar on the Smorks (colours 9312 / 22784 / 31104). Flat armour (Wiki): Bork 10 (2 against magic, none while dazed), the Smorks 2.
+- **The start**, six ticks after the first arrival: sound 12769. Bork goes for the first player in (Wiki), a tile a tick.
+- **The gong.** `npc_bork_gong_melee01` and sound 10051, eight ticks in and then every 7, 6, 5 or 4 ticks as the tempo rises: two strikes two ticks apart. The second shakes the ring of tiles touching him. The first reaches out to his target when they stand two or three tiles off, covering every ring out to them (the Wiki's "stronger beat with a larger area"). The `tfa_wave_dust_short` delay is the tile's Manhattan distance from his footprint's tile (2,2), in cycles (219 of 222 strikes exactly).
+- **The Smorks** (`npc_smork_cannon_attack01`, from the tower's middle), facing whom they shoot:
+  - **Volleys** of all bones (ranged, 4056) or all potions (magic, 4057) at every player but Bork's target, flying 150, 120, then 90 cycles as the tempo rises.
+  - **Their cycle.** The first volley comes 13 ticks in, then napalm, one or two volleys, and the heavy cannonball. Later cycles have two or three volleys, napalm, then one or two volleys (four in all) before the cannonball, starting 39 ticks after the daze. Volleys are a tempo's spacing apart (7, 6, 5, 4). The volley after the napalm comes 2 x spacing - 1 after its cast, and the cannonball's line a spacing after the last volley.
+  - **Napalm.** "Burny gloop!" / "Fireeeeeeeeee!" / "Hot stuff!" with a goblin voice (12747-12756). A tick later comes the cast (sound 12240), with `gargboss_debris_shadow_120` on the tile. Four ticks after that the fire (12239) splashes from the tile two tiles towards the tower: the 2x3 beyond it when straight, the 2x2 when diagonal, plus a drip or two beside the tile (the base shape is inside 17 of 18 captured splashes). In the frenzy, next to the tower, it runs away from it instead. Fire and splat graphics are 3 cycles a tile out. A tick later `tfa_bork_ragged_tile` oil, turned at random, lies there for 199 ticks. Oil does 6-7 a tick and a burn from 2 (Wiki). Napalm landing on Bork hurts him.
+  - **The heavy cannonball.** "Big bomb! Bork watch out!", then two ticks later `npc_smork_big_cannon_attack01`, sound 12248 (delay 15) and `gargboss_debris_shadow_150` on the tile of a player other than Bork's target. It lands five ticks later. Every captured one landed on Bork (14 of 14), the party luring him onto it.
+- **The daze.** "Oof." with `npc_bork_14_cycle_stun01` and sounds 3201, 12273, 12758 and 12249. A Smork apologises: "Bork! We sorry! No go!" / "No! Fearless leader!" / "That you fault!". For the 14 ticks his armour is gone and melee always hits (Wiki).
+- **The stomp.** "Bork very angry!!" with `stomp_attack_in01`, then two ticks later `stomp_attack01`. Four shockwaves come 3, 6, 9 and 12 ticks in (sound 10051 each) over the arena, his own tiles too: 4184-4198 x 5591-5607 without its four corner tiles. Each rolls out a cycle a tile of Manhattan distance from one of his feet. The feet are the two of his footprint's eight non-corner edge tiles on the side facing his target as the stomp starts, in turn, the clockwise one first (all 40 captured shockwaves exactly). The tower's shadow is safe: a tile is shadowed when every line from his middle 2x2 to points 0.3 in from the tile's corners crosses the tower (fitted, a tile or two off at the edges). The recovery `cycle_and_out01` plays at 8, "Bork smash <player> now." at 15, and the gong again at 19. A missed cannonball brings "Bork think it stomp time now!" (Wiki).
+- **Tempo** at the Smorks' 75, 50 and 25%: "Bork get into it!" / "Smorks go faster!", "Bork make fast drum!" / "Smorks feeling drum beat now!", "Bork maximum crush!" / "Smorks go fastest!".
+- **Deaths.**
+  - Bork: `npc_bork_death01` and `vfx_bork_death_spotanim01`, "Smorks... avenge... Bork.", and gone seven ticks later, when the Smorks say "Human die for that!". Four ticks on, the frenzy starts: a volley at everyone (90 cycles) every two ticks. After two or three volleys comes napalm, with the next volley three ticks after its cast, and from then on five volleys between napalms.
+  - The Smorks: "Uh oh." (12761), the tower's three death graphics two ticks later (12251), a fade out over the seventh tick, and gone at nine.
+  - The room is won when both have gone. The oil crumbles (`vfx_smork_napalm_despawn_spotanim01`, turned at random) and the Navigator fades in three ticks later.
+- *Estimates:* every damage figure, the burn's ticking (2 every four ticks, five times), the missed cannonball's stomp (two ticks after the landing), and Bork stomping every 45 ticks over the whole arena once the Smorks are dead (Wiki: "Bork's stomps cover the entire arena").
+
+## Ezekiel
+
+- Ezekiel (16652, 3x3) at 4062,5537 in an arena 4056-4068 x 5528-5540. He walks after his tank, the first player in (Wiki), faced as an entity.
+- **His cycle**, 36-37 ticks: the special, melee at +7 and +12, the swords flying at +14, melee at +26 and +31.
+- **Melee** (`npc_ezekiel_melee01`) is a cleave: `tfa_wave_dust` on the ring round him, except the three tiles directly behind him, opposite his target (the Wiki's safe spot). With the tank out of reach, a magic attack (`magic01`) goes at everyone instead.
+- **The special:** a star of explosions one to three steps round him, then the swords (Animated Sword 16653, 3x3), each with a timer bar (headbar 87, 60 to 0 over 390 cycles). Fourteen ticks later each flies twelve tiles along its lane in one tick and fades:
+  - "Divine consequence!": a cross, one vertical lane (both ends) and one horizontal;
+  - "Divine judgement!": three in a row from the north, flying a tick apart west to east; or two vertical lanes, both ends.
+- A player walking out of a sword's lane as it flies rolls clear (`tfa_ezekiel_roll`, Wiki and user).
+- The finale's blocked tiles are walkable again once he is dead.
+- Players' hits on a sword charge it instead of hurting it (hitsplat 23 and a second bar, headbar 42); the charge raises its damage (Wiki).
+- A sword flying through him: "Agh!", `idle_to_weaken01` and the weakened stance (`weaken01`) for eight ticks, without attacking. All swords missing him heal him (Wiki; 5% here, *estimate*).
+- **The finale**, below a third: he moves to 4059,5534 (a 60-cycle exact move), `finale01` with its glow, standing in `finale_loop01`. The 9x9 round him is blocked except the 3x3 in front of him (4062-4064 x 5534-5536), and everyone is pushed into it, unhurt (user). Seven fence swords drop round it, and three finale swords on his footprint.
+- **Every 11 ticks a barrage** in three steps a tick apart: lightning on two of the three finale swords each step; the one left out shows the safe tile, the east row of the 3x3 at that sword's row (guides; *estimate* of the exact tile). From the barrage's start to its last impact the click itself rolls a player to the 3x3 tile they click (a 15-cycle forced move; a click mid-roll finishes it and rolls on at once); otherwise they walk. Moving against the way they face is a quick step back instead (`tfa_ezekiel_strafe`, keeping their facing; user). They face their target while attacking one, else the way their last roll went (for six ticks), else Ezekiel.
+- **Death:** `npc_ezekiel_finale_death01`, "...Formidable.", the finale swords' despawns, the death sword (16656) left on his tile, and the room is won ten ticks later.
+- *Estimates:* every damage figure, the charge's scale, the heal. The swords' fade-in (a transparency update) isn't sent.
+
+## Dreadnoth the Jellied
+
+- Dreadnoth (16665, 5x5) at 4189,5661 in an arena 4181-4198 x 5656-5670, with headbar 66 (90 wide). It crawls after its target, a tile every two ticks as live's crawl steps (which clients play over both ticks, so it doesn't stop and start), and hits whoever is beside it in melee.
+- **Waves** at 85, 65 and 45% (headbar 66 fills of about 75, 56 and 40 of 90): one, two and three volleys six ticks apart. Each is `jump01`, then a tick later three damage tiles in or by its footprint (sound 12361) and three `ranged_proj01` at each player (10-90, 12-120, 14-150). Where they land, a splat and `jelly_spawning_idle`, sent again every tick until the jellies (16666, 75 hitpoints, at most 12) rise eight ticks after the last volley.
+- It faces its target as an entity. The jellies are ordinary combat NPCs that always go for the nearest fighter; they and Dreadnoth walk through other NPCs, so jellies stack and never block it.
+- **Phase two** at 25%: "*glub glub*", then five ticks later (all five captures) and every eight ticks after, a jump (`jump02`) at its target, a 90-cycle exact move with `tfa_boss_jelly_5x5_jump` (the shadow) where it lands. It lands centred on the player's tile when they are within five tiles, else five tiles the nearest of eight ways towards them, never west of x 4184 (fits the captured jumps; 38 of 48 to a tile from the tile it faced). A player still under it is slammed, and it heals by the damage (Wiki and guides; hitsplat 6). As it lands: one to three damage tiles in its footprint, and at each player a `ranged_proj01` (10-90) and a `ranged_proj02` (10-180, sound 12362) at their tile, which becomes a damage tile six ticks later.
+- **Death:** it splits into seven jellies of 37 hitpoints; the room is won when the last one dies. The damage tiles are cleared (`invisible_type8_nonblocking`).
+- *Estimates:* every damage figure, how many jellies a volley makes, a jelly's damage (the cache's).
+
+## The Quartermaster
+
+- "Resupply" opens Alliance Supplies (omnishop row `tfa_midraid_supplies_shop`), or `tfa_midraid_supplies_shop_failure`, which adds Leftovers. "Talk-to" is a messagebox.
+- The stock and prices come from the cache: Saradomin brew(4) and Super restore(4) 3 credits, Prayer potion(4), Manta ray, Halibut, Ranging potion(2) and Super combat potion(2) 2, Giant krill and Prayer potion(2) 1, the Alliance log free.
+- The currency is Supply Credits, in `tfa_supply_points` (16381).
+- *Estimates* (a spectator has no credits and sees no shop): 10 credits for each challenge won, lost on leaving the raid; the failure row once anyone in the party has died; the dialogue.
+
+## Xarth
+
+From the captures of five fights (four to five players).
+
+- Xarth (16684, 3x3) at 4190,5534 never moves; his footprint is nine `invisible_type8_blocking`. Three rubble heaps (2x2) at 4193,5530 (south), 4196,5536 (east) and 4193,5540 (north).
+- **Phase one**, three cycles of 31 ticks:
+  - five magic attacks four ticks apart (fireball 4034 at a player);
+  - an AoE (`xarth_attack_aoe_01`, sounds 9221, 9335, 9215): a projectile at each player's tile, with a shadow;
+  - three ticks later the flame blast (sounds 9224, 9210, 9215, 9259, then 9240 for each player a tick later). Three ticks after that comes the wave (`vfx_vmq4_ennius_fire_explosion`, sound 10579), rolling out a cycle per tile of distance from his footprint (every captured tile).
+  - **The wave's shape:** a 90° wedge out of his footprint towards the heap that falls (a row out it is the footprint plus a tile each side, a tile wider each side every row), then all round in the third cycle. The heaps fall south or north first (at random: 3 and 2 of 5 captures), then east, then the last.
+  - **The falling heap shelters the tiles behind it.** A tile the heap hides from his centre tile, by OSRS's projectile line of sight, gets no fire. One it hides only from his footprint's tile nearest that tile gets the smaller explosion (`_smaller`). This fits 3,892 of 3,920 captured tiles.
+  - The heap NPC goes and a destroyed one plays `loc_xarth_rubble_collapse_01` with its graphic for three ticks. The heap's tiles get `invisible_type8_nonblocking` and `invisible_type8_blockrange_size2`, so the 2x2 is walkable.
+- **Phase two** starts on the third wave's tick:
+  - seven arena fires, one to seven tiles from his footprint (mostly two to five), and the eight corpse piles burning;
+  - ranged attacks seven and eleven ticks in;
+  - then a 21-tick cycle from 15: two magic attacks two ticks apart (three for five players) at edge tiles, four ranged attacks four ticks apart from five, three more fires at twelve.
+  - Three ticks after each magic attack a Corpse (16687, 62 hitpoints) fades in there (0 to 30 cycles) and walks a tile a tick to him. One that reaches him is absorbed (`xarth_corpse_absorbed_01`, gone two ticks later) and heals him twice the hitpoints it has left (hitsplat 6: 124 for an unhurt one). One killed plays `xarth_corpse_death_01` with the doused flame and goes four ticks later.
+- **Death:** `xarth_death_01` with its graphic. Six ticks later he and the corpses go, his footprint becomes `invisible_type8_nonblocking`, and the room is won.
+- *Estimates:* every damage figure, the fires' burn, whether the smaller explosions hurt (here they don't), where on the edge the corpses rise.
+
+## Ocellus
+
+From the captures of three kills, the Wiki's Ocellus and strategy pages, and the guides.
+
+- The room (level 1) centres on 4127,5673. The hooded figure (16671; met or not by `tfa_ocellus_met`, saved) stands at 4126,5669. "Talk-to" or "Proceed" asks "Begin the challenge?" (*estimate*).
+- **The start:** "Now... ascension...", the entrance closes behind the party, and it becomes the first phase (16674).
+- **Headbars and hitsplats** (captured): in the first phase his headbar is the blue one (headbar 10, 100 wide), and damage on him shows cyan (hitsplats 18 for your own hits, 19 for others'; blocks stay 12 and 13). From the third phase it is headbar 19 (100 wide), showing the shared pool the HUD shows, with the usual hitsplats. Heals show as hitsplat 6: on a player intercepting a crack line, and on him from his soulsplit. Not built: the small heals (2-6) live shows on him in the first phase, whose cause the captures don't show.
+
+**First phase** (blue bar, and a second bar of 96 for his charge):
+- He walks corner to corner anticlockwise, SE (4132,5666), NE (4132,5678), NW (4120,5678), SW (4120,5666), from a random first corner. He shows Protect from Melee while walking (melee does nothing then), and every five ticks throws a fireball (ranged: `phase1_basic_projectile_start`, 4231/4232) or a water ball (magic: `_end`, 4228/4229) at everyone.
+- **At a corner** (the tick after he arrives): seven tendrils two ticks apart. Each is eight tiles of `floor_crack` from a far tile in to his footprint, at random from seven spots (captured; not aimed at players): straight along either of the two rows or columns of his side nearer the middle, or diagonal from his inner corner, its tile or either beside it.
+  - A tendril shows two ticks after it is laid. Its energy flows back into him five ticks after it is laid, and the whole line lights up green (the `_end` graphics, sound 12513; on every line in the captures).
+  - Anyone standing on any tile of the crack as the green passes intercepts it (no timing needed: they can stand on it early and wait). An interception heals that player's chip damage: what they lost since their last interception, from the most health they had since (guides).
+  - With nobody on it, he charges: 2 on the second bar.
+- Three ticks after the last tendril: "Pointless..." / "You... fail..." / "Unworthy...". Three ticks after that, his explosion: the two rings round his footprint (inner at once, outer a moment later), up to 35. Three ticks later he walks on.
+- **The middle**, at two thirds and a quarter, even mid-walk (captured): he teleports out, fading out, and four ticks later in at 4126,5672, fading in, with the centre's walk-block loc.
+  - Four sides clockwise from a random one, eight ticks apart. Each side has two diagonal six-tile tendrils, from the ends of that side: the first shows at once and flows after four ticks, the second two ticks later.
+  - Each side ends in the explosion six ticks after it starts.
+  - Eight ticks after the last side: "Death... awaits..." (17-18), or, from a charge of 12, "Embrace... annihilation..." (80-90). Both are unavoidable (Wiki; the threshold is an *estimate*). Two ticks later he expends the charge and it empties; seven ticks after that he walks on.
+- **At 1:** "You... will disappear...". He teleports to the middle if he isn't there; three ticks later comes `phase1_transformation`, and ten ticks after the line, the second phase (16675).
+
+**Second phase, 123 ticks whatever the damage** (music 894):
+- Two ticks in, six portals stand on each arm of the cross: E 4128-4138, W 4115-4125 at y 5673, N 5674-5684 and S 5661-5671 at x 4127, every two tiles.
+- Seven ticks in comes "Your time... comes...". The Blade (16676) stands with him and takes the party's attacks (he has no Attack option). 43% of its damage reaches his bar (832 of 1,951 seen).
+- **The party's quadrant** (where most of them stand, then clockwise NW, NE, SE, SW) gets 42 ticks:
+  - **Six volleys, five ticks apart.** On the two arms beside the quadrant every portal turns purple (`quadrant_wall_active`) but one an arm, which stays orange. Four ticks later each purple portal fires across the quadrant from a 2x2 at it, covering its 2-tile strip, at 6 cycles a tile. Anyone in a strip is hit for 20-25 as the shot reaches them. The 2x2 where the two orange strips cross is safe.
+  - Which portals stay orange is a fixed pattern per quadrant, the same in every captured kill (`ORANGE`; counted out from the middle, the N/S arm's then the E/W arm's): NW and SW 2-2, 2-3, 1-4, 2-2, 2-4, 3-3; NE 1-0, 1-3, 1-5, 3-3, 2-2, 3-0; SE 1-1, 3-1, 1-3, 1-1, 2-2, 4-1. Each safe spot is on the floor and a few tiles from the last.
+  - **28 ticks in:** purple pools burst on 10-12 tiles and every player's tile (25, four ticks later; *estimate*).
+  - **31 ticks in:** every portal on both arms turns purple.
+  - **33 ticks in:** an orange portal opens on the floor for seven ticks (`p2_safe_portal`; its idle graphic again every tick), with the Blade's discharge. Stepping on it moves a player to the same spot in the next quadrant clockwise (*estimate*).
+  - **40 ticks in:** every purple portal fires across the quadrant, and anyone still in it dies.
+- The client keeps a tile graphic sent again on its tile within 800 ms (the floor portal's idle, a tick long) playing up to 150 ms past its end until the next arrives, so tick jitter doesn't make it flash.
+- "This... is enough..." ends it, in the middle of the third quadrant.
+
+**Third phase** (16677, on the same bar):
+- **The cross falls.** Four ticks in, each arm cracks (`straight_collapse_01-04`, solid 3-wide). Five ticks later they fall in (`dungeonkit_guthixian03_cracking_collapsing_01-04`), with explosions running out from the middle every three tiles, 15 cycles apart (`tfa_arena_collapsing_explosion02, 03, 04, 01`). Three ticks after that, the empty forms leave the hole. The middle platform gives way to a 3x3 invisible blocker (the hole shows there too), and the stairs up to the room to invisible locs (4126,5658 and the entrance tile). The portals play their despawn two ticks in; the sword's drop explodes a tick in. The middle is blocked (5x5), and invisible walls stand along both sides of every arm, open only beside its three stepping stones ("Gap", Jump; the other walls also block projectiles). Anyone left on an arm is moved into the quadrant (*estimate*).
+- When a quadrant falls, the stones of the arms beside it crumble (`dungeonkit_guthixian03_steppingstone_despawn_01-03`) as he moves on; those crossings are gone.
+- **Jumping:** a stone is jumped onto from the quadrant's edge tile beside it (outer stones) or from the stone before it, a tick each (`human_steppingstonejump`). A walk click from a stone hops on towards it. The crossings:
+  - SE 4129,5663 to SW 4125,5669;
+  - SW 4117,5671 to NW 4123,5675;
+  - NW 4125,5683 to NE 4129,5677;
+  - NE 4137,5675 to SE 4131,5671.
+  Nobody can jump while the barriers stand, and out of his quadrant only over the arm to the quadrant he takes next, clockwise ("The way back is closed." otherwise; *estimates*).
+- **The quadrants:** he takes the quadrant the portals ended in, then clockwise, from its corner tile, with its two barriers up. Three ticks in, two void bombs fall in each quadrant still standing and leave void (6-7 a tick) until it falls.
+- **His rotation:** melee, melee and a slash, twice, three ticks apart. The slash is a wave three tiles deep and his width, in front of him towards the tank, the rows two cycles apart the tick after his swing (captured); it hits a tick later. The tank is the first to hit him, while they stay in his quadrant. If he can't reach them he fires a void shot at everyone instead (Wiki).
+- **Then a special in turn.** From the second quadrant on, "Insolence..." comes first; after that the cog, the void and "Untether...", round again:
+  - **The cog:** a circle under him (`prayer_in`), then the cog strikes three ticks later (40), once more each quadrant, three ticks apart (`melee_prayer` per strike, `prayer_out` on the last, the loop animation between). Prayers must be off as the circle forms and Protect from Melee on when it strikes: anyone with an overhead prayer as it forms is hit through it. Debris falls where everyone stood (on the second-last strike) and five ticks later leaves void for 24 ticks.
+  - **The void:** "Await... the void..." / "Your panic... is futile..." / "The void... will take you...". Three ticks later, a void shot at everyone and a Void Vine (45 hitpoints, from its headbar) rooting someone other than the tank. The vine has no model: the entangle shows on the player (`spell_entangle01` start, its idle each tick, end). Another player must break it within 15 ticks, or the rooted player takes 50.
+  - **"Untether...":** he rises where he stands and floats to his corner over three ticks (captured exact move), his stance the `unleash_loop` until he lands, as live's base animation change (the quadrant's destruction and the final stand's rise do the same with theirs). The quadrant erupts four times, four ticks apart, including every player's tile (40). 25 ticks in, the square shows under him; four ticks later he comes down on the quadrant (45), all but the square (his footprint and a tile round it), which is safe. No head icon changes (captured).
+  - **"Insolence...":** three superior slashes five ticks apart, each a wave three wide running eight tiles out towards a player, two cycles a step, leaving void in three bands (`insolence_1/4/7`) that crumbles after 15 ticks.
+- **Void flares**, 44 hitpoints each, two at a time, with a charging bar under their health (headbar 75, filling over 28 ticks). One not killed when it is full detonates on everyone (15-30). In the first quadrant they are Siphons, after Untether; in the second Augmenters and in the third Rifts, every 48 ticks.
+  - A Siphon heals him 1% every four ticks while it lives.
+  - An Augmenter that detonates also strengthens him (*estimate*).
+- **The quadrants fall at 75, 50 and 25%:** "Obliteration..." / "Run... It matters not..." and the barriers drop. Eleven ticks later comes "This end... comes..." / "Everything... ends..." / "You can't... escape... the end...". A tick after the line he fades out; a tick later the quadrant falls: its floor's map pieces are overwritten by invisible locs (three tiles a quadrant, each an s10 piece and its s22 decoration), then its slices, its floor blocked, and anyone still on it lost (`tfa_ocellus_void_player_death`). Four ticks after that he takes the next quadrant, fading in.
+- **The censers** (Saradomin 62699 SE, Armadylean 62695 SW, Zarosian 62697 NW, Bandosian 62693 NE) work once each, in this phase, for the whole party (Wiki):
+  - Saradomin: 50 hitpoints and 50 prayer;
+  - Zarosian: 50% special attack;
+  - Armadylean: the next ranged hit on him at its maximum;
+  - Bandosian: the next melee hit on him at its maximum.
+
+**The final stand** (one quadrant left, "End..."), a 60-tick loop from three ticks after he arrives (captured):
+- **0:** he rises (`deflect_in`, his stance `deflect_loop` as live's base animation change) with Deflect Melee (head icon 440:15; melee hits on him turn back on the attacker). The "range" arena graphic shows round him (start, its loop again every three ticks, end), and the tiles next to him are void. **2:** `deflect_loop`.
+- **3:** `soul_fragment_start`: he takes half of everyone's health into an orb a few tiles away (shown only to its player; *estimate*), which gives it back once grown (12 ticks). Void bursts mark each player's tile every two ticks, six times, and hit two ticks later anyone still on it (15-16). He takes half damage meanwhile. His levitating fragment graphic (slot 2) shows until he lands, sent again every two ticks as live loops it.
+- **21:** he lands (`deflect_out`), the arena graphic ends, the fragment graphic is cleared. No `soul_fragment_end` while risen.
+- **24:** his charged attack, a style at random: the cog (melee), the black hole (magic) or arrows (ranged). Protected, 6-7; otherwise 40-50. A tick on, Soul Split (440:11, until his next deflect): the blast heals him a fifth of what it deals (*estimate*).
+- **31:** on the ground, no deflect animation: Deflect Range (440:16), the "melee" arena graphic, everywhere but next to him void. **34:** the orbs and bursts again (his ground fragment graphic). **50:** `soul_fragment_end`, the arena ends.
+- **52:** his charged attack, Soul Split a tick later. **59:** Rifts, two at first, then up to five. **60:** round again.
+
+**Death:**
+- `npc_ocellus_phase3_death` with its graphics, the raid's total time, and a Combat Achievements kill (`combat-achievements:kill`, "Fractured Archive, The", monster key 26).
+- The Blade (16683, "Travel") appears where he fell 14 ticks later and takes the party to the vault.
+
+*Estimates:* every damage figure, the tendrils' charge and its threshold, the floor portal's destination, the Blade's share, the cog's prayer checks, the vine's and the flares' hitpoints and timers, the Augmenter's effect, the Untether square, the barriers stopping jumps, and the final stand's void and orb tiles. The last quadrant's slices aren't placed: they never fell in the captures.
+
+## The vault
+
+- Level 2 of map square 64,90. The exit loc (63297) at 4127,5773, the Merit scroll (62775, "Read" opens the records) at 4129,5778, the braziers at 4131,5805 and 4123,5805.
+- Eight chests round the island, one per party slot: 4124,5793, 4130,5793, 4121,5796, 4133,5796, 4120,5800, 4134,5800, 4121,5803, 4133,5803. Each is a multinpc on `tfa_vault_own_chest`, so a player's own shows as theirs. "Open" plays `chest_guthixian02_open01` and turns it into a Rift ("Search").
+- The Rift out (16690, "Leave" / "Quick-leave") fades in at 4126,5796 about 15 ticks after the party arrives, and goes back to the lobby.
+- **The loot** follows the Wiki's chest table (`loot` in the data file):
+  - one unique (Rondache > Zorya's tome = Horn of Bran > Ascension crossbows > Obligator), or else three standard rolls (weights out of 148 from the Drop Rate Project; each roll 1/51 to give five times as much);
+  - tertiaries: the inert Archivist's folio 1/20, each elemental fragment 1/80, an elite clue;
+  - Orion, the pet.
+- **The reward chest:** Search opens `tfa_chests` (973), the Archive's copy of the Tombs of Amascut's chest. Its items sit on inventory 1029 (six slots, `tfa_chests`), with Take / Take-5 / Take-10 / Take-All on an item (`interface_inv_init`, 149) and Bank-all (973:5), Take-all (973:7) and Discard-all (973:9, after "Are you sure you want to discard everything?"). Taken to the inventory, bulky drops come noted; banked, they're unnoted. The loot counts for the collection log when the chest is first opened.
+- *Estimates:* the unique chance (4%) and weights, the pet's rate (1/400), the unique chest's tile, opening only your own chest, the chest's item options (as the Tombs of Amascut's), unclaimed loot going to the bank on leaving or logging out (the Wiki says the lobby's Loot Wheelbarrow keeps it), and the cabbage for a poor run (not done). Aether catalyst (3/148) is left out: the cache has no item by that name.
+
+## Spectating from outside
+
+- The lobby's Strategy board (63083, "Spectate") asks "Spectate a specific party." / "Spectate a recent party." / "Cancel.".
+  - Specific: "Who would you like to spectate?". "<name> does not appear to be defending the Archive." when they aren't in it; "That player is offline, or has privacy mode enabled.".
+  - Recent: "There aren't any recent raids to spectate." *Estimate:* otherwise the raid that started last.
+  - Carrying anything: "Spectators cannot bring anything into the Archive. Please visit the bank to deposit your items." (live strikes the options out).
+- In: a fade, `tfa_client_spectate_mode` 2, "Spectating the room. Click a fighting player's health display to spectate them.", the body parked on local tile 62,1 of the party's room, the HUD, and `tfa_client_num_external_spectators` (16425) for everyone. Clicking a fighter's health follows them, as for the dead.
+- **The view** (captured `cam_target_v4`, for outside spectators and the dead alike): the camera looks at the room's middle, or at the followed fighter, until `cam_reset` when they leave. The parked body is 30-55 tiles from the fight, so the spectator sees players and NPCs out to 64 tiles, and the room's graphics, sounds and projectiles reach them as far.
+
+  | Room | Camera target |
+  | --- | --- |
+  | Guardian | 4127,5599 (level 0) |
+  | Nexus | 4127,5599 (level 2) |
+  | Bork | 4191,5599 |
+  | Ezekiel | 4063,5535 (*estimate:* not captured; square + 31,31 like Bork, Dreadnoth and Xarth) |
+  | Dreadnoth | 4191,5663 |
+  | Xarth | 4191,5535 |
+  | Ocellus | 4127,5673 (level 1) |
+  | Vault | 4127,5798 (level 2) |
+- The spectator follows the party between rooms. The HUD's leave (974:1, `[2]`), a wipe or the party leaving sends them back beside the board.
+- *Difference:* live closes side tabs 0-6; here the inventory and combat tabs close, as for the dead, because those are what the server can put back.
 
 ## Not done yet
 
-The next phases, and what each needs from a capture:
+What is left, and what a capture needs to show (as a fighter this time):
 
-| Phase | Content | A capture needs to show |
-| --- | --- | --- |
-| 2 | The Guardian's kill and what follows it: the doors, the room where the next boss is chosen. Ezekiel, and Bork and the Smorks (`tfa_bork_smork_hp_ui_handler` suggests the boss bar's second bar, `hp_bar_extra`). | the kill, the door choice, both fights from start to end |
-| 3 | Moia (`tfa_moia_shadow_shield_amount`) and Dreadnoth the Jellied. The Quartermaster and the mid-raid shops (`tfa_midraid_supplies_shop`, `_failure`): Omnishop must read the row's `omnishop_buy_q1-4` instead of its fixed 1/5/10/50. Supply points (`tfa_supply_points`). | both fights, the shop opened and used |
-| 4 | Xarth, and the Dagon'hai Elder with the monks. BossHud drives the second bar wherever a boss uses it. | both fights |
-| 5 | Ocellus: three phases, artifacts, quadrant barriers, platforms. | the whole fight |
-| 6 | The Blade, the vault chests (`tfa_vault_chest_*`, `tfa_vault_own_chest`), the loot, the lobby rewards chest, the cape claims, the records' completion times. The Combat Achievements kill (`combat-achievements:kill`, monster key 26), the collection log, the death-fee discount. | a completion and its loot; Wiki drop rates |
-| 7 | The items: Obligator's and Zorya's tome's weapon types (the Wiki gave them "Unarmed"), Leftovers, the Ascension crossbows and bolts, the elemental fragments, Horn of Bran and Zeal, the Archivist's folio, Rondache, the Living records, and what the shards are for. | each item used |
+| Content | A capture needs to show |
+| --- | --- |
+| Moia (`tfa_moia_shadow_shield_amount`) and the Dagon'hai Elder with the monks, the two west doors | both fights |
+| Damage on players for every boss; prayers and what they block | a fighter's own session |
+| The door choice: how a party picks a side | entering a section |
+| The Quartermaster's shop in use, and how Supply Credits are earned | buying, with the credits before and after |
+| The loot: the unique chance, the lobby's Loot Wheelbarrow, the cape claims, the cabbage, the death-fee discount | a completion and its loot screen |
+| Ocellus: the tendrils' damage and charge, the floor portal's destination, the stones' jump, the cog's prayer rule, the final stand's orbs | a fighter in each phase |
+| The items: Obligator's and Zorya's tome's weapon types, Leftovers, the Ascension crossbows and bolts, the elemental fragments, Horn of Bran and Zeal, the Archivist's folio, Rondache, the Living records, and what the shards are for | each item used |
 
-Also missing from phase 1:
+Also missing:
 - The banker's and the wizard apprentice's dialogue.
 - Mining experience.
-- Party scaling.
 - Practice mode, which is not out on live.

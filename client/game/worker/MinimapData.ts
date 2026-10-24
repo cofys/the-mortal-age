@@ -1,6 +1,8 @@
 import { MinimapImageRenderer } from "../../rs/map/MinimapImageRenderer";
 import { Scene } from "../../rs/scene/Scene";
 
+export type MinimapData = { mapX: number; mapY: number; minimapBlobs: Blob[] };
+
 export async function loadMinimapBlob(
     minimapImageRenderer: MinimapImageRenderer,
     scene: Scene,

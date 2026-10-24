@@ -1,3 +1,4 @@
+import { packedActorBounds, type ActorBounds } from "../../ActorVisibility";
 import { playerInterpolation } from "../../player/PlayerInterpolation";
 import { applyInterpolatedFrames, interpolationFrame, interpolationKey, type ActorInterpolation } from "../../../rs/model/seq/FrameInterpolation";
 import type { OsrsClient } from "../../../game/OsrsClient";
@@ -35,6 +36,47 @@ export interface PosedActorGeometry {
     matrices?: Float32Array;
     /** The pose's key, shared by every player in the same pose this frame. */
     poseKey?: string;
+    bounds?: ActorBounds;
+}
+
+/** One unshared face corner per label: shared by player and NPC rest meshes. */
+export function buildLabelledActorRestMesh(
+    key: string,
+    baseModel: Model,
+    rig: LabelRig,
+    textureLoader: TextureLoader,
+    textureIdIndexMap: Map<number, number>,
+): PosedActorGeometry {
+    const vertexLabel = rig.vertexLabelOf();
+    const normals = buildActorNormals(baseModel);
+    const build = (alpha: boolean) => {
+        const faces = getModelFacesFiltered(baseModel, textureLoader, alpha);
+        const sceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, faces.length * 3 + 16, true);
+        if (faces.length > 0) sceneBuf.addModel(baseModel, faces, undefined, false, normals);
+        const labels = new Uint32Array(faces.length * 3);
+        for (let i = 0; i < faces.length; i++) {
+            const face = faces[i].index;
+            labels[i * 3] = vertexLabel[baseModel.indices1[face]] + 1;
+            labels[i * 3 + 1] = vertexLabel[baseModel.indices2[face]] + 1;
+            labels[i * 3 + 2] = vertexLabel[baseModel.indices3[face]] + 1;
+        }
+        return {
+            vertices: sceneBuf.vertexBuf.byteArray() as Uint8Array,
+            indices: Int32Array.from(sceneBuf.indices),
+            labels,
+        };
+    };
+    const opaque = build(false);
+    const alpha = build(true);
+    return {
+        key,
+        opaqueVertices: opaque.vertices,
+        opaqueIndices: opaque.indices,
+        opaqueLabels: opaque.labels,
+        alphaVertices: alpha.vertices,
+        alphaIndices: alpha.indices,
+        alphaLabels: alpha.labels,
+    };
 }
 
 interface BaseAppearance {
@@ -76,7 +118,7 @@ export class PlayerPoseGeometry {
      * Returns the posed geometry for one player this frame, or undefined while it cannot pose.
      * `allowGpu` false forces a CPU-posed mesh (when the frame's pose rows are full).
      */
-    resolve(pid: number, allowGpu: boolean = true): PosedActorGeometry | undefined {
+    resolve(pid: number, allowGpu: boolean = true, visible?: (geometry: PosedActorGeometry) => boolean): PosedActorGeometry | undefined {
         const pe = this.client.playerEcs;
         const actionSeqId = pe.getAnimSeqId(pid) | 0;
         const movementSeqId = pe.getAnimMovementSeqId(pid) | 0;
@@ -133,6 +175,10 @@ export class PlayerPoseGeometry {
         const cycleKey = interpolationKey(interpolation);
         const appKey = app.getCacheKey?.() ?? this.appearanceFallbackKey(app);
         const key = `${appKey}|${seqId}|${frameIdx}${cycleKey}${overlayKey}`;
+
+        const cpuPose = this.geomCache.get(key);
+        // Only final CPU poses have bounds; rest meshes do not bound a GPU label animation.
+        if (cpuPose && (!allowGpu || this.poseCache.get(key) === null) && visible && !visible(cpuPose)) return undefined;
 
         if (allowGpu) {
             const matrices = this.poseFor(key, base, { seqId, frameIdx, interpolation, overlaySeqId, overlayFrameIdx });
@@ -246,36 +292,7 @@ export class PlayerPoseGeometry {
         const rig = this.rigFor(baseModel);
         if (!rig) return undefined;
         const textureLoader = this.client.textureLoader as TextureLoader;
-        const vertexLabel = rig.vertexLabelOf();
-        const normals = buildActorNormals(baseModel);
-        const build = (alpha: boolean) => {
-            const faces = getModelFacesFiltered(baseModel, textureLoader, alpha);
-            const sceneBuf = new SceneBuffer(textureLoader, this.textureIdIndexMap, faces.length * 3 + 16, true);
-            if (faces.length > 0) sceneBuf.addModel(baseModel, faces, undefined, false, normals);
-            const labels = new Uint32Array(faces.length * 3);
-            for (let i = 0; i < faces.length; i++) {
-                const face = faces[i].index;
-                labels[i * 3] = vertexLabel[baseModel.indices1[face]] + 1;
-                labels[i * 3 + 1] = vertexLabel[baseModel.indices2[face]] + 1;
-                labels[i * 3 + 2] = vertexLabel[baseModel.indices3[face]] + 1;
-            }
-            return {
-                vertices: sceneBuf.vertexBuf.byteArray() as Uint8Array,
-                indices: Int32Array.from(sceneBuf.indices),
-                labels,
-            };
-        };
-        const opaque = build(false);
-        const alpha = build(true);
-        const rest: PosedActorGeometry = {
-            key,
-            opaqueVertices: opaque.vertices,
-            opaqueIndices: opaque.indices,
-            opaqueLabels: opaque.labels,
-            alphaVertices: alpha.vertices,
-            alphaIndices: alpha.indices,
-            alphaLabels: alpha.labels,
-        };
+        const rest = buildLabelledActorRestMesh(key, baseModel, rig, textureLoader, this.textureIdIndexMap);
         this.restCache.set(key, rest);
         while (this.restCache.size > MAX_REST_MESH_ENTRIES) {
             this.restCache.delete(this.restCache.keys().next().value as string);
@@ -385,14 +402,14 @@ export class PlayerPoseGeometry {
             if (opaqueFaces.length > 0) {
                 this.opaqueSceneBuf.addModel(model, opaqueFaces, undefined, true, actorNormals);
             }
-            const opaqueVertices = this.opaqueSceneBuf.vertexBuf.byteArray();
+            const opaqueVertices = new Uint8Array(this.opaqueSceneBuf.vertexBuf.byteArray());
             const opaqueIndices = new Int32Array(this.opaqueSceneBuf.indices);
 
             this.resetSceneBuf(this.alphaSceneBuf);
             if (alphaFaces.length > 0) {
                 this.alphaSceneBuf.addModel(model, alphaFaces, undefined, true, actorNormals);
             }
-            const alphaVertices = this.alphaSceneBuf.vertexBuf.byteArray();
+            const alphaVertices = new Uint8Array(this.alphaSceneBuf.vertexBuf.byteArray());
             const alphaIndices = new Int32Array(this.alphaSceneBuf.indices);
 
             return [{
@@ -401,6 +418,7 @@ export class PlayerPoseGeometry {
                 opaqueIndices,
                 alphaVertices,
                 alphaIndices,
+                bounds: packedActorBounds(opaqueVertices, alphaVertices),
             }, animated];
         } catch {
             return undefined;

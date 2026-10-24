@@ -9,14 +9,21 @@
 import { Scene } from "../../rs/scene/Scene";
 import type { SdMapData } from "../loader/SdMapData";
 import type { WebGPURenderer } from "./WebGPURenderer";
+import { WebGPUMapSquare } from "./WebGPUMapSquare";
 
 export class WebGPUInstances {
     /** Bumped per build (and on clear); only the latest build's result is applied. */
     private buildSeq = 0;
     private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
     private builtScene: SdMapData | null = null;
+    private pendingLoads = 0;
+    private activeBuilds = 0;
 
     constructor(private readonly renderer: WebGPURenderer) {}
+
+    hasPendingWork(): boolean {
+        return this.pendingLoads > 0 || this.activeBuilds > 0 || this.rebuildTimer !== null || this.builtScene !== null;
+    }
 
     async load(templateChunks: number[][][], regionX: number, regionY: number): Promise<void> {
         const r = this.renderer;
@@ -35,10 +42,15 @@ export class WebGPUInstances {
         // The current scene stays drawn while the new one builds. LOC_ADD_CHANGE packets arrive
         // right after REBUILD_REGION in the same batch: start once they are in, so the scene is
         // built once, with them.
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        if (!r.instanceActive || r.instanceTemplateChunks !== templateChunks) return;
-        this.cancelRebuild();
-        await this.build();
+        this.pendingLoads++;
+        try {
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            if (!r.instanceActive || r.instanceTemplateChunks !== templateChunks) return;
+            this.cancelRebuild();
+            await this.build();
+        } finally {
+            this.pendingLoads--;
+        }
     }
 
     /** Rebuilds the scene with the current loc state, debounced (locs arrive in bursts). */
@@ -51,8 +63,9 @@ export class WebGPUInstances {
     }
 
     /** The latest finished build, once; the renderer applies it. */
-    takeBuiltScene(): SdMapData | null {
+    takeBuiltScene(ready?: (scene: SdMapData) => boolean): SdMapData | null {
         const scene = this.builtScene;
+        if (scene && ready && !ready(scene)) return null;
         this.builtScene = null;
         return scene;
     }
@@ -61,6 +74,7 @@ export class WebGPUInstances {
         const r = this.renderer;
         this.buildSeq++;
         this.cancelRebuild();
+        if (this.builtScene) WebGPUMapSquare.cancelPreparedLoad(this.builtScene);
         this.builtScene = null;
         r.instanceActive = false;
         r.instanceSceneMap = null;
@@ -85,30 +99,38 @@ export class WebGPUInstances {
         const build = ++this.buildSeq;
         const regionX = r.instanceRegionX;
         const regionY = r.instanceRegionY;
-        // regionX/Y are chunk coordinates: the player tile is regionX * 8, its square tile / 64.
-        const mapData = await r
-            .loadSceneData({
-                mapX: ((regionX * 8) / Scene.MAP_SQUARE_SIZE) | 0,
-                mapY: ((regionY * 8) / Scene.MAP_SQUARE_SIZE) | 0,
-                maxLevel: Scene.MAX_LEVELS - 1,
-                loadNpcs: false,
-                smoothTerrain: true,
-                ...r.osrsClient.clientPlugins.objectSettings(),
-                minimizeDrawCalls: true,
-                instance: { templateChunks, regionX, regionY },
-                locOverrides: r.locOverrides,
-                locSpawns: r.locSpawns,
-                terrainOverrides: r.terrainOverrides,
-                mapRegionReplacements: r.mapRegionReplacements,
-                // The scene builder keeps the ones inside the instance's bounds.
-                extraLocs: r.getExtraLocs(),
-            })
-            .catch((error) => {
-                console.error("[webgpu] instance scene build failed", error);
-                return undefined;
-            });
-        if (build !== this.buildSeq || !r.instanceActive) return;
-        if (mapData) this.builtScene = mapData;
-        else console.warn("[webgpu] instance scene load returned no data");
+        this.activeBuilds++;
+        try {
+            // regionX/Y are chunk coordinates: the player tile is regionX * 8, its square tile / 64.
+            const mapData = await r
+                .loadSceneData({
+                    mapX: ((regionX * 8) / Scene.MAP_SQUARE_SIZE) | 0,
+                    mapY: ((regionY * 8) / Scene.MAP_SQUARE_SIZE) | 0,
+                    maxLevel: Scene.MAX_LEVELS - 1,
+                    loadNpcs: false,
+                    smoothTerrain: true,
+                    ...r.osrsClient.clientPlugins.objectSettings(),
+                    minimizeDrawCalls: true,
+                    instance: { templateChunks, regionX, regionY },
+                    locOverrides: r.locOverrides,
+                    locSpawns: r.locSpawns,
+                    terrainOverrides: r.terrainOverrides,
+                    mapRegionReplacements: r.mapRegionReplacements,
+                    // The scene builder keeps the ones inside the instance's bounds.
+                    extraLocs: r.getExtraLocs(),
+                }, () => build === this.buildSeq && r.instanceActive)
+                .catch((error) => {
+                    if ((error as Error)?.name !== "AbortError") console.error("[webgpu] instance scene build failed", error);
+                    return undefined;
+                });
+            if (build !== this.buildSeq || !r.instanceActive) return;
+            if (mapData) {
+                if (this.builtScene) WebGPUMapSquare.cancelPreparedLoad(this.builtScene);
+                this.builtScene = mapData;
+            }
+            else console.warn("[webgpu] instance scene load returned no data");
+        } finally {
+            this.activeBuilds--;
+        }
     }
 }

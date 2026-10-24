@@ -13,6 +13,7 @@ const {
 const { Obelisks } = require("../../src/main/typescript/elvarg/game/content/Obelisks");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
+const { World } = require("../../src/main/typescript/elvarg/game/World");
 const { isSafeLocation: isFeroxSafeLocation } = require("./ferox/Bounds.FeroxEnclave");
 
 // Everything this plugin asks of a tile. The safe test alone checks building roofs, Ferox's
@@ -91,11 +92,11 @@ const TELEPORT_BLOCK_LEVEL = 20;
 // Combat level is derived from seven skills on every call, and target selection asks for
 // it once per candidate per tick. Memoising for a tick turns that from O(players^2)
 // recomputes into O(players), while staying fresh enough to notice a level up.
-const COMBAT_LEVEL_TTL_MS = 600;
+const COMBAT_LEVEL_TTL_TICKS = 1;
 const combatLevels = new WeakMap();
 // The attack loop re-checks permission twice a cycle, and splash targeting checks every
 // nearby candidate, so denial messages are throttled per player rather than per check.
-const DENY_MESSAGE_INTERVAL_MS = 1200;
+const DENY_MESSAGE_INTERVAL_TICKS = 2;
 const denyMessageBlockedUntil = new WeakMap();
 const LEVEL_DIFFERENCE_MESSAGES = [
   "Your level difference is too great.",
@@ -105,12 +106,12 @@ const CLAN_CHAT_MESSAGES = ["You cannot attack a player who is in your clan chat
 
 function combatLevelOf(player) {
   const cached = combatLevels.get(player);
-  const now = Date.now();
+  const now = World.getProcessCycle();
   if (cached && now < cached.expiresAt) {
     return cached.level;
   }
   const level = player?.getSkillManager?.()?.getCombatLevel?.() | 0;
-  combatLevels.set(player, { level, expiresAt: now + COMBAT_LEVEL_TTL_MS });
+  combatLevels.set(player, { level, expiresAt: now + COMBAT_LEVEL_TTL_TICKS });
   return level;
 }
 
@@ -158,11 +159,11 @@ function sendThrottled(player, messages) {
   if (!player || player?.isPlayerBot?.() === true) {
     return;
   }
-  const now = Date.now();
+  const now = World.getProcessCycle();
   if (now < (denyMessageBlockedUntil.get(player) ?? 0)) {
     return;
   }
-  denyMessageBlockedUntil.set(player, now + DENY_MESSAGE_INTERVAL_MS);
+  denyMessageBlockedUntil.set(player, now + DENY_MESSAGE_INTERVAL_TICKS);
   const sender = player.getPacketSender?.();
   for (const message of messages) {
     sender?.sendMessage?.(message);

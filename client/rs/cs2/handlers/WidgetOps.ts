@@ -806,6 +806,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
             params: new Map(),
         };
         // Place at the specified index - this matches OSRS behavior
+        if (parent.children[childIndex]) ctx.widgetManager.unregisterWidgetTree(parent.children[childIndex]!);
         parent.children[childIndex] = child;
         ctx.widgetManager.invalidateDynamicChildrenCache(parent);
         ctx.widgetManager.registerWidget(child);
@@ -1014,6 +1015,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
 
         if (!parent.children) parent.children = [];
         while (parent.children.length <= childIndex) parent.children.push(null);
+        if (parent.children[childIndex]) ctx.widgetManager.unregisterWidgetTree(parent.children[childIndex]!);
         parent.children[childIndex] = child;
         ctx.widgetManager.invalidateDynamicChildrenCache(parent);
         ctx.widgetManager.registerWidget(child);
@@ -1114,6 +1116,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
 
         if (!parent.children) parent.children = [];
         while (parent.children.length <= childIndex) parent.children.push(null);
+        if (parent.children[childIndex]) ctx.widgetManager.unregisterWidgetTree(parent.children[childIndex]!);
         parent.children[childIndex] = sibling;
         ctx.widgetManager.invalidateDynamicChildrenCache(parent);
         ctx.widgetManager.registerWidget(sibling);

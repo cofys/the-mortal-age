@@ -1279,7 +1279,7 @@ function handlePotionDrink(player, itemId, slot) {
   entry.potion.effect(player);
 
   const share = player.getAttribute("lunar:potion-share");
-  if (share && entry.potion.shareable && Date.now() < share.expiresAt) {
+  if (share && entry.potion.shareable && pluginApi.core.World.getProcessCycle() < share.expiresAt) {
     const restorative = /restore|prayer|energy|stamina|antipoison|antidote|antifire|guthix rest/i.test(entry.potion.name);
     if ((share.type === "restore") === restorative) {
       entry.potion.effect(share.target);

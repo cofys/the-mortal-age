@@ -43,6 +43,16 @@ const spotRenderer: any = {
 };
 (globalThis as any).self ??= globalThis; // PicoGL reads it when PlayerRenderer loads
 const { PlayerRenderer } = require("../render/player/PlayerRenderer");
+const webgl: any = new PlayerRenderer({ osrsClient: client });
+streamed = false;
+const glLoading = webgl.poseFor("idle|0", base, anim);
+assert.ok(glLoading && isRest(glLoading));
+streamed = true;
+const glPosed = webgl.poseFor("idle|0", base, anim);
+assert.ok(glPosed && !isRest(glPosed));
+assert.notEqual(glPosed, glLoading, "WebGL pose uploads see a streamed frame replace its placeholder");
+assert.equal(webgl.poseFor("idle|0", base, anim), glPosed,
+    "completed WebGL poses keep immutable matrices for unchanged-upload checks");
 const spotFrame = PlayerRenderer.prototype.buildSpotFrameModelForFrame;
 streamed = false;
 assert.equal(spotFrame.call(spotRenderer, 19, 0), undefined, "no graphic while its frame is missing");

@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { AntiAliasingMode } from "../game/plugins/gpu/GpuConfig";
+import { AntiAliasingMode, GpuConfig } from "../game/plugins/gpu/GpuConfig";
 import { resolveGpuSettings } from "../game/plugins/gpu/GpuPlugin";
 import { createScenePipeline, WEBGPU_MSAA_SAMPLES, withSampleCount } from "../render/webgpu/multisample";
 
 const settings = (antiAliasingMode: string, extra: Partial<Parameters<typeof resolveGpuSettings>[0]> = {}) =>
     resolveGpuSettings({ antiAliasingMode, drawDistance: 25, fpsLimit: 240, colorBanding: 0, ...extra });
+
+assert.equal(GpuConfig.items.antiAliasingMode.default, AntiAliasingMode.MSAA_4, "desktop AA default is preserved");
+assert.equal(GpuConfig.items.fpsLimit.default, 240, "desktop FPS default is preserved");
 
 // Each anti-aliasing mode maps to MSAA samples or FXAA, never both.
 assert.deepEqual(

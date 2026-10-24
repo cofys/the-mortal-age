@@ -2484,6 +2484,20 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         width: maskW,
                         height: maskH,
                     });
+                    // For plugins marking things on the minimap (RuneLite's localToMinimap,
+                    // which gives up 80 minimap pixels out).
+                    osrsClient.minimapGeometry = {
+                        drawnAt: performance.now(),
+                        plane: playerLevel,
+                        scale: minimapRenderScale,
+                        worldToMinimap: (wx: number, wy: number) => {
+                            const relX = (wx - worldX) * 4;
+                            const relY = (worldY - wy) * 4;
+                            if (relX * relX + relY * relY >= 6400) return undefined;
+                            const p = minimapRenderer.relativeToScreen(relX, relY);
+                            return [p.x, p.y] as const;
+                        },
+                    };
 
                     // Instances have one combined image, located at the scene origin.
                     const minimapMaps = getMinimapMaps(osrsClient.renderer, playerTileX, playerTileY);

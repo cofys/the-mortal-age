@@ -461,7 +461,19 @@ export function renderOpaqueActorPass(host: WebGLOsrsRendererHost,
             dynamicNpcs.sort((a, b) =>
                 a.geometry.key < b.geometry.key ? -1 : a.geometry.key > b.geometry.key ? 1 : 0,
             );
-            for (const dyn of dynamicNpcs) {
+            for (let i = 0; i < dynamicNpcs.length; i++) {
+                const dyn = dynamicNpcs[i];
+                const npcDataOffset = dyn.dataOffset + dyn.npcIndex;
+                const dynWvId = host.osrsClient.npcEcs.getWorldViewId(dyn.ecsId);
+                let instances = 1;
+                while (i + 1 < dynamicNpcs.length) {
+                    const next = dynamicNpcs[i + 1];
+                    if (next.geometry.key !== dyn.geometry.key || next.map !== dyn.map ||
+                        next.dataOffset + next.npcIndex !== npcDataOffset + instances ||
+                        host.osrsClient.npcEcs.getWorldViewId(next.ecsId) !== dynWvId) break;
+                    instances++;
+                    i++;
+                }
                 const indexCount = host.uploadDynamicNpcGeometry(dyn.geometry, false);
                 if (indexCount <= 0 || !host.dynamicNpcDrawCall) {
                     continue;
@@ -469,25 +481,21 @@ export function renderOpaqueActorPass(host: WebGLOsrsRendererHost,
 
                 const dynDrawCall = host.dynamicNpcDrawCall;
                 dynDrawCall.texture("u_npcDataTexture", actorDataTexture);
-                const npcDataOffset = dyn.dataOffset + dyn.npcIndex;
 
                 dynDrawCall.uniform("u_npcDataOffset", npcDataOffset);
                 dynDrawCall.uniform("u_mapPos", [dyn.map.renderPosX, dyn.map.renderPosY]);
                 dynDrawCall.uniform("u_timeLoaded", dyn.map.timeLoaded);
-                {
-                    const dynWvId = host.osrsClient.npcEcs.getWorldViewId(dyn.ecsId);
-                    if (dynWvId >= 0) {
-                        const dynDeckH = host.getWorldEntityDeckHeight(0, 0);
-                        dynDrawCall.uniform("u_modelYOffset", host.getNpcModelYOffset(dynDeckH));
-                        dynDrawCall.uniform(
-                            "u_worldEntityTransform",
-                            host.worldEntityAnimator?.getTransform(dynWvId) ??
-                            WebGLMapSquare.IDENTITY_MAT4,
-                        );
-                    } else {
-                        dynDrawCall.uniform("u_modelYOffset", host.getNpcModelYOffset());
-                        dynDrawCall.uniform("u_worldEntityTransform", WebGLMapSquare.IDENTITY_MAT4);
-                    }
+                if (dynWvId >= 0) {
+                    const dynDeckH = host.getWorldEntityDeckHeight(0, 0);
+                    dynDrawCall.uniform("u_modelYOffset", host.getNpcModelYOffset(dynDeckH));
+                    dynDrawCall.uniform(
+                        "u_worldEntityTransform",
+                        host.worldEntityAnimator?.getTransform(dynWvId) ??
+                        WebGLMapSquare.IDENTITY_MAT4,
+                    );
+                } else {
+                    dynDrawCall.uniform("u_modelYOffset", host.getNpcModelYOffset());
+                    dynDrawCall.uniform("u_worldEntityTransform", WebGLMapSquare.IDENTITY_MAT4);
                 }
 
                 // Set height map texture from the map
@@ -503,10 +511,16 @@ export function renderOpaqueActorPass(host: WebGLOsrsRendererHost,
 
                 host.dynamicNpcSingleDrawRange[0] = 0;
                 host.dynamicNpcSingleDrawRange[1] = indexCount | 0;
-                host.dynamicNpcSingleDrawRange[2] = 1;
+                host.dynamicNpcSingleDrawRange[2] = instances;
                 (dynDrawCall as any).offsets[0] = 0;
                 (dynDrawCall as any).numElements[0] = indexCount | 0;
-                host.draw(dynDrawCall, host.dynamicNpcSingleDrawRanges);
+                (dynDrawCall as any).numInstances[0] = instances;
+                try {
+                    host.draw(dynDrawCall, host.dynamicNpcSingleDrawRanges);
+                } finally {
+                    host.dynamicNpcSingleDrawRange[2] = 1;
+                    (dynDrawCall as any).numInstances[0] = 1;
+                }
             }
         }
     

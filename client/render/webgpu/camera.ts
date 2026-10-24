@@ -93,12 +93,18 @@ export function updateFollowCamera(
         px = Math.round(projected.x);
         py = Math.round(projected.y);
     }
+    // A camera target (a spectator's) stands in for the player.
+    const cameraTarget = osrsClient.getCameraTargetPosition();
+    if (cameraTarget) {
+        px = cameraTarget.x;
+        py = cameraTarget.y;
+    }
     const playerX = px / 128;
     const playerZ = py / 128;
 
     renderer.playerPosUni[0] = playerX;
     renderer.playerPosUni[1] = playerZ;
-    const basePlane = playerEcs.getLevel(playerEcsIndex) | 0;
+    const basePlane = cameraTarget ? cameraTarget.level : playerEcs.getLevel(playerEcsIndex) | 0;
     const playerHeightSample = sampleBridgeHeightForWorldTile(
         renderer.mapManager,
         playerX,
@@ -107,7 +113,7 @@ export function updateFollowCamera(
         BridgePlaneStrategy.RENDER,
     );
     // Login must finish while a cutscene owns the camera, too.
-    if (playerHeightSample.valid) markMapDataLoaded(renderer, timeSec);
+    markMapDataLoaded(renderer, playerHeightSample.valid);
     // Scripted camera moves (and free cameras) turn following off, as in WebGL's frame loop.
     if (!osrsClient.followPlayerCamera) return;
 
@@ -181,8 +187,8 @@ export function updateFollowCamera(
 
     if (hdCameraFeel) {
         // Eased zoom: the wheel moves a target multiplier, the current value chases it with
-        // frame-rate independent exponential smoothing. WebGPURenderer captured the wheel
-        // while the pointer was over the scene, before the viewport widget consumed it.
+        // frame-rate independent exponential smoothing. WebGPURenderer forwards only wheel
+        // accepted by the viewport, after foreground widgets have claimed their gestures.
         if (renderer.followCamWheel !== 0) {
             renderer.followCamZoomTarget = clamp(
                 renderer.followCamZoomTarget *
@@ -283,13 +289,10 @@ export function updateFollowCamera(
     camera.snapToPosition(undefined, desiredPosY, undefined);
 }
 
-/** Map data counts as loaded once the player's ground height has been valid for a second. */
-function markMapDataLoaded(renderer: WebGPURenderer, timeSec: number): void {
+/** Keep the loading overlay until the whole scene and the player's ground are ready. */
+function markMapDataLoaded(renderer: WebGPURenderer, heightValid: boolean): void {
     if (renderer.mapDataLoadedNotified) return;
-    if (renderer.heightValidAtTime === undefined) {
-        renderer.heightValidAtTime = timeSec;
-    } else if (timeSec - renderer.heightValidAtTime >= 1.0) {
-        renderer.mapDataLoadedNotified = true;
-        renderer.osrsClient.loadingTracker.markComplete(LoadingRequirement.MAP_DATA_LOADED);
-    }
+    if (!heightValid || !renderer.mapManager.isSceneReady(renderer.stats.frameCount)) return;
+    renderer.mapDataLoadedNotified = true;
+    renderer.osrsClient.loadingTracker.markComplete(LoadingRequirement.MAP_DATA_LOADED);
 }

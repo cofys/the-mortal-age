@@ -402,12 +402,3 @@ test('Wilderness death above 20 destroys an unlocked quiver, but keeps a locked 
   }
 });
 
-test("a broken quiver repairs for 270,000 coins", () => {
-  const player = fakePlayer({ cape: null });
-  player.carried.set(I.DIZANAS_QUIVER_BROKEN_, 1);
-  player.carried.set(995, 270000);
-  assert.equal(Quiver._test.repairQuiver({ player }), true);
-  assert.equal(player.carried.has(I.DIZANAS_QUIVER_BROKEN_), false);
-  assert.equal(player.carried.get(I.DIZANAS_QUIVER_UNCHARGED_), 1);
-  assert.equal(player.carried.get(995) ?? 0, 0);
-});

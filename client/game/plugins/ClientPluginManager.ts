@@ -79,9 +79,17 @@ export type WidgetOverlayDrawContext = {
     fontLoader: FontLoader;
     /** A cache sprite as a texture. */
     sprite(id: number): { tex: WebGLTexture; w: number; h: number } | undefined;
+    /**
+     * An item's 36x32 inventory image, without its quantity text (RuneLite's
+     * ItemManager.getImage); `outline` 1 adds the item's black border.
+     */
+    itemImage?(itemId: number, quantity: number, outline: number): HTMLCanvasElement | undefined;
     /** Where a movable overlay of this size (layout units) draws this frame; nothing while the HUD is hidden. */
     place(overlay: WidgetOverlay, width: number, height: number): OverlayPlacement | undefined;
 };
+
+/** An NPC model outline a plugin asks for: colour 0xRRGGBB, alpha 0-1, width in pixels. */
+export type NpcOutline = { ecsId: number; serverId: number; color: number; alpha: number; width: number };
 
 /** A movable overlay's top left in device pixels, and the device pixels per layout unit. */
 export type OverlayPlacement = { x: number; y: number; scaleX: number; scaleY: number };
@@ -97,6 +105,11 @@ export interface WidgetOverlay {
      * Used by overlays that sit over the side panel (status bars) so tooltips still win.
      */
     drawAtAnchor?: boolean;
+    /**
+     * Draw over the scene but under every widget (RuneLite's ABOVE_SCENE), e.g. NPC highlights
+     * that interfaces should cover.
+     */
+    drawBelowWidgets?: boolean;
     /**
      * Makes it a RuneLite movable overlay: Alt-drag moves it, Alt + right-click resets it. The
      * name keys its saved position (RuneLite's overlay class name); position is its default
@@ -195,6 +208,8 @@ export interface ClientPlugin {
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
     widgetOverlay?: WidgetOverlay;
+    /** Overlays that come and go (one per tracked skill, say), drawn after `widgetOverlay`. */
+    widgetOverlays?(): WidgetOverlay[];
     /** Lays out movable overlays (the RuneLite OverlayRenderer). */
     placeOverlay?(
         overlay: WidgetOverlay,
@@ -233,6 +248,8 @@ export interface ClientPlugin {
     tileMarkersConfig?(): TileMarkersPluginConfig | undefined;
     /** Hover and interaction outlines on world objects (first answer wins). */
     interactHighlightConfig?(): InteractHighlightPluginConfig | undefined;
+    /** NPC model outlines to draw every frame (RuneLite's ModelOutlineRenderer.drawOutline). */
+    npcOutlines?(): NpcOutline[];
     /** Ground item labels around a tile (first answer wins). */
     groundItemOverlayEntries?(
         tileX: number,
@@ -275,8 +292,8 @@ export class ClientPluginManager {
 
     playerHeadIcons(serverId: number): IndexedSprite[] {
         const icons: IndexedSprite[] = [];
-        for (const plugin of this.plugins) {
-            const sprites = plugin.getPlayerHeadIcons?.(serverId);
+        for (const plugin of this.implementing("getPlayerHeadIcons")) {
+            const sprites = plugin.getPlayerHeadIcons!(serverId);
             if (sprites) icons.push(...sprites);
         }
         return icons;
@@ -310,7 +327,7 @@ export class ClientPluginManager {
     }
 
     configureSceneDrawCall(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void {
-        for (const plugin of this.plugins) plugin.configureSceneDrawCall?.(renderer, drawCall);
+        for (const plugin of this.implementing("configureSceneDrawCall")) plugin.configureSceneDrawCall!(renderer, drawCall);
     }
 
     disposeRenderer(renderer: WebGLOsrsRenderer): void {
@@ -364,7 +381,7 @@ export class ClientPluginManager {
     }
 
     onScriptFinished(scriptId: number): void {
-        for (const plugin of this.plugins) plugin.onScriptFinished?.(scriptId);
+        for (const plugin of this.implementing("onScriptFinished")) plugin.onScriptFinished!(scriptId);
     }
 
     onScriptCallback(event: ScriptCallbackEvent): void {
@@ -390,7 +407,8 @@ export class ClientPluginManager {
 
     widgetOverlays(): WidgetOverlay[] {
         const overlays: WidgetOverlay[] = [];
-        for (const plugin of this.plugins) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
+        for (const plugin of this.implementing("widgetOverlay")) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
+        for (const plugin of this.implementing("widgetOverlays")) overlays.push(...plugin.widgetOverlays!());
         return overlays;
     }
 
@@ -400,8 +418,8 @@ export class ClientPluginManager {
         height: number,
         canvas: { w: number; h: number },
     ): OverlayPlacement | undefined {
-        for (const plugin of this.plugins) {
-            if (plugin.placeOverlay) return plugin.placeOverlay(overlay, width, height, canvas);
+        for (const plugin of this.implementing("placeOverlay")) {
+            return plugin.placeOverlay!(overlay, width, height, canvas);
         }
         return undefined;
     }
@@ -494,6 +512,12 @@ export class ClientPluginManager {
         return DISABLED_TILE_MARKERS_CONFIG;
     }
 
+    npcOutlines(): NpcOutline[] {
+        const outlines: NpcOutline[] = [];
+        for (const plugin of this.implementing("npcOutlines")) outlines.push(...plugin.npcOutlines!());
+        return outlines;
+    }
+
     interactHighlightConfig(): InteractHighlightPluginConfig | undefined {
         for (const plugin of this.plugins) {
             const config = plugin.interactHighlightConfig?.();
@@ -542,7 +566,7 @@ export class ClientPluginManager {
     }
 
     updateWidgetLayout(): void {
-        for (const plugin of this.plugins) plugin.updateWidgetLayout?.();
+        for (const plugin of this.implementing("updateWidgetLayout")) plugin.updateWidgetLayout!();
     }
 
     renderHud(client: OsrsClient): ReactNode[] {

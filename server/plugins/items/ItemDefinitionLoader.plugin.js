@@ -100,18 +100,57 @@ function loadItemPrices() {
   for (const [key, quote] of Object.entries(data)) {
     const id = Number(key);
     if (!Number.isInteger(id) || id < 0) continue;
-    const price = [quote?.high, quote?.low].find(
-      (value) => Number.isSafeInteger(value) && value > 0
-    );
-    if (price === undefined) continue;
     const definition = ItemDefinition.forId(id);
     if (definition === ItemDefinition.DEFAULT) continue;
-    definition.grandExchangeValue = price;
+
+    const prices = [quote?.high, quote?.low].filter(
+      (value) => Number.isSafeInteger(value) && value > 0
+    );
+    if (!prices.length) continue;
+
+    // Some live quotes are inverted (high below low). Charge the higher guide price
+    // as the buy and the lower as the sell so the spread cannot be arbitraged.
+    const buy = Math.max(...prices);
+    const sell = Math.min(...prices);
+    definition.grandExchangeValue = buy;
+    definition.grandExchangeSellValue = sell;
     const noteId = definition.getNoteId();
     if (!definition.isNoted() && noteId >= 0) {
       const note = ItemDefinition.forId(noteId);
-      if (note.isNoted() && note.getNoteId() === id) note.grandExchangeValue = price;
+      if (note.isNoted() && note.getNoteId() === id) {
+        note.grandExchangeValue = buy;
+        note.grandExchangeSellValue = sell;
+      }
     }
+    loaded += 1;
+  }
+  return { filePath, loaded };
+}
+
+// High/low alchemy values from osrsreboxed-db's item-alch.json.
+// Applied after item-gameplay.json so the cache-derived values win over the old export.
+function loadItemAlch() {
+  const ItemDefinition = getItemDefinition();
+  const filePath = path.resolve(
+    process.cwd(),
+    getGameConstants().DEFINITIONS_DIRECTORY,
+    "item-alch.json"
+  );
+  if (!fs.existsSync(filePath)) {
+    return { filePath, loaded: 0 };
+  }
+  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid item-alch.json: expected an object keyed by item id");
+  }
+  let loaded = 0;
+  for (const [key, values] of Object.entries(data)) {
+    const id = Number(key);
+    if (!Number.isInteger(id) || id < 0) continue;
+    const definition = ItemDefinition.forId(id);
+    if (definition === ItemDefinition.DEFAULT) continue;
+    definition.highAlch = Number.isSafeInteger(values?.highalch) ? values.highalch : 0;
+    definition.lowAlch = Number.isSafeInteger(values?.lowalch) ? values.lowalch : 0;
     loaded += 1;
   }
   return { filePath, loaded };
@@ -255,6 +294,7 @@ function loadItemDefinitions() {
     unresolvedWeaponInterfaces,
     mismatched,
     prices: loadItemPrices(),
+    alch: loadItemAlch(),
   };
 }
 
@@ -276,6 +316,7 @@ function sendCustomItems({ player }) {
 
 module.exports = {
   name: "ItemDefinitionLoader",
+  _test: { loadItemPrices, loadItemAlch },
   register(api) {
     const startedAt = Date.now();
     const result = loadItemDefinitions();
@@ -286,6 +327,7 @@ module.exports = {
       unresolvedWeaponInterfaces: result.unresolvedWeaponInterfaces,
       mismatched: result.mismatched,
       prices: result.prices.loaded,
+      alch: result.alch.loaded,
       elapsedMs: Date.now() - startedAt,
     });
     api.registerContentEndpoint("custom-items", customItemsResource);

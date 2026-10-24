@@ -1,9 +1,10 @@
 const { CombatSpecial } = require("../../src/main/typescript/elvarg/game/content/combat/CombatSpecial");
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
+const { World } = require("../../src/main/typescript/elvarg/game/World");
 
 const ATTR_BLEED_TASK_KEY = "combat:bleed:task-key";
-const POOL_USE_DELAY_MS = 1000;
+const POOL_USE_DELAY_TICKS = 2;
 const POOL_DRINK = 7305; // poh_pool_drink
 const nextPoolUseAt = new WeakMap();
 
@@ -108,12 +109,12 @@ function drinkFromPool(event, tier = 4) {
     event.handled = true;
     return;
   }
-  const now = Date.now();
+  const now = World.getProcessCycle();
   if (now < (nextPoolUseAt.get(player) ?? 0)) {
     event.handled = true;
     return;
   }
-  nextPoolUseAt.set(player, now + POOL_USE_DELAY_MS);
+  nextPoolUseAt.set(player, now + POOL_USE_DELAY_TICKS);
   restoreFromPool(player, tier);
   // rsprox captures (poh_pool_regeneration and the lesser pools, 123 drinks): the player faces the
   // pool and plays poh_pool_drink; no message or sound.

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
 
 import { SparseDat2 } from "../rs/cache/store/SparseDat2";
 import { prefetchIndexRegions, startSparsePrefetch } from "../game/Caches";
@@ -176,3 +178,38 @@ async function main(): Promise<void> {
 }
 
 void main();
+
+test("bulk prefetch waits for the foreground scene, not unfinished background regions", async (t) => {
+    (globalThis as any).self = globalThis;
+    require.extensions[".glsl"] = (module, file) => { module.exports = readFileSync(file, "utf8"); };
+    for (const extension of [".png", ".jpg", ".webp"]) {
+        require.extensions[extension] = (module, file) => { module.exports = file; };
+    }
+    const { OsrsClient } = await import("../game/OsrsClient");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let ready = false, starts = 0;
+    const checkedFrames: number[] = [];
+    const client = {
+        gameState: 30,
+        renderer: {
+            stats: { frameCount: 10 },
+            mapManager: { isSceneReady: (frame: number) => { checkedFrames.push(frame); return ready; } },
+            hasPendingMapStreamingWork: () => true,
+        },
+        get loadedCache() { starts++; return undefined; },
+    };
+    (OsrsClient.prototype as any).startSparsePrefetchWhenSceneReady.call(client);
+    t.mock.timers.tick(0);
+    assert.equal(starts, 0, "incomplete foreground maps still take priority");
+    ready = true;
+    t.mock.timers.tick(100);
+    assert.equal(starts, 1, "outer preload and retry backoff must not hold bulk warming");
+    assert.deepEqual(checkedFrames, [10, 10]);
+    t.mock.timers.tick(1000);
+    assert.equal(starts, 1, "readiness stops the polling loop");
+
+    client.gameState = 10;
+    (OsrsClient.prototype as any).startSparsePrefetchWhenSceneReady.call(client);
+    t.mock.timers.tick(1000);
+    assert.equal(starts, 1, "logging out cancels deferred prefetch");
+});

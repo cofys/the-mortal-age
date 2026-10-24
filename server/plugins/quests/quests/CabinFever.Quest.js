@@ -227,7 +227,7 @@ module.exports = function registerCabinFeverQuest(api) {
 
   const ARRIVE_ACTION_ID = "cabin-fever:arrive";
   // How long a looted plunder container stays empty (wiki: up to 5 minutes).
-  const PLUNDER_RESPAWN_MS = 15000;
+  const PLUNDER_RESPAWN_TICKS = 25;
   const PIRATE_AGILITY = 42;
 
   const BATTLE_DECK = new Location(1815, 4837, 1); // beside Bill on the Adventurous
@@ -771,10 +771,10 @@ module.exports = function registerCabinFeverQuest(api) {
   }
 
   function lootPlunder(player, source) {
-    const now = Date.now();
+    const now = World.getProcessCycle();
     const timestamps = lootedAt.get(player) ?? {};
     const looted = varbitValue(player, source.varbit) === 1;
-    if (looted && now - (timestamps[source.varbit] ?? 0) < PLUNDER_RESPAWN_MS) {
+    if (looted && now - (timestamps[source.varbit] ?? -Infinity) < PLUNDER_RESPAWN_TICKS) {
       plunderOutcome.set(player, "recently");
       playVariant(player, source.variant);
       return;

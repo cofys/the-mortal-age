@@ -12,6 +12,7 @@
  * like the scene entries and call the extension's `sceneDepthPosition(viewPos)` for the clip
  * position; `beforeScene` records its own passes through `drawWorldDepth` and `drawActorDepth`.
  */
+import type { Frustum } from "../../game/Frustum";
 import type { WebGPURenderer } from "./WebGPURenderer";
 
 export const SCENE_EXTENSION_FIRST_BINDING = 6;
@@ -89,6 +90,8 @@ export interface WebGPUSceneExtension {
     sceneColorFormat?: GPUTextureFormat;
     /** Checked once per frame; the base pipelines draw while false. */
     isActive(): boolean;
+    /** Prepare the current shadow volume before actor poses; absent volumes disable actor culling. */
+    prepareActorVisibility?(renderer: WebGPURenderer): Frustum | undefined;
     /** Runs on active, logged-in frames before the scene pass, in the frame's encoder. */
     beforeScene?(renderer: WebGPURenderer, encoder: GPUCommandEncoder): void;
     /**

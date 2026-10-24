@@ -53,6 +53,16 @@ type ClutterMap = WebGPUMapSquare & {
 };
 
 type GrassTile = { map: ClutterMap; level: number; localX: number; localY: number; distance: number };
+type ClutterResidency = {
+    seen: number;
+    plane: number;
+    materials: ClutterMap["tileGroundMaterials"];
+    colors: ClutterMap["tileGroundColors"];
+    heights: ClutterMap["heightMapData"];
+    baseX: number;
+    baseY: number;
+    span: number;
+};
 
 /** Integer hash of a world tile (and variant seed), stable across frames and players. */
 function hashTile(x: number, y: number, seed: number): number {
@@ -133,7 +143,13 @@ export class HdClutterLayer {
     private vertices = new Float32Array(0);
     private floats = 0;
     private vertexCount = 0;
-    private signature?: string;
+    private readonly residency = new Map<ClutterMap, ClutterResidency>();
+    private generation = 0;
+    private bucketX = NaN;
+    private bucketZ = NaN;
+    private plane = -1;
+    private dirty = true;
+    private readonly invalidate = () => { this.dirty = true; };
     private disposed = false;
 
     constructor(device: GPUDevice) {
@@ -189,12 +205,34 @@ export class HdClutterLayer {
         const maps = renderer.mapManager.visibleMaps as readonly ClutterMap[];
         const bucketX = Math.floor(playerX / REBUILD_BUCKET_TILES);
         const bucketZ = Math.floor(playerZ / REBUILD_BUCKET_TILES);
-        let signature = `${bucketX},${bucketZ},${playerPlane}`;
-        for (const map of maps) signature += `|${map.id}:${map.plane ?? ""}`;
-        if (signature !== this.signature) {
-            this.signature = signature;
+        const generation = ++this.generation;
+        // MapManager reorders squares with the camera; residency and ground data drive grass.
+        for (const map of maps) {
+            const previous = this.residency.get(map);
+            const plane = typeof map.plane === "number" ? map.plane | 0 : playerPlane;
+            const baseX = map.getRenderBaseTileX(), baseY = map.getRenderBaseTileY(), span = map.getLocalTileSpan();
+            if (!previous || previous.plane !== plane || previous.materials !== map.tileGroundMaterials ||
+                previous.colors !== map.tileGroundColors || previous.heights !== map.heightMapData ||
+                previous.baseX !== baseX || previous.baseY !== baseY || previous.span !== span) {
+                this.residency.set(map, { seen: generation, plane, materials: map.tileGroundMaterials,
+                    colors: map.tileGroundColors, heights: map.heightMapData, baseX, baseY, span });
+                if (!previous) map.locDataChangedListeners.add(this.invalidate);
+                this.dirty = true;
+            } else previous.seen = generation;
+        }
+        for (const [map, entry] of this.residency) {
+            if (entry.seen === generation) continue;
+            map.locDataChangedListeners.delete(this.invalidate);
+            this.residency.delete(map);
+            this.dirty = true;
+        }
+        if (this.dirty || bucketX !== this.bucketX || bucketZ !== this.bucketZ || playerPlane !== this.plane) {
             // Build around the bucket centre so every position in it is covered alike.
             this.build(maps, (bucketX + 0.5) * REBUILD_BUCKET_TILES, (bucketZ + 0.5) * REBUILD_BUCKET_TILES, playerPlane);
+            this.bucketX = bucketX;
+            this.bucketZ = bucketZ;
+            this.plane = playerPlane;
+            this.dirty = false;
         }
         return this.vertexCount > 0;
     }
@@ -225,6 +263,8 @@ export class HdClutterLayer {
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        for (const map of this.residency.keys()) map.locDataChangedListeners.delete(this.invalidate);
+        this.residency.clear();
         this.vertexBuffer?.destroy();
         this.vertexBuffer = undefined;
         this.lightBuffer?.destroy();

@@ -34,7 +34,7 @@ export const HdConfig = ConfigGroup("hd", {
     }),
     textureFiltering: ConfigItem({
         name: "Texture filtering",
-        description: "Mipmaps, 8x anisotropic filtering and higher-detail textures reduce shimmer (WebGPU)",
+        description: "Mipmaps and 8x anisotropic filtering reduce shimmer (WebGPU)",
         position: 7,
         default: true,
     }),

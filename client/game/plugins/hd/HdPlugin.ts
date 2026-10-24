@@ -8,10 +8,11 @@ import type { ProgramSource } from "../../../render/shaders/ShaderUtil";
 import { environmentAt } from "../../../render/render/environment";
 import { HdConfig, type HdOptions } from "./HdConfig";
 import { createHdProgram } from "./HdShader";
-import { collectHdLights } from "./HdLights";
+import { HdLights } from "./HdLights";
 import lighting from "./hd-lighting.glsl";
 import { HdMaterials } from "./HdMaterials";
 import { HdMist } from "./HdMist";
+import { HdSceneInputs } from "./HdSceneInputs";
 import { Frustum } from "../../Frustum";
 import { resolveFogRange } from "../../../render/RenderDistancePolicy";
 import type {
@@ -62,11 +63,13 @@ export class HdPlugin extends Plugin {
         lightPositions: Float32Array;
         lightColors: Float32Array;
         lightCount: number;
-        lastLights?: { time: number; x: number; z: number; plane: number };
+        lights: HdLights;
+        inputs: HdSceneInputs;
+        mist: HdMist;
+        lastLights?: { time: number; x: number; z: number; plane: number; revision: number };
         lastShadow?: { time: number; x: number; z: number; plane: number; environment: unknown; distance: number; roof: number | undefined };
     }>();
     private readonly shadowMatrix = mat4.create();
-    private readonly mist = new HdMist();
     private readonly inverseView = mat4.create();
     private compilingHd = false;
 
@@ -101,6 +104,7 @@ export class HdPlugin extends Plugin {
     }
 
     sceneProgramsReady(renderer: WebGLOsrsRenderer, programs: Program[]): void {
+        const mist = this.renderers.get(renderer)?.mist ?? new HdMist();
         this.disposeRenderer(renderer);
         // A complete sampler is required even when its shader branch is disabled; one of each
         // kind, so a draw call holds the right texture type in every HD slot before HD is on.
@@ -118,6 +122,7 @@ export class HdPlugin extends Plugin {
         this.renderers.set(renderer, {
             programs: programs as SceneProgram[], hd: this.compilingHd, rebuilding: false, placeholder, placeholderArray, shadowPass: false, shadowFrustum: new Frustum(),
             lightPositions: new Float32Array(LIGHT_LIMIT * 4), lightColors: new Float32Array(LIGHT_LIMIT * 4), lightCount: 0,
+            lights: new HdLights(), inputs: new HdSceneInputs(), mist,
         });
     }
 
@@ -177,14 +182,15 @@ export class HdPlugin extends Plugin {
         set("u_hdSpecular", 1);
         const now = performance.now();
         const plane = renderer.getPlayerRawPlane();
+        const revision = state.inputs.update(renderer, plane, environment, this.options);
         const lastLights = state.lastLights;
         if (!lastLights || now - lastLights.time >= LIGHT_INTERVAL_MS ||
-            Math.abs(x - lastLights.x) >= 1 || Math.abs(z - lastLights.z) >= 1 || plane !== lastLights.plane) {
-            state.lightCount = collectHdLights(renderer, state.lightPositions, state.lightColors, Date.now());
-            state.lastLights = { time: now, x, z, plane };
+            Math.abs(x - lastLights.x) >= 1 || Math.abs(z - lastLights.z) >= 1 || plane !== lastLights.plane ||
+            revision !== lastLights.revision) {
+            state.lightCount = state.lights.collect(renderer, state.lightPositions, state.lightColors, Date.now(), revision);
+            state.lastLights = { time: now, x, z, plane, revision };
         }
-        set("u_hdMist", this.mist.uniform(x, z, (mx, mz) => renderer.sampleHeightAtExactPlane(mx, mz, plane), now,
-            this.options.surfaceFog));
+        set("u_hdMist", state.mist.uniform(x, z, state.inputs.groundAt, now, this.options.surfaceFog, revision));
         set("u_hdLightCount", state.lightCount);
         set("u_hdLightPositions[0]", state.lightPositions);
         set("u_hdLightColors[0]", state.lightColors);
@@ -289,6 +295,8 @@ export class HdPlugin extends Plugin {
         state?.placeholder.delete();
         state?.placeholderArray.delete();
         state?.materials?.dispose();
+        state?.inputs.dispose();
+        state?.lights.dispose();
         this.renderers.delete(renderer);
     }
 }

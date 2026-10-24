@@ -6,7 +6,7 @@ replace the renderer defaults, the browser quality profile and the dev panel's c
 
 | Setting | Range | Default |
 | --- | --- | --- |
-| Anti-aliasing | Disabled, FXAA, MSAA x2, x4, x8, x16 | MSAA x4 |
+| Anti-aliasing | Disabled, FXAA, MSAA x2, x4, x8, x16 | Disabled on handhelds; MSAA x4 on desktop |
 | Draw distance | 25–160 tiles (above 90 needs 117 HD) | 25 |
 | FPS limit | 0–1000, 0 for no cap | 240 |
 | Colour banding | 0–100% | 0 |
@@ -20,8 +20,9 @@ away and nothing has to be pushed or undone when the plugin is turned off.
 - **Draw distance** replaces `OsrsClient.renderDistance` in the render-distance resolvers of
   both renderers and in scene picking. The full-detail (LOD) radius follows it at 2 tiles less,
   as the dev panel's slider does. Device caps for phones and low-end devices still apply.
-- **FPS limit** replaces the client's own cap in `GameRenderer.getEffectiveFpsLimit`, including
-  the cache's mobile battery cap. Hidden tabs still drop to 30 fps.
+- **FPS limit** replaces the client's own cap in `GameRenderer.getEffectiveFpsLimit`. Handhelds
+  also honour a stricter mobile battery cap. Hidden tabs still drop to 30 fps. Saved graphics
+  choices override the device defaults.
 - **Colour banding** is the shaders' `u_colorBanding`, with the dev panel's mapping:
   `255 − 2 × percent`. 255 is smooth.
 

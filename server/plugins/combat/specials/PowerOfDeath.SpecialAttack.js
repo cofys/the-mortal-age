@@ -6,7 +6,7 @@
  * Recasting while active only restarts the minute; it does not stack with itself.
  */
 const POWER_OF_DEATH_ATTRIBUTE = "power-of-death:until";
-const DURATION_MS = 60 * 1000;
+const DURATION_TICKS = 100;
 const DRAIN = 100;
 const MESSAGE = "Spirits of deceased evildoers offer you their protection.";
 
@@ -15,7 +15,7 @@ const staffIds = new Set();
 const hookedApis = new WeakSet();
 
 function isActive(player) {
-  return Number(player.getAttribute(POWER_OF_DEATH_ATTRIBUTE) ?? 0) > Date.now();
+  return Number(player.getAttribute(POWER_OF_DEATH_ATTRIBUTE) ?? 0) > core.World.getProcessCycle();
 }
 
 function clearPowerOfDeath(player) {
@@ -68,7 +68,7 @@ module.exports = function registerPowerOfDeath(api, { id, itemId, animation, gra
       CombatSpecial.drain(character, DRAIN);
       character.performAnimation(new Animation(animation));
       character.performGraphic(new Graphic(graphic));
-      character.setAttribute(POWER_OF_DEATH_ATTRIBUTE, Date.now() + DURATION_MS);
+      character.setAttribute(POWER_OF_DEATH_ATTRIBUTE, core.World.getProcessCycle() + DURATION_TICKS);
       character.getAsPlayer().sendMessage(MESSAGE);
     }
   }

@@ -2390,6 +2390,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   api.onItemAction(handleItemAction);
   api.onNpcDeath(handleNpcDeath);
   api.onZoneEnter(SALT_MINE_ZONE, handleSaltMineEnter);
+  api.onServerStartup(installQuestObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);

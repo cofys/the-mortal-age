@@ -176,6 +176,7 @@ export class UseItemPacketListener {
       PluginManager.emitItemOnNpc({
         player,
         target,
+        definition: target.getCurrentDefinition(player),
         npcId: target.getContentId(player),
         targetIndex,
         interfaceId,

@@ -10,3 +10,8 @@
 # With that set, `git merge origin/main` auto-resolves any server/ conflict
 # by keeping our (elvarg) side, so only real client/ conflicts need review.
 /server/** merge=ours
+# Preserve the canonical reward artifact's bytes on Windows checkouts too.
+/server/data/definitions/clue-caskets.json text eol=lf
+/server/plugins/bosses/data/reward-tables.json text eol=lf
+# Keep generated casket imports identical to the canonical exporter bytes.
+/server/data/definitions/reward-caskets.json text eol=lf

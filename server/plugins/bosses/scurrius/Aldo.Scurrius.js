@@ -67,7 +67,7 @@ function trade({ player, npc }) {
 
 function useSpine(event) {
   const { player, target, itemId } = event;
-  if (itemId !== core.ItemIdentifiers.SCURRIUS_SPINE || target?.getDefinition?.()?.getName?.() !== "Historian Aldo") return;
+  if (itemId !== core.ItemIdentifiers.SCURRIUS_SPINE || (event.definition ?? target?.getDefinition?.())?.getName?.() !== "Historian Aldo") return;
   event.handled = true;
   aldoSays(player, target, SPINE_USED, () => offerTrade(player, target));
 }

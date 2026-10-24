@@ -8627,7 +8627,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function feedSafalaan(event) {
     const player = event?.player;
-    const targetName = String(event?.target?.getDefinition?.()?.getName?.() ?? event?.target?.getName?.() ?? "").toLowerCase();
+    const targetName = String((event?.definition ?? event?.target?.getDefinition?.())?.getName?.() ?? event?.target?.getName?.() ?? "").toLowerCase();
     if (!player || !targetName.includes("safalaan") || event.itemId !== PREP.stew || stage(player) < STAGE.PREPARATIONS || stage(player) >= STAGE.SIEGE) return;
     event.handled = true;
     if (!player.getInventory().contains(PREP.stew)) return;

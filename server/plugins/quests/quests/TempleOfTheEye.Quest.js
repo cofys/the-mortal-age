@@ -1992,6 +1992,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onInterfaceActionButton(PUZZLE_CLOSE_UID, closePuzzle);
   api.onNpcInteraction("The Great Guardian", { "Power-up": powerUpGreatGuardian });
+  api.onServerStartup(installWorld);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

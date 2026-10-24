@@ -118,14 +118,6 @@ function brokenIdFor(itemId) {
   return I.DIZANAS_QUIVER_BROKEN_;
 }
 
-function originalIdForBroken(itemId) {
-  const I = itemIdentifiers();
-  if (itemId === I.BLESSED_DIZANAS_QUIVER_L_BROKEN_) return I.BLESSED_DIZANAS_QUIVER_L_;
-  if (itemId === I.BLESSED_DIZANAS_QUIVER_BROKEN_) return I.BLESSED_DIZANAS_QUIVER;
-  if (itemId === I.DIZANAS_QUIVER_L_BROKEN_) return I.DIZANAS_QUIVER_L_UNCHARGED_;
-  return I.DIZANAS_QUIVER_UNCHARGED_;
-}
-
 // ------------------------------------------------------------------ the stored ammo
 
 /** { id, amount } of the quiver's ammo, or null. */
@@ -614,28 +606,6 @@ function deathItemDrop(event) {
   clearQuiverState(player, item);
 }
 
-function repairQuiver({ player }) {
-  const inventory = player.getInventory();
-  const { Item, ItemIdentifiers: I } = core();
-  const broken = [
-    I.DIZANAS_QUIVER_BROKEN_,
-    I.BLESSED_DIZANAS_QUIVER_BROKEN_,
-    I.DIZANAS_QUIVER_L_BROKEN_,
-    I.BLESSED_DIZANAS_QUIVER_L_BROKEN_,
-  ].find((id) => inventory.contains(id));
-  if (broken == null) return false;
-  if (inventory.getAmount(COINS) < REPAIR_COST) {
-    player.sendMessage(`You need ${REPAIR_COST.toLocaleString("en-US")} coins to repair Dizana's quiver.`);
-    return true;
-  }
-  inventory.deleteNumber(COINS, REPAIR_COST);
-  inventory.deleteNumber(broken, 1);
-  inventory.add(new Item(originalIdForBroken(broken)));
-  inventory.refreshItems();
-  player.sendMessage("You repair Dizana's quiver.");
-  return true;
-}
-
 function login({ player }) {
   sendSlot(player);
 }
@@ -653,7 +623,6 @@ module.exports = {
     api.onCombatHitResolved(spendCharge);
     api.onShouldKeepItemOnDeath(shouldKeepQuiver);
     api.onPlayerDeathItemDrop(deathItemDrop);
-    api.onNpcInteraction("Perdu", { Repair: repairQuiver });
     api.registerCustomInterface(buildOpenInterface());
     for (const quiver of QUIVER_NAMES) {
       api.onItemAction(quiver, { Open: openQuiver, Empty: emptyQuiver, Uncharge: uncharge });
@@ -671,5 +640,5 @@ module.exports = {
   stored,
   firedAmmunition,
   slotClicked,
-  _test: { stageOf, idFor, itemCharges, blessingProgress, chargeWithSplinters, uncharge, blessAtShrine, upgradeWithAva, avaRecovery, hasSunfire, quiverBonuses, spendCharge, shouldKeepQuiver, deathItemDrop, repairQuiver, openQuiver, renderOpen, activeAmmoId, brokenIdFor },
+  _test: { stageOf, idFor, itemCharges, blessingProgress, chargeWithSplinters, uncharge, blessAtShrine, upgradeWithAva, avaRecovery, hasSunfire, quiverBonuses, spendCharge, shouldKeepQuiver, deathItemDrop, openQuiver, renderOpen, activeAmmoId, brokenIdFor },
 };

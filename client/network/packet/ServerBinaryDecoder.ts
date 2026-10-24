@@ -1560,6 +1560,11 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 if (!easing) return null;
                 return { type: "camera", payload: { mode: "arc", centreX, centreY, x, y, height, cycles, easing, ignoreTerrain: (flags & 2) !== 0 } };
             }
+            if (mode === 12) {
+                if (reader.readByte() === 1) return { type: "camera", payload: { mode: "target", player: reader.readShort() } };
+                const x = reader.readShort(), y = reader.readShort();
+                return { type: "camera", payload: { mode: "target", x, y, level: reader.readByte() } };
+            }
             if (mode === 6) {
                 return { type: "camera", payload: { mode: "unlock", unlock: reader.readBoolean() } };
             }

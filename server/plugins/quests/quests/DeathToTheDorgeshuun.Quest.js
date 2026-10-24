@@ -1482,6 +1482,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   api.onZoneEnter(STORE_ZONE, handleStoreZoneEnter);
   api.onZoneEnter(MILL_ZONE, handleMillZoneEnter);
   api.onZoneEnter(LUMBRIDGE_ZONE, handleLumbridgeZoneEnter);
+  api.onServerStartup(ensureWorldObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

@@ -19,6 +19,7 @@ const { FightType } = require("../dist/game/content/combat/FightType");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { PluginManager } = require("../dist/plugins/PluginManager");
+const { World } = require("../dist/game/World");
 const { ItemIdentifiers: I } = require("../dist/util/ItemIdentifiers");
 
 const SpecialAttacks = require("../plugins/combat/SpecialAttacks.plugin");
@@ -138,7 +139,7 @@ test("Power of Death outlives the staff until a hit lands without it, and expire
   press(fakePlayer(I.STAFF_OF_LIGHT)); // a second user does not share the state
   const unwielded = fakePlayer(I.STAFF_OF_THE_DEAD);
   press(unwielded);
-  unwielded.setAttribute("power-of-death:until", Date.now() - 1);
+  unwielded.setAttribute("power-of-death:until", World.getProcessCycle() - 1);
   assert.equal(incoming(unwielded, 20, CombatType.MELEE), 20, "expired");
 });
 

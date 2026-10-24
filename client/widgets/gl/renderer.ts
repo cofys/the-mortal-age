@@ -16,9 +16,6 @@ export class GLRenderer {
     uProj_tex!: WebGLUniformLocation;
     uSampler_tex!: WebGLUniformLocation;
     uTexSize_tex!: WebGLUniformLocation;
-    uTintColor_tex!: WebGLUniformLocation;
-    uTintStrength_tex!: WebGLUniformLocation;
-    uAlpha_tex!: WebGLUniformLocation;
     aPos_col = -1;
     aColor_col = -1;
     uProj_col!: WebGLUniformLocation;
@@ -36,6 +33,7 @@ export class GLRenderer {
     vbo!: WebGLBuffer;
     ibo!: WebGLBuffer;
     vaoTex!: WebGLVertexArrayObject;
+    private vaoTexBatch!: WebGLVertexArrayObject;
     vaoCol!: WebGLVertexArrayObject;
     // State
     width = 1;
@@ -57,13 +55,16 @@ export class GLRenderer {
     private static readonly SOLID_BATCH_RECT_CAPACITY = 2048;
     private solidBatchData = new Float32Array(GLRenderer.SOLID_BATCH_RECT_CAPACITY * 36);
     private solidBatchFloatCount = 0;
-    private textureBatchData = new Float32Array(16 * 256);
-    private textureBatchTriangleData = new Float32Array(24 * 256);
+    // WebGL2 guarantees at least 16 fragment texture units; leave room for other UI paths.
+    private static readonly TEXTURE_BATCH_TEXTURES = 8;
+    private static readonly TEXTURE_BATCH_QUADS = 2048;
+    private static readonly QUAD_CORNERS = [0, 1, 2, 0, 2, 3];
+    private static readonly NO_TINT: [number, number, number] = [0, 0, 0];
+    private textureBatchTriangleData = new Float32Array(60 * 256);
     private textureBatchQuadCount = 0;
-    private textureBatchTex: Texture | null = null;
-    private textureBatchTintStrength = 0;
-    private textureBatchTintColor: [number, number, number] = [0, 0, 0];
-    private textureBatchAlpha = 1;
+    private readonly textureBatchTextures: Texture[] = [];
+    private readonly textureBatchSamplers = new Int32Array(8);
+    private readonly textureBatchSizes = new Float32Array(16);
 
     constructor(canvas: HTMLCanvasElement) {
         const gl = createGL(canvas);
@@ -76,7 +77,17 @@ export class GLRenderer {
     init() {
         const gl = this.gl;
         // Programs
-        const vsTex = `#version 300 es\nprecision highp float;\nlayout(location=0) in vec2 aPos; layout(location=1) in vec2 aUV; uniform mat4 uProj; out vec2 vUV; void main(){ vUV=aUV; gl_Position=uProj*vec4(aPos,0.0,1.0);} `;
+        const vsTex = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aPos;
+layout(location=1) in vec2 aUV;
+layout(location=2) in vec4 aTint;
+layout(location=3) in vec2 aTextureMeta;
+uniform mat4 uProj;
+out vec2 vUV;
+flat out vec4 vTint;
+flat out vec2 vTextureMeta;
+void main(){ vUV=aUV; vTint=aTint; vTextureMeta=aTextureMeta; gl_Position=uProj*vec4(aPos,0.0,1.0); }`;
         // Textures are LINEAR-filtered but sampled through texelAaUv: identical to
         // NEAREST at integer render scales, while fractional scales (e.g. 125%
         // interface scaling, fractional DPR) smooth each texel transition over
@@ -86,25 +97,30 @@ export class GLRenderer {
         const fsTex = `#version 300 es
 precision highp float;
 in vec2 vUV;
-uniform sampler2D uSampler;
-uniform vec2 uTexSize;
-uniform vec3 uTintColor;
-uniform float uTintStrength;
-uniform float uAlpha;
+flat in vec4 vTint;
+flat in vec2 vTextureMeta;
+uniform sampler2D uSampler[${GLRenderer.TEXTURE_BATCH_TEXTURES}];
+uniform vec2 uTexSize[${GLRenderer.TEXTURE_BATCH_TEXTURES}];
 out vec4 o;
-vec2 texelAaUv(vec2 uv) {
-    if (uTexSize.x < 0.5 || uTexSize.y < 0.5) return uv;
-    vec2 pix = uv * uTexSize;
+vec2 texelAaUv(vec2 uv, vec2 size) {
+    if (size.x < 0.5 || size.y < 0.5) return uv;
+    vec2 pix = uv * size;
     vec2 seam = floor(pix + 0.5);
     vec2 dudv = max(fwidth(pix), vec2(1e-5));
     pix = seam + clamp((pix - seam) / dudv, -0.5, 0.5);
-    return pix / uTexSize;
+    return pix / size;
+}
+vec4 sampleTexture(int slot, vec2 uv) {
+    // WebGL2 sampler arrays require constant indices.
+${Array.from({ length: GLRenderer.TEXTURE_BATCH_TEXTURES }, (_, i) => `    if (slot == ${i}) return texture(uSampler[${i}], uv);`).join("\n")}
+    return texture(uSampler[0], uv);
 }
 void main(){
-    vec4 c = texture(uSampler, texelAaUv(vUV));
+    int slot = int(vTextureMeta.y);
+    vec4 c = sampleTexture(slot, texelAaUv(vUV, uTexSize[slot]));
     c.rgb /= max(c.a, 1e-4);
-    c.rgb = mix(c.rgb, uTintColor, clamp(uTintStrength, 0.0, 1.0));
-    c.a *= uAlpha;
+    c.rgb = mix(c.rgb, vTint.rgb, clamp(vTint.a, 0.0, 1.0));
+    c.a *= vTextureMeta.x;
     o = c;
 }`;
         const vsCol = `#version 300 es
@@ -173,11 +189,8 @@ void main(){
         this.progGrad = createProgram(gl, vsGrad, fsGrad);
         this.progMasked = createProgram(gl, vsMasked, fsMasked);
         this.uProj_tex = gl.getUniformLocation(this.progTex, "uProj")!;
-        this.uSampler_tex = gl.getUniformLocation(this.progTex, "uSampler")!;
-        this.uTexSize_tex = gl.getUniformLocation(this.progTex, "uTexSize")!;
-        this.uTintColor_tex = gl.getUniformLocation(this.progTex, "uTintColor")!;
-        this.uTintStrength_tex = gl.getUniformLocation(this.progTex, "uTintStrength")!;
-        this.uAlpha_tex = gl.getUniformLocation(this.progTex, "uAlpha")!;
+        this.uSampler_tex = gl.getUniformLocation(this.progTex, "uSampler[0]")!;
+        this.uTexSize_tex = gl.getUniformLocation(this.progTex, "uTexSize[0]")!;
         this.uProj_col = gl.getUniformLocation(this.progSolid, "uProj")!;
         // Gradient program uniforms
         this.uProj_grad = gl.getUniformLocation(this.progGrad, "uProj")!;
@@ -206,6 +219,12 @@ void main(){
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
+        this.vaoTexBatch = gl.createVertexArray()!;
+        gl.bindVertexArray(this.vaoTexBatch);
+        for (const [location, size, offset] of [[0, 2, 0], [1, 2, 8], [2, 4, 16], [3, 2, 32]]) {
+            gl.enableVertexAttribArray(location);
+            gl.vertexAttribPointer(location, size, gl.FLOAT, false, 40, offset);
+        }
         // VAO for solid (only aPos)
         this.vaoCol = gl.createVertexArray()!;
         gl.bindVertexArray(this.vaoCol);
@@ -247,7 +266,7 @@ void main(){
         const gl = this.gl;
         this.solidBatchFloatCount = 0;
         this.textureBatchQuadCount = 0;
-        this.textureBatchTex = null;
+        this.textureBatchTextures.length = 0;
         gl.clearColor(r, g, b, a);
         gl.clear(gl.COLOR_BUFFER_BIT);
     }
@@ -278,6 +297,44 @@ void main(){
     drawRect(x: number, y: number, w: number, h: number, color: [number, number, number, number]) {
         this.flushTextureBatch();
         this.appendSolidRect(x, y, w, h, color);
+    }
+
+    /** Fills a convex polygon (points in order, device pixels) as a triangle fan. */
+    drawPolygon(points: ReadonlyArray<readonly [number, number]>, color: [number, number, number, number]) {
+        if (points.length < 3 || !(color[3] > 0)) return;
+        this.flushTextureBatch();
+        const [x0, y0] = points[0];
+        for (let i = 1; i + 1 < points.length; i++) {
+            this.appendSolidTriangle(x0, y0, points[i][0], points[i][1], points[i + 1][0], points[i + 1][1], color);
+        }
+    }
+
+    /**
+     * Strokes a line through the points, `width` device pixels wide (each segment a quad with
+     * square caps so corners meet), closing back to the first point when `closed`.
+     */
+    drawPolyline(
+        points: ReadonlyArray<readonly [number, number]>,
+        width: number,
+        color: [number, number, number, number],
+        closed: boolean = true,
+    ) {
+        if (points.length < 2 || !(width > 0) || !(color[3] > 0)) return;
+        this.flushTextureBatch();
+        const half = width / 2;
+        const count = closed ? points.length : points.length - 1;
+        for (let i = 0; i < count; i++) {
+            const [ax, ay] = points[i];
+            const [bx, by] = points[(i + 1) % points.length];
+            const len = Math.hypot(bx - ax, by - ay);
+            if (!(len > 0)) continue;
+            const ux = (bx - ax) / len, uy = (by - ay) / len;
+            const nx = -uy * half, ny = ux * half;
+            const sx = ax - ux * half, sy = ay - uy * half;
+            const ex = bx + ux * half, ey = by + uy * half;
+            this.appendSolidTriangle(sx + nx, sy + ny, ex + nx, ey + ny, ex - nx, ey - ny, color);
+            this.appendSolidTriangle(sx + nx, sy + ny, ex - nx, ey - ny, sx - nx, sy - ny, color);
+        }
     }
 
     /**
@@ -363,7 +420,7 @@ void main(){
         uScale = 1,
         vScale = 1,
         tintStrength = 0,
-        tintColor: [number, number, number] = [0, 0, 0],
+        tintColor: [number, number, number] = GLRenderer.NO_TINT,
         flipX = false,
         flipY = false,
         alpha = 1,
@@ -397,7 +454,7 @@ void main(){
         vertices: Float32Array,
         quadCount: number,
         tintStrength = 0,
-        tintColor: [number, number, number] = [0, 0, 0],
+        tintColor: [number, number, number] = GLRenderer.NO_TINT,
         alpha = 1,
     ) {
         if (!tex?.tex || quadCount <= 0) return;
@@ -405,7 +462,7 @@ void main(){
         this.flushSolidBatch();
         this.appendTextureQuads(
             tex,
-            vertices.subarray(0, quadCount * 16),
+            vertices,
             quadCount,
             tintStrength,
             tintColor,
@@ -438,7 +495,7 @@ void main(){
         angle: number,
         angleScale: number = 65536,
         tintStrength = 0,
-        tintColor: [number, number, number] = [0, 0, 0],
+        tintColor: [number, number, number] = GLRenderer.NO_TINT,
         alpha = 1,
     ) {
         const gl = this.gl;
@@ -450,9 +507,8 @@ void main(){
         gl.bindTexture(gl.TEXTURE_2D, tex.tex);
         gl.uniform1i(this.uSampler_tex, 0);
         gl.uniform2f(this.uTexSize_tex, tex.w, tex.h);
-        gl.uniform3f(this.uTintColor_tex, tintColor[0], tintColor[1], tintColor[2]);
-        gl.uniform1f(this.uTintStrength_tex, tintStrength);
-        gl.uniform1f(this.uAlpha_tex, alpha);
+        gl.vertexAttrib4f(2, tintColor[0], tintColor[1], tintColor[2], tintStrength);
+        gl.vertexAttrib2f(3, alpha, 0);
 
         // Convert OSRS angle to radians
         // OSRS uses angle / 326.11 for 2048 scale (camera yaw)
@@ -606,6 +662,26 @@ void main(){
         gl.activeTexture(gl.TEXTURE0);
     }
 
+    private appendSolidTriangle(
+        ax: number, ay: number, bx: number, by: number, cx: number, cy: number,
+        color: [number, number, number, number],
+    ) {
+        if (this.solidBatchFloatCount + 18 > this.solidBatchData.length) {
+            this.flushSolidBatch();
+        }
+        const data = this.solidBatchData;
+        let o = this.solidBatchFloatCount;
+        for (const [x, y] of [[ax, ay], [bx, by], [cx, cy]]) {
+            data[o++] = x;
+            data[o++] = y;
+            data[o++] = color[0];
+            data[o++] = color[1];
+            data[o++] = color[2];
+            data[o++] = color[3];
+        }
+        this.solidBatchFloatCount = o;
+    }
+
     private appendSolidRect(
         x: number,
         y: number,
@@ -685,26 +761,24 @@ void main(){
         tintColor: [number, number, number],
         alpha: number,
     ) {
-        this.prepareTextureBatch(tex, 1, tintStrength, tintColor, alpha);
-        const data = this.textureBatchData;
-        const offset = this.textureBatchQuadCount * 16;
-        data[offset + 0] = x0;
-        data[offset + 1] = y0;
-        data[offset + 2] = u0;
-        data[offset + 3] = v0;
-        data[offset + 4] = x1;
-        data[offset + 5] = y0;
-        data[offset + 6] = u1;
-        data[offset + 7] = v0;
-        data[offset + 8] = x1;
-        data[offset + 9] = y1;
-        data[offset + 10] = u1;
-        data[offset + 11] = v1;
-        data[offset + 12] = x0;
-        data[offset + 13] = y1;
-        data[offset + 14] = u0;
-        data[offset + 15] = v1;
-        this.textureBatchQuadCount++;
+        const data = this.texVerts;
+        data[0] = x0;
+        data[1] = y0;
+        data[2] = u0;
+        data[3] = v0;
+        data[4] = x1;
+        data[5] = y0;
+        data[6] = u1;
+        data[7] = v0;
+        data[8] = x1;
+        data[9] = y1;
+        data[10] = u1;
+        data[11] = v1;
+        data[12] = x0;
+        data[13] = y1;
+        data[14] = u0;
+        data[15] = v1;
+        this.appendTextureQuads(tex, data, 1, tintStrength, tintColor, alpha);
     }
 
     private appendTextureQuads(
@@ -715,77 +789,60 @@ void main(){
         tintColor: [number, number, number],
         alpha: number,
     ) {
-        this.prepareTextureBatch(tex, quadCount, tintStrength, tintColor, alpha);
-        const offset = this.textureBatchQuadCount * 16;
-        this.textureBatchData.set(vertices, offset);
-        this.textureBatchQuadCount += quadCount;
+        let first = 0;
+        while (first < quadCount) {
+            const count = Math.min(GLRenderer.TEXTURE_BATCH_QUADS, quadCount - first);
+            const slot = this.prepareTextureBatch(tex, count);
+            const data = this.textureBatchTriangleData;
+            const corners = GLRenderer.QUAD_CORNERS;
+            let target = this.textureBatchQuadCount * 60;
+            for (let quad = first; quad < first + count; quad++) {
+                for (let vertex = 0; vertex < 6; vertex++) {
+                    let source = quad * 16 + corners[vertex] * 4;
+                    data[target++] = vertices[source++];
+                    data[target++] = vertices[source++];
+                    data[target++] = vertices[source++];
+                    data[target++] = vertices[source++];
+                    data[target++] = tintColor[0];
+                    data[target++] = tintColor[1];
+                    data[target++] = tintColor[2];
+                    data[target++] = tintStrength;
+                    data[target++] = alpha;
+                    data[target++] = slot;
+                }
+            }
+            this.textureBatchQuadCount += count;
+            first += count;
+        }
     }
 
-    private prepareTextureBatch(
-        tex: Texture,
-        addQuads: number,
-        tintStrength: number,
-        tintColor: [number, number, number],
-        alpha: number,
-    ) {
-        if (
-            this.textureBatchQuadCount > 0 &&
-            !this.canReuseTextureBatch(tex, tintStrength, tintColor, alpha)
-        ) {
+    private prepareTextureBatch(tex: Texture, addQuads: number): number {
+        let slot = this.textureBatchTextures.indexOf(tex);
+        if (this.textureBatchQuadCount + addQuads > GLRenderer.TEXTURE_BATCH_QUADS ||
+            (slot < 0 && this.textureBatchTextures.length === GLRenderer.TEXTURE_BATCH_TEXTURES)) {
             this.flushTextureBatch();
+            slot = -1;
         }
-        if (this.textureBatchQuadCount === 0) {
-            this.textureBatchTex = tex;
-            this.textureBatchTintStrength = tintStrength;
-            this.textureBatchTintColor[0] = tintColor[0];
-            this.textureBatchTintColor[1] = tintColor[1];
-            this.textureBatchTintColor[2] = tintColor[2];
-            this.textureBatchAlpha = alpha;
+        if (slot < 0) {
+            slot = this.textureBatchTextures.length;
+            this.textureBatchTextures.push(tex);
         }
-        this.ensureTextureBatchCapacity(addQuads);
-    }
-
-    private canReuseTextureBatch(
-        tex: Texture,
-        tintStrength: number,
-        tintColor: [number, number, number],
-        alpha: number,
-    ): boolean {
-        return (
-            this.textureBatchTex === tex &&
-            this.textureBatchTintStrength === tintStrength &&
-            this.textureBatchAlpha === alpha &&
-            this.textureBatchTintColor[0] === tintColor[0] &&
-            this.textureBatchTintColor[1] === tintColor[1] &&
-            this.textureBatchTintColor[2] === tintColor[2]
-        );
-    }
-
-    private ensureTextureBatchCapacity(addQuads: number) {
-        const requiredQuads = this.textureBatchQuadCount + addQuads;
-        const currentQuads = this.textureBatchData.length / 16;
-        if (requiredQuads <= currentQuads) return;
-
-        let nextQuads = Math.max(1, currentQuads);
-        while (nextQuads < requiredQuads) {
-            nextQuads <<= 1;
-        }
-
-        const next = new Float32Array(nextQuads * 16);
-        next.set(this.textureBatchData.subarray(0, this.textureBatchQuadCount * 16));
-        this.textureBatchData = next;
+        this.ensureTextureTriangleBatchCapacity(this.textureBatchQuadCount + addQuads);
+        return slot;
     }
 
     private ensureTextureTriangleBatchCapacity(quadCount: number) {
-        const requiredFloats = quadCount * 24;
+        const requiredFloats = quadCount * 60;
         if (requiredFloats <= this.textureBatchTriangleData.length) return;
 
-        let nextLength = Math.max(24, this.textureBatchTriangleData.length);
+        let nextLength = Math.max(60, this.textureBatchTriangleData.length);
         while (nextLength < requiredFloats) {
             nextLength <<= 1;
         }
 
-        this.textureBatchTriangleData = new Float32Array(nextLength);
+        const next = new Float32Array(nextLength);
+        next.set(this.textureBatchTriangleData.subarray(0, this.textureBatchQuadCount * 60));
+        this.textureBatchTriangleData = next;
     }
 
     private flushSolidBatch() {
@@ -808,69 +865,31 @@ void main(){
     }
 
     private flushTextureBatch() {
-        if (this.textureBatchQuadCount === 0 || !this.textureBatchTex?.tex) return;
-
+        if (this.textureBatchQuadCount === 0) return;
         const gl = this.gl;
         gl.useProgram(this.progTex);
         gl.uniformMatrix4fv(this.uProj_tex, false, this.proj);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.textureBatchTex.tex);
-        gl.uniform1i(this.uSampler_tex, 0);
-        gl.uniform2f(this.uTexSize_tex, this.textureBatchTex.w, this.textureBatchTex.h);
-        gl.uniform3f(
-            this.uTintColor_tex,
-            this.textureBatchTintColor[0],
-            this.textureBatchTintColor[1],
-            this.textureBatchTintColor[2],
-        );
-        gl.uniform1f(this.uTintStrength_tex, this.textureBatchTintStrength);
-        gl.uniform1f(this.uAlpha_tex, this.textureBatchAlpha);
-        gl.bindVertexArray(this.vaoTex);
+        for (let i = 0; i < GLRenderer.TEXTURE_BATCH_TEXTURES; i++) {
+            const tex = this.textureBatchTextures[i];
+            this.textureBatchSamplers[i] = tex ? i : 0;
+            if (!tex) continue;
+            gl.activeTexture(gl.TEXTURE0 + i);
+            gl.bindTexture(gl.TEXTURE_2D, tex.tex);
+            this.textureBatchSizes[i * 2] = tex.w;
+            this.textureBatchSizes[i * 2 + 1] = tex.h;
+        }
+        gl.uniform1iv(this.uSampler_tex, this.textureBatchSamplers);
+        gl.uniform2fv(this.uTexSize_tex, this.textureBatchSizes);
+        gl.bindVertexArray(this.vaoTexBatch);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
 
-        // Some browsers/drivers report intermittent glDrawElements buffer-size failures on the
-        // large shared textured UI batch. Expand quads into triangles and submit with drawArrays
-        // so CS2/widget text does not depend on element-buffer behavior.
-        this.ensureTextureTriangleBatchCapacity(this.textureBatchQuadCount);
-        const src = this.textureBatchData;
-        const dst = this.textureBatchTriangleData;
-        let srcOffset = 0;
-        let dstOffset = 0;
-        for (let i = 0; i < this.textureBatchQuadCount; i++) {
-            dst[dstOffset + 0] = src[srcOffset + 0];
-            dst[dstOffset + 1] = src[srcOffset + 1];
-            dst[dstOffset + 2] = src[srcOffset + 2];
-            dst[dstOffset + 3] = src[srcOffset + 3];
-            dst[dstOffset + 4] = src[srcOffset + 4];
-            dst[dstOffset + 5] = src[srcOffset + 5];
-            dst[dstOffset + 6] = src[srcOffset + 6];
-            dst[dstOffset + 7] = src[srcOffset + 7];
-            dst[dstOffset + 8] = src[srcOffset + 8];
-            dst[dstOffset + 9] = src[srcOffset + 9];
-            dst[dstOffset + 10] = src[srcOffset + 10];
-            dst[dstOffset + 11] = src[srcOffset + 11];
-            dst[dstOffset + 12] = src[srcOffset + 0];
-            dst[dstOffset + 13] = src[srcOffset + 1];
-            dst[dstOffset + 14] = src[srcOffset + 2];
-            dst[dstOffset + 15] = src[srcOffset + 3];
-            dst[dstOffset + 16] = src[srcOffset + 8];
-            dst[dstOffset + 17] = src[srcOffset + 9];
-            dst[dstOffset + 18] = src[srcOffset + 10];
-            dst[dstOffset + 19] = src[srcOffset + 11];
-            dst[dstOffset + 20] = src[srcOffset + 12];
-            dst[dstOffset + 21] = src[srcOffset + 13];
-            dst[dstOffset + 22] = src[srcOffset + 14];
-            dst[dstOffset + 23] = src[srcOffset + 15];
-            srcOffset += 16;
-            dstOffset += 24;
-        }
-        gl.bufferData(gl.ARRAY_BUFFER, dst.subarray(0, dstOffset), gl.DYNAMIC_DRAW);
+        // Keep primitive order; flat metadata changes texture/tint without sorting alpha draws.
+        gl.bufferData(gl.ARRAY_BUFFER, this.textureBatchTriangleData.subarray(0, this.textureBatchQuadCount * 60), gl.DYNAMIC_DRAW);
         gl.drawArrays(gl.TRIANGLES, 0, this.textureBatchQuadCount * 6);
         this.perfDrawCalls++;
         this.perfTextureDrawCalls++;
-
         this.textureBatchQuadCount = 0;
-        this.textureBatchTex = null;
+        this.textureBatchTextures.length = 0;
     }
     createTextureFromCanvas(key: string, canvas: HTMLCanvasElement): Texture {
         const gl = this.gl;
@@ -954,7 +973,7 @@ void main(){
         const existing = this.textures.get(key);
         if (!existing) return false;
 
-        if (this.textureBatchTex === existing) {
+        if (this.textureBatchTextures.includes(existing)) {
             this.flushTextureBatch();
         }
         if (existing.tex) {
@@ -973,6 +992,7 @@ void main(){
         const existing = this.textures.get(key);
 
         if (existing && existing.tex) {
+            if (this.textureBatchTextures.includes(existing)) this.flushTextureBatch();
             const resized = existing.w !== canvas.width || existing.h !== canvas.height;
             const x = damage && !resized ? Math.max(0, Math.floor(damage.x)) : 0;
             const y = damage && !resized ? Math.max(0, Math.floor(damage.y)) : 0;

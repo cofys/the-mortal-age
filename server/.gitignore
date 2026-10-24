@@ -10,6 +10,7 @@ data/saves/characters
 data/saves/*.sqlite*
 data/saves/gauntlet-scoreboard.json
 data/saves/nex-scoreboard.json
+data/saves/shooting-stars.json
 logs/
 caches/
 Function

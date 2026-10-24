@@ -1,3 +1,4 @@
+import { BuildSteps } from "../../common/utils/BuildSteps";
 import { nextSequenceFrame } from "../../rs/model/seq/FrameInterpolation";
 import { ConfigType } from "../../rs/cache/ConfigType";
 import { IndexType } from "../../rs/cache/IndexType";
@@ -22,7 +23,7 @@ import { LocEntity } from "../../rs/scene/entity/LocEntity";
 import { TextureLoader } from "../../rs/texture/TextureLoader";
 import { INVALID_HSL_COLOR, hslToRgb } from "../../rs/util/ColorUtil";
 import { getBridgeLinkedBelow, isBridgeSurfaceTile } from "../../game/scene/BridgeTiles";
-import { loadMinimapBlob } from "../../game/worker/MinimapData";
+import { loadMinimapBlob, type MinimapData } from "../../game/worker/MinimapData";
 import { RenderDataLoader, RenderDataResult } from "../../game/worker/RenderDataLoader";
 import { WorkerState } from "../../game/worker/RenderDataWorker";
 import { AnimationFrames } from "../AnimationFrames";
@@ -651,14 +652,14 @@ function onlySingleCopyGroups(models: SceneModel[]): boolean {
     return true;
 }
 
-function addSceneModels(
+function* addSceneModels(
     modelHashBuf: ModelHashBuffer,
     textureLoader: TextureLoader,
     sceneBuf: SceneBuffer,
     sceneModels: SceneModel[],
     minimizeDrawCalls: boolean,
     far: boolean = false,
-): void {
+): Generator<void> {
     const groupedModels = new Map<string, SceneModel[]>();
     for (const sceneModel of sceneModels) {
         const model = sceneModel.model;
@@ -674,6 +675,7 @@ function addSceneModels(
 
     const modelGroupMap: Map<string, ModelMergeGroup> = new Map();
     for (const sceneModels of groupedModels.values()) {
+        yield;
         const model = sceneModels[0].model;
         const doubleSided = sceneModels[0].doubleSided;
         const faces = getModelFaces(model);
@@ -835,6 +837,7 @@ function addSceneModels(
     }
 
     for (const group of modelGroupMap.values()) {
+        yield;
         sceneBuf.addModelGroup(group);
     }
     if (!far) {
@@ -847,7 +850,7 @@ function addSceneModels(
             return { ...model, model: mesh, forceMerge: true };
         });
         const farBuffer = new SceneBuffer(textureLoader, sceneBuf.textureIdIndexMap, 1024);
-        addSceneModels(modelHashBuf, textureLoader, farBuffer, farModels, true, true);
+        yield* addSceneModels(modelHashBuf, textureLoader, farBuffer, farModels, true, true);
         sceneBuf.appendFarScenery(farBuffer);
     }
 }
@@ -861,7 +864,7 @@ export function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
         );
 
     return {
-        vertices: sceneBuf.vertexBuf.byteArray(),
+        vertices: sceneBuf.vertexBuf.byteArray().slice(),
         indices: new Int32Array(sceneBuf.indices),
 
         modelTextureData: createModelInfoTextureData(sceneBuf.drawCommands),
@@ -1366,6 +1369,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         }
     }
 
+    async load(state: WorkerState, input: SdMapLoaderInput & { minimapOnly: true }, build?: BuildSteps): Promise<RenderDataResult<MinimapData | undefined>>;
+    async load(state: WorkerState, input: SdMapLoaderInput, build?: BuildSteps): Promise<RenderDataResult<SdMapData | undefined>>;
     async load(
         state: WorkerState,
         {
@@ -1380,6 +1385,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             minimizeDrawCalls,
             doorOnly = false,
             locOnly = false,
+            minimapLevel,
+            minimapOnly = false,
             loadedTextureIds,
             locOverrides,
             locSpawns,
@@ -1390,9 +1397,10 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             extraNpcs: extraNpcsInput,
             overrideRenderPos,
         }: SdMapLoaderInput,
-    ): Promise<RenderDataResult<SdMapData | undefined>> {
+        build = new BuildSteps(),
+    ): Promise<RenderDataResult<SdMapData | MinimapData | undefined>> {
         if (mapProfileEnabled) console.time(`load map ${mapX},${mapY}`);
-        this.init();
+        const sparseMissesBefore = state.js5?.store.missCount;
         state.sceneBuilder.mapFileLoader.setRegionReplacements(mapRegionReplacements);
 
         const locTypeLoader = state.locTypeLoader;
@@ -1404,14 +1412,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         const npcModelLoader = state.npcModelLoader;
 
         const varManager = state.varManager;
-
-        let textureIds: number[] = [];
-        const textureIdIndexMap = new Map<number, number>();
-        textureIds = textureLoader.getTextureIds().filter((id) => textureLoader.isSd(id));
-        textureIds = textureIds.slice(0, 2047);
-        for (let i = 0; i < textureIds.length; i++) {
-            textureIdIndexMap.set(textureIds[i], i + 1);
-        }
 
         const borderSize = 6;
 
@@ -1600,9 +1600,9 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         if (mapProfileEnabled) console.time(`build scene ${mapX},${mapY}`);
         let scene: Scene;
-        const locLoadType = shouldLoadPartial ? LocLoadType.NO_MODELS : LocLoadType.MODELS;
+        const locLoadType = shouldLoadPartial || minimapOnly ? LocLoadType.NO_MODELS : LocLoadType.MODELS;
         if (instanceInput) {
-            scene = state.sceneBuilder.buildInstanceScene(
+            scene = await build.run(state.sceneBuilder.buildInstanceSceneSteps(
                 instanceInput.templateChunks,
                 baseX,
                 baseY,
@@ -1610,16 +1610,16 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                 INSTANCE_SIZE,
                 smoothTerrain,
                 locLoadType,
-            );
+            ));
         } else {
-            scene = state.sceneBuilder.buildScene(
+            scene = await build.run(state.sceneBuilder.buildSceneSteps(
                 baseX,
                 baseY,
                 mapSize,
                 mapSize,
                 smoothTerrain,
                 locLoadType,
-            );
+            ));
         }
         // Inject extra locs (from LOC_ADD_CHANGE) into the built scene
         if (extraLocsInput && extraLocsInput.length > 0) {
@@ -1635,7 +1635,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                     // A LOC_ANIM on an added loc (such as a boat's salvaging hook) is an
                     // override keyed by the loc's own tile and id.
                     const animated = locOverrides?.get(`${loc.x},${loc.y},${loc.level},${loc.id}`);
-                    state.sceneBuilder.addLoc(
+                    state.sceneBuilder.addLocToBuiltScene(
                         scene,
                         loc.level,
                         sceneX,
@@ -1643,7 +1643,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                         loc.id,
                         loc.shape,
                         loc.rotation,
-                        scene.collisionMaps[loc.level],
                         locLoadType,
                         typeof animated?.seqId === "number" ? animated.seqId : undefined,
                         animated?.seqRandomStart,
@@ -1653,9 +1652,31 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             // Dynamic locs are added after SceneBuilder's normal lighting pass.
             // Light them before extracting render geometry so merge-normal locs
             // are converted from ModelData to Model.
-            scene.light(textureLoader, -50, -10, -50);
+            if (!minimapOnly) scene.light(textureLoader, -50, -10, -50);
         }
         if (mapProfileEnabled) console.timeEnd(`build scene ${mapX},${mapY}`);
+        // Sparse model misses return undefined; wait before packing a scene we'll discard.
+        if (state.js5?.store.missCount !== sparseMissesBefore) {
+            if (mapProfileEnabled) console.timeEnd(`load map ${mapX},${mapY}`);
+            return { data: undefined, transferables: [] };
+        }
+
+        if (minimapOnly) {
+            const level = minimapLevel ?? -1;
+            if (!Number.isInteger(level) || level < 0 || level >= Scene.MAX_LEVELS) {
+                throw new Error("Invalid minimap floor");
+            }
+            const minimapBlobs: Blob[] = new Array(Scene.MAX_LEVELS);
+            minimapBlobs[level] = typeof OffscreenCanvas !== "undefined"
+                ? await loadMinimapBlob(state.minimapImageRenderer, scene, level, usedBorderSize)
+                : transparentPng1x1();
+            if (mapProfileEnabled) console.timeEnd(`load map ${mapX},${mapY}`);
+            return { data: { mapX, mapY, minimapBlobs }, transferables: [] };
+        }
+
+        this.init();
+        const textureIds = textureLoader.getTextureIds().filter((id) => textureLoader.isSd(id)).slice(0, 2047);
+        const textureIdIndexMap = new Map(textureIds.map((id, index) => [id, index + 1]));
 
         // Terrain does not change for LOC_ADD_CHANGE packets. Keep it in the
         // primary mesh and put mutable non-door locs in their own mesh.
@@ -1665,9 +1686,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         locSceneBuf.setHeightBounds(scene);
         doorSceneBuf.setHeightBounds(scene);
         const coreSize = isInstance ? INSTANCE_SIZE : Scene.MAP_SQUARE_SIZE;
-        if (!shouldLoadPartial) {
-            sceneBuf.addTerrain(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize);
-        }
 
         const sceneLocs = getSceneLocs(
             locTypeLoader,
@@ -1713,31 +1731,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             smoothLocAnimationSteps,
         );
 
-        if (!shouldLoadDoorOnly) {
-            addSceneModels(
-                this.modelHashBuf!,
-                textureLoader,
-                locSceneBuf,
-                sceneModels,
-                minimizeDrawCalls,
-            );
-        }
-        if (!shouldLoadLocOnly) {
-            addSceneModels(
-                this.modelHashBuf!,
-                textureLoader,
-                doorSceneBuf,
-                doorSceneModels,
-                minimizeDrawCalls,
-            );
-        }
-
-        // Animated locs
-        const locsAnimated = shouldLoadDoorOnly
-            ? []
-            : locSceneBuf.addLocAnimatedGroups(locAnimatedGroups);
-        if (mapProfileEnabled) console.log(`animated locs: ${locsAnimated.length}`);
-
         // Npcs
 
         let npcInstances: NpcInstance[] = [];
@@ -1769,6 +1762,41 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                       ? Math.floor(renderPosY * Scene.MAP_SQUARE_SIZE)
                       : mapY * Scene.MAP_SQUARE_SIZE,
               );
+
+        // A late animation/NPC miss makes every packed output from this pass disposable.
+        if (state.js5?.store.missCount !== sparseMissesBefore) {
+            if (mapProfileEnabled) console.timeEnd(`load map ${mapX},${mapY}`);
+            return { data: undefined, transferables: [] };
+        }
+
+        if (!shouldLoadPartial) {
+            await build.run(sceneBuf.addTerrainSteps(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize));
+        }
+
+        if (!shouldLoadDoorOnly) {
+            await build.run(addSceneModels(
+                this.modelHashBuf!,
+                textureLoader,
+                locSceneBuf,
+                sceneModels,
+                minimizeDrawCalls,
+            ));
+        }
+        if (!shouldLoadLocOnly) {
+            await build.run(addSceneModels(
+                this.modelHashBuf!,
+                textureLoader,
+                doorSceneBuf,
+                doorSceneModels,
+                minimizeDrawCalls,
+            ));
+        }
+
+        // Animated locs
+        const locsAnimated = shouldLoadDoorOnly
+            ? []
+            : locSceneBuf.addLocAnimatedGroups(locAnimatedGroups);
+        if (mapProfileEnabled) console.log(`animated locs: ${locsAnimated.length}`);
 
         // Build per-level CSR mappings of loc IDs per interior tile (64x64 region) at tile origin.
         // We only include object IDs for origins (e.g., loc.startX/startY matches the tile) and direct
@@ -2066,17 +2094,19 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
               }
             : buildTerrainPickData(scene, usedBorderSize, maxLevel, coreSize, usedBorderSize);
 
-        const vertices = sceneBuf.vertexBuf.byteArray();
+        const vertices = sceneBuf.vertexBuf.byteArray().slice();
         const indices = new Int32Array(sceneBuf.indices);
-        const doorVertices = doorSceneBuf.vertexBuf.byteArray();
+        const doorVertices = doorSceneBuf.vertexBuf.byteArray().slice();
         const doorIndices = new Int32Array(doorSceneBuf.indices);
-        const npcVertices = npcSceneBuf.vertexBuf.byteArray();
+        const npcVertices = npcSceneBuf.vertexBuf.byteArray().slice();
         const npcIndices = new Int32Array(npcSceneBuf.indices);
 
         const minimapBlobs: Blob[] = shouldLoadPartial ? [] : new Array(Scene.MAX_LEVELS);
         if (!shouldLoadPartial) {
+            const levels = minimapLevel === undefined || isInstance || overrideRenderPos
+                ? [0, 1, 2, 3] : [Math.max(0, Math.min(Scene.MAX_LEVELS - 1, minimapLevel | 0))];
             if (typeof OffscreenCanvas !== "undefined") {
-                for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+                for (const level of levels) {
                     minimapBlobs[level] = await loadMinimapBlob(
                         state.minimapImageRenderer,
                         scene,
@@ -2086,7 +2116,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                 }
             } else {
                 const transparent = transparentPng1x1();
-                for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+                for (const level of levels) {
                     minimapBlobs[level] = transparent;
                 }
             }
@@ -2442,7 +2472,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             renderBaseTile ? renderBaseTile.y | 0 : mapY * Scene.MAP_SQUARE_SIZE,
         );
 
-        const vertices = npcSceneBuf.vertexBuf.byteArray();
+        const vertices = npcSceneBuf.vertexBuf.byteArray().slice();
         const indices = new Int32Array(npcSceneBuf.indices);
 
         const loadedTextures = new Map<number, Int32Array>();

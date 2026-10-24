@@ -83,6 +83,18 @@ export class MapRegionReplacementManager {
     };
   }
 
+  /** Terrain-only replacement: clients keep the cache's objects for the region. */
+  public static replaceMapRegionTerrain(
+    regionId: number,
+    terrainData: Uint8Array,
+    source: string = "runtime"
+  ): ReplaceMapRegionResult {
+    if (!Number.isInteger(regionId) || regionId < 0 || regionId > 0xffff) {
+      throw new Error(`invalid regionId: ${regionId}`);
+    }
+    return this.register(regionId, terrainData, null, source);
+  }
+
   public static getReplacementMapData(
     regionId: number
   ): { terrainData: Uint8Array; objectData: Uint8Array | null } | null {
@@ -100,11 +112,22 @@ export class MapRegionReplacementManager {
     return Array.from(this.replacements.keys()).sort((a, b) => a - b);
   }
 
-  public static getRegionPack(regionId: number): Buffer | null {
+  /**
+   * The .pack the map editor exports and the server loads from data/regions:
+   * header (28 bytes) + object archive + terrain archive.
+   *
+   * `objectDataOverride` lets a caller build a pack for a region whose live
+   * replacement is terrain-only - the pack still has to carry the region's objects,
+   * because a .pack is a complete region, not a patch. Pass the objects that belong
+   * there (the cache's, or the ones a previously loaded pack carried).
+   */
+  public static getRegionPack(regionId: number, objectDataOverride?: Uint8Array): Buffer | null {
     const replacement = this.replacements.get(regionId);
     const files = CacheMaps.getArchiveIds(regionId);
-    if (!replacement || !files || !replacement.objectData) return null;
-    const objectData = Buffer.from(replacement.objectData);
+    if (!replacement || !files) return null;
+    const objects = objectDataOverride ?? replacement.objectData;
+    if (!objects) return null;
+    const objectData = Buffer.from(objects);
     const terrainData = Buffer.from(replacement.terrainData);
     const pack = Buffer.alloc(28 + objectData.length + terrainData.length);
     pack.writeInt32BE(1, 0);

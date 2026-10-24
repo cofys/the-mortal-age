@@ -6,6 +6,7 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Spell } = require('../dist/game/content/combat/magic/Spell');
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+const { World } = require('../dist/game/World');
 let core;
 const crafting = {};
 const tasks = [];
@@ -122,8 +123,8 @@ test('elemental staves and rune pouch shortfalls use the core rune pipeline', ()
 test('restrictions, missing runes, wrong slots and cooldowns preserve items and XP', () => {
   for (const change of [p => { p.level = 1; }, p => { p.blockItem = true; }, p => { p.blockSpell = true; },
     p => { p.book = core.MagicSpellbook.ANCIENT; }, p => { p.amounts.delete(564); },
-    p => p.setAttribute('magic:next-cast-at',Date.now()+10000),
-    p => p.setAttribute('enchant-jewellery:next-cast-at',Date.now()+10000)]) {
+    p => p.setAttribute('magic:next-cast-at',World.getProcessCycle()+17),
+    p => p.setAttribute('enchant-jewellery:next-cast-at',World.getProcessCycle()+3)]) {
     const player = playerWith([[1694,1],[564,1],[555,1]]); change(player);
     const before = [...player.amounts];
     const setAutocast = core.Autocasting.setAutocast;

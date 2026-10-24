@@ -1,0 +1,132 @@
+"use strict";
+
+// STASH units (Wiki "STASH"): an emote step's hidey-hole loc is built with Construction,
+// then stores that step's full outfit. The loc is a multiloc on its own cache varbit.
+const Runtime = require("./Runtime.TreasureTrails");
+const { TIERS } = require("./Tiers.TreasureTrails");
+const BUILT_ATTRIBUTE = "treasure-trails:stash-built";
+const STORED_ATTRIBUTE = "treasure-trails:stash-stored";
+const NAILS_PER_UNIT = 10;
+const PLANKS_PER_UNIT = 2;
+let api;
+let core;
+let units;
+
+/** Every STASH unit by its base loc id, with the outfit of the emote step it serves. */
+function stashes() {
+  if (units) return units;
+  units = new Map();
+  for (const tier of TIERS) {
+    if (!tier.stash) continue;
+    for (const step of Runtime.data(tier).steps) {
+      if (step.family !== "emote" || !step.stash) continue;
+      const definition = core.CacheDefinitions.getObject(step.stash.locId);
+      units.set(step.stash.locId, { tier, step, location: step.stash.location, varbit: definition?.transformVarbit ?? -1 });
+    }
+  }
+  return units;
+}
+
+function built(player) {
+  const value = player.getAttribute(BUILT_ATTRIBUTE);
+  return Array.isArray(value) ? value : [];
+}
+
+function stored(player) {
+  const value = player.getAttribute(STORED_ATTRIBUTE);
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function nails(inventory) {
+  const I = core.ItemIdentifiers;
+  // Any one metal except dragon (Wiki "STASH": dragon nails do not work).
+  return [I.BRONZE_NAILS, I.IRON_NAILS, I.STEEL_NAILS, I.BLACK_NAILS, I.MITHRIL_NAILS, I.ADAMANTITE_NAILS, I.RUNE_NAILS]
+    .find(id => count(inventory, id) >= NAILS_PER_UNIT);
+}
+
+function count(inventory, id) {
+  return inventory.getItems().reduce((sum, item) => sum + (item && item.getId() === id ? item.getAmount() : 0), 0);
+}
+
+function build(player, unit) {
+  const { stash } = unit.tier;
+  const inventory = player.getInventory();
+  const I = core.ItemIdentifiers;
+  if (player.getSkillManager().getCurrentLevel(core.Skill.CONSTRUCTION) < stash.level) {
+    player.sendMessage(`You need a Construction level of ${stash.level} to build this STASH unit.`);
+    return;
+  }
+  const nail = nails(inventory);
+  const hasSaw = [I.SAW, I.CRYSTAL_SAW, I.AMYS_SAW].some(id => count(inventory, id) > 0);
+  if (count(inventory, I.HAMMER) < 1 || !hasSaw || count(inventory, I[stash.plank]) < PLANKS_PER_UNIT || nail == null) {
+    player.sendMessage(`You need a hammer, a saw, ${PLANKS_PER_UNIT} ${core.ItemDefinition.forId(I[stash.plank]).getName().toLowerCase()}s and ${NAILS_PER_UNIT} nails of one metal to build this STASH unit.`);
+    return;
+  }
+  inventory.delete(I[stash.plank], PLANKS_PER_UNIT);
+  inventory.delete(nail, NAILS_PER_UNIT);
+  player.getSkillManager().addExperiences(core.Skill.CONSTRUCTION, stash.xp);
+  player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId("human_poh_build")));
+  player.setAttribute(BUILT_ATTRIBUTE, [...built(player), unit.step.stash.locId]);
+  if (unit.varbit >= 0) player.getPacketSender().sendVarbit(unit.varbit, 1);
+}
+
+function deposit(player, unit) {
+  const inventory = player.getInventory();
+  const taken = [];
+  for (const requirement of unit.step.equipment) {
+    const slot = inventory.getItems().findIndex((item, index) => item && requirement.anyOf.includes(item.getId()) && !taken.some(entry => entry.slot === index));
+    if (slot < 0) {
+      player.sendMessage("You need all the items for this STASH unit's emote clue to store them.");
+      return;
+    }
+    taken.push({ slot, id: inventory.getItems()[slot].getId() });
+  }
+  for (const { slot } of taken) inventory.deleteAtSlot(slot, 1);
+  inventory.refreshItems();
+  player.setAttribute(STORED_ATTRIBUTE, { ...stored(player), [unit.step.stash.locId]: taken.map(entry => entry.id) });
+  player.sendMessage("You store the items in the STASH unit.");
+}
+
+function withdraw(player, unit, items) {
+  const inventory = player.getInventory();
+  if (inventory.getFreeSlots() < items.length) {
+    player.sendMessage("You need more inventory space to take the items out of the STASH unit.");
+    return;
+  }
+  for (const id of items) inventory.adds(id, 1);
+  const remaining = { ...stored(player) };
+  delete remaining[unit.step.stash.locId];
+  player.setAttribute(STORED_ATTRIBUTE, remaining);
+  player.sendMessage("You take the items out of the STASH unit.");
+}
+
+function interact(event) {
+  if (event.handled) return;
+  const unit = stashes().get(event.objectId);
+  if (!unit) return;
+  event.handled = true;
+  const { player } = event;
+  if (!built(player).includes(event.objectId)) { build(player, unit); return; }
+  const items = stored(player)[event.objectId];
+  if (Array.isArray(items) && items.length) withdraw(player, unit, items);
+  else deposit(player, unit);
+}
+
+function restore({ player }) {
+  for (const locId of built(player)) {
+    const unit = stashes().get(locId);
+    if (unit?.varbit >= 0) player.getPacketSender().sendVarbit(unit.varbit, 1);
+  }
+}
+
+module.exports = function attachStash(pluginApi) {
+  api = pluginApi;
+  core = api.core;
+  units = null;
+  api.persistAttribute(BUILT_ATTRIBUTE, []);
+  api.persistAttribute(STORED_ATTRIBUTE, {});
+  api.onBeforeObjectInteraction(interact);
+  api.onPlayerLogin(restore);
+};
+
+Object.assign(module.exports, { BUILT_ATTRIBUTE, STORED_ATTRIBUTE, stashes, interact, restore });

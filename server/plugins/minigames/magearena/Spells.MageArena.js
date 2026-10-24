@@ -10,9 +10,11 @@
  * the refusal message is throttled.
  */
 
+const { World } = require("../../../src/main/typescript/elvarg/game/World");
+
 const CASTS_REQUIRED = 100;
 const ARENA = Object.freeze({ minX: 3089, maxX: 3117, minY: 3921, maxY: 3946, z: 0 });
-const DENY_MESSAGE_INTERVAL_MS = 1200;
+const DENY_MESSAGE_INTERVAL_TICKS = 2;
 
 /** Spell ids of the three god spells (core CombatSpells). */
 const SARADOMIN_STRIKE = 1190;
@@ -73,9 +75,9 @@ function hitResolved({ attacker, target }) {
 }
 
 function sendLockedMessage(player, god) {
-  const now = Date.now();
+  const now = World.getProcessCycle();
   if (now < (lastDeniedAt.get(player) ?? 0)) return;
-  lastDeniedAt.set(player, now + DENY_MESSAGE_INTERVAL_MS);
+  lastDeniedAt.set(player, now + DENY_MESSAGE_INTERVAL_TICKS);
   player.sendMessage(
     `You need to cast ${god.name} 100 times inside the Mage Arena before you can cast it outside.`
   );

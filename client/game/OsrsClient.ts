@@ -1,3 +1,4 @@
+import type { MinimapGeometry, SceneGeometry } from "./scene/SceneGeometry";
 import { vec3 } from "gl-matrix";
 import { closeOpenModal } from "./widgets/input/widgetKeyboardInput";
 import { getNpcMenuActions } from "./menu/WorldMenuBuilder";
@@ -50,6 +51,7 @@ import {
     getDefaultServerSecure,
     getDefaultWsUrl,
     isDebugIdEnabled,
+    isMapEditorUrl,
 } from "../config/clientEnv";
 import {
     type BankServerUpdate,
@@ -214,7 +216,7 @@ import { isDropTarget, isWidgetUseTarget } from "../widgets/WidgetFlags";
 import { markWidgetInteractionDirty } from "../widgets/WidgetInteraction";
 import { WidgetManager } from "../widgets/WidgetManager";
 import { WidgetSessionManager } from "../widgets/WidgetSessionManager";
-import { applyQuestListWidgetGroups } from "../widgets/custom/questList";
+import { applyQuestListWidgetGroups, questListPreferences } from "../widgets/custom/questList";
 import { cleanupInterfaceClickTargets, cleanupWidgetClickTarget } from "../widgets/gl/widgets-gl";
 import { layoutWidgets } from "../widgets/layout/WidgetLayout";
 import { sanitizeText } from "../widgets/menu/utils";
@@ -253,6 +255,7 @@ import {
 } from "./TransmitCycles";
 import { AudioVarpController } from "./audio/AudioVarpController";
 import { MusicSystem } from "./audio/MusicSystem";
+import { AmbientSoundCollector } from "./audio/AmbientSoundCollector";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
@@ -445,6 +448,7 @@ const LOGOUT_WORLD_SWITCHER_UID = (182 << 16) | 3;
 const LOGOUT_STONE_UIDS = new Set([(161 << 16) | 46, (164 << 16) | 34, (548 << 16) | 51]);
 
 export class OsrsClient {
+    private serverQuestListGroups: QuestListWidgetGroup[] | undefined;
     private static readonly CLIENT_TICK_MS = 20;
     // Maximum amount of client-tick backlog (in ms) we will attempt to simulate.
     // This avoids multi-second/minute "catch-up" after sleep/throttling while still allowing
@@ -510,6 +514,12 @@ export class OsrsClient {
     npcTypeLoader!: NpcTypeLoader;
     soundEffectLoader?: SoundEffectLoader;
     soundEffectSystem?: SoundEffectSystem;
+    /** Scenery's looping sounds; each renderer passes it the maps it shows, once per frame. */
+    readonly ambientSounds = new AmbientSoundCollector(
+        () => this.soundEffectSystem,
+        () => this.locTypeLoader,
+        () => this.varManager,
+    );
     musicSystem?: MusicSystem;
 
     // Master volume multiplier (0-1, from deviceoption 19)
@@ -830,6 +840,10 @@ export class OsrsClient {
 
     // ECS stores
     npcEcs: NpcEcs = new NpcEcs();
+    /** The active renderer's scene geometry, for plugins drawing over the scene in 2D. */
+    sceneGeometry?: SceneGeometry;
+    /** The minimap as last drawn, for plugins marking it. */
+    minimapGeometry?: MinimapGeometry;
     playerEcs: PlayerEcs = new PlayerEcs();
     private continuousMovement?: ContinuousMovement;
     playerAnimController!: PlayerAnimController;
@@ -842,6 +856,24 @@ export class OsrsClient {
     // Movement is always server-authoritative (OSRS-like)
     // Server-assigned ID of the player we control
     controlledPlayerServerId: number = -1;
+    /**
+     * OSRS's cam_target: what the follow camera, the scene's centre and the sound listener follow
+     * instead of the local player (a spectator's view of a tile or of another player), until
+     * cam_reset. A player out of view falls back to the local player.
+     */
+    cameraTarget: { x: number; y: number; level: number } | { playerServerId: number } | undefined;
+
+    /** The camera target's position in 1/128 tiles (tile centres), or undefined to follow the local player. */
+    getCameraTargetPosition(): { x: number; y: number; level: number } | undefined {
+        const target = this.cameraTarget;
+        if (!target) return undefined;
+        if ("playerServerId" in target) {
+            const index = this.playerEcs.getIndexForServerId(target.playerServerId);
+            if (index === undefined) return undefined;
+            return { x: this.playerEcs.getX(index) | 0, y: this.playerEcs.getY(index) | 0, level: this.playerEcs.getLevel(index) | 0 };
+        }
+        return { x: target.x * 128 + 64, y: target.y * 128 + 64, level: target.level };
+    }
     /** Per-tick active world entity IDs — maintained by WORLDENTITY_INFO packets. */
     private activeWorldEntityIds: number[] = [];
     /**
@@ -1192,7 +1224,7 @@ export class OsrsClient {
         // Boots the RuneLite-shaped runtime: config, event bus, plugin manager,
         // core plugins (constructed inside the injector, enabled ones started).
         // Edit mode loads none, so the editor runs without their per-frame work.
-        const editMode = new URLSearchParams(window.location.search).has("edit");
+        const editMode = isMapEditorUrl();
         this.runeLite = RuneLite.start(this, !editMode);
         this.loginRenderer.loginStretch = () => this.clientPlugins.loginStretch();
         // Menus are built in pure modules (ui/menu, widgets/menu); they reach the plugins here.
@@ -1277,6 +1309,7 @@ export class OsrsClient {
             getMapElementTypeLoader: () => this.mapElementTypeLoader,
             getTextureLoader: () => this.textureLoader,
             getVarManager: () => this.varManager,
+            getWorkerPool: () => this.workerPool,
             getWidgetManager: () => this.widgetManager,
             getCs2Vm: () => this.cs2Vm,
             getRenderer: () => this.renderer,
@@ -2339,6 +2372,15 @@ export class OsrsClient {
             this.playerEcs,
             this.seqTypeLoader,
             this.seqFrameLoader,
+            (serverId, index, seqType, frame) =>
+                this.handleSeqFrameSounds(seqType, frame, {
+                    position: {
+                        x: this.playerEcs.getX(index) | 0,
+                        y: this.playerEcs.getY(index) | 0,
+                        z: (this.playerEcs.getLevel(index) | 0) * 128,
+                    },
+                    isLocalPlayer: serverId === (this.controlledPlayerServerId | 0),
+                }),
         );
         // PlayerEcs needs SeqType metadata for OSRS-parity movement blocking (sequenceDelay/priority checks).
         this.playerEcs.setSeqTypeLoader?.(this.seqTypeLoader);
@@ -2817,9 +2859,11 @@ export class OsrsClient {
                 }
             } else if (payload?.action === "set_quest_list") {
                 if (this.widgetManager && Array.isArray(payload.groups)) {
+                    this.serverQuestListGroups = payload.groups as QuestListWidgetGroup[];
                     applyQuestListWidgetGroups(
                         this.widgetManager,
                         payload.groups as QuestListWidgetGroup[],
+                        questListPreferences(this.varManager),
                     );
                     markWidgetsLoaded();
                 }
@@ -5371,17 +5415,17 @@ export class OsrsClient {
                 setTimeout(() => {
                     if (this.gameState === GameState.LOADING_GAME) {
                         this.updateGameState(GameState.LOGGED_IN);
-                        this.startSparsePrefetchWhenMapStreamingIdle();
+                        this.startSparsePrefetchWhenSceneReady();
                     }
                 }, remaining);
             });
         }
     }
 
-    private startSparsePrefetchWhenMapStreamingIdle(): void {
+    private startSparsePrefetchWhenSceneReady(): void {
         const waitForIdle = () => {
             if (this.gameState !== GameState.LOGGED_IN) return;
-            if (this.renderer.hasPendingMapStreamingWork()) {
+            if (!this.renderer.mapManager.isSceneReady(this.renderer.stats.frameCount)) {
                 setTimeout(waitForIdle, 100);
                 return;
             }
@@ -6187,6 +6231,8 @@ export class OsrsClient {
                 this.continuousMovement?.tick();
                 this.playerEcs.updateClient(1);
             } catch {}
+            // Before the frame sounds below: positional sounds are heard from here.
+            this.updateSoundListener();
             try {
                 this.playerAnimController?.tick?.(1);
             } catch {}
@@ -6239,11 +6285,13 @@ export class OsrsClient {
         const url = this.minimapImageUrls.get(mapId);
         if (url) {
             this.minimapImageAccess.set(mapId, performance.now());
+        } else {
+            void this.renderer?.requestMinimapImage(mapX, mapY, level);
         }
         return url;
     }
 
-    setMinimapImageUrl(mapX: number, mapY: number, url: string, level: number = 0): void {
+    setMinimapImageUrl(mapX: number, mapY: number, url: string | undefined, level: number = 0): void {
         const mapId = this.getMinimapImageKey(mapX, mapY, level);
         const old = this.minimapImageUrls.get(mapId);
         if (old) {
@@ -6251,12 +6299,14 @@ export class OsrsClient {
             this.minimapImageUrls.delete(mapId);
             this.minimapImageAccess.delete(mapId);
         }
+        if (!url) return;
         this.minimapImageUrls.set(mapId, url);
         this.minimapImageAccess.set(mapId, performance.now());
         this.pruneMinimapImageUrls();
     }
 
     clearMinimapImageUrls(): void {
+        this.renderer?.clearMinimapSources();
         for (const url of this.minimapImageUrls.values()) {
             this.releaseMinimapImageUrl(url);
         }
@@ -6547,6 +6597,9 @@ export class OsrsClient {
             this.combatOptions.initVarDefaults();
 
             this.varManager.onVarpChange = (varpId, _oldValue, newValue) => {
+                if (varpId >= 3408 && varpId <= 3412 && this.serverQuestListGroups && this.widgetManager) {
+                    applyQuestListWidgetGroups(this.widgetManager, this.serverQuestListGroups, questListPreferences(this.varManager));
+                }
                 // Server-backed stockmarket fields are separate from cache pending-offer varps.
                 if (varpId >= 7900 && varpId < 7900 + 8 * 7) markStockTransmit();
                 if (this.cs2Vm?.isRunning()) {
@@ -6692,6 +6745,35 @@ export class OsrsClient {
             this.loginState.loginIndex = LoginIndex.WELCOME;
             this.updateGameState(GameState.LOGIN_SCREEN);
         }
+    }
+
+    /**
+     * Positional sounds are heard from the local player (or the actor a spectator follows), or the
+     * camera without one. Every renderer needs it, so it runs on the client tick (the WebGL frame
+     * also calls it every frame).
+     */
+    updateSoundListener(): void {
+        const soundSystem = this.soundEffectSystem;
+        if (!soundSystem) return;
+        try {
+            // A spectator (cam_target) hears from the actor the camera follows.
+            const cameraTarget = this.getCameraTargetPosition();
+            if (cameraTarget) {
+                soundSystem.updateListenerPosition(cameraTarget.x, cameraTarget.y, cameraTarget.level * 128);
+                return;
+            }
+            const index = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
+            if (index !== undefined) {
+                soundSystem.updateListenerPosition(
+                    this.playerEcs.getX(index) | 0,
+                    this.playerEcs.getY(index) | 0,
+                    (this.playerEcs.getLevel(index) | 0) * 128,
+                );
+                return;
+            }
+        } catch {}
+        // z is the listener plane (level * 128), not a world height
+        soundSystem.updateListenerPosition(this.camera.getPosX() * 128, this.camera.getPosZ() * 128, 0);
     }
 
     handleSeqFrameSounds(seqType: SeqType, frame: number, context?: SequenceSoundContext): void {
@@ -7701,6 +7783,15 @@ export class OsrsClient {
 
         if (Array.isArray(block.modelCustomisation)) {
             this.applyNpcModelCustomisation(serverId, block.modelCustomisation);
+        }
+
+        if (Array.isArray(block.baseAnimations) && ecsId !== undefined) {
+            this.npcEcs.setBaseAnimations(ecsId, block.baseAnimations);
+        }
+
+        if (block.transparency && ecsId !== undefined) {
+            const fade = block.transparency;
+            this.npcEcs.setTransparency(ecsId, fade.startCycle, fade.endCycle, fade.from, fade.to, getClientCycle() | 0);
         }
 
         if (block.say && ecsId !== undefined) {

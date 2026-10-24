@@ -121,12 +121,13 @@ function sell(player, cape) {
 }
 
 /** Some transcripts both list the hood hand-out and narrate it; one hood per request. */
-const HOOD_REPEAT_MS = 3000;
+const HOOD_REPEAT_TICKS = 5;
 const lastHood = new WeakMap();
 
 function giveHood(player, cape) {
-  const now = Date.now();
-  if (now - (lastHood.get(player) ?? 0) < HOOD_REPEAT_MS) return;
+  const now = Capes.core.World.getProcessCycle();
+  const last = lastHood.get(player);
+  if (last !== undefined && now - last < HOOD_REPEAT_TICKS) return;
   if (player.getInventory().getFreeSlots() === 0) return;
   lastHood.set(player, now);
   player.getInventory().adds(cape.hood, 1);

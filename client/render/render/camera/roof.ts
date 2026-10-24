@@ -217,7 +217,10 @@ export function getPlayerBasePlane(host: WebGLOsrsRendererHost, ): number {
 
         let rawPlane = 0;
         const idx = host.getControlledPlayerEcsIndex();
-        if (idx !== undefined) {
+        const cameraTarget = host.osrsClient.getCameraTargetPosition();
+        if (cameraTarget) {
+            rawPlane = cameraTarget.level;
+        } else if (idx !== undefined) {
             rawPlane = host.osrsClient.playerEcs.getLevel(idx) | 0;
         }
 
@@ -241,6 +244,9 @@ export function getPlayerRawPlane(host: WebGLOsrsRendererHost, ): number {
 
 export function getPlayerTileXY(host: WebGLOsrsRendererHost, ): { x: number; y: number } {
 
+        // A camera target (a spectator's) stands in for the player.
+        const cameraTarget = host.osrsClient.getCameraTargetPosition();
+        if (cameraTarget) return { x: (cameraTarget.x / 128) | 0, y: (cameraTarget.y / 128) | 0 };
         const controlledIndex = host.getControlledPlayerEcsIndex();
         if (controlledIndex !== undefined) {
             return {
@@ -285,8 +291,8 @@ export function clampCullTileToGridBounds(host: WebGLOsrsRendererHost, tile: { x
 
 export function getRenderCullTile(host: WebGLOsrsRendererHost, ): { x: number; y: number } {
 
-        // Scene draw-distance is camera-anchored, then clamped to the loaded grid bounds.
-        return host.clampCullTileToGridBounds(host.getCameraTileXY());
+        // Fog uses this projected world position too, including aboard a boat.
+        return { x: host.playerPosUni[0], y: host.playerPosUni[1] };
     
 }
 

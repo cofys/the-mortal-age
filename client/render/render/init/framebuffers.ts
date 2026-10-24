@@ -201,6 +201,10 @@ export function initFramebuffer(host: WebGLOsrsRendererHost, ): void {
         host.framebuffer?.delete();
         host.colorTarget?.delete();
         host.depthTarget?.delete();
+        host.sceneResolveFramebuffer?.delete();
+        host.sceneResolveFramebuffer = undefined;
+        host.sceneResolveColorTarget?.delete();
+        host.sceneResolveColorTarget = undefined;
 
         const sceneSize = host.getSceneRenderSize();
         host.sceneRenderWidth = sceneSize.width | 0;
@@ -225,6 +229,20 @@ export function initFramebuffer(host: WebGLOsrsRendererHost, ): void {
             .createFramebuffer()
             .colorTarget(0, host.colorTarget)
             .depthTarget(host.depthTarget);
+
+        if (samples > 0 && (
+            host.sceneRenderWidth !== host.app.width || host.sceneRenderHeight !== host.app.height
+        )) {
+            host.sceneResolveColorTarget = host.app.createRenderbuffer(
+                host.sceneRenderWidth,
+                host.sceneRenderHeight,
+                PicoGL.RGBA8,
+                0,
+            );
+            host.sceneResolveFramebuffer = host.app
+                .createFramebuffer()
+                .colorTarget(0, host.sceneResolveColorTarget);
+        }
 
         host.needsFramebufferUpdate = false;
     
@@ -253,4 +271,39 @@ export function initTextureFramebuffer(host: WebGLOsrsRendererHost,
             .colorTarget(0, host.textureColorTarget)
             .depthTarget(host.textureDepthTarget);
     
+}
+
+export function resolveSceneFramebuffer(host: WebGLOsrsRendererHost): void {
+    host.app.readFramebuffer(host.framebuffer!);
+    host.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
+    if (host.sceneResolveFramebuffer) {
+        // WebGL cannot scale a multisampled resolve; upscale only after resolving at scene size.
+        host.app.drawFramebuffer(host.sceneResolveFramebuffer);
+        host.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT, {
+            srcStartX: 0,
+            srcStartY: 0,
+            srcEndX: host.sceneRenderWidth | 0,
+            srcEndY: host.sceneRenderHeight | 0,
+            dstStartX: 0,
+            dstStartY: 0,
+            dstEndX: host.sceneRenderWidth | 0,
+            dstEndY: host.sceneRenderHeight | 0,
+            filter: PicoGL.NEAREST,
+        });
+        host.app.readFramebuffer(host.sceneResolveFramebuffer);
+        host.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
+    }
+    host.app.drawFramebuffer(host.textureFramebuffer!);
+    host.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT, {
+        srcStartX: 0,
+        srcStartY: 0,
+        srcEndX: host.sceneRenderWidth | 0,
+        srcEndY: host.sceneRenderHeight | 0,
+        dstStartX: 0,
+        dstStartY: 0,
+        dstEndX: host.app.width | 0,
+        dstEndY: host.app.height | 0,
+        filter: host.sceneRenderWidth === host.app.width && host.sceneRenderHeight === host.app.height
+            ? PicoGL.NEAREST : PicoGL.LINEAR,
+    });
 }

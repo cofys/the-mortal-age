@@ -26,6 +26,9 @@ import { ShopOverlay } from "./plugins/shop/ShopOverlay";
 import { StewardOverlay } from "./plugins/steward/StewardOverlay";
 import { NewspaperOverlay } from "./plugins/newspaper/NewspaperOverlay";
 import { Sidebar } from "./sidebar/Sidebar";
+import { ControlsHelp } from "./controls/ControlsHelp";
+import "./controls/ControlsHelp.css";
+import { FirstPersonPlugin } from "./plugins/firstperson/FirstPersonPlugin";
 
 interface OsrsContainerProps {
     osrsClient: OsrsClient;
@@ -106,6 +109,8 @@ function resolvePointerCoordinate(
 }
 
 export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
+    const closeCamera = osrsClient.runeLite.pluginManager.getPlugin(FirstPersonPlugin);
+    const [closeCameraActive, setCloseCameraActive] = useState(() => closeCamera?.isActive() ?? false);
     const [renderer, setRenderer] = useState<GameRenderer>(osrsClient.renderer);
 
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>();
@@ -137,6 +142,7 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
             if (now - fpsUiLastMs.current >= 250) {
                 fpsUiLastMs.current = now;
                 setFps(Math.round(renderer.stats.frameTimeFps));
+                setCloseCameraActive(osrsClient.runeLite.pluginManager.getPlugin(FirstPersonPlugin)?.isActive() ?? false);
                 if (!hideUi && osrsClient.hoverOverlayEnabled) {
                     forceStatsOverlayRefresh(renderer.stats.frameCount | 0);
                 }
@@ -376,6 +382,12 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                 <div className="game-canvas-shell">
                     <div className="game-canvas-stage">
                         {loadingBarOverlay}
+
+                        {!hideUi && osrsClient.isLoggedIn() && <ControlsHelp
+                            configManager={osrsClient.runeLite.configManager}
+                            closeCameraActive={closeCameraActive}
+                            onExitCloseCamera={() => closeCamera?.exitCameraMode()}
+                        />}
 
                         {!hideUi && (
                             <Suspense fallback={null}>

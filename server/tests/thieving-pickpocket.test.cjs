@@ -9,6 +9,7 @@ const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
 const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
 const { NpcIdentifiers: N } = require('../dist/util/NpcIdentifiers');
 const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+const { World } = require('../dist/game/World');
 const Thieving = require('../plugins/skills/Thieving.plugin');
 const Pickpocket = require('../plugins/skills/thieving/Pickpocket.Thieving');
 const CoinPouch = require('../plugins/skills/thieving/CoinPouch.Thieving');
@@ -224,16 +225,17 @@ test('a caught player cannot start another pickpocket before the stun lands', (t
 test("a new click can't cancel a pending outcome or stun, and a lost stun never locks pickpocketing", (t) => {
     const who = player({ level: 1 });
     const original = Math.random;
-    const now = Date.now;
+    const originalCycle = World.getProcessCycle;
+    let cycle = World.getProcessCycle();
     Math.random = () => 0.99;
-    t.after(() => { Math.random = original; Date.now = now; });
+    World.getProcessCycle = () => cycle;
+    t.after(() => { Math.random = original; World.getProcessCycle = originalCycle; });
     submitted.length = 0;
     Thieving._test.pickpocket({ player: who, npc: npc(), npcId: 0, definition: { getName: () => 'Man' } });
     submitted[0].execute();
     assert.ok(submitted.every((task) => task.key !== who.getIndex()), "not keyed to the player, whose tasks a click cancels (walkToReset)");
     // The stun task lost anyway: once the hold has passed, pickpocketing goes ahead.
-    const start = Date.now();
-    Date.now = () => start + 2000;
+    cycle += 3;
     log.length = 0;
     Thieving._test.pickpocket({ player: who, npc: npc(), npcId: 0, definition: { getName: () => 'Man' } });
     assert.deepEqual(log, ["You attempt to pick the man's pocket."]);

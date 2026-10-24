@@ -1,0 +1,97 @@
+{
+  "about": "Decoration sets for the map generators (EditGenerators.AgentMcp.js). Hand-maintained; every id checked with search_objects/describe_object, the looks by screenshot (docs/agents/map-building-notes.md).",
+  "graveyard": {
+    "stones": [
+      404,
+      405,
+      400,
+      403
+    ],
+    "tombstone": 402,
+    "trees": [
+      1286,
+      1288
+    ],
+    "path": 1
+  },
+  "farm": {
+    "crops": {
+      "wheat": 313,
+      "cabbage": 1161,
+      "potato": 312
+    },
+    "scarecrow": 297,
+    "hay": [
+      304,
+      298
+    ],
+    "soil": null
+  },
+  "house": {
+    "floor": 81,
+    "roofFlag": 16,
+    "indoorFlag": 4,
+    "ladderUp": 11794,
+    "ladderDown": 11802,
+    "ground": [
+      {
+        "id": 7183,
+        "place": "wall",
+        "about": "Range (1x2)"
+      },
+      {
+        "id": 7170,
+        "place": "wall",
+        "about": "Shelf"
+      },
+      {
+        "id": 7169,
+        "place": "centre",
+        "chairs": [
+          7182,
+          7182
+        ],
+        "about": "Table and chairs"
+      },
+      {
+        "id": 5122,
+        "place": "corner",
+        "about": "Barrel"
+      },
+      {
+        "id": 365,
+        "place": "corner",
+        "about": "Sacks"
+      }
+    ],
+    "upstairs": [
+      {
+        "id": 7190,
+        "place": "wall",
+        "about": "Bed (1x2)"
+      },
+      {
+        "id": 7194,
+        "place": "wall",
+        "about": "Drawers"
+      },
+      {
+        "id": 7170,
+        "place": "wall",
+        "about": "Shelf"
+      },
+      {
+        "id": 5123,
+        "place": "corner",
+        "about": "Barrel"
+      }
+    ],
+    "single": [
+      {
+        "id": 7190,
+        "place": "wall",
+        "about": "Bed (1x2): a one-storey house sleeps downstairs"
+      }
+    ]
+  }
+}

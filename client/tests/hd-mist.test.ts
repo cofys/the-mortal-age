@@ -20,4 +20,32 @@ assert.equal(new HdMist().uniform(0, 0, () => 0, 0)[1], 0, "and no mist");
 const teleported = mist.uniform(500, 500, () => -40, 6000);
 assert.equal(teleported[0], -40, "a teleport snaps the level instead of sweeping through");
 assert.equal(mist.uniform(500, 500, () => -40, 7000, false)[1], 0, "the Surface fog toggle turns the mist off");
+
+let samples = 0;
+const cached = new HdMist();
+const countedGround = () => { samples++; return -4; };
+for (let frame = 0; frame < 60; frame++) {
+    cached.uniform(100, 50, countedGround, frame * 16, frame % 2 === 0, 1);
+}
+assert.equal(samples, 81, "stationary frames reuse the sampled target, including while disabled");
+cached.uniform(100.01, 50, countedGround, 1000, true, 1);
+cached.uniform(100.01, 50, countedGround, 1016, true, 2);
+assert.equal(samples, 243, "sub-tile movement and terrain revisions each resample all 81 points");
+assert.equal(cached.uniform(100.01, 50, () => -40, 1032, true, 2)[0], -40,
+    "a new renderer's sampler cannot reuse another renderer's same-numbered revision");
+
+// The uncached path is the reference for easing, missing terrain, clock changes and toggles.
+const reference = new HdMist(), optimized = new HdMist();
+let height = -4, revision = 0;
+const terrain = () => height;
+for (const [now, x, nextHeight, enabled] of [
+    [0, 10, -4, 1], [16, 10, -4, 1], [33, 10, -5, 0], [40, 10, -5, 0],
+    [1000, 10, -5, 1], [500, 10, -5, 1], [1500, 10, 0, 1], [2000, 10, -6, 1],
+    [2500, 10.01, -6, 1], [4000, 500, -40, 1],
+]) {
+    if (height !== nextHeight) revision++;
+    height = nextHeight;
+    assert.deepEqual(optimized.uniform(x, 20, terrain, now, !!enabled, revision),
+        reference.uniform(x, 20, terrain, now, !!enabled), "caching preserves every eased uniform value");
+}
 console.log("hd mist ok");

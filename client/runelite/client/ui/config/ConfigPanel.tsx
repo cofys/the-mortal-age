@@ -128,18 +128,35 @@ function ConfigField({
     }
 
     if (item.color) {
+        // RuneLite's @Alpha colours: no alpha bits means opaque.
+        const argb = Number(value) >>> 0;
+        const alpha = item.alpha ? (argb >>> 24) || 255 : 255;
+        const withAlpha = (rgb: number, a: number) =>
+            item.alpha ? ((a & 0xff) << 24 | (rgb & 0xffffff)) >>> 0 : rgb & 0xffffff;
         return (
             <div className="rl-sidebar-row rl-sidebar-value-row">
                 <label className="rl-sidebar-field">{label}</label>
                 <input
                     className="rl-sidebar-color-input"
                     type="color"
-                    value={toColorInput(value)}
+                    value={toColorInput(argb & 0xffffff)}
                     onChange={(event) => {
                         const color = parseInt(event.target.value.slice(1), 16) || 0;
-                        update(color);
+                        update(withAlpha(color, alpha));
                     }}
                 />
+                {item.alpha && (
+                    <input
+                        className="rl-sidebar-alpha-input"
+                        type="range"
+                        min={1}
+                        max={255}
+                        aria-label={`${label} alpha`}
+                        title={`Alpha ${alpha}`}
+                        value={alpha}
+                        onChange={(event) => update(withAlpha(argb, Number(event.target.value)))}
+                    />
+                )}
             </div>
         );
     }

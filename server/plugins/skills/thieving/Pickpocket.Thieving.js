@@ -63,7 +63,7 @@ const POUCH_COINS = new Map(TARGETS.filter((t) => t.coinPouch).map((t) => [t.coi
  * timestamp rather than a flag, so a lost stun can never lock pickpocketing for good.
  */
 const caughtAt = new WeakMap();
-const CAUGHT_HOLD_MS = 1800;
+const CAUGHT_HOLD_TICKS = 3;
 
 let core;
 let pluginApi;
@@ -253,7 +253,7 @@ function fail(player, npc, target, name) {
   player.sendMessage(`You fail to pick ${name}'s pocket.`);
   npc.forceChat(target.catchLine ?? DEFAULT_CATCH_LINE);
   wearOutGloves(player);
-  caughtAt.set(player, Date.now());
+  caughtAt.set(player, core.World.getProcessCycle());
   core.TaskManager.submit(caughtTask(player, npc, target));
 }
 
@@ -347,7 +347,7 @@ function pickpocket(event) {
     return;
   }
   // The stun's last tick still holds the player in place but no longer stops a pickpocket.
-  if (Date.now() - (caughtAt.get(player) ?? 0) < CAUGHT_HOLD_MS || player.getTimers().getTicks(core.TimerKey.STUN) > PICKPOCKET_STUN_TICKS - PICKPOCKET_STUN_LOCK_TICKS) return;
+  if (core.World.getProcessCycle() - (caughtAt.get(player) ?? -Infinity) < CAUGHT_HOLD_TICKS || player.getTimers().getTicks(core.TimerKey.STUN) > PICKPOCKET_STUN_TICKS - PICKPOCKET_STUN_LOCK_TICKS) return;
   if (core.CombatFactory.inCombat(player)) {
     player.sendMessage("You must wait a few seconds after being in combat to do this.");
     return;

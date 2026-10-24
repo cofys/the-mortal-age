@@ -1,6 +1,9 @@
+import type { Frustum } from "../../../game/Frustum";
+import { actorBoundsVisible, type ActorBounds } from "../../ActorVisibility";
 import { ACTOR_VERTEX_STRIDE } from "../../buffer/ActorNormals";
 import type { IProjectileManager } from "../../../game/interfaces/IProjectileManager";
 import type { OsrsClient } from "../../../game/OsrsClient";
+import type { ActorMutation } from "../../../game/ecs/ActorMutation";
 import { getClientCycle } from "../../../network/ServerConnection";
 import type { PlayerSpotAnimationEvent } from "../../../game/sync/PlayerSyncTypes";
 import type { NpcSpotAnimationEvent, WorldSpotAnimationEvent } from "../../../game/GameRenderer";
@@ -29,23 +32,25 @@ import {
     MapActorUniforms,
     POSE_ROWS,
     POSE_WIDTH,
-    actorUniformStride,
     type GpuGeometry,
+    type ActorPose,
 } from "./actorGpu";
 import { POSE_FLOATS_PER_LABEL } from "../../player/LabelPose";
 import {
     ActorDataWriter,
     ActorTileSelection,
     getRenderPlayersForMap,
+    getNpcGeometryRequest,
     packNpcActorData,
     packPlayerActorData,
     packProjectileActorData,
     packWorldGfxActorData,
-    resolveUnbatchedNpcGeometry,
     updateNpcClientAnimations,
 } from "./actorPacking";
-import { PlayerPoseGeometry } from "./actorPlayers";
+import { PlayerPoseGeometry, type PosedActorGeometry } from "./actorPlayers";
+import { NpcPoseGeometry } from "./actorNpcs";
 import { DynamicNpcAnimLoader } from "../../npc/DynamicNpcAnimLoader";
+import { AsyncNpcPoseCache } from "../../npc/AsyncNpcPoseCache";
 import type { GfxInstance, GfxManager } from "../../gfx/GfxManager";
 import type { GfxCache } from "../../gfx/GfxCache";
 
@@ -90,10 +95,15 @@ interface MapActorState {
  * - The WebGPU map stream loads squares with `loadNpcs: false`, so there is no baked per-map
  *   NPC geometry; every NPC goes through DynamicNpcAnimLoader current-frame geometry.
  * - Instances and first-person arm rendering are not ported (instanceActive is false under
- *   WebGPU), and actor frame sounds are not dispatched. World entity decks are: their actors are
- *   packed from the ECS worldViewId (packDeckActors) and placed by the map's deck transform.
+ *   WebGPU). World entity decks are: their actors are packed from the ECS worldViewId
+ *   (packDeckActors) and placed by the map's deck transform. Player frame sounds play from
+ *   PlayerAnimController, for every renderer.
  */
 export class WebGPUActors {
+    readonly stats = { npcCandidates: 0, npcBoundsTests: 0, npcsCulled: 0,
+        playerCandidates: 0, playerBoundsTests: 0, playersCulled: 0 };
+    private shadow: Frustum | null | undefined = null;
+    private readonly npcBounds = new Map<string, ActorBounds>();
     private readonly writer = new ActorDataWriter();
     private readonly mapStates = new Map<number, MapActorState>();
     private readonly frameMaps: MapActorState[] = [];
@@ -106,6 +116,11 @@ export class WebGPUActors {
     private gfx?: ActorGfxRuntime;
     private playerPose?: PlayerPoseGeometry;
     private dynamicNpcLoader?: DynamicNpcAnimLoader;
+    private npcPose?: NpcPoseGeometry;
+    private asyncNpcPoses?: AsyncNpcPoseCache;
+    private readonly npcPoseMutation = (event: ActorMutation) => {
+        if (event.kind === "despawn") this.asyncNpcPoses?.forgetActor(event.index);
+    };
     private lastUpdateTimeSec = -1;
     /** Client-cycle accounting, mirroring the WebGL frame's pendingClientTicks. */
     private hasClientTickBaseline = false;
@@ -121,9 +136,9 @@ export class WebGPUActors {
         GPURenderPipeline,
         { extended: GPURenderPipeline; depth?: GPURenderPipeline }
     >();
-    private playerPipelines = new Set<GPURenderPipeline>();
-    /** This frame's GPU player poses: pose key -> pose texture row, packed into poseUpload. */
-    private readonly poseRows = new Map<string, number>();
+    private posePipelines = new Set<GPURenderPipeline>();
+    /** This frame's GPU actor poses: pose key -> pose texture row, packed into poseUpload. */
+    private readonly poseRows = new Map<string, ActorPose>();
     private readonly poseUpload = new Float32Array(POSE_ROWS * POSE_WIDTH * 4);
     private poseTexels = 0;
 
@@ -146,8 +161,8 @@ export class WebGPUActors {
             entries: [
                 {
                     binding: 0,
-                    visibility: GPU_SHADER_STAGE.VERTEX | GPU_SHADER_STAGE.FRAGMENT,
-                    buffer: { type: "uniform", hasDynamicOffset: true, minBindingSize: 128 },
+                    visibility: GPU_SHADER_STAGE.VERTEX,
+                    buffer: { type: "read-only-storage", minBindingSize: 128 },
                 },
                 {
                     binding: 1,
@@ -278,7 +293,7 @@ export class WebGPUActors {
                         ],
                     },
                 ];
-                if (kind === "player") {
+                if (kind === "player" || kind === "npc") {
                     buffers.push({
                         arrayStride: 4,
                         attributes: [{ shaderLocation: 1, offset: 0, format: "uint32" }],
@@ -323,10 +338,10 @@ export class WebGPUActors {
                 pair[alpha ? 1 : 0] = pipeline;
                 this.pipelines.set(kind, pair);
                 if (extended) this.variants.set(pipeline, { extended: extended.get(kind)!, depth: depth?.get(kind) });
-                if (kind === "player") {
-                    this.playerPipelines.add(pipeline);
-                    if (extended) this.playerPipelines.add(extended.get(kind)!);
-                    if (depth) this.playerPipelines.add(depth.get(kind)!);
+                if (kind === "player" || kind === "npc") {
+                    this.posePipelines.add(pipeline);
+                    if (extended) this.posePipelines.add(extended.get(kind)!);
+                    if (depth) this.posePipelines.add(depth.get(kind)!);
                 }
             }
         }
@@ -342,6 +357,9 @@ export class WebGPUActors {
         );
         loader.setTextureIdIndexMap(this.textureIdIndexMap);
         this.dynamicNpcLoader = loader;
+        this.npcPose = new NpcPoseGeometry(client, loader, this.textureIdIndexMap);
+        this.asyncNpcPoses = new AsyncNpcPoseCache(loader, client.workerPool, key => this.hasResidentNpcPose(key));
+        client.npcEcs.mutationListeners.add(this.npcPoseMutation);
 
         this.gfx = new ActorGfxRuntime(
             renderer,
@@ -379,9 +397,11 @@ export class WebGPUActors {
         return map;
     }
 
-    update(timeSec: number): void {
+    update(timeSec: number, shadow?: Frustum | null): void {
         const world = this.world;
         if (!world) return;
+        this.shadow = shadow;
+        for (const key of Object.keys(this.stats) as (keyof typeof this.stats)[]) this.stats[key] = 0;
         const deltaSec =
             this.lastUpdateTimeSec >= 0 ? Math.min(1, Math.max(0, timeSec - this.lastUpdateTimeSec)) : 0;
         this.lastUpdateTimeSec = timeSec;
@@ -454,7 +474,7 @@ export class WebGPUActors {
         }
         writer.data.fill(0, writer.count * 8, paddedU16);
         this.actorData?.update(this.renderer.device, writer.data, writer.count);
-        this.actorData?.updatePoses(this.renderer.device, this.poseUpload, this.poseTexels, this.poseRows.size);
+        this.actorData?.updatePoses(this.renderer.device, this.poseUpload, this.poseTexels, this.poseRows);
     }
 
     drawOpaque(pass: GPURenderPassEncoder): void {
@@ -483,36 +503,53 @@ export class WebGPUActors {
             pass.setBindGroup(1, extended ? world.extensionTextureBindGroup! : world.worldTextureBindGroup);
         }
         pass.setBindGroup(3, this.actorData.bindGroup);
+        let boundPipeline: GPURenderPipeline | undefined;
+        let boundGeometry: GpuGeometry | undefined;
+        let boundLabels: GPUBuffer | undefined;
         const maps = this.frameMaps;
         for (let m = 0; m < maps.length; m++) {
             const state = alpha ? maps[maps.length - 1 - m] : maps[m];
-            for (const item of alpha ? state.alpha : state.opaque) {
+            const items = alpha ? state.alpha : state.opaque;
+            if (items.length === 0) continue;
+            const bindGroup = state.uniforms.bindGroupFor();
+            if (!bindGroup) continue;
+            pass.setBindGroup(2, bindGroup);
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
                 const variants = extended ? this.variants.get(item.pipeline) : undefined;
                 const pipeline = depth ? variants?.depth : variants?.extended ?? item.pipeline;
-                if (pipeline) this.dispatch(pass, state, item, pipeline, depth ? 1 : world.sampleCount);
+                if (!pipeline) continue;
+                let instances = 1;
+                // Keep draw order: only adjacent opaque actors with consecutive records merge.
+                if (!alpha) {
+                    while (i + 1 < items.length) {
+                        const next = items[i + 1];
+                        if (next.pipeline !== item.pipeline || next.geometry !== item.geometry ||
+                            next.entry !== item.entry + instances) break;
+                        instances++;
+                        i++;
+                    }
+                }
+                const selected = withSampleCount(pipeline, depth ? 1 : world.sampleCount);
+                if (selected !== boundPipeline) {
+                    pass.setPipeline(selected);
+                    boundPipeline = selected;
+                }
+                if (item.geometry !== boundGeometry) {
+                    pass.setVertexBuffer(0, item.geometry.vertices);
+                    pass.setIndexBuffer(item.geometry.indices, "uint32");
+                    boundGeometry = item.geometry;
+                }
+                if (this.posePipelines.has(pipeline)) {
+                    const labels = item.geometry.labels ?? item.geometry.vertices;
+                    if (labels !== boundLabels) {
+                        pass.setVertexBuffer(1, labels);
+                        boundLabels = labels;
+                    }
+                }
+                pass.drawIndexed(item.geometry.indexCount, instances, 0, 0, item.entry);
             }
         }
-    }
-
-    private dispatch(
-        pass: GPURenderPassEncoder,
-        state: MapActorState,
-        item: ActorDrawItem,
-        pipeline: GPURenderPipeline,
-        sampleCount: number,
-    ): void {
-        const bindGroup = state.uniforms.bindGroupFor(item.entry);
-        if (!bindGroup) return;
-        pass.setPipeline(withSampleCount(pipeline, sampleCount));
-        pass.setBindGroup(2, bindGroup, [state.uniforms.offsetFor(item.entry)]);
-        pass.setVertexBuffer(0, item.geometry.vertices);
-        if (this.playerPipelines.has(pipeline)) {
-            // CPU-posed meshes (pose row -1) never read their label, so their own vertex
-            // buffer stands in for the label buffer: it is always long enough.
-            pass.setVertexBuffer(1, item.geometry.labels ?? item.geometry.vertices);
-        }
-        pass.setIndexBuffer(item.geometry.indices, "uint32");
-        pass.drawIndexed(item.geometry.indexCount);
     }
 
     onMapAdded(map: WebGPUMapSquare, mapData: SdMapData): void {
@@ -525,7 +562,6 @@ export class WebGPUActors {
             uniforms: new MapActorUniforms(
                 device,
                 this.actorUniformLayout,
-                actorUniformStride(device),
                 mapData,
             ),
             opaque: [],
@@ -624,6 +660,9 @@ export class WebGPUActors {
     }
 
     dispose(): void {
+        this.renderer.osrsClient.npcEcs.mutationListeners.delete(this.npcPoseMutation);
+        this.asyncNpcPoses?.dispose();
+        this.asyncNpcPoses = undefined;
         for (const state of this.mapStates.values()) {
             state.uniforms.destroy();
         }
@@ -637,6 +676,9 @@ export class WebGPUActors {
         this.geometry = undefined;
         this.actorData?.destroy();
         this.actorData = undefined;
+        this.npcBounds.clear();
+        this.npcPose?.clear();
+        this.npcPose = undefined;
         this.dynamicNpcLoader?.clear();
         this.dynamicNpcLoader = undefined;
     }
@@ -701,23 +743,68 @@ export class WebGPUActors {
         const client = this.renderer.osrsClient;
         const loader = this.dynamicNpcLoader;
         if (!loader) return;
+        this.stats.npcCandidates++;
         const dataIndex = packNpcActorData(client, this.writer, map, ecsId);
         if (dataIndex < 0) return;
         state.npcByEcsId.set(ecsId, dataIndex);
 
-        const geometry = resolveUnbatchedNpcGeometry(client, loader, ecsId);
-        if (!geometry) return;
+        let request: Parameters<DynamicNpcAnimLoader["getFrameGeometry"]> | undefined;
+        let opaque: GpuGeometry | null | undefined;
+        let alpha: GpuGeometry | null | undefined;
+        let poseRow = -1;
+        try {
+            request = getNpcGeometryRequest(client, ecsId);
+            const posed = this.npcPose?.resolve(request, !!this.world?.extensionActive);
+            if (posed?.matrices) poseRow = this.poseRowFor(posed.poseKey!, posed.matrices);
+            if (posed && poseRow >= 0) {
+                opaque = this.geometry?.getOrCreate(posed.key + "|o", posed.opaqueVertices, posed.opaqueIndices, posed.opaqueLabels) ?? null;
+                alpha = this.geometry?.getOrCreate(posed.key + "|a", posed.alphaVertices, posed.alphaIndices, posed.alphaLabels) ?? null;
+            } else {
+                const key = this.asyncNpcPoses?.getKey(request, ecsId);
+                if (key) {
+                    const bounds = this.npcBounds.get(key);
+                    if (bounds) {
+                        this.stats.npcBoundsTests++;
+                        if (!this.actorVisible(bounds, map, dataIndex, -modelYOffset,
+                            (client.npcEcs.getWorldViewId(ecsId) | 0) >= 0)) {
+                            this.stats.npcsCulled++;
+                            return;
+                        }
+                    }
+                    opaque = this.geometry?.get(`${key}|o`);
+                    alpha = this.geometry?.get(`${key}|a`);
+                }
+            }
+        } catch {
+            request ??= [client.npcEcs.getNpcTypeId(ecsId) | 0, -1, 0];
+        }
+        // The smaller CPU pose cache may evict a mesh whose two GPU passes are still resident.
+        if (opaque === undefined || alpha === undefined || (!opaque && !alpha)) {
+            poseRow = -1;
+            if (!request) return;
+            const geometry = this.asyncNpcPoses?.get(request, ecsId);
+            if (geometry) {
+                if (geometry.bounds) {
+                    this.npcBounds.delete(geometry.key);
+                    this.npcBounds.set(geometry.key, geometry.bounds);
+                    if (this.npcBounds.size > ACTOR_GEOMETRY_CACHE_ENTRIES) this.npcBounds.delete(this.npcBounds.keys().next().value!);
+                }
+                opaque = this.geometry?.getOrCreate(`${geometry.key}|o`, geometry.opaqueVertices, geometry.opaqueIndices);
+                alpha = this.geometry?.getOrCreate(`${geometry.key}|a`, geometry.alphaVertices, geometry.alphaIndices);
+            } else {
+                const key = this.asyncNpcPoses?.getFallbackKey(request, ecsId);
+                if (!key || !this.hasResidentNpcPose(key)) return;
+                opaque = this.geometry?.get(`${key}|o`);
+                alpha = this.geometry?.get(`${key}|a`);
+            }
+        }
         const timeLoaded = map.timeLoaded;
-        const opaque = this.geometry?.getOrCreate(
-            `${geometry.key}|o`,
-            geometry.opaqueVertices,
-            geometry.opaqueIndices,
-        );
+        let entry: number | undefined;
         if (opaque && this.pipelines.get("npc")?.[0]) {
             state.opaque.push({
                 pipeline: this.pipelines.get("npc")![0],
                 geometry: opaque,
-                entry: this.actorEntry(
+                entry: entry ??= this.actorEntry(
                     state,
                     map,
                     timeLoaded,
@@ -726,19 +813,15 @@ export class WebGPUActors {
                     0,
                     0,
                     0,
+                    poseRow,
                 ),
             });
         }
-        const alpha = this.geometry?.getOrCreate(
-            `${geometry.key}|a`,
-            geometry.alphaVertices,
-            geometry.alphaIndices,
-        );
         if (alpha && this.pipelines.get("npc")?.[1]) {
             state.alpha.push({
                 pipeline: this.pipelines.get("npc")![1],
                 geometry: alpha,
-                entry: this.actorEntry(
+                entry: entry ??= this.actorEntry(
                     state,
                     map,
                     timeLoaded,
@@ -747,9 +830,16 @@ export class WebGPUActors {
                     0,
                     0,
                     0,
+                    poseRow,
                 ),
             });
         }
+    }
+
+    private hasResidentNpcPose(key: string): boolean {
+        const opaque = this.geometry?.get(`${key}|o`);
+        const alpha = this.geometry?.get(`${key}|a`);
+        return opaque !== undefined && alpha !== undefined && !!(opaque || alpha);
     }
 
     private packMapPlayers(state: MapActorState, map: WebGPUMapSquare): void {
@@ -769,14 +859,23 @@ export class WebGPUActors {
         let indexInMap = 0;
         for (const pid of pids) {
             if (!this.renderer.interactionHost.shouldRenderPlayerIndex(pid)) continue;
+            this.stats.playerCandidates++;
             const dataIndex = packPlayerActorData(client, this.writer, map, pid, indexInMap++);
             if (dataIndex < 0) continue;
             state.playerByPid.set(pid, dataIndex);
 
-            let posed = this.playerPose?.resolve(pid);
+            const visible = (geometry: PosedActorGeometry) => {
+                if (!geometry.bounds) return true;
+                this.stats.playerBoundsTests++;
+                const keep = this.actorVisible(geometry.bounds, map, dataIndex, modelYOffset,
+                    (client.playerEcs.getWorldViewId(pid) | 0) >= 0);
+                if (!keep) this.stats.playersCulled++;
+                return keep;
+            };
+            let posed = this.playerPose?.resolve(pid, true, visible);
             let poseRow = posed?.matrices ? this.poseRowFor(posed.poseKey!, posed.matrices) : -1;
             if (posed?.matrices && poseRow < 0) {
-                posed = this.playerPose?.resolve(pid, false);
+                posed = this.playerPose?.resolve(pid, false, visible);
                 poseRow = -1;
             }
             if (!posed) continue;
@@ -793,12 +892,13 @@ export class WebGPUActors {
                     this.pipelines.get("player")![1],
                 ],
             ];
+            let entry: number | undefined;
             for (const [geometry, items, pipeline] of passes) {
                 if (!geometry) continue;
                 items.push({
                     pipeline,
                     geometry,
-                    entry: this.actorEntry(state, map, timeLoaded, modelYOffset, dataIndex, 0, 0, 0, poseRow),
+                    entry: entry ??= this.actorEntry(state, map, timeLoaded, modelYOffset, dataIndex, 0, 0, 0, poseRow),
                 });
             }
         }
@@ -833,15 +933,17 @@ export class WebGPUActors {
         });
     }
 
-    /** The frame's pose texture row for a GPU pose, shared by players in the same pose; -1 when full. */
+    /** The frame's pose texture row for a GPU pose, shared by actors in the same pose; -1 when full. */
     private poseRowFor(poseKey: string, matrices: Float32Array): number {
         const existing = this.poseRows.get(poseKey);
-        if (existing !== undefined) return existing;
+        if (existing !== undefined) return existing.row;
         const row = this.poseRows.size;
         if (row >= POSE_ROWS) return -1;
-        this.poseUpload.set(matrices, row * POSE_WIDTH * 4);
+        if (!this.actorData?.hasPose(poseKey, row, matrices)) {
+            this.poseUpload.set(matrices, row * POSE_WIDTH * 4);
+        }
         this.poseTexels = Math.max(this.poseTexels, (matrices.length / POSE_FLOATS_PER_LABEL) * 3);
-        this.poseRows.set(poseKey, row);
+        this.poseRows.set(poseKey, { row, matrices });
         return row;
     }
 
@@ -992,6 +1094,7 @@ export class WebGPUActors {
     ): void {
         const cache = this.gfx?.cache;
         if (!cache) return;
+        let entry: number | undefined;
         const opaqueGeometry = cache.ensureFrameGeometry(spotId, frameIdx, false, frameCycle);
         if (opaqueGeometry && this.pipelines.get(kind)?.[0]) {
             const gpu = this.geometry?.getOrCreate(
@@ -1003,7 +1106,7 @@ export class WebGPUActors {
                 state.opaque.push({
                     pipeline: this.pipelines.get(kind)![0],
                     geometry: gpu,
-                    entry: this.actorEntry(
+                    entry: entry ??= this.actorEntry(
                         state,
                         map,
                         timeLoaded,
@@ -1027,7 +1130,7 @@ export class WebGPUActors {
                 state.alpha.push({
                     pipeline: this.pipelines.get(kind)![1],
                     geometry: gpu,
-                    entry: this.actorEntry(
+                    entry: entry ??= this.actorEntry(
                         state,
                         map,
                         timeLoaded,
@@ -1070,11 +1173,32 @@ export class WebGPUActors {
 
     // ── Culling ────────────────────────────────────────────────────────────────────────────────
 
+    private actorVisible(bounds: ActorBounds, map: WebGPUMapSquare, dataIndex: number,
+        modelYOffset: number, worldEntity: boolean): boolean {
+        // Deck transforms are applied in view space; their local tiles are not world positions.
+        if (worldEntity || !map.heightMapData || !this.renderer.osrsClient.camera) return true;
+        const offset = dataIndex * 8;
+        const localX = (this.writer.data[offset] << 16) >> 16;
+        const localZ = (this.writer.data[offset + 1] << 16) >> 16;
+        const plane = this.writer.data[offset + 2] & 3;
+        const size = map.heightMapSize;
+        const tx = (localX >> 7) + map.borderSize, tz = (localZ >> 7) + map.borderSize;
+        if (tx < 0 || tz < 0 || tx + 1 >= size || tz + 1 >= size) return true;
+        const start = plane * size * size + tz * size + tx;
+        const data = map.heightMapData;
+        const heights = [data[start], data[start + 1], data[start + size], data[start + size + 1]];
+        if (!heights.every(Number.isFinite)) return true;
+        const groundMin = (-Math.max(...heights) * 8 + modelYOffset) / 128;
+        const groundMax = (-Math.min(...heights) * 8 + modelYOffset) / 128;
+        return actorBoundsVisible(bounds, map.getRenderBaseWorldX() + localX / 128,
+            map.getRenderBaseWorldY() + localZ / 128, groundMin, groundMax,
+            this.renderer.osrsClient.camera.frustum, this.shadow);
+    }
+
     private getCullTile(): { x: number; y: number } {
-        const camera = this.renderer.osrsClient.camera;
         return {
-            x: Math.floor(camera.getPosX()),
-            y: Math.floor(camera.getPosZ()),
+            x: this.renderer.playerPosUni[0],
+            y: this.renderer.playerPosUni[1],
         };
     }
 

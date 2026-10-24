@@ -8,7 +8,7 @@
 const Capes = require("./Common.SkillCapes");
 
 const BOOSTED_LEVEL = 100;
-const COOLDOWN_MS = 60_000;
+const COOLDOWN_TICKS = 100;
 const COOLDOWN_MESSAGES = {
   HITPOINTS: "Your Skillcape of Hitpoints can only provide a hitpoint boost once per minute.",
   PRAYER: "Your Skillcape of Prayer can only provide a prayer boost once per minute.",
@@ -24,11 +24,13 @@ function boost(player, cape) {
   const cooldown = COOLDOWN_MESSAGES[cape.skillKey];
   if (cooldown) {
     const boosts = lastBoost.get(player) ?? {};
-    if (Date.now() - (boosts[cape.skillKey] ?? 0) < COOLDOWN_MS) {
+    const now = Capes.core.World.getProcessCycle();
+    const last = boosts[cape.skillKey];
+    if (last !== undefined && now - last < COOLDOWN_TICKS) {
       player.sendMessage(cooldown);
       return;
     }
-    lastBoost.set(player, { ...boosts, [cape.skillKey]: Date.now() });
+    lastBoost.set(player, { ...boosts, [cape.skillKey]: now });
   }
   skills.setCurrentLevel(cape.skill, Math.min(BOOSTED_LEVEL, skills.getCurrentLevel(cape.skill) + 1), true);
 }

@@ -12,8 +12,46 @@ import {
 import { isNpcSearch, isNpcSearchResult, setNpcSearchResults } from "../spawnSearch";
 import { createTypedArrayFromCode } from "../Cs2ArrayObject";
 import { Opcodes } from "../Opcodes";
-import type { HandlerContext, HandlerMap } from "./HandlerTypes";
+import { PostProcessedObjTypeLoader } from "../../config/objtype/ObjTypeLoader";
+import type { HandlerContext, HandlerMap, ItemNameIndexEntry } from "./HandlerTypes";
 import { GAMEFRAME_LAYOUT_ENUM, GAMEFRAME_317_OPTION, GAMEFRAME_317_LABEL, GAMEFRAME_317_FIXED_OPTION, GAMEFRAME_317_FIXED_LABEL } from "../../../common/ui/gameframeLayout";
+
+/** Item ids 0-65535 cover every standard item. */
+const ITEM_SEARCH_MAX_ID = 65535;
+
+/**
+ * The names every oc_find searches, read from the definitions once. The Grand Exchange and
+ * bank searches run oc_find on each keystroke, and the item loader's LRU cache holds 4,096 of
+ * the ~32,000 named items, so scanning the loader each time re-decoded every definition
+ * (about 100ms a keystroke). The index is rebuilt for a new loader, and when the members
+ * flag changes, since a free-to-play world renames members items.
+ *
+ * Bank placeholders share their item's name but are never real items (a blank model):
+ * spawned and dropped, one is an invisible ground item. Noted copies are left out too.
+ */
+function itemNameIndex(ctx: HandlerContext): ItemNameIndexEntry[] {
+    const loader = ctx.objTypeLoader!;
+    const membersWorld = PostProcessedObjTypeLoader.membersWorld;
+    const cached = ctx.itemNameIndex;
+    if (cached && cached.loader === loader && cached.membersWorld === membersWorld) {
+        return cached.entries;
+    }
+    const entries: ItemNameIndexEntry[] = [];
+    for (let id = 0; id < ITEM_SEARCH_MAX_ID; id++) {
+        const obj = loader.load(id);
+        if (
+            obj &&
+            obj.name &&
+            obj.name !== "null" &&
+            obj.placeholderTemplate === -1 &&
+            obj.noteTemplate === -1
+        ) {
+            entries.push({ id, name: obj.name.toLowerCase(), tradable: obj.isTradable === true });
+        }
+    }
+    ctx.itemNameIndex = { loader, membersWorld, entries };
+    return entries;
+}
 
 function loadEnum(ctx: HandlerContext, enumId: number) {
     const type = ctx.enumTypeLoader?.load(enumId);
@@ -143,26 +181,11 @@ export function registerConfigOps(handlers: HandlerMap): void {
             }
             setNpcSearchResults(ctx.itemSearchResults);
         } else if (query.length > 0 && ctx.objTypeLoader) {
-            // Search through all items for matching names
-            // Note: This searches items 0-65535 which covers all standard items
-            const maxItemId = 65535;
-            for (let id = 0; id < maxItemId; id++) {
-                const obj = ctx.objTypeLoader.load(id);
-                // Bank placeholders share their item's name but are never real items (a blank
-                // model): spawned and dropped, one is an invisible ground item. Noted copies are
-                // left out too, and a tradable-only search (the Grand Exchange) also drops the
-                // untradeable variants that share a real item's name (Abyssal whip 4178, 20405).
-                if (
-                    obj &&
-                    obj.name &&
-                    obj.name !== "null" &&
-                    obj.placeholderTemplate === -1 &&
-                    obj.noteTemplate === -1 &&
-                    (!tradableOnly || obj.isTradable)
-                ) {
-                    if (obj.name.toLowerCase().includes(query)) {
-                        ctx.itemSearchResults.push(id);
-                    }
+            // A tradable-only search (the Grand Exchange) also drops the untradeable variants
+            // that share a real item's name (Abyssal whip 4178, 20405).
+            for (const entry of itemNameIndex(ctx)) {
+                if ((!tradableOnly || entry.tradable) && entry.name.includes(query)) {
+                    ctx.itemSearchResults.push(entry.id);
                 }
             }
         }

@@ -421,6 +421,8 @@ export function scheduleLocReload(host: WebGLOsrsRendererHost, mapX: number, map
         // has already passed, so discard them before they restore stale locs.
         let discarded = false;
         for (const batch of host.pendingStreamMapsByGeneration.values()) {
+            const pending = batch.get(id);
+            if (pending) WebGLMapSquare.cancelPreparedLoad(pending);
             if (batch.delete(id)) discarded = true;
         }
         // In-flight builds check locReloadVersions themselves. Only restart a

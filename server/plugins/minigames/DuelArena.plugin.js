@@ -73,6 +73,7 @@ const CACHE_RULE_BUTTONS = new Map([
 const sessions = new Map();
 const requests = new WeakMap();
 const requestDelay = new WeakMap();
+const DUEL_REQUEST_DELAY_TICKS = 4;
 const menuState = new WeakMap();
 const presets = new WeakMap();
 const lastRules = new WeakMap();
@@ -420,8 +421,8 @@ function request({ player, target }) {
     return;
   }
   const reciprocal = requests.get(target) === player;
-  if (!reciprocal && Date.now() < (requestDelay.get(player) ?? 0)) return;
-  requestDelay.set(player, Date.now() + 2000);
+  if (!reciprocal && World.getProcessCycle() < (requestDelay.get(player) ?? 0)) return;
+  requestDelay.set(player, World.getProcessCycle() + DUEL_REQUEST_DELAY_TICKS);
   requests.set(player, target);
   player.getDueling().setState(DuelState.REQUESTED_DUEL);
   if (reciprocal) {

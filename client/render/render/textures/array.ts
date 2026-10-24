@@ -227,11 +227,12 @@ export function initTextureArray(host: WebGLOsrsRendererHost, ) {
                     true,
                     1.0,
                 );
+                if (texturePixels.length === 0) continue;
                 pixels.set(texturePixels, (i + 1) * pixelCount);
+                host.loadedTextureIds.add(textureId);
             } catch (e) {
                 console.error("Failed loading texture", textureId, e);
             }
-            host.loadedTextureIds.add(textureId);
         }
 
         host.textureArray = createTextureArray(
@@ -359,11 +360,11 @@ export function maybeRegenerateTextureMipmaps(host: WebGLOsrsRendererHost, nowMs
             return;
         }
 
-        // Only regenerate when texture streaming settles a bit, or periodically if it never fully settles.
+        // Off-screen preloads can stay busy after the foreground scene and texture uploads settle.
         const quietForMs = nowMs - host.textureMipmapsDirtyAtMs;
         const sinceLastGenMs = nowMs - host.textureMipmapsLastGenAtMs;
         const shouldGen =
-            (quietForMs > 250 && !host.hasPendingMapStreamingWork()) ||
+            (quietForMs > 250 && host.mapManager.isSceneReady(host.stats.frameCount)) ||
             (sinceLastGenMs > 750 && host.textureMipmapsDirtyUpdates >= 8);
 
         if (!shouldGen) return;

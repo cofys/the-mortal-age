@@ -50,7 +50,13 @@ export type WorldMapArchiveRendererOptions = {
     textureLoader: TextureLoader;
     mapScenes: IndexedSprite[];
     varManager?: VarManager;
+    maxRenderedRegionBytes?: number;
+    /** Lets a cache worker finish foreground scene builds before raster work. */
+    beforeRaster?: (signal?: AbortSignal) => Promise<void>;
 };
+
+export type WorldMapRenderArea = Pick<WorldMapArea, "id" | "internalName" | "backgroundColor" |
+    "regionLowX" | "regionHighX" | "regionLowY" | "regionHighY">;
 
 type WorldMapDecoration = {
     objectDefinitionId: number;
@@ -107,7 +113,7 @@ type WorldMapRegionRecord = {
 };
 
 type WorldMapAreaDataRecord = {
-    area: WorldMapArea;
+    area: WorldMapRenderArea;
     data0: WorldMapData0Record[];
     data1: WorldMapData1Record[];
     staticIcons: StaticWorldMapIcon[];
@@ -511,12 +517,15 @@ export class WorldMapArchiveRenderer {
     private readonly geographyIndex: CacheIndex;
     private readonly groundIndex: CacheIndex;
     private readonly areaCache = new Map<number, WorldMapAreaDataRecord | undefined>();
-    private readonly groundSpriteCache = new Map<string, Promise<Int32Array>>();
+    private readonly groundSpriteCache = new Map<string, Promise<Int32Array | undefined>>();
+    private readonly pendingGroundSprites = new Map<Promise<Int32Array | undefined>, string>();
     private readonly scaleHandlers = new Map<number, WorldMapScaleHandler>();
     private readonly renderedRegionCache = new Map<string, WorldMapRenderedTile>();
     private renderedRegionCacheBytes = 0;
-
-    private readonly maxRenderedRegionBytes = 48 * 1024 * 1024;
+    private readonly decodedRegions = new Map<WorldMapRegionRecord, number>();
+    private decodedRegionBytes = 0;
+    private readonly activeRegions = new Map<WorldMapRegionRecord, number>();
+    private cacheAbort = new AbortController();
 
     constructor(private readonly options: WorldMapArchiveRendererOptions) {
         this.worldMapIndex = options.cacheSystem.getIndex(IndexType.OSRS.worldMap);
@@ -525,97 +534,136 @@ export class WorldMapArchiveRenderer {
     }
 
     clear(): void {
+        this.cancelLoads();
         this.areaCache.clear();
         this.groundSpriteCache.clear();
+        this.decodedRegions.clear();
+        this.decodedRegionBytes = 0;
         this.scaleHandlers.clear();
         this.renderedRegionCache.clear();
         this.renderedRegionCacheBytes = 0;
     }
 
+    cancelLoads(): void {
+        this.cacheAbort.abort();
+        this.cacheAbort = new AbortController();
+        for (const [promise, key] of this.pendingGroundSprites) {
+            if (this.groundSpriteCache.get(key) === promise) this.groundSpriteCache.delete(key);
+        }
+        this.pendingGroundSprites.clear();
+    }
+
     async loadTile(
-        area: WorldMapArea | undefined,
+        area: WorldMapRenderArea | undefined,
         mapX: number,
         mapY: number,
         pixelsPerTile: number,
+        signal?: AbortSignal,
     ): Promise<WorldMapRenderedTile | undefined> {
-        if (!area) {
-            return undefined;
-        }
+        if (!area || signal?.aborted) return undefined;
         const clampedPixelsPerTile = Math.max(1, Math.min(8, Math.ceil(pixelsPerTile || 1)));
-        const areaData = this.getAreaData(area);
-        if (!areaData) {
-            return undefined;
+        const signals = signal ? [this.cacheAbort.signal, signal] : [this.cacheAbort.signal];
+        const aborted = () => signals.some(s => s.aborted);
+        let cancel!: () => void;
+        const cancelled = new Promise<undefined>(resolve => { cancel = () => resolve(undefined); });
+        for (const s of signals) s.addEventListener("abort", cancel, { once: true });
+        let region: WorldMapRegionRecord | undefined;
+        let pinned = false;
+        try {
+            const areaData = await Promise.race([
+                retryOnMissingGroup(() => aborted() ? undefined : this.getAreaData(area)), cancelled,
+            ]);
+            if (!areaData || aborted()) return undefined;
+            region = this.getRegion(areaData, mapX | 0, mapY | 0);
+            if (!region || (!region.data0 && region.data1.length === 0)) return undefined;
+            const currentRegion = region;
+            const cacheKey = `${areaData.area.id}:${mapX | 0}:${mapY | 0}:${clampedPixelsPerTile}`;
+            const cached = this.renderedRegionCache.get(cacheKey);
+            if (cached) {
+                this.renderedRegionCache.delete(cacheKey);
+                this.renderedRegionCache.set(cacheKey, cached);
+                return cached;
+            }
+            const source = region.data0 ?? region.data1[0];
+            // Keep cold geography and ground requests parallel, including single-worker clients.
+            const ready = await Promise.race([Promise.all([
+                retryOnMissingGroup(() => aborted() ? false : this.loadGeography(currentRegion)),
+                this.getGroundColors(source.groupId, source.headerless ? source.fileId : 0),
+            ]), cancelled]);
+            if (!ready || !ready[0] || !ready[1] || aborted()) return undefined;
+            if (this.options.beforeRaster) await Promise.race([this.options.beforeRaster(signal), cancelled]);
+            if (aborted()) return undefined;
+            // Pending IO need not pin decoded arrays. An evicted region can decode from the
+            // now-resident geography before the synchronous raster, including large chunk maps.
+            this.activeRegions.set(region, (this.activeRegions.get(region) ?? 0) + 1);
+            pinned = true;
+            if (!this.loadGeography(region)) return undefined;
+            const width = clampedPixelsPerTile * TILE_COUNT;
+            const rgbPixels = new Int32Array(width * width);
+            const scaleHandler = this.getScaleHandler(clampedPixelsPerTile);
+            if (region.data0) {
+                this.drawMapData0(rgbPixels, width, region.data0, scaleHandler, ready[1], areaData.area.backgroundColor);
+            } else {
+                this.drawMapData1(rgbPixels, width, region.data1, scaleHandler, ready[1], areaData.area.backgroundColor);
+            }
+            const tile = { pixels: this.convertRgbToRgba(rgbPixels), width, height: width, icons: region.dynamicIcons };
+            this.setRenderedRegionCache(cacheKey, tile);
+            return tile;
+        } finally {
+            for (const s of signals) s.removeEventListener("abort", cancel);
+            if (region && pinned) {
+                const count = (this.activeRegions.get(region) ?? 1) - 1;
+                if (count > 0) this.activeRegions.set(region, count);
+                else this.activeRegions.delete(region);
+            }
+            this.pruneDecodedRegions();
         }
-        const region = this.getRegion(areaData, mapX | 0, mapY | 0);
-        if (!region) {
-            return undefined;
-        }
-        if (!region.data0 && region.data1.length === 0) {
-            return undefined;
-        }
-
-        const cacheKey = `${areaData.area.id}:${mapX | 0}:${mapY | 0}:${clampedPixelsPerTile}`;
-        const cached = this.renderedRegionCache.get(cacheKey);
-        if (cached) {
-            this.renderedRegionCache.delete(cacheKey);
-            this.renderedRegionCache.set(cacheKey, cached);
-            return cached;
-        }
-
-        if (!this.loadGeography(region)) {
-            return undefined;
-        }
-        const width = clampedPixelsPerTile * TILE_COUNT;
-        const height = width;
-        const rgbPixels = new Int32Array(width * height);
-        const source = region.data0 ?? region.data1[0];
-        // Rev 241 keeps one ground image per map area in the region's group; before, file 0.
-        const groundColors = await this.getGroundColors(source?.groupId ?? -1, source?.headerless ? source.fileId : 0);
-        const scaleHandler = this.getScaleHandler(clampedPixelsPerTile);
-
-        if (region.data0) {
-            this.drawMapData0(rgbPixels, width, region.data0, scaleHandler, groundColors, areaData.area.backgroundColor);
-        } else {
-            this.drawMapData1(rgbPixels, width, region.data1, scaleHandler, groundColors, areaData.area.backgroundColor);
-        }
-
-        const pixels = this.convertRgbToRgba(rgbPixels);
-        const tile = {
-            pixels,
-            width,
-            height,
-            icons: region.dynamicIcons,
-        };
-        this.setRenderedRegionCache(cacheKey, tile);
-        return tile;
     }
 
     getIcons(area: WorldMapArea | undefined, mapX: number, mapY: number): WorldMapRenderIcon[] | undefined {
         if (!area) return undefined;
-        const areaData = this.getAreaData(area);
-        if (!areaData) return undefined;
-        const region = this.getRegion(areaData, mapX | 0, mapY | 0);
-        if (!region) return undefined;
-        if ((region.data0 || region.data1.length > 0) && !region.geographyLoaded) {
-            this.loadGeography(region);
+        let region: WorldMapRegionRecord | undefined;
+        try {
+            const areaData = this.getAreaData(area);
+            if (!areaData) return undefined;
+            region = this.getRegion(areaData, mapX | 0, mapY | 0);
+            if (!region) return undefined;
+            this.activeRegions.set(region, (this.activeRegions.get(region) ?? 0) + 1);
+            if ((region.data0 || region.data1.length > 0) && !region.geographyLoaded) {
+                this.loadGeography(region);
+            }
+            const icons = region.staticIcons.concat(region.dynamicIcons);
+            return icons.length > 0 ? icons : undefined;
+        } catch (error) {
+            if (!isGroupMissingError(error)) throw error;
+            return undefined;
+        } finally {
+            if (region) {
+                const count = (this.activeRegions.get(region) ?? 1) - 1;
+                if (count > 0) this.activeRegions.set(region, count);
+                else this.activeRegions.delete(region);
+            }
+            this.pruneDecodedRegions();
         }
-        const icons = region.staticIcons.concat(region.dynamicIcons);
-        return icons.length > 0 ? icons : undefined;
     }
 
-    private getAreaData(area: WorldMapArea): WorldMapAreaDataRecord | undefined {
-        if (this.areaCache.has(area.id)) return this.areaCache.get(area.id);
+    private getAreaData(area: WorldMapRenderArea): WorldMapAreaDataRecord | undefined {
+        if (this.areaCache.has(area.id)) {
+            const cached = this.areaCache.get(area.id);
+            this.cacheAreaData(area.id, cached);
+            return cached;
+        }
         let result: WorldMapAreaDataRecord | undefined;
         try {
             const compositeMapArchiveId = worldMapGroupId(this.worldMapIndex, "compositemap");
             if (compositeMapArchiveId < 0) {
-                this.areaCache.set(area.id, undefined);
+                this.cacheAreaData(area.id, undefined);
                 return undefined;
             }
             const compositeMapArchive = this.worldMapIndex.getArchive(compositeMapArchiveId);
             const compositeMapFile = compositeMapFileFor(compositeMapArchive, area);
             if (!compositeMapFile) {
-                this.areaCache.set(area.id, undefined);
+                this.cacheAreaData(area.id, undefined);
                 return undefined;
             }
             const composite = readCompositeMap(compositeMapFile.data, true, area.id);
@@ -627,6 +675,7 @@ export class WorldMapArchiveRenderer {
                 regions: new Map(),
             };
         } catch (error) {
+            if (isGroupMissingError(error)) throw error;
             console.log("[WorldMapArchiveRenderer] Failed to load area data", {
                 areaId: area.id,
                 internalName: area.internalName,
@@ -634,8 +683,14 @@ export class WorldMapArchiveRenderer {
             });
             result = undefined;
         }
-        this.areaCache.set(area.id, result);
+        this.cacheAreaData(area.id, result);
         return result;
+    }
+
+    private cacheAreaData(id: number, data: WorldMapAreaDataRecord | undefined): void {
+        this.areaCache.delete(id);
+        this.areaCache.set(id, data);
+        while (this.areaCache.size > 2) this.areaCache.delete(this.areaCache.keys().next().value!);
     }
 
     private getRegion(areaData: WorldMapAreaDataRecord, regionX: number, regionY: number): WorldMapRegionRecord | undefined {
@@ -696,27 +751,78 @@ export class WorldMapArchiveRenderer {
     }
 
     private loadGeography(region: WorldMapRegionRecord): boolean {
-        if (region.geographyLoaded) return true;
-        region.dynamicIcons = [];
-        if (region.data0) {
-            if (!this.loadWorldMapDataGeography(region.data0)) return false;
-            this.buildIcons(region, region.data0, 0, 0, 64, 64);
+        const previousBytes = this.decodedRegions.get(region) ?? 0;
+        const wasLoaded = region.geographyLoaded;
+        this.decodedRegions.delete(region);
+        this.decodedRegions.set(region, previousBytes);
+        try {
+            if (region.geographyLoaded) return true;
+            region.dynamicIcons = [];
+            if (region.data0) {
+                if (!this.loadWorldMapDataGeography(region.data0)) return false;
+                this.buildIcons(region, region.data0, 0, 0, 64, 64);
+                region.geographyLoaded = true;
+                return true;
+            }
+
+            if (region.data1[0]?.headerless) {
+                if (!this.loadChunkRegionGeography(region.data1)) return false;
+            } else {
+                let missing: unknown;
+                let loaded = true;
+                for (const data of region.data1) {
+                    try {
+                        loaded = this.loadWorldMapDataGeography(data) && loaded;
+                    } catch (error) {
+                        if (!isGroupMissingError(error)) throw error;
+                        missing = error;
+                    }
+                }
+                if (missing) throw missing;
+                if (!loaded) return false;
+            }
+            for (const data of region.data1) {
+                this.buildIcons(region, data, data.chunkX * 8, data.chunkY * 8, 8, 8);
+            }
             region.geographyLoaded = true;
             return true;
-        }
-
-        if (region.data1[0]?.headerless) {
-            if (!this.loadChunkRegionGeography(region.data1)) return false;
-        } else {
-            for (const data of region.data1) {
-                if (!this.loadWorldMapDataGeography(data)) return false;
+        } finally {
+            if (!wasLoaded) {
+                let bytes = 0;
+                for (const data of region.data0 ? [region.data0] : region.data1) {
+                    bytes += data.floorUnderlayIds?.byteLength ?? 0;
+                    for (const arrays of [data.floorOverlayIds, data.overlayShapes, data.overlayRotations]) {
+                        for (const values of arrays ?? []) bytes += values.byteLength;
+                    }
+                    for (const plane of data.decorations ?? []) {
+                        bytes += plane.length * 8;
+                        for (const row of plane) if (row) bytes += 32 + row.length * 48;
+                    }
+                }
+                this.decodedRegionBytes += bytes - previousBytes;
+                this.decodedRegions.set(region, bytes);
             }
+            this.pruneDecodedRegions();
         }
-        for (const data of region.data1) {
-            this.buildIcons(region, data, data.chunkX * 8, data.chunkY * 8, 8, 8);
+    }
+
+    private pruneDecodedRegions(): void {
+        for (const [region, bytes] of this.decodedRegions) {
+            if (this.decodedRegions.size <= 16 && this.decodedRegionBytes <= 8 * 1024 * 1024) break;
+            if (this.activeRegions.has(region)) continue;
+            this.decodedRegions.delete(region);
+            this.decodedRegionBytes -= bytes;
+            for (const data of region.data0 ? [region.data0] : region.data1) {
+                data.floorUnderlayIds = undefined;
+                data.floorOverlayIds = undefined;
+                data.overlayShapes = undefined;
+                data.overlayRotations = undefined;
+                data.decorations = undefined;
+                data.geographyLoaded = false;
+            }
+            region.dynamicIcons = [];
+            region.geographyLoaded = false;
         }
-        region.geographyLoaded = true;
-        return true;
     }
 
     /** Rev 241: all of a region's chunk entries come from one file. */
@@ -728,6 +834,7 @@ export class WorldMapArchiveRenderer {
             decodeHeaderlessChunkRegion(entries, file.data);
             return true;
         } catch (error) {
+            if (isGroupMissingError(error)) throw error;
             console.warn("[WorldMap] chunk region geography", entries[0].regionX, entries[0].regionY, error);
             return false;
         }
@@ -745,15 +852,12 @@ export class WorldMapArchiveRenderer {
             }
             return true;
         } catch (error) {
-            // Missing groups are queued for on-demand fetch and this is
-            // retried on the next render, so only log real failures.
-            if (!isGroupMissingError(error)) {
-                console.log("[WorldMapArchiveRenderer] Failed to load geography", {
-                    groupId: data.groupId,
-                    fileId: data.fileId,
-                    error,
-                });
-            }
+            if (isGroupMissingError(error)) throw error;
+            console.log("[WorldMapArchiveRenderer] Failed to load geography", {
+                groupId: data.groupId,
+                fileId: data.fileId,
+                error,
+            });
             return false;
         }
     }
@@ -1256,36 +1360,51 @@ export class WorldMapArchiveRenderer {
         return HSL_RGB_MAP[adjustOverlayLight(hsl, 96)] ?? defaultColor;
     }
 
-    private getGroundColors(groupId: number, fileId = 0): Promise<Int32Array> {
+    private getGroundColors(groupId: number, fileId = 0): Promise<Int32Array | undefined> {
         const key = `${groupId}/${fileId}`;
         const cached = this.groundSpriteCache.get(key);
-        if (cached) return cached;
-        const colors = this.loadGroundColors(groupId, fileId);
+        if (cached) {
+            this.groundSpriteCache.delete(key);
+            this.groundSpriteCache.set(key, cached);
+            return cached;
+        }
+        const colors = this.loadGroundColors(groupId, fileId, this.cacheAbort.signal);
         this.groundSpriteCache.set(key, colors);
+        this.pendingGroundSprites.set(colors, key);
+        void colors.then(value => {
+            this.pendingGroundSprites.delete(colors);
+            if (!value && this.groundSpriteCache.get(key) === colors) this.groundSpriteCache.delete(key);
+        });
+        while (this.groundSpriteCache.size > 32) this.groundSpriteCache.delete(this.groundSpriteCache.keys().next().value!);
         return colors;
     }
 
-    private async loadGroundColors(groupId: number, fileId: number): Promise<Int32Array> {
+    private async loadGroundColors(groupId: number, fileId: number, signal: AbortSignal): Promise<Int32Array | undefined> {
+        let cancel!: () => void;
+        const cancelled = new Promise<undefined>(resolve => { cancel = () => resolve(undefined); });
+        signal.addEventListener("abort", cancel, { once: true });
         try {
             // Waits for the group to stream in when the cache is sparse.
-            const archive = await retryOnMissingGroup(() => this.groundIndex.getArchive(groupId));
-            if (archive) {
+            const archive = await Promise.race([
+                retryOnMissingGroup(() => signal.aborted ? undefined : this.groundIndex.getArchive(groupId)), cancelled,
+            ]);
+            if (archive && !signal.aborted) {
                 const file = archive.getFile(fileId) ?? archive.getFile(0) ?? archive.files[0];
-                if (file) return await this.decodeWorldMapSprite(file.data);
+                if (file) return await this.decodeWorldMapSprite(file.data, signal);
             }
         } catch (error) {
             console.log("[WorldMapArchiveRenderer] Failed to load ground sprite", {
                 groupId,
                 error,
             });
+        } finally {
+            signal.removeEventListener("abort", cancel);
         }
-        // Don't keep the blank result cached; a later view retries the load.
-        this.groundSpriteCache.delete(`${groupId}/${fileId}`);
-        return new Int32Array(TILE_AREA);
+        // A transient miss must not become a permanently cached tile with blank ground.
+        return undefined;
     }
 
-    private async decodeWorldMapSprite(data: Int8Array): Promise<Int32Array> {
-        const colors = new Int32Array(TILE_AREA);
+    private async decodeWorldMapSprite(data: Int8Array, signal?: AbortSignal): Promise<Int32Array | undefined> {
         const bytes = new Uint8Array(data.byteLength) as Uint8Array<ArrayBuffer>;
         bytes.set(data as unknown as Uint8Array);
         let image: ImageBitmap | HTMLImageElement | undefined;
@@ -1303,18 +1422,19 @@ export class WorldMapArchiveRenderer {
                     img.src = url!;
                 });
             } else {
-                return colors;
+                return undefined;
             }
+            if (signal?.aborted) return undefined;
             const width = Math.min(TILE_COUNT, image.width | 0);
             const height = Math.min(TILE_COUNT, image.height | 0);
-            if (width <= 0 || height <= 0) return colors;
+            if (width <= 0 || height <= 0) return undefined;
             const canvas =
                 typeof OffscreenCanvas !== "undefined"
                     ? new OffscreenCanvas(width, height)
                     : typeof document !== "undefined"
                       ? document.createElement("canvas")
                       : undefined;
-            if (!canvas) return colors;
+            if (!canvas) return undefined;
             canvas.width = width;
             canvas.height = height;
             // Canvas and OffscreenCanvas expose different getContext overloads.
@@ -1323,9 +1443,10 @@ export class WorldMapArchiveRenderer {
                 typeof OffscreenCanvas !== "undefined" && canvas instanceof OffscreenCanvas
                     ? canvas.getContext("2d", { willReadFrequently: true })
                     : (canvas as HTMLCanvasElement).getContext("2d", { willReadFrequently: true });
-            if (!ctx) return colors;
+            if (!ctx) return undefined;
             ctx.drawImage(image, 0, 0, width, height);
             const imageData = ctx.getImageData(0, 0, width, height).data;
+            const colors = new Int32Array(TILE_AREA);
             for (let y = 0; y < height; y++) {
                 let srcOffset = y * width * 4;
                 let dstOffset = y * TILE_COUNT;
@@ -1337,13 +1458,14 @@ export class WorldMapArchiveRenderer {
                     srcOffset += 4;
                 }
             }
+            return colors;
         } catch (error) {
             console.log("[WorldMapArchiveRenderer] Failed to decode ground sprite", { error });
+            return undefined;
         } finally {
             if (image && "close" in image) image.close();
             if (url !== undefined) URL.revokeObjectURL(url);
         }
-        return colors;
     }
 
     private getImageMimeType(data: Uint8Array): string {
@@ -1380,7 +1502,8 @@ export class WorldMapArchiveRenderer {
     }
 
     private convertRgbToRgba(rgbPixels: Int32Array): Uint8Array {
-        const pixels = new Uint8Array(rgbPixels.length * 4);
+        // Each RGB element is consumed before its bytes become RGBA, on either byte order.
+        const pixels = new Uint8Array(rgbPixels.buffer, rgbPixels.byteOffset, rgbPixels.byteLength);
         let offset = 0;
         for (let i = 0; i < rgbPixels.length; i++) {
             const rgb = rgbPixels[i] & 0xffffff;
@@ -1393,9 +1516,13 @@ export class WorldMapArchiveRenderer {
     }
 
     private setRenderedRegionCache(key: string, tile: WorldMapRenderedTile): void {
+        const maxRenderedRegionBytes = this.options.maxRenderedRegionBytes ?? 48 * 1024 * 1024;
+        if (maxRenderedRegionBytes <= 0) return;
+        const previous = this.renderedRegionCache.get(key);
+        if (previous) this.renderedRegionCacheBytes -= previous.pixels.byteLength;
         this.renderedRegionCache.set(key, tile);
         this.renderedRegionCacheBytes += tile.pixels.byteLength;
-        while (this.renderedRegionCacheBytes > this.maxRenderedRegionBytes) {
+        while (this.renderedRegionCacheBytes > maxRenderedRegionBytes) {
             const oldest = this.renderedRegionCache.keys().next().value;
             if (oldest === undefined) break;
             const removed = this.renderedRegionCache.get(oldest);

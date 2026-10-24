@@ -18,6 +18,8 @@ export interface InteractHighlightDrawTarget {
     alpha?: number;
     /** World entity bobbing transform (view-space). Identity when not on a world entity. */
     worldEntityTransform?: Float32Array;
+    /** Outline radius in mask texels; the Interact Highlight default when unset. */
+    outlineRadius?: number;
 }
 
 export interface InteractHighlightOverlayContext {
@@ -253,6 +255,7 @@ export class InteractHighlightOverlay implements Overlay {
                 Number.isFinite(target.alpha) ? (target.alpha as number) : DEFAULT_ALPHA,
             );
 
+            this.quadDrawCall.uniform("u_outlineRadius", target.outlineRadius ?? DEFAULT_OUTLINE_RADIUS);
             this.app.defaultDrawFramebuffer();
             this.app.viewport(0, 0, this.maskWidth, this.maskHeight);
             this.app.enable(PicoGL.BLEND);

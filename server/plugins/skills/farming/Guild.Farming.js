@@ -88,7 +88,7 @@ function giveSeedPack(player, tier = 3, tithe = false) {
     return true;
 }
 function guildItemOnNpc(event) {
-    if (event.target.getDefinition().getName() !== "Guildmaster Jane" || !/^Spirit (seed|seedling(?: \(w\))?|sapling)$/.test(core.CacheDefinitions.getItem(event.itemId).name)) return;
+    if ((event.definition ?? event.target.getDefinition()).getName() !== "Guildmaster Jane" || !/^Spirit (seed|seedling(?: \(w\))?|sapling)$/.test(core.CacheDefinitions.getItem(event.itemId).name)) return;
     event.handled = true;
     if (!event.player.getInventory().contains(event.itemId)) return;
     if (event.player.getInventory().isFull() && core.CacheDefinitions.getItem(event.itemId).stackability && event.player.getInventory().getAmount(event.itemId) > 1) { event.player.getInventory().full(); return; }

@@ -18,6 +18,24 @@ whole, so tenths round up, as the old table did (bones 4.5 → 5, bat bones 5.3 
 The core's `ArceuusOfferings.BONE_XP` (Sinister Offering, Construction altars) is separate and
 unchanged.
 
+### Sequential burial (opt-in)
+
+By default **Bury** buries one bone per click, as OSRS. A custom world can let one click continue
+through the inventory with the `pluginConfig` key `Prayer:sequentialBurying`, in `world.json`
+or layered over it from the gitignored `world.local.json`:
+
+```json
+{ "pluginConfig": { "Prayer:sequentialBurying": true } }
+```
+
+With it on, **Bury** starts with the clicked bone, then continues through eligible unnoted bones in
+inventory slot order, including mixed types. Each bone resolves after two game ticks; consumption
+and experience happen together. Nonbones, members-only bones on a free world, and bones above the
+player's Prayer level are left alone. Movement, another item action, logout/death or an enabled
+level-up popup stops the sequence without consuming its unresolved bone. The flag does not change
+ash scattering, bonecrusher rewards or altar offerings. Anything but the boolean `true` leaves the
+default.
+
 ## Demonic ashes
 
 `server/plugins/skills/data/ashes.json` lists the ashes that demons drop instead of bones, by obj gameval.

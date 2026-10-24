@@ -42,6 +42,16 @@ export type NpcExactMove = {
     angle: number;
 };
 
+
+/**
+ * A fade (OSRS npc transparency): the NPC's model goes from `from` to `to` (0 opaque, 255
+ * invisible) between `startCycles` and `endCycles` client cycles into the tick, and stays at `to`.
+ */
+export type NpcTransparency = { startCycles: number; endCycles: number; from: number; to: number };
+
+/** The base animation slots the npc update block carries (the client maps them to its movement set). */
+export const BASE_ANIMATION_SLOT = { IDLE: 0, WALK: 1, TURN_LEFT: 2, TURN_RIGHT: 3 } as const;
+
 export class NPC extends Mobile {
     private static sameLocation(a: Location | null | undefined, b: Location | null | undefined): boolean {
         if (a == null && b == null) {
@@ -127,6 +137,8 @@ export class NPC extends Mobile {
     private exactMoveState: NpcExactMove | null = null;
     /** This tick's headbars besides the hitpoints one, sent with the NPC's update and cleared after it. */
     private headbars: NpcHeadbar[] = [];
+    /** This tick's fade, sent with the NPC's update and cleared after it. */
+    private transparencyState: NpcTransparency | null = null;
     /** Its steps are sent as crawls (half walking speed on the client) rather than walks. */
     private crawling = false;
     /** A tile to turn to this tick (OSRS npc face coord), sent with the NPC's update and cleared after it. */
@@ -137,6 +149,8 @@ export class NPC extends Mobile {
      * keeps being sent for a few ticks before the field clears.
      */
     private modelCustomisation: { slot: number; modelId: number }[] | undefined = undefined;
+    private baseAnimations: { slot: number; seqId: number }[] | undefined = undefined;
+    private baseAnimationsResetUntil = 0;
     private modelCustomisationResetUntil = 0;
     private isDying: boolean;
     private owner: Player;
@@ -633,6 +647,32 @@ export class NPC extends Mobile {
         return this;
     }
 
+    /**
+     * Overrides the stand / walk sequences every viewer's client uses for this NPC (OSRS npc base
+     * animation set change), e.g. the Archive Guardian's ground idle once it lands: without it the
+     * client goes back to the cache's stand pose whenever an animation ends. Null resets them.
+     */
+    public setBaseAnimations(sequences: { idle?: number; walk?: number; turnLeft?: number; turnRight?: number } | null): NPC {
+        const entries: { slot: number; seqId: number }[] = [];
+        if (sequences?.idle !== undefined) entries.push({ slot: BASE_ANIMATION_SLOT.IDLE, seqId: sequences.idle | 0 });
+        if (sequences?.walk !== undefined) entries.push({ slot: BASE_ANIMATION_SLOT.WALK, seqId: sequences.walk | 0 });
+        if (sequences?.turnLeft !== undefined) entries.push({ slot: BASE_ANIMATION_SLOT.TURN_LEFT, seqId: sequences.turnLeft | 0 });
+        if (sequences?.turnRight !== undefined) entries.push({ slot: BASE_ANIMATION_SLOT.TURN_RIGHT, seqId: sequences.turnRight | 0 });
+        this.baseAnimations = entries;
+        this.baseAnimationsResetUntil = entries.length > 0 ? 0 : World.getProcessCycle() + 5;
+        return this;
+    }
+
+    /** The base animations to send this update, or undefined when there are none (or a reset expired). */
+    public getBaseAnimationsForUpdate(): { slot: number; seqId: number }[] | undefined {
+        if (this.baseAnimations === undefined) return undefined;
+        if (this.baseAnimations.length === 0 && World.getProcessCycle() > this.baseAnimationsResetUntil) {
+            this.baseAnimations = undefined;
+            return undefined;
+        }
+        return this.baseAnimations;
+    }
+
     /** The customisation to send this update, or undefined when there is none (or a reset expired). */
     public getModelCustomisationForUpdate(): { slot: number; modelId: number }[] | undefined {
         if (this.modelCustomisation === undefined) {
@@ -746,6 +786,27 @@ export class NPC extends Mobile {
         return this;
     }
 
+    /**
+     * Fades the NPC's model to `to` (0 opaque, 255 invisible) over client cycles `startCycles` to
+     * `endCycles` of this tick, from `from` (its current look when left out), as OSRS's npc
+     * transparency: a boss teleporting out (`fade(255, { from: 0, startCycles: 30, endCycles: 45 })`),
+     * a spawn fading in (`fade(0, { from: 255, endCycles: 30 })`).
+     */
+    public fade(to: number, options: { from?: number; startCycles?: number; endCycles?: number } = {}): NPC {
+        const clamp = (value: number) => Math.max(0, Math.min(255, Math.trunc(value)));
+        this.transparencyState = {
+            startCycles: Math.max(0, Math.trunc(options.startCycles ?? 0)),
+            endCycles: Math.max(0, Math.trunc(options.endCycles ?? 30)),
+            from: options.from === undefined ? -1 : clamp(options.from),
+            to: clamp(to),
+        };
+        return this;
+    }
+
+    public getTransparency(): NpcTransparency | null {
+        return this.transparencyState;
+    }
+
     /** Takes a headbar shown with showHeadbar away. */
     public removeHeadbar(id: number): NPC {
         this.headbars = this.headbars.filter((bar) => bar.id !== id);
@@ -788,6 +849,7 @@ export class NPC extends Mobile {
         this.exactMoveState = null;
         this.headbars = [];
         this.faceTileState = null;
+        this.transparencyState = null;
     }
 
     public getCombatMethod(): CombatMethod {

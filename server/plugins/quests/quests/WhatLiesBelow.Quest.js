@@ -1311,6 +1311,7 @@ module.exports = function registerWhatLiesBelowQuest(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onNpcBeforeDeath(handleNpcBeforeDeath);
   api.onNpcHitModify(handleNpcHitModify);
+  api.onServerStartup(installWorld);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDeath(handlePlayerDeath);

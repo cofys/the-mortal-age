@@ -200,7 +200,7 @@ export class LunarSpells {
             } else if (key === "hunter kit") {
                 inventory.adds(946, 1).adds(303, 1).adds(954, 2).adds(10029, 1).adds(10008, 1);
             } else if (key === "magic imbue") {
-                player.setAttribute("lunar:magic-imbue-until", Date.now() + 12 * 60_000);
+                player.setAttribute("lunar:magic-imbue-until", World.getProcessCycle() + 720);
             } else {
                 for (const item of [...inventory.getValidItems()]) {
                     const plank = planks.get(item.getId());
@@ -253,7 +253,7 @@ export class LunarSpells {
         });
         if (key === "stat restore pot share" || key === "boost potion share") {
             return spell.cast(player, () => {
-                player.setAttribute("lunar:potion-share", { target, type: key === "stat restore pot share" ? "restore" : "boost", expiresAt: Date.now() + 30_000 });
+                player.setAttribute("lunar:potion-share", { target, type: key === "stat restore pot share" ? "restore" : "boost", expiresAt: World.getProcessCycle() + 50 });
                 player.sendMessage("Drink a matching potion within 30 seconds to share its effect.");
             });
         }
@@ -333,7 +333,7 @@ export class LunarSpells {
 
     public static expireSpellbookSwap(player: Player): void {
         const swap: any = player.getAttribute("lunar:spellbook-swap");
-        if (swap && Date.now() >= swap.expiresAt) {
+        if (swap && World.getProcessCycle() >= swap.expiresAt) {
             player.setAttribute("lunar:spellbook-swap", null);
             MagicSpellbook.changeSpellbook(player, MagicSpellbook.LUNAR, true);
         }
@@ -369,7 +369,7 @@ export class LunarSpells {
             const book = books[(option as number) - 1];
             player.getPacketSender().sendInterfaceRemoval();
             if (!book) return;
-            player.setAttribute("lunar:spellbook-swap", { expiresAt: Date.now() + 120_000 });
+            player.setAttribute("lunar:spellbook-swap", { expiresAt: World.getProcessCycle() + 200 });
             MagicSpellbook.changeSpellbook(player, book, true);
         } }, "Standard", "Ancient", "Arceuus"));
         player.getDialogueManager().startDialogues(builder);

@@ -2290,6 +2290,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemAction(handleItemAction);
   api.onNpcDeath(handleNpcDeath);
+  api.onServerStartup(installQuestObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

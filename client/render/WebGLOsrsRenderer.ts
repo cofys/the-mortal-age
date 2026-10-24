@@ -1,3 +1,4 @@
+import { LocAnimated } from "./loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -255,6 +256,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public pendingInstanceScene: SdMapData | null = null;
     /** The map square the drawn instance scene is built as; it owns every NPC in the scene. */
     public instanceSceneMap: { mapX: number; mapY: number } | null = null;
+    /**
+     * The animated locs of the scene an instance rebuild replaces, to carry their animations onto
+     * the new scene (a held loc animation would otherwise start again from frame 0).
+     */
+    public carriedLocAnimations: LocAnimated[] | null = null;
     /** Active world entity overlays (rendered on top of normal world). */
     public worldEntityOverlays: Map<
         number,
@@ -330,7 +336,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public observedGridRevision: number = -1;
     // Skip the 1-second fog fade-in for maps loaded after a cross-region
     // teleport so the destination appears instantly.
-    public skipMapFadeIn: boolean = false;
     public activeStreamGeneration: number = 0;
     public activeStreamExpectedMapIds: Set<number> = new Set();
     public pendingStreamMapsByGeneration: Map<number, StreamMapBatch> = new Map();
@@ -382,6 +387,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     colorTarget?: Renderbuffer;
     depthTarget?: Renderbuffer;
     framebuffer?: Framebuffer;
+    sceneResolveColorTarget?: Renderbuffer;
+    sceneResolveFramebuffer?: Framebuffer;
     /**
      * Desktop 3D scene resolution as a share of the canvas (0.5-1), set in the debug panel. The
      * scene is drawn smaller and scaled up; the interface stays at full resolution.
@@ -418,8 +425,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public drawSubsetBuffer: DrawRange[] = [];
     // Reusable arrays for tickPass (avoids per-frame allocation)
     public visibleMapsBuffer: WebGLMapSquare[] = [];
-    public ambientSoundBuffer: import("../game/audio/SoundEffectSystem").AmbientSoundInstance[] = [];
-    public ambientSoundBufferIndex: number = 0;
     // Reusable object for gfxRenderer.renderMapPass calls
     public gfxRenderPassOffsets: { player?: number; npc?: number; world?: number } = {};
     // Reusable object for seqSoundCallback to avoid nested object allocation
@@ -434,11 +439,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         this.seqSoundPosition.z = ctx.level * 128;
         this.osrsClient.handleSeqFrameSounds(seqType, frame, this.seqSoundOptions);
     };
-    // Throttle ambient sound collection to every N frames (reduces tick cost)
-    public ambientSoundFrameCounter: number = 0;
-    public static readonly AMBIENT_SOUND_THROTTLE_FRAMES = 3;
-    // Memoized "does this loc (or any of its transforms) emit ambient sound"
-    public locSoundPotentialCache: Map<number, boolean> = new Map();
     public groundItemStacks: Map<number, ClientGroundItemStack[]> = new Map();
     public groundItemStackHashes: Map<number, string> = new Map();
 
@@ -720,8 +720,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     // Track if we've notified LoadingTracker that map data is ready
     public mapDataLoadedNotified: boolean = false;
-    // Time (in seconds) when height data first became valid (for fog fade-in delay)
-    public heightValidAtTime: number | undefined = undefined;
 
     // Optional override: force a specific idle SeqType id for player animation
     playerIdleSeqId: number = -1;
@@ -811,6 +809,15 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
                 npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
+        this.osrsClient.sceneGeometry = {
+            tileHeight: (x, y, plane) => this.getTileHeightAtPlane(x, y, plane),
+            worldToScreen: (x, height, y) => {
+                const p = this.worldToScreen(x, height, y);
+                return p ? [p[0], p[1]] : undefined;
+            },
+            npcModelPoints: (ecsId, serverId) => this.sceneRaycaster?.npcTrianglesProvider?.(ecsId, serverId) ?? undefined,
+            npcHeight: (npcTypeId) => this.getNpcDefaultHeight(npcTypeId),
+        };
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
             this.clearMinimapIconsForMap(mapX | 0, mapY | 0);
@@ -1441,8 +1448,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.queueStreamMapData(this, mapData, streamGeneration);
     }
 
-    public applyReadyStreamGenerationBatch(time: number): number {
-        return render.applyReadyStreamGenerationBatch(this, time);
+    public applyReadyStreamGenerationBatch(): number {
+        return render.applyReadyStreamGenerationBatch(this);
     }
 
     initMaterialsTexture(): void {
@@ -1638,9 +1645,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         waterTextures: Texture,
         sceneUniformBuffer: UniformBuffer,
         mapData: SdMapData,
-        time: number,
     ): void {
-        return render.loadMap(this, mainProgram, mainAlphaProgram, npcProgram, textureArray, textureMaterials, waterTextures, sceneUniformBuffer, mapData, time);
+        return render.loadMap(this, mainProgram, mainAlphaProgram, npcProgram, textureArray, textureMaterials, waterTextures, sceneUniformBuffer, mapData);
     }
 
     isValidMapData(mapData: SdMapData): boolean {
@@ -2259,47 +2265,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render._ecsUpdateNpcClient(this, map, clientTicksElapsed);
     }
 
-    public addAmbientSoundInstance(
-        locId: number,
-        soundType: any,
-        x: number,
-        y: number,
-        z: number,
-        orientation: number,
-        sizeX: number,
-        sizeY: number,
-    ): void {
-        return render.addAmbientSoundInstance(this, locId, soundType, x, y, z, orientation, sizeX, sizeY);
-    }
-
-    public static locTypeHasSound(locType: any): boolean {
-        return render.locTypeHasSound(locType);
-    }
-
-    public locHasSoundPotential(locId: number): boolean {
-        return render.locHasSoundPotential(this, locId);
-    }
-
-    public getMapSoundEmitters(
-        map: WebGLMapSquare,
-    ): { locId: number; x: number; y: number; level: number; rot: number }[] {
-        return render.getMapSoundEmitters(this, map);
-    }
-
-    public addAmbientEmitter(
-        locId: number,
-        x: number,
-        y: number,
-        level: number,
-        rot: number,
-    ): void {
-        return render.addAmbientEmitter(this, locId, x, y, level, rot);
-    }
-
-    collectAmbientSounds(map: WebGLMapSquare): void {
-        return render.collectAmbientSounds(this, map);
-    }
-
     addNpcRenderData(map: WebGLMapSquare) {
         return render.addNpcRenderData(this, map);
     }
@@ -2415,17 +2380,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     public getFrameOverheadPrayerMaxEntries(): number {
         return render.getFrameOverheadPrayerMaxEntries(this);
-    }
-
-    public updateAnimatedDrawRanges(
-        map: WebGLMapSquare,
-        drawCall: DrawCall,
-        drawRanges: DrawRange[],
-        transparent: boolean,
-        isInteract: boolean,
-        isLod: boolean,
-    ): void {
-        return render.updateAnimatedDrawRanges(this, map, drawCall, drawRanges, transparent, isInteract, isLod);
     }
 
     public renderGeometryPass(transparent: boolean): void {

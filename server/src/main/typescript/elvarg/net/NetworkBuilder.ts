@@ -246,6 +246,22 @@ export class NetworkBuilder {
         response.end(JSON.stringify({ regions: MapRegionReplacementManager.getRegionIds() }));
         return;
       }
+      // Terrain-only replacements have no pack (the .pack format needs object
+      // data too); the map editor fetches their raw terrain bytes here instead.
+      const terrainMatch = /^\/regions\/(\d+)\.terrain$/.exec(request.url ?? "");
+      if (terrainMatch) {
+        const terrain = MapRegionReplacementManager.getReplacementMapData(
+          Number(terrainMatch[1]))?.terrainData;
+        if (!terrain) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
+        response.setHeader("Content-Type", "application/octet-stream");
+        response.setHeader("Content-Length", terrain.length);
+        response.end(Buffer.from(terrain));
+        return;
+      }
       const match = /^\/regions\/(\d+)\.pack$/.exec(request.url ?? "");
       const pack = match ? MapRegionReplacementManager.getRegionPack(Number(match[1])) : null;
       if (!pack) {
@@ -634,7 +650,7 @@ export class ClientConnection {
         case "dialogue_amount": {
           const action = this.player?.getEnteredAmountAction();
           // 0 is dropped unless the prompt takes it (a setting where 0 means off).
-          if (action && (packet.amount > 0 || (packet.amount === 0 && (action as { acceptsZero?: boolean }).acceptsZero === true))) {
+          if (action && (packet.amount > 0 || (packet.amount === 0 && action.acceptsZero === true) || (packet.amount < 0 && action.acceptsNegative === true))) {
             action.execute(packet.amount);
           }
           else if (this.player && Bank.isOpen(this.player) && packet.amount > 0) {
@@ -1223,14 +1239,14 @@ export class ClientConnection {
     // Ctrl (1) inverts the run toggle for this walk; Ctrl+Shift (2) is a staff teleport that
     // plugins take over, and walks like a Ctrl-click for everyone else.
     const invert = modifierFlags === 2 || (modifierFlags & 1) !== 0;
-    const run = forceRun || (invert ? !player.isRunningReturn() : player.isRunningReturn());
-    player.setRunning(run);
-    player.getMovementQueue().requestWalk(
-      new Location(x, y, player.getLocation().getZ())
-    );
+    // The inversion holds for this path only; the run setting and orb stay as they are.
+    const runOverride = forceRun ? true : invert ? !player.isRunningReturn() && player.getRunEnergy() > 0 : null;
     // MovementQueue owns the destination flag and de-duplicates it; sending it
     // here as well double-posts the marker on every walk click.
-    player.getPacketSender().sendRunStatus();
+    player.getMovementQueue().requestWalk(
+      new Location(x, y, player.getLocation().getZ()),
+      runOverride
+    );
   }
 
   private inventoryAction(packet: Extract<ReturnType<typeof decodeClientPackets>[number], { type: "inventory_action" }>): void {

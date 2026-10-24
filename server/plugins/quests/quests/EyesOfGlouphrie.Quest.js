@@ -997,6 +997,7 @@ module.exports = function registerEyesOfGlouphrieQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);
   api.onNpcDeath(handleNpcDeath);
+  api.onServerStartup(ensureQuestObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

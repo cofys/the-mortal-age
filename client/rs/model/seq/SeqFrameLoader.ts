@@ -83,10 +83,17 @@ export class Dat2SeqFrameLoader implements SeqFrameLoader {
             }
 
             const frames: SeqFrame[] = new Array(archive.lastFileId);
+            let missingBase = false;
 
             for (const file of archive.files) {
-                frames[file.id] = Dat2SeqFrame.load(this.cacheInfo, this.baseLoader, file.data);
+                try {
+                    frames[file.id] = Dat2SeqFrame.load(this.cacheInfo, this.baseLoader, file.data);
+                } catch (e) {
+                    if (!isGroupMissingError(e)) throw e;
+                    missingBase = true;
+                }
             }
+            if (missingBase) return undefined;
 
             frameMap = new SeqFrameMap(frames);
             this.frameMaps.set(frameMapId, frameMap);

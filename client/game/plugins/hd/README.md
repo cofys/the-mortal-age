@@ -12,23 +12,18 @@ Set the test account to `3092 3502 0` via the worktree's MCP to view Edgeville's
 The plugin adapts 117 HD lighting, regional environments, fog, material parameters,
 textures, normal maps, animated object lights and directional shadows to PicoGL.
 Current materials/assets come from `117HD/RLHD` at
-`38d4082ca5a7ed77324484ce287659a4eb7758c2`. The environment/light data retains the
+`c4d9ac940e69a655c806efc1486e7a46dcccf219`. The environment/light data retains the
 existing `elvarg-web-client` port.
 
-The local preview replaces 11 material families with CC0 Poly Haven photographs:
-grass, earth, sand, gravel, castle/red brick, weathered wood, thatch, slate,
-clay tiles and cobbles. See `textures/local/sources.json` for source URLs and
-output hashes, and `textures/local/LICENSE.txt` for licence information.
-Colour maps use compact WebP; normal maps use lossless WebP. Grass, castle brick
-and thatch colour maps use a small separate 512px array; the remaining 43 images
-stay at 256px. Together the arrays occupy about 20 MiB with mipmaps, compared
-with 17 MiB for the original pack. No additional draw calls or shader texture
-samples are added. Grass keeps its existing terrain normal. Ground albedo removes
-broad photographic blotches while preserving fine contrast and the cache's hues.
-Natural ground uses a small, continuous UV warp to break exact one-tile repeats;
-it stays fixed in world space as the camera/player moves. Paved patterns retain
-straight courses. Masonry uses world-aligned UVs instead of resetting or stretching
-the photograph on each cache model face. Other model materials retain cache UVs.
+The plugin uses upstream colour and matching normal maps for all 29 supported
+cache materials and 18 ground recipes, at the upstream default of 256px. The
+material table contains no local photographic replacements. Stone patterns,
+Falador paving, jagged tiles and roof styles keep their separate upstream assets.
+Model materials retain cache UVs and upstream texture scales. The existing
+renderer lighting and performance settings remain in use.
+
+Natural ground retains the continuous, world-anchored UV warp; paved patterns
+retain straight courses.
 
 Ground recipes cover grass, dirt, sand, gravel, rock, snow, wood, carpets, brick,
 marble, tiles and paving. Untextured terrain carries the recipe in its unused U
@@ -41,7 +36,7 @@ their original unshaded colours in an extra four bytes; the HD toggle replaces
 baked shading with smooth lighting.
 The local player reuses the existing pose cache across shadow and scene passes.
 Architecture uses geometric normals, with detail from material normal maps.
-Both texture arrays use trilinear mipmaps and up to 8x anisotropic filtering.
+The upstream texture array uses trilinear mipmaps and up to 8x anisotropic filtering.
 Dry grass, soil, sand, gravel and roofs are matte, including the wood-grain
 material used by wooden roofs. Rough planks and masonry use subtle highlights.
 Reflections use upstream's Phong gloss and the sun's colour
@@ -110,7 +105,7 @@ shadow projection remains capped at 48 tiles, with cached world depth and curren
 actor poses as before.
 
 WebGPU's **117 HD** settings also include three independent switches, on by default:
-**Texture filtering** enables mipmaps, 8× anisotropic filtering and the 512px detail assets;
+**Texture filtering** enables mipmaps and 8× anisotropic filtering;
 turning it off restores 256px bilinear sampling. **Anti-aliasing** applies FXAA
 after tone mapping and before the HUD, with a shorter search span and half-strength blend
 to retain texture contrast. **Depth-aware AO** filters and upsamples
@@ -143,7 +138,4 @@ their existing distance caps.
 `textures/LICENSE-117HD.txt`; texture credits are in `textures/000_licenses.txt`.
 To refresh materials from a local upstream checkout:
 `python3 client/scripts/hd/import-materials.py /path/to/RLHD` from the repo root.
-The local overrides survive that refresh. To recreate their images, run
-`python3 client/scripts/hd/import-local-materials.py /tmp/hd-material-sources`
-with Pillow and NumPy installed, then rerun the upstream importer. Missing 1K
-source maps are fetched from Poly Haven; originals remain outside the game bundle.
+The importer publishes upstream textures without applying local replacements.

@@ -85,6 +85,8 @@ type PlayerGpuGeometry = {
     alpha?: PlayerGpuPass;
 };
 
+type PlayerGpuPose = { geometry: PlayerGpuGeometry; row: number; matrices: Float32Array };
+
 export class PlayerRenderer {
     constructor(private renderer: WebGLOsrsRenderer) {}
 
@@ -266,7 +268,6 @@ export class PlayerRenderer {
     private indexBuffer?: any;
     private lastLoggedSeqId: number = -1;
     private lastLoggedFrameIndex: number = -1;
-    private playerSoundState: Map<string, { seqId: number; frameIdx: number }> = new Map();
     private skeletalDurationCache: Map<number, number> = new Map();
 
     // Always-on GFX (toolkit request)
@@ -330,6 +331,12 @@ export class PlayerRenderer {
         this.lastRenderableAppearance.clear();
         this.geomCache.clear();
         this.clearPlayerGpuGeometryCache();
+        this.uploadedPoseTexture = undefined;
+        this.uploadedPoseKeys.length = 0;
+        this.uploadedPoseMatrices.length = 0;
+        this.poseRows.clear();
+        this.poseTextureRows.clear();
+        this.poseRowMatrices.length = 0;
     }
 
     // Bounded geometry cache: (appearance|seqId|frameIdx) -> buffers
@@ -571,8 +578,14 @@ export class PlayerRenderer {
     private static readonly POSE_ROWS = 256;
     private static readonly POSE_CACHE_MAX_ENTRIES = 4096;
     private poseUpload = new Float32Array(0);
-    private readonly poseRows = new Map<string, { geometry: PlayerGpuGeometry; row: number }>();
+    private readonly poseRows = new Map<string, PlayerGpuPose>();
+    /** LRU rows stay stable across maps and opaque/alpha subsets. */
+    private readonly poseTextureRows = new Map<string, number>();
+    private readonly dirtyPoseRows = new Uint8Array(PlayerRenderer.POSE_ROWS);
     private readonly poseRowMatrices: Float32Array[] = [];
+    private uploadedPoseTexture?: Texture;
+    private readonly uploadedPoseKeys: string[] = [];
+    private readonly uploadedPoseMatrices: Float32Array[] = [];
     private readonly poseCache = new Map<string, Float32Array | null>();
     private readonly rigs = new WeakMap<object, LabelRig | null>();
     private readonly restMeshIds = new WeakMap<object, number>();
@@ -703,12 +716,20 @@ export class PlayerRenderer {
      * Poses this pass's GPU-animatable groups and uploads them, one texture row each.
      * Returns the rest mesh and row per batch key; groups left out draw from the frame cache.
      */
-    private preparePoses(groups: Map<string, any>): Map<string, { geometry: PlayerGpuGeometry; row: number }> {
+    private preparePoses(groups: Map<string, any>): Map<string, PlayerGpuPose> {
         const out = this.poseRows;
         out.clear();
         const rows = this.poseRowMatrices;
-        rows.length = 0;
-        let maxLabels = 0;
+        const r: any = this.renderer;
+        const texture: Texture | undefined = r.playerPoseTexture;
+        if (!texture) return out;
+        if (texture !== this.uploadedPoseTexture) {
+            this.uploadedPoseTexture = texture;
+            this.uploadedPoseKeys.length = 0;
+            this.uploadedPoseMatrices.length = 0;
+            this.poseTextureRows.clear();
+            rows.length = 0;
+        }
         for (const [batchKey, group] of groups) {
             if (out.size >= PlayerRenderer.POSE_ROWS) break;
             const baseRec = this.ensureBaseForAppearance(group.appearance);
@@ -717,37 +738,73 @@ export class PlayerRenderer {
             if (!matrices) continue;
             const geometry = this.restMeshFor(baseRec.baseModel, this.rigFor(baseRec.baseModel)!);
             if (!geometry) continue;
-            out.set(batchKey, { geometry, row: rows.length });
-            rows.push(matrices);
-            maxLabels = Math.max(maxLabels, matrices.length / POSE_FLOATS_PER_LABEL);
+            out.set(batchKey, { geometry, matrices, row: -1 });
         }
-        if (rows.length === 0) return out;
-
-        const r: any = this.renderer;
-        if (!r.playerPoseTexture) {
-            out.clear();
-            return out;
+        for (const [key, entry] of out) {
+            let row = this.poseTextureRows.get(key);
+            if (row === undefined) {
+                row = this.poseTextureRows.size;
+                if (row === PlayerRenderer.POSE_ROWS) {
+                    // Reserve the whole pass before eviction, including groups visited later.
+                    for (const [previous, previousRow] of this.poseTextureRows) {
+                        if (out.has(previous)) continue;
+                        this.poseTextureRows.delete(previous);
+                        row = previousRow;
+                        break;
+                    }
+                }
+            }
+            this.poseTextureRows.delete(key);
+            this.poseTextureRows.set(key, row);
+            entry.row = row;
+            rows[row] = entry.matrices;
         }
-        const width = maxLabels * 3;
-        const rowFloats = width * 4;
-        if (this.poseUpload.length < rowFloats * rows.length) {
-            this.poseUpload = new Float32Array(rowFloats * PlayerRenderer.POSE_ROWS);
+        let first = PlayerRenderer.POSE_ROWS, last = -1;
+        this.dirtyPoseRows.fill(0);
+        for (const [key, { row }] of out) {
+            // A streamed frame can replace the rest pose under the same animation key.
+            if (this.uploadedPoseKeys[row] !== key || this.uploadedPoseMatrices[row] !== rows[row]) {
+                first = Math.min(first, row);
+                last = Math.max(last, row);
+                this.dirtyPoseRows[row] = 1;
+            }
         }
-        for (let i = 0; i < rows.length; i++) this.poseUpload.set(rows[i], i * rowFloats);
+        if (last < 0) return out;
         const gl: WebGL2RenderingContext = r.app.gl;
-        const texture: any = r.playerPoseTexture;
         texture.bind(Math.max(0, texture.currentUnit | 0));
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            width,
-            rows.length,
-            gl.RGBA,
-            gl.FLOAT,
-            this.poseUpload.subarray(0, rowFloats * rows.length),
-        );
+        // LRU wrap must not upload the unchanged rows between distant dirty rows.
+        for (let start = first; start <= last; start++) {
+            if (!this.dirtyPoseRows[start]) continue;
+            let end = start;
+            let maxLabels = rows[start].length / POSE_FLOATS_PER_LABEL;
+            while (end < last && this.dirtyPoseRows[end + 1]) {
+                end++;
+                maxLabels = Math.max(maxLabels, rows[end].length / POSE_FLOATS_PER_LABEL);
+            }
+            const width = maxLabels * 3;
+            const rowFloats = width * 4;
+            const height = end - start + 1;
+            if (this.poseUpload.length < rowFloats * height) {
+                this.poseUpload = new Float32Array(rowFloats * PlayerRenderer.POSE_ROWS);
+            }
+            for (let i = start; i <= end; i++) this.poseUpload.set(rows[i], (i - start) * rowFloats);
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0,
+                start,
+                width,
+                height,
+                gl.RGBA,
+                gl.FLOAT,
+                this.poseUpload.subarray(0, rowFloats * height),
+            );
+            start = end;
+        }
+        for (const [key, { row }] of out) {
+            this.uploadedPoseKeys[row] = key;
+            this.uploadedPoseMatrices[row] = rows[row];
+        }
         return out;
     }
 
@@ -2255,32 +2312,6 @@ export class PlayerRenderer {
                 }
             }
 
-            // Frame sounds: mirror server-driven movement/action unless a local debug override is active.
-            if (!forcedSeq && !unanimatedIdle && (movementSeqId | 0) >= 0) {
-                this.emitPlayerFrameSound(
-                    pid | 0,
-                    movementSeqId | 0,
-                    movementFrameIdx | 0,
-                    px | 0,
-                    py | 0,
-                    plane | 0,
-                    this.isControlledPid(pid),
-                    "movement",
-                );
-            }
-            if (useActionSequence) {
-                this.emitPlayerFrameSound(
-                    pid | 0,
-                    actionSeqId | 0,
-                    actionFrameIdx | 0,
-                    px | 0,
-                    py | 0,
-                    plane | 0,
-                    this.isControlledPid(pid),
-                    "action",
-                );
-            }
-
             // Debug logging moved to tickPass to avoid duplicate logs during rendering
 
             // Appearance is not required for logging, but is required for batching/rendering
@@ -2818,34 +2849,6 @@ export class PlayerRenderer {
             }
             if (r.cullBackFace) r.app.enable(PicoGL.CULL_FACE);
         }
-    }
-
-    private emitPlayerFrameSound(
-        pid: number,
-        seqId: number,
-        frameIdx: number,
-        worldX: number,
-        worldY: number,
-        plane: number,
-        isLocalPlayer: boolean,
-        channel: "movement" | "action",
-    ): void {
-        const key = `${pid | 0}|${channel}`;
-        const last = this.playerSoundState.get(key);
-        if (last && last.seqId === seqId && last.frameIdx === frameIdx) {
-            return;
-        }
-        this.playerSoundState.set(key, { seqId, frameIdx });
-        try {
-            const mv = this.renderer.osrsClient;
-            const seqType = mv.seqTypeLoader.load(seqId);
-            // Check for both modern frameSounds and legacy soundEffects formats
-            if (!seqType || (!seqType.frameSounds?.size && !seqType.soundEffects?.length)) return;
-            mv.handleSeqFrameSounds(seqType, frameIdx, {
-                position: { x: worldX, y: worldY, z: plane * 128 },
-                isLocalPlayer,
-            });
-        } catch {}
     }
 
     private isControlledPid(pid: number): boolean {

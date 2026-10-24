@@ -131,7 +131,7 @@ export class NpcModelLoader {
         return model;
     }
 
-    private applyNpcSequenceTransformations(
+    applyNpcSequenceTransformations(
         model: Model,
         baseType: SeqType | undefined,
         baseSeqId: number,

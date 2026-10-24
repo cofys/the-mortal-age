@@ -939,6 +939,7 @@ module.exports = function registerPryingTimesQuest(api) {
   api.onItemAction("Bottle of fish bladder stout", { Drink: drinkStout });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);
+  api.onServerStartup(installQuestObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

@@ -20,7 +20,7 @@ const Avarice = require("./Avarice.Revenants");
 const ID = MALEDICTUS_ID;
 const NAME = "Revenant maledictus";
 const SPAWN_RATE = 10_000; // ours (Near-Reality's): the Wiki's "flat spawn rate" isn't published
-const COOLDOWN_MS = 45 * 60_000;
+const COOLDOWN_TICKS = 4500;
 const LIFETIME_TICKS = 1000; // 10 minutes
 const RANGE = 15;
 const HINT_RANGE = 64;
@@ -236,7 +236,7 @@ function createMaledictus(api, core, { inCaves, surge }) {
     boss.__skipDefaultRespawn = true;
     state.boss = boss;
     state.total = 0;
-    state.quietUntil = Date.now() + COOLDOWN_MS;
+    state.quietUntil = core.World.getProcessCycle() + COOLDOWN_TICKS;
     for (const player of players()) {
       if (inCaves(player.getLocation())) player.sendMessage(`<col=ef1020>A superior revenant has been awoken in the ${at.hint} of the caves..`);
     }
@@ -252,7 +252,7 @@ function createMaledictus(api, core, { inCaves, surge }) {
 
   /** Every revenant kill feeds the world total; the boss appears when a roll lands under it. */
   function onRevenantKilled(combatLevel, random = Math.random) {
-    if (state.boss || Date.now() < state.quietUntil) return false;
+    if (state.boss || core.World.getProcessCycle() < state.quietUntil) return false;
     state.total += combatLevel;
     if (random() * SPAWN_RATE >= state.total) return false;
     return spawn() != null;

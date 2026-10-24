@@ -2,6 +2,7 @@ import { CollisionData } from "../../rs/scene/CollisionMap";
 import { DrawRange } from "../DrawRange";
 import { LocAnimatedData } from "../loc/LocAnimatedData";
 import { NpcData } from "../npc/NpcData";
+import type { SdMapLoaderInput } from "./SdMapLoaderInput";
 
 /**
  * Minimap icon entry: position + sprite ID for dynamic rendering
@@ -65,6 +66,9 @@ export type LocGeometryData = {
 export type SdMapData = {
     mapX: number;
     mapY: number;
+
+    /** Main-thread-only source snapshot for lazily requested minimap floors. */
+    minimapInput?: SdMapLoaderInput;
 
     /** Main-thread-only timing data enabled by `?map-profile=1`. */
     mapProfile?: { queuedAt: number; workerReadyAt: number };

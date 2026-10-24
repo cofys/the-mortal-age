@@ -10,6 +10,7 @@ import {
 } from "picogl";
 
 import type { OsrsClient } from "../../game/OsrsClient";
+import { isMapEditorUrl } from "../../config/clientEnv";
 import { GameState } from "../../game/login";
 import { withRenderTransform } from "../../game/login/renderer/layout/config";
 import { drawServerListOverlay } from "../../game/login/renderer/render/serverListOverlay";
@@ -74,7 +75,7 @@ export class LoginOverlay implements Overlay {
     private uiNeedsRedraw: boolean = true;
     private editorLoadingStatus?: string;
     private lastEditorLoadingLogAt = -Infinity;
-    private waitingForEditorLaunch = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("edit");
+    private waitingForEditorLaunch = isMapEditorUrl();
 
     constructor(osrsClient: OsrsClient) {
         this.osrsClient = osrsClient;

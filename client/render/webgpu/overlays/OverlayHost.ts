@@ -275,6 +275,15 @@ export class OverlayHost {
                 npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
+        this.osrsClient.sceneGeometry = {
+            tileHeight: (x, y, plane) => this.getTileHeightAtPlane(x, y, plane),
+            worldToScreen: (x, height, y) => {
+                const p = this.worldToScreen(x, height, y);
+                return p ? [p[0], p[1]] : undefined;
+            },
+            npcModelPoints: (ecsId, serverId) => this.sceneRaycaster?.npcTrianglesProvider?.(ecsId, serverId) ?? undefined,
+            npcHeight: (npcTypeId) => this.getNpcDefaultHeight(npcTypeId),
+        };
         this.boundToCssEvent = (gx?: number, gy?: number) =>
             this.toCssEvent(gx, gy, this.currentFrameCount);
     }

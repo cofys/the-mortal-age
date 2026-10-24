@@ -1268,6 +1268,7 @@ module.exports = function registerGrimTalesQuest(api) {
     onReward: grantReward,
   });
 
+  api.onServerStartup(installWorld);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onNpcInteraction("Grimgnash", { "Talk-To": talkToGrimgnash });

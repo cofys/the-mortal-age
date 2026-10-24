@@ -11,10 +11,12 @@ import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItems
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { InteractHighlightConfig } from "../../../game/plugins/interacthighlight/InteractHighlightConfig";
 import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight/InteractHighlightPlugin";
+import { InventoryTagsPlugin } from "../../../game/plugins/inventorytags/InventoryTagsPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { MyKingdomPlugin } from "../../../game/plugins/mykingdom/MyKingdomPlugin";
 import { StallsPlugin } from "../../../game/plugins/shop/StallsPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
+import { NpcIndicatorsPlugin } from "../../../game/plugins/npcindicators/NpcIndicatorsPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { StewardPlugin } from "../../../game/plugins/steward/StewardPlugin";
 import { WarTablePlugin } from "../../../game/plugins/wartable/WarTablePlugin";
@@ -33,6 +35,7 @@ import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkers
 import { AdminWorldMapPlugin } from "../../../game/plugins/adminworldmap/AdminWorldMapPlugin";
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
+import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
 import { ConfigPlugin } from "./config/ConfigPlugin";
 import type { PluginClass } from "./Plugin";
@@ -52,7 +55,10 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     StallsPlugin,
     WarTablePlugin,
     StewardPlugin,
+    // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
+    InventoryTagsPlugin,
     NotesPlugin,
+    NpcIndicatorsPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,
@@ -68,6 +74,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     StretchedModePlugin,
     GpuPlugin,
     CameraPlugin,
+    XpTrackerPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

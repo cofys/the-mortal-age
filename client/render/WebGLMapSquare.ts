@@ -10,6 +10,7 @@ import PicoGL, {
 } from "picogl";
 
 import { ACTOR_VERTEX_STRIDE } from "./buffer/ActorNormals";
+import { MapGeometryUpload, mapGeometrySources } from "./MapGeometryUpload";
 import { BasTypeLoader } from "../rs/config/bastype/BasTypeLoader";
 import { NpcTypeLoader } from "../rs/config/npctype/NpcTypeLoader";
 import { SeqTypeLoader } from "../rs/config/seqtype/SeqTypeLoader";
@@ -24,7 +25,8 @@ import { DrawRange, newDrawRange } from "./DrawRange";
 import type { GroundItemGeometryBuildData } from "./ground/GroundItemMeshBuilder";
 import { NpcGeometryData } from "./loader/NpcGeometryData";
 import { type LocGeometryData, SdMapData } from "./loader/SdMapData";
-import { LocAnimated } from "./loc/LocAnimated";
+import { LocAnimated, type LocFrameSoundHandler } from "./loc/LocAnimated";
+import { LocAnimationUpdater } from "./loc/LocAnimationUpdater";
 
 const FRAME_RENDER_DELAY = 0;
 
@@ -32,6 +34,12 @@ const NPC_DATA_TEXTURE_BUFFER_SIZE = 5;
 
 type GpuInterleavedBuffer = ReturnType<PicoApp["createInterleavedBuffer"]>;
 type GpuIndexBuffer = ReturnType<PicoApp["createIndexBuffer"]>;
+
+function takePreparedBuffer(prepared: Map<ArrayBufferView, VertexBuffer> | undefined, data: ArrayBufferView): VertexBuffer | undefined {
+    const buffer = prepared?.get(data);
+    prepared?.delete(data);
+    return buffer;
+}
 
 function createModelInfoTexture(app: PicoApp, data: Uint16Array): Texture {
     return app.createTexture2D(data, 16, Math.max(Math.ceil(data.length / 16 / 4), 1), {
@@ -222,13 +230,14 @@ function createLocGeometryResources(
     borderSize: number,
     timeLoaded: number,
     geometry: LocGeometryData,
+    prepared?: Map<ArrayBufferView, VertexBuffer>,
 ): DoorGeometryResources | undefined {
     if (geometry.vertices.length === 0 || geometry.indices.length === 0) {
         return undefined;
     }
 
-    const interleavedBuffer = app.createInterleavedBuffer(12, geometry.vertices);
-    const indexBuffer = app.createIndexBuffer(PicoGL.UNSIGNED_INT, geometry.indices);
+    const interleavedBuffer = takePreparedBuffer(prepared, geometry.vertices) ?? app.createInterleavedBuffer(12, geometry.vertices);
+    const indexBuffer = takePreparedBuffer(prepared, geometry.indices) ?? app.createIndexBuffer(PicoGL.UNSIGNED_INT, geometry.indices);
     const vertexArray = app
         .createVertexArray()
         .vertexAttributeBuffer(0, interleavedBuffer, {
@@ -344,6 +353,39 @@ function createLocGeometryResources(
 }
 
 export class WebGLMapSquare {
+    private static readonly pendingGeometry = new Map<SdMapData,
+        { app: PicoApp; upload: MapGeometryUpload<VertexBuffer> }>();
+
+    static prepareLoad(app: PicoApp, data: SdMapData): boolean {
+        let pending = this.pendingGeometry.get(data);
+        if (!pending) {
+            const sources = mapGeometrySources(data, true);
+            if (sources.reduce((sum, source) => sum + source.data.byteLength, 0) <= MapGeometryUpload.FRAME_BYTES) return true;
+            const upload = new MapGeometryUpload(sources, (source) => source.index
+                ? app.createIndexBuffer(PicoGL.UNSIGNED_INT, 3, source.data.byteLength / 4)
+                : app.createInterleavedBuffer(source.stride, source.data.byteLength),
+                (buffer, bytes, offset) => buffer.data(bytes, offset), (buffer) => buffer.delete());
+            pending = { app, upload };
+            this.pendingGeometry.set(data, pending);
+        }
+        try {
+            return pending.upload.step();
+        } catch (error) {
+            this.cancelPreparedLoad(data);
+            throw error;
+        }
+    }
+
+    static cancelPreparedLoad(data: SdMapData): void {
+        this.pendingGeometry.get(data)?.upload.dispose();
+        this.pendingGeometry.delete(data);
+    }
+
+    static cancelPreparedLoads(app: PicoApp): void {
+        for (const [data, pending] of this.pendingGeometry) {
+            if (pending.app === app) this.cancelPreparedLoad(data);
+        }
+    }
     readonly locDataChangedListeners = new Set<() => void>();
     tileOverlays?: Int16Array[][];
 
@@ -365,8 +407,8 @@ export class WebGLMapSquare {
     // Reusable buffer for getLocTypeRotsAtLocal to avoid per-call allocations
     private locTypeRotsAtLocalBuffer: number[] = [];
     /** Static loc ambient sound emitters; built lazily by the renderer, cleared on scene data refresh. */
-    ambientSoundEmitters?: { locId: number; x: number; y: number; level: number; rot: number }[];
     private loc?: DoorGeometryResources;
+    private readonly locAnimationUpdater = new LocAnimationUpdater();
     private locDrawRangePlanes?: NonNullable<DoorGeometryResources["planes"]>;
     private door?: DoorGeometryResources;
     private doorDrawRangePlanes?: NonNullable<DoorGeometryResources["planes"]>;
@@ -405,6 +447,8 @@ export class WebGLMapSquare {
         frame: number,
         npcEcs?: NpcEcs,
     ): WebGLMapSquare {
+        const prepared = this.pendingGeometry.get(mapData)?.upload.take();
+        this.pendingGeometry.delete(mapData);
         const { mapX, mapY, borderSize, tileRenderFlags } = mapData;
 
         const collisionMaps = mapData.collisionDatas.map(CollisionMap.fromData);
@@ -418,8 +462,8 @@ export class WebGLMapSquare {
         }
         const mapPos = vec2.fromValues(usedRenderX, usedRenderY);
 
-        const interleavedBuffer = app.createInterleavedBuffer(12, mapData.vertices);
-        const indexBuffer = app.createIndexBuffer(PicoGL.UNSIGNED_INT, mapData.indices);
+        const interleavedBuffer = takePreparedBuffer(prepared, mapData.vertices) ?? app.createInterleavedBuffer(12, mapData.vertices);
+        const indexBuffer = takePreparedBuffer(prepared, mapData.indices) ?? app.createIndexBuffer(PicoGL.UNSIGNED_INT, mapData.indices);
 
         const vertexArray = app
             .createVertexArray()
@@ -562,8 +606,8 @@ export class WebGLMapSquare {
 
         let doorResources: DoorGeometryResources | undefined;
         if (mapData.doorVertices.length > 0 && mapData.doorIndices.length > 0) {
-            const doorInterleavedBuffer = app.createInterleavedBuffer(12, mapData.doorVertices);
-            const doorIndexBuffer = app.createIndexBuffer(PicoGL.UNSIGNED_INT, mapData.doorIndices);
+            const doorInterleavedBuffer = takePreparedBuffer(prepared, mapData.doorVertices) ?? app.createInterleavedBuffer(12, mapData.doorVertices);
+            const doorIndexBuffer = takePreparedBuffer(prepared, mapData.doorIndices) ?? app.createIndexBuffer(PicoGL.UNSIGNED_INT, mapData.doorIndices);
             const doorVertexArray = app
                 .createVertexArray()
                 .vertexAttributeBuffer(0, doorInterleavedBuffer, {
@@ -708,6 +752,7 @@ export class WebGLMapSquare {
             borderSize,
             time,
             mapData.loc,
+            prepared,
         );
 
         let npcInterleavedBuffer: GpuInterleavedBuffer | undefined;
@@ -715,8 +760,8 @@ export class WebGLMapSquare {
         let npcVertexArray: VertexArray | undefined;
 
         if (mapData.npcVertices.length > 0 && mapData.npcIndices.length > 0) {
-            npcInterleavedBuffer = app.createInterleavedBuffer(ACTOR_VERTEX_STRIDE, mapData.npcVertices);
-            npcIndexBuffer = app.createIndexBuffer(PicoGL.UNSIGNED_INT, mapData.npcIndices);
+            npcInterleavedBuffer = takePreparedBuffer(prepared, mapData.npcVertices) ?? app.createInterleavedBuffer(ACTOR_VERTEX_STRIDE, mapData.npcVertices);
+            npcIndexBuffer = takePreparedBuffer(prepared, mapData.npcIndices) ?? app.createIndexBuffer(PicoGL.UNSIGNED_INT, mapData.npcIndices);
             npcVertexArray = app
                 .createVertexArray()
                 .vertexAttributeBuffer(0, npcInterleavedBuffer, {
@@ -1012,6 +1057,7 @@ export class WebGLMapSquare {
         for (const c of occInit) {
             mapSquare.incNpcOcc(c.plane, c.x, c.y);
         }
+        for (const unused of prepared?.values() ?? []) unused.delete();
         return mapSquare;
     }
 
@@ -1197,6 +1243,10 @@ export class WebGLMapSquare {
                 return isAlpha ? this.drawCallAlpha : this.drawCall;
             }
         }
+    }
+
+    updateAnimatedLocs(seqFrameLoader: SeqFrameLoader, cycle: number, onFrameSound?: LocFrameSoundHandler): void {
+        this.locAnimationUpdater.update(this.locsAnimated, this.loc, seqFrameLoader, cycle, onFrameSound);
     }
 
     getLocDrawCall(
@@ -1402,6 +1452,7 @@ export class WebGLMapSquare {
     }
 
     private clearLocGeometry(): void {
+        this.locAnimationUpdater.clear();
         const loc = this.loc;
         if (!loc) return;
         releaseDrawCallRange(loc.drawCall);
@@ -1843,7 +1894,6 @@ export class WebGLMapSquare {
             this.locTypeRotsAtLocalBuffer.length = 0;
             for (const listener of this.locDataChangedListeners) listener();
         }
-        this.ambientSoundEmitters = undefined;
     }
 
     refreshLocGeometry(

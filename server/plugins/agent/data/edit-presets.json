@@ -1,0 +1,91 @@
+{
+  "_comment": [
+    "Declarative building presets for the agent map-editing tools (EditBuild.AgentMcp.js).",
+    "A preset is a list of parts; each part is a shape from EditGeometry.AgentMcp.js plus a",
+    "material name from `materials` below. Values written as \"$name\" are taken from the call's",
+    "`params`, so one preset covers many sizes (\"-$name\" reads a parameter negated). Geometry",
+    "is relative to the origin tile the agent gives, and rotation is applied around that origin.",
+    "",
+    "Provenance, per server/AGENTS.md rules 9 and 10:",
+    "- Every id here is read from the game cache (`search_objects`, which names come from",
+    "  CacheDefinitions, or `yarn dump:loc`), never from another server or from memory. An id",
+    "  that stops existing after a cache update shows up as a failed placement, not as silent",
+    "  corruption, and `search_objects` re-derives the right one by name.",
+    "- The `about` notes describe APPEARANCE only, and were checked in-game with the",
+    "  vision_screenshot tool on a headless client. They are not claims about game behaviour.",
+    "  Objects that looked wrong in the world are listed in server/docs/agents/map-editing.md",
+    "  (Marble wall 5907 and Tower 1939 render as brown wood; 3x3 Pillar 6283 and Column 5228",
+    "  render as oversized dark monoliths). Add new materials here rather than hard-coding",
+    "  numbers in tool code."
+  ],
+  "materials": {
+    "castle_wall": { "id": 16519, "about": "Grey crenellated stone wall; renders as proper stone (checked in-game)" },
+    "battlement": { "id": 2832, "about": "Squat crenellated stone block; stacks into towers and parapets" },
+    "gate": { "id": 37, "about": "Openable wooden gate" },
+    "arch": { "id": 2106, "about": "Stone archway, walked through" },
+    "stair": { "id": 54, "about": "Stone staircase" },
+    "brazier": { "id": 11017, "about": "Standing brazier" },
+    "marble_bench": { "id": 29115, "about": "Marble bench" },
+    "statue_king": { "id": 563, "about": "Statue of a king" },
+    "oak": { "id": 8462, "about": "Oak tree" }
+  },
+  "presets": {
+    "house": {
+      "about": "Walled house shell with a doorway; hollow, so it can be furnished.",
+      "params": { "width": 5, "height": 5, "doorSide": "south", "wall": "castle_wall" },
+      "parts": [
+        { "shape": "box", "material": "$wall", "x": 0, "y": 0, "width": "$width", "height": "$height", "doorSide": "$doorSide" }
+      ]
+    },
+    "tower": {
+      "about": "Square tower footprint with a parapet ring around it.",
+      "params": { "size": 3, "body": "battlement", "parapet": "castle_wall" },
+      "parts": [
+        { "shape": "tower", "material": "$body", "x": 0, "y": 0, "width": "$size", "height": "$size" },
+        { "shape": "box", "material": "$parapet", "x": 0, "y": 0, "width": "$size", "height": "$size", "grow": 2 }
+      ]
+    },
+    "gatehouse": {
+      "about": "Gate flanked by battlement piers, with an archway behind it.",
+      "params": { "wall": "battlement", "gate": "gate", "arch": "arch" },
+      "parts": [
+        { "shape": "column", "material": "$wall", "dx": 0, "dy": -2 },
+        { "shape": "column", "material": "$wall", "dx": 0, "dy": 2 },
+        { "shape": "column", "material": "$gate", "dx": 0, "dy": 0, "face": 1 },
+        { "shape": "column", "material": "$arch", "dx": 1, "dy": 0 }
+      ]
+    },
+    "plaza": {
+      "about": "Open square: king statues at the corners, braziers mid-side, marble benches inside.",
+      "params": { "radius": 4, "statue": "statue_king", "brazier": "brazier", "bench": "marble_bench" },
+      "parts": [
+        { "shape": "column", "material": "$statue", "dx": "-$radius", "dy": "-$radius" },
+        { "shape": "column", "material": "$statue", "dx": "$radius", "dy": "-$radius" },
+        { "shape": "column", "material": "$statue", "dx": "-$radius", "dy": "$radius" },
+        { "shape": "column", "material": "$statue", "dx": "$radius", "dy": "$radius" },
+        { "shape": "column", "material": "$brazier", "dx": 0, "dy": "-$radius" },
+        { "shape": "column", "material": "$brazier", "dx": 0, "dy": "$radius" },
+        { "shape": "column", "material": "$bench", "dx": "-1", "dy": 1 },
+        { "shape": "column", "material": "$bench", "dx": "1", "dy": 1 }
+      ]
+    },
+    "tiered_city": {
+      "about": "Ringed hill city: four concentric walls, each with an east gate and towers on its east and west sides. Pair with set_height terraces for the stepped look.",
+      "params": {
+        "radii": [8, 13, 18, 23],
+        "wall": "castle_wall",
+        "tower": "battlement",
+        "gate": "gate"
+      },
+      "repeat": { "radius": "$radii" },
+      "parts": [
+        { "shape": "ring", "material": "$wall", "radius": "$radius", "thickness": 1, "gapDegrees": 20, "gapAngle": 0 },
+        { "shape": "column", "material": "$gate", "dx": "$radius", "dy": 0, "face": 1 },
+        { "shape": "column", "material": "$tower", "dx": "$radius", "dy": "-2" },
+        { "shape": "column", "material": "$tower", "dx": "$radius", "dy": "2" },
+        { "shape": "column", "material": "$tower", "dx": "-$radius", "dy": "-2" },
+        { "shape": "column", "material": "$tower", "dx": "-$radius", "dy": "2" }
+      ]
+    }
+  }
+}

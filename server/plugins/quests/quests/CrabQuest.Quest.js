@@ -1515,6 +1515,7 @@ module.exports = function registerCrabQuestQuest(api) {
   api.onItemOnItem(handleItemOnItem);
   api.onGroundItemPickup(handleGroundItemPickup);
   api.onPlayerLogin(migrateStage);
+  api.onServerStartup(installObjects);
   api.onPlayerLogin(handleLogin);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   api.onPlayerLogout(handleLogout);

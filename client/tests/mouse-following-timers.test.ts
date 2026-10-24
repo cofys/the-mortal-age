@@ -1,25 +1,26 @@
 import assert from "node:assert/strict";
 
 import { WidgetTransmitProcessor } from "../game/widgets/WidgetTransmitProcessor";
+import { WidgetManager } from "../widgets/WidgetManager";
 
 // The enhanced client's cursor mouseover box is rebuilt at the mouse by a timer script (4725).
 // Timers run on the 20ms client tick, so between ticks the box trailed the pointer. It is now
 // also re-run on each frame the mouse moved; other timers stay on the tick.
 const ROOT = 161;
-const mouseBox: any = { uid: (ROOT << 16) | 1, groupId: ROOT, onTimer: [4725] };
-const otherTimer: any = { uid: (ROOT << 16) | 2, groupId: ROOT, onTimer: [40, 7] };
+const mouseBox: any = { uid: (ROOT << 16) | 1, groupId: ROOT, parentUid: -1, onTimer: [4725] };
+const otherTimer: any = { uid: (ROOT << 16) | 2, groupId: ROOT, parentUid: -1, onTimer: [40, 7] };
+const manager = new WidgetManager({} as never, {
+    loadWidgetGroup: () => ({ root: mouseBox, widgets: new Map([
+        [mouseBox.uid, mouseBox], [otherTimer.uid, otherTimer],
+    ]) }),
+    getAvailableGroups: () => [ROOT], clearCache() {},
+} as never);
+manager.setRootInterface(ROOT);
 
 const queued: number[] = [];
 const ranNow: number[] = [];
 const processor = new WidgetTransmitProcessor({
-    getWidgetManager: () =>
-        ({
-            rootInterface: ROOT,
-            interfaceParents: new Map(),
-            getAllGroupRoots: () => [mouseBox, otherTimer],
-            getStaticChildrenByParentUid: () => [],
-            isEffectivelyHidden: () => false,
-        }) as any,
+    getWidgetManager: () => manager,
     getTransmitCycles: () => ({}) as any,
     getCs2Vm: () =>
         ({

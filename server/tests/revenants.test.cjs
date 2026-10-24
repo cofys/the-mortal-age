@@ -341,7 +341,7 @@ function maledictusHarness({ players = [] } = {}) {
   const surged = [];
   const fakeCore = {
     ...core,
-    World: { ...core.World, getPlayers: () => players },
+    World: { ...core.World, getProcessCycle: () => 0, getPlayers: () => players },
     TaskManager: { submit() {} },
     ItemOnGroundManager: { registerLocation: (owner, i) => ground.push([owner.name, i.getId(), i.getAmount()]) },
   };

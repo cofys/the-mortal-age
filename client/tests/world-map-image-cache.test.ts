@@ -99,3 +99,27 @@ test("a missing world-map archive tile retries and recovers after the backoff", 
     assert.equal(attempts, 2);
     assert.equal(cache.worldMapImageTiles.size, 1);
 });
+
+test("a stale viewport reply cannot publish or remove a newer request for the same tile", async () => {
+    const cache = state();
+    const replies: Array<(tile: any) => void> = [];
+    const tile = { pixels: new Uint8Array(64 * 64 * 4), width: 64, height: 64, icons: [] };
+    let cancelled = 0;
+    const loadDeps = { ...deps(() => new Promise(resolve => replies.push(resolve))), cancelTileLoads: () => cancelled++ };
+    getWorldMapImageTile(cache, loadDeps, 1, 1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    cache.worldMapState.displayX += 64;
+    getWorldMapImageTile(cache, loadDeps, 1, 1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(replies.length, 2, "the new viewport replaces the old pending request");
+    replies[0](tile);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(cache.pendingWorldMapImageIds.size, 1, "stale finally must retain the new pending marker");
+    assert.equal(cache.worldMapImageTiles.size, 0);
+    assert.equal(cache.failedWorldMapImageIds.size, 0);
+    replies[1](tile);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(cache.pendingWorldMapImageIds.size, 0);
+    assert.equal(cache.worldMapImageTiles.size, 1);
+    assert.equal(cancelled, 2);
+});

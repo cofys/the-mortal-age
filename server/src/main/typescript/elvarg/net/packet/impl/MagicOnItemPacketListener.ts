@@ -90,13 +90,8 @@ export class MagicOnItemPacketListener {
     if (missing.length) PluginManager.consumeSpellRuneSource(player, missing);
   }
 
-  private canReceiveGroundItem(player: any, itemId: number): boolean {
-    const inventory = player.getInventory();
-    if (inventory.getFreeSlots() > 0) {
-      return true;
-    }
-    const definition = ItemDefinition.forId(itemId);
-    return definition?.isStackable?.() && inventory.contains(itemId);
+  private canReceiveGroundItem(player: any, item: Item): boolean {
+    return ItemOnGroundManager.inventoryCapacity(player, item) > 0;
   }
 
   public castGroundItem(player: any, groundItemId: number, x: number, y: number, spellId: number): void {
@@ -141,7 +136,8 @@ export class MagicOnItemPacketListener {
       player.sendMessage("Nothing interesting happens.");
       return;
     }
-    if (!this.canReceiveGroundItem(player, groundItemId)) {
+    if (!this.canGrabGroundItem(player, groundItem)) return;
+    if (!this.canReceiveGroundItem(player, groundItem.getItem())) {
       player.getInventory().full();
       return;
     }
@@ -183,6 +179,13 @@ export class MagicOnItemPacketListener {
     });
   }
 
+  /** Generic permission query shared by cast and arrival checks. */
+  private canGrabGroundItem(player: any, groundItem: any): boolean {
+    const request = { player, groundItem, allow: true };
+    PluginManager.emitCustomEvent("magic:can-telekinetic-grab", request);
+    return request.allow !== false;
+  }
+
   /** The telegrab projectile has landed: the item is taken if it is still there. */
   private landGroundItemGrab(player: any, groundItemId: number, position: Location): void {
     if (!player.isRegistered?.() || player.getHitpoints?.() <= 0) {
@@ -198,12 +201,8 @@ export class MagicOnItemPacketListener {
       player.sendMessage("Too late - it's gone!");
       return;
     }
-    if (!this.canReceiveGroundItem(player, groundItemId)) {
-      player.getInventory().full();
-      return;
-    }
-    ItemOnGroundManager.deregister(groundItem);
-    player.getInventory().addItem(groundItem.getItem().clone());
+    if (!this.canGrabGroundItem(player, groundItem)) return;
+    if (ItemOnGroundManager.transferToInventory(player, groundItem, "telegrab") <= 0) return;
     PluginManager.emitCustomEvent("magic:telekinetic-grab", { player, itemId: groundItemId, position });
   }
 
@@ -265,7 +264,7 @@ export class MagicOnItemPacketListener {
 
   private findVisibleGroundItem(player: any, groundItemId: number, position: Location): any | null {
     const exact = ItemOnGroundManager.getGroundItem(player.getUsername(), groundItemId, position, player.getPrivateArea());
-    if (exact) {
+    if (exact && ItemOnGroundManager.canSee(player, exact)) {
       return exact;
     }
 
@@ -282,6 +281,7 @@ export class MagicOnItemPacketListener {
       if (item.getPrivateArea?.() !== player.getPrivateArea?.()) {
         continue;
       }
+      if (!ItemOnGroundManager.canSee(player, item)) continue;
       if (item.getState?.() === State.SEEN_BY_PLAYER && item.getOwner?.() !== player.getUsername?.()) {
         continue;
       }

@@ -5,6 +5,11 @@
     "plugins/bots/data/**",
     "data/npc-spawns*.json",
     "data/definitions/npc-spawns*.json",
-    "data/definitions/npc-combat-defs.json"
+    "data/definitions/object-spawns*.json",
+    "data/definitions/npc-combat-defs.json",
+    "data/regions/**",
+    "plugins/agent/data/templates/**",
+    "plugins/agent/data/edit-styles.json",
+    "*.log"
   ]
 }

@@ -33,6 +33,11 @@ function farmFor(player) {
     }
     return farm;
 }
+
+function retrievalItems(request) {
+    for (const {id: itemId, amount} of request.player.getAttribute(FARM_ATTRIBUTE)?.deathbank ?? [])
+        request.items.push({itemId, amount});
+}
 function stateFor(player, patch) {
     const farm = farmFor(player);
     return farm.patches[Data.patchKey(patch)] ??= Model.emptyPatch(Date.now(), farm, ["GRAPES", "CORAL", "SEAWEED"].includes(patch.type) ? 0 : 3);
@@ -299,8 +304,9 @@ function harvest(player, patch) {
     if (["CRYSTAL_TREE", "CELASTRUS"].includes(crop.type) && !requireAxe(player)) return false;
     if (["ALLOTMENT", "HERB", "HOPS", "BELLADONNA"].includes(crop.type) && !requireTool(player, "Spade")) return false;
     const level = player.getSkillManager().getCurrentLevel(core.Skill.FARMING);
-    if (crop.type === "BELLADONNA" && !player.getEquipment().getItems().some(i => /gloves|gauntlets|vambraces/i.test(core.CacheDefinitions.getItem(i.getId()).name))) {
-        player.sendMessage("You need to wear gloves to pick poisonous nightshade."); return false;
+    if (crop.type === "BELLADONNA" && !Data.BELLADONNA_HANDWEAR.has(player.getEquipment().get(core.Equipment.HANDS_SLOT)?.getId())) {
+        player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(2, core.HitMask.GREEN)]);
+        player.sendMessage("Your hands are not protected from the poisonous nightshade."); return false;
     }
     const attas = Model.activeAnima(farmFor(player), Date.now()) === "ATTAS";
     let amount = crop.key === "WOAD" ? 3 : crop.key === "LIMPWURT" ? 3 + Math.floor(Math.floor(Math.random() * level) * (hasTool(player, "Magic secateurs") ? 1.1 : 1) * (attas ? 1.05 : 1) / 10)
@@ -694,6 +700,7 @@ function attach(api) {
     api.onCustomEvent("player:world-input", cancelWork);
     api.onCustomEvent("npc-drops:generated", Hespori.hesporiLoot);
     api.onCustomEvent("hespori:quest-challenge", Hespori.challengeHespori);
+    api.onCustomEvent("item-retrieval:items", retrievalItems);
     api.onCustomEvent("hespori:quest-process", Hespori.hesporiProcess);
     api.onCustomEvent("hespori:quest-can-attack", Hespori.hesporiCanAttack);
     api.onCustomEvent("hespori:quest-leave", Hespori.hesporiLogout);
@@ -730,4 +737,4 @@ const botFarm = {
   itemId: (name) => Data.itemId(name),
 };
 
-Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick, botFarm });
+Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick, botFarm, retrievalItems });

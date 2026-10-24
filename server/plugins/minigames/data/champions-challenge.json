@@ -1,0 +1,119 @@
+{
+  "$comment": "Champions' Challenge (docs/champions-challenge.md). Tiles are the real basement's; the plugin copies it into a private instance. `bit` is the champion's champions_defeated_* varbit within varp 617 (its lamp bit is bit + 16). Rules, XP and scroll texts are the Wiki's; captured facts are noted in the docs page.",
+  "varp": 617,
+  "lampBitOffset": 16,
+  "instance": { "sourceChunkX": 394, "sourceChunkY": 1218, "chunks": 5, "planes": 4 },
+  "tiles": {
+    "trapdoor": [3190, 3355, 0],
+    "basementArrive": [3189, 9758, 0],
+    "ladderUp": [3190, 9758, 0],
+    "outside": [3190, 3356, 0],
+    "statue": [3184, 9758, 0],
+    "statueLanding": [3182, 9758, 0],
+    "portcullis": [3181, 9758, 0],
+    "arenaSide": [3180, 9758, 0],
+    "corridorSide": [3182, 9758, 0],
+    "arenaLadder": [3183, 9758, 0],
+    "arenaLadderLanding": [3185, 9758, 0],
+    "chest": [3168, 9776, 0],
+    "championSpawn": [3168, 9758, 0],
+    "grave": [3188, 3356, 0]
+  },
+  "arena": { "minX": 3152, "maxX": 3181, "minY": 9744, "maxY": 9772 },
+  "npcs": {
+    "larxus": { "id": 3321, "tile": [3187, 9758], "wanderRadius": 3 },
+    "figures": [
+      { "id": 3326, "tile": [3160, 9752] },
+      { "id": 3325, "tile": [3160, 9763] },
+      { "id": 3327, "tile": [3168, 9750] },
+      { "id": 3323, "tile": [3175, 9752] },
+      { "id": 3322, "tile": [3168, 9765] },
+      { "id": 3324, "tile": [3175, 9763] }
+    ]
+  },
+  "locs": {
+    "trapdoorOpen": 10559,
+    "ladderUp": 10560,
+    "statueClosed": 10556,
+    "statueOpen": 10557,
+    "portcullis": 10553,
+    "arenaLadder": 10554,
+    "chest": 31945
+  },
+  "items": { "lamp": 22320, "cape": 21439, "leonScroll": 6808 },
+  "music": { "basement": 525, "arena": 528 },
+  "jingle": 85,
+  "sounds": { "gate": 84 },
+  "anims": { "portcullis": 2976 },
+  "interfaces": {
+    "scroll": { "group": 222, "lines": 11 },
+    "reward": { "group": 63, "message": 2, "pic": 3, "slayer": 6, "hitpoints": 7, "zoom": 300 }
+  },
+  "champions": [
+    {
+      "key": "imp", "npc": 3355, "scroll": 6803, "bit": 5, "name": "Imp", "xp": 160,
+      "rule": { "special": true },
+      "aggressive": true,
+      "letter": ["How about picking on someone your own size? I'll", "see you at the Champions' Guild."], "signature": "Champion of Imps"
+    },
+    {
+      "key": "goblin", "npc": 3353, "scroll": 6801, "bit": 3, "name": "Goblin", "xp": 128,
+      "rule": { "only": "Magic" },
+      "aggressive": false,
+      "letter": ["Fight me if you think you can human, I'll wait for", "you in the Champions's Guild."], "signature": "Champion of Goblins"
+    },
+    {
+      "key": "skeleton", "npc": 3358, "scroll": 6806, "bit": 8, "name": "Skeleton", "xp": 232,
+      "rule": { "only": "Ranged" },
+      "aggressive": true,
+      "letter": ["I'll be waiting at the Champions' Guild to collect", "your bones."], "signature": "Champion of Skeletons"
+    },
+    {
+      "key": "zombie", "npc": 3359, "scroll": 6807, "bit": 9, "name": "Zombie", "xp": 240,
+      "rule": { "not": "Magic" },
+      "aggressive": true,
+      "letter": ["You come to Champions' Guild, you fight me, I", "squish you, I get brains!"], "signature": "Champion of Zombies"
+    },
+    {
+      "key": "giant", "npc": 3329, "scroll": 6800, "bit": 2, "name": "Giant", "xp": 280,
+      "rule": { "only": "Melee" },
+      "aggressive": true,
+      "letter": ["Get yourself to the Champions' Guild, if you dare", "to face me puny human."], "signature": "Champion of Giants"
+    },
+    {
+      "key": "hobgoblin", "npc": 3354, "scroll": 6802, "bit": 4, "name": "Hobgoblin", "xp": 232,
+      "rule": { "not": "Melee" },
+      "aggressive": true,
+      "letter": ["You won't defeat me, though you're welcome to try", "at the Champions' Guild."], "signature": "Champion of Hobgoblins"
+    },
+    {
+      "key": "ghoul", "npc": 3330, "scroll": 6799, "bit": 1, "name": "Ghoul", "xp": 400,
+      "rule": { "carry": "weapons" },
+      "aggressive": true,
+      "letter": ["Come and duel me at the Champions' Guild, I'll", "make sure nothing goes to waste."], "signature": "Champion of Ghouls"
+    },
+    {
+      "key": "earthwarrior", "npc": 3328, "scroll": 6798, "bit": 0, "name": "Earth Warrior", "xp": 432,
+      "rule": { "prayer": true },
+      "aggressive": true,
+      "letter": ["I challenge you to a duel, come to the arena", "beneath the Champions' Guild and fight me if you", "dare."], "signature": "Champion of Earth Warriors"
+    },
+    {
+      "key": "jogre", "npc": 3356, "scroll": 6804, "bit": 6, "name": "Jogre", "xp": 480,
+      "rule": { "not": "Ranged" },
+      "aggressive": true,
+      "letter": ["You think you can defeat me? Come to the", "Champions' Guild and prove it!"], "signature": "Champion of Jogres"
+    },
+    {
+      "key": "lesserdemon", "npc": 3357, "scroll": 6805, "bit": 7, "name": "Lesser Demon", "xp": 592,
+      "rule": { "carry": "noEquipment" },
+      "aggressive": true,
+      "letter": ["Come to the Champions' Guild so I can banish you", "mortal!"], "signature": "Champion of Lesser Demons"
+    },
+    {
+      "key": "leon", "npc": 3360, "scroll": null, "bit": 10, "name": "Human", "xp": 492,
+      "rule": { "carry": "wornOnly" },
+      "aggressive": true
+    }
+  ]
+}

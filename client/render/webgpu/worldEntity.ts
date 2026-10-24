@@ -166,9 +166,9 @@ export async function loadWorldEntityScene(
 
     let mapData;
     try {
-        mapData = await renderer.loadSceneData(input);
+        mapData = await renderer.loadSceneData(input, () => renderer.worldEntityLoadTokens.get(entityIndex) === loadToken);
     } catch (error) {
-        console.error(`[webgpu] world entity scene load failed for entity ${entityIndex}`, error);
+        if ((error as Error)?.name !== "AbortError") console.error(`[webgpu] world entity scene load failed for entity ${entityIndex}`, error);
         mapData = undefined;
     }
 

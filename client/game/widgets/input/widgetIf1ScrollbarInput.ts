@@ -138,7 +138,7 @@ export function processWidgetIf1ScrollbarInput(
                 if (handleIf1Scrollbars(allRoots[i], 0, 0)) break;
             }
             if (handledWheel) {
-                input.wheelDeltaY = 0;
+                input.clearWheel();
             }
         }
     }

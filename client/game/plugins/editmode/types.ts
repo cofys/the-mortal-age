@@ -282,6 +282,8 @@ export interface EditModeHost {
     getTerrainHeight?(tile: EditModeTile): number | undefined;
     /** Rebuilds edited map squares from their persisted base data. */
     refreshEditedRegions?(regionIds: readonly number[], edits: readonly EditModeEdit[]): void;
+    /** Pulls server-side region replacements and object spawns into the scene. */
+    syncServerReplacements?(): Promise<void>;
     setFreeCamera(enabled: boolean): void;
     /** Renders the world instead of the login screen while logged out. */
     setScenePreview(enabled: boolean, spawn?: EditModeTile): void;

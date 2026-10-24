@@ -1,6 +1,6 @@
 "use strict";
 
-const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheDefinitions, GameObject, encodeLocAddChange, encodeLocDel, encodeRebuildRegion,
+const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheDefinitions, GameObject, World, encodeLocAddChange, encodeLocDel, encodeRebuildRegion,
   getTemplateRegion, templateChunkKey, rotateChunkLoc, rotateChunkTile, ObjectDefinition } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const Estate = require("./Estate.Construction");
@@ -736,7 +736,7 @@ class PlayerHouseInstance extends PrivateArea {
             if (!buildable || this.hiddenFurniture.has(furniture)) continue;
             const hotspot = Data.HOTSPOT_BY_KEY.get(furniture.hotspotKey) ?? Data.hotspotIn(room.roomKey, furniture.sourceObjectId);
             const variant = hotspot ? hotspot.objectIds.indexOf(furniture.sourceObjectId) : -1;
-            const objectId = (this.litBurners.get(furniture) ?? 0) > Date.now() ? buildable.objectIds[0] + 1
+            const objectId = (this.litBurners.get(furniture) ?? 0) > World.getProcessCycle() ? buildable.objectIds[0] + 1
               : furniture.displayObjectId ?? buildable.objectIds[variant] ?? buildable.objectIds.find((id) => id >= 0) ?? -1;
             if (objectId < 0) continue;
             const local = this.rotatedFootprint(furniture.localX, furniture.localY, furniture.sourceObjectId, furniture.face, room.rotation);

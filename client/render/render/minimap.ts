@@ -205,6 +205,7 @@ export function clearMinimapIconsForMap(host: WebGLOsrsRendererHost, mapX: numbe
 
 export function registerMinimapData(host: WebGLOsrsRendererHost, mapData: SdMapData): void {
 
+        host.registerMinimapSource?.(mapData);
         const mapX = mapData.mapX | 0;
         const mapY = mapData.mapY | 0;
         for (let level = 0; level < Scene.MAX_LEVELS; level++) {

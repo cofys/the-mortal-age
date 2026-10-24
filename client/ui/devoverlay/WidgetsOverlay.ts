@@ -122,6 +122,8 @@ export class WidgetsOverlay implements Overlay {
     private lastMenuVisualSignature: string = "";
     private lastWidgetOverlaySignature: string = "";
     private widgetOverlayRects: DirtyRect[] = [];
+    /** Device rects the below-widget overlays drew last full pass. */
+    private belowWidgetOverlayRects: DirtyRect[] = [];
     private lastMenuVisualRect?: DirtyRect;
     private lastTradeAmountOverlaySignature: string = "";
     private lastMouseOverTextSignature: string = "";
@@ -754,8 +756,11 @@ export class WidgetsOverlay implements Overlay {
 
         // A plugin may supply an alternate gameframe (e.g. the classic 317 frame).
         const gameFrame = this.ctx.getGameContext?.()?.osrsClient?.clientPlugins?.activeGameFrame?.();
-        const widgetOverlays: WidgetOverlay[] =
+        const allWidgetOverlays: WidgetOverlay[] =
             this.ctx.getGameContext?.()?.osrsClient?.clientPlugins?.widgetOverlays?.() ?? [];
+        // Below-widget overlays draw first in a full pass; the rest draw in or above the tree.
+        const belowWidgetOverlays = allWidgetOverlays.filter((overlay) => overlay.drawBelowWidgets === true);
+        const widgetOverlays = allWidgetOverlays.filter((overlay) => overlay.drawBelowWidgets !== true);
 
         if (this.widgetEntries.length === 0) {
             const widgetManager = this.ctx.getWidgetManager?.();
@@ -822,14 +827,17 @@ export class WidgetsOverlay implements Overlay {
             // open, partial dirty-rect redraws can visibly blink as hover/click state changes
             // every frame. Redraw the full overlay for the duration of the menu instead.
             let widgetOverlaySignature = "";
-            for (const overlay of widgetOverlays) widgetOverlaySignature += overlay.signature() + "|";
+            for (const overlay of allWidgetOverlays) widgetOverlaySignature += overlay.signature() + "|";
             const forceFullRedraw =
                 !this.hasPresentedFrame ||
                 this.rootSetChanged ||
                 menuOpen ||
                 tradeOverlayDirty ||
                 !!gameFrame ||
-                widgetOverlaySignature !== this.lastWidgetOverlaySignature;
+                widgetOverlaySignature !== this.lastWidgetOverlaySignature ||
+                // A partial pass would clear what a below-widget overlay drew in its dirty rects.
+                (belowWidgetOverlays.length > 0 &&
+                    (anyDirty || preciseDirtyWidgets.length > 0 || menuVisualDirty || mouseOverTextDirty));
             const preciseDirtyCount = preciseDirtyWidgets.length | 0;
             const shouldRedraw =
                 anyDirty ||
@@ -909,6 +917,14 @@ export class WidgetsOverlay implements Overlay {
                     if (gameFrame) {
                         gameFrame.drawGameFrame(this.buildGameFrameContext(this.glRenderer));
                         this.glRenderer.flush();
+                    }
+                    if (belowWidgetOverlays.length > 0) {
+                        this.drawWidgetOverlays(belowWidgetOverlays, true);
+                        this.belowWidgetOverlayRects = this.widgetOverlayRects;
+                        this.widgetOverlayRects = [];
+                        this.glRenderer.flush();
+                    } else {
+                        this.belowWidgetOverlayRects = [];
                     }
                     try {
                         const roots = (sharedUi as any).__widgetRoots;
@@ -1026,6 +1042,8 @@ export class WidgetsOverlay implements Overlay {
             renderer: glr,
             fontLoader: this.ctx.getFontLoader?.() || (() => undefined),
             sprite: (id: number) => (glr.canvas as any).__textureCache?.getSpriteById(id),
+            itemImage: (itemId: number, quantity: number, outline: number) =>
+                this.ctx.getItemIconCanvas?.()?.(itemId, quantity, outline, 0, 0),
             place: (overlay: WidgetOverlay, width: number, height: number) =>
                 this.ctx.getGameContext?.()?.osrsClient?.clientPlugins?.placeOverlay(overlay, width, height, {
                     w: glr.width,

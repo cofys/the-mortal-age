@@ -13,6 +13,7 @@ type HighlightTarget = {
     alpha: number;
     /** View-space deck placement for a target aboard a world entity (identity elsewhere). */
     worldEntityTransform?: Float32Array;
+    outlineRadius?: number;
 };
 
 /** Per-target uniforms, rewritten in place each frame. */
@@ -201,9 +202,8 @@ export class InteractHighlightLayer {
         this.targets = [];
         this.composeBindGroups = [];
 
-        const config = this.host.osrsClient.clientPlugins.interactHighlightConfig();
-        if (!config?.enabled) return;
-
+        // The shared resolver applies Interact Highlight's own switch; plugin outlines (NPC
+        // Indicators) come through it whether or not that plugin is enabled.
         try {
             // Active + hover targets, resolved with the same shared helpers the WebGL
             // overlay uses (local interaction sync, hover entries, expiry).
@@ -216,6 +216,7 @@ export class InteractHighlightLayer {
                     color: drawTarget.color ?? 0xffffff,
                     alpha: typeof drawTarget.alpha === "number" ? drawTarget.alpha : 0.45,
                     worldEntityTransform: drawTarget.worldEntityTransform,
+                    outlineRadius: drawTarget.outlineRadius,
                 });
             }
         } catch {
@@ -376,6 +377,7 @@ export class InteractHighlightLayer {
             this.composeData[3] = Math.max(0, Math.min(1, target.alpha));
             this.composeData[4] = 1.0 / Math.max(1, this.maskWidth);
             this.composeData[5] = 1.0 / Math.max(1, this.maskHeight);
+            this.composeData[6] = target.outlineRadius ?? DEFAULT_OUTLINE_RADIUS;
             this.device.queue.writeBuffer(uniforms.composeBuffer, 0, this.composeData);
             this.composeBindGroups.push(this.composeBindGroupFor(uniforms, maskView));
 

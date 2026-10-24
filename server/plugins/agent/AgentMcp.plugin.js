@@ -53,6 +53,14 @@ function buildMcpServer(core) {
   require("./mcp/Session.AgentMcp")(ctx);
   require("./mcp/World.AgentMcp")(ctx);
   require("./mcp/Dialogue.AgentMcp")(ctx);
+  require("./mcp/Edit.AgentMcp")(ctx);
+  const build = require("./mcp/EditBuild.AgentMcp")(ctx);
+  require("./mcp/EditNpcs.AgentMcp")(ctx);
+  const terrain = require("./mcp/EditTerrain.AgentMcp")(ctx);
+  const templates = require("./mcp/EditTemplates.AgentMcp")(ctx, { build, terrain });
+  const styles = require("./mcp/EditStyles.AgentMcp")(ctx, { build, terrain, objectsIn: templates.objectsIn });
+  require("./mcp/EditGenerators.AgentMcp")(ctx, { build, terrain, styles });
+  require("./mcp/EditSizes.AgentMcp")(ctx);
   require("./mcp/Bank.AgentMcp")(ctx);
   require("./mcp/Shop.AgentMcp")(ctx);
   require("./mcp/Social.AgentMcp")(ctx);

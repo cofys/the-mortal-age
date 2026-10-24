@@ -258,7 +258,7 @@ function solztunAction(action) {
 }
 
 function useOnSolztun(event) {
-  if (event.target?.getDefinition?.()?.getName?.() !== SOLZTUN || event.itemId !== ids.sceptre) return;
+  if ((event.definition ?? event.target?.getDefinition?.())?.getName?.() !== SOLZTUN || event.itemId !== ids.sceptre) return;
   event.handled = true;
   api.emitCustomEvent("npc-dialogue:start", { player: event.player, npc: event.target, npcId: event.npcId, variant: SOLZTUN_USE_VARIANT });
 }

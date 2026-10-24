@@ -16,6 +16,21 @@ number.
 }
 ```
 
+## Boss drop rates
+
+`pluginConfig` `"NpcDrops:bossRareMultiplier"` makes bosses' rare drops that many times likelier.
+`1` (or leaving it out) is the OSRS rate; at `2` a 1/512 unique is 1/256, at `3` 1/171, at `5`
+1/102. It covers every drop rarer than 1/100 that a boss rolls on its own: uniques, pets, jars,
+visages and clue scrolls. Common loot keeps its rate. Bosses are the NPCs the game cache marks
+as bosses. Raid chests (Chambers of Xeric, Theatre of Blood, Tombs of Amascut) and other
+reward chests are not affected.
+
+```json
+{
+  "pluginConfig": { "NpcDrops:bossRareMultiplier": 2 }
+}
+```
+
 ## Spawn point
 
 `spawn` sets the world tile where players start when they connect. The same location is used

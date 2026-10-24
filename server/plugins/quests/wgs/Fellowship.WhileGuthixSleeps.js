@@ -5,7 +5,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  const SEED_ATTRIBUTE='while-guthix-sleeps:seed-on-counter',FREE_SEED_ATTRIBUTE='while-guthix-sleeps:free-seed';
  const DRAYNOR_ATTRIBUTE='while-guthix-sleeps:draynor-teleport',SARIM_ATTRIBUTE='while-guthix-sleeps:sarim-teleport';
  const SKETCHED_ATTRIBUTE='while-guthix-sleeps:spy-sketched';
- const SPY_ALERT_ATTRIBUTE='while-guthix-sleeps:spy-alert-until';
+ const SPY_ALERT_ATTRIBUTE='while-guthix-sleeps:spy-alert-until',SPY_ALERT_TICKS=50;
  ATTRIBUTES.push(MERCENARIES_ATTRIBUTE,RECRUITS_ATTRIBUTE,SEED_ATTRIBUTE,FREE_SEED_ATTRIBUTE,DRAYNOR_ATTRIBUTE,SARIM_ATTRIBUTE,SKETCHED_ATTRIBUTE);
  const IDRIA=13540,WOOD_IDRIA=13542,THAERISK=13511,AKRISAE=13543,SILIF=13519;
  const MERCENARIES=[13535,13536,13537],SPY=13545,CAPTIVE=13546,OUTSIDER=13555,FARMER=13554;
@@ -70,7 +70,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  function talk({player,npcId}){
   const s=stage(player);
   if(npcId===WOOD_IDRIA&&s===210){play(player,npcId,PREFIX+'talking-to-idria');return true;}
-  if([SPY,OUTSIDER].includes(npcId)&&s===230){player.setAttribute(SPY_ALERT_ATTRIBUTE,Date.now()+30000);play(player,npcId,PREFIX+'capturing-a-spy-talking-to-a-'+(npcId===SPY?'shady-stranger':'suspicious-outsider'));return true;}
+  if([SPY,OUTSIDER].includes(npcId)&&s===230){player.setAttribute(SPY_ALERT_ATTRIBUTE,World.getProcessCycle()+SPY_ALERT_TICKS);play(player,npcId,PREFIX+'capturing-a-spy-talking-to-a-'+(npcId===SPY?'shady-stranger':'suspicious-outsider'));return true;}
   if(npcId===CAPTIVE&&s>=250&&s<=310){
    if(s<300){play(player,npcId,PREFIX+'capturing-a-spy-talking-to-the-shady-stranger-after-the-truth-serum-breaks');return true;}
    if(player.getLocation().getX()>=2988){player.sendMessage('Go inside the cell to speak privately with the stranger.');return true;}
@@ -140,7 +140,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   const {player,itemId,target:npc}=event;
   if(itemId!==TELEORB||stage(player)!==230||![SPY,OUTSIDER].includes(npc.getId())||npc.getOwner?.()!==player)return false;
   event.handled=true;
-  if(npc.getId()===OUTSIDER||val(player,SPY_ALERT_ATTRIBUTE)>Date.now()){player.sendMessage('This person is too alert for you to plant anything on them.');return true;}
+  if(npc.getId()===OUTSIDER||val(player,SPY_ALERT_ATTRIBUTE)>World.getProcessCycle()){player.sendMessage('This person is too alert for you to plant anything on them.');return true;}
   if(Math.random()<0.15){hit(player,3);player.sendMessage('The stranger notices your attempt. Try again.');return true;}
   player.getInventory().deleteNumber(TELEORB,1);advance(player,240);player.sendMessage('You plant the teleorb on the stranger.');return true;
  }

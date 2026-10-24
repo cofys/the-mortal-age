@@ -102,12 +102,22 @@ for (const [label, component, quantity] of [["1", 3, 1], ["5", 4, 5], ["10", 5, 
     assert.equal(player.items.get(I.BRONZE_DAGGER), quantity);
     player.items.set(I.BRONZE_BAR, 27);
     open(player);
+    assert.equal(sent(player, "sendConfig").at(-1)[1], label === "All" ? 27 : quantity);
     click(player, 9);
     ticks();
     assert.equal(player.items.get(I.BRONZE_DAGGER), quantity * 2);
     assert.equal(player.xp, quantity * 2 * 12.5);
   });
 }
+
+test("opening the anvil preselects All, matching the quantity the server will smith", () => {
+  const player = playerWith(I.BRONZE_BAR, 27);
+  open(player);
+  assert.deepEqual(sent(player, "sendConfig").at(-1), [CacheDefinitions.getVarpId("makexcrafting"), 27]);
+  click(player, 9);
+  ticks();
+  assert.equal(player.items.get(I.BRONZE_DAGGER), 27);
+});
 
 test("walking closes the menu without clearing the selected quantity", () => {
   const player = playerWith();
@@ -126,8 +136,9 @@ test("walking closes the menu without clearing the selected quantity", () => {
 test("disconnect clears the selection, and players do not share quantity state", () => {
   const first = playerWith(), second = playerWith();
   open(first);
-  click(first, 7);
+  click(first, 4);
   open(second);
+  click(second, 3);
   click(second, 9);
   ticks();
   assert.equal(second.items.get(I.BRONZE_DAGGER), 1);
@@ -135,7 +146,7 @@ test("disconnect clears the selection, and players do not share quantity state",
   open(first);
   click(first, 9);
   ticks();
-  assert.equal(first.items.get(I.BRONZE_DAGGER), 1);
+  assert.equal(first.items.get(I.BRONZE_DAGGER), 27, "the remembered 5 was cleared; All is the default again");
 });
 
 test("invalid X input preserves the previous selection", () => {

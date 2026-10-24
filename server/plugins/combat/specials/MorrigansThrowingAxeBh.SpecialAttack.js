@@ -1,9 +1,10 @@
 /** Wiki: Hamstring multiplies the target's running drain by six for one minute. */
+const { World } = require("../../../src/main/typescript/elvarg/game/World");
 const HAMSTRING_ATTRIBUTE = "morrigans-throwing-axe:hamstring-until";
-const DURATION_MS = 60_000;
+const DURATION_TICKS = 100;
 
 function hamstringDrain(player, drain) {
-  return Number(player.getAttribute(HAMSTRING_ATTRIBUTE) ?? 0) > Date.now() ? drain * 6 : drain;
+  return Number(player.getAttribute(HAMSTRING_ATTRIBUTE) ?? 0) > World.getProcessCycle() ? drain * 6 : drain;
 }
 function buildMorrigansThrowingAxeBhSpecialAttack(api) {
   const { Animation, CombatSpecial, Graphic, GraphicHeight, ItemIdentifiers, RangedCombatMethod } = api.core;
@@ -37,7 +38,7 @@ function buildMorrigansThrowingAxeBhSpecialAttack(api) {
       }
       const targetPlayer = target.getAsPlayer();
 
-      targetPlayer.setAttribute(HAMSTRING_ATTRIBUTE, Date.now() + DURATION_MS);
+      targetPlayer.setAttribute(HAMSTRING_ATTRIBUTE, World.getProcessCycle() + DURATION_TICKS);
       targetPlayer.sendMessage("You've been hamstrung! For the next minute, your run energy will drain 6x faster.");
     }
   }

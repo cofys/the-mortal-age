@@ -63,10 +63,7 @@ function officeTake(request) {
   request.taken = 0;
   if (!entry || count <= 0) return;
   const inventory = player.getInventory();
-  const stackable = Common.definition(entry.id).isStackable();
-  const room = stackable
-    ? (inventory.getAmount(entry.id) > 0 || inventory.getFreeSlots() > 0 ? entry.amount : 0)
-    : inventory.getFreeSlots();
+  const room = inventory.getAddableAmount(Common.toItem(entry));
   const taken = Math.min(count, entry.amount, room);
   if (taken <= 0) return;
   inventory.add(Common.toItem(entry, taken), true);

@@ -327,13 +327,9 @@ export function drawWithRoofPlaneFilter(host: WebGLOsrsRendererHost,
         filtered.length = 0;
         const moving = map && host.mapManager.worldEntityMapIds.has(map.id);
         const point = map ? host.getRenderCullTile() : undefined;
-        let distance = map ? resolveFogRange({ renderDistance: host.getFrameRenderDistanceTiles(),
+        const distance = map ? resolveFogRange({ renderDistance: host.getFrameRenderDistanceTiles(),
             autoFogDepth: host.autoFogDepth, autoFogDepthFactor: host.autoFogDepthFactor,
             manualFogDepth: host.fogDepth, hd: host.osrsClient.clientPlugins.hdEnabled() }).fogEnd : 0;
-        // Fog is centred on the shader's player position. Free-camera culling
-        // can use a different origin; pad conservatively rather than opening holes.
-        if (map && host.osrsClient.clientPlugins.hdEnabled()) distance += Math.max(
-            Math.abs(point!.x - host.playerPosUni[0]), Math.abs(point!.y - host.playerPosUni[1]));
         const lodDistance = map ? host.getFrameLodThresholdTiles() : 0;
         const baseX = map?.getRenderBaseTileX() ?? 0, baseZ = map?.getRenderBaseTileY() ?? 0;
 
@@ -525,46 +521,5 @@ export function getFrameOverheadPrayerMaxEntries(host: WebGLOsrsRendererHost, ):
 
         if (!isTouchDevice) return 256;
         return host.syncBrowserQualityProfile().overheadPrayerMaxEntries | 0;
-    
-}
-
-export function updateAnimatedDrawRanges(host: WebGLOsrsRendererHost, 
-        map: WebGLMapSquare,
-        drawCall: DrawCall,
-        drawRanges: DrawRange[],
-        transparent: boolean,
-        isInteract: boolean,
-        isLod: boolean,
-    ): void {
-
-        if (!map.locsAnimated.length) {
-            return;
-        }
-
-        for (const loc of map.locsAnimated) {
-            const frames = transparent ? loc.anim.framesAlpha : loc.anim.frames;
-            if (!frames) {
-                continue;
-            }
-
-            const frame = frames[loc.drawFrame()];
-            if (!frame) {
-                continue;
-            }
-
-            const index = loc.getDrawRangeIndex(transparent, isInteract, isLod);
-            if (index === -1) {
-                continue;
-            }
-
-            drawCall.offsets[index] = frame[0];
-            (drawCall as any).numElements[index] = frame[1];
-            // Frame geometry is shared by multiple loc instances. Keep each
-            // instance's chunk identity instead of replacing it with that frame.
-            const range = drawRanges[index];
-            range[0] = frame[0];
-            range[1] = frame[1];
-            range[2] = frame[2];
-        }
     
 }

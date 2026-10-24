@@ -9,12 +9,13 @@ import { TimedObjectReplacementTask } from "../../../../task/impl/TimedObjectRep
 import { ItemIdentifiers } from "../../../../../util/ItemIdentifiers";
 import { Misc } from "../../../../../util/Misc";
 import { ObjectIdentifiers } from "../../../../../util/ObjectIdentifiers";
+import { World } from "../../../../World";
 
 const WEB_RESPAWN = 400;
 const SLASH_SOUND: Sound = Sound.SLASH_WEB;
 const FAIL_SLASH_SOUND: Sound = Sound.FAIL_SLASH_WEB;
 const ITEM_ON_WEB_ANIMATION: Animation = new Animation(911);
-let lastSlash: number;
+let lastSlashTick: number | null = null;
 const SHARP_ITEM_PATTERN = /(.*2h.*|.*sword.*|.*dagger.*|.*rapier.*|.*scimitar.*|.*halberd.*|.*spear.*|.*axe.*|.*excalibur.*|.*claws.*|.*whip.*)/i;
 
 /**
@@ -46,8 +47,8 @@ export class WebHandler {
 
         if (web.getDefinition().getName().toLowerCase() !== "web") return;
 
-        const currentTime = Date.now();
-        if (currentTime - lastSlash < 4000) return;
+        const cycle = World.getProcessCycle();
+        if (lastSlashTick !== null && cycle - lastSlashTick < 7) return;
 
         player.performAnimation(itemOnWeb ? ITEM_ON_WEB_ANIMATION : new Animation(player.getAttackAnim()));
 
@@ -61,7 +62,7 @@ export class WebHandler {
             player.sendMessage("You fail to slash the web.");
         }
 
-        lastSlash = currentTime;
+        lastSlashTick = cycle;
     }
 }
 

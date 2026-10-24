@@ -6,6 +6,7 @@ import type { VarManager } from "../../rs/config/vartype/VarManager";
 import type { Cs2Vm } from "../../rs/cs2/Cs2Vm";
 import type { Script as Cs2Script } from "../../rs/cs2/Script";
 import { WorldMapArchiveRenderer } from "../../rs/map/WorldMapArchiveRenderer";
+import type { RenderDataWorkerPool } from "../worker/RenderDataWorkerPool";
 import { WorldMapState } from "../../rs/map/WorldMapArea";
 import type { TextureLoader } from "../../rs/texture/TextureLoader";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
@@ -44,6 +45,7 @@ export type WorldMapControllerDeps = {
     getMapElementTypeLoader: () => MapElementTypeLoader | undefined;
     getTextureLoader: () => TextureLoader;
     getVarManager: () => VarManager | undefined;
+    getWorkerPool?: () => RenderDataWorkerPool | undefined;
     getWidgetManager: () => any;
     getCs2Vm: () => Cs2Vm | undefined;
     getRenderer: () => { canvas?: any } | undefined;
@@ -70,7 +72,8 @@ export class WorldMapController {
     pendingWorldMapDragDisplayX: number | undefined;
     pendingWorldMapDragDisplayY: number | undefined;
 
-    private worldMapArchiveRenderer?: WorldMapArchiveRenderer;
+    private worldMapArchiveRenderer?: Pick<WorldMapArchiveRenderer, "loadTile">;
+    private fallbackArchiveRenderer?: WorldMapArchiveRenderer;
     worldMapImageTiles: Map<number, WorldMapImageTile> = new Map();
     worldMapImageAccess: Map<number, number> = new Map();
     pendingWorldMapImageIds: Set<number> = new Set();
@@ -103,6 +106,11 @@ export class WorldMapController {
             getMinimapImageKey: (mapX, mapY, level) =>
                 this.deps.getMinimapImageKey(mapX, mapY, level),
             getWorldMapArchiveRenderer: () => this.worldMapArchiveRenderer,
+            cancelTileLoads: (clearCache) => {
+                this.deps.getWorkerPool?.()?.cancelWorldMapTiles(clearCache);
+                if (clearCache) this.fallbackArchiveRenderer?.clear();
+                else this.fallbackArchiveRenderer?.cancelLoads();
+            },
             loadMapElement: (elementId) => this.deps.getMapElementTypeLoader()?.load?.(elementId | 0),
             getWidgetManager: () => this.deps.getWidgetManager(),
             evictTextureKey: (key) => {
@@ -118,6 +126,7 @@ export class WorldMapController {
     }
 
     setWorldMapState(state: WorldMapState): void {
+        this.clearWorldMapImages();
         state.setElementMetadataResolver((elementId) => {
             try {
                 const element = this.deps.getMapElementTypeLoader()?.load?.(elementId | 0);
@@ -140,6 +149,29 @@ export class WorldMapController {
     }
 
     initArchiveRenderer(): void {
+        this.deps.getWorkerPool?.()?.cancelWorldMapTiles(true);
+        this.fallbackArchiveRenderer?.clear();
+        this.fallbackArchiveRenderer = undefined;
+        this.worldMapArchiveRenderer = {
+            loadTile: async (area, mapX, mapY, pixelsPerTile) => {
+                if (!area) return undefined;
+                const pool = this.deps.getWorkerPool?.();
+                if (pool) {
+                    const { id, internalName, backgroundColor, regionLowX, regionHighX, regionLowY, regionHighY } = area;
+                    const reply = await pool.loadWorldMapTile({
+                        area: { id, internalName, backgroundColor, regionLowX, regionHighX, regionLowY, regionHighY },
+                        mapX, mapY, pixelsPerTile,
+                    });
+                    if (reply.supported) return reply.tile;
+                }
+                // Older worker environments can still decode through a DOM image/canvas.
+                this.fallbackArchiveRenderer ??= this.createFallbackRenderer();
+                return this.fallbackArchiveRenderer?.loadTile(area, mapX, mapY, pixelsPerTile);
+            },
+        };
+    }
+
+    private createFallbackRenderer(): WorldMapArchiveRenderer | undefined {
         try {
             let mapScenes: ReturnType<CacheLoaderFactory["getMapScenes"]> = [];
             try {
@@ -147,7 +179,7 @@ export class WorldMapController {
             } catch (error) {
                 console.log("[WorldMapController] Failed to load world map scene sprites", { error });
             }
-            this.worldMapArchiveRenderer = new WorldMapArchiveRenderer({
+            return new WorldMapArchiveRenderer({
                 cacheSystem: this.deps.getCacheSystem(),
                 locTypeLoader: this.deps.getLocTypeLoader(),
                 mapElementTypeLoader: this.deps.getMapElementTypeLoader(),
@@ -155,12 +187,13 @@ export class WorldMapController {
                 textureLoader: this.deps.getTextureLoader(),
                 mapScenes,
                 varManager: this.deps.getVarManager(),
+                maxRenderedRegionBytes: 0,
             });
         } catch (error) {
-            this.worldMapArchiveRenderer = undefined;
             console.log("[WorldMapController] Failed to initialise world map archive renderer", {
                 error,
             });
+            return undefined;
         }
     }
 
@@ -202,6 +235,10 @@ export class WorldMapController {
 
     cycle(): boolean {
         return !!this.worldMapState?.cycle?.();
+    }
+
+    hasPendingImages(): boolean {
+        return this.pendingWorldMapImageIds.size > 0 || (this.deps.getWorkerPool?.()?.pendingWorldMapTiles ?? 0) > 0;
     }
 
     getWorldMapImageTile(

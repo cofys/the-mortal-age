@@ -14,10 +14,7 @@ export const POSE_ROWS = 256;
 export const POSE_WIDTH = 255 * 3;
 const IDENTITY_MAT4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
-/** Dynamic-offset stride; 256 matches bindings.ts, grown if the device needs more. */
-export function actorUniformStride(device: GPUDevice): number {
-    return Math.max(256, device.limits.minUniformBufferOffsetAlignment || 1);
-}
+export type ActorPose = { row: number; matrices: Float32Array };
 
 /** group(3): the per-frame actor data texture and the GPU player pose texture. */
 export class ActorDataTexture {
@@ -26,6 +23,8 @@ export class ActorDataTexture {
     readonly bindGroup: GPUBindGroup;
     private uploaded = new Uint16Array(0);
     private uploadedRows = 0;
+    private readonly uploadedPoseKeys: string[] = [];
+    private readonly uploadedPoseMatrices: Float32Array[] = [];
 
     constructor(device: GPUDevice, layout: GPUBindGroupLayout, label: string) {
         this.texture = device.createTexture({
@@ -49,15 +48,30 @@ export class ActorDataTexture {
         });
     }
 
-    /** Uploads the first `texels` texels of `rows` POSE_WIDTH-texel rows packed in `data`. */
-    updatePoses(device: GPUDevice, data: Float32Array, texels: number, rows: number): void {
-        if (rows <= 0 || texels <= 0) return;
+    hasPose(key: string, row: number, matrices: Float32Array): boolean {
+        return this.uploadedPoseKeys[row] === key && this.uploadedPoseMatrices[row] === matrices;
+    }
+
+    /** Streaming can finish a pose at the same key, so compare its immutable matrix array too. */
+    updatePoses(device: GPUDevice, data: Float32Array, texels: number, poses: ReadonlyMap<string, ActorPose>): void {
+        let first = POSE_ROWS, last = -1;
+        for (const [key, { row, matrices }] of poses) {
+            if (this.hasPose(key, row, matrices)) continue;
+            first = Math.min(first, row);
+            last = Math.max(last, row);
+        }
+        if (last < first || texels <= 0) return;
+        const rows = last - first + 1;
         device.queue.writeTexture(
-            { texture: this.poseTexture },
-            data,
+            { texture: this.poseTexture, origin: { x: 0, y: first } },
+            data.subarray(first * POSE_WIDTH * 4, (last + 1) * POSE_WIDTH * 4),
             { bytesPerRow: POSE_WIDTH * 16, rowsPerImage: rows },
             { width: texels, height: rows, depthOrArrayLayers: 1 },
         );
+        for (const [key, { row, matrices }] of poses) {
+            this.uploadedPoseKeys[row] = key;
+            this.uploadedPoseMatrices[row] = matrices;
+        }
     }
 
     /** Uploads `count` actors (8 uint16 each) from the start of `data`. */
@@ -87,6 +101,8 @@ export class ActorDataTexture {
         this.texture.destroy();
         this.poseTexture.destroy();
         this.uploaded = new Uint16Array(0);
+        this.uploadedPoseKeys.length = 0;
+        this.uploadedPoseMatrices.length = 0;
     }
 }
 
@@ -120,7 +136,7 @@ function createHeightMapTexture(device: GPUDevice, mapData: SdMapData): GPUTextu
 }
 
 /**
- * Per-map group(2): a dynamic-offset uniform buffer plus the map's own height map texture.
+ * Per-map group(2): packed actor records plus the map's own height map texture.
  * One uniform entry per draw item; entries are reused by the opaque and alpha passes.
  */
 export class MapActorUniforms {
@@ -131,12 +147,14 @@ export class MapActorUniforms {
 
     private readonly device: GPUDevice;
     private readonly layout: GPUBindGroupLayout;
-    private readonly stride: number;
+    private readonly stride = ACTOR_UNIFORM_BYTES;
     private capacity = 0;
     private buffer: GPUBuffer | undefined;
     private bindGroup: GPUBindGroup | undefined;
     private scratch: Float32Array;
     private view: DataView;
+    private uploaded = new Uint32Array(0);
+    private uploadedCount = -1;
     /** View-space deck placement, shared by every entry on this map (identity otherwise). */
     private worldEntityTransform: Float32Array = IDENTITY_MAT4;
 
@@ -145,17 +163,15 @@ export class MapActorUniforms {
     constructor(
         device: GPUDevice,
         layout: GPUBindGroupLayout,
-        stride: number,
         mapData: SdMapData,
     ) {
         this.device = device;
         this.layout = layout;
-        this.stride = stride;
         this.borderSize = mapData.borderSize | 0;
         this.renderPosX = mapData.renderPosX ?? mapData.mapX;
         this.renderPosY = mapData.renderPosY ?? mapData.mapY;
         this.heightTexture = createHeightMapTexture(device, mapData);
-        this.scratch = new Float32Array(stride / 4);
+        this.scratch = new Float32Array(this.stride / 4);
         this.view = new DataView(this.scratch.buffer);
     }
 
@@ -210,6 +226,14 @@ export class MapActorUniforms {
     flush(): void {
         if (!this.buffer) return;
         if (this.entryCount > 0) {
+            const words = new Uint32Array(this.scratch.buffer, 0, this.entryCount * this.stride / 4);
+            if (this.uploadedCount === this.entryCount) {
+                let equal = true;
+                for (let i = 0; i < words.length; i++) {
+                    if (words[i] !== this.uploaded[i]) { equal = false; break; }
+                }
+                if (equal) return;
+            }
             this.device.queue.writeBuffer(
                 this.buffer,
                 0,
@@ -217,15 +241,14 @@ export class MapActorUniforms {
                 0,
                 this.entryCount * this.stride,
             );
+            if (this.uploaded.length < words.length) this.uploaded = new Uint32Array(words.length);
+            this.uploaded.set(words);
+            this.uploadedCount = this.entryCount;
         }
     }
 
-    bindGroupFor(entry: number): GPUBindGroup | undefined {
+    bindGroupFor(): GPUBindGroup | undefined {
         return this.bindGroup;
-    }
-
-    offsetFor(entry: number): number {
-        return entry * this.stride;
     }
 
     destroy(): void {
@@ -233,10 +256,13 @@ export class MapActorUniforms {
         this.buffer?.destroy();
         this.buffer = undefined;
         this.bindGroup = undefined;
+        this.uploaded = new Uint32Array(0);
+        this.uploadedCount = -1;
     }
 
     private grow(capacity: number): void {
         this.capacity = capacity;
+        this.uploadedCount = -1;
         const scratch = new Float32Array(capacity * (this.stride / 4));
         scratch.set(this.scratch);
         this.scratch = scratch;
@@ -245,7 +271,7 @@ export class MapActorUniforms {
         this.buffer = this.device.createBuffer({
             label: "webgpu actor uniforms",
             size: capacity * this.stride,
-            usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+            usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
         });
         this.bindGroup = this.device.createBindGroup({
             label: "webgpu actor uniforms",
@@ -253,7 +279,7 @@ export class MapActorUniforms {
             entries: [
                 {
                     binding: 0,
-                    resource: { buffer: this.buffer, offset: 0, size: this.stride },
+                    resource: { buffer: this.buffer, offset: 0, size: capacity * this.stride },
                 },
                 { binding: 1, resource: this.heightTexture.createView({ dimension: "2d-array" }) },
             ],
@@ -270,44 +296,37 @@ export interface GpuGeometry {
     labels?: GPUBuffer;
 }
 
-function createGeometryBuffer(device: GPUDevice, data: Uint8Array, usage: GPUBufferUsageFlags): GPUBuffer {
-    const size = Math.max(4, Math.ceil(data.byteLength / 4) * 4);
-    const buffer = device.createBuffer({ size, usage });
-    if (data.byteLength > 0) {
-        if (data.byteLength % 4 === 0) {
-            device.queue.writeBuffer(buffer, 0, data);
-        } else {
-            const padded = new Uint8Array(size);
-            padded.set(data);
-            device.queue.writeBuffer(buffer, 0, padded);
-        }
-    }
-    return buffer;
-}
-
-function createIndexBuffer(device: GPUDevice, data: Int32Array): GPUBuffer {
-    const size = Math.max(4, data.byteLength);
-    const buffer = device.createBuffer({ size, usage: GPU_BUFFER_USAGE.INDEX | GPU_BUFFER_USAGE.COPY_DST });
-    if (data.length > 0) {
-        device.queue.writeBuffer(buffer, 0, data);
-    }
-    return buffer;
-}
-
 /**
- * GPU mirror of the CPU geometry caches (DynamicNpcAnimLoader / GfxCache). Evicted buffers
- * are destroyed at the start of the next frame, after the draws that reference them have
- * been submitted.
+ * GPU mirror of the CPU geometry caches (DynamicNpcAnimLoader / GfxCache). Evictions
+ * stay untouched until the next frame's uploads, after their draws have been submitted.
+ * Queue-ordered writes can then reuse the buffers even while those draws are in flight.
  */
 export class ActorGeometryCache {
-    private readonly device: GPUDevice;
     private readonly entries = new Map<string, GpuGeometry>();
+    private readonly emptyEntries = new Set<string>();
     private retired: GPUBuffer[] = [];
-    private readonly maxEntries: number;
+    private readonly pooled = new Map<string, GPUBuffer[]>();
+    private pooledBytes = 0;
 
-    constructor(device: GPUDevice, maxEntries: number = 1024) {
-        this.device = device;
-        this.maxEntries = maxEntries;
+    constructor(
+        private readonly device: GPUDevice,
+        private readonly maxEntries: number = 1024,
+        private readonly maxPooledBytes: number = 16 * 1024 * 1024,
+    ) {}
+
+    /** Undefined means evicted/unbuilt; null means this pass was built and has no faces. */
+    get(key: string): GpuGeometry | null | undefined {
+        const geometry = this.entries.get(key);
+        if (geometry) {
+            this.entries.delete(key);
+            this.entries.set(key, geometry);
+            return geometry;
+        }
+        if (this.emptyEntries.delete(key)) {
+            this.emptyEntries.add(key);
+            return null;
+        }
+        return undefined;
     }
 
     getOrCreate(
@@ -316,25 +335,26 @@ export class ActorGeometryCache {
         indices: Int32Array,
         labels?: Uint32Array,
     ): GpuGeometry | undefined {
-        if (vertices.byteLength === 0 || indices.length === 0) return undefined;
-        const existing = this.entries.get(key);
-        if (existing) {
-            // LRU touch.
-            this.entries.delete(key);
-            this.entries.set(key, existing);
-            return existing;
+        if (vertices.byteLength === 0 || indices.length === 0) {
+            this.emptyEntries.delete(key);
+            this.emptyEntries.add(key);
+            if (this.emptyEntries.size > this.maxEntries) {
+                this.emptyEntries.delete(this.emptyEntries.values().next().value!);
+            }
+            return undefined;
         }
+        const existing = this.get(key);
+        if (existing) return existing;
+        this.emptyEntries.delete(key);
         const geometry: GpuGeometry = {
-            vertices: createGeometryBuffer(
-                this.device,
+            vertices: this.createBuffer(
                 vertices,
                 GPU_BUFFER_USAGE.VERTEX | GPU_BUFFER_USAGE.COPY_DST,
             ),
-            indices: createIndexBuffer(this.device, indices),
+            indices: this.createBuffer(indices, GPU_BUFFER_USAGE.INDEX | GPU_BUFFER_USAGE.COPY_DST),
             indexCount: indices.length,
             labels: labels
-                ? createGeometryBuffer(
-                      this.device,
+                ? this.createBuffer(
                       new Uint8Array(labels.buffer, labels.byteOffset, labels.byteLength),
                       GPU_BUFFER_USAGE.VERTEX | GPU_BUFFER_USAGE.COPY_DST,
                   )
@@ -345,9 +365,19 @@ export class ActorGeometryCache {
         return geometry;
     }
 
-    /** Call once per frame before uploading new geometry. */
+    /** Call after submitting the previous frame, before uploading this frame's geometry. */
     beginFrame(): void {
-        for (const buffer of this.retired) buffer.destroy();
+        for (const buffer of this.retired) {
+            if (this.pooledBytes + buffer.size > this.maxPooledBytes) {
+                buffer.destroy();
+                continue;
+            }
+            const key = `${buffer.usage}:${buffer.size}`;
+            let buffers = this.pooled.get(key);
+            if (!buffers) this.pooled.set(key, buffers = []);
+            buffers.push(buffer);
+            this.pooledBytes += buffer.size;
+        }
         this.retired.length = 0;
     }
 
@@ -358,7 +388,37 @@ export class ActorGeometryCache {
             entry.labels?.destroy();
         }
         this.entries.clear();
-        this.beginFrame();
+        this.emptyEntries.clear();
+        for (const buffer of this.retired) buffer.destroy();
+        this.retired.length = 0;
+        for (const buffers of this.pooled.values()) {
+            for (const buffer of buffers) buffer.destroy();
+        }
+        this.pooled.clear();
+        this.pooledBytes = 0;
+    }
+
+    private createBuffer(data: Uint8Array | Int32Array, usage: GPUBufferUsageFlags): GPUBuffer {
+        const size = Math.max(4, Math.ceil(data.byteLength / 4) * 4);
+        // Animated poses keep their topology, so exact sizes reuse storage without over-allocation.
+        const key = `${usage}:${size}`;
+        const buffers = this.pooled.get(key);
+        const pooled = buffers?.pop();
+        if (pooled) {
+            this.pooledBytes -= pooled.size;
+            if (!buffers!.length) this.pooled.delete(key);
+        }
+        const buffer = pooled ?? this.device.createBuffer({ size, usage });
+        if (data.byteLength > 0) {
+            if (data.byteLength % 4 === 0) {
+                this.device.queue.writeBuffer(buffer, 0, data);
+            } else {
+                const padded = new Uint8Array(size);
+                padded.set(data);
+                this.device.queue.writeBuffer(buffer, 0, padded);
+            }
+        }
+        return buffer;
     }
 
     private evictIfNeeded(): void {

@@ -1335,6 +1335,7 @@ module.exports = function registerPandemoniumQuest(api) {
     if (interfaceId === OBJECTBOX) player.getPacketSender().sendVarbit(HINT_ARROW_VARBIT, 0).clearHintArrow();
   });
   api.onPlayerLogin(migrateStage);
+  api.onServerStartup(installQuestObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);

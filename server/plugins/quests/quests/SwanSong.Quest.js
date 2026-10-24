@@ -1418,6 +1418,7 @@ module.exports = function registerSwanSongQuest(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onObjectInteraction(handleObjectInteraction);
   api.onZoneEnter(COLONY_ZONE, handleZoneEnter);
+  api.onServerStartup(installObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

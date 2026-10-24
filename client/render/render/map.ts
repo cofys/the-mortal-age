@@ -1,3 +1,4 @@
+import { LocAnimated } from "../loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -188,6 +189,7 @@ import {
 import { KNOWN_WATER_TEXTURE_IDS } from "../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 import { RENDER_CONSTANTS } from "./constants";
+import { cancelPendingMapUploads } from "./streaming";
 
 export function resolveLocReloadBatchMap(host: WebGLOsrsRendererHost, 
         batchId: number,
@@ -258,7 +260,6 @@ export function loadMap(host: WebGLOsrsRendererHost,
         waterTextures: Texture,
         sceneUniformBuffer: UniformBuffer,
         mapData: SdMapData,
-        time: number,
     ): void {
 
         const { mapX, mapY } = mapData;
@@ -288,6 +289,7 @@ export function loadMap(host: WebGLOsrsRendererHost,
             (isLocUpdate || isLocGeometryUpdate || isDoorOnlyUpdate) &&
             existing instanceof WebGLMapSquare
         ) {
+            WebGLMapSquare.cancelPreparedLoad(mapData);
             if (isDoorOnlyUpdate && mapData.doorOnly) {
                 existing.refreshDoorGeometry(
                     host.app,
@@ -351,17 +353,8 @@ export function loadMap(host: WebGLOsrsRendererHost,
         host.registerMinimapData(mapData);
 
         const frameCount = host.stats.frameCount;
-        // -1.0 makes loadAlpha = 1.0 immediately in the vertex shader,
-        // skipping the 1-second fog fade-in for teleport-loaded maps. A world entity's map (a
-        // boat deck) never fades in: it is reloaded whenever the boat is respawned or rebuilt
-        // (a facility built, a part swapped, the boat re-added while sailing), and each reload
-        // would otherwise fade it in again as if it were new terrain.
-        const reuseTime =
-            existing instanceof WebGLMapSquare
-                ? existing.timeLoaded
-                : host.skipMapFadeIn || host.mapManager.worldEntityMapIds.has(mapId)
-                    ? -1.0
-                    : time;
+        // The grid appears atomically; individual upload times must not fade its squares separately.
+        const reuseTime = existing instanceof WebGLMapSquare ? existing.timeLoaded : -1.0;
         const reuseFrame = existing instanceof WebGLMapSquare ? existing.frameLoaded : frameCount;
 
         const loadedMap = WebGLMapSquare.load(
@@ -383,6 +376,11 @@ export function loadMap(host: WebGLOsrsRendererHost,
             reuseFrame,
             host.osrsClient.npcEcs,
         );
+
+        if (host.carriedLocAnimations) {
+            LocAnimated.carryOver(host.carriedLocAnimations, loadedMap.locsAnimated);
+            host.carriedLocAnimations = null;
+        }
 
         // For instances, set base world position for height sampling.
         // The height data is at source coordinates, not instance coordinates.
@@ -418,12 +416,11 @@ export function isValidMapData(host: WebGLOsrsRendererHost, mapData: SdMapData):
 }
 
 export function clearMaps(host: WebGLOsrsRendererHost, ): void {
-
+        cancelPendingMapUploads(host);
         host.mapManager.cleanUp();
         host.mapsToLoad.clear();
         host.pendingStreamMapsByGeneration.clear();
         host.observedGridRevision = -1;
-        host.skipMapFadeIn = false;
         host.activeStreamGeneration = 0;
         host.activeStreamExpectedMapIds.clear();
         host.pendingLocUpdates.clear();

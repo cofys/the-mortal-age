@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/definition/ItemDefinition");
@@ -32,9 +34,20 @@ const COLLECTIONS = [518, 519, 520, 521, 522, 523, 539, 540];
 const MARKET_BASE = 7900;
 const MARKET_STRIDE = 7;
 const FINISHED = 5;
-const OFFER_DELAY_MS = 5000;
+const OFFERS_ATTRIBUTE = "grand-exchange-offers";
+const LIMITS_ATTRIBUTE = "grand-exchange-limits";
+const LIMIT_WINDOW_MS = 4 * 60 * 60 * 1000;
+const OFFER_MIN_DELAY_MS = 5_000;
+const OFFER_MAX_DELAY_MS = 10 * 60_000;
+const OFFER_ILLIQUID_MIN_MS = 60_000;
+const OFFER_ILLIQUID_MAX_MS = 5 * 60_000;
+// At the guide price an offer has a tenth of the volume wait; crossing it by a
+// few percent cuts that further, while resting further away waits progressively longer.
+const OFFER_GUIDE_DELAY = 0.1;
+const OFFER_PRICE_SENSITIVITY = 50;
 const MAX = 0x7fffffff;
 const COINS = ItemIdentifiers.COINS;
+const MARKET_DATA_FILE = path.join(__dirname, "data", "grand-exchange.json");
 // OSRS: members get all 8 offer slots, free-to-play worlds the first 3.
 const usableSlots = () => (pluginApi.core.WorldDefinition.isMembersWorld() ? 8 : 3);
 const offers = new WeakMap();
@@ -42,6 +55,21 @@ const completionTimers = new WeakMap();
 const viewing = new WeakMap();
 const searching = new WeakSet();
 let pluginApi;
+let marketData;
+
+function loadMarketData() {
+  if (marketData) return marketData;
+  const { data } = JSON.parse(fs.readFileSync(MARKET_DATA_FILE, "utf8"));
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid grand-exchange.json: expected a data object");
+  }
+  return (marketData = data);
+}
+
+function marketQuote(itemId) {
+  const base = ItemDefinition.forId(itemId).unNote();
+  return loadMarketData()[base] ?? {};
+}
 
 function validItem(id) {
   if (!CacheDefinitions.hasItem(id)) return false;
@@ -60,6 +88,83 @@ function price(id) {
   // OSRS market quote from item-prices.json; store value for unquoted/custom items.
   const base = ItemDefinition.forId(id).unNote();
   return Math.max(1, Math.min(MAX, Math.floor(ItemDefinition.forId(base).getGrandExchangeValue()) || 1));
+}
+
+/** The price a sell offer receives: the live low, or the buy price where there is no split. */
+function sellPrice(id) {
+  const base = ItemDefinition.forId(id).unNote();
+  const definition = ItemDefinition.forId(base);
+  const value = definition.getGrandExchangeSellValue?.() ?? definition.getGrandExchangeValue();
+  return Math.max(1, Math.min(MAX, Math.floor(value) || 1));
+}
+
+function guidePrice(offer) {
+  if (!(offer?.itemId > 0)) return 1;
+  return offer.sell ? sellPrice(offer.itemId) : price(offer.itemId);
+}
+
+/** The price stored on the offer, or the guide for offers saved before prices were adjustable. */
+function offerPrice(offer) {
+  return Number.isInteger(offer?.price) && offer.price > 0 ? Math.min(MAX, offer.price) : guidePrice(offer);
+}
+
+/** Scripts 773/779 price controls: -1, +1, -5%, guide, +5% (custom entry is handled separately). */
+function changePrice(offer, slot) {
+  const current = offerPrice(offer);
+  if (slot === 8) return Math.max(1, current - 1);
+  if (slot === 9) return Math.min(MAX, current + 1);
+  if (slot === 10) return Math.max(1, Math.floor(current * 0.95));
+  if (slot === 11) return guidePrice(offer);
+  if (slot === 13) return Math.min(MAX, Math.ceil(current * 1.05));
+  return current;
+}
+
+function fillDelayMs(offer, random = Math.random) {
+  const volume = Number(marketQuote(offer.itemId).volume);
+  if (!Number.isFinite(volume) || volume <= 0) {
+    return OFFER_ILLIQUID_MIN_MS + random() * (OFFER_ILLIQUID_MAX_MS - OFFER_ILLIQUID_MIN_MS);
+  }
+  const quantity = Math.max(1, Number(offer.quantity) || 1);
+  const expectedMinutes = quantity / (volume / 1440);
+  // No order book: approximate resting liquidity from the distance to the guide.
+  // Overpaying a buy (or undercutting a sell) crosses faster; the reverse waits.
+  // ponytail: price-distance heuristic, replace with a resting order book if fill
+  // order needs to depend on the actual queue at each price.
+  const guide = guidePrice(offer);
+  const distance = guide > 0 ? (offerPrice(offer) - guide) / guide : 0;
+  const aggressiveness = offer.sell ? -distance : distance;
+  const priceFactor = OFFER_GUIDE_DELAY * Math.exp(-OFFER_PRICE_SENSITIVITY * aggressiveness);
+  const delay = expectedMinutes * 60_000 * (0.75 + 0.75 * random()) * priceFactor;
+  return Math.max(OFFER_MIN_DELAY_MS, Math.min(OFFER_MAX_DELAY_MS, delay));
+}
+
+function limitKey(itemId) {
+  return ItemDefinition.forId(itemId).unNote();
+}
+
+function limitEntry(player, itemId, now) {
+  const entry = player.getAttribute(LIMITS_ATTRIBUTE)?.[limitKey(itemId)];
+  return entry && now - entry.start < LIMIT_WINDOW_MS ? entry : undefined;
+}
+
+function itemLimit(itemId) {
+  const limit = Number(marketQuote(itemId).limit);
+  return Number.isFinite(limit) && limit > 0 ? limit : Infinity;
+}
+
+function remainingLimit(player, itemId, now = Date.now()) {
+  const limit = itemLimit(itemId);
+  if (limit === Infinity) return Infinity;
+  return Math.max(0, limit - (limitEntry(player, itemId, now)?.amount ?? 0));
+}
+
+function recordLimit(player, itemId, amount, now = Date.now()) {
+  let limits = player.getAttribute(LIMITS_ATTRIBUTE);
+  if (!limits) player.setAttribute(LIMITS_ATTRIBUTE, limits = {});
+  const key = limitKey(itemId);
+  const entry = limits[key];
+  if (entry && now - entry.start < LIMIT_WINDOW_MS) entry.amount += amount;
+  else limits[key] = { start: now, amount };
 }
 
 let quotedPrices;
@@ -86,8 +191,8 @@ function active(player, offer) {
 }
 
 function completedOffers(player) {
-  let slots = player.getAttribute("grand-exchange-offers");
-  if (!slots) player.setAttribute("grand-exchange-offers", slots = {});
+  let slots = player.getAttribute(OFFERS_ATTRIBUTE);
+  if (!slots) player.setAttribute(OFFERS_ATTRIBUTE, slots = {});
   return slots;
 }
 
@@ -124,7 +229,7 @@ function marketVarps(slot, offer) {
   return {
     [OFFER_ITEMS[slot]]: -1,
     [base + 6]: offer?.itemId ?? -1,
-    [base]: offer ? price(offer.itemId) : 0,
+    [base]: offer ? offerPrice(offer) : 0,
     [base + 1]: offer?.quantity ?? 0,
     // An aborted offer traded nothing (the client draws its bar red).
     [base + 2]: offer?.finished && !offer.aborted ? offer.quantity : 0,
@@ -174,7 +279,7 @@ function refresh(player, offer) {
     .sendConfig(SELECTED_ITEM, offer.itemId)
     .sendVarbit(SELL, offer.sell ? 1 : 0)
     .sendVarbit(QUANTITY, offer.quantity)
-    .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? price(offer.itemId) : 1)
+    .sendVarpLong(PRICE_LONG, offer.itemId > 0 ? offerPrice(offer) : 1)
     .sendVarbit(SELECTED_SLOT, offer.slot + 1)
     .sendString(examine(offer.itemId), SETUP_DESC);
 }
@@ -229,6 +334,7 @@ function chooseItem(player, offer) {
     closeSearch(player);
     offer.itemId = id;
     offer.quantity = 1;
+    offer.price = price(id);
     refresh(player, offer);
   } });
   searching.add(player);
@@ -249,7 +355,13 @@ function start(player, sell, slot = 0, itemId = -1) {
     }
     slot = free;
   }
-  const offer = { sell, slot, itemId, quantity: 1 };
+  const offer = {
+    sell,
+    slot,
+    itemId,
+    quantity: 1,
+    price: itemId > 0 ? (sell ? sellPrice(itemId) : price(itemId)) : 1,
+  };
   offers.set(player, offer);
   player.setEnteredAmountAction(null);
   player.setEnteredSyntaxAction(null);
@@ -260,10 +372,19 @@ function start(player, sell, slot = 0, itemId = -1) {
 function confirm(player, offer) {
   if (!active(player, offer) || !exchangeable(offer.itemId)) return;
   const amount = offer.quantity;
-  const total = amount * price(offer.itemId);
+  const unitPrice = offerPrice(offer);
+  offer.price = unitPrice;
+  const total = amount * unitPrice;
   const sender = player.getPacketSender();
-  if (!Number.isInteger(amount) || amount < 1 || amount > MAX || !Number.isSafeInteger(total) || total > MAX) {
+  if (!Number.isInteger(unitPrice) || unitPrice < 1 || unitPrice > MAX ||
+      !Number.isInteger(amount) || amount < 1 || amount > MAX ||
+      !Number.isSafeInteger(total) || total > MAX) {
     sender.sendMessage("Choose a smaller quantity (maximum trade value is 2,147,483,647 coins).");
+    return;
+  }
+  const remaining = remainingLimit(player, offer.itemId);
+  if (amount > remaining) {
+    sender.sendMessage(`You can only buy or sell ${itemLimit(offer.itemId)} of that item every 4 hours (${remaining} remaining).`);
     return;
   }
   const inventory = player.getInventory();
@@ -289,8 +410,9 @@ function confirm(player, offer) {
     return;
   }
   inventory.setItems(result.getItems()).refreshItems();
-  const finished = { ...offer, total, finished: false, completesAt: Date.now() + OFFER_DELAY_MS };
+  const finished = { ...offer, total, finished: false, completesAt: Date.now() + fillDelayMs(offer) };
   completedOffers(player)[offer.slot] = finished;
+  recordLimit(player, offer.itemId, amount);
   saveOffers(player);
   offers.delete(player);
   viewing.set(player, offer.slot);
@@ -300,19 +422,33 @@ function confirm(player, offer) {
       { [SELECTED_SLOT]: offer.slot + 1 },
       { [COLLECTIONS[offer.slot]]: collection(finished) })
     .sendString(examine(offer.itemId), DETAILS_DESC)
-    .sendMessage("Offer placed. It will complete in five seconds.");
+    .sendMessage("Offer placed. It will fill when the market meets your price.");
   scheduleCompletion(player, finished);
 
 }
 
-function collect(player, action, slot = viewing.get(player)) {
+/**
+ * Script 9909's collection menu: a single noteable item offers Collect-item (1)
+ * and Collect-note (2); a stack offers Collect-notes (1) and Collect-items (2).
+ * A non-noteable item only has Collect (2) and Bank (3).
+ */
+function collectionOutputId(baseId, amount, action, forceNotes = false) {
+  const noteId = ItemDefinition.forId(baseId).getNoteId();
+  const noteable = noteId >= 0 && ItemDefinition.forId(noteId).isNoted();
+  if (!noteable || action === 3) return baseId;
+  if (forceNotes) return noteId;
+  if (action === 2) return amount === 1 ? noteId : baseId;
+  if (action === 1) return amount > 1 ? noteId : baseId;
+  return baseId;
+}
+
+function collect(player, action, slot = viewing.get(player), forceNotes = false) {
   const offer = completedOffers(player)[slot];
   if (!offer?.finished) return;
   const paid = payout(offer);
   const baseId = paid.coins ? COINS : ItemDefinition.forId(paid.itemId).unNote();
-  const noteId = ItemDefinition.forId(baseId).getNoteId();
-  const outputId = action === 1 && noteId >= 0 && ItemDefinition.forId(noteId).isNoted() ? noteId : baseId;
   const outputAmount = paid.amount;
+  const outputId = collectionOutputId(baseId, outputAmount, action, forceNotes);
   const inventory = player.getInventory();
   const destination = action === 3 ? player.getBank(Bank.getTabForItem(player, baseId)) : inventory;
   const result = action === 3 ? new Bank(player) : new Inventory(player);
@@ -374,7 +510,7 @@ function abort(player, slot = viewing.get(player)) {
 /** The Collect button (465:6, dynamic child 0): op 1 to the inventory (as notes), op 2 to the bank. */
 function collectAll(player, action) {
   const to = action === 2 ? 3 : 1;
-  for (const slot of Object.keys(completedOffers(player)).map(Number)) collect(player, to, slot);
+  for (const slot of Object.keys(completedOffers(player)).map(Number)) collect(player, to, slot, to === 1);
 }
 
 function openGrandExchange({ player }) {
@@ -425,7 +561,7 @@ function openGrandExchange({ player }) {
     .sendInterfaceFlagsRange(uid(23), 0, 1, 2)
     // Same item operations as the normal inventory panel.
     .sendInterfaceFlagsRange(SIDE_ITEMS, 0, 27, 1086);
-  sender.sendMessage("Instant GE: search for an item to buy, or sell from your inventory. Fixed guide prices; no fees.");
+  sender.sendMessage("Grand Exchange: live guide prices. Adjust the price if you like; fills depend on trade volume and each item has a four-hour limit.");
   return true;
 }
 
@@ -458,7 +594,7 @@ function handleCollectionButton({ player, buttonId, slot, action }) {
   if (player.getInterfaceId() !== GE_COLLECT) return true;
   const child = buttonId & 0xffff;
   if ((child === 3 || child === 4) && action === 1) {
-    for (const index of Object.keys(completedOffers(player)).map(Number)) collect(player, child === 4 ? 3 : 1, index);
+    for (const index of Object.keys(completedOffers(player)).map(Number)) collect(player, child === 4 ? 3 : 1, index, child === 3);
   } else if (child >= 5 && child <= 12 && slot === 3 && action >= 1 && action <= 3) {
     collect(player, action, child - 5);
   }
@@ -520,21 +656,50 @@ function handleExchangeButton({ player, buttonId, slot, action }) {
       refresh(player, offer);
     } });
     player.getPacketSender().sendEnterAmountPrompt("How many would you like to trade?");
-  } else if (slot >= 8 && slot <= 16) {
-    player.sendMessage("This exchange uses fixed guide prices.");
+  } else if (slot >= 8 && slot <= 13) {
+    if (slot === 12) {
+      player.setEnteredAmountAction({ execute: function handleOfferPrice(amount) {
+        if (!active(player, offer) || !Number.isInteger(amount) || amount < 1 || amount > MAX) return;
+        offer.price = amount;
+        refresh(player, offer);
+      } });
+      player.getPacketSender().sendEnterAmountPrompt(
+        offer.sell ? "How much would you like to sell each item for?" : "How much would you like to pay for each item?",
+      );
+    } else {
+      offer.price = changePrice(offer, slot);
+    }
   }
   refresh(player, offer);
   return true;
 }
 
 const COLLECTION_BUTTONS = Array.from({ length: 10 }, (_, i) => collectUid(i + 3));
-const EXCHANGE_BUTTONS = [uid(4), uid(6), uid(23), uid(24), uid(26), uid(30), ...Array.from({ length: 8 }, (_, i) => uid(i + 7))];
+// Child 34 is the offer setup panel; its quantity and price controls are dynamic children (slot 1-13).
+const EXCHANGE_BUTTONS = [uid(4), uid(6), uid(23), uid(24), uid(26), uid(30), uid(34), ...Array.from({ length: 8 }, (_, i) => uid(i + 7))];
 
 module.exports = {
   name: "GrandExchange",
+  _test: {
+    price,
+    sellPrice,
+    changePrice,
+    collectionOutputId,
+    fillDelayMs,
+    remainingLimit,
+    recordLimit,
+    LIMITS_ATTRIBUTE,
+    LIMIT_WINDOW_MS,
+    OFFERS_ATTRIBUTE,
+    setMarketData: (data) => {
+      marketData = data;
+    },
+  },
   register(api) {
     pluginApi = api;
-    api.persistAttribute("grand-exchange-offers", {});
+    loadMarketData();
+    api.persistAttribute(OFFERS_ATTRIBUTE, {});
+    api.persistAttribute(LIMITS_ATTRIBUTE, {});
     api.onPlayerLogin(({ player }) => {
       for (const offer of Object.values(completedOffers(player))) scheduleCompletion(player, offer);
     });

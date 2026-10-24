@@ -4,6 +4,7 @@ const path = require("node:path");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 const { PluginManager } = require("../dist/plugins/PluginManager");
+const { World } = require("../dist/game/World");
 const core = PluginManager.getCoreApi();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
@@ -101,7 +102,7 @@ test("Hamstring multiplies the actual run drain and refreshes without stacking",
   assert.equal(modifier(victim, 0.5), 3);
   special.combatMethod.handleAfterHitEffects(hit);
   assert.equal(modifier(victim, 0.5), 3);
-  attributes.set("morrigans-throwing-axe:hamstring-until", Date.now() - 1);
+  attributes.set("morrigans-throwing-axe:hamstring-until", World.getProcessCycle() - 1);
   assert.equal(modifier(victim, 0.5), 0.5);
 });
 

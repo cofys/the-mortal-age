@@ -49,9 +49,14 @@ export class IndexSkeletalSeqLoader implements SkeletalSeqLoader {
             return undefined;
         }
 
-        const skeletalSeq = SkeletalSeq.load(this.baseLoader, id, file.data);
-        this.seqs.set(id, skeletalSeq);
-        return skeletalSeq;
+        try {
+            const skeletalSeq = SkeletalSeq.load(this.baseLoader, id, file.data);
+            this.seqs.set(id, skeletalSeq);
+            return skeletalSeq;
+        } catch (e) {
+            if (!isGroupMissingError(e)) throw e;
+            return undefined;
+        }
     }
 
     clearCache(): void {

@@ -70,11 +70,8 @@ function takeFromOffice(player, slot, count) {
 
 /** How many of `entry` the inventory can take right now. */
 function room(player, entry) {
-  const inventory = player.getInventory();
-  if (Common.core().ItemDefinition.forId(entry.id).isStackable()) {
-    return inventory.getAmount(entry.id) > 0 || inventory.getFreeSlots() > 0 ? entry.amount : 0;
-  }
-  return Math.min(entry.amount, inventory.getFreeSlots());
+  const { Item } = Common.core();
+  return player.getInventory().getAddableAmount(new Item(entry.id, entry.amount, entry.meta));
 }
 
 function charge(player, fee) {
@@ -173,23 +170,17 @@ function takeEverything({ player }) {
 /** What Take-All moves: each stored stack in turn, as far as the inventory holds it. */
 function plan(player, office) {
   const inventory = player.getInventory();
-  let free = inventory.getFreeSlots();
-  const stacked = new Set();
+  // Reserve capacity on a copy, including metadata and stack headroom, before charging.
+  const planned = new inventory.constructor(player);
+  planned.setItems(inventory.getCopiedItems());
+  const { Item } = Common.core();
   const moves = [];
   office.forEach((entry, slot) => {
     if (!entry) return;
-    if (Common.core().ItemDefinition.forId(entry.id).isStackable()) {
-      if (!stacked.has(entry.id) && inventory.getAmount(entry.id) === 0) {
-        if (free === 0) return;
-        free--;
-      }
-      stacked.add(entry.id);
-      moves.push({ slot, count: entry.amount, fee: entry.fee });
-      return;
-    }
-    const count = Math.min(entry.amount, free);
+    const item = new Item(entry.id, entry.amount, entry.meta);
+    const count = planned.getAddableAmount(item);
     if (count <= 0) return;
-    free -= count;
+    planned.add(item.setAmount(count), false);
     moves.push({ slot, count, fee: entry.fee });
   });
   return moves;

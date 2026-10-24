@@ -10,6 +10,7 @@ const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/imp
 const { ObjectManager } = require("../../src/main/typescript/elvarg/game/entity/impl/object/ObjectManager");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
 const { ObjectIdentifiers } = require("../../src/main/typescript/elvarg/util/ObjectIdentifiers");
+const { World } = require("../../src/main/typescript/elvarg/game/World");
 
 const KEY_IDS = Object.freeze([ItemIdentifiers.LOOT_KEY, ItemIdentifiers.LOOT_KEY_2, ItemIdentifiers.LOOT_KEY_3, ItemIdentifiers.LOOT_KEY_4, ItemIdentifiers.LOOT_KEY_5]);
 const KEY_ID_SET = new Set(KEY_IDS);
@@ -173,7 +174,7 @@ const pendingLoot = new WeakMap();
 const recentlyDefeated = new WeakMap();
 const warnedAtKeyLimit = new WeakSet();
 const UNLOCK_COST = 1_000_000;
-const RECENT_DEATH_WINDOW_MS = 6_000;
+const RECENT_DEATH_WINDOW_TICKS = 10;
 const DESTROY_VALUE_LIMIT = 1_000_000;
 
 function pending(victim) {
@@ -183,7 +184,9 @@ function pending(victim) {
 }
 
 function killerCannotReceiveKey(killer) {
-  return killer?.isDyingReturn?.() === true || Date.now() - (recentlyDefeated.get(killer) ?? 0) < RECENT_DEATH_WINDOW_MS;
+  if (killer?.isDyingReturn?.() === true) return true;
+  const defeatedAt = recentlyDefeated.get(killer);
+  return defeatedAt !== undefined && World.getProcessCycle() - defeatedAt < RECENT_DEATH_WINDOW_TICKS;
 }
 
 function queueDrop(event) {
@@ -213,7 +216,7 @@ function giveKey(killer, key, location) {
 function createLootKey({ killer, victim }) {
   const state = pendingLoot.get(victim);
   pendingLoot.delete(victim);
-  recentlyDefeated.set(victim, Date.now());
+  recentlyDefeated.set(victim, World.getProcessCycle());
   if (!state || !LootKeys.isEligibleKill(killer, victim) || killerCannotReceiveKey(killer)) return;
 
   // Later hooks can change eligibility, including the bot's selected equipment drops.

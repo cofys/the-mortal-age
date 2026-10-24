@@ -278,9 +278,8 @@ export class MinimapRenderer {
     private vao!: WebGLVertexArrayObject;
 
     // Batching for dots
-    private dotBuffer: Float32Array;
+    private dotBuffer = new Float32Array(256 * 6 * 4);
     private dotInstances: DotInstance[] = [];
-    private maxDots = 256;
     /** Reused 4-vert × 4-float quad; avoids per-draw Float32Array allocs on every minimap tile/dot. */
     private quadVerts = new Float32Array(16);
 
@@ -296,7 +295,6 @@ export class MinimapRenderer {
     constructor(gl: WebGL2RenderingContext, proj: Float32Array) {
         this.gl = gl;
         this.proj = proj;
-        this.dotBuffer = new Float32Array(this.maxDots * 4 * 4); // 4 verts * 4 floats per dot
         this.init();
     }
 
@@ -514,6 +512,12 @@ export class MinimapRenderer {
             this.bindNearestTexture(texId);
             gl.uniform1i(this.uTexture_ov, 0);
 
+            const floatCount = dots.length * 6 * 4;
+            if (floatCount > this.dotBuffer.length) {
+                this.dotBuffer = new Float32Array(Math.max(floatCount, this.dotBuffer.length * 2));
+            }
+            const verts = this.dotBuffer;
+            let offset = 0;
             for (const dot of dots) {
                 const screen = this.relativeToScreen(dot.x, dot.y);
                 const spriteW = dot.tex.w * dot.scale;
@@ -525,28 +529,34 @@ export class MinimapRenderer {
                 const x1 = screen.x + halfW;
                 const y1 = screen.y + halfH;
 
-                const verts = this.quadVerts;
-                verts[0] = x0;
-                verts[1] = y0;
-                verts[2] = 0;
-                verts[3] = 0;
-                verts[4] = x1;
-                verts[5] = y0;
-                verts[6] = 1;
-                verts[7] = 0;
-                verts[8] = x1;
-                verts[9] = y1;
-                verts[10] = 1;
-                verts[11] = 1;
-                verts[12] = x0;
-                verts[13] = y1;
-                verts[14] = 0;
-                verts[15] = 1;
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-                gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
-                gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+                verts[offset++] = x0;
+                verts[offset++] = y0;
+                verts[offset++] = 0;
+                verts[offset++] = 0;
+                verts[offset++] = x1;
+                verts[offset++] = y0;
+                verts[offset++] = 1;
+                verts[offset++] = 0;
+                verts[offset++] = x1;
+                verts[offset++] = y1;
+                verts[offset++] = 1;
+                verts[offset++] = 1;
+                verts[offset++] = x0;
+                verts[offset++] = y0;
+                verts[offset++] = 0;
+                verts[offset++] = 0;
+                verts[offset++] = x1;
+                verts[offset++] = y1;
+                verts[offset++] = 1;
+                verts[offset++] = 1;
+                verts[offset++] = x0;
+                verts[offset++] = y1;
+                verts[offset++] = 0;
+                verts[offset++] = 1;
             }
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+            gl.bufferData(gl.ARRAY_BUFFER, verts.subarray(0, floatCount), gl.DYNAMIC_DRAW);
+            gl.drawArrays(gl.TRIANGLES, 0, dots.length * 6);
         }
 
         this.dotInstances.length = 0;

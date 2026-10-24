@@ -4,18 +4,18 @@ import { NPC } from "./NPC";
 import { World } from "../../../World";
 
 export class NPCMovementCoordinator {
-    private static readonly RETREAT_REPATH_COOLDOWN_MS = 600;
+    private static readonly RETREAT_REPATH_COOLDOWN_TICKS = 1;
     private npc: NPC;
     private coordinateState: CoordinateState;
     private radius: number;
-    private nextRetreatRepathAt: number;
+    private nextRetreatRepathCycle: number;
 
 
     constructor(npc: NPC) {
         this.npc = npc;
         this.coordinateState = CoordinateState.HOME;
         this.radius = 0;
-        this.nextRetreatRepathAt = 0;
+        this.nextRetreatRepathCycle = 0;
     }
 
     public process() {
@@ -63,7 +63,7 @@ export class NPCMovementCoordinator {
         const current = this.npc.getLocation();
         if (current.equals(spawn)) {
             this.coordinateState = CoordinateState.HOME;
-            this.nextRetreatRepathAt = 0;
+            this.nextRetreatRepathCycle = 0;
             return;
         }
 
@@ -76,11 +76,11 @@ export class NPCMovementCoordinator {
             return;
         }
 
-        const nowMs = Date.now();
-        if (nowMs < this.nextRetreatRepathAt) {
+        const cycle = World.getProcessCycle();
+        if (cycle < this.nextRetreatRepathCycle) {
             return;
         }
-        this.nextRetreatRepathAt = nowMs + NPCMovementCoordinator.RETREAT_REPATH_COOLDOWN_MS;
+        this.nextRetreatRepathCycle = cycle + NPCMovementCoordinator.RETREAT_REPATH_COOLDOWN_TICKS;
         PathFinder.calculateWalkRoute(this.npc, spawn.getX(), spawn.getY());
     }
 
@@ -117,7 +117,7 @@ export class NPCMovementCoordinator {
             this.coordinateState = CoordinateState.AWAY;
         } else {
             this.coordinateState = CoordinateState.HOME;
-            this.nextRetreatRepathAt = 0;
+            this.nextRetreatRepathCycle = 0;
         }
     }
 

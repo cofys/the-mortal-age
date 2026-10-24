@@ -1,4 +1,4 @@
-import { isWebGL2Supported, isWebGPUSupported } from "../common/utils/DeviceUtil";
+import { isWebGPUSupported } from "../common/utils/DeviceUtil";
 import { WebGLOsrsRenderer } from "../render/WebGLOsrsRenderer";
 import { WebGPURenderer } from "../render/webgpu/WebGPURenderer";
 import { GameRenderer } from "./GameRenderer";
@@ -10,6 +10,7 @@ export const WEBGPU: OsrsRendererType = "webgpu";
 
 // Prefer WebGPU when an adapter is available; otherwise use WebGL.
 export const PREFER_WEBGPU_DEFAULT = true;
+let webgpuAdapterAvailable = false;
 
 export function getRendererName(type: OsrsRendererType): string {
     switch (type) {
@@ -39,7 +40,7 @@ export function getAvailableRenderers(): OsrsRendererType[] {
     if (WebGLOsrsRenderer.isSupported()) {
         renderers.push(WEBGL);
     }
-    if (WebGPURenderer.isSupported()) {
+    if (WebGPURenderer.isSupported() && webgpuAdapterAvailable) {
         renderers.push(WEBGPU);
     }
 
@@ -73,6 +74,7 @@ export async function pickRendererType(): Promise<OsrsRendererType | undefined> 
             webgpuReady = false;
         }
     }
+    webgpuAdapterAvailable = webgpuReady;
 
     if (requested === WEBGPU && !webgpuReady) {
         console.warn("[renderer] WebGPU requested but unavailable; falling back to WebGL");

@@ -19,7 +19,8 @@ import {
 
 export type WorldMapImageDeps = {
     getMinimapImageKey: (mapX: number, mapY: number, level?: number) => number;
-    getWorldMapArchiveRenderer: () => WorldMapArchiveRenderer | undefined;
+    getWorldMapArchiveRenderer: () => Pick<WorldMapArchiveRenderer, "loadTile"> | undefined;
+    cancelTileLoads?: (clearCache?: boolean) => void;
     loadMapElement: (elementId: number) => any;
     getWidgetManager: () => any;
     evictTextureKey: (key: string) => void;
@@ -60,7 +61,7 @@ export function getWorldMapImageKey(
     return baseKey | ((pixelsPerTile & 0xf) << 18) | (areaId << 22);
 }
 
-function updateWorldMapImageRequestEpoch(state: WorldMapStateHolder): number {
+function updateWorldMapImageRequestEpoch(state: WorldMapStateHolder, deps: WorldMapImageDeps): number {
     const zoomBucket = Math.max(1, Math.round((state.worldMapState.zoomPercentage || 100) / 25));
     const viewportKey = [
         state.worldMapState.getCurrentMapAreaId(),
@@ -74,6 +75,8 @@ function updateWorldMapImageRequestEpoch(state: WorldMapStateHolder): number {
         state.worldMapImageRequestViewportKey = viewportKey;
         state.worldMapImageRequestEpoch = (state.worldMapImageRequestEpoch + 1) | 0;
         state.failedWorldMapImageIds.clear();
+        deps.cancelTileLoads?.();
+        state.pendingWorldMapImageIds.clear();
     }
     return state.worldMapImageRequestEpoch;
 }
@@ -265,10 +268,12 @@ function queueLoadWorldMapImage(
     }
 
     state.pendingWorldMapImageIds.add(mapId);
+    const requestEpoch = state.worldMapImageRequestEpoch;
+    const current = () => cacheEpoch === state.worldMapImageCacheEpoch && requestEpoch === state.worldMapImageRequestEpoch;
     void Promise.resolve()
-        .then(() => archiveRenderer.loadTile(area, mapX | 0, mapY | 0, pixelsPerTile))
+        .then(() => current() ? archiveRenderer.loadTile(area, mapX | 0, mapY | 0, pixelsPerTile) : undefined)
         .then((tile) => {
-            if (cacheEpoch !== state.worldMapImageCacheEpoch) {
+            if (!current()) {
                 return;
             }
             if (mapId !== getWorldMapImageKey(state, deps, mapX, mapY, level)) {
@@ -302,7 +307,7 @@ function queueLoadWorldMapImage(
             rememberFailedWorldMapImage(state, mapId);
         })
         .catch((err) => {
-            if (cacheEpoch !== state.worldMapImageCacheEpoch) {
+            if (!current()) {
                 return;
             }
             console.log("[WorldMapController] Failed to load world map image tile", {
@@ -314,7 +319,7 @@ function queueLoadWorldMapImage(
             rememberFailedWorldMapImage(state, mapId);
         })
         .finally(() => {
-            state.pendingWorldMapImageIds.delete(mapId);
+            if (current()) state.pendingWorldMapImageIds.delete(mapId);
         });
 }
 
@@ -326,7 +331,7 @@ function getWorldMapImageSourceInternal(
     level: number,
     accessPriority: number,
 ): WorldMapImageTile | undefined {
-    updateWorldMapImageRequestEpoch(state);
+    updateWorldMapImageRequestEpoch(state, deps);
     const mapId = getWorldMapImageKey(state, deps, mapX, mapY, level);
     const accessTime = performance.now() + Math.max(0, accessPriority);
     const tile = state.worldMapImageTiles.get(mapId);
@@ -409,6 +414,7 @@ export function clearWorldMapImages(
     clearRenderCaches: () => void,
 ): void {
     state.worldMapImageCacheEpoch = (state.worldMapImageCacheEpoch + 1) | 0;
+    deps.cancelTileLoads?.(true);
     for (const tile of state.worldMapImageTiles.values()) {
         releaseWorldMapImageTile(deps, tile);
     }

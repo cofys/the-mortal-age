@@ -7,6 +7,8 @@ import { ModelData } from "./ModelData";
 
 export interface ModelLoader {
     getModel(id: number): ModelData | undefined;
+    /** Optional content generation for loaders whose models can be replaced at runtime. */
+    revision?: number;
     /**
      * Total not-yet-downloaded misses observed (sparse cache). Callers that
      * merge and cache multi-part models compare this across their part loads:

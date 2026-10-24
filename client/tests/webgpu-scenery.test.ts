@@ -98,8 +98,50 @@ test("WebGPU selects one scenery tier per chunk, culls fog/frustum and keeps unc
 test("WebGPU shadows use full geometry and the light frustum, including off-screen casters", () => {
     const f = fixture([range(0, 6, 0), range(24, 12, 64)], [range(72, 3, 64)]);
     f.square.drawDepth(f.pass, 3, { ...f.context,
-        shadow: { intersectsBox: (box: number[][]) => box[0][0] >= 64 } as Frustum });
+        shadow: { intersectsBox: (box: number[][]) => box[1][0] >= 64 } as Frustum });
     assert.deepEqual(f.draws.map(d => [d.first, d.count]), [[6, 12]]);
+    f.square.delete();
+});
+
+test("WebGPU rejects an off-screen batch without testing each range", () => {
+    const f = fixture(Array.from({ length: 200 }, (_, i) => range(i * 24, 6, 80 + i)), []);
+    let tests = 0;
+    f.context.distance = 1000;
+    f.context.camera = { intersectsBox: (box: number[][]) => { tests++; return box[0][0] < 40; } } as Frustum;
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 0);
+    assert.equal(tests, 1, "one conservative batch test replaces 200 rejected range tests");
+    f.square.delete();
+});
+
+test("WebGPU batch bounds preserve per-range draws across camera, fog, roofs and shadows", () => {
+    const full = Array.from({ length: 80 }, (_, i) => range(i * 24, 6, (i * 17) % 128 - 32));
+    const far = full.map((r, i) => range((80 + i) * 24, 6, r.bounds![0]));
+    const f = fixture(full, far, Uint8Array.from(full, (_, i) => i % 4));
+    const batches = (f.square as any).opaqueBatches;
+    const bounds = batches.map((batch: any) => batch.bounds);
+    for (const shadow of [false, true]) for (const roof of [0, 3]) for (let x = -64; x <= 128; x += 8) {
+        const frustum = { intersectsBox: (box: number[][]) => box[0][0] <= x + 24 && box[1][0] >= x } as Frustum;
+        const context = { ...f.context, tileX: x, distance: 32, camera: frustum,
+            shadow: shadow ? frustum : undefined };
+        f.draws.length = 0;
+        batches.forEach((batch: any, i: number) => batch.bounds = bounds[i]);
+        f.square.drawOpaque(f.pass, roof, context);
+        const bounded = f.draws.slice();
+        f.draws.length = 0;
+        batches.forEach((batch: any) => batch.bounds = undefined);
+        f.square.drawOpaque(f.pass, roof, context);
+        assert.deepEqual(bounded, f.draws, `same draws at x=${x}, roof=${roof}, shadow=${shadow}`);
+    }
+    f.square.delete();
+});
+
+test("WebGPU keeps batches containing unbounded animation ranges conservative", () => {
+    const unbounded = newDrawRange(24, 6);
+    const f = fixture([range(0, 6, 80), unbounded], []);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.deepEqual(f.draws.map(d => [d.first, d.count]), [[6, 6]]);
+    assert.equal((f.square as any).opaqueBatches[0].bounds, undefined);
     f.square.delete();
 });
 
@@ -126,6 +168,7 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     const f = fixture(full, far);
     const frame = range(48, 12, 24);
     f.square.locsAnimated = [{ frame: 0, anim: { frames: [frame] }, update() {}, drawFrame: () => 0,
+        drawRangeIndex: 0, drawRangeLodIndex: 0, drawRangeAlphaIndex: -1, drawRangeLodAlphaIndex: -1,
         getDrawRangeIndex: (alpha: boolean) => alpha ? -1 : 0 } as any];
     f.square.updateAnimatedLocs({} as any, 10);
     assert.equal(full[0], fullRange);
@@ -134,6 +177,64 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     assert.deepEqual(far[0].slice(0, 2), [48, 12]);
     assert.deepEqual(full[0].chunk, [0, 0]);
     assert.deepEqual(far[0].chunk, [24, 0]);
+    f.square.delete();
+});
+
+test("WebGPU advances and selects scenery once per cycle across high-FPS and shadow passes", () => {
+    const full = [range(0, 6, 0)], far = [range(24, 6, 24)];
+    const f = fixture(full, far);
+    let advances = 0, selections = 0, sounds = 0;
+    const loc = { anim: { frames: [range(48, 12, 24)] },
+        update(_loader: unknown, _cycle: number, sound?: () => void) { advances++; sound?.(); },
+        drawFrame() { selections++; return 0; },
+        drawRangeIndex: 0, drawRangeLodIndex: 0, drawRangeAlphaIndex: -1, drawRangeLodAlphaIndex: -1,
+        getDrawRangeIndex: (alpha: boolean) => alpha ? -1 : 0 } as any;
+    f.square.locsAnimated = [loc];
+    const sound = () => sounds++;
+    for (let frame = 0; frame < 5; frame++) {
+        f.square.updateAnimatedLocs({} as any, 10, sound);
+        f.square.updateAnimatedLocs({} as any, 10);
+    }
+    assert.equal(advances, 1, "240 FPS and HD shadows share one 20 ms animation update");
+    assert.equal(selections, 1, "full/far opaque/alpha share the same baked-frame selection");
+    assert.equal(sounds, 1);
+    f.square.updateAnimatedLocs({} as any, 11);
+    f.square.updateAnimatedLocs({} as any, 11, sound);
+    assert.equal(advances, 3, "a visible pass may deliver sound after a shadow-only update");
+    assert.equal(selections, 2, "a late sound callback need not rewrite geometry");
+    assert.equal(sounds, 2);
+    f.square.locsAnimated = [{ ...loc }];
+    f.square.updateAnimatedLocs({} as any, 11, sound);
+    assert.equal(selections, 3, "replacing the loc list invalidates within the same cycle");
+    const replacement = range(72, 18, 0);
+    f.square.refreshPartial({ ...f.data, locOnly: true,
+        loc: { ...f.data.loc, drawRanges: [replacement] } } as any, {} as any, 1);
+    f.square.locsAnimated = [loc];
+    f.square.updateAnimatedLocs({} as any, 11, sound);
+    assert.deepEqual(replacement.slice(0, 3), [48, 12, 1], "new geometry is repaired in the same cycle");
+    assert.equal(selections, 4);
+    f.square.delete();
+});
+
+test("WebGPU partial loc rebuilds replace animation bounds and keep them while frames advance", () => {
+    const f = fixture([range(0, 6, 0)], []);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 1);
+    const replacement = range(24, 12, 80);
+    f.square.refreshPartial({ ...f.data, locOnly: true,
+        loc: { ...f.data.loc, drawRanges: [replacement] } } as any, {} as any, 1);
+    f.square.locsAnimated = [{ anim: { frames: [range(48, 6, 80)] }, update() {}, drawFrame: () => 0,
+        drawRangeIndex: 0, drawRangeLodIndex: -1, drawRangeAlphaIndex: -1, drawRangeLodAlphaIndex: -1,
+        getDrawRangeIndex: (alpha: boolean, _interact: boolean, lod: boolean) => alpha || lod ? -1 : 0 } as any];
+    f.square.updateAnimatedLocs({} as any, 10);
+    assert.deepEqual(replacement.bounds, [80, -1, 0, 88, 1, 8]);
+    f.draws.length = 0;
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 0, "the replacement no longer inherits the old visible bounds");
+    f.context.tileX = 80;
+    f.context.camera = { intersectsBox: () => true } as unknown as Frustum;
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.deepEqual(f.draws.map(d => [d.first, d.count]), [[12, 6]], "the new pose renders when its bounds are in view");
     f.square.delete();
 });
 
@@ -153,5 +254,81 @@ test("WebGPU wall previews give each placement its own uniform slot", () => {
     f.square.setWorldEntityTransforms([]);
     f.square.drawOpaque(f.pass, 3, f.context);
     assert.equal(f.draws.length, 0, "clearing previews leaves no phantom copy");
+    f.square.delete();
+});
+
+test("WebGPU bundles replay exact draws and invalidate for animation, roofs, pipelines and partial reloads", () => {
+    const f = fixture([range(0, 6, 0, false), range(24, 12, 8, false)], [], new Uint8Array([0, 1]));
+    const tracker = enableBundles(f);
+    const descriptors = tracker.descriptors;
+    Object.assign(f.resources, { opaquePipeline: {}, alphaPipeline: {}, canvasFormat: "bgra8unorm", sampleCount: 4 });
+    const draw = () => { f.draws.length = 0; f.square.drawOpaque(f.pass, 3, f.context); return f.draws.map(d => ({ ...d })); };
+    const direct = draw();
+    assert.deepEqual(draw(), direct);
+    assert.deepEqual(draw(), direct);
+    assert.equal(tracker.builds, 1);
+    assert.equal(tracker.executions, 2);
+    assert.deepEqual(descriptors[0], { colorFormats: ["bgra8unorm"], depthStencilFormat: "depth32float", sampleCount: 4 });
+    const batch = (f.square as any).opaqueBatches[0];
+    batch.ranges[1][0] = 96;
+    const animated = draw();
+    assert.notDeepEqual(animated, direct, "animated frame's index offset is part of the command signature");
+    assert.equal(tracker.executions, 2, "changed lists use immediate commands before being cached");
+    assert.deepEqual(draw(), animated);
+    assert.equal(tracker.builds, 2);
+    f.draws.length = 0;
+    f.square.drawOpaque(f.pass, 0, f.context);
+    assert.equal(f.draws.length, 1, "roof change never replays an obsolete second draw");
+    Object.assign(f.resources, { opaquePipeline: {}, sampleCount: 1, extensionActive: true,
+        extension: { sceneColorFormat: "rgba16float" } });
+    draw(); draw();
+    assert.equal(descriptors.at(-1).sampleCount, 1);
+    assert.deepEqual(descriptors.at(-1).colorFormats, ["rgba16float"]);
+    f.square.refreshPartial({ ...f.data, locOnly: true } as any, {} as any, 1);
+    const before = tracker.builds;
+    draw();
+    assert.equal(tracker.builds, before, "replacement GPU resources do not reuse the old bundle");
+    draw();
+    assert.equal(tracker.builds, before + 1);
+    f.square.drawDepth(f.pass, 3, f.context);
+    f.square.drawDepth(f.pass, 3, f.context);
+    assert.deepEqual(descriptors.at(-1).colorFormats, []);
+    assert.equal(descriptors.at(-1).sampleCount, 1);
+    f.square.delete();
+});
+
+function enableBundles(f: ReturnType<typeof fixture>) {
+    const tracker = { builds: 0, executions: 0, descriptors: [] as any[] };
+    (f.device as any).createRenderBundleEncoder = (descriptor: any) => {
+        tracker.descriptors.push(descriptor);
+        const calls: [string, any[]][] = [];
+        return Object.fromEntries([
+            ...["setPipeline", "setBindGroup", "setVertexBuffer", "setIndexBuffer", "drawIndexed"].map(name =>
+                [name, (...args: any[]) => { calls.push([name, args]); }]),
+            ["finish", () => { tracker.builds++; return calls; }],
+        ]);
+    };
+    (f.pass as any).executeBundles = (bundles: [string, any[]][][]) => {
+        tracker.executions++;
+        for (const bundle of bundles) for (const [name, args] of bundle) (f.pass as any)[name](...args);
+    };
+    return tracker;
+}
+
+test("one animated range only invalidates its small bundle section", () => {
+    const f = fixture(Array.from({ length: 65 }, (_, i) => range(i * 24, 6, 0, false)), []);
+    const tracker = enableBundles(f);
+    Object.assign(f.resources, { opaquePipeline: {}, canvasFormat: "bgra8unorm", sampleCount: 1 });
+    for (let i = 0; i < 3; i++) f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(tracker.builds, 2, "two 32-range bundles; the final single draw stays direct");
+    const batches = (f.square as any).opaqueBatches;
+    batches[0].ranges[0][0] = 4000;
+    f.draws.length = 0;
+    const before = tracker.executions;
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(tracker.executions, before + 1, "unchanged section still replays");
+    assert.equal(f.draws.length, 65);
+    assert.equal(f.draws[0].first, 1000);
+    assert.equal(f.draws[64].first, 384);
     f.square.delete();
 });

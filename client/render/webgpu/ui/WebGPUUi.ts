@@ -128,6 +128,7 @@ export class WebGPUUi {
     }
 
     registerMinimapData(mapData: SdMapData): void {
+        if (mapData.minimapInput) this.renderer.registerMinimapSource(mapData);
         const osrsClient = this.renderer.osrsClient;
         const mapX = mapData.mapX | 0;
         const mapY = mapData.mapY | 0;

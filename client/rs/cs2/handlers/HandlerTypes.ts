@@ -176,6 +176,20 @@ export interface Cs2VmLike {
     clearHandlerCaches(): void;
 }
 
+/** One searchable item: its id and lower-cased name (ConfigOps oc_find). */
+export interface ItemNameIndexEntry {
+    id: number;
+    name: string;
+    tradable: boolean;
+}
+
+/** The item name index, valid for one item loader and members flag. */
+export interface ItemNameIndex {
+    loader: unknown;
+    membersWorld: boolean;
+    entries: ItemNameIndexEntry[];
+}
+
 /** Context passed to all handlers - gives access to VM state */
 export interface HandlerContext {
     // Reference to the Cs2Vm instance
@@ -317,6 +331,8 @@ export interface HandlerContext {
     itemSearchTradableOnly: boolean;
     itemSearchResults: number[];
     itemSearchIndex: number;
+    /** Every searchable item's name, read from the definitions once (ConfigOps oc_find). */
+    itemNameIndex?: ItemNameIndex;
 
     // Widget children iteration state (for IF/CC_CHILDREN_FIND/FINDNEXTID)
 

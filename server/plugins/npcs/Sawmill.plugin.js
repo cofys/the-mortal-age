@@ -100,7 +100,7 @@ function openPlankMenu(player, npcId) {
 
 /** A log used on an operator becomes one plank on the spot, as captured (no menu). */
 function useLogOnOperator(event) {
-  const name = event.target?.getDefinition?.()?.getName?.();
+  const name = (event.definition ?? event.target?.getDefinition?.())?.getName?.();
   const plank = data().planks.find((entry) => entry.log === event.itemId);
   if (!plank || !data().operators.includes(name)) return;
   event.handled = true;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { test } from "node:test";
 
 import { SceneBuffer, getModelFaces } from "../render/buffer/SceneBuffer";
 import { CacheSystem } from "../rs/cache/CacheSystem";
@@ -46,3 +47,81 @@ const shader = fs.readFileSync(
 assert.doesNotMatch(shader, /\) \+ 1\) \* isTextured/, "Shader must not offset texture layers");
 
 console.log("Fire cape texture regression test passed");
+
+test("texture preloads leave missing and empty sparse textures available for later uploads", async (t) => {
+    t.mock.method(console, "error", () => {});
+    t.mock.method(console, "log", () => {});
+    (globalThis as any).self = globalThis;
+    for (const ext of [".png", ".jpg", ".webp"]) {
+        require.extensions[ext] = (module, file) => { module.exports = file; };
+    }
+    const { WorldResources } = require("../render/webgpu/WorldResources");
+    const { initTextureArray } = require("../render/render/textures/array");
+    const pixels = new Int32Array(128 * 128).fill(0xff123456);
+    const client = {
+        loadedCache: { info: { game: "oldschool", revision: 235 } },
+        textureLoader: {
+            getTextureIds: () => [1, 2, 3], isSd: () => true, getMaterial: () => ({}),
+            getPixelsArgb: (id: number) => {
+                if (id === 2) throw new Error("sprite still downloading");
+                return id === 3 ? new Int32Array() : pixels;
+            },
+        },
+        clientPlugins: { createWebGPUSceneExtension: () => undefined },
+    };
+    const device = {
+        limits: { maxTextureArrayLayers: 2048 },
+        createBuffer: () => ({ destroy() {} }),
+        createTexture: () => ({ createView: () => ({}), destroy() {} }),
+        createBindGroupLayout: () => ({}), createBindGroup: () => ({}), createSampler: () => ({}),
+        createPipelineLayout: () => ({}), createShaderModule: () => ({}), createRenderPipeline: () => ({}),
+        queue: { writeTexture() {} },
+    };
+    const world = await WorldResources.create(device, client, "rgba8unorm");
+    assert.deepEqual([...world.loadedTextureIds], [1], "WebGPU only skips textures with real uploaded pixels");
+    world.uploadMapTextures(new Map([[2, pixels], [3, pixels]]));
+    assert.deepEqual([...world.loadedTextureIds], [1, 2, 3], "worker results can fill previously missing layers");
+    world.destroy();
+
+    class MockGL {}
+    const previousGL = (globalThis as any).WebGL2RenderingContext;
+    (globalThis as any).WebGL2RenderingContext = MockGL;
+    t.after(() => { (globalThis as any).WebGL2RenderingContext = previousGL; });
+    const gl = new Proxy(new MockGL(), { get: () => () => ({}) });
+    const host = {
+        osrsClient: client, textureIds: [1, 2, 3], loadedTextureIds: new Set<number>(),
+        textureIdIndexMap: new Map([[1, 1], [2, 2], [3, 3]]),
+        app: { gl, state: { textures: [], activeTexture: 0 } }, gl,
+        updateTextureFiltering() {},
+    };
+    initTextureArray(host);
+    assert.deepEqual([...host.loadedTextureIds], [1], "WebGL only skips textures with real uploaded pixels");
+    client.textureLoader.getPixelsArgb = () => pixels;
+    initTextureArray(host);
+    assert.deepEqual([...host.loadedTextureIds], [1, 2, 3]);
+});
+
+test("quiet mipmap regeneration does not wait for off-screen preload or retry backoff", async () => {
+    (globalThis as any).self = globalThis;
+    const pico = require("picogl");
+    pico.PicoGL = pico;
+    const { maybeRegenerateTextureMipmaps } = await import("../render/render/textures/array");
+    const { TextureFilterMode } = await import("../render/render/constants");
+    let ready = false, generated = 0;
+    const host: any = {
+        textureMipmapsDirty: true, textureMipmapsDirtyAtMs: 0,
+        textureMipmapsLastGenAtMs: 0, textureMipmapsDirtyUpdates: 1,
+        textureFilterMode: TextureFilterMode.BILINEAR,
+        textureArray: { bind() {} },
+        gl: { generateMipmap: () => generated++ },
+        mapManager: { isSceneReady: () => ready }, stats: { frameCount: 10 },
+        hasPendingMapStreamingWork: () => true,
+    };
+    maybeRegenerateTextureMipmaps(host, 300);
+    assert.equal(generated, 0, "foreground streaming still defers the quiet path");
+    ready = true;
+    maybeRegenerateTextureMipmaps(host, 300);
+    assert.equal(generated, 1, "even a single remaining texture gets mipmaps during background work");
+    assert.equal(host.textureMipmapsDirty, false);
+    assert.equal(host.textureMipmapsDirtyUpdates, 0);
+});

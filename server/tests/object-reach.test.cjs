@@ -19,6 +19,7 @@ const { UseItemPacketListener } = require('../dist/net/packet/impl/UseItemPacket
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Sounds } = require('../dist/game/Sounds');
 
+const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
 const target = { level: 0, destX: 100, destY: 100, srcSize: 1, privateArea: null };
 
 let cacheReady;
@@ -456,21 +457,21 @@ test('ground-item pickup accepts only a collision-reachable adjacent tile on the
   let inventoryAdds = 0;
   let resets = 0;
   let removed = 0;
-  const groundItem = {
-    getItem: () => ({ getId: () => 33788, getAmount: () => 1 }),
-    getPosition: () => new Location(100, 100, 0),
-    getPrivateArea: () => null,
-    isPendingRemoval: () => false,
-  };
+  const floorItem = new Item(33788, 1);
+  const groundItem = new ItemOnGround(State.SEEN_BY_PLAYER, 'ObjectReachTest',
+    new Location(100, 100, 0), floorItem, true, -1, null);
+  const received = [];
   const player = {
+    getUsername: () => 'ObjectReachTest',
     getLocation: () => location,
     getSize: () => 1,
     getPrivateArea: () => null,
     getMovementQueue: () => ({ reset: () => { resets++; } }),
     getInventory: () => ({
       getFreeSlots: () => 1,
+      getItems: () => received,
       getAmount: () => 0,
-      addItem: () => { inventoryAdds++; },
+      addItem: (item) => { inventoryAdds++; received.push(item.clone()); },
     }),
     getLastItemPickup: () => ({ reset() {} }),
   };

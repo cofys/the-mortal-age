@@ -35,11 +35,25 @@ export function hdMistLevel(x: number, z: number, groundAt: (x: number, z: numbe
 export class HdMist {
     private level?: number;
     private updatedAt = 0;
+    private target?: number;
+    private targetX = NaN;
+    private targetZ = NaN;
+    private revision?: number;
+    private groundAt?: (x: number, z: number) => number;
 
     /** u_hdMist: mist level (tiles, Y down), strength, wind x, wind z. */
     uniform(x: number, z: number, groundAt: (x: number, z: number) => number, now: number,
-        enabled = true): [number, number, number, number] {
-        const target = hdMistLevel(x, z, groundAt);
+        enabled = true, revision?: number): [number, number, number, number] {
+        // Callers without a terrain revision retain the uncached sampling contract.
+        if (revision === undefined || revision !== this.revision || this.groundAt !== groundAt ||
+            x !== this.targetX || z !== this.targetZ) {
+            this.target = hdMistLevel(x, z, groundAt);
+            this.targetX = x;
+            this.targetZ = z;
+            this.revision = revision;
+            this.groundAt = groundAt;
+        }
+        const target = this.target;
         if (target !== undefined) {
             const dt = Math.min(1, Math.max(0, (now - this.updatedAt) / 1000));
             // Teleports and the first frame snap; walking eases.

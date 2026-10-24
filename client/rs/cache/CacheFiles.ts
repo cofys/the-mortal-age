@@ -22,7 +22,7 @@ type StoredResponseRecord = {
     key: string;
     cacheName: string;
     requestUrl: string;
-    body: ArrayBuffer;
+    body: Blob | ArrayBuffer; // ArrayBuffer entries from older clients remain readable.
     headers: [string, string][];
     status: number;
     statusText: string;
@@ -103,7 +103,8 @@ async function buildStoredRecord(
     });
     const status = response.status;
     const statusText = response.statusText;
-    const body = await response.arrayBuffer();
+    // IDB metadata cursors can clone a Blob without materializing every range's bytes in JS.
+    const body = await response.blob();
     return {
         key: buildEntryKey(cacheName, requestUrl),
         cacheName,

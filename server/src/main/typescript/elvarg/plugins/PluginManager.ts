@@ -28,6 +28,7 @@ import {
   PluginCanSpawnNpcEvent,
   PluginCanStockItemEvent,
   PluginPrayerDisabledEvent,
+  PluginSpecialAttackDisabledEvent,
   PluginFiremakingBlockedEvent,
   PluginCanTeleportEvent,
   PluginCanLogoutEvent,
@@ -252,6 +253,8 @@ export class PluginManager {
   private static objectHooksByName = new Map<string, ObjectInteractionHook[]>();
   private static nextObjectHookOrder = 0;
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  private static beforeNpcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  private static beforeObjectInteractionHooks: PluginHook<PluginObjectInteractionEvent>[] = [];
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -302,6 +305,7 @@ export class PluginManager {
   private static canSpawnNpcHooks: PluginHook<PluginCanSpawnNpcEvent>[] = [];
   private static canStockItemHooks: PluginHook<PluginCanStockItemEvent>[] = [];
   private static prayerDisabledHooks: PluginHook<PluginPrayerDisabledEvent>[] = [];
+  private static specialAttackDisabledHooks: PluginHook<PluginSpecialAttackDisabledEvent>[] = [];
   private static canUnequipHooks: PluginHook<PluginCanUnequipEvent>[] = [];
   private static playerDeathHooks: PluginHook<PluginPlayerDeathEvent>[] = [];
   private static playerOptionHooks: PluginHook<PluginPlayerOptionEvent>[] = [];
@@ -974,7 +978,7 @@ export class PluginManager {
     if (!event || !event.player || !event.object || event.handled) {
       return false;
     }
-    if (PluginManager.nextObjectHookOrder === 0) {
+    if (PluginManager.nextObjectHookOrder === 0 && !PluginManager.beforeObjectInteractionHooks.length) {
       return false;
     }
 
@@ -983,6 +987,13 @@ export class PluginManager {
     }
 
     event.option ??= event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "";
+
+    for (const hook of PluginManager.beforeObjectInteractionHooks) {
+      if (event.handled) {
+        return true;
+      }
+      PluginManager.executeHook(hook, event, "object_interaction", "object_interaction");
+    }
 
     const hooks = [
       ...PluginManager.objectInteractionHooks,
@@ -1044,7 +1055,7 @@ export class PluginManager {
 
     event.definition ??= event.npc.getCurrentDefinition?.(event.player);
 
-    for (const hooks of [PluginManager.npcInteractionHooks, PluginManager.npcAnyInteractionHooks]) {
+    for (const hooks of [PluginManager.beforeNpcInteractionHooks, PluginManager.npcInteractionHooks, PluginManager.npcAnyInteractionHooks]) {
       for (const hook of hooks) {
         if (event.handled) {
           break;
@@ -1452,6 +1463,15 @@ export class PluginManager {
     const event: PluginPrayerDisabledEvent = { player, prayer, disabled: null };
     return PluginManager.firstAnswer(PluginManager.prayerDisabledHooks, event, "prayer_disabled", "disabled") === true
       ? event.message ?? "You cannot use that prayer here."
+      : null;
+  }
+
+  /** The plugin's refusal message when the special attack bar is disabled, or null when it is usable. */
+  public static emitSpecialAttackDisabled(player: any): string | null {
+    if (PluginManager.specialAttackDisabledHooks.length === 0) return null;
+    const event: PluginSpecialAttackDisabledEvent = { player, disabled: null };
+    return PluginManager.firstAnswer(PluginManager.specialAttackDisabledHooks, event, "special_attack_disabled", "disabled") === true
+      ? event.message ?? "You can't use special attacks here."
       : null;
   }
 
@@ -2206,6 +2226,7 @@ export class PluginManager {
       Direction: require(`${model}/Direction`).Direction,
       Equipment: require(`${model}/container/impl/Equipment`).Equipment,
       Bank: require(`${model}/container/impl/Bank`).Bank,
+      PlayerStatus: require(`${model}/PlayerStatus`).PlayerStatus,
       Task: require("../game/task/Task").Task,
       CountdownTask: require("../game/task/impl/CountdownTask").CountdownTask,
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
@@ -2255,6 +2276,8 @@ export class PluginManager {
       PlayerDeathTask: require("../game/task/impl/PlayerDeath").PlayerDeathTask,
       CombatPoisonData: require("../game/task/impl/CombatPoisonEffect").CombatPoisonData,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      CacheMaps: require("../game/cache/CacheMaps").CacheMaps,
+      MapRegionReplacementManager: require("../game/collision/MapRegionReplacementManager").MapRegionReplacementManager,
       readTemplateRegion: require("../game/collision/TemplateRegionData").readTemplateRegion,
       Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
@@ -2929,6 +2952,12 @@ export class PluginManager {
           PluginManager.worldEntityInteractionHooks.push({ pluginName, handler });
         }
       },
+      onBeforeNpcInteraction: (handler) => {
+        if (typeof handler === "function") PluginManager.beforeNpcInteractionHooks.push({ pluginName, handler });
+      },
+      onBeforeObjectInteraction: (handler) => {
+        if (typeof handler === "function") PluginManager.beforeObjectInteractionHooks.push({ pluginName, handler });
+      },
       onNpcInteraction: (
         handler: string | ((event: PluginNpcInteractionEvent) => void),
         actions?: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
@@ -3270,6 +3299,9 @@ export class PluginManager {
       },
       onPrayerDisabled: (handler) => {
         if (typeof handler === "function") PluginManager.prayerDisabledHooks.push({ pluginName, handler });
+      },
+      onSpecialAttackDisabled: (handler) => {
+        if (typeof handler === "function") PluginManager.specialAttackDisabledHooks.push({ pluginName, handler });
       },
       onCanEquip: (handler) => {
         if (typeof handler !== "function") {

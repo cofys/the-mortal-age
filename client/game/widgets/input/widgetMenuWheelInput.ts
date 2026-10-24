@@ -5,7 +5,7 @@ export function processWidgetMenuWheelInput(
     frame: WidgetInputFrame,
 ): void {
     const { input } = frame;
-    if (input.wheelDeltaY !== 0) {
+    if (input.wheelDeltaY !== 0 || input.pinchZoomDelta !== 0) {
         const menuUiState = (deps.getRenderer()?.canvas as any)?.__ui;
         const openMenu = menuUiState?.menu;
         const menuRt = menuUiState?.__menuRt;
@@ -15,7 +15,7 @@ export function processWidgetMenuWheelInput(
             const inputScaleY = Number(canvasAny?.__uiInputScaleY ?? 1) || 1;
             const menuMouseX = Math.round(input.mouseX * inputScaleX);
             const menuMouseY = Math.round(input.mouseY * inputScaleY);
-            const rotation = input.wheelDeltaY > 0 ? 1 : -1;
+            const rotation = Math.sign(input.wheelDeltaY);
             const margin = menuRt.closeMargin | 0 || 10;
             const withinRect = (r: any): boolean =>
                 !!r &&
@@ -32,14 +32,15 @@ export function processWidgetMenuWheelInput(
                     Math.max(menuRt.submenuScroll + rotation, 0),
                     menuRt.submenuScrollMax,
                 );
-                input.wheelDeltaY = 0;
+                input.clearWheel();
             } else if (menuRt.menuScrollMax > 0 && withinRect(menuRt.mainRect)) {
                 menuRt.menuScroll = Math.min(
                     Math.max(menuRt.menuScroll + rotation, 0),
                     menuRt.menuScrollMax,
                 );
-                input.wheelDeltaY = 0;
+                input.clearWheel();
             }
+            if (input.pinchZoomDelta !== 0) input.clearWheel();
         }
     }
 }

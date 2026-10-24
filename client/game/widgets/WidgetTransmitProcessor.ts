@@ -61,8 +61,10 @@ export class WidgetTransmitProcessor {
         this.mouseFollowingY = mouseY;
         const cs2Vm = this.deps.getCs2Vm();
         if (!cs2Vm) return;
+        const widgetManager = this.deps.getWidgetManager();
+        if (!widgetManager) return;
         for (const node of this.mouseFollowingTimers) {
-            if (node.hidden) continue;
+            if (!widgetManager.isTimerWidgetActive(node)) continue;
             const event = createTimerEvent(node);
             if (event && MOUSE_FOLLOWING_TIMERS.has(event.args[0] as number)) {
                 cs2Vm.runScriptEvent(event);
@@ -77,45 +79,12 @@ export class WidgetTransmitProcessor {
         this.mouseFollowingY = -1;
         const widgetManager = this.deps.getWidgetManager();
         if (!widgetManager || widgetManager.rootInterface === -1) return;
-        const allRoots = widgetManager.getAllGroupRoots(widgetManager.rootInterface);
-        if (!allRoots || allRoots.length === 0) return;
-
-        const visited = new Set<number>();
-        const stack: any[] = [];
-        for (const r of allRoots) if (r) stack.push(r);
-
-        for (const [containerUid, parent] of widgetManager.interfaceParents) {
-            if (!parent) continue;
-            if (widgetManager.isEffectivelyHidden(containerUid)) continue;
-            if ((parent.group | 0) === (widgetManager.rootInterface | 0)) continue;
-            const subRoots = widgetManager.getAllGroupRoots(parent.group);
-            for (const r of subRoots) if (r) stack.push(r);
-        }
-
-        while (stack.length > 0) {
-            const node = stack.pop();
-            if (!node || typeof node !== "object") continue;
-            const uid = (node.uid ?? 0) | 0;
-            if (uid === 0 || visited.has(uid)) continue;
-            visited.add(uid);
-            if (node.hidden) continue;
-
+        for (const node of widgetManager.getActiveTimerWidgets()) {
             const event = createTimerEvent(node);
             if (event) {
                 this.deps.queueScriptEvent(event, 1);
                 if (MOUSE_FOLLOWING_TIMERS.has(event.args[0] as number)) {
                     this.mouseFollowingTimers.add(node);
-                }
-            }
-
-            const staticChildren = widgetManager.getStaticChildrenByParentUid(uid);
-            for (let i = staticChildren.length - 1; i >= 0; i--) {
-                stack.push(staticChildren[i]);
-            }
-
-            if (Array.isArray(node.children)) {
-                for (let i = node.children.length - 1; i >= 0; i--) {
-                    stack.push(node.children[i]);
                 }
             }
         }

@@ -1,6 +1,6 @@
 import { subscribePluginMessages } from "../../network/serverConnection/domain/pluginMessages";
 import { PluginMessage } from "@runelite/api/events/PluginMessage";
-import { ChatMessage, GameStateChanged } from "@runelite/api/events";
+import { ChatMessage, GameStateChanged, StatChanged } from "@runelite/api/events";
 import { ClientTick } from "@runelite/api/events/ClientTick";
 import { CommandExecuted } from "@runelite/api/events/CommandExecuted";
 import { FocusChanged } from "@runelite/api/events/FocusChanged";
@@ -9,7 +9,7 @@ import { PostClientTick } from "@runelite/api/events/PostClientTick";
 import { BeforeRender } from "@runelite/api/events/BeforeRender";
 import type { OsrsClient } from "../../game/OsrsClient";
 import { subscribeTick } from "../../network/serverConnection/timing";
-import { subscribeChatMessages } from "../../network/serverConnection/subscriptions/ui";
+import { subscribeChatMessages, subscribeSkills } from "../../network/serverConnection/subscriptions/ui";
 import { ConfigManager } from "./config/ConfigManager";
 import { EventBus } from "./eventbus/EventBus";
 import { PluginManager } from "./plugins/PluginManager";
@@ -18,6 +18,7 @@ import { OverlayRenderer } from "./ui/overlay/OverlayRenderer";
 import { CLIENT_TOKEN } from "./plugins/PluginInjector";
 import { CORE_PLUGINS, LEGACY_CONFIG_MIGRATIONS } from "./plugins";
 import { toRuneLiteGameState } from "../impl/GameStateMapping";
+import { bindNpcEvents } from "../impl/NpcEventSource";
 import { runLegacyConfigMigrations } from "../impl/LegacyConfigMigration";
 
 /**
@@ -60,15 +61,20 @@ export class RuneLite {
     }
 
     postClientTick(): void {
-        this.eventBus.post(new ClientTick());
+        if (this.eventBus.hasSubscribers(ClientTick)) this.eventBus.post(new ClientTick());
     }
 
     postPostClientTick(): void {
-        this.eventBus.post(new PostClientTick());
+        if (this.eventBus.hasSubscribers(PostClientTick)) this.eventBus.post(new PostClientTick());
     }
 
     postBeforeRender(): void {
-        this.eventBus.post(new BeforeRender());
+        if (this.eventBus.hasSubscribers(BeforeRender)) this.eventBus.post(new BeforeRender());
+    }
+
+    /** NpcSpawned/NpcDespawned/NpcChanged from the NPC store (server NPCs). */
+    private postNpcEvents(): void {
+        if (this.client.npcEcs?.mutationListeners) bindNpcEvents(this.client.npcEcs, (event) => this.eventBus.post(event));
     }
 
     private load(): void {
@@ -83,6 +89,14 @@ export class RuneLite {
         subscribeChatMessages((msg) => this.eventBus.post(
             new ChatMessage(msg.chatType ?? 0, msg.from ?? "", msg.text, msg.prefix ?? null),
         ));
+
+        // A stats snapshot (login) or update: one StatChanged per skill it carries.
+        subscribeSkills((update) => {
+            for (const skill of update.skills) {
+                this.eventBus.post(new StatChanged(skill.id, skill.xp, skill.baseLevel, skill.currentLevel));
+            }
+        });
+        this.postNpcEvents();
 
         // state.tickListeners fire after the tick's packets are applied.
         subscribeTick(() => this.eventBus.post(new GameTick()));

@@ -1208,6 +1208,7 @@ module.exports = function registerEaglesPeakQuest(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onZoneEnter(CAMP_ZONE, handleZoneEnter);
   api.onZoneEnter(DUNGEON_ZONE, handleZoneEnter);
+  api.onServerStartup(installCampObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handlePlayerGone);
   api.onPlayerDeath(handlePlayerGone);

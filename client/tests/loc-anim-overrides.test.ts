@@ -1,3 +1,4 @@
+import "./browser-self";
 import assert from "node:assert/strict";
 import { onLocAnim } from "../render/render/locs2";
 

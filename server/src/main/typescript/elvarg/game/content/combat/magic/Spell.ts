@@ -3,11 +3,13 @@ import { Player } from "../../../entity/impl/player/Player";
 import { Item } from "../../../model/Item";
 import { MagicSpellbook } from "../../../model/MagicSpellbook";
 import { Skill } from "../../../model/Skill";
+import { GameConstants } from "../../../GameConstants";
+import { World } from "../../../World";
 import { PluginManager } from "../../../../plugins/PluginManager";
 
 export abstract class Spell {
     private static readonly NEXT_CAST_AT = "magic:next-cast-at";
-    private static readonly CAST_DELAY_MS = 600;
+    private static readonly CAST_DELAY_TICKS = 1;
 
     abstract spellId(): number;
     abstract levelRequired(): number;
@@ -124,7 +126,7 @@ export abstract class Spell {
             return true;
         }
 
-        const now = Date.now();
+        const now = World.getProcessCycle();
         const cooldown = this.getCastCooldown();
         if ((this.usesSharedCastDelay() && Number(player.getAttribute(Spell.NEXT_CAST_AT) ?? 0) > now) ||
             (cooldown != null && Number(player.getAttribute(cooldown.attribute) ?? 0) > now)) {
@@ -153,10 +155,13 @@ export abstract class Spell {
         }
 
         if (this.usesSharedCastDelay()) {
-            player.setAttribute(Spell.NEXT_CAST_AT, now + Spell.CAST_DELAY_MS);
+            player.setAttribute(Spell.NEXT_CAST_AT, now + Spell.CAST_DELAY_TICKS);
         }
         if (cooldown != null) {
-            player.setAttribute(cooldown.attribute, now + cooldown.duration);
+            player.setAttribute(
+                cooldown.attribute,
+                now + Math.ceil(cooldown.duration / GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE)
+            );
         }
 
         return true;

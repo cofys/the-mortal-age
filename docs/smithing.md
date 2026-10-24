@@ -24,7 +24,7 @@ Smelting at furnaces and smithing at anvils (`server/plugins/skills/Smithing.plu
 
 ## Anvils
 
-- **Smith** opens interface 312 on the bar the player used, or the best carried bar they can make something from, or the lowest carried bar. It sets varbit `smithing_bar_type` and varp `makexcrafting` to the number of that bar held (recs 1102, 1610).
+- **Smith** opens interface 312 on the bar the player used, or the best carried bar they can make something from, or the lowest carried bar. It sets varbit `smithing_bar_type` and varp `makexcrafting` to the quantity the server will use: the player's remembered choice, or All if they have not chosen one (recs 1102, 1610; [Halloween 2017 & Make-All](https://secure.runescape.com/m=news/halloween-2017--make-all?oldschool=1)). The client highlights All when `makexcrafting >= min(28, bars)` (script 2928), so sending the bar count preselects All while the server smiths one (issue #830).
 - **With no bar:** message box "You should select an item from your inventory and use it on the anvil." (recs 321, 1105, 1515, 3315, 4012).
 - **A click** sets `smithing_bar_lasttype` and `smithing_item_lasttype`, closes the interface and plays `human_smithing` (898) on the same tick. The first item comes 3 ticks later, then one every 5 (recs 96, 1106, 1610, 3461).
 - **Messages:** "You hammer the steel and make ten dart tips." Captured (rev 237+): a platebody, a plateskirt, fifteen arrowtips, ten crossbow bolts, a two-handed sword, ten dart tips, a dagger, an axe, a full helm, a medium helm, a kite shield, a square shield, a pair of plate legs, some keel parts, a mithril grapple tip, a bullseye lantern. The other phrases follow the same style **(unverified)**.

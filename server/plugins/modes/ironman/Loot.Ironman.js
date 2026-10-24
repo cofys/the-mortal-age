@@ -17,12 +17,20 @@ const WARNED_ATTRIBUTE = "ironman:kill-credit-warned";
 const COMBAT_SKILLS = new Set(["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC", "HITPOINTS"]);
 
 function pickup(event) {
+  if (cannotTake(event)) event.handled = true;
+}
+
+function telegrab(event) {
+  if (event.allow !== false && cannotTake(event)) event.allow = false;
+}
+
+function cannotTake(event) {
   const { player, groundItem } = event;
-  if (!Common.isIron(player)) return;
+  if (!Common.isIron(player)) return false;
   const owner = groundItem?.getOwner?.();
-  if (!owner || owner.toLowerCase() === player.getUsername().toLowerCase()) return;
+  if (!owner || owner.toLowerCase() === player.getUsername().toLowerCase()) return false;
   player.sendMessage(Common.message("pickup"));
-  event.handled = true;
+  return true;
 }
 
 /**
@@ -67,6 +75,7 @@ function experience(event) {
 
 module.exports = function attach(api) {
   api.onGroundItemPickup(pickup);
+  api.onCustomEvent("magic:can-telekinetic-grab", telegrab);
   api.onCustomEvent("npc-drops:roll", rolledDrops);
   api.onCanAttack(attacking);
   api.onPlayerDeathItemDrop(playerLoot);

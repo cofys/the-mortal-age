@@ -5,7 +5,6 @@ import { SceneBuilder } from "../rs/scene/SceneBuilder";
 import { isMobileMode } from "../common/utils/DeviceUtil";
 import { clamp } from "../common/utils/MathUtil";
 import { ProjectionType } from "./Camera";
-import { ClientState } from "./ClientState";
 import { OsrsRendererType } from "./GameRenderers";
 import { getAxisDeadzone } from "./InputManager";
 import { MapManager, MapSquare } from "./MapManager";
@@ -16,7 +15,9 @@ import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
 import { multiLocVariants, multiLocVarps } from "../render/loc/MultiLocVarps";
-import { getMapSquareId } from "../rs/map/MapFileIndex";
+import { getMapPlaneId, getMapSquareId } from "../rs/map/MapFileIndex";
+import type { SdMapData } from "../render/loader/SdMapData";
+import type { SdMapLoaderInput } from "../render/loader/SdMapLoaderInput";
 
 /** Optional details of a LOC change (moves, rotations, shape changes). */
 export type LocChangeOptions = {
@@ -72,6 +73,43 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     mapManager: MapManager<T>;
     uiHidden: boolean = false;
     widgetsOverlay?: WidgetsOverlay;
+    private readonly minimapSources = new Map<number, SdMapLoaderInput>();
+    private readonly minimapRequests = new Map<number, { source: SdMapLoaderInput; retryAt: number }>();
+
+    registerMinimapSource(data: SdMapData): void {
+        const input = data.minimapInput;
+        if (!input || data.doorOnly || data.locOnly || input.instance || input.overrideRenderPos) return;
+        this.minimapSources.set(getMapSquareId(data.mapX, data.mapY), { ...input, loadedTextureIds: new Set() });
+        for (let level = 0; level < 4; level++) this.osrsClient.setMinimapImageUrl(data.mapX, data.mapY, undefined, level);
+    }
+
+    clearMinimapSources(): void {
+        this.minimapSources.clear();
+        this.minimapRequests.clear();
+    }
+
+    async requestMinimapImage(mapX: number, mapY: number, level: number): Promise<void> {
+        if (!Number.isInteger(level) || level < 0 || level >= 4) return;
+        const mapId = getMapSquareId(mapX, mapY);
+        const source = this.minimapSources.get(mapId);
+        if (!source) return;
+        const key = getMapPlaneId(mapX, mapY, level);
+        const pending = this.minimapRequests.get(key);
+        if (pending?.source === source && pending.retryAt > Date.now()) return;
+        const request = { source, retryAt: Infinity };
+        this.minimapRequests.set(key, request);
+        try {
+            const data = await this.osrsClient.workerPool.queueMinimap(source, level);
+            const blob = data?.minimapBlobs[level];
+            if (blob && this.minimapSources.get(mapId) === source) {
+                this.osrsClient.setMinimapImageUrl(mapX, mapY, URL.createObjectURL(blob), level);
+            }
+        } catch (error) {
+            console.warn(`[minimap] floor ${level} load failed for ${mapX},${mapY}`, error);
+        } finally {
+            if (this.minimapRequests.get(key) === request) request.retryAt = Date.now() + 1000;
+        }
+    }
 
     // OSRS camera shake slots (0:X, 1:Y, 2:Z, 3:Yaw, 4:Pitch).
     public readonly cameraShakeEnabled: boolean[] = [false, false, false, false, false];
@@ -211,13 +249,17 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         super();
         // Keep the number of queued map loads low to cap memory spikes
         this.mapManager = new MapManager(osrsClient.workerPool.size, this.queueLoadMap.bind(this));
+        this.mapManager.mapRemovedListeners.add((map) => {
+            this.minimapSources.delete(getMapSquareId(map.mapX, map.mapY));
+            for (let level = 0; level < 4; level++) this.minimapRequests.delete(getMapPlaneId(map.mapX, map.mapY, level));
+        });
     }
 
     protected override getEffectiveFpsLimit(): number {
-        // The GPU plugin's cap replaces the client's own, mobile battery caps included.
+        // The GPU cap still honours the handheld's selected battery limit.
         const gpu = this.osrsClient.clientPlugins.gpuSettings();
         let limit = gpu ? gpu.fpsLimit : super.getEffectiveFpsLimit();
-        let target = gpu ? 0 : Number(this.osrsClient.targetFps) | 0;
+        let target = gpu && !isMobileMode ? 0 : Number(this.osrsClient.targetFps) | 0;
         // Never honor CS2 mobile battery caps (~20) on desktop.
         if (!isMobileMode && target > 0 && target < 60) {
             target = 0;
@@ -256,6 +298,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     }
 
     override cleanUp(): void {
+        this.clearMinimapSources();
         this.osrsClient.inputManager.cleanUp();
     }
 
@@ -294,21 +337,6 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         this.mapManager.init(
             this.osrsClient.mapFileIndex,
             SceneBuilder.fillEmptyTerrain(this.osrsClient.loadedCache.info),
-        );
-        if (!this.osrsClient.isLoggedIn()) {
-            return;
-        }
-        // Use camera position for initial load (player position not yet available)
-        const camera = this.osrsClient.camera;
-        this.mapManager.update(
-            camera.getPosX(),
-            camera.getPosZ(),
-            camera,
-            this.stats.frameCount,
-            this.osrsClient.mapRadius,
-            ClientState.baseX | 0,
-            ClientState.baseY | 0,
-            this.osrsClient.expandedMapLoading | 0,
         );
     }
 
@@ -519,8 +547,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
         // Scroll wheel zoom.
         // Follow-camera zoom is driven by widget onScroll handlers on the main viewport root.
-        // Pinch is merged into wheelDeltaY in InputManager (same path as mouse wheel).
-        const zoomDelta = inputManager.wheelDeltaY;
+        const zoomDelta = inputManager.getCameraZoomDelta();
         const pluginHandlesCameraScroll = this.osrsClient.clientPlugins.handleCameraScroll({
             camera,
             input: inputManager,

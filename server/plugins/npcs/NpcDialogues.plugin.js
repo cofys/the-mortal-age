@@ -13,7 +13,8 @@
  * past it. A message step's "npc-dialogue:action" (`kind: "message"`) can set
  * `box: { items }` (one or two item ids) to show it as an item box, as OSRS shows
  * hand-outs, instead of a chat message. "npc-dialogue:start" plays a named variant on demand.
- * Speech, choices, random alternatives and named shops run through existing systems.
+ * Speech, choices, random alternatives and named shops run through existing systems; a shop
+ * with versions emits "npc-dialogue:shop" ({ player, npcId, target, shops, shop }) to pick one.
  */
 const fs = require("fs");
 const path = require("path");
@@ -366,6 +367,18 @@ function flatten(steps, opts = {}) {
     }
   }
   return out;
+}
+
+/**
+ * The shop an open_shop step opens. A shop page split into versions lists them in
+ * `step.shops` ("Ned's Handmade Rope (100% Wool) (Default)", "... (Fremennik Isles)");
+ * "npc-dialogue:shop" lets a plugin pick one by game state, else the Default version opens.
+ */
+function shopName(api, player, npcId, step) {
+  if (!Array.isArray(step.shops)) return step.target;
+  const request = { player, npcId, target: step.target, shops: step.shops, shop: null };
+  api.emitCustomEvent("npc-dialogue:shop", request);
+  return request.shop ?? step.shops.find((name) => name.endsWith(" (Default)"));
 }
 
 function startDialogue(api, event, steps, branches = {}, context = {}) {
@@ -786,7 +799,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           return run([...(option.steps || []), ...rest], record);
         }
         if (step.type === "action" && step.action === "open_shop") {
-          const target = step.target;
+          const target = shopName(api, player, npcId, step);
           const shops = ShopDefinition.all().filter((shop) => shop.getName() === target);
           if (shops.length === 1) {
             close();

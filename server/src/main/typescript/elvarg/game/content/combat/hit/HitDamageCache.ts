@@ -1,12 +1,12 @@
-import { Stopwatch } from "../../../../util/Stopwatch";
+import { TickStopwatch } from "../../../../util/TickStopwatch";
 
 export class HitDamageCache {
-    private stopwatch: Stopwatch;
+    private stopwatch: TickStopwatch;
     private damage: number;
 
     constructor(damage: number) {
         this.damage = damage;
-        this.stopwatch = new Stopwatch().reset();
+        this.stopwatch = new TickStopwatch().reset();
     }
 
     public getDamage(): number {

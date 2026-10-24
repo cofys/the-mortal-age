@@ -30,7 +30,7 @@ const CATEGORIES = {
   EZEKIEL: "tfa_stats_category_ezekiel",
   MOIA: "tfa_stats_category_moia",
   OCELLUS: "tfa_stats_category_ocellus",
-  JELLY: "tfa_stats_category_jelly",
+  DREADNOTH: "tfa_stats_category_jelly",
   XARTH: "tfa_stats_category_xarth",
 };
 const ROWS = {
@@ -113,6 +113,11 @@ function onRecord({ player, category, field }) {
   if (player && category && field) record(player, category, field);
 }
 
+/** "fractured-archive:record-time" { player, category, size, ticks }: a completion time. */
+function onRecordTime({ player, category, size, ticks }) {
+  if (player && category && size > 0 && ticks > 0) recordTime(player, category, Math.min(size, Shared.MAX_PARTY_SIZE), ticks);
+}
+
 /** The Record Keeper's "View Stats?" - "Yes.": once the conversation has closed itself. */
 function keeperChoice({ player, stepId }) {
   if (stepId === "tfa-record-keeper-view-stats") Shared.later(player, 1, () => open(player));
@@ -125,6 +130,7 @@ module.exports = function registerRecords(api) {
   api.onInterfaceActionClick(tableTrigger);
   api.onCustomEvent("npc-dialogue:choice", keeperChoice);
   api.onCustomEvent("fractured-archive:record", onRecord);
+  api.onCustomEvent("fractured-archive:record-time", onRecordTime);
 };
 
 Object.assign(module.exports, { ATTR, CATEGORIES, record, recordTime, recordsOf, open, sendCategory });

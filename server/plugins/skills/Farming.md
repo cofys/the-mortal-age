@@ -52,8 +52,10 @@ This is **not a verified 1:1 implementation**. In particular:
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
   quest-specific crops/access restrictions, achievement completion, and the
   wider quest/diary progression systems are not implemented by this plugin.
-- The complete Zamorak equipment list for Bologa and the precise nightshade
-  glove restrictions still need parity work.
+- The complete Zamorak equipment list for Bologa still needs parity work.
+- Belladonna hand protection uses the Wiki's published protective families, resolved to
+  unnoted hands-slot cache variants (including recolours). Unlisted new families require
+  source verification; protection is not inferred from item names or combat stats.
 - Region 25287 could not be decoded by the cache export. Its contents are not
   included in the patch coverage claim. No in-game or smoke tests were run.
 

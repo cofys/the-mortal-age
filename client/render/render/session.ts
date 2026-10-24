@@ -1,4 +1,5 @@
 import Denque from "denque";
+import { cancelPendingMapUploads } from "./streaming";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
 import { Schema } from "leva/dist/declarations/src/types";
@@ -191,7 +192,7 @@ import { RENDER_CONSTANTS } from "./constants";
 import { cleanUpRenderer } from "./handlers";
 
 export function clearSessionCaches(host: WebGLOsrsRendererHost, ): void {
-
+        cancelPendingMapUploads(host);
         // Clear NPC type caches (grow with each unique NPC type seen)
         host.npcDefaultHeightCache.clear();
         host.npcNameCache.clear();
@@ -266,12 +267,11 @@ export function clearSessionCaches(host: WebGLOsrsRendererHost, ): void {
         host.cameraTerrainPitchPressure = 0;
         host.clearCameraShake();
         host.mapDataLoadedNotified = false;
-        host.heightValidAtTime = undefined;
     
 }
 
 export async function cleanUp(host: WebGLOsrsRendererHost, ): Promise<void> {
-
+        WebGLMapSquare.cancelPreparedLoads(host.app);
         cleanUpRenderer(host);
         host.canvas.removeEventListener("touchstart", host.onCanvasTouchStart, true);
         if (isMobileMode && typeof window !== "undefined") {
@@ -321,6 +321,12 @@ export async function cleanUp(host: WebGLOsrsRendererHost, ): Promise<void> {
 
         host.depthTarget?.delete();
         host.depthTarget = undefined;
+
+        host.sceneResolveFramebuffer?.delete();
+        host.sceneResolveFramebuffer = undefined;
+
+        host.sceneResolveColorTarget?.delete();
+        host.sceneResolveColorTarget = undefined;
 
         host.textureFramebuffer?.delete();
         host.textureFramebuffer = undefined;

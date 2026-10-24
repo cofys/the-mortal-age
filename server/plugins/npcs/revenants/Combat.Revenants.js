@@ -15,6 +15,7 @@ const Bracelet = require("./Bracelet.Revenants");
 
 const ATTACK_DISTANCE = 8;
 const FREEZE_IMMUNE_ATTRIBUTE = "revenants:freeze-immune-until";
+const FREEZE_IMMUNITY_TICKS = Math.ceil(MAGIC.freezeImmunityMs / 600);
 
 /** Per-spawn heal state: heals left (8-25) and the cycle the next one is ready. Cleared on death. */
 const healState = new WeakMap();
@@ -78,8 +79,8 @@ function createRevenantCombat(core) {
   function freeze(target) {
     if (!target.isPlayer() || Math.floor(Math.random() * MAGIC.freezeChance) !== 0) return false;
     const player = target.getAsPlayer();
-    if (Date.now() < Number(player.getAttribute(FREEZE_IMMUNE_ATTRIBUTE) ?? 0)) return false;
-    player.setAttribute(FREEZE_IMMUNE_ATTRIBUTE, Date.now() + MAGIC.freezeImmunityMs);
+    if (core.World.getProcessCycle() < Number(player.getAttribute(FREEZE_IMMUNE_ATTRIBUTE) ?? 0)) return false;
+    player.setAttribute(FREEZE_IMMUNE_ATTRIBUTE, core.World.getProcessCycle() + FREEZE_IMMUNITY_TICKS);
     CombatFactory.freeze(player, MAGIC.freezeTicks * 0.6);
     return true;
   }

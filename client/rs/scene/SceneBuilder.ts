@@ -1,3 +1,4 @@
+import { finishBuild } from "../../common/utils/BuildSteps";
 import {
     CHUNK_SIZE,
     INSTANCE_CHUNK_COUNT,
@@ -234,6 +235,17 @@ export class SceneBuilder {
         smoothUnderlays: boolean = false,
         locLoadType: LocLoadType = LocLoadType.MODELS,
     ): Scene {
+        return finishBuild(this.buildSceneSteps(baseX, baseY, sizeX, sizeY, smoothUnderlays, locLoadType));
+    }
+
+    *buildSceneSteps(
+        baseX: number,
+        baseY: number,
+        sizeX: number,
+        sizeY: number,
+        smoothUnderlays: boolean = false,
+        locLoadType: LocLoadType = LocLoadType.MODELS,
+    ): Generator<void, Scene> {
         const scene = new Scene(Scene.MAX_LEVELS, sizeX, sizeY);
 
         const mapStartX = Math.floor(baseX / Scene.MAP_SQUARE_SIZE);
@@ -246,6 +258,7 @@ export class SceneBuilder {
 
         for (let mx = mapStartX; mx < mapEndX; mx++) {
             for (let my = mapStartY; my < mapEndY; my++) {
+                yield;
                 const terrainData = this.getTerrainData(mx, my);
                 if (terrainData) {
                     const offsetX = mx * Scene.MAP_SQUARE_SIZE - baseX;
@@ -259,6 +272,7 @@ export class SceneBuilder {
 
         for (let mx = mapStartX; mx < mapEndX; mx++) {
             for (let my = mapStartY; my < mapEndY; my++) {
+                yield;
                 if (!emptyTerrainIds.has(getMapSquareId(mx, my))) {
                     continue;
                 }
@@ -278,6 +292,7 @@ export class SceneBuilder {
 
         for (let mx = mapStartX; mx < mapEndX; mx++) {
             for (let my = mapStartY; my < mapEndY; my++) {
+                yield;
                 const locData = this.getLocData(mx, my);
                 if (!locData) {
                     continue;
@@ -289,7 +304,9 @@ export class SceneBuilder {
         }
 
         this.applyTerrainOverrides(scene);
+        yield;
         this.addTileModels(scene, smoothUnderlays);
+        yield;
         scene.setTileMinLevels();
 
         // Set floor collision BEFORE bridge demotion (matches OSRS client order)
@@ -304,6 +321,7 @@ export class SceneBuilder {
             scene.light(this.locModelLoader.textureLoader, -50, -10, -50);
         }
 
+        yield;
         return scene;
     }
 
@@ -759,6 +777,40 @@ export class SceneBuilder {
         }
     }
 
+    /**
+     * Adds a loc the server spawned (LOC_ADD_CHANGE) to a scene already built. Bridges are
+     * demoted by then, so the server's plane is the one it is drawn on, but its heights are still
+     * the map plane's: the Motherlode Mine's upper veins stand on plane 1's heights, not on the
+     * cave floor 320 units below.
+     */
+    addLocToBuiltScene(
+        scene: Scene,
+        level: number,
+        tileX: number,
+        tileY: number,
+        id: number,
+        type: LocModelType,
+        rotation: number,
+        locLoadType: LocLoadType,
+        seqOverride?: number,
+        seqRandomStartOverride?: boolean,
+    ): void {
+        this.addLoc(
+            scene,
+            level,
+            tileX,
+            tileY,
+            id,
+            type,
+            rotation,
+            scene.collisionMaps[level],
+            locLoadType,
+            seqOverride,
+            seqRandomStartOverride,
+            SceneBuilder.mapLevel(scene, tileX, tileY, level),
+        );
+    }
+
     addLoc(
         scene: Scene,
         level: number,
@@ -771,6 +823,7 @@ export class SceneBuilder {
         locLoadType: LocLoadType,
         seqOverride?: number,
         seqRandomStartOverride?: boolean,
+        heightLevel: number = level,
     ): void {
         if ((id | 0) <= 0) {
             return;
@@ -811,10 +864,12 @@ export class SceneBuilder {
             endY = tileY + 1;
         }
 
-        const heightMap = scene.tileHeights[level];
+        // Heights come from the map plane: after bridge demotion a bridge's locs are drawn a
+        // plane below the heights they stand on (`heightLevel`, see addLocToBuiltScene).
+        const heightMap = scene.tileHeights[heightLevel];
         let heightMapAbove: Int32Array[] | undefined;
-        if (level < scene.levels - 1) {
-            heightMapAbove = scene.tileHeights[level + 1];
+        if (heightLevel < scene.levels - 1) {
+            heightMapAbove = scene.tileHeights[heightLevel + 1];
         }
 
         const centerHeight =
@@ -868,7 +923,7 @@ export class SceneBuilder {
                     id,
                     type,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -890,7 +945,7 @@ export class SceneBuilder {
                     id,
                     LocModelType.NORMAL,
                     locRotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -948,7 +1003,7 @@ export class SceneBuilder {
                     id,
                     type,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -966,7 +1021,7 @@ export class SceneBuilder {
                     id,
                     type,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1010,7 +1065,7 @@ export class SceneBuilder {
                     id,
                     type,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1045,7 +1100,7 @@ export class SceneBuilder {
                     id,
                     type,
                     rotation + 4,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1055,7 +1110,7 @@ export class SceneBuilder {
                     id,
                     type,
                     (rotation + 1) & 3,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1088,7 +1143,7 @@ export class SceneBuilder {
                     id,
                     type,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1122,7 +1177,7 @@ export class SceneBuilder {
                     id,
                     type,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1144,7 +1199,7 @@ export class SceneBuilder {
                     id,
                     LocModelType.WALL_DECORATION_INSIDE,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1185,7 +1240,7 @@ export class SceneBuilder {
                     id,
                     LocModelType.WALL_DECORATION_INSIDE,
                     rotation,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1229,7 +1284,7 @@ export class SceneBuilder {
                     id,
                     LocModelType.WALL_DECORATION_INSIDE,
                     rotation + 4,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1268,7 +1323,7 @@ export class SceneBuilder {
                     id,
                     LocModelType.WALL_DECORATION_INSIDE,
                     insideRotation + 4,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1312,7 +1367,7 @@ export class SceneBuilder {
                     id,
                     LocModelType.WALL_DECORATION_INSIDE,
                     rotation + 4,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1322,7 +1377,7 @@ export class SceneBuilder {
                     id,
                     LocModelType.WALL_DECORATION_INSIDE,
                     insideRotation + 4,
-                    level,
+                    heightLevel,
                     tileX,
                     tileY,
                     seqId,
@@ -1748,15 +1803,29 @@ export class SceneBuilder {
         smoothUnderlays: boolean = false,
         locLoadType: LocLoadType = LocLoadType.MODELS,
     ): Scene {
+        return finishBuild(this.buildInstanceSceneSteps(templateChunks, _baseX, _baseY, sizeX, sizeY, smoothUnderlays, locLoadType));
+    }
+
+    *buildInstanceSceneSteps(
+        templateChunks: number[][][],
+        _baseX: number,
+        _baseY: number,
+        sizeX: number,
+        sizeY: number,
+        smoothUnderlays: boolean = false,
+        locLoadType: LocLoadType = LocLoadType.MODELS,
+    ): Generator<void, Scene> {
         const scene = new Scene(Scene.MAX_LEVELS, INSTANCE_SIZE, INSTANCE_SIZE);
 
         // Phase 1: Load all source region archives referenced by the template grid
         const archives = this.loadInstanceRegionArchives(templateChunks, this.xteasMap);
 
         // Phase 2: Decode terrain chunk-by-chunk
+        const terrainRowOffsets = new Map<Int8Array, Uint32Array>();
         for (let plane = 0; plane < PLANE_COUNT; plane++) {
             for (let cx = 0; cx < INSTANCE_CHUNK_COUNT; cx++) {
                 for (let cy = 0; cy < INSTANCE_CHUNK_COUNT; cy++) {
+                    yield;
                     const packed = templateChunks[plane]?.[cx]?.[cy] ?? -1;
                     if (packed === -1) {
                         this.clearTerrainChunk(scene, plane, cx * CHUNK_SIZE, cy * CHUNK_SIZE);
@@ -1778,6 +1847,11 @@ export class SceneBuilder {
                     const sourceChunkY = (chunkY & 7) * CHUNK_SIZE;
                     const noiseXOffset = (chunkX - cx) * CHUNK_SIZE;
                     const noiseYOffset = (chunkY - cy) * CHUNK_SIZE;
+                    let rowOffsets = terrainRowOffsets.get(archive.terrain);
+                    if (!rowOffsets) {
+                        rowOffsets = this.indexTerrainRows(scene, archive.terrain);
+                        terrainRowOffsets.set(archive.terrain, rowOffsets);
+                    }
                     this.decodeInstanceTerrainChunk(
                         scene,
                         archive.terrain,
@@ -1790,6 +1864,7 @@ export class SceneBuilder {
                         rotation,
                         noiseXOffset,
                         noiseYOffset,
+                        rowOffsets,
                     );
                 }
             }
@@ -1815,6 +1890,7 @@ export class SceneBuilder {
         for (let plane = 0; plane < PLANE_COUNT; plane++) {
             for (let cx = 0; cx < INSTANCE_CHUNK_COUNT; cx++) {
                 for (let cy = 0; cy < INSTANCE_CHUNK_COUNT; cy++) {
+                    yield;
                     const packed = templateChunks[plane]?.[cx]?.[cy] ?? -1;
                     if (packed === -1) continue;
                     const {
@@ -1845,7 +1921,9 @@ export class SceneBuilder {
         }
 
         // Phase 4: Post-processing (same as buildScene)
+        yield;
         this.addTileModels(scene, smoothUnderlays);
+        yield;
         scene.setTileMinLevels();
         this.setFloorCollision(scene);
         scene.applyBridgeLinks();
@@ -1854,6 +1932,7 @@ export class SceneBuilder {
             scene.light(this.locModelLoader.textureLoader, -50, -10, -50);
         }
 
+        yield;
         return scene;
     }
 
@@ -1883,11 +1962,19 @@ export class SceneBuilder {
         return archives;
     }
 
-    /**
-     * Decode an 8×8 terrain chunk from a source region archive with rotation.
-     * Reads the full 4×64×64 terrain buffer but only applies tiles within the
-     * source chunk bounds.
-     */
+    private indexTerrainRows(scene: Scene, data: Int8Array): Uint32Array {
+        const offsets = new Uint32Array(Scene.MAX_LEVELS * Scene.MAP_SQUARE_SIZE ** 2 / CHUNK_SIZE);
+        const buffer = new ByteBuffer(data);
+        for (let row = 0; row < offsets.length; row++) {
+            offsets[row] = buffer.offset;
+            for (let tile = 0; tile < CHUNK_SIZE; tile++) {
+                this.decodeTerrainTile(scene, buffer, -1, -1, -1, 0, 0, 0, false);
+            }
+        }
+        return offsets;
+    }
+
+    /** Decode only the selected 8×8 terrain tiles, retaining destination height/noise rules. */
     private decodeInstanceTerrainChunk(
         scene: Scene,
         regionMapData: Int8Array,
@@ -1900,6 +1987,7 @@ export class SceneBuilder {
         rotation: number,
         noiseXOffset: number,
         noiseYOffset: number,
+        rowOffsets: Uint32Array,
     ): void {
         // Clear bridge collision flags in the chunk area before decoding
         const collisionMap = scene.collisionMaps[targetPlane];
@@ -1915,38 +2003,27 @@ export class SceneBuilder {
 
         const buffer = new ByteBuffer(regionMapData);
 
-        for (let level = 0; level < Scene.MAX_LEVELS; level++) {
-            for (let x = 0; x < Scene.MAP_SQUARE_SIZE; x++) {
-                for (let y = 0; y < Scene.MAP_SQUARE_SIZE; y++) {
-                    if (
-                        level === sourcePlane &&
-                        x >= sourceChunkX &&
-                        x < sourceChunkX + CHUNK_SIZE &&
-                        y >= sourceChunkY &&
-                        y < sourceChunkY + CHUNK_SIZE
-                    ) {
-                        const localX = x & 7;
-                        const localY = y & 7;
-                        const destX = chunkSceneX + rotateChunkX(localX, localY, rotation);
-                        const destY = chunkSceneY + rotateChunkY(localX, localY, rotation);
-                        const noiseX = chunkSceneX + localX + noiseXOffset;
-                        const noiseY = chunkSceneY + localY + noiseYOffset;
-                        this.decodeTerrainTile(
-                            scene,
-                            buffer,
-                            targetPlane,
-                            destX,
-                            destY,
-                            noiseX - destX,
-                            noiseY - destY,
-                            rotation,
-                            true,
-                        );
-                    } else {
-                        // Skip this tile's data without applying it
-                        this.decodeTerrainTile(scene, buffer, -1, -1, -1, 0, 0, 0, false);
-                    }
-                }
+        for (let x = sourceChunkX; x < sourceChunkX + CHUNK_SIZE; x++) {
+            const sourceTile = (sourcePlane * Scene.MAP_SQUARE_SIZE + x) * Scene.MAP_SQUARE_SIZE + sourceChunkY;
+            buffer.offset = rowOffsets[sourceTile / CHUNK_SIZE];
+            for (let y = sourceChunkY; y < sourceChunkY + CHUNK_SIZE; y++) {
+                const localX = x & 7;
+                const localY = y & 7;
+                const destX = chunkSceneX + rotateChunkX(localX, localY, rotation);
+                const destY = chunkSceneY + rotateChunkY(localX, localY, rotation);
+                const noiseX = chunkSceneX + localX + noiseXOffset;
+                const noiseY = chunkSceneY + localY + noiseYOffset;
+                this.decodeTerrainTile(
+                    scene,
+                    buffer,
+                    targetPlane,
+                    destX,
+                    destY,
+                    noiseX - destX,
+                    noiseY - destY,
+                    rotation,
+                    true,
+                );
             }
         }
     }

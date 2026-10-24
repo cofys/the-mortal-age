@@ -16,7 +16,7 @@ export class DataBuffer {
 
     ensureSize(count: number): boolean {
         const byteOffset = this.offset * this.stride;
-        if (byteOffset + count * this.stride >= this.view.byteLength) {
+        if (byteOffset + count * this.stride > this.view.byteLength) {
             const newLength = Math.max(
                 this.view.byteLength * 2,
                 this.stride * 128,

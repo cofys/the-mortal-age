@@ -387,6 +387,8 @@ export class PlayerSession {
             : undefined),
           crawl: npc.isCrawling?.() || undefined,
           modelCustomisation: npc.getModelCustomisationForUpdate?.() ?? undefined,
+          baseAnimations: npc.getBaseAnimationsForUpdate?.() ?? undefined,
+          transparency: npc.getTransparency?.() ?? undefined,
         };
       })
     );

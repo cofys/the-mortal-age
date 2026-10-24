@@ -2,6 +2,7 @@ import FileSaver from "file-saver";
 import { vec3 } from "gl-matrix";
 import { Leva, button, buttonGroup, folder, useControls } from "leva";
 import { ButtonGroupOpts, Schema } from "leva/dist/declarations/src/types";
+import { Components, createPlugin, styled, useInputContext, type LevaInputProps } from "leva/plugin";
 import { memo, useCallback, useEffect, useState } from "react";
 
 import { DownloadProgress } from "../rs/cache/CacheFiles";
@@ -13,6 +14,8 @@ import { ClientState } from "./ClientState";
 import { GameRenderer } from "./GameRenderer";
 import {
     OsrsRendererType,
+    WEBGL,
+    WEBGPU,
     createRenderer,
     getAvailableRenderers,
     getRendererName,
@@ -37,6 +40,40 @@ enum VarType {
     VARP = 0,
     VARBIT = 1,
 }
+
+const RendererSelect = styled("select", {
+    height: "$rowHeight",
+    padding: "0 $sm",
+    border: "none",
+    borderRadius: "$sm",
+    backgroundColor: "$elevation3",
+    color: "inherit",
+    font: "inherit",
+    "&:focus": { $focusStyle: "" },
+});
+
+// Leva's built-in select cannot disable individual options.
+const rendererControl = createPlugin<{ value: OsrsRendererType }, OsrsRendererType, {}>({
+    component: function RendererControl() {
+        const { label, value, onUpdate, id, disabled } = useInputContext<LevaInputProps<OsrsRendererType>>();
+        const available = getAvailableRenderers();
+        return (
+            <Components.Row input>
+                <Components.Label>{label}</Components.Label>
+                <RendererSelect id={id} value={value} disabled={disabled} onChange={(event) => {
+                    const type = event.currentTarget.value as OsrsRendererType;
+                    if (available.includes(type)) onUpdate(type);
+                }}>
+                    {[WEBGL, WEBGPU].map((type) => (
+                        <option key={type} value={type} disabled={!available.includes(type)}>
+                            {getRendererName(type)}
+                        </option>
+                    ))}
+                </RendererSelect>
+            </Components.Row>
+        );
+    },
+});
 
 export const DebugControls = memo(
     ({
@@ -197,11 +234,6 @@ export const DebugControls = memo(
                 cancelAnimationFrame(animationId);
             };
         }, [osrsClient, cameraPoints, animationDuration, isCameraRunning]);
-
-        const rendererOptions: Record<string, OsrsRendererType> = {};
-        for (let v of getAvailableRenderers()) {
-            rendererOptions[getRendererName(v)] = v;
-        }
 
         const recordSchema: Schema = {
             "Add point (F3)": button(() => addPoint()),
@@ -409,9 +441,8 @@ export const DebugControls = memo(
                 ...(playerFolder ? { Player: playerFolder } : {}),
                 Render: folder(
                     {
-                        Renderer: {
+                        Renderer: rendererControl({
                             value: renderer.type,
-                            options: rendererOptions,
                             onChange: (v: OsrsRendererType) => {
                                 if (renderer.type !== v) {
                                     const renderer = createRenderer(v, osrsClient);
@@ -419,7 +450,7 @@ export const DebugControls = memo(
                                     setRenderer(renderer);
                                 }
                             },
-                        },
+                        }),
                         "Fps Limit": {
                             value: osrsClient.targetFps,
                             min: 0,

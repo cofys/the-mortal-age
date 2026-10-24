@@ -287,7 +287,7 @@ function storeTool(player, slot) {
 }
 function farmingItemOnNpc(event) {
     const { player, target, itemId: id } = event;
-    if (!target.getDefinition()?.getName()?.toLowerCase().includes("leprechaun")) return;
+    if (!(event.definition ?? target.getDefinition())?.getName()?.toLowerCase().includes("leprechaun")) return;
     event.handled = true;
     if (!player.getInventory().contains(id)) return;
     const definition = core.CacheDefinitions.getItem(id);

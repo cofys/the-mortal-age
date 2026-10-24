@@ -31,7 +31,7 @@ import {
     type RegionPackMessage,
 } from "./hostProtocol/regionPackMessage";
 import { browserHostOrigin, browserHostWindow } from "./hostProtocol/origin";
-import { isBrowserHostClient } from "../../../config/clientEnv";
+import { isBrowserHostClient, isMapEditorUrl } from "../../../config/clientEnv";
 import {
     NPC_SPAWN_MESSAGE,
     NPC_SPAWN_REQUEST_MESSAGE,
@@ -1317,6 +1317,55 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         }
     };
 
+    /**
+     * Pulls server-side region replacements (agent edits, packs) and persisted
+     * object spawns into the scene, so the logged-out preview shows the live
+     * world. Local unsaved edits keep applying on top at rebuild. Browser-host
+     * editors receive all of this through host messaging instead.
+     */
+    const syncServerReplacements = async (): Promise<void> => {
+        if (browserHostWindow()) return;
+        const base = getContentApiBase();
+        if (!base) return;
+        const touched = new Set<number>();
+        try {
+            const list = await (await fetch(`${base}/regions`)).json();
+            for (const regionId of list?.regions ?? []) {
+                if (!Number.isInteger(regionId)) continue;
+                try {
+                    const packResponse = await fetch(`${base}/regions/${regionId}.pack`);
+                    if (packResponse.ok) {
+                        const pack = parseRegionPack(new Uint8Array(await packResponse.arrayBuffer()));
+                        editorRegionReplacements.set(regionId, {
+                            terrainData: Uint8Array.from(pack.terrainData),
+                            objectData: pack.objectData ? Uint8Array.from(pack.objectData) : undefined,
+                        });
+                    } else {
+                        const terrainResponse = await fetch(`${base}/regions/${regionId}.terrain`);
+                        if (!terrainResponse.ok) continue;
+                        editorRegionReplacements.set(regionId, {
+                            terrainData: new Uint8Array(await terrainResponse.arrayBuffer()),
+                            objectData: undefined,
+                        });
+                    }
+                    touched.add(regionId);
+                } catch (error) {
+                    console.warn(`[edit-mode] failed to load server region ${regionId}`, error);
+                }
+            }
+        } catch (error) {
+            console.warn("[edit-mode] failed to list server regions", error);
+        }
+        try {
+            const spawns = parseObjectSpawns(await loadLocalEditorData("object-spawns"));
+            objectSpawns = spawns;
+            for (const spawn of spawns) touched.add(regionIdForTile(spawn.position.x, spawn.position.y));
+        } catch (error) {
+            console.warn("[edit-mode] failed to load server object spawns", error);
+        }
+        if (touched.size > 0) await refreshEditedRegions([...touched]);
+    };
+
     plugin.attach({
         getCanvas: () => client.renderer?.canvas as HTMLCanvasElement | undefined,
         getCameraTile: () => ({
@@ -1675,6 +1724,9 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         setScenePreview: (enabled, spawn) => {
             client.scenePreviewEnabled = enabled;
             client.scenePreviewLoadingStartedAt = enabled ? performance.now() : undefined;
+            // Pull agent/pack edits when the preview starts: the scene (and its
+            // map data) is ready then, so this cannot race the initial load.
+            if (enabled) void syncServerReplacements();
             if (!enabled) {
                 client.editorLaunching = false;
                 document.body.classList.remove("map-editor-launching");
@@ -1798,6 +1850,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             return renderer.getTileHeightAtPlane(tile.tileX, tile.tileY, tile.plane);
         },
         refreshEditedRegions,
+        syncServerReplacements,
         despawnNpc: (serverId) => {
             // Dev-only: reuse the server despawn path rather than duplicating
             // the ECS/world-view teardown it performs.
@@ -1964,7 +2017,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
 
     // ?edit=1 opens the client straight in the editor instead of changing the
     // normal welcome-screen button.
-    if (new URLSearchParams(window.location.search).has("edit")) {
+    if (isMapEditorUrl()) {
         // ponytail: polled, because the cache load and the world definition
         // fetch settle independently and neither has a ready event to hook.
         const timer = window.setInterval(() => {

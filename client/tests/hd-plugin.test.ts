@@ -88,7 +88,7 @@ const resource = () => {
 const values = new Map<string, unknown>();
 let programBinds = 0;
 const program = { bind() { programBinds++; }, uniform: (name: string, value: unknown) => values.set(name, value), samplers: { u_textures: 0 } as Record<string, number> };
-let rebuilds = 0;
+let rebuilds = 0, terrainSamples = 0;
 let finishRebuild = () => {};
 const app = {
     createTexture2D: resource, createTextureArray: resource, createFramebuffer: resource,
@@ -103,7 +103,7 @@ const renderer = {
     playerPosUni: [0, 0], getFrameRenderDistanceTiles: () => 50, getPlayerRawPlane: () => 0,
     osrsClient: { camera: { viewMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] } },
     mapManager: { visibleMapCount: 0 }, textureIdIndexMap: new Map(),
-    sampleHeightAtExactPlane: () => 0, shouldUseDirectTextureScenePass: () => true,
+    sampleHeightAtExactPlane: () => { terrainSamples++; return 0; }, shouldUseDirectTextureScenePass: () => true,
     framebuffer: {}, textureFramebuffer: {},
     // The swap lands when the test calls finishRebuild (a real compile takes frames).
     rebuildScenePrograms: () => { rebuilds++; return { then: (done: () => void) => { finishRebuild = done; } }; },
@@ -135,6 +135,7 @@ programBinds = 0;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(programBinds, 2, "Bind once for shadow uniforms and once to restore the scene pass");
 assert.equal(shadows, 1);
+assert.equal(terrainSamples, 82, "first frame samples 81 mist points and the shadow target");
 const programFog = values.get("u_hdFog") as number[];
 const expectedFog = resolveFogRange({ renderDistance: 50, autoFogDepth: true,
     autoFogDepthFactor: 0.85, manualFogDepth: 24, hd: true });
@@ -152,6 +153,7 @@ renderer.playerPosUni[0] = 0.1;
 programBinds = 0;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 1, "Reuse the shadow map between 15 Hz updates");
+assert.equal(terrainSamples, 163, "sub-tile movement resamples the mist target");
 assert.equal(actorShadows, 2, "Moving actor shadows must use the current pose every frame");
 assert.equal(shadowCopies, 2, "Replace previous actor depth with cached world depth");
 assert.equal(programBinds, 2);
@@ -160,6 +162,7 @@ assert.equal((values.get("u_hdLightPositions[0]") as Float32Array).length, 16 * 
 frameTime = 68;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 2, "Refresh moving shadows at the next deadline");
+assert.equal(terrainSamples, 164, "stationary frames reuse mist samples while refreshing the shadow target");
 renderer.playerPosUni[0] = 10;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 3, "Teleporting must refresh shadows immediately");
@@ -182,7 +185,15 @@ assert.equal(new HdPlugin().isEnabled(), false, "Disabled by default");
 performance.now = originalNow;
 
 const { HdMaterials, HD_LOOKUP_WIDTH, HD_TEXTURE_SIZE } = require("../game/plugins/hd/HdMaterials");
-const { HD_MATERIALS, HD_GROUND_MATERIALS } = require("../game/plugins/hd/HdMaterialData");
+const { HD_MATERIALS, HD_GROUND_MATERIALS, HD_DETAIL_TEXTURES } = require("../game/plugins/hd/HdMaterialData");
+assert.equal(HD_DETAIL_TEXTURES.length, 0, "The upstream pack uses the normal 256px atlas");
+for (const material of [...HD_MATERIALS, ...HD_GROUND_MATERIALS]) {
+    for (const file of [material.file, material.normal]) {
+        if (file) assert.ok(!file.includes("/local/"), "Upstream materials must not retain photographic overrides");
+    }
+}
+assert.equal(new Set([13, 17, 18].map(id => HD_GROUND_MATERIALS.find((m: any) => m.id === id).file)).size, 3,
+    "Stone patterns, Falador paving and jagged tiles retain their distinct upstream textures");
 for (const id of [6, 16, 44, 45, 50, 55]) {
     assert.equal(HD_MATERIALS.find((m: any) => m.id === id).params[0], 0, "Roofs, including the wood-grain replacement, stay matte");
 }
@@ -211,8 +222,8 @@ assert.equal(metadata(5)[0], 0, "Use the cache texture until the HD image loads"
 const brick = HD_MATERIALS.find((m: any) => m.id === 2);
 images.find(image => image.src === brick.file).onload();
 materialState.update(layers);
-assert.ok(metadata(5)[0] < 0, "Select the 512px array for a successfully loaded detailed wall");
-assert.equal(metadata(5)[1], 2, "World mapping must not mark masonry as unlit");
+assert.ok(metadata(5)[0] > 0, "A loaded upstream wall selects the 256px array");
+assert.equal(metadata(5)[1], 0, "Upstream masonry retains cache UVs and normal lighting");
 assert.equal(metadata(5)[2], 0, "Keep geometric normals until the normal image loads");
 images.find(image => image.src === brick.normal).onload();
 materialState.update(layers);
@@ -221,7 +232,7 @@ const uploadsBeforeRemap = atlasUploads;
 layers.set(2, 9);
 materialState.update(layers);
 assert.equal(metadata(5)[0], 0);
-assert.ok(metadata(9)[0] < 0, "Follow cache-layer remaps without reuploading image pixels");
+assert.ok(metadata(9)[0] > 0, "Follow cache-layer remaps without reuploading image pixels");
 assert.equal(atlasUploads, uploadsBeforeRemap);
 materialState.dispose();
 images.find(image => image.src === brick.file).onload();

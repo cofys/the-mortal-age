@@ -20,6 +20,7 @@ import { CombatEffectSpell } from "./CombatEffectSpell";
 import { CombatNormalSpell, CombatNormalSpellOptions } from "./CombatNormalSpell";
 import { CombatSpell } from "./CombatSpell";
 import { Spell } from "./Spell";
+import { World } from "../../../World";
 
 /**
  * Charge-based combat spell for the powered staves (tridents). OSRS charges
@@ -86,7 +87,7 @@ class ChargeSpell extends Spell {
             return true;
         }
         player.getSkillManager().addExperiences(Skill.MAGIC, this.baseExperience());
-        player.setAttribute(CombatSpells.CHARGE_UNTIL, Date.now() + 420_000);
+        player.setAttribute(CombatSpells.CHARGE_UNTIL, World.getProcessCycle() + 700);
         player.sendMessage("You feel charged with magical power.");
         return true;
     }
@@ -202,9 +203,9 @@ class DarkLureSpell extends CombatArceuusEffectSpell {
 const ARCEUUS_MARK_UNTIL = "arceuus:mark-until";
 
 const hasArceuusMark = (target: Mobile): boolean =>
-    Number(target.getAttribute(ARCEUUS_MARK_UNTIL) ?? 0) > Date.now();
+    Number(target.getAttribute(ARCEUUS_MARK_UNTIL) ?? 0) > World.getProcessCycle();
 const hasArceuusWard = (target: Mobile): boolean =>
-    Number(target.getAttribute("arceuus:ward-until") ?? 0) > Date.now();
+    Number(target.getAttribute("arceuus:ward-until") ?? 0) > World.getProcessCycle();
 /**
  * A demon's demonbane vulnerability other than 100% (Wiki: Yama 120%, his void flares 200%), set by
  * the content that spawns it on the NPC's DEMONBANE_VULNERABILITY_ATTRIBUTE: the bonus scales with it.
@@ -322,7 +323,7 @@ export class CombatSpells {
     }
 
     public static applyChargeMaxHit(caster: Mobile, maxHit: number, spell?: CombatSpell | null): number {
-        if (!caster.isPlayer() || Number(caster.getAttribute(this.CHARGE_UNTIL) ?? 0) <= Date.now()) {
+        if (!caster.isPlayer() || Number(caster.getAttribute(this.CHARGE_UNTIL) ?? 0) <= World.getProcessCycle()) {
             return maxHit;
         }
         const player = caster.getAsPlayer();
@@ -1602,7 +1603,7 @@ export class CombatSpells {
         spellEffect: (cast, target) => {
             if (!cast.isPlayer()) return;
             const magicLevel = cast.getAsPlayer().getSkillManager().getCurrentLevel(Skill.MAGIC);
-            cast.setAttribute(ARCEUUS_MARK_UNTIL, Date.now() + magicLevel * 600);
+            cast.setAttribute(ARCEUUS_MARK_UNTIL, World.getProcessCycle() + magicLevel);
         },
     });
 
@@ -1647,7 +1648,7 @@ export class CombatSpells {
         spellEffect: (_cast, target) => {
             if (!target.isNpc()) return;
             target.getMovementQueue().reset();
-            target.setAttribute("arceuus:dark-lure-until", Date.now() + 20_000);
+            target.setAttribute("arceuus:dark-lure-until", World.getProcessCycle() + 34);
             target.getCombat().attack(_cast);
         },
     });

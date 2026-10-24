@@ -945,7 +945,7 @@ export class Cs2Vm {
             },
             getViewportZoomRange: vm.context.getViewportZoomRange,
             setViewportZoomRange: vm.context.setViewportZoomRange,
-            getViewportFovValues: vm.context.getViewportFovValues,
+            getViewportFovValues: () => vm.context.getViewportFovValues(),
             setViewportFovValues: vm.context.setViewportFovValues,
             setViewportClampFov: vm.context.setViewportClampFov,
 
@@ -2025,6 +2025,7 @@ export class Cs2Vm {
         } else if (eventType === "onVarTransmit") {
             (widget as any).varTransmitTriggers = transmitTriggers ?? undefined;
         }
+        if (eventType === "onTimer") this.context.widgetManager.updateTimerWidget(widget);
         markWidgetInteractionDirty(widget);
     }
 
@@ -2080,6 +2081,7 @@ export class Cs2Vm {
         } else if (eventType === "onVarTransmit") {
             (widget as any).varTransmitTriggers = transmitTriggers ?? undefined;
         }
+        if (eventType === "onTimer") this.context.widgetManager.updateTimerWidget(widget);
         markWidgetInteractionDirty(widget);
     }
 

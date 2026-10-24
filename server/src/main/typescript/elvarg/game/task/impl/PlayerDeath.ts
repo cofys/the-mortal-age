@@ -1,7 +1,6 @@
 import { GameConstants } from "../../GameConstants";
 import { MORTAL_DEVELOPER_ATTRIBUTE } from "../../entity/impl/Mobile";
 import { CombatFactory } from "../../content/combat/CombatFactory";
-import { ItemDefinition } from "../../definition/ItemDefinition";
 import { ItemOnGroundManager } from "../../entity/impl/grounditem/ItemOnGroundManager";
 import { Player } from "../../entity/impl/player/Player";
 import { PlayerRights } from "../../model/rights/PlayerRights";
@@ -11,7 +10,6 @@ import { SkullType } from "../../model/SkullType";
 import { PrayerData, PrayerHandler } from "../../content/PrayerHandler";
 import { Skill } from "../../model/Skill";
 import { Location } from "../../model/Location";
-import { BrokenItem } from "../../model/BrokenItem";
 import { Animation } from "../../model/Animation";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { ItemIdentifiers } from "../../../util/ItemIdentifiers";
@@ -180,6 +178,7 @@ export class PlayerDeathTask extends Task {
                 player,
                 killer: killer ?? null,
                 item,
+                kept: itemsToKeep.includes(item),
                 location: position,
                 shouldDropItems: true,
                 dropEligible,
@@ -247,16 +246,10 @@ export class PlayerDeathTask extends Task {
         return itemsToKeep;
     }
 
-    /** The items a death let the player keep, back in the inventory (broken where they break). */
+    /** The items a death let the player keep, back in the inventory. */
     public static returnKeptItems(player: Player, items: Item[]): void {
         for (const it of items) {
-            let id = it.getId();
-            const brokenItem = BrokenItem.get(id);
-            if (brokenItem != null) {
-                id = brokenItem.getBrokenItem();
-                player.sendMessage(`Your ${ItemDefinition.forId(it.getId()).getName()} has been broken. You can fix it by talking to Perdu.`);
-            }
-            player.getInventory().addItem(it.clone().setId(id));
+            player.getInventory().addItem(it.clone());
         }
     }
 

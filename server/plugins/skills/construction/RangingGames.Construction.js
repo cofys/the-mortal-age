@@ -1,6 +1,6 @@
 "use strict";
 
-const { Animation, Equipment, ItemDefinition, Location, Skill, Task, TaskManager } = require("./Core.Construction");
+const { Animation, Equipment, ItemDefinition, Location, Skill, Task, TaskManager, World } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Prizes = require("./Prizes.Construction");
@@ -86,7 +86,7 @@ function shoot(event) {
   const kind = furniture && GAMES[furniture.buildableKey];
   if (!kind) return false;
   if (house.buildingMode) return player.sendMessage("You can't play games in building mode."), true;
-  if (Date.now() < (busyUntil.get(player) ?? 0)) return true;
+  if (World.getProcessCycle() < (busyUntil.get(player) ?? 0)) return true;
   let game = gamesIn(house).get(furniture);
   if (game?.done) {
     gamesIn(house).delete(furniture);
@@ -117,7 +117,7 @@ function fire(player, house, furniture, kind, target) {
   player.setPositionToFace(to);
   player.performAnimation(new Animation(kind.throwAnimations[0]));
   if (kind.throwSound) player.getPacketSender().sendSound(kind.throwSound, 0, 0);
-  busyUntil.set(player, Date.now() + SHOT_TICKS * 600 - 100);
+  busyUntil.set(player, World.getProcessCycle() + SHOT_TICKS);
   entry.shots++;
   let tick = 0;
   TaskManager.submit(new class extends Task {

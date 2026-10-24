@@ -1683,6 +1683,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
     onReward: grantReward,
   });
 
+  api.onServerStartup(installWorld);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onGroundItemPickup(handleBottlePickup);

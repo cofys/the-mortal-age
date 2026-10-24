@@ -8,7 +8,8 @@ const Flow = require("./DialogueFlow.RandomEvents");
 const Teleports = require("./Teleports.RandomEvents");
 
 const POTENTIAL_VARP = 531;
-const DRAIN_MS = 3_000;
+const DRAIN_TICKS = 5;
+const CHEST_RECLOSE_TICKS = 100;
 const CHEST_CLOSED = 14986;
 const CHEST_OPEN = 14988;
 const CHEST_LOOT = [
@@ -47,7 +48,7 @@ module.exports = function attach(api, Events) {
 
   function start(session) {
     session.data.potential = 100;
-    session.data.startedAt = Date.now();
+    session.data.startedAt = api.core.World.getProcessCycle();
     session.data.chests = new Map();
     session.tick = tick;
     const sender = session.player.getPacketSender();
@@ -56,7 +57,7 @@ module.exports = function attach(api, Events) {
   }
 
   function tick(session) {
-    const potential = 100 - Math.floor((Date.now() - session.data.startedAt) / DRAIN_MS);
+    const potential = 100 - Math.floor((api.core.World.getProcessCycle() - session.data.startedAt) / DRAIN_TICKS);
     if (potential <= 0) {
       session.player.getPacketSender().sendConfig(POTENTIAL_VARP, 0);
       Teleports.finish(session, { message: "You run out of time and the maze teleports you out." });
@@ -67,7 +68,7 @@ module.exports = function attach(api, Events) {
       session.player.getPacketSender().sendConfig(POTENTIAL_VARP, potential);
     }
     for (const [key, chest] of session.data.chests) {
-      if (Date.now() >= chest.closeAt) {
+      if (api.core.World.getProcessCycle() >= chest.closeAt) {
         Teleports.replaceObject(chest.object, CHEST_CLOSED);
         session.data.chests.delete(key);
       }
@@ -93,7 +94,7 @@ module.exports = function attach(api, Events) {
     player.getPacketSender().sendConfig(POTENTIAL_VARP, session.data.potential);
     const replacement = Teleports.replaceObject(object, CHEST_OPEN);
     // The chest shuts again after a minute, as OSRS does; the maze tick closes it.
-    session.data.chests.set(key, { object: replacement, closeAt: Date.now() + 60_000 });
+    session.data.chests.set(key, { object: replacement, closeAt: api.core.World.getProcessCycle() + CHEST_RECLOSE_TICKS });
     return true;
   }
 

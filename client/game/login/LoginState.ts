@@ -10,6 +10,7 @@ import {
     getDefaultServerAddress,
     getDefaultServerName,
     getDefaultServerSecure,
+    isMapEditorUrl,
 } from "../../config/clientEnv";
 import { isIosStandalonePwa } from "../../common/utils/DeviceUtil";
 import {
@@ -296,7 +297,7 @@ export class LoginState {
     set serverName(name: string) {
         this.currentServerName = name;
         // Edit mode keeps its own title (OsrsClient sets it).
-        if (typeof document === "undefined" || new URLSearchParams(window.location.search).has("edit")) return;
+        if (typeof document === "undefined" || isMapEditorUrl()) return;
         document.title = name.trim() ? `${name.trim()} - RSPS.app` : "RSPS.app";
     }
 

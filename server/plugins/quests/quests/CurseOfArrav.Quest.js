@@ -1102,6 +1102,7 @@ module.exports = function registerCurseOfArravQuest(api) {
     onReward: grantReward,
   });
 
+  api.onServerStartup(installWorld);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onNpcDialogueVariant(selectVariant);

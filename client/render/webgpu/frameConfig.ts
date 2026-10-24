@@ -4,6 +4,8 @@
  * frame before drawing the scene.
  */
 import { clamp } from "../../common/utils/MathUtil";
+import { ClientState } from "../../game/ClientState";
+import { MapManager } from "../../game/MapManager";
 import { isIos, isLowEndDevice, isMobileMode, isTouchDevice } from "../../common/utils/DeviceUtil";
 import { computeRoofPlaneLimit } from "../../game/roof/RoofVisibility";
 import { resolveBridgePromotedPlane } from "../../game/scene/PlaneResolver";
@@ -20,6 +22,26 @@ import type { WebGPURenderer } from "./WebGPURenderer";
 interface TilePoint {
     x: number;
     y: number;
+}
+
+/** Match WebGL's authoritative scene window; orbiting the camera must not reload scenery. */
+export function updateWebGPUMapStreaming(renderer: WebGPURenderer, frameCount: number): void {
+    const client = renderer.osrsClient;
+    const preview = !client.isLoggedIn() && client.scenePreviewEnabled;
+    const streamAroundPlayer = preview || getControlledPlayerWorldViewId(renderer) >= 0;
+    const distance = resolveWebGPURenderDistance(renderer);
+    const padding = MapManager.getSceneryPadding(distance);
+    renderer.mapManager.update(
+        preview ? client.camera.getPosX() : renderer.playerPosUni[0],
+        preview ? client.camera.getPosZ() : renderer.playerPosUni[1],
+        client.camera,
+        frameCount,
+        Math.max(client.mapRadius, Math.ceil((distance + 32) / 64)),
+        streamAroundPlayer ? -1 : ClientState.baseX | 0,
+        streamAroundPlayer ? -1 : ClientState.baseY | 0,
+        Math.max(client.expandedMapLoading | 0, padding),
+        distance,
+    );
 }
 
 /**
@@ -109,6 +131,9 @@ function getCameraTileXY(renderer: WebGPURenderer): TilePoint {
 
 /** Port of getPlayerTileXY (render/render/camera/roof.ts); camera tile if no player. */
 function getPlayerTileXY(renderer: WebGPURenderer): TilePoint {
+    // A camera target (a spectator's) stands in for the player.
+    const cameraTarget = renderer.osrsClient.getCameraTargetPosition();
+    if (cameraTarget) return { x: (cameraTarget.x / 128) | 0, y: (cameraTarget.y / 128) | 0 };
     const controlledIndex = getControlledPlayerEcsIndex(renderer);
     if (controlledIndex !== undefined) {
         return {
@@ -123,7 +148,10 @@ function getPlayerTileXY(renderer: WebGPURenderer): TilePoint {
 function getPlayerBasePlane(renderer: WebGPURenderer): number {
     let rawPlane = 0;
     const idx = getControlledPlayerEcsIndex(renderer);
-    if (idx !== undefined) {
+    const cameraTarget = renderer.osrsClient.getCameraTargetPosition();
+    if (cameraTarget) {
+        rawPlane = cameraTarget.level;
+    } else if (idx !== undefined) {
         rawPlane = renderer.osrsClient.playerEcs.getLevel(idx) | 0;
     }
     return resolveBridgePromotedPlane(renderer.mapManager, rawPlane, getPlayerTileXY(renderer));

@@ -1,4 +1,5 @@
 import type { LoginState } from "../../LoginState";
+import { isMapEditorUrl } from "../../../../config/clientEnv";
 import type { LoginRendererHost } from "../host";
 import { withRenderTransform } from "../layout/config";
 import { updateLayout } from "../layout/updateLayout";
@@ -10,7 +11,7 @@ import { drawTitleMuteButton } from "../controls";
 import { drawEditModeLoadingScreen } from "../../../plugins/editmode/editModeLoadingScreen";
 
 function isEditModeLaunch(): boolean {
-    return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("edit");
+    return isMapEditorUrl();
 }
 
 export function drawDownload(host: LoginRendererHost, state: LoginState, width: number, height: number, layoutWidth = width, layoutHeight = height) {

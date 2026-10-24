@@ -1,3 +1,4 @@
+import type { BuildSteps } from "../../common/utils/BuildSteps";
 import { SerializerImplementation } from "threads";
 
 import { SdMapDataLoader } from "../../render/loader/SdMapDataLoader";
@@ -14,7 +15,7 @@ export interface RenderDataLoader<I, D> {
 
     init(): void;
 
-    load(state: WorkerState, input: I): Promise<RenderDataResult<D>>;
+    load(state: WorkerState, input: I, build?: BuildSteps): Promise<RenderDataResult<D>>;
 
     shouldClearWorkerCacheAfterLoad?(input: I): boolean;
 

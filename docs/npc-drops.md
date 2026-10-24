@@ -14,6 +14,8 @@ Loot that depends on where or what the NPC was rather than its table is added by
 
 Tertiary drops can be made likelier per kill on `npc-drops:tertiary-chance` { player, npc, npcId, rules }, emitted once per kill before the tertiary rolls (only when the table has any): a listener pushes `{ pattern, multiplier }`, and each entry whose name matches is that many times as likely. An imbued ring of wealth adds ×2 for clue scrolls in the Wilderness; Mortimer's clue tasks add theirs ([slayer.md](slayer.md)).
 
+A boss's rare drops can be made likelier world-wide with `pluginConfig` `"NpcDrops:bossRareMultiplier"` ([world-configuration.md](world-configuration.md)). Tables of NPCs the cache marks as bosses (param 1361) get `boss: true` on load, and their pre-roll, separate and tertiary entries rarer than 1/100 roll that many times likelier, on top of any tertiary multiplier. The main weighted roll is left alone. Raid and other reward chests roll their own loot and are not affected.
+
 ## Regenerating
 
 The two generated files come from the OSRS Wiki's drop tables, through osrsreboxed-db:

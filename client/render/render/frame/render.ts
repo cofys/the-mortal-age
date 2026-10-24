@@ -1,6 +1,8 @@
 import { hintArrow } from "../../../game/HintArrow";
 import { updateSkyColor } from "../environment";
 import { syncCameraViewportUnitScale } from "../quality";
+import { resolveSceneFramebuffer } from "../init/framebuffers";
+import { takePreparedQueuedMap } from "../streaming";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -603,8 +605,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         const streamAroundPlayer = host.getControlledPlayerWorldViewId() >= 0;
         const renderDistance = host.resolveEffectiveRenderDistanceTiles(frameCount | 0);
         // Server scene rebases at local tile 16/88. Load enough static scenery
-        // beyond those edges for the requested HD view, without changing simulation.
-        const sceneryPadding = host.osrsClient.clientPlugins.hdEnabled() ? Math.ceil(Math.max(0, renderDistance - 16) / 8) : 0;
+        // beyond those edges for the requested view, without changing simulation.
+        const sceneryPadding = MapManager.getSceneryPadding(renderDistance);
         host.mapManager.update(
             host.playerPosUni[0],
             host.playerPosUni[1],
@@ -774,20 +776,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // didn't already render directly into the texture framebuffer.
         profiler.startPhase("blit");
         if (!directTextureScenePass) {
-            host.app.readFramebuffer(host.framebuffer);
-            host.app.drawFramebuffer(host.textureFramebuffer);
-            host.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
-            host.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT, {
-                srcStartX: 0,
-                srcStartY: 0,
-                srcEndX: host.sceneRenderWidth | 0,
-                srcEndY: host.sceneRenderHeight | 0,
-                dstStartX: 0,
-                dstStartY: 0,
-                dstEndX: host.app.width | 0,
-                dstEndY: host.app.height | 0,
-                filter: PicoGL.LINEAR,
-            });
+            resolveSceneFramebuffer(host);
         }
         host.app.viewport(0, 0, host.app.width | 0, host.app.height | 0);
         profiler.endPhase();
@@ -1626,8 +1615,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         let mapApplyCount = 0;
         // Load new map squares
         profiler.startPhase("mapApply");
-        mapApplyCount += host.applyReadyStreamGenerationBatch(timeSec);
-        const mapData = host.mapsToLoad.shift();
+        mapApplyCount += host.applyReadyStreamGenerationBatch();
+        const mapData = takePreparedQueuedMap(host);
         if (mapData) {
             const firstMapId = getMapSquareId(mapData.mapX, mapData.mapY);
             const firstBatchId = host.queuedLocReloadBatchByMap.get(firstMapId);
@@ -1648,6 +1637,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
 
             for (const pendingMap of toApply) {
                 if (!host.isValidMapData(pendingMap)) {
+                    WebGLMapSquare.cancelPreparedLoad(pendingMap);
                     console.warn(
                         `[WebGLOsrsRenderer] mapsToLoad rejected: mapX=${pendingMap.mapX} mapY=${pendingMap.mapY} cacheName=${pendingMap.cacheName} loadNpcs=${pendingMap.loadNpcs} smooth=${pendingMap.smoothTerrain}`,
                     );
@@ -1667,7 +1657,6 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     host.waterTextures,
                     host.sceneUniformBuffer,
                     pendingMap,
-                    host.skipMapFadeIn ? -1.0 : timeSec,
                 );
 
                 // Configure world entity overlay maps: set interactionPlane + deck height

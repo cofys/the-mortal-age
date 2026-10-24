@@ -1,4 +1,5 @@
 import { ConfigGroup, ConfigItem } from "@runelite/client/config/ConfigItem";
+import { isLowEndDevice } from "../../../common/utils/DeviceUtil";
 
 /** Anti-aliasing modes, as in RuneLite's GPU plugin. */
 export enum AntiAliasingMode {
@@ -29,7 +30,7 @@ export const GpuConfig = ConfigGroup("gpu", {
             "MSAA x8": AntiAliasingMode.MSAA_8,
             "MSAA x16": AntiAliasingMode.MSAA_16,
         },
-        default: AntiAliasingMode.MSAA_4,
+        default: isLowEndDevice ? AntiAliasingMode.DISABLED : AntiAliasingMode.MSAA_4,
     }),
     drawDistance: ConfigItem({
         name: "Draw distance",

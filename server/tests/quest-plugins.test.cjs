@@ -112,6 +112,65 @@ test('Quests.plugin registers every quest through api.core without throwing', ()
   assert.doesNotThrow(() => plugin.register(api));
 });
 
+test('Family Crest only handles gold rocks in Witchaven and Mining recognizes the shared gold-rock object', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/FamilyCrest.Quest')(api);
+  const handleObjectInteraction = handlers.objects.at(-1);
+  const messages = [];
+  const player = { getAttribute: () => 0, sendMessage: message => messages.push(message) };
+  const interact = (x, y, z) => {
+    const event = {
+      player,
+      objectId: api.core.ObjectIdentifiers.GOLD_ROCKS_2,
+      clickType: 1,
+      definition: { getInteractions: () => ['Mine'] },
+      location: { x, y, z },
+      handled: false,
+    };
+    handleObjectInteraction(event);
+    return event;
+  };
+
+  assert.equal(interact(2933, 3288, 0).handled, false, 'Crafting Guild rocks must be left to Mining');
+  const witchavenRock = interact(2732, 9680, 0);
+  assert.equal(witchavenRock.handled, true, 'Witchaven rocks retain the Family Crest interaction');
+  assert.equal(messages.at(-1), 'This gold does not look special to you.');
+
+  const { ROCKS } = require('../plugins/skills/Mining.plugin');
+  const { GOLD_ROCKS_2 } = api.core.ObjectIdentifiers;
+  assert.ok(ROCKS.find(rock => rock.objectName === 'Gold rocks').objectIds.includes(GOLD_ROCKS_2));
+});
+
+test('a shop version named after a quest opens once its quest state matches (#831)', () => {
+  const { api } = mockApi();
+  require('../plugins/quests/Quests.plugin').register(api);
+  const { getRegisteredQuests, pickQuestShopVersion } = require('../plugins/quests/QuestRuntime');
+  const named = (name) => getRegisteredQuests().find((quest) => quest.name === name);
+  const attributes = new Map();
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const pick = (shops) => {
+    const request = { player, shops, shop: null };
+    pickQuestShopVersion(request);
+    return request.shop;
+  };
+  const ned = ["Ned's Handmade Rope (100% Wool) (Default)", "Ned's Handmade Rope (100% Wool) (Fremennik Isles)"];
+  const babaYaga = ["Baba Yaga's Magic Shop. (After Lunar Diplomacy)", "Baba Yaga's Magic Shop. (During Lunar Diplomacy)"];
+  assert.equal(pick(ned), null, 'Default and Karamja gloves versions are left to the dialogue runtime');
+  assert.equal(pick(babaYaga), null);
+  const isles = named('The Fremennik Isles');
+  isles.setStage(player, isles.completionValue ?? 2);
+  assert.equal(pick(ned), ned[1], '"Fremennik Isles" names The Fremennik Isles');
+  const lunar = named('Lunar Diplomacy');
+  lunar.setStage(player, lunar.startedValue ?? 1);
+  assert.equal(pick(babaYaga), babaYaga[1]);
+  lunar.setStage(player, lunar.completionValue ?? 2);
+  assert.equal(pick(babaYaga), babaYaga[0]);
+});
+
 test('DT2 medallions cannot be banked while ordinary items remain bankable', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
@@ -21728,4 +21787,15 @@ test('Giant Dwarf owns Veldaban only for its stage 40 meeting; completed Giant l
   action('lEFN0h');
   assert.equal([...rewardXp.values()].reduce((sum, value) => sum + value, 0), xpAfterCompletion,
     'replaying the completion action cannot grant the reward twice');
+});
+
+test('every registered quest has a cache metadata record for settings filters and sorting', () => {
+  const { api } = mockApi();
+  require('../plugins/quests/Quests.plugin').register(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const cache = api.core.CacheDefinitions;
+  const records = require('../plugins/quests/QuestList.QuestRuntime').metadata(cache);
+  const normalize = value => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const missing = [...new Set(getRegisteredQuests().map(q => q.name))].filter(name => !records.has(normalize(name)));
+  assert.deepEqual(missing, [], 'missing cache records must be explicitly resolved');
 });

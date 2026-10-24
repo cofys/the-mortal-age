@@ -15,6 +15,28 @@ const client = { stateMachine: { subscribe: () => () => {} }, clientPlugins } as
 const runeLite = RuneLite.start(client, false);
 assert.equal(runeLite.pluginManager.getPlugins().length, 0, "edit mode loads no plugins");
 
+const { BeforeRender, ClientTick, PostClientTick } = require("../runelite/api/events");
+const posted: object[] = [];
+const post = runeLite.eventBus.post.bind(runeLite.eventBus);
+runeLite.eventBus.post = (event: object) => { posted.push(event); post(event); };
+const emit = [
+    () => runeLite.postBeforeRender(), () => runeLite.postClientTick(), () => runeLite.postPostClientTick(),
+];
+for (let i = 0; i < 1000; i++) for (const event of emit) event();
+assert.equal(posted.length, 0, "3,000 frame/tick events with no subscribers need no allocation or dispatch");
+for (const [index, eventClass] of [BeforeRender, ClientTick, PostClientTick].entries()) {
+    let received = 0;
+    const unsubscribe = runeLite.eventBus.subscribe(eventClass, () => received++);
+    emit[index]();
+    emit[index]();
+    assert.equal(received, 2, "subscribing after an empty pass starts delivery immediately");
+    assert.notEqual(posted.at(-1), posted.at(-2), "subscribed events remain distinct instances");
+    const count = posted.length;
+    unsubscribe();
+    emit[index]();
+    assert.equal(posted.length, count, "removing the last subscriber stops empty dispatches again");
+}
+
 // With none loaded every hook is a no-op the renderer can call unguarded.
 assert.equal(clientPlugins.gpuSettings(), undefined);
 assert.equal(clientPlugins.hdEnabled(), false);

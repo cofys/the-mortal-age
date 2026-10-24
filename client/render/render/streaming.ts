@@ -201,10 +201,32 @@ export function getPendingStreamMapCount(host: WebGLOsrsRendererHost, ): number 
     
 }
 
+export function cancelPendingMapUploads(host: WebGLOsrsRendererHost): void {
+    for (const data of host.mapsToLoad.toArray()) WebGLMapSquare.cancelPreparedLoad(data);
+    for (const batch of host.pendingStreamMapsByGeneration.values()) {
+        for (const data of batch.values()) WebGLMapSquare.cancelPreparedLoad(data);
+    }
+}
+
+export function takePreparedQueuedMap(host: WebGLOsrsRendererHost): SdMapData | undefined {
+    const nextMap = host.mapsToLoad.peekFront();
+    if (!nextMap) return undefined;
+    if (!host.isValidMapData(nextMap)) {
+        WebGLMapSquare.cancelPreparedLoad(nextMap);
+        // The caller still clears loc-batch bookkeeping and rejects this payload.
+        return host.mapsToLoad.shift();
+    }
+    const canPrepare = !nextMap.doorOnly && !nextMap.locOnly &&
+        !host.pendingLocUpdates.has(getMapSquareId(nextMap.mapX, nextMap.mapY));
+    return !canPrepare || WebGLMapSquare.prepareLoad(host.app, nextMap)
+        ? host.mapsToLoad.shift() : undefined;
+}
+
 export function hasPendingMapStreamingWork(host: WebGLOsrsRendererHost, ): boolean {
 
         if (host.mapsToLoad.length > 0) return true;
         if (host.mapManager.loadingMapIds.size > 0) return true;
+        if (host.mapManager.hasPendingMapLoads(host.stats.frameCount)) return true;
         return host.getPendingStreamMapCount() > 0;
     
 }
@@ -222,25 +244,13 @@ export function syncStreamGenerationFromMapManager(host: WebGLOsrsRendererHost, 
                     if (!carryForward) carryForward = new Map<number, SdMapData>();
                     carryForward.set(mapId, mapData);
                 } else {
+                    WebGLMapSquare.cancelPreparedLoad(mapData);
                     host.mapManager.loadingMapIds.delete(mapId);
                 }
             }
             host.pendingStreamMapsByGeneration.delete(generation);
         }
         host.observedGridRevision = revision;
-
-        // Detect cross-region teleport: if none of the new maps are loaded,
-        // skip the fog fade-in so they appear instantly.
-        let hasOverlap = false;
-        for (const mapId of nextExpected) {
-            if (host.mapManager.mapSquares.has(mapId)) {
-                hasOverlap = true;
-                break;
-            }
-        }
-        if (!hasOverlap && nextExpected.size > 0) {
-            host.skipMapFadeIn = true;
-        }
 
         host.activeStreamGeneration = revision;
         host.activeStreamExpectedMapIds = nextExpected;
@@ -281,11 +291,13 @@ export function queueStreamMapData(host: WebGLOsrsRendererHost, mapData: SdMapDa
             batch = new Map<number, SdMapData>();
             host.pendingStreamMapsByGeneration.set(targetGeneration, batch);
         }
+        const previous = batch.get(mapId);
+        if (previous && previous !== mapData) WebGLMapSquare.cancelPreparedLoad(previous);
         batch.set(mapId, mapData);
     
 }
 
-export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost, time: number): number {
+export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost): number {
 
         const generation = host.activeStreamGeneration | 0;
         const expected = host.activeStreamExpectedMapIds;
@@ -314,6 +326,7 @@ export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost, tim
         // the player's own chunk (index 0 in the ordered grid).  This ensures the
         // map square the player is standing on always renders first.
         let applied = 0;
+        const startedAt = performance.now();
         let allReady = true;
         const orderedMapIds = host.mapManager.getGridMapIdsSnapshot();
         let playerChunkReady = false;
@@ -340,10 +353,19 @@ export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost, tim
                 allReady = false;
                 continue;
             }
-            if (!host.isValidMapData(mapData)) continue;
+            if (!host.isValidMapData(mapData)) {
+                WebGLMapSquare.cancelPreparedLoad(mapData);
+                pending.delete(mapId);
+                continue;
+            }
             // Low-end: one square per frame (nearest first, player's chunk first) so
             // GPU uploads don't stall a frame; the rest stay queued for later frames.
-            if (isLowEndDevice && applied > 0) {
+            if (applied > 0 && (isLowEndDevice || performance.now() - startedAt >= 4)) {
+                allReady = false;
+                break;
+            }
+            if (!mapData.doorOnly && !mapData.locOnly && !host.pendingLocUpdates.has(mapId) &&
+                !WebGLMapSquare.prepareLoad(host.app, mapData)) {
                 allReady = false;
                 break;
             }
@@ -359,15 +381,11 @@ export function applyReadyStreamGenerationBatch(host: WebGLOsrsRendererHost, tim
                 waterTextures,
                 sceneUniformBuffer,
                 mapData,
-                time,
             );
             logMapApplied(mapData, applyStartedAt);
         }
         if (allReady || pending.size === 0) {
             host.pendingStreamMapsByGeneration.delete(generation);
-        }
-        if (allReady) {
-            host.skipMapFadeIn = false;
         }
         return applied | 0;
     

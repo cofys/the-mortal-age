@@ -151,10 +151,10 @@ test('grasps: the bind is rolled at the cast (doubled by the Mark) and shown 30 
         assert.deepEqual([target.graphics.at(-1), delays.at(-1), freezes.at(-1)], [1863, 30, 4 * 0.6], '50%: bound for 4 ticks, the bind graphic 30 cycles on');
         cast(spell, caster, target, true, 0.51);
         assert.deepEqual([target.graphics.at(-1), freezes.length], [1864, 1], 'not bound: the plain impact');
-        caster.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+        caster.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
         cast(spell, caster, target, true, 0.99);
         assert.equal(freezes.length, 2, 'the Mark makes 50% into 100%');
-        target.setAttribute('arceuus:ward-until', Date.now() + 60_000);
+        target.setAttribute('arceuus:ward-until', World.getProcessCycle() + 100);
         cast(CombatSpells.GHOSTLY_GRASP, caster, target, true, 0);
         assert.equal(freezes.at(-1), 0.6, 'warded: 1 tick');
         const missed = arceuusPlayer();
@@ -178,10 +178,10 @@ test('demonbanes: +20% accuracy, +40% and +25% damage with the Mark, doubled wit
     assert.deepEqual([spell.castAnimation().getId(), spell.startGraphic().getId(), spell.endGraphic().getId()], [8977, 1869, 1870]);
     const plain = arceuusPlayer();
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(plain), spell.demonbaneDamageMultiplier(plain)], [1.2, 1]);
-    plain.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    plain.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(plain), spell.demonbaneDamageMultiplier(plain)], [1.4, 1.25]);
     const purging = arceuusPlayer({ weapon: 29594 });
-    purging.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    purging.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(purging), spell.demonbaneDamageMultiplier(purging)], [1.8, 1.5]);
     assert.equal(CombatSpells.UNDEAD_GRASP.demonbaneAccuracyMultiplier(plain), 1, 'not a demonbane spell');
 });
@@ -191,7 +191,7 @@ test('demonbanes against a more vulnerable demon: the bonus scales with it (Wiki
     const spell = CombatSpells.DARK_DEMONBANE;
     const flare = { getAttribute: (key) => (key === 'combat:demonbane-vulnerability' ? 2 : undefined) };
     const purging = arceuusPlayer({ weapon: 29594 });
-    purging.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    purging.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
     purging.getCombat = () => ({ getTarget: () => flare });
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(purging), spell.demonbaneDamageMultiplier(purging)], [2.6, 2]);
 });
@@ -200,9 +200,9 @@ test('Mark of Darkness: 3 ticks per base Magic level (x5 with a purging staff), 
     const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
     const { TaskManager } = require('../dist/game/task/TaskManager');
     const player = arceuusPlayer({ magic: 20 });
-    const start = Date.now();
+    const start = World.getProcessCycle();
     ArceuusSpells.placeMark(player);
-    const ticks = (player.getAttribute('arceuus:mark-until') - start) / 600;
+    const ticks = player.getAttribute('arceuus:mark-until') - start;
     assert.ok(Math.abs(ticks - 60) < 1, `${ticks} ticks for level 20`);
     for (let i = 0; i < 50; i++) TaskManager.process();
     assert.deepEqual(player.messages, ['Your Mark of Darkness is about to run out.']);
@@ -211,7 +211,7 @@ test('Mark of Darkness: 3 ticks per base Magic level (x5 with a purging staff), 
     assert.equal(player.graphics.at(-1), 1886);
     const purging = arceuusPlayer({ magic: 20, weapon: 29595 });
     ArceuusSpells.placeMark(purging);
-    assert.ok(Math.abs((purging.getAttribute('arceuus:mark-until') - Date.now()) / 600 - 300) < 1, 'x5');
+    assert.equal(purging.getAttribute('arceuus:mark-until') - World.getProcessCycle(), 300, 'x5');
 });
 
 test('Vile Vigour spends only the prayer that fills run energy; Death Charge restores once per cast (Wiki)', () => {
@@ -228,7 +228,7 @@ test('Vile Vigour spends only the prayer that fills run energy; Death Charge res
         ArceuusSpells.handleSpell(player, 'Vile Vigour');
         assert.equal(player.messages.at(-1), "You're already at maximum run energy.");
         player.energy = 10;
-        player.setAttribute('arceuus:vile-vigour-cooldown', Date.now() + 10_200); // as the cast's rune check sets it
+        player.setAttribute('arceuus:vile-vigour-cooldown', World.getProcessCycle() + 17); // as the cast's rune check sets it
         ArceuusSpells.handleSpell(player, 'Vile Vigour');
         assert.equal(player.messages.at(-1), 'You can only cast Vile Vigour every 10 seconds.');
 
@@ -249,12 +249,12 @@ test('corruption: certain with the Mark at casting (50% without), with its hit g
     Spell.prototype.canCast = () => true;
     try {
         const caster = arceuusPlayer();
-        caster.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+        caster.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
         ArceuusSpells.handleSpell(caster, 'Greater Corruption');
         const target = arceuusPlayer();
         withRandom(0.99, () => ArceuusSpells.applyCorruption(caster, target));
         assert.equal(target.graphics.at(-1), 1880, 'corrupted though the roll was high');
-        caster.setAttribute('arceuus:corruption-cooldown', Date.now() + 30_000); // as the cast's rune check sets it
+        caster.setAttribute('arceuus:corruption-cooldown', World.getProcessCycle() + 50); // as the cast's rune check sets it
         ArceuusSpells.handleSpell(caster, 'Lesser Corruption');
         assert.equal(caster.messages.at(-1), 'You can only cast corruption spells every 30 seconds.');
     } finally {
@@ -370,4 +370,18 @@ test('a combat cast pays its Wiki base XP once, at the XP rate: splashes pay the
     assert.equal(cast(CombatSpells.SNARE, hit(false, 0)), 120, 'Snare splash: 60');
     assert.equal(cast(CombatSpells.TELEBLOCK, hit(true, 0)), 190, 'Tele Block hit: 95');
     assert.equal(cast(CombatSpells.TELEBLOCK, hit(false, 0)), 168, 'Tele Block splash: 84');
+});
+
+test('tick stopwatch: gameplay delays are whole game cycles, and a fresh one has elapsed', () => {
+    const { TickStopwatch } = require('../dist/util/TickStopwatch');
+    const stopwatch = new TickStopwatch();
+    assert.equal(stopwatch.elapsedTime(1800), true, 'never started: every delay has elapsed');
+    stopwatch.reset();
+    const start = World.getProcessCycle();
+    assert.equal(stopwatch.elapsedTime(1800), false);
+    World.processCycle = start + 2;
+    assert.equal(stopwatch.elapsedTime(1800), false, 'two ticks are 1200ms');
+    World.processCycle = start + 3;
+    assert.equal(stopwatch.elapsed(), 1800);
+    assert.equal(stopwatch.elapsedTime(1800), true, 'three ticks are 1800ms');
 });

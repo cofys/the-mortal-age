@@ -1,6 +1,11 @@
 import * as PicoGL from "picogl";
 
 declare module "picogl" {
+    export interface App {
+        /** PicoGL forwards numeric allocation sizes to VertexBuffer's constructor. */
+        createIndexBuffer(type: number, itemSize: number, data: number, usage?: number): VertexBuffer;
+    }
+
     export interface VertexBuffer {
         byteLength: number;
     }

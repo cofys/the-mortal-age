@@ -43,4 +43,16 @@ assert.deepEqual(search("yami", false), [30888]);
 assert.deepEqual(search("abyssal whip", true), [4151]);
 assert.deepEqual(search("abyssal whip", false), [4151, 4178, 20405, 26482]);
 
+// The Grand Exchange search runs oc_find on every keystroke. Scanning the loader each time
+// re-decodes every item definition (its LRU holds 4,096 of the ~32,000 named items), about
+// 100ms a keystroke, so the names are indexed once and later searches only filter the index.
+let loads = 0;
+ctx.objTypeLoader = { load: (id: number) => { loads++; return items[id]; } };
+assert.deepEqual(search("whip", true), [4151]);
+const firstScan = loads;
+assert.ok(firstScan > 0, "the first search reads the definitions");
+assert.deepEqual(search("whip", false), [4151, 4178, 20405, 26482]);
+assert.deepEqual(search("yami", false), [30888]);
+assert.equal(loads, firstScan, "later searches reuse the name index instead of reloading every item");
+
 console.log("item search tests passed");

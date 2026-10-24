@@ -21,7 +21,8 @@ function itemKey(item: ConfigItemDef, property: string): string {
 export function serializeConfigValue(item: ConfigItemDef, value: unknown): string {
     if (value === undefined || value === null) return "";
     if (item.color) {
-        const color = Math.max(0, Math.floor(Number(value)) | 0);
+        // Unsigned: an alpha of 0x80 or more would turn negative with "| 0".
+        const color = Math.max(0, Math.floor(Number(value))) >>> 0;
         const hasAlpha = item.alpha && (color & 0xff000000) !== 0;
         const hex = (color >>> 0).toString(16).padStart(8, "0");
         return hasAlpha ? `#${hex}` : `#${hex.slice(2)}`;

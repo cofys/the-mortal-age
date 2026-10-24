@@ -6,7 +6,7 @@ import type { Player } from "../../entity/impl/player/Player";
 import { CoordinateState } from "../../entity/impl/npc/NPCMovementCoordinator";
 import { SecondsTimer } from "../../model/SecondsTimer";
 import { StatementDialogue } from "../../model/dialogues/entries/impl/StatementDialogue";
-import { Stopwatch } from "../../../util/Stopwatch";
+import { TickStopwatch } from "../../../util/TickStopwatch";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { World } from "../../World";
 import { CombatConstants } from "./CombatConstants";
@@ -46,7 +46,7 @@ const COMBAT_TARGET_PLAYER_VARP = 1075;
 export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
     private damageMap: Map<Player, HitDamageCache> | null = null;
-    private readonly lastAttack = new Stopwatch();
+    private readonly lastAttack = new TickStopwatch();
     // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
     private poisonImmunityTimer: SecondsTimer | null = null;
     private fireImmunityTimer: SecondsTimer | null = null;
@@ -571,12 +571,12 @@ export class Combat {
     public getFireImmunityTimer(): SecondsTimer { return this.fireImmunityTimer ??= new SecondsTimer(); }
     public getTeleblockTimer(): SecondsTimer { return this.teleblockTimer ??= new SecondsTimer(); }
     public getPrayerBlockTimer(): SecondsTimer { return this.prayerBlockTimer ??= new SecondsTimer(); }
-    public getLastAttack(): Stopwatch { return this.lastAttack; }
+    public getLastAttack(): TickStopwatch { return this.lastAttack; }
 
     private shouldRetreat(): boolean {
         if (!this.character.isNpc()) return false;
         const npc = this.character.getAsNpc();
-        if (Number(npc.getAttribute("arceuus:dark-lure-until") ?? 0) > Date.now()) return false;
+        if (Number(npc.getAttribute("arceuus:dark-lure-until") ?? 0) > World.getProcessCycle()) return false;
         if (!npc.getCurrentDefinition().doesRetreat()) return false;
         const coordinator = npc.getMovementCoordinator();
         if (coordinator.getCoordinateState() === CoordinateState.RETREATING ||

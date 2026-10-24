@@ -8,6 +8,7 @@
  * Capture: "You find a clue geode!" (spam). The text for opening one is not captured.
  */
 let core = null;
+let pluginApi = null;
 let tiers = [];
 
 function buildTiers(ids) {
@@ -27,6 +28,9 @@ function geodeChance(petBase, miningLevel, modifier) {
 
 // OSRS allows one clue of each tier at a time, in any of its forms, carried or banked.
 function ownsClue(player, tier) {
+  const request = { player, tier: tier.name, allowed: null };
+  pluginApi?.emitCustomEvent?.("treasure-trails:can-receive", request);
+  if (typeof request.allowed === "boolean") return !request.allowed;
   const names = new Set(
     ["Clue scroll", "Clue bottle", "Clue nest", "Clue geode", "Scroll box"].map((form) => `${form} (${tier.name})`)
   );
@@ -41,12 +45,11 @@ function ownsClue(player, tier) {
 }
 
 function giveGeode(player, geodeId) {
+  const request = {player, itemId: geodeId, box: false};
+  pluginApi?.emitCustomEvent?.("treasure-trails:clue-item", request);
+  geodeId = request.itemId;
   const inventory = player.getInventory();
-  if (inventory.getFreeSlots() > 0) {
-    inventory.adds(geodeId, 1);
-  } else {
-    core.ItemOnGroundManager.registers(player, new core.Item(geodeId, 1));
-  }
+  inventory.forceAdd(player, new core.Item(geodeId, 1));
   player.sendMessage("You find a clue geode!");
 }
 
@@ -65,19 +68,25 @@ function rollClueGeodes({ player, skill, petBase }, random = Math.random) {
 }
 
 function openClueGeode(event) {
+  const request = {...event, handled: false};
+  pluginApi?.emitCustomEvent?.("treasure-trails:open-vessel", request);
+  if (request.handled) return true;
   const { player } = event;
   const tier = tiers.find((entry) => entry.geodeId === event.itemId);
   if (!tier) {
     return false;
   }
   const inventory = player.getInventory();
-  inventory.deleteNumber(tier.geodeId, 1);
+  const item = inventory.getItems()[event.slot];
+  if (item?.getId() !== tier.geodeId || item.getAmount() < 1 || event.item && event.item !== item) return true;
+  inventory.deleteAtSlot(event.slot, 1);
   inventory.adds(tier.scrollId, 1);
   player.sendMessage("You open the geode and find a clue scroll.");
   return true;
 }
 
 function attach(api) {
+  pluginApi = api;
   core = api.core;
   tiers = buildTiers(core.ItemIdentifiers);
   for (const tier of tiers) {

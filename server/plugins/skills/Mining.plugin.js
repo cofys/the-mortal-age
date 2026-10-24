@@ -53,7 +53,7 @@ const ROCKS = [
   },
   { objectName: "Silver rocks", objectIds: [7457], level: 20, xp: 40, oreId: ItemIds.SILVER_ORE, petBase: 741600, cycles: 14, respawnTicks: 7 },
   { objectName: "Coal rocks", objectIds: [7456], level: 30, xp: 50, oreId: ItemIds.COAL, petBase: 290640, cycles: 15, respawnTicks: 7 },
-  { objectName: "Gold rocks", objectIds: [7491, 9720, 9721, 9722, 11951, 11183, 11184, 11185, 2099], level: 40, xp: 65, oreId: ItemIds.GOLD_ORE, petBase: 296640, cycles: 15, respawnTicks: 10 },
+  { objectName: "Gold rocks", objectIds: [7491, 9720, 9721, 9722, 11951, 11183, 11184, 11185, 2099, ObjectIds.GOLD_ROCKS_2], level: 40, xp: 65, oreId: ItemIds.GOLD_ORE, petBase: 296640, cycles: 15, respawnTicks: 10 },
   { objectName: "Mithril rocks", objectIds: [7492, 7459], level: 50, xp: 80, oreId: ItemIds.MITHRIL_ORE, petBase: 148320, cycles: 17, respawnTicks: 11 },
   { objectName: "Adamantite rocks", objectIds: [7460], level: 70, xp: 95, oreId: ItemIds.ADAMANTITE_ORE, petBase: 59328, cycles: 18, respawnTicks: 14 },
   { objectName: "Runite rocks", objectIds: [14859, 4860, 2106, 2107, 7461], level: 85, xp: 125, oreId: ItemIds.RUNITE_ORE, petBase: 42377, cycles: 23, respawnTicks: 45 },

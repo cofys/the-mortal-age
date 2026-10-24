@@ -91,5 +91,86 @@
       "Stop boasting and get back to work, pal.",
       "I am!"
     ]
+  },
+  "hub": {
+    "$comment": "The Nexus between bosses (level 2), per visit: after the 1st, 2nd and 3rd boss past the Guardian. Staff, tiles, facings and overhead lines as captured; the lines' interval is an estimate.",
+    "linesEvery": 12,
+    "visits": {
+      "1": [
+        {"npc": "eva_cashien_sword", "tile": [4127, 5597, 2], "face": "SOUTH", "lines": ["There's no time to waste, pick a side!", "Pick a side, and may Saradomin guide you!", "The middle defences are buckling, pick a side!"]},
+        {"npc": "armacus_selles", "tile": [4120, 5582, 2], "face": "EAST"},
+        {"npc": "alliance_druid_2", "tile": [4125, 5603, 2], "face": "WEST"},
+        {"npc": "alliance_guardian_of_armadyl_4", "tile": [4124, 5600, 2], "face": "NORTH"},
+        {"npc": "alliance_temple_knight_2", "tile": [4124, 5588, 2], "face": "WEST"},
+        {"npc": "alliance_druid_1", "tile": [4132, 5589, 2], "face": "EAST"},
+        {"npc": "alliance_temple_knight_1", "tile": [4122, 5580, 2], "face": "SOUTH_WEST"}
+      ],
+      "2": [
+        {"npc": "eva_cashien", "tile": [4135, 5603, 2], "face": "WEST"},
+        {"npc": "tfa_midraid_supplies_npc", "tile": [4129, 5609, 2], "face": "SOUTH", "lines": ["Stock available!", "Supplies are available!", "Shop's open!", "Supplies are ready!", "Fully stocked!"]},
+        {"npc": "tfa_ivy_sophista_noop", "tile": [4127, 5613, 2], "face": "SOUTH", "lines": ["One final push, pick a side!", "Pick a side! Do not relent!", "Give them no quarter, pick a side!"]},
+        {"npc": "alliance_druid_1", "tile": [4124, 5600, 2], "face": "SOUTH"},
+        {"npc": "alliance_temple_knight_2", "tile": [4127, 5596, 2], "face": "WEST"},
+        {"npc": "alliance_guardian_of_armadyl_3", "tile": [4124, 5588, 2], "face": "WEST", "lines": ["Runes ready!"]},
+        {"npc": "alliance_guardian_of_armadyl_3", "tile": [4132, 5589, 2], "face": "EAST"},
+        {"npc": "alliance_temple_knight_1", "tile": [4122, 5580, 2], "face": "SOUTH_WEST"}
+      ],
+      "3": [
+        {"npc": "armacus_selles_postguardian", "tile": [4128, 5619, 2], "face": "SOUTH"},
+        {"npc": "eva_cashien_sword", "tile": [4126, 5619, 2], "face": "SOUTH"},
+        {"npc": "tfa_ivy_sophista", "tile": [4127, 5618, 2], "face": "SOUTH", "lines": ["The inner vault must be protected!", "Go inside and clear out any threats!", "There's a disturbance in the inner vault!", "Deal with it and let's end this!"]},
+        {"npc": "alliance_guardian_of_armadyl_6", "tile": [4125, 5602, 2], "face": "SOUTH"},
+        {"npc": "alliance_guardian_of_armadyl_2", "tile": [4124, 5599, 2], "face": "SOUTH"},
+        {"npc": "alliance_temple_knight_2", "tile": [4124, 5588, 2], "face": "WEST"},
+        {"npc": "alliance_druid_2", "tile": [4132, 5589, 2], "face": "EAST", "lines": ["More runes coming!"]},
+        {"npc": "alliance_temple_knight_1", "tile": [4122, 5580, 2], "face": "SOUTH_WEST"}
+      ]
+    },
+    "wheelbarrow": {"loc": "tfa_loot_wheelbarrow", "tile": [4130, 5608, 2], "face": 0, "visit": "2"},
+    "postGuardian": {"npcs": ["armacus_selles_postguardian", "alliance_guardian_of_armadyl_3", "alliance_guardian_of_armadyl_4", "alliance_guardian_of_armadyl_5", "alliance_guardian_of_armadyl_6"], "tiles": [[4127, 5573], [4126, 5574], [4128, 5574], [4126, 5576], [4128, 5576]], "runTo": [4127, 5590]}
+  },
+  "loot": {
+    "$comment": "Wiki, Chest (The Fractured Archive): three standard rolls when no unique (weights out of 148, from the Drop Rate Project), each roll 1/51 to give five times as much; tertiaries per chest. The unique chance, the uniques' weights (the Wiki only ranks them: Rondache > Zorya's tome = Horn of Bran > Ascension crossbows > Obligator) and the pet's rate are estimates. Aether catalyst (3/148) is left out: the cache has no item by that name.",
+    "rolls": 3,
+    "bonusChance": 51,
+    "bonusFactor": 5,
+    "uniqueChance": 0.04,
+    "uniques": [["rondache", 30], ["zoryas_tome_uncharged", 22], ["tfa_zeal_reward", 22], ["ascension_crossbows", 16], ["obligator_uncharged", 10]],
+    "standard": [
+      ["battlestaff", 34, 37, 5],
+      ["dragon_platelegs", 1, 1, 5],
+      ["dragon_plateskirt", 1, 1, 5],
+      ["rune_kiteshield", 5, 7, 5],
+      ["naturerune", 301, 385, 5],
+      ["astralrune", 301, 385, 5],
+      ["bloodrune", 301, 385, 5],
+      ["soulrune", 301, 380, 5],
+      ["earthrune", 3009, 3551, 5],
+      ["unidentified_harralander", 60, 66, 3],
+      ["unidentified_ranarr", 18, 20, 3],
+      ["unidentified_toadflax", 24, 28, 3],
+      ["snapdragon_seed", 3, 4, 3],
+      ["kwuarm_seed", 7, 8, 3],
+      ["snape_grass_seed", 7, 8, 3],
+      ["yew_seed", 4, 5, 3],
+      ["sapphire", 24, 27, 5],
+      ["emerald", 24, 26, 5],
+      ["ruby", 23, 27, 5],
+      ["diamond", 24, 26, 5],
+      ["iron_ore", 851, 915, 3],
+      ["adamantite_ore", 60, 72, 3],
+      ["runite_ore", 25, 26, 3],
+      ["ascension_shards", 75, 82, 22],
+      ["xbows_bolt_tips_onyx", 50, 58, 5],
+      ["earth_orb", 68, 75, 5],
+      ["desiccated_page", 30, 36, 3],
+      ["blankrune_high", 1404, 1632, 3],
+      ["mahogany_logs", 140, 152, 3],
+      ["dragon_arrowheads", 350, 369, 3],
+      ["raw_shark", 80, 91, 3],
+      ["wine_of_zamorak", 32, 36, 3]
+    ],
+    "tertiary": [["archivists_folio_empty", 20], ["tfa_mote_air", 80], ["tfa_mote_water", 80], ["tfa_mote_earth", 80], ["tfa_mote_fire", 80], ["CLUE_SCROLL_ELITE_", 12]],
+    "pet": ["ocelluspet", 400]
   }
 }

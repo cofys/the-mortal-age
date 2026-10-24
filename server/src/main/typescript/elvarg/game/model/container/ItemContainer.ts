@@ -469,6 +469,20 @@ export abstract class ItemContainer {
     return this.addItem(new Item(id, amount));
   }
 
+  /** How much of an item add() can accept, without changing either item or container. */
+  public getAddableAmount(item: Item): number {
+    const requested = Math.max(0, Math.floor(item.getAmount()));
+    if (item.getId() <= 0 || !Number.isFinite(requested) || requested <= 0) return 0;
+    if (getItemDefinition().forId(item.getId()).isStackable() || this.stackType() == StackType.STACKS) {
+      const meta = JSON.stringify(item.getMeta() ?? null);
+      const existing = this.items.find((held) => held.getId() === item.getId() &&
+        JSON.stringify(held.getMeta() ?? null) === meta);
+      if (existing) return Math.min(requested, Math.max(0, MAX_STACK_AMOUNT - existing.getAmount()));
+      return this.getFreeSlots() > 0 ? Math.min(requested, MAX_STACK_AMOUNT) : 0;
+    }
+    return Math.min(requested, this.getFreeSlots());
+  }
+
   public add(item: Item, refresh: boolean): ItemContainer {
     ensureContainersLoaded();
     if (
@@ -779,7 +793,19 @@ export abstract class ItemContainer {
       // Drop once at the reward location. Ground-stack merging must not mutate the reward item.
       getItemOnGroundManager().registers(player, item.clone());
     } else {
+      const requested = item.getAmount();
+      const meta = JSON.stringify(item.getMeta() ?? null);
+      const matchingAmount = () => this.items.reduce((total, entry) =>
+        entry.getId() === item.getId() && JSON.stringify(entry.getMeta() ?? null) === meta
+          ? total + entry.getAmount() : total, 0);
+      const before = matchingAmount();
       this.addItem(item);
+      // Addition can fit only part of a stack or a nonstackable batch. Preserve
+      // the exact remainder, just as forceAdd already does for a full inventory.
+      const remaining = requested - (matchingAmount() - before);
+      if (remaining > 0) {
+        getItemOnGroundManager().registers(player, item.clone().setAmount(remaining));
+      }
     }
   }
 

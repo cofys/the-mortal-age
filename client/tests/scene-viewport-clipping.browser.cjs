@@ -104,9 +104,12 @@ function captureScene() {
             }
         }
         app.blitFramebuffer = function (...args) {
-            app.blitFramebuffer = original;
+            const resolvesScene = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING) ===
+                renderer.textureFramebuffer.framebuffer;
             const scissorAtBlit = gl.isEnabled(gl.SCISSOR_TEST);
             const result = original.apply(this, args);
+            if (!resolvesScene) return result;
+            app.blitFramebuffer = original;
             try {
                 scene = { ...readPixels(renderer.textureFramebuffer.framebuffer), scissorAtBlit };
             } catch (error) {

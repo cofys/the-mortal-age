@@ -114,6 +114,8 @@ export class MovementQueue {
     private stepBlockedByEntity = false;
     private lastSentDestX = Number.MIN_SAFE_INTEGER;
     private lastSentDestY = Number.MIN_SAFE_INTEGER;
+    /** Ctrl-click run choice for the current path only; null follows the run setting. */
+    private runOverride: boolean | null = null;
 
     /**
      * Creates a walking queue for the specified character.
@@ -344,12 +346,20 @@ export class MovementQueue {
         return true;
     }
 
-    public requestWalk(destination: Location): void {
+    public requestWalk(destination: Location, runOverride: boolean | null = null): void {
         if (!this.player || this.player.getHitpoints() <= 0) {
             return;
         }
         const mobility = this.getMobility();
         if (!mobility.canMove()) {
+            // Mid forced move (a roll) or being placed after one: a plugin may chain another
+            // straight away (Ezekiel's dodges), where a normal walk has to wait.
+            if ((this.player.getForceMovement() != null || this.character.isNeedsPlacement())
+                && !this.isMovementBlocked()
+                && this.player.getArea?.()?.handleForcedWalk?.(this.player,
+                    { x: destination.getX(), y: destination.getY(), z: destination.getZ() })) {
+                return;
+            }
             mobility.sendMessage(this.player);
             return;
         }
@@ -364,6 +374,13 @@ export class MovementQueue {
             handled: false,
         })) return;
         PathFinder.calculateWalkRoute(this.player, destination.getX(), destination.getY());
+        // Set after routing: the route calculation resets the queue.
+        this.runOverride = this.points.length > 0 ? runOverride : null;
+    }
+
+    /** Where the queued walk ends, or null when nothing is queued. */
+    public getDestination(): Location | null {
+        return this.points.peekLast()?.position ?? null;
     }
 
     private getLast(): Point {
@@ -558,6 +575,7 @@ export class MovementQueue {
         if (moved) this.lastMoveCycle = World.getProcessCycle();
 
         if (this.points.length === 0) {
+            this.runOverride = null;
             this.syncDestinationFlagToRoute();
         }
 
@@ -618,9 +636,10 @@ export class MovementQueue {
     }
 
     /**
-     * Diagonal first, then east/west, then north/south - except that only 1x1
-     * actors ever take the diagonal. Anything larger squares the corner with a
-     * cardinal step instead.
+     * Diagonal first, then east/west, then north/south, for any size: OSRS's larger NPCs step
+     * diagonally too when their whole footprint can (captured: Ocellus and Ezekiel at 3x3, Bork
+     * at 4x4, Dreadnoth at 5x5, 260 diagonal steps), and only square the corner when the
+     * diagonal is blocked.
      */
     private validatedStep(source: Location, destination: Location): Location | null {
         const signX = Math.sign(destination.getX() - source.getX());
@@ -631,7 +650,7 @@ export class MovementQueue {
             return source.transform(signX, signY);
         }
         const candidates: number[][] = [];
-        if (this.character.getSize() === 1 && signX !== 0 && signY !== 0) {
+        if (signX !== 0 && signY !== 0) {
             candidates.push([signX, signY]);
         }
         if (signX !== 0) candidates.push([signX, 0]);
@@ -691,10 +710,11 @@ export class MovementQueue {
             }
             return;
         }
-        if (player.isRunningReturn()) {
+        if (this.isRunToggled()) {
             player.setRunEnergy(player.getRunEnergy() - applyRunEnergyDrainModifiers(player, 1));
             if (player.getRunEnergy() <= 0) {
                 player.setRunEnergy(0);
+                this.runOverride = null;
                 player.setRunning(false);
                 player.getPacketSender().sendRunStatus();
             }
@@ -734,6 +754,7 @@ export class MovementQueue {
 
     public reset(clearDestination = true): MovementQueue {
         this.externalMovementUntil = 0;
+        this.runOverride = null;
         this.points.clear();
         this.followX = -1;
         this.followY = -1;
@@ -930,7 +951,7 @@ export class MovementQueue {
 
     public isRunToggled(): boolean {
         return this.character.isPlayer()
-            ? (this.character as Player).isRunningReturn()
+            ? this.runOverride ?? (this.character as Player).isRunningReturn()
             : this.character.getAsNpc().getMovementSteps() > 1;
     }
 
