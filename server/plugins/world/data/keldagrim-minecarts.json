@@ -1,0 +1,130 @@
+{
+  "_source": "OSRS Wiki: Keldagrim_minecart_system, Cart_conductor; the conductors' transcripts (data/definitions/npc-dialogues.json). Tiles, steps, ticks and messages are rsprox.net recordings 423 (rev 232: the Grand Exchange trapdoor, talked to and travelled), 3241 (rev 233: a ticket at Ice Mountain and its refusals, Ice Mountain to Keldagrim, Keldagrim to the Grand Exchange and to Ice Mountain, the wrong-ticket and front-of-queue refusals) and 3250 (rev 233: White Wolf Mountain to Keldagrim). Ids are cache gamevals.",
+  "names": {
+    "npcs": {
+      "wolf": "dwarf_city_train_conductor6",
+      "mine": "dwarf_city_train_conductor7",
+      "trapdoor": "dwarf_city_train_conductor4"
+    },
+    "locs": {
+      "hubCart": "keldagrim_train_cart",
+      "unridable": "keldagrim_train_cart_unridable",
+      "iceCart": "icemountain_train_cart",
+      "wolfCart": "whitewolfmountain_train_cart",
+      "trapdoor": "ge_keldagrim_trapdoor"
+    },
+    "objs": {
+      "keldaIce": "dwarf_minecart_ticket_kelda_ice",
+      "iceKelda": "dwarf_minecart_ticket_ice_kelda",
+      "keldaWolf": "dwarf_minecart_ticket_kelda_whitewolf",
+      "wolfKelda": "dwarf_minecart_ticket_whitewolf_kelda",
+      "coins": "coins",
+      "ringOfCharosA": "ring_of_charos_unlocked"
+    }
+  },
+  "_sales": "The line each conductor says as a purchase goes through: the coins are taken and the ticket given there. The Tickets option's menus have no such line; their pick is the sale, at the price it shows.",
+  "sales": [
+    { "conductor": "hub", "text": "Thanks, carts to Ice Mountain depart from track 1.", "ticket": "keldaIce", "price": 150 },
+    { "conductor": "hub", "text": "You're alright, I suppose... I can let you go for 75 coins. And remember, carts to Ice Mountain depart from track 1.", "ticket": "keldaIce", "price": 75 },
+    { "conductor": "hub", "text": "Thanks. Go to track 4 for carts heading to White Wolf Mountain.", "ticket": "keldaWolf", "price": 100 },
+    { "conductor": "hub", "text": "You're a decent human, I suppose... I can let you go for 50 coins. Go to track 4 for the carts heading to White Wolf Mountain.", "ticket": "keldaWolf", "price": 50 },
+    { "conductor": "mine", "text": "Thanks for your custom!", "ticket": "iceKelda", "price": 150 },
+    { "conductor": "mine", "text": "Well... I suppose so.", "ticket": "iceKelda", "price": 75 },
+    { "conductor": "wolf", "text": "Thanksh a lot human! Remember to come back for more shtout whenever you want! *hic*", "ticket": "wolfKelda", "price": 100 },
+    { "conductor": "wolf", "text": "Errr... yesh, I shuppose you're right.", "ticket": "wolfKelda", "price": 50 }
+  ],
+  "menuTickets": { "Ice Mountain": "keldaIce", "White Wolf Mountain": "keldaWolf", "Keldagrim@mine": "iceKelda", "Keldagrim@wolf": "wolfKelda" },
+  "_hub": "Keldagrim Carts' station. Its carts (keldagrim_train_cart) are not in the map: the recordings add them as the station loads. Each track's front cart is the one to ride; the transcript names the tracks (Ice Mountain track 1, White Wolf Mountain track 4, the Grand Exchange track 3). The fourth row leads to a closed tunnel.",
+  "hubCarts": [
+    [2917, 10164], [2919, 10164],
+    [2911, 10169], [2913, 10169], [2915, 10169], [2917, 10169], [2919, 10169],
+    [2909, 10171], [2911, 10171], [2913, 10171], [2915, 10171], [2917, 10171], [2919, 10171], [2921, 10171], [2923, 10171],
+    [2911, 10175], [2913, 10175], [2915, 10175], [2917, 10175], [2919, 10175], [2921, 10175], [2923, 10175]
+  ],
+  "_tracks": "Steps count from boarding: [tick, the tile the player is on after it, the glide [from x, from y, start cycle, to x, to y, end cycle, angle]]. Then the fade, the destination and the screen back. Track 4's run east is calibrated after track 1's (no recording rides it).",
+  "tracks": [
+    {
+      "track": 1, "route": "ice", "y": 10175, "front": [2923, 10175], "ticket": "keldaIce",
+      "steps": [
+        [1, [2926, 10175], [2923, 10175, 30, 2926, 10175, 135, 1536]],
+        [4, [2929, 10175], [2926, 10175, 30, 2929, 10175, 90, 1536]],
+        [6, [2932, 10175], [2929, 10175, 30, 2932, 10175, 60, 1536]],
+        [7, [2935, 10175], [2932, 10175, 30, 2935, 10175, 60, 1536]],
+        [8, [2938, 10175], [2935, 10175, 30, 2938, 10175, 60, 1536]],
+        [9, [2941, 10175], [2938, 10175, 30, 2941, 10175, 60, 1536]],
+        [10, [2943, 10175], [2941, 10175, 30, 2943, 10175, 80, 1536]]
+      ],
+      "fadeTick": 11, "landTick": 14, "to": [2995, 9835], "fadeInTick": 17, "closeTick": 20, "cartBackTick": 13
+    },
+    {
+      "track": 3, "route": "ge", "y": 10171, "front": [2923, 10171], "ticket": null,
+      "steps": [
+        [1, [2926, 10171], [2923, 10171, 30, 2926, 10171, 135, 1536]],
+        [4, [2929, 10171], [2926, 10171, 30, 2929, 10171, 90, 1536]],
+        [6, [2932, 10171], [2929, 10171, 30, 2932, 10171, 60, 1536]],
+        [7, [2935, 10171], [2932, 10171, 30, 2935, 10171, 60, 1536]],
+        [8, [2937, 10171], [2935, 10171, 30, 2937, 10171, 60, 1536]],
+        [9, [2938, 10167], [2937, 10171, 30, 2937, 10168, 75, 0]],
+        [10, [2938, 10165], [2938, 10167, 30, 2938, 10165, 60, 0]],
+        [11, [2942, 10164], [2938, 10165, 30, 2941, 10165, 75, 1536]],
+        [12, [2943, 10164], [2942, 10164, 30, 2943, 10164, 40, 1536]]
+      ],
+      "fadeTick": 13, "landTick": 16, "to": [3141, 3504], "fadeInTick": 19, "closeTick": 22, "cartBackTick": 13
+    },
+    {
+      "track": 4, "route": "wolf", "y": 10169, "front": [2919, 10169], "ticket": "keldaWolf", "_calibrated": "the steps",
+      "steps": [
+        [1, [2922, 10169], [2919, 10169, 30, 2922, 10169, 135, 1536]],
+        [4, [2925, 10169], [2922, 10169, 30, 2925, 10169, 90, 1536]],
+        [6, [2928, 10169], [2925, 10169, 30, 2928, 10169, 60, 1536]],
+        [7, [2931, 10169], [2928, 10169, 30, 2931, 10169, 60, 1536]],
+        [8, [2934, 10169], [2931, 10169, 30, 2934, 10169, 60, 1536]],
+        [9, [2937, 10169], [2934, 10169, 30, 2937, 10169, 60, 1536]],
+        [10, [2940, 10169], [2937, 10169, 30, 2940, 10169, 60, 1536]],
+        [11, [2943, 10169], [2940, 10169, 30, 2943, 10169, 60, 1536]]
+      ],
+      "fadeTick": 12, "landTick": 15, "to": [2874, 9868], "_to": "Calibrated: where the recording stood to board the White Wolf Mountain cart.", "fadeInTick": 18, "closeTick": 21, "cartBackTick": 13
+    },
+    { "track": 2, "y": 10164, "closed": true }
+  ],
+  "_refusals": "The Ice Mountain pick's refusals, which the Tickets menus' other picks repeat (\"Same as ...\").",
+  "refusals": {
+    "coins": "I'm sorry, I've run out of money.",
+    "space": "I'm sorry, [sir/madam], but I don't believe you can hold the ticket."
+  },
+  "trapdoor": [3140, 3504],
+  "_outstations": "Their carts are in the map; each needs its ticket to Keldagrim. The Grand Exchange trapdoor's ride is free.",
+  "outstations": [
+    { "loc": "iceCart", "ticket": "iceKelda" },
+    { "loc": "wolfCart", "ticket": "wolfKelda" }
+  ],
+  "_arrival": "Into Keldagrim, counting from the fade (the click, or the trapdoor's last line): the worn view blanked at 4, on the station's track at 3, gliding west along it from 5 (the screen back then), off the cart at 22 with the overlay closed and an unridable cart left behind.",
+  "arrival": {
+    "blankTick": 4, "landTick": 3, "land": [2943, 10170], "fadeInTick": 5,
+    "steps": [
+      [5, [2941, 10170], [2943, 10170, 30, 2941, 10170, 70, 512]],
+      [6, [2940, 10172], [2941, 10170, 30, 2941, 10171, 40, 1024]],
+      [7, [2936, 10173], [2940, 10172, 30, 2937, 10172, 75, 512]],
+      [8, [2933, 10173], [2936, 10173, 30, 2933, 10173, 60, 512]],
+      [9, [2930, 10173], [2933, 10173, 30, 2930, 10173, 60, 512]],
+      [10, [2927, 10173], [2930, 10173, 30, 2927, 10173, 60, 512]],
+      [11, [2924, 10173], [2927, 10173, 30, 2924, 10173, 60, 512]],
+      [12, [2921, 10173], [2924, 10173, 30, 2921, 10173, 60, 512]],
+      [13, [2918, 10173], [2921, 10173, 30, 2918, 10173, 60, 512]],
+      [14, [2915, 10173], [2918, 10173, 30, 2915, 10173, 60, 512]],
+      [15, [2912, 10173], [2915, 10173, 30, 2912, 10173, 60, 512]],
+      [16, [2909, 10173], [2912, 10173, 30, 2909, 10173, 130, 512]]
+    ],
+    "offTick": 22, "off": [2909, 10174], "unridable": [2909, 10173]
+  },
+  "_wornHidden": "Worn slots the client shows empty while riding (weapon, shield, boots), as recorded.",
+  "wornHidden": [3, 5, 10],
+  "messages": {
+    "front": "You should take the cart at the front of the queue.",
+    "wrongTicket": "You don't have an appropriate ticket for these carts.",
+    "noTicket": "You must purchase a ticket to Keldagrim before you can ride the mine cart.",
+    "closed": "That tunnel is inaccessible.",
+    "giantDwarf": "You need to start The Giant Dwarf to enter Keldagrim.",
+    "_giantDwarf": "Calibrated: Keldagrim.plugin.js's line for the city's gate; no recording shows a ride refused for the quest."
+  }
+}

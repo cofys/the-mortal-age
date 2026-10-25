@@ -8,6 +8,9 @@ import type {
     WidgetOverlayDrawContext,
 } from "../../../../game/plugins/ClientPluginManager";
 import type { ConfigManager } from "../../config/ConfigManager";
+import { MenuTargetType } from "../../../../rs/MenuEntry";
+import type { SimpleMenuEntry } from "../../../../ui/menu/MenuEngine";
+import type { MenuTransformContext } from "../../../../ui/menu/menuTransforms";
 import { OverlayPosition } from "./OverlayPosition";
 import {
     type HudFrame,
@@ -259,6 +262,27 @@ export class OverlayRenderer implements ClientPlugin {
         if (managing === this.managing) return;
         this.managing = managing;
         if (!managing && this.drag) this.finishDrag();
+    }
+
+    /**
+     * RuneLite's overlay menu entries: right-clicking over a movable overlay that has some puts
+     * them at the top of the menu (deprioritised, so a left click still reaches the scene).
+     */
+    transformMenuEntries(entries: SimpleMenuEntry[], context: MenuTransformContext): SimpleMenuEntry[] {
+        if (context.surface !== "world" || !context.menu) return entries;
+        const hit = this.overlayAt(this.mouseX, this.mouseY);
+        const extra = hit?.overlay.menuEntries?.() ?? [];
+        if (extra.length === 0) return entries;
+        return [
+            ...extra.map((e) => ({
+                option: e.option,
+                target: `<col=ff9040>${e.target}</col>`,
+                targetType: MenuTargetType.NONE,
+                deprioritized: true,
+                onClick: () => e.onClick(),
+            })),
+            ...entries,
+        ];
     }
 
     /** The smallest movable overlay under the mouse, as RuneLite picks it. */

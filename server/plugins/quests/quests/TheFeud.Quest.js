@@ -1383,6 +1383,13 @@ module.exports = function registerTheFeudQuest(api) {
     }
   }
 
+  /** The death handler above already awards exactly one of these conditional rewards. */
+  function handleDropContext({ npcId, context }) {
+    if (npcId !== BANDIT_CHAMPION_ID || !context?.handledItemIds) return;
+    context.handledItemIds.add(WILLOW_BLACKJACK_ITEM_ID);
+    context.handledItemIds.add(ADAMANT_SCIMITAR_ITEM_ID);
+  }
+
   function handleLogin({ player }) {
     refreshQuestList(player);
     syncVarbits(player);
@@ -1582,6 +1589,7 @@ module.exports = function registerTheFeudQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleConditionChosen);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
+  api.onCustomEvent("npc-drops:context", handleDropContext);
 
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject(handleItemOnObject, { noted: false });

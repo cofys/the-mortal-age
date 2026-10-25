@@ -137,6 +137,7 @@ function fakePlayer(name = 'Gladiator') {
     getCombat: () => ({
       getHitQueue: () => ({ addPendingDamage: (hits) => p.damage.push(...hits.map((hit) => hit.getDamage())) }),
       getPoisonImmunityTimer: () => ({ finished: () => true }),
+      getPoisonClock: () => ({ finished: () => true, isVenomImmune: () => false, clearCounter() {} }),
       getCastSpell: () => null,
       getAutocastSpell: () => null,
     }),

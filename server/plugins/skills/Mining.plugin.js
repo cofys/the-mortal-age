@@ -377,7 +377,6 @@ class MiningTask extends Task {
         stopMining(this.activeSessions, player);
         continue;
       }
-
       if (state.rock.infinite) {
         if (inventoryBlocks(player, state.rock.oreId)) {
           player.getInventory().full();

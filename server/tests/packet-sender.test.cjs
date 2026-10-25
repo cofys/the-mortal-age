@@ -92,7 +92,7 @@ test('interface script packets preserve 64-bit price totals', () => {
   assert.equal(frame.readBigInt64BE(9), 12345678901n);
 });
 
-test('replacing a main interface emits its close event before changing its id', () => {
+test('interface transitions emit close before replacement and changed after assignment', () => {
   const { Player } = require('../dist/game/entity/impl/player/Player');
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const original = PluginManager.emitCustomEvent;
@@ -103,7 +103,11 @@ test('replacing a main interface emits its close event before changing its id', 
     Player.prototype.setInterfaceId.call(player, 465);
     Player.prototype.setInterfaceId.call(player, 465);
     Player.prototype.setInterfaceId.call(player, -1);
-    assert.deepEqual(events, [['interface:closed', 464, 464]]);
+    assert.deepEqual(events, [
+      ['interface:closed', 464, 464],
+      ['interface:changed', 465, 465],
+      ['interface:changed', -1, -1],
+    ]);
     assert.equal(player.interfaceId, -1);
   } finally { PluginManager.emitCustomEvent = original; }
 });

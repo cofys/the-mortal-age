@@ -28,6 +28,7 @@ export function handleAuthTickMessage(msg: any): boolean {
             state.sessionLoginFlags = LOGIN_FLAG_TOKEN;
         }
         if (msg.payload.success) {
+            clearHintArrow();
             clearAttackTimer();
             loadItemPrices();
         }

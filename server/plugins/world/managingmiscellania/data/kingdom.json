@@ -1,0 +1,30 @@
+{
+  "_sources": {
+    "economy": "OSRS Wiki, Managing Miscellania, and its calculator Module:Miscellania_calculator (21 Sep 2026): each day the coffers pay min(5 + floor(coffer/10), 50,000 or 75,000 after Royal Trouble, coffer); worker effectiveness = floor(paid * 100 / 8333); resource points += floor(effectiveness * favour / 100), capped at 262,143; favour (0-127) then falls by ceil((160 or 131 - favour) / 15) while above 32.",
+    "yield": "Per category: floor(workers * inverseCost * resourcePoints / 2048), with the module's inverse costs and bonus roll tables; ranarr seeds are capped at 2 and tree seeds at 4 per collection.",
+    "limits": "OSRS Wiki: coffers hold 5,000,000 (7,500,000 after Royal Trouble); 10 workers (15 after Royal Trouble), at most 10 on one job; no collection after 30 days without visiting Miscellania or Etceteria.",
+    "approval": "OSRS Wiki, Managing Miscellania: +1 per coal, +2 per gem, 50% chance of +1 per maple log or per tuna/lobster/swordfish, on the islands."
+  },
+  "cofferMax": { "base": 5000000, "royalTrouble": 7500000 },
+  "dailyPayMax": { "base": 50000, "royalTrouble": 75000 },
+  "favourSubtraction": { "base": 160, "royalTrouble": 131 },
+  "favourFloor": 32,
+  "favourMax": 127,
+  "workers": { "base": 10, "royalTrouble": 15, "perJob": 10 },
+  "resourcePointCap": 262143,
+  "pauseAfterDays": 30,
+  "inverseCost": {
+    "maple": 160, "coal": 98, "fish": 158, "herbs": 11, "flax": 224,
+    "mahogany": 40, "teak": 54, "bothHardwood": 47, "farm": 86
+  },
+  "tables": {
+    "nests": [["BIRD_NEST_SEEDS", 65], ["BIRD_NEST_RING", 32], ["BIRD_NEST_EGG_GREEN", 1], ["BIRD_NEST_EGG_BLUE", 1], ["BIRD_NEST_EGG_RED", 1]],
+    "miningGems": [["UNCUT_SAPPHIRE", 32], ["UNCUT_EMERALD", 16], ["UNCUT_RUBY", 8], ["UNCUT_DIAMOND", 2]],
+    "fishingLoot": [["UNCUT_SAPPHIRE", 32], ["UNCUT_EMERALD", 16], ["UNCUT_RUBY", 8], ["UNCUT_DIAMOND", 2], ["CASKET", 32], ["VIKINGBOOTS", 4], ["VIKINGGLOVES", 4], ["KEYHALF1", 1], ["KEYHALF2", 1], ["CLUE_EASY", 4]],
+    "herbs": [["UNIDENTIFIED_TARROMIN", 10], ["UNIDENTIFIED_HARRALANDER", 9], ["UNIDENTIFIED_IRIT", 6], ["UNIDENTIFIED_AVANTOE", 6], ["UNIDENTIFIED_RANARR", 3], ["UNIDENTIFIED_KWUARM", 3], ["UNIDENTIFIED_CADANTINE", 3], ["UNIDENTIFIED_DWARF_WEED", 3], ["UNIDENTIFIED_LANTADYME", 3]],
+    "herbSeeds": [["GUAM_SEED", 320], ["MARRENTILL_SEED", 218], ["TARROMIN_SEED", 149], ["HARRALANDER_SEED", 101], ["RANARR_SEED", 69, 2], ["TOADFLAX_SEED", 47], ["IRIT_SEED", 32], ["AVANTOE_SEED", 22], ["KWUARM_SEED", 15], ["SNAPDRAGON_SEED", 10], ["CADANTINE_SEED", 7], ["LANTADYME_SEED", 5], ["DWARF_WEED_SEED", 3], ["TORSTOL_SEED", 2]],
+    "flaxSeeds": [["GUAM_SEED", 320], ["MARRENTILL_SEED", 218], ["TARROMIN_SEED", 149], ["HARRALANDER_SEED", 101], ["RANARR_SEED", 69], ["TOADFLAX_SEED", 47], ["IRIT_SEED", 32], ["AVANTOE_SEED", 22], ["KWUARM_SEED", 15], ["SNAPDRAGON_SEED", 10], ["CADANTINE_SEED", 7], ["LANTADYME_SEED", 5], ["DWARF_WEED_SEED", 3], ["TORSTOL_SEED", 2]],
+    "treeSeeds": [["ACORN", 214, 4], ["APPLE_TREE_SEED", 170, 4], ["WILLOW_SEED", 135, 4], ["BANANA_TREE_SEED", 108, 4], ["ORANGE_TREE_SEED", 85, 4], ["CURRY_TREE_SEED", 68, 4], ["MAPLE_SEED", 54, 4], ["PINEAPPLE_TREE_SEED", 42, 4], ["PAPAYA_TREE_SEED", 34, 4], ["YEW_SEED", 27, 4], ["PALM_TREE_SEED", 22, 4], ["CALQUAT_TREE_SEED", 17, 4], ["SPIRIT_TREE_SEED", 11, 4], ["DRAGONFRUIT_TREE_SEED", 6, 4], ["MAGIC_TREE_SEED", 5, 4], ["TEAK_SEED", 4, 4], ["MAHOGANY_SEED", 4, 4], ["CELASTRUS_TREE_SEED", 3, 4], ["REDWOOD_TREE_SEED", 2, 4]],
+    "seeds": [["POTATO_SEED", 1567735], ["ONION_SEED", 1180708], ["CABBAGE_SEED", 619972], ["TOMATO_SEED", 561932], ["BARLEY_SEED", 497148], ["HAMMERSTONE_HOP_SEED", 494318], ["MARIGOLD_SEED", 409668], ["ASGARNIAN_HOP_SEED", 369067], ["JUTE_SEED", 368455], ["REDBERRY_BUSH_SEED", 343409], ["NASTURTIUM_SEED", 270351], ["YANILLIAN_HOP_SEED", 245383], ["CADAVABERRY_BUSH_SEED", 242164], ["SWEETCORN_SEED", 197249], ["ROSEMARY_SEED", 173977], ["DWELLBERRY_BUSH_SEED", 172110], ["GUAM_SEED", 135320], ["WOAD_SEED", 129804], ["KRANDORIAN_HOP_SEED", 122649], ["LIMPWURT_SEED", 103567], ["STRAWBERRY_SEED", 97042], ["MARRENTILL_SEED", 93062], ["JANGERBERRY_BUSH_SEED", 69567], ["WILDBLOOD_HOP_SEED", 62976], ["TARROMIN_SEED", 62551], ["WATERMELON_SEED", 47071], ["HARRALANDER_SEED", 43198], ["SNAPE_GRASS_SEED", 34094], ["WHITEBERRY_BUSH_SEED", 24586], ["TOADFLAX_SEED", 19990], ["MUSHROOM_SEED", 19266], ["IRIT_SEED", 14019], ["BELLADONNA_SEED", 11594], ["AVANTOE_SEED", 9229], ["POISONIVY_BUSH_SEED", 9199], ["CACTUS_SEED", 7850], ["KWUARM_SEED", 6599], ["RANARR_SEED", 5305, 2], ["SNAPDRAGON_SEED", 3901], ["POTATO_CACTUS_SEED", 3790], ["CADANTINE_SEED", 2817], ["LANTADYME_SEED", 2097], ["SEAWEED_SEED", 1508], ["DWARF_WEED_SEED", 1208], ["TORSTOL_SEED", 810]]
+  }
+}

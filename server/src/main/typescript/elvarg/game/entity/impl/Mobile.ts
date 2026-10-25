@@ -91,7 +91,7 @@ export abstract class Mobile extends Entity {
      */
     interactingMobile: any;
     npcTransformationId = -1;
-    poisonDamage: number;
+    poisonDamage: number = 0;
     /**
      * True when the current affliction is venom rather than ordinary
      * poison. Venom uses a different damage curve (see CombatPoisonEffect):
@@ -99,6 +99,8 @@ export abstract class Mobile extends Entity {
      * doesn't expire on its own.
      */
     private venomed = false;
+    private lastVenomDamage: number | undefined;
+    private venomGeneration = 0;
     // Allocated on first use: most actors never touch prayers.
     private prayerActive: boolean[] | null = null;
     resetMovementQueue = false;
@@ -478,7 +480,9 @@ export abstract class Mobile extends Entity {
     }
 
     setPoisonDamage(poisonDamage: number) {
+        if (poisonDamage <= 0 && this.poisonDamage > 0) this.venomGeneration++;
         this.poisonDamage = poisonDamage;
+        if (poisonDamage <= 0) this.lastVenomDamage = undefined;
     }
     isPoisoned(): boolean {
         return this.poisonDamage > 0;
@@ -489,7 +493,22 @@ export abstract class Mobile extends Entity {
     }
 
     setVenomed(venomed: boolean) {
+        if (this.venomed !== venomed) this.venomGeneration++;
         this.venomed = venomed;
+        if (!venomed) this.lastVenomDamage = undefined;
+    }
+
+    getLastVenomDamage(): number | undefined {
+        return this.lastVenomDamage;
+    }
+
+    getVenomGeneration(): number {
+        return this.venomGeneration;
+    }
+
+    setLastVenomDamage(damage: number | undefined): void {
+        this.lastVenomDamage = Number.isFinite(damage) && damage > 0
+            ? Math.min(20, Math.floor(damage)) : undefined;
     }
 
     getPositionToFace(): Location {

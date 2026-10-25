@@ -225,7 +225,9 @@ function holdBowl(player, held) {
 }
 
 function cleanUp(player) {
+  const game = games.get(player);
   games.delete(player);
+  if (game?.area.hasMember(player)) game.area.leave(player, false);
   player.removeFlag(IGNORE_CLIPPING_FLAG);
   holdBowl(player, false);
   const sender = player.getPacketSender();
@@ -264,8 +266,11 @@ function walkPast(player, ...tiles) {
 
 /** Juna lets the player in (the "enters the Tears of Guthix cave" stage direction). */
 function enter(player) {
+  if (games.has(player)) return;
   player.getPacketSender().sendInterfaceRemoval();
+  const area = createCave();
   games.set(player, {
+    area,
     tears: 0,
     ticksLeft: questPoints(player),
     leaving: false,
@@ -273,6 +278,8 @@ function enter(player) {
     collectTile: null,
     entry: { questPoints: questPoints(player), totalXp: totalXp(player) },
   });
+  area.enter(player);
+  Streams.WALLS.forEach((_, index) => Streams.drawWall(core, index, streams.colourAt(index), area));
   holdBowl(player, true);
   const sender = player.getPacketSender();
   sender.sendVarbit(TEARS_VARBIT, 0);
@@ -328,26 +335,28 @@ function collectTick(player, game) {
 // --- The cave as an Area
 
 function createCave() {
-  class TearsOfGuthixCave extends core.Area {
+  class TearsOfGuthixCave extends core.PrivateArea {
     process(mobile) {
       const player = mobile.isPlayer() ? mobile.getAsPlayer() : null;
       const game = player && games.get(player);
-      if (!game || game.leaving) return;
+      if (!game) return;
+      if (game.leaving) {
+        if (player.getLocation().equals(tile(OUTSIDE))) this.leave(player, false);
+        return;
+      }
+      if (inCave(player)) player.removeFlag(IGNORE_CLIPPING_FLAG);
       if (game.wall >= 0) collectTick(player, game);
       game.ticksLeft--;
       player.getPacketSender().sendVarbit(COUNTDOWN_VARBIT, Math.max(0, game.ticksLeft));
       if (game.ticksLeft <= 0) finish(player);
     }
 
-    postEnter(mobile) {
-      if (mobile.isPlayer() && games.has(mobile.getAsPlayer())) mobile.getAsPlayer().removeFlag(IGNORE_CLIPPING_FLAG);
-    }
-
     postLeave(mobile, logout) {
       const player = mobile.isPlayer() ? mobile.getAsPlayer() : null;
       const game = player && games.get(player);
+      super.postLeave(mobile, logout);
       if (!game) return;
-      if (game.leaving && !logout) drink(player, game);
+      if (game.leaving && !logout && player.getHitpoints() > 0 && player.getLocation().equals(tile(OUTSIDE))) drink(player, game);
       else cleanUp(player);
     }
 
@@ -356,7 +365,7 @@ function createCave() {
     }
   }
   const { Boundary } = core;
-  return new TearsOfGuthixCave([new Boundary(CAVE[0], CAVE[1], CAVE[2], CAVE[3], PLANE)]);
+  return new TearsOfGuthixCave([new Boundary(OUTSIDE[0], CAVE[1], CAVE[2], CAVE[3], PLANE)]);
 }
 
 /** Logging out mid-game drinks nothing; the player starts outside next time. */
@@ -375,19 +384,36 @@ function login({ player }) {
 }
 
 function startStreams() {
-  streams = Streams.startStreams(core);
+  streams = Streams.startStreams(core, redrawStreams);
+}
+
+function redrawStreams(index, colour) {
+  Streams.drawWall(core, index, colour);
+  for (const game of games.values()) {
+    if (!game.area.isDestroyed()) Streams.drawWall(core, index, colour, game.area);
+  }
+}
+
+function death({ player }) {
+  if (games.has(player)) cleanUp(player);
+}
+
+function shutdown() {
+  for (const player of games.keys()) logout({ player });
 }
 
 module.exports = function registerCave(pluginApi) {
   api = pluginApi;
   core = api.core;
-  api.persistAttribute(PERSONAL_BEST_ATTRIBUTE);
+  api.persistAttribute(PERSONAL_BEST_ATTRIBUTE, 0);
   api.persistAttribute(LAST_VISIT_ATTRIBUTE);
-  api.registerArea(createCave());
   api.onServerStartup(startStreams);
+  api.onServerShutdown(shutdown);
   api.onObjectInteraction("Weeping wall", { "Collect-from": collectFrom });
   api.onPlayerLogout(logout);
+  api.onPlayerDisconnect(logout);
   api.onPlayerLogin(login);
+  api.onPlayerBeforeDeath(death);
 };
 
 Object.assign(module.exports, {

@@ -5,44 +5,75 @@ import { Mobile } from "../../entity/impl/Mobile";
 import { Item } from "../../model/Item";
 import { HitDamage } from "../../content/combat/hit/HitDamage";
 import { HitMask } from "../../content/combat/hit/HitMask";
+import { TaskManager } from "../TaskManager";
 
 export class CombatPoisonEffect extends Task {
+  private static readonly active = new WeakMap<Mobile, CombatPoisonEffect>();
   private entity: Mobile;
   private ticksUntilHit: number;
 
   constructor(entity: Mobile) {
-    super(1, entity, false);
+    // Activity cancellation must not stop an actor's ongoing affliction.
+    super(1, {}, false);
     this.entity = entity;
     this.ticksUntilHit = 30;
+    CombatPoisonEffect.active.get(entity)?.stop();
+    CombatPoisonEffect.active.set(entity, this);
+  }
+
+  /** Resume saved affliction without reapplying or changing its damage. */
+  public static resume(entity: Mobile): void {
+    if (!entity.isRegistered() || entity.getHitpoints() <= 0) return;
+    if (!entity.isPoisoned() && !(entity.isPlayer() && entity.getCombat().getPoisonClock().hasCounter())) return;
+    if (this.active.get(entity)?.isRunning()) return;
+    TaskManager.submit(new CombatPoisonEffect(entity));
+  }
+
+  /** Stop callbacks before saving/removing an actor, retaining saved affliction. */
+  public static suspend(entity: Mobile): void {
+    this.active.get(entity)?.stop();
   }
 
   public execute() {
+    if (CombatPoisonEffect.active.get(this.entity) !== this) {
+      super.stop();
+      return;
+    }
     if (!this.entity.isRegistered()) {
       this.stop();
       return;
     }
 
-    if (!this.entity.isPoisoned()) {
+    if (this.entity.getHitpoints() <= 0) {
+      this.entity.setPoisonDamage(0);
+      this.entity.setVenomed(false);
+      if (this.entity.isPlayer()) this.entity.getCombat().getPoisonClock().stop();
       this.stop();
       return;
     }
 
-    if (!this.entity.getCombat().getPoisonImmunityTimer().finished()) {
+    const player = this.entity.isPlayer() ? this.entity.getAsPlayer() : null;
+    const clock = player?.getCombat().getPoisonClock();
+    const afflicted = this.entity.isPoisoned();
+    if (!afflicted && !clock?.hasCounter()) {
+      this.entity.setVenomed(false);
       this.stop();
       return;
     }
 
-    if (this.entity.isPlayer() && this.entity.getAsPlayer().getInterfaceId() > 0) {
-      // Poison pauses while interfaces are open and should hit immediately
-      // after the interface closes if it was already due.
-      if (this.ticksUntilHit < 0) {
-        this.ticksUntilHit = 0;
+    // Immunity prevents new afflictions in CombatFactory.poisonEntity; it does
+    // not cure an existing one (for example when equipping a serpentine helm).
+    // Explicit cures clear the affliction fields, handled by isPoisoned above.
+    const modal = !!player && (player.getInterfaceId() > 0 || player.getPacketSender().hasInterruptibleInterface());
+    if (clock) {
+      if (!clock.tickPulse(modal)) return;
+      if (!afflicted) {
+        if (!clock.hasCounter()) this.stop();
+        return;
       }
-      return;
     }
 
-    if (this.ticksUntilHit > 0) {
-      this.ticksUntilHit--;
+    if (!clock && --this.ticksUntilHit > 0) {
       return;
     }
 
@@ -56,10 +87,14 @@ export class CombatPoisonEffect extends Task {
       // OSRS venom: the stored value IS the damage dealt (no severity->damage
       // formula), escalates by 2 each hit up to a cap of 20, and does not
       // decay or expire on its own - only a cure ends it.
-      this.entity
-        .getCombat()
-        .getHitQueue()
-        .addPendingDamage([new HitDamage(currentValue, HitMask.GREEN)]);
+      const generation = this.entity.getVenomGeneration();
+      const hit = new HitDamage(currentValue, HitMask.GREEN).onApplied(damageTaken => {
+        if (damageTaken > 0 && this.entity.isRegistered() && this.entity.isVenomed() &&
+            this.entity.getVenomGeneration() === generation) {
+          this.entity.setLastVenomDamage(damageTaken);
+        }
+      });
+      this.entity.getCombat().getHitQueue().addPendingDamage([hit]);
       this.entity.setPoisonDamage(Math.min(20, currentValue + 2));
       this.ticksUntilHit = 30;
       return;
@@ -75,15 +110,20 @@ export class CombatPoisonEffect extends Task {
     this.ticksUntilHit = 30;
 
     if (currentValue <= 1) {
-      this.stop();
+      if (!clock?.hasCounter()) this.stop();
       return;
     }
   }
 
   public stop() {
-    this.entity.setPoisonDamage(0);
-    this.entity.setVenomed(false);
-
+    // Cancelling a callback (notably before the logout save) is not a cure.
+    if (CombatPoisonEffect.active.get(this.entity) === this) {
+      CombatPoisonEffect.active.delete(this.entity);
+      if (this.entity.isPlayer() && !this.entity.isPoisoned() &&
+          !this.entity.getCombat().getPoisonClock().hasCounter()) {
+        this.entity.getCombat().getPoisonClock().resetPhase();
+      }
+    }
     super.stop();
   }
 
@@ -106,6 +146,10 @@ export class CombatPoisonEffect extends Task {
     }
     if (entity.isPoisoned()) {
       return entity.getPoisonDamage();
+    }
+    if (entity.isPlayer()) {
+      const counter = entity.getCombat().getPoisonClock().getCounter();
+      return counter > 0 ? -counter : 0;
     }
     const immunity = entity.getCombat().getPoisonImmunityTimer().secondsRemaining();
     if (immunity > CombatPoisonEffect.ORB_IMMUNITY_MIN_SECONDS) {

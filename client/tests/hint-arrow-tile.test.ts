@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 
-import { hintArrow, hintArrowTileOffset, setHintArrowNpc, setHintArrowTile } from "../game/HintArrow";
+import { hintArrow, hintArrowTileOffset, setHintArrowNpc, setHintArrowPlayer, setHintArrowTile } from "../game/HintArrow";
+import { handleAuthTickMessage } from "../network/serverConnection/handlers/authTick";
+import { state } from "../network/serverConnection/state";
 import { HintArrowLayer } from "../render/webgpu/overlays/HintArrowLayer";
 import { IndexedSprite } from "../rs/sprite/IndexedSprite";
 import { SpriteLoader } from "../rs/sprite/SpriteLoader";
@@ -69,6 +71,26 @@ function webgpuDrawsTheArrow(): void {
     assert.deepEqual(queued, [[105 - 12, 205 - 28, 25, 25], [300 - 12, 400 - 28, 25, 25]]);
 }
 
+function loginClearsThePreviousSessionsHint(): void {
+    const socket = state.socket;
+    state.socket = { fetchContent: async () => ({}) } as any;
+    try {
+        for (const setHint of [() => setHintArrowPlayer(40), () => setHintArrowNpc(40), () => setHintArrowTile(3400, 4000, 0, 8)]) {
+            setHint();
+            handleAuthTickMessage({ type: "login_response", payload: { success: false } });
+            assert.notEqual(hintArrow.type, 0, "a rejected login does not reset the current hint");
+            handleAuthTickMessage({ type: "login_response", payload: { success: true } });
+            assert.equal(hintArrow.type, 0, "a fresh session cannot point at a reused actor id or old tile");
+        }
+        handleAuthTickMessage({ type: "hint_arrow", payload: { arrowType: 3, a: 41 } });
+        assert.equal(hintArrow.type, 3, "new hints from the server still work after login");
+        assert.equal(hintArrow.playerId, 41);
+    } finally {
+        state.socket = socket;
+    }
+}
+
 tileHintsKeepPositionHeightAndPlane();
 offsetsMatchTheOsrsClient();
 webgpuDrawsTheArrow();
+loginClearsThePreviousSessionsHint();

@@ -1,0 +1,63 @@
+{
+  "_source": "OSRS Wiki: Bank_PIN; the Banker's transcript (\"I'd like to check my PIN settings.\" -> open_interface \"Bank PIN\"); the cache's bankpin_settings and bankpin_keypad interfaces and their client scripts (333 -> 653 shuffles the keypad and prompts for each digit; 685 sends the four digits as one resume_countdialog); rsprox.net recordings 7 (rev 223: the settings screen and the logout toggle), 4194 (rev 238) and 2246 (rev 228): the keypad at a bank and \"You have correctly entered your PIN.\"",
+  "interfaces": { "settings": "bankpin_settings", "keypad": "bankpin_keypad" },
+  "components": {
+    "settings": {
+      "root": "settings", "status": "statusoutput", "delay": "delayoutput", "logout": 10, "message": 14,
+      "noPin": "buttons_nopin", "setPin": "set", "noPinDelay": 20,
+      "hasPin": 21, "changePin": "change", "deletePin": "delete", "hasPinDelay": 24, "logoutToggle": "logouthandler",
+      "pending": "buttons_pendingpin", "cancelPending": "cancel",
+      "warning": "warning", "question": "warningquestion", "yes": "warning_yes", "no": "warning_no"
+    },
+    "keypad": { "title": "title", "instruction": "instruction", "forgotten": "forgotten_container" }
+  },
+  "_numbers": "Components with no gameval name, by their file id (the dump of each interface): settings 10 the logout output, 14 the message box text, 20 and 24 the two recovery-delay buttons, 21 the has-a-PIN buttons layer.",
+  "keypad": {
+    "bankTitle": "Bank of Gielinor",
+    "settingsTitle": "Bank of Gielinor",
+    "instruction": "Please enter your PIN using the buttons below.",
+    "_again": "Calibrated: the second entry when setting or changing a PIN.",
+    "again": "Now please enter that number again."
+  },
+  "_guardTitles": "The keypad's title for each \"bank-pin:guard\" feature. Recorded: grand-exchange (rsprox 3250), bond (1375). Anything else shows the bank's title, uncalibrated.",
+  "guardTitles": { "grand-exchange": "Grand Exchange", "bond": "Old School Bonds" },
+  "_guardShops": "shops.json ids of the point shops the Wiki lists: 1449 Last Man Standing, 1450 Leagues, 1459 PvP Arena, 1465 Speedrunning, 1481 Events.",
+  "guardShops": { "1449": "lms-shop", "1450": "leagues-shop", "1459": "pvp-arena-rewards", "1465": "speedrun-shop", "1481": "events-shop" },
+  "delays": [3, 7],
+  "_defaultDelay": "Calibrated: the Wiki says a new PIN takes effect in 7 days.",
+  "defaultDelay": 7,
+  "_lockout": "Wiki: after two failed attempts a 10-second lockout, after another 15 seconds, after four 10 minutes; logging out doesn't reset the count. Seconds.",
+  "lockout": { "2": 10, "3": 15, "4": 600 },
+  "offlineGraceMinutes": 5,
+  "texts": {
+    "noPin": "You do not have a PIN",
+    "hasPin": "You have a PIN",
+    "pendingPin": "PIN coming soon",
+    "pendingDelete": "PIN being deleted",
+    "days": "[days] days",
+    "lockAfter": "Lock after 5 minutes offline",
+    "alwaysLock": "Always lock",
+    "_recorded": "message, alwaysLockMessage and lockAfterMessage-like lines: the message box's recorded texts; the rest calibrated.",
+    "message": "Customers are reminded that they should NEVER tell anyone their Bank PINs or passwords, nor should they ever enter their PINs on any website form.",
+    "alwaysLockMessage": "On login, your PIN will always be locked.",
+    "lockAfterMessage": "If you log back in within 5 minutes, your PIN will stay unlocked.",
+    "pendingMessage": "Your new PIN will be active in [days] days. Until then you can cancel it here.",
+    "pendingDeleteMessage": "Your PIN will be deleted in [days] days. You can cancel this here if you remember it.",
+    "deleteQuestion": "Do you really wish to delete your PIN?"
+  },
+  "messages": {
+    "_recorded": "correct is recorded; the rest are calibrated (the Wiki paraphrases the lockout's advice).",
+    "correct": "You have correctly entered your PIN.",
+    "enterFirst": "You need to enter your Bank PIN at a bank first.",
+    "wrong": "That number is incorrect.",
+    "lockedOut": "You have entered your PIN incorrectly too many times. If you made a mistake, use the 'cancel' option. Please wait [seconds] seconds before trying again.",
+    "mismatch": "Those numbers did not match. Your PIN has not been set.",
+    "set": "Your new PIN will be active in [days] days.",
+    "changed": "Your PIN has been changed.",
+    "deleted": "Your PIN has been deleted.",
+    "cancelled": "The pending change to your PIN has been cancelled.",
+    "forgot": "Your PIN will be deleted in [days] days.",
+    "active": "Your Bank PIN is now active.",
+    "removed": "Your Bank PIN has now been deleted."
+  }
+}

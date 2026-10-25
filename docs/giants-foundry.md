@@ -184,6 +184,7 @@ The client draws everything from varbits; the server keeps them right.
 - Clicking the machine again outside a sweet spot: "<col=ff3045>Your attempt to overwork the preform causes you to miss the action altogether."; the next tick does nothing.
 - XP per machine tick (Wiki): 4.5 trip hammer, 3.2 grindstone, 3.3 polishing wheel.
 - Smiths' uniform (Wiki): each piece gives a 20% chance of 5% more progress on the trip hammer and 10% more on the others. That is the 21 and 11 in the recordings where the player wore it.
+  The full set gives 100% ("with the whole outfit giving a 100% chance"). The chance is `smithsUniformChance` in `Common.Smithing.js`, shared with the anvil's 4-tick chance.
 - At 1000 the player says "Looks like the sword is finished. I should take it to Kovac.".
 
 **Temperature**
@@ -259,8 +260,14 @@ The client draws everything from varbits; the server keeps them right.
 - The refusal when the preform is unequipped anywhere but the storage: it is refused silently.
 - Store-preform with no preform worn, and Take-preform with nothing stored: placeholder messages.
 
+## Rewards outside the minigame
+
+- Smithing catalyst (`Smelting.Smithing.js`, Superheat Item): for a bar that uses coal, one catalyst per bar halves the coal and doubles the Smithing XP. When there aren't enough catalysts or coal for that, the bar is smelted as normal.
+- Double ammo mould: `Cannonballs.Smithing.js`.
+- Smiths' uniform at an anvil (`Anvil.Smithing.js`): each item takes 4 ticks instead of 5 at the same chance.
+- Colossal blade (`ColossalBlade.EquipmentEffects.js`): the melee max hit is raised by 2 × the target's size, at most 10.
+
 ## Follow-ups
 
-- The smithing catalyst (half coal and double XP at a furnace), the double ammo mould (8 cannonballs from 2 bars) and the colossal blade's size-based max hit bonus.
-- The Smiths' uniform's 4-tick anvil chance in Smithing.
+- The smithing catalyst at the Blast Furnace (the Wiki: double XP there, no further coal saving). The Wiki doesn't say when the catalyst is taken there.
 - Combat achievements, diaries and the minigame's league tasks.

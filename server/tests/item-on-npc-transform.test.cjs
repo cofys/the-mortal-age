@@ -78,6 +78,35 @@ test('item use on an NPC passes the definition the player sees', () => {
   assert.equal(event.npcId, BANKER);
 });
 
+test('queued item use revalidates the exact inventory slot and NPC on arrival', () => {
+  const npcs = World.getNpcs();
+  const originalGet = npcs.get;
+  const originalEmit = PluginManager.emitItemOnNpc;
+  try {
+    for (const change of ['none', 'swap', 'consume', 'replace-npc']) {
+      const target = transformedBanker();
+      const player = playerWithCoins(5);
+      const inventory = player.getInventory();
+      inventory.setItem(1, new Item(4151, 1));
+      let arrive, emitted = 0, currentTarget = target;
+      player.getMovementQueue = () => ({ walkToEntity: (_target, callback) => { arrive = callback; } });
+      npcs.get = () => currentTarget;
+      PluginManager.emitItemOnNpc = () => { emitted++; return true; };
+      UseItemPacketListener.itemOnNpc(player, 149, 1, COINS, 0);
+      assert.equal(typeof arrive, 'function');
+      if (change === 'swap') inventory.swap(0, 1);
+      if (change === 'consume') inventory.deleteAtSlot(0, 5, false);
+      if (change === 'replace-npc') currentTarget = transformedBanker();
+      arrive();
+      assert.equal(emitted, change === 'none' ? 1 : 0, change);
+      assert.equal(inventory.getAmount(4151), 1, 'a replacement item is never offered to the old handler');
+    }
+  } finally {
+    npcs.get = originalGet;
+    PluginManager.emitItemOnNpc = originalEmit;
+  }
+});
+
 test('using coins on a transformed banker offers the platinum token exchange', () => {
   const hooks = {};
   const api = new Proxy(PluginManager.createApi('BankBooths'), {

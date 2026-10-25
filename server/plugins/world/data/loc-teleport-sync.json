@@ -24,7 +24,8 @@
       {"name": "ladder", "x": 3284, "y": 3165, "z": 0, "why": "Only seen on a Leagues world, from Al Kharid to Varlamore; not the normal game's."}
     ],
     "names": {
-      "sailing_gangplank_shipyard": "In the shipyard; Sailing handles it."
+      "sailing_gangplank_shipyard": "In the shipyard; Sailing handles it.",
+      "ge_keldagrim_trapdoor": "The Keldagrim minecarts ride it (KeldagrimMinecarts.plugin.js), as recorded."
     },
     "patterns": [
       {"pattern": "^sailing_", "why": "Sailing content (boats, docks, the shipyard)."},

@@ -174,6 +174,10 @@ function isRift(objectId) {
 
 function search({ player, objectId }) {
   if (!isRift(objectId)) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "rewards-guardian", resume: () => search({ player, objectId }) };
+  Shared.api().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (searchesLeft(player) <= 0) {
     Shared.statement(player, "There doesn't seem to be anything in the rift for you.");
     return true;
@@ -195,6 +199,10 @@ function search({ player, objectId }) {
 
 function bigSearch({ player, objectId }) {
   if (!isRift(objectId)) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "rewards-guardian", resume: () => bigSearch({ player, objectId }) };
+  Shared.api().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (searchesLeft(player) <= 0) {
     Shared.statement(player, "There doesn't seem to be anything in the rift for you.");
     return true;

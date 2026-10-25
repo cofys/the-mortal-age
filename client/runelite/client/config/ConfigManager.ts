@@ -7,6 +7,7 @@ import {
     isConfigGroupDescriptor,
 } from "./ConfigItem";
 import { type ConfigStorage, defaultConfigStorage } from "./ConfigStorage";
+import { Keybind } from "./Keybind";
 
 export const CONFIG_PREFIX = "rl.config.";
 
@@ -20,6 +21,7 @@ function itemKey(item: ConfigItemDef, property: string): string {
 
 export function serializeConfigValue(item: ConfigItemDef, value: unknown): string {
     if (value === undefined || value === null) return "";
+    if (item.keybind) return String(value instanceof Keybind ? value : Keybind.parse(String(value)));
     if (item.color) {
         // Unsigned: an alpha of 0x80 or more would turn negative with "| 0".
         const color = Math.max(0, Math.floor(Number(value))) >>> 0;
@@ -37,7 +39,10 @@ export function serializeConfigValue(item: ConfigItemDef, value: unknown): strin
 }
 
 export function parseConfigValue(item: ConfigItemDef, raw: string | null | undefined): unknown {
-    if (raw === null || raw === undefined || raw === "") return item.default;
+    if (raw === null || raw === undefined) return item.default;
+    // A text setting saved empty stays empty (a cleared list), as in RuneLite.
+    if (raw === "") return typeof item.default === "string" && !item.enum && !item.keybind ? "" : item.default;
+    if (item.keybind) return Keybind.parse(raw, item.default instanceof Keybind ? item.default : Keybind.NOT_SET);
     if (item.color) {
         if (raw.startsWith("#")) {
             const hex = raw.slice(1);

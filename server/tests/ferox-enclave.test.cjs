@@ -18,6 +18,7 @@ const Barriers = require("../plugins/areas/ferox/Barriers.FeroxEnclave");
 const Pool = require("../plugins/areas/ferox/Pool.FeroxEnclave");
 const FFA = require("../plugins/areas/ferox/FreeForAll.FeroxEnclave");
 const Portal = require("../plugins/areas/ferox/CastleWarsPortal.FeroxEnclave");
+const FeroxPlugin = require("../plugins/areas/FeroxEnclave.plugin");
 
 let prompt = null;
 let barrier = null;
@@ -92,6 +93,25 @@ function runTicks(p, count) {
   }
   return p.ticks;
 }
+
+test("random events use the captured enclave polygon, leaving the buffer and arena restricted", () => {
+  let eligibility;
+  const api = new Proxy({
+    core: PluginManager.getCoreApi(), sendMultiChatboxPrompt: recordPrompt,
+    onCustomEvent(name, handler) { if (name === "random-events:eligibility") eligibility = handler; },
+  }, { get(target, name) { return target[name] ?? (() => {}); } });
+  FeroxPlugin.register(api);
+  assert.equal(typeof eligibility, "function");
+  for (const [x, y, z, expected] of [[3130, 3631, 0, true], [3123, 3629, 0, true],
+    [3122, 3629, 0, null], [3123, 3617, 0, null], [3130, 3631, 1, null], [3320, 4750, 0, null]]) {
+    const request = { player: player({ at: new Location(x, y, z) }), kind: "mime", following: false, allowed: null };
+    eligibility(request);
+    assert.equal(request.allowed, expected, `${x},${y},${z}`);
+  }
+  const blocked = { player: player({ at: new Location(3130, 3631, 0) }), allowed: false };
+  eligibility(blocked);
+  assert.equal(blocked.allowed, false, "an active activity's exclusion wins over Ferox's general permission");
+});
 
 test("the barrier in this cache crosses between the town and the buffer (captured tiles)", () => {
   assert.ok(barrier, "barrier 39652 at 3123,3629");

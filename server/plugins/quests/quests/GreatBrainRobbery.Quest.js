@@ -161,6 +161,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   const FISHBOWL_HELMET_ITEM_ID = ItemIdentifiers.FISHBOWL_HELMET; // 7534
   const DIVING_APPARATUS_ITEM_ID = ItemIdentifiers.DIVING_APPARATUS; // 7535
   const HOLY_SYMBOL_ITEM_ID = ItemIdentifiers.HOLY_SYMBOL; // 1718
+  const HALLOWED_SYMBOL_ITEM_ID = ItemIdentifiers.HALLOWED_SYMBOL;
   const RING_OF_CHAROS_ITEM_ID = ItemIdentifiers.RING_OF_CHAROS; // 4202
   const RING_OF_CHAROS_A_ITEM_ID = ItemIdentifiers.RING_OF_CHAROS_A_; // 6465
 
@@ -309,7 +310,45 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   }
 
   function wearingHolySymbol(player) {
-    return equipped(player, Equipment.AMULET_SLOT, HOLY_SYMBOL_ITEM_ID);
+    return equipped(player, Equipment.AMULET_SLOT, HOLY_SYMBOL_ITEM_ID) ||
+      equipped(player, Equipment.AMULET_SLOT, HALLOWED_SYMBOL_ITEM_ID);
+  }
+
+  function afflicted(player) {
+    return player.isPoisoned() || player.isVenomed();
+  }
+
+  function cureWithPrayerBook(player) {
+    if (!held(player, PRAYER_BOOK_ITEM_ID) || !flag(player, BOOK_READ_ATTRIBUTE) ||
+        !wearingHolySymbol(player) || !afflicted(player)) return;
+    const skills = player.getSkillManager();
+    const prayer = skills.getCurrentLevel(Skill.PRAYER);
+    if (prayer <= 0) return;
+    const severity = player.getPoisonDamage();
+    if (!Number.isFinite(severity) || severity <= 0) return;
+    if (player.isVenomed()) {
+      // Saves predating last-hit tracking (and venom before its first hit) have
+      // no historical damage. Retain their current damage rather than invent it.
+      const lastHit = player.getLastVenomDamage() ?? severity;
+      skills.setCurrentLevel(Skill.PRAYER, Math.max(0, prayer - 50), true);
+      player.setPoisonDamage(lastHit * 5);
+      player.setVenomed(false);
+      player.sendMessage("Your venom has been reduced to poison.");
+      return;
+    }
+    const damage = api.core.CombatPoisonEffect.damageFromSeverity(severity);
+    const cost = Math.max(0, Math.floor((damage - 1) / 2));
+    const spent = Math.min(prayer, cost);
+    skills.setCurrentLevel(Skill.PRAYER, prayer - spent, true);
+    player.setPoisonDamage(prayer >= cost ? 0 : Math.max(0, severity - spent * 10));
+    player.sendMessage(player.isPoisoned()
+      ? "...and the power of Saradomin weakens the poison."
+      : "...and the power of Saradomin cures you of poison.");
+  }
+
+  function reciteFromHealthOrb(event) {
+    if (event.handled || !held(event.player, PRAYER_BOOK_ITEM_ID)) return;
+    event.handled = recitePrayerBook({ player: event.player, itemId: PRAYER_BOOK_ITEM_ID });
   }
 
   function wearingCharos(player) {
@@ -1150,8 +1189,8 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     ["HDXjv4", (player) => bookAction.get(player) === "read"],
     ["Geotyj", (player) => bookAction.get(player) === "recite" && !wearingHolySymbol(player)],
     ["5a53gY", (player) => bookAction.get(player) === "recite" && wearingHolySymbol(player)],
-    ["LWjR89", () => true],
-    ["gyOFgt", () => false],
+    ["LWjR89", (player) => !afflicted(player)],
+    ["gyOFgt", (player) => afflicted(player)],
     ["Dd9_bz", (player) => player.getSkillManager().getCurrentLevel(Skill.PRAYER) <= 0],
     ["1JqdZv", (player) => player.getSkillManager().getCurrentLevel(Skill.PRAYER) > 0],
     ["5Kh-Fz", (player) => !wearingHolySymbol(player)],
@@ -1422,9 +1461,13 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
         event.handled = true;
         player.sendMessage("The player collapses, and is sent back to the granary.");
         return;
+      case "rCFhoj":
+        // The following action supplies the actual full/partial/venom outcome.
+        event.handled = true;
+        return;
       case "hnbBxH":
         event.handled = true;
-        player.sendMessage("The player's poison is cured.");
+        cureWithPrayerBook(player);
         return;
       case "vPCEhg":
         event.handled = true;
@@ -1603,6 +1646,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   api.onItemOnObject(handleItemOnObject);
   api.onItemOnItem(handleItemOnItem);
   api.onItemAction("Prayer book", { Read: readPrayerBook, "Recite-prayer": recitePrayerBook });
+  api.onCustomEvent("poison:cure-from-orb", reciteFromHealthOrb);
   api.onItemAction("Wolf whistle", { Blow: blowWolfWhistle });
   api.onGroundItemPickup(handleGroundItemPickup);
   api.onNpcDialogueCondition(handleDialogueConditionAnswer);

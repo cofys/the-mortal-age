@@ -30,3 +30,20 @@ test("ambiguous, incomplete or unresolved reward data cannot produce loot", () =
     {item_id: 3, weight: 4, quantity_raw: "1; 3", noted: false},
   ]) assert.throws(() => Rolls.rollTable({out_of: 4, rolls: [1, 3], entries: [entry]}, 1), /reward/i);
 });
+
+test("a joint outcome grants every listed item on one roll", () => {
+  const Rolls = require("../plugins/treasuretrails/Rolls.RewardCaskets");
+  const table = { rolls: [1, 1], out_of: 2, entries: [
+    { weight: 1, items: [{ item_id: 2436, quantity: [5, 5], noted: true }, { item_id: 2440, quantity: [5, 5], noted: true }] },
+    { item_id: 995, quantity: [1, 1], noted: false, weight: 1 },
+  ] };
+  assert.deepEqual(Rolls.rollTable(table, 1, () => 0), [{ itemId: 2436, amount: 5, noted: true }, { itemId: 2440, amount: 5, noted: true }]);
+  assert.deepEqual(Rolls.rollTable(table, 1, () => 0.75), [{ itemId: 995, amount: 1, noted: false }]);
+  assert.throws(() => Rolls.rollTable({ ...table, entries: [{ weight: 2, items: [] }] }, 1, () => 0), /Invalid casket reward entry/);
+});
+
+test("every imported tier's table rolls, including hard's joint mega-rare outcome", () => {
+  const Rolls = require("../plugins/treasuretrails/Rolls.RewardCaskets");
+  const tables = require("../data/definitions/clue-caskets.json").tables;
+  for (const tier of Object.keys(tables)) assert.ok(Rolls.roll(tier, tables[tier].rolls[0]).length >= tables[tier].rolls[0], tier);
+});

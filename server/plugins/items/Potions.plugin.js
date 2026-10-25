@@ -1,6 +1,7 @@
 const {
   restoreRunEnergy,
   curePoisonAndVenom,
+  curePoison,
   boostSkill,
   lowerSkillByCurrent,
   lowerSkillByMax,
@@ -108,7 +109,12 @@ function damageButKeepAlive(player, amount) {
   player.setHitpoints(next);
 }
 
-function applyPoisonImmunity(player, seconds, message = true) {
+function applyPoisonImmunity(player, seconds, message = true, fullVenomCure = false) {
+  if (player.isVenomed() && !fullVenomCure) {
+    curePoison(player);
+    if (message) player.sendMessage("The potion weakens the venom to poison.");
+    return;
+  }
   curePoisonAndVenom(player);
   // Wiki (7 April 2016): drinking any kind of antipoison will no longer
   // decrease your poison immunity, so a weaker dose never shortens the timer.
@@ -240,9 +246,12 @@ function applyZamorakBrew(player) {
 }
 
 function applyGuthixRest(player) {
-  heal(player, 5);
+  const current = getCurrentLevel(player, Skill.HITPOINTS);
+  const base = getMaxLevel(player, Skill.HITPOINTS);
+  const extraCap = current >= base ? 5 : 0;
+  if (current < base + extraCap) heal(player, 5, extraCap);
   restoreRunEnergy(player, 5);
-  curePoisonAndVenom(player);
+  curePoison(player, 1);
 }
 
 /** Prayer restore that may over-heal by up to `overPercent` above base (ancient/forgotten brew). */
@@ -835,12 +844,17 @@ registerPotion({
 registerPotion({
   name: "Anti-venom",
   chains: [doseChain("ANTI_VENOM_4_", "ANTI_VENOM_3_", "ANTI_VENOM_2_", "ANTI_VENOM_1_")],
-  effect: (player) => applyPoisonImmunity(player, 720),
+  effect: (player) => applyPoisonImmunity(player, 738, true, true),
 });
 registerPotion({
   name: "Anti-venom+",
   chains: [doseChain("ANTI_VENOM_4__3", "ANTI_VENOM_3__3", "ANTI_VENOM_2__3", "ANTI_VENOM_1__3")],
-  effect: (player) => applyPoisonImmunity(player, 900),
+  effect: (player) => applyPoisonImmunity(player, 900, true, true),
+});
+registerPotion({
+  name: "Extended anti-venom+",
+  chains: [doseChain("EXTENDED_ANTI_VENOM_4_", "EXTENDED_ANTI_VENOM_3_", "EXTENDED_ANTI_VENOM_2_", "EXTENDED_ANTI_VENOM_1_")],
+  effect: (player) => applyPoisonImmunity(player, 1062, true, true),
 });
 
 registerPotion({
@@ -869,6 +883,12 @@ registerPotion({
   chains: [doseChain("ANTIPOISON_MIX_2_", "ANTIPOISON_MIX_1_")],
   requiresFoodPermission: true,
   effect: applyMix((player) => applyPoisonImmunity(player, 90, false), 3),
+});
+registerPotion({
+  name: "Anti-poison supermix",
+  chains: [doseChain("ANTI_POISON_SUPERMIX_2_", "ANTI_POISON_SUPERMIX_1_")],
+  requiresFoodPermission: true,
+  effect: applyMix((player) => applyPoisonImmunity(player, 360, false)),
 });
 registerPotion({
   name: "Restore mix",
@@ -1253,6 +1273,15 @@ function handlePotionDrink(player, itemId, slot) {
     return true;
   }
 
+  // Quest and content plugins can explain an item-specific unlock before a
+  // drink consumes a dose, starts a cooldown or applies any effect.
+  const permission = { player, itemId, allowed: true, message: null };
+  pluginApi.emitCustomEvent("potions:validate-drink", permission);
+  if (permission.allowed === false) {
+    if (permission.message) player.sendMessage(permission.message);
+    return true;
+  }
+
   const timers = player.getTimers();
   if (timers.has(TimerKey.STUN)) {
     player.sendMessage("You're currently stunned and cannot use potions.");
@@ -1412,30 +1441,44 @@ function componentIds(api, names) {
   return names.map((name) => api.core.CacheDefinitions.getComponentId(name)).filter(Number.isInteger);
 }
 
-/** The potions it can drink: those that cure poison or venom. */
-const CURE_POTIONS = new Set([
-  "Antipoison", "Superantipoison", "Antidote+", "Antidote++", "Sanfew serum",
-  "Anti-venom", "Anti-venom+", "Antipoison mix", "Antidote+ mix",
+/** Wiki Poison/Venom: prefer stronger treatment, including partial Guthix rest. */
+const CURE_POTIONS = new Map([
+  ["Guthix rest", 0],
+  ["Antipoison", 1], ["Antipoison mix", 1],
+  ["Superantipoison", 2], ["Sanfew serum", 2], ["Anti-poison supermix", 2],
+  ["Antidote+", 3], ["Antidote+ mix", 3],
+  ["Antidote++", 4], ["Anti-venom", 5], ["Anti-venom+", 6],
+  ["Extended anti-venom+", 7],
 ]);
 
 /**
- * "Cure" on the hitpoints orb drinks the first such potion in the inventory, as drinking it
- * does (rsprox captures: the drink's animation, sound and messages); with none, "You haven't
- * got anything capable of curing your poison.".
+ * Prefer the strongest potion, then the least-dosed vessel of that family,
+ * keeping the first slot for a dose tie. Different equally strong families
+ * retain their existing inventory order pending captured priority evidence.
+ * Consumption still uses the ordinary drink handler and its restrictions.
  */
 function cureFromHealthOrb({ player }) {
   if (!player || (!player.isPoisoned?.() && !player.isVenomed?.())) return;
   const items = player.getInventory().getItems();
+  let selected = null;
   for (let slot = 0; slot < items.length; slot++) {
     const itemId = items[slot]?.getId?.() ?? -1;
     if (itemId <= 0) continue;
     const entry = POTION_BY_ITEM_ID.get(itemId);
-    if (entry && CURE_POTIONS.has(entry.potion.name)) {
-      handlePotionDrink(player, itemId, slot);
-      return;
+    const strength = entry && CURE_POTIONS.get(entry.potion.name);
+    if (strength === undefined || !entry) continue;
+    if (!selected || strength > selected.strength ||
+        (entry.potion === selected.entry.potion && entry.doses < selected.entry.doses)) {
+      selected = { entry, strength, itemId, slot };
     }
   }
-  player.sendMessage("You haven't got anything capable of curing your poison.");
+  if (selected) {
+    handlePotionDrink(player, selected.itemId, selected.slot);
+    return;
+  }
+  const fallback = { player, handled: false };
+  pluginApi.emitCustomEvent("poison:cure-from-orb", fallback);
+  if (!fallback.handled) player.sendMessage("You haven't got anything capable of curing your poison.");
 }
 
 module.exports = {

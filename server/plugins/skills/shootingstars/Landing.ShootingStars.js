@@ -4,8 +4,8 @@
  * When and where stars land (Wiki, Shooting Stars): one star per world, a new one every
  * 90 +/- 15 minutes (world.json pluginConfig "ShootingStars:intervalMinutes" changes the 90), the
  * first 20-50 minutes after the server starts. A new star replaces one still standing. Its size
- * is 6-9 by the Wiki's crash chances, and its site one of the Wiki's landing sites, never the
- * last one twice in a row (stars land in members areas on free-to-play worlds too).
+ * is 6-9 by the Wiki's crash chances. Rolls exclude Darkmeyer; repeating the previous site
+ * sends the star there instead (stars land in members areas on free-to-play worlds too).
  *
  * Players find stars by scouting, as in OSRS. "ShootingStars:announce" (off by default) adds a
  * game message to everyone when one lands, for small worlds. ::star (owner) shows the current
@@ -19,6 +19,8 @@ const Star = require("./Star.ShootingStars");
 const Mining = require("./Mining.ShootingStars");
 
 const { DATA, world } = Common;
+const DARKMEYER_SITE_INDEX = DATA.sites.findIndex((site) => site.name === "Daeyalt essence mine entrance");
+if (DARKMEYER_SITE_INDEX < 0) throw new Error("Shooting Stars: Darkmeyer landing site is missing.");
 
 function randomBetween(min, max, random = Math.random) {
   return min + random() * (max - min);
@@ -40,13 +42,11 @@ function rollSize(random = Math.random) {
   return sizes[sizes.length - 1].size;
 }
 
-/** Any site but the last one used. */
+/** Wiki, citing Mod Ash (12 December 2021): a repeated roll redirects to Darkmeyer. */
 function rollSite(random = Math.random) {
-  const count = DATA.sites.length;
-  if (count <= 1) return 0;
-  let index = Math.floor(random() * (count - 1));
-  if (index >= world.lastSiteIndex && world.lastSiteIndex >= 0) index += 1;
-  return index;
+  let index = Math.floor(random() * (DATA.sites.length - 1));
+  if (index >= DARKMEYER_SITE_INDEX) index += 1;
+  return index === world.lastSiteIndex ? DARKMEYER_SITE_INDEX : index;
 }
 
 function announce(star) {

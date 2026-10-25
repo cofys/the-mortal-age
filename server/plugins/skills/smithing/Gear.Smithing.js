@@ -7,7 +7,7 @@
  *
  * Varrock armour (https://oldschool.runescape.wiki/w/Varrock_armour): at the Edgeville furnace,
  * a 10% chance to smelt two bars at once, up to the tier's metal. Each extra iron bar takes a
- * ring charge too.
+ * ring charge too, and a smithing catalyst while one is left (otherwise the full coal).
  *
  * Neither has captures; the messages are the game's, not checked against one (docs/smithing.md).
  */
@@ -66,6 +66,7 @@ function varrockArmourBars(player) {
 
 function smeltOutcome(outcome) {
   const { player, recipe, furnaceId } = outcome;
+  const second = Smelting.resolveCatalyst(player, outcome.base ?? recipe);
   const iron = recipe.barId === Core.ItemIdentifiers.IRON_BAR;
   const ring = iron && wearsRingOfForging(player);
   if (ring) outcome.success = true;
@@ -73,9 +74,10 @@ function smeltOutcome(outcome) {
     && furnaceId === Core.CacheDefinitions.getLocId(EDGEVILLE_FURNACE)
     && varrockArmourBars(player).has(recipe.barId)
     && Math.random() < VARROCK_ARMOUR_CHANCE
-    && Smelting.hasIngredients(player, recipe)) {
-    Smelting.consumeIngredients(player, recipe);
+    && Smelting.hasIngredients(player, second)) {
+    Smelting.consumeIngredients(player, second);
     outcome.bars = 2;
+    outcome.secondRecipe = second;
     player.sendMessage("The Varrock platebody enabled you to smelt your next ore simultaneously.");
   }
   if (ring) useRingCharges(player, outcome.bars);

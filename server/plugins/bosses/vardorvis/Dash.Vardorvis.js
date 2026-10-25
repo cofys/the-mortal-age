@@ -104,7 +104,8 @@ function erupt(fight, cracks) {
   if (!fight.alive() || player.getHitpoints() <= 0) return;
   const [px, py] = Common.siteTile(session.area, player.getLocation());
   if (!cracks.some(({ x, y }) => x === px && y === py)) return;
-  const dealt = Common.damage(player, Common.randomInt(0, dash.maxHit[fight.awakened ? "awakened" : "normal"]));
+  const dealt = Common.damage(player, Common.randomInt(0, dash.maxHit[fight.awakened ? "awakened" : "normal"]),
+    null, (amount) => fight.recordDamage(amount));
   Common.lifesteal(fight.boss, dealt);
 }
 

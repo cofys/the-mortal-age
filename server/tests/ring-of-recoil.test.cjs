@@ -63,3 +63,21 @@ test("a charged ring of suffering is left to its own plugin", () => {
   const player = createPlayer(ItemIdentifiers.RING_OF_SUFFERING_R_);
   assert.equal(CombatFactory.wearingRecoilRing(player), false);
 });
+
+test("recoil immunity prevents reflected damage and preserves ordinary-ring charges", () => {
+  const player = createPlayer(), enemy = attacker();
+  enemy.getAttribute = key => key === 'combat:recoil-immune';
+  player.attributes.set(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE, 39);
+  CombatFactory.handleRecoil(player, enemy, 100);
+  assert.deepEqual(enemy.pending, []);
+  assert.equal(player.attributes.get(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 39);
+  assert.equal(player.getEquipment().get(Equipment.RING_SLOT).getId(), ItemIdentifiers.RING_OF_RECOIL);
+});
+
+test("recoil immunity does not suppress Vengeance", () => {
+  const player = createPlayer(), enemy = attacker();
+  player.forceChat = () => {}; player.setHasVengeance = () => {};
+  enemy.getAttribute = key => key === 'combat:recoil-immune';
+  CombatFactory.handleVengeance(player, enemy, 20);
+  assert.equal(enemy.pending[0].getDamage(), 15);
+});

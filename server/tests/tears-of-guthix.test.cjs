@@ -72,6 +72,8 @@ function fakePlayer({ xp = {}, quests = {}, attributes = {}, equipment = {} } = 
   for (const [key, stage] of Object.entries(quests)) attrs.set(`quest.${key}.stage`, stage);
   const varbits = new Map([[451, 2]]);
   return {
+    messages: [],
+    sendMessage(message) { this.messages.push(message); },
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
     getSkillManager: () => ({
@@ -127,4 +129,185 @@ test("right-click Story plays only Juna's verdict", () => {
   const data = JSON.parse(fs.readFileSync(path.join(__dirname, "../data/definitions/npc-dialogues.json"), "utf8"));
   const steps = verdictSteps(data.Juna.variants["standard-dialogue"]);
   assert.deepEqual(steps.map((step) => step.id), ["xVIAF8", "PlgV_M", "ZcrLIs", "gbeW2g", "OHiPEk", "xCJjUs"]);
+});
+
+function captureApi(overrides = {}) {
+  const hooks = {};
+  const captured = new Proxy({ ...api, ...overrides }, {
+    get(target, name) {
+      if (name in target) return target[name];
+      return (...args) => { hooks[name] ??= []; hooks[name].push(args); };
+    },
+  });
+  return { api: captured, hooks, event: (name) => hooks.onCustomEvent.find(([key]) => key === name)[1] };
+}
+
+test("Juna rechecks free hands and the weekly gate when the admission dialogue finishes", () => {
+  const h = captureApi();
+  Juna(h.api);
+  const action = h.event("npc-dialogue:action");
+  const equipment = {};
+  const player = fakePlayer({ equipment });
+  assert.equal(Juna._test.answerCondition({ npcId: core.NpcIdentifiers.JUNA, player, stepId: "xCJjUs" }), true);
+  equipment[core.Equipment.SHIELD_SLOT] = 1187;
+  action({ npcId: core.NpcIdentifiers.JUNA, player, stepId: "1SFGWK" });
+  assert.equal(Cave.isPlaying(player), false);
+  assert.match(player.messages.pop(), /both hands free/);
+  delete equipment[core.Equipment.SHIELD_SLOT];
+  player.setAttribute(Cave.LAST_VISIT_ATTRIBUTE, { day: Cave.today(), questPoints: 0, totalXp: 0 });
+  action({ npcId: core.NpcIdentifiers.JUNA, player, stepId: "1SFGWK" });
+  assert.equal(Cave.isPlaying(player), false);
+  assert.match(player.messages.pop(), /not yet eligible/);
+});
+
+test("the journal shows both outstanding requirements and eligible reminders happen once per UTC day", () => {
+  const h = captureApi();
+  Juna(h.api);
+  const player = fakePlayer({ attributes: {
+    "tears-of-guthix:reminders": true,
+    [Cave.LAST_VISIT_ATTRIBUTE]: { day: Cave.today() - 6, questPoints: 0, totalXp: 0 },
+  } });
+  const journal = { player, lines: [] };
+  h.event("tears-of-guthix:journal")(journal);
+  assert.match(journal.lines[0], /1 day/);
+  assert.match(journal.lines[1], /1 Quest Point or 100,000 XP/);
+  const login = h.hooks.onPlayerLogin[0][0];
+  login({ player });
+  assert.equal(player.messages.length, 0);
+  player.setAttribute(Cave.LAST_VISIT_ATTRIBUTE, { day: Cave.today() - 7, questPoints: 0, totalXp: 0 });
+  player.setAttribute("total-xp", 100000);
+  login({ player });
+  login({ player });
+  assert.deepEqual(player.messages, ["You are eligible to drink from the Tears of Guthix."]);
+  player.setAttribute("tears-of-guthix:last-reminder", Cave.today() - 1);
+  login({ player });
+  assert.equal(player.messages.length, 2);
+});
+
+test("light creatures require the lit sapphire lantern and leave the WGS creature alone", () => {
+  const tasks = [];
+  const h = captureApi({ core: { ...core, TaskManager: { submit: (task) => tasks.push(task) } } });
+  require("../plugins/minigames/tearsofguthix/Chasm.TearsOfGuthix")(h.api);
+  const attract = h.hooks.onNpcInteraction[0][1].Attract;
+  const npc = (x, y) => ({ getId: () => core.NpcIdentifiers.LIGHT_CREATURE_4, getLocation: () => new core.Location(x, y, 2) });
+  const player = fakePlayer();
+  let lantern = 4701;
+  player.getInventory = () => ({ contains: (id) => id === lantern });
+  assert.equal(attract({ player, npc: npc(3226, 9518) }), true);
+  assert.equal(tasks.length, 0);
+  assert.match(player.messages.pop(), /lit sapphire lantern/);
+  assert.equal(attract({ player, npc: npc(3228, 9525) }), false);
+  lantern = 4702;
+  player.getLocation = () => new core.Location(3233, 9525, 2);
+  player.getCombat = () => ({ reset() {} });
+  player.getMovementQueue = () => ({ reset() {} });
+  player.setForceMovement = (move) => { player.force = move; };
+  player.getForceMovement = () => player.force;
+  player.moveTo = (at) => { player.at = at; };
+  attract({ player, npc: npc(3226, 9518) });
+  tasks.pop().execute();
+  assert.deepEqual([player.at.x, player.at.y, player.at.z], [3229, 9505, 2]);
+});
+
+test("WGS leaves the crossing creatures to Tears and still handles its northern descent", () => {
+  const h = captureApi(), plays = [];
+  require("../plugins/quests/wgs/Chasm.WhileGuthixSleeps")({
+    api: h.api, ATTRIBUTES: [], stage: () => 720, held: () => true, play: (...args) => plays.push(args),
+  });
+  const attract = h.hooks.onNpcInteraction.find(([name]) => name === "Light creature")[1].Attract;
+  const player = { getLocation: () => new core.Location(3235, 9526, 2) };
+  const npc = (y) => ({ getId: () => 5435, getLocation: () => new core.Location(3226, y, 2) });
+  assert.equal(attract({ player, npcId: 5435, npc: npc(9518) }), false);
+  const crossing = { player, itemId: 4702, target: npc(9518) };
+  h.hooks.onItemOnNpc[0][0](crossing);
+  assert.equal(crossing.handled, undefined);
+  assert.equal(attract({ player, npcId: 5435, npc: npc(9525) }), true);
+  assert.equal(plays[0][2], "into-the-chasm-attracting-a-light-creature");
+});
+
+test("simultaneous visits are private, share the world's stream colours and clean up on logout or reward", () => {
+  const tasks = [];
+  const h = captureApi({ core: {
+    ...core,
+    TaskManager: { submit: (task) => tasks.push(task) },
+    MapObjects: { get: () => null },
+    ObjectManager: { register(object) {
+      const area = object.getPrivateArea();
+      for (const old of area?.getObjects() ?? []) {
+        if (old !== object && old.getType() === object.getType() && old.getLocation().equals(object.getLocation())) area.detach(old);
+      }
+    } },
+  } });
+  Cave(h.api);
+  h.hooks.onServerStartup[0][0]();
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const makePlayer = (index) => {
+    const player = new Player(null, new core.Location(3251, 9516, 2));
+    player.setIndex(index);
+    player.setAttribute("quest.points", 50);
+    player.getPacketSender = () => new Proxy({}, { get: () => () => {} });
+    player.getInventory().refreshItems = () => {};
+    player.getEquipment().refreshItems = () => {};
+    return player;
+  };
+  const first = makePlayer(1), second = makePlayer(2);
+  Cave.enter(first);
+  Cave.enter(second);
+  const firstArea = first.getPrivateArea(), secondArea = second.getPrivateArea();
+  assert.ok(firstArea instanceof core.PrivateArea);
+  assert.notEqual(firstArea, secondArea);
+  assert.deepEqual(firstArea.getPlayers(), [first]);
+  assert.deepEqual(secondArea.getPlayers(), [second]);
+  const colours = (area) => area.getObjects().map((obj) => [obj.getLocation().x, obj.getLocation().y, obj.getId()]).sort();
+  for (let i = 0; i < 32; i++) tasks[0].execute();
+  assert.equal(firstArea.getObjects().length, 9);
+  assert.deepEqual(colours(firstArea), colours(secondArea));
+
+  h.hooks.onPlayerLogout[0][0]({ player: first });
+  assert.equal(firstArea.isDestroyed(), true);
+  assert.equal(Cave.isPlaying(first), false);
+  assert.equal(first.getAttribute(Cave.LAST_VISIT_ATTRIBUTE), undefined, "abandoning does not use the week");
+  assert.equal(first.getEquipment().getSlot(core.Equipment.WEAPON_SLOT), -1);
+  assert.equal(secondArea.isDestroyed(), false);
+
+  h.api.emitCustomEvent = (name, request) => { if (name === "diary:is-complete") request.complete = true; };
+  Cave._test.games.get(second).tears = 10;
+  Cave.finish(second);
+  secondArea.process(second); // outside Juna: drink and release the instance
+  assert.equal(secondArea.isDestroyed(), true);
+  tasks.at(-1).execute();
+  assert.equal(Cave.isPlaying(second), false);
+  assert.equal(second.getAttribute(Cave.LAST_VISIT_ATTRIBUTE).day, Cave.today());
+  assert.equal(second.getAttribute("tears-of-guthix:personal-best"), 10);
+  assert.equal(second.getSkillManager().getExperience(core.Skill.ATTACK), 110, "the hard diary adds exactly 10%");
+  tasks.at(-1).execute();
+  assert.equal(second.getSkillManager().getExperience(core.Skill.ATTACK), 110, "a delayed callback cannot pay twice");
+
+  const third = makePlayer(3);
+  third.setAttribute("quest.points", 2);
+  Cave.enter(third);
+  const thirdArea = third.getPrivateArea();
+  third.setLocation(new core.Location(3257, 9517, 2));
+  thirdArea.process(third);
+  assert.equal(Cave._test.games.get(third).leaving, false);
+  thirdArea.process(third);
+  assert.equal(Cave._test.games.get(third).leaving, true, "one tick per quest point");
+  h.hooks.onPlayerBeforeDeath[0][0]({ player: third });
+  assert.equal(thirdArea.isDestroyed(), true);
+  assert.equal(third.getEquipment().getSlot(core.Equipment.WEAPON_SLOT), -1, "the bowl is removed before death item handling");
+  assert.equal(third.getAttribute(Cave.LAST_VISIT_ATTRIBUTE), undefined, "death before drinking allows a retry");
+
+  const fourth = makePlayer(4);
+  Cave.enter(fourth);
+  const fourthArea = fourth.getPrivateArea();
+  h.hooks.onServerShutdown[0][0]();
+  assert.equal(fourthArea.isDestroyed(), true);
+  assert.equal(Cave._test.games.size, 0);
+
+  const fifth = makePlayer(5);
+  Cave.enter(fifth);
+  const fifthArea = fifth.getPrivateArea();
+  h.hooks.onPlayerDisconnect[0][0]({ player: fifth });
+  assert.equal(fifthArea.isDestroyed(), true);
+  assert.equal(fifth.getAttribute(Cave.LAST_VISIT_ATTRIBUTE), undefined);
 });

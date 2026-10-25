@@ -12,7 +12,17 @@ export interface SceneGeometry {
     npcModelPoints(ecsId: number, serverId: number): ReadonlyArray<readonly [number, number, number]> | undefined;
     /** The NPC type's default model height in fine units (RuneLite's logical height). */
     npcHeight(npcTypeId: number): number;
+    /**
+     * Each of a loc's models as triangles in scene units (x, height, y): one for most locs, two
+     * for a wall corner or double diagonal decoration (RuneLite's convex hull and hull 2).
+     */
+    locModelPoints(loc: SceneLoc): ReadonlyArray<ReadonlyArray<readonly [number, number, number]>> | undefined;
+    /** The locs whose origin is this world tile on this plane: base id, shape and rotation. */
+    locsAtTile(worldX: number, worldY: number, plane: number): SceneLoc[];
 }
+
+/** A loc in the scene: its base (untransformed) id, origin tile, plane, shape and rotation. */
+export type SceneLoc = { id: number; tileX: number; tileY: number; plane: number; shape: number; rotation: number };
 
 /** Where the minimap drew this frame (RuneLite's Perspective.localToMinimap). */
 export interface MinimapGeometry {

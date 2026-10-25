@@ -1,0 +1,143 @@
+{
+  "_source": "https://oldschool.runescape.wiki/w/Alchemical_Hydra and /Strategies (phases, vents, attacks, damage); monsters-complete (hitpoints, attack speed, max hits); the cache for every id. The phase forms follow the Wiki's infobox (serpentine 8615, electric 8619, flame 8620, enraged 8621). Values neither gives are marked _calibrated.",
+  "names": {
+    "npcs": {
+      "serpentine": "hydraboss",
+      "electric": "hydraboss_4",
+      "flame": "hydraboss_3",
+      "enraged": "hydraboss_2",
+      "toElectric": "hydraboss_p1_transition",
+      "toFlame": "hydraboss_p2_transition",
+      "toEnraged": "hydraboss_p3_transition",
+      "dead": "hydraboss_finaldeath"
+    },
+    "locs": {
+      "door": ["karuulm_hydra_room_door", "karuulm_hydra_room_door_m"],
+      "ventRed": "karuulm_hydra_room_floor_vent_geyser_red",
+      "ventGreen": "karuulm_hydra_room_floor_vent_geyser_green",
+      "ventBlue": "karuulm_hydra_room_floor_vent_geyser_blue"
+    },
+    "seqs": {
+      "ranged": ["hydra_stage_1_attack_ranged", "hydra_stage_2_attack_ranged", "hydra_stage_3_attack_ranged", "hydra_stage_4_attack_ranged"],
+      "magic": ["hydra_stage_1_attack_magic", "hydra_stage_2_attack_magic", "hydra_stage_3_attack_magic", "hydra_stage_4_attack_magic"],
+      "special": ["hydra_stage_1_attack_special", "hydra_stage_2_attack_special", "hydra_stage_3_attack_special", "hydra_stage_1_attack_special"],
+      "phaseOut": ["hydra_stage_1_death", "hydra_stage_2_death", "hydra_stage_3_death"],
+      "phaseIn": ["hydra_stage_2_spawn", "hydra_stage_3_spawn", "hydra_stage_4_spawn"],
+      "death": "hydra_stage_4_death",
+      "geyser": "hydra_geyser"
+    },
+    "spotanims": {
+      "magic": "hydraboss_magic_proj",
+      "ranged": "hydraboss_ranged_proj",
+      "poisonFlight": "hydraboss_pools_proj",
+      "poisonSplash": "hydraboss_pools_splash",
+      "poisonPool": "hydraboss_pools_landed_0",
+      "lightningCaster": "hydraboss_lightning_caster",
+      "lightning": "hydraboss_lightning_travel",
+      "shock": "hydraboss_shockwave",
+      "fireTravel": "hydraboss_fire_travel",
+      "fire": "hydraboss_fire"
+    },
+    "_npcs": "The gameval numbers don't follow the phase order: by the Wiki's infobox, hydraboss_4 (8619) is the electric phase and hydraboss_2 (8621) the enraged one, as monsters-complete's 4-tick, 55-max stats for 8621 agree."
+  },
+  "room": {
+    "bounds": [1356, 1379, 10251, 10279],
+    "spawn": [1364, 10265],
+    "centre": [1364, 10265],
+    "entry": [1356, 10259],
+    "outside": [1354, 10259],
+    "corners": [[1357, 10252], [1378, 10252], [1357, 10278], [1378, 10278]]
+  },
+  "vents": {
+    "red": [1371, 10263],
+    "green": [1371, 10272],
+    "blue": [1362, 10272]
+  },
+  "phases": [
+    {
+      "name": "serpentine",
+      "vent": "red",
+      "special": "poison",
+      "below": 825
+    },
+    {
+      "name": "electric",
+      "vent": "green",
+      "special": "lightning",
+      "below": 550
+    },
+    {
+      "name": "flame",
+      "vent": "blue",
+      "special": "fire",
+      "below": 275
+    },
+    {
+      "name": "enraged",
+      "vent": null,
+      "special": "poison",
+      "below": 0
+    }
+  ],
+  "combat": {
+    "maxHit": 35,
+    "enragedMaxHit": 55,
+    "attackSpeed": 6,
+    "enragedAttackSpeed": 4,
+    "attackDistance": 10,
+    "styleSwitchEvery": 3,
+    "specialAfter": 3,
+    "specialEvery": 9,
+    "shieldedDamage": 0.25,
+    "ventRange": 1,
+    "_calibrated": "the vent cadence and how long weakening lasts, pool, lightning and fire timings",
+    "ventEvery": 10,
+    "phaseChangeTicks": 3
+  },
+  "poison": {
+    "blobs": 5,
+    "enragedBlobs": 1,
+    "spread": 3,
+    "landDelay": 3,
+    "splashMax": 7,
+    "poolMax": 12,
+    "poisonTargeted": 6,
+    "poisonNear": 4,
+    "_calibrated": "how long a pool stays",
+    "poolTicks": 25
+  },
+  "lightning": {
+    "currents": 4,
+    "max": 22,
+    "bindTicks": 5,
+    "_calibrated": "how long a current lasts and how fast it closes in",
+    "lifetime": 20,
+    "stepEvery": 1
+  },
+  "fire": {
+    "wallLength": 5,
+    "trackMax": 25,
+    "burnHits": 5,
+    "burnDamage": 5,
+    "idleAfter": 7,
+    "_calibrated": "the fire walls' damage and lifetime, and how long the tracking fire follows",
+    "wallDamage": 10,
+    "wallTicks": 20,
+    "trackTicks": 8
+  },
+  "kill": {
+    "monster": "Alchemical Hydra",
+    "slayerXp": 1320,
+    "_slayerXp": "monsters-complete's slayer_xp",
+    "respawnTicks": 43,
+    "_respawn": "the Wiki infobox's 43 ticks (its Strategies page says 20 seconds)"
+  },
+  "messages": {
+    "noTask": "You need a hydra Slayer task to fight the Alchemical Hydra.",
+    "doorLocked": "The door is jammed shut while the Hydra lives.",
+    "killCount": "Your Alchemical Hydra kill count is: <col=ff0000>{kills}</col>.",
+    "weakened": "The chemicals neutralise the Alchemical Hydra's defences!",
+    "empowered": "The chemicals are absorbed by the Alchemical Hydra; empowering it further!",
+    "_unverified": "noTask, doorLocked, weakened and empowered have no capture behind them"
+  }
+}

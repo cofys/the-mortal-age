@@ -14,8 +14,7 @@ const MAX_INTERVAL_MS = 120 * 60_000;
 const NEXT_EVENT_ATTRIBUTE = "random-events:next-at";
 const MAX_DISTANCE = 15;
 const DEFINITIONS_EVENT = "random-events:definitions";
-const TELEPORTING_KINDS = new Set(["frog", "beekeeper", "drill", "forester", "gravedigger",
-  "pinball", "evilbob", "prison", "eviltwin", "maze", "mime", "pillory", "quiz", "exam"]);
+const Locations = require("./Locations.RandomEvents");
 const Gift = require("./GiftRewards.RandomEvents");
 const Certer = require("./Certer.RandomEvents");
 const Teleports = require("./Teleports.RandomEvents");
@@ -60,8 +59,7 @@ function nextEventAt(now) {
 }
 
 function eventAvailable(definition, player) {
-  const wilderness = api.core.Wilderness.isPvpArea(player.getLocation());
-  return (!player.getArea?.() || wilderness) && !(TELEPORTING_KINDS.has(definition.kind) && wilderness);
+  return Locations.available(api, definition, player);
 }
 
 function disallowedLocation(player) {
@@ -137,8 +135,8 @@ function spawnCommand(event) {
     player.sendMessage(`Usage: ::randevt [id] (0-${events.length - 1}; omit id for random).`);
     return;
   }
-  if (!eligible(player, true)) {
-    player.sendMessage("Finish restricted actions or activities before testing a random event.");
+  if (!eligible(player, true) || !eventAvailable(events[index], player)) {
+    player.sendMessage("Random events cannot appear here or while you are busy.");
     return;
   }
   login({ player }); // Replace the previous owned event and re-arm its cooldown.
@@ -157,7 +155,8 @@ function valid(active, player, now = Date.now()) {
       players.get(player)?.active !== active || now >= active.expiresAt ||
       !player.isRegistered() || player.getHitpoints() <= 0) return false;
   const a = player.getLocation(), b = active.npc.getLocation();
-  return player.getPrivateArea?.() == null && a.getZ() === b.getZ() && a.getDistance(b) <= MAX_DISTANCE;
+  return player.getPrivateArea?.() == null && a.getZ() === b.getZ() && a.getDistance(b) <= MAX_DISTANCE &&
+    !disallowedLocation(player) && Locations.available(api, active.definition, player, true);
 }
 
 function finish(active) {
@@ -331,4 +330,18 @@ function activeFor(player) {
   return players.get(player)?.active ?? null;
 }
 
-module.exports = { DEFINITIONS_EVENT, initialize, login, processPlayer, spawnCommand, talk, chooseSandwich, chooseCerter, dismiss, cleanup, logoutCleanup, shutdown, activeFor, finish, serve, valid };
+function advanceTime({ player, ms, handledBy }) {
+  const state = players.get(player);
+  if (!state) return;
+  state.nextAt -= ms;
+  state.checkAt -= ms;
+  player.setAttribute(NEXT_EVENT_ATTRIBUTE, state.nextAt);
+  if (state.active) {
+    state.active.startedAt -= ms;
+    state.active.expiresAt -= ms;
+    state.active.nextNagAt -= ms;
+  }
+  handledBy.push("RandomEvents");
+}
+
+module.exports = { DEFINITIONS_EVENT, initialize, login, processPlayer, spawnCommand, talk, chooseSandwich, chooseCerter, dismiss, cleanup, logoutCleanup, shutdown, activeFor, finish, serve, valid, advanceTime };

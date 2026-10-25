@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CacheSystem } from "../rs/cache/CacheSystem";
+import { Dat2CacheLoaderFactory } from "../rs/cache/loader/Dat2CacheLoaderFactory";
 import { ConfigType } from "../rs/cache/ConfigType";
 import { IndexType } from "../rs/cache/IndexType";
 import { ByteBuffer } from "../rs/io/ByteBuffer";
@@ -48,6 +49,69 @@ const ARCHIVES: Array<[string, number, new (id: number, info: any) => any]> = [
     ["mapelement", ConfigType.OSRS.mapFunctions, MapElementType],
     ["worldentity", ConfigType.OSRS.worldEntity, WorldEntityType],
 ];
+
+test("enum lookups reuse their lazy loader and still retry an unavailable archive", () => {
+    let reads = 0, ready = false;
+    const unavailable = new Error("enum archive not ready");
+    const configIndex = {
+        archiveExists: () => true,
+        getArchive: () => {
+            reads++;
+            if (!ready) throw unavailable;
+            return { fileCount: 1, getFile: () => ({ getDataAsBuffer: () => new ByteBuffer(new Int8Array([0])) }) };
+        },
+    };
+    const info: any = { game: "oldschool", revision: 241 };
+    const cache: any = { getIndex: () => configIndex };
+    const factory = new Dat2CacheLoaderFactory(info, "dat2", cache);
+    const loader = factory.getEnumTypeLoader()!;
+    assert.equal(reads, 0, "constructing the loader does not read streaming archive bytes");
+    assert.equal(factory.getEnumTypeLoader(), loader, "chat lookups share the same loader");
+    assert.throws(() => loader.load(0), error => error === unavailable);
+    ready = true;
+    const definition = loader.load(0);
+    for (let i = 0; i < 30; i++) assert.equal(factory.getEnumTypeLoader()!.load(0), definition);
+    assert.equal(reads, 2, "one unavailable read and one successful archive read");
+    loader.clearCache();
+    assert.notEqual(loader.load(0), definition, "decoded definitions can still be cleared");
+    assert.equal(reads, 2, "clearing definitions retains the decoded archive");
+    const otherFactory = new Dat2CacheLoaderFactory(info, "dat2", cache);
+    assert.notEqual(otherFactory.getEnumTypeLoader()!.load(0), definition, "another cache factory owns its loader");
+    assert.equal(reads, 3);
+});
+
+test("loader getters reuse one instance per cache factory", () => {
+    const info = loadCacheList(loadCacheInfos()).latest;
+    const cache = CacheSystem.fromFiles(info, loadCache(info).files);
+    const factory = new Dat2CacheLoaderFactory(info, "dat2", cache);
+    const getters = [
+        "getUnderlayTypeLoader",
+        "getOverlayTypeLoader",
+        "getVarBitTypeLoader",
+        "getVarcIntTypeLoader",
+        "getLocTypeLoader",
+        "getNpcTypeLoader",
+        "getObjTypeLoader",
+        "getSeqTypeLoader",
+        "getSpotAnimTypeLoader",
+        "getParamTypeLoader",
+        "getIdkTypeLoader",
+        "getEnumTypeLoader",
+        "getStructTypeLoader",
+        "getTextureLoader",
+        "getModelLoader",
+        "getSeqBaseLoader",
+        "getSeqFrameLoader",
+        "getSkeletalSeqLoader",
+        "getWorldEntityTypeLoader",
+        "getMapFileLoader",
+    ] as const;
+    for (const getter of getters) {
+        const first = (factory as any)[getter]();
+        if (first === undefined) continue;
+        assert.equal((factory as any)[getter](), first, `${getter} reuses its loader`);
+    }
+});
 
 test("every config entry decodes exactly", () => {
     const info = loadCacheList(loadCacheInfos()).latest;

@@ -3,7 +3,8 @@
  * nature rune, 53 Magic XP, and the furnace's bar with its Smithing level, coal and XP
  * (Smithing.plugin.js's recipes). Iron ore with two coal (and 30 Smithing) always makes steel,
  * otherwise iron, never failing. A carried coal bag's coal is used after the inventory's
- * (docs/storage-items.md).
+ * (docs/storage-items.md). A carried smithing catalyst works as at a furnace (Wiki: Smithing
+ * catalyst): half the coal and double the Smithing XP, not the Magic XP.
  *
  * Captured (rsprox, rev 227, recordings 100, 1749, 1834, 1835): the cast plays sequence 725
  * (human_castsuperheatitem) with spotanim 148 (superheatitem_casting) at height 92, swaps the
@@ -41,13 +42,14 @@ function recipeFor(player, oreId) {
   const Smithing = require("../Smithing.plugin");
   const byBar = (barId) => Smithing.SMELTING_RECIPES.find((recipe) => recipe.barId === barId);
   if (oreId === ItemIds.IRON_ORE) {
-    const steel = byBar(ItemIds.STEEL_BAR);
+    const steel = Smithing.resolveCatalyst(player, byBar(ItemIds.STEEL_BAR));
     const level = player.getSkillManager().getCurrentLevel(core.Skill.SMITHING);
     return level >= steel.level && Smithing.hasIngredients(player, steel) ? steel : { ...byBar(ItemIds.IRON_BAR), successChance: 1 };
   }
   // Coal is in several recipes but is never the ore; molten glass is Crafting, not a bar.
   if (oreId === ItemIds.COAL) return null;
-  return Smithing.SMELTING_RECIPES.find((recipe) => !recipe.skill && recipe.ingredients.some(([id]) => id === oreId)) ?? null;
+  const recipe = Smithing.SMELTING_RECIPES.find((candidate) => !candidate.skill && candidate.ingredients.some(([id]) => id === oreId));
+  return recipe ? Smithing.resolveCatalyst(player, recipe) : null;
 }
 
 function fail(player, message) {

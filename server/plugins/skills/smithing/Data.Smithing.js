@@ -50,7 +50,7 @@ function load(apiCore) {
 
 /** The bars the furnace's Smelt menu lists, in its order. */
 function smeltMenuRecipes() {
-  return SMELTING_RECIPES.filter((recipe) => !recipe.notInMenu);
+  return SMELTING_RECIPES.filter((recipe) => !recipe.notInMenu && (!recipe.members || core.WorldDefinition.isMembersWorld()));
 }
 
 /** Every anvil product, by bar: { component, itemId, label, level, bars, amount, xp, members, quest }. */

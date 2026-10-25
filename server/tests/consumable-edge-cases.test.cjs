@@ -157,6 +157,7 @@ function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] }
     poisonImmunity,
     poisonDamage: current,
     venomed: current > 0,
+    isVenomed() { return this.venomed && this.poisonDamage > 0; },
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => ({ contains: (id) => inventory.includes(id) }),
@@ -489,7 +490,7 @@ test("curing poison also clears the sticky venom flag", () => {
 test("an antipoison mix heals its extra 3 Hitpoints and cures poison in one drink", () => {
   const player = createPlayer({ base: 99, current: 50 });
   player.setPoisonDamage(20);
-  player.setVenomed(true);
+  player.setVenomed(false);
   Potions._test.findPotionEntry(ItemIdentifiers.ANTIPOISON_MIX_2_).potion.effect(player);
   assert.equal(player.levels.get(Skill.HITPOINTS), 53, "the mix adds 3 Hitpoints");
   assert.equal(player.poisonDamage, 0);
@@ -500,9 +501,9 @@ test("an antipoison mix heals its extra 3 Hitpoints and cures poison in one drin
 test("a weaker antipoison never shortens an active poison immunity", () => {
   const player = createPlayer({ base: 99, current: 99 });
   Potions._test.findPotionEntry(ItemIdentifiers.ANTI_VENOM_4_).potion.effect(player);
-  assert.equal(player.poisonImmunity.seconds, 720, "anti-venom gives 12 minutes");
+  assert.equal(player.poisonImmunity.seconds, 738, "anti-venom gives the published41-step tier");
   Potions._test.findPotionEntry(ItemIdentifiers.ANTIPOISON_4_).potion.effect(player);
-  assert.equal(player.poisonImmunity.seconds, 720, "the weaker dose does not decrease it");
+  assert.equal(player.poisonImmunity.seconds, 738, "the weaker dose does not decrease it");
   player.poisonImmunity.seconds = 0;
   Potions._test.findPotionEntry(ItemIdentifiers.ANTIDOTE_4_).potion.effect(player);
   assert.equal(player.poisonImmunity.seconds, 540, "Antidote+ gives 9 minutes");

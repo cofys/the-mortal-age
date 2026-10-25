@@ -10,6 +10,7 @@ const { __internals } = require("../plugins/npcs/NpcDrops.plugin");
 const Common = require("../plugins/bosses/skotizo/Common.Skotizo");
 const Totems = require("../plugins/bosses/skotizo/Totems.Skotizo");
 const { Fight, _test: FightTest } = require("../plugins/bosses/skotizo/Fight.Skotizo");
+const CombatAchievements = require("../plugins/bosses/skotizo/CombatAchievements.Skotizo");
 
 const BASE = 19679;
 const MIDDLE = 19681;
@@ -126,4 +127,45 @@ test("the altars' share comes off the max hit, so a low Skotizo can still be fin
   assert.equal(FightTest.altarMaxHit(attacker("Abyssal whip", fight.boss), 40), 10);
   assert.equal(FightTest.altarMaxHit(attacker("Emberlight", fight.boss), 40), 22);
   assert.equal(FightTest.altarMaxHit(attacker("Abyssal whip", { }), 40), 40, "anything but Skotizo");
+});
+
+function achievementHitHook() {
+  let resolved;
+  CombatAchievements.attachCombatAchievements({
+    onCombatHitResolved: (handler) => { resolved = handler; },
+    onNpcHitModify() {},
+    onCustomEvent() {},
+  });
+  return resolved;
+}
+
+test("Skotizo damage achievements ignore unrelated player fights, even those with their own stats", () => {
+  const resolved = achievementHitHook(), target = player();
+  const hit = { getTotalDamage: () => 12 };
+  for (const fight of [{ player: target, stopped: false }, { player: target, stopped: false, stats: { damageTaken: 0 } }]) {
+    target.getArea = () => ({ session: { fight } });
+    assert.doesNotThrow(() => resolved({ target, hit }), "another boss's area must not enter Skotizo tracking");
+    if (fight.stats) assert.equal(fight.stats.damageTaken, 0);
+  }
+  target.getArea = () => null;
+  assert.doesNotThrow(() => resolved({ target, hit }));
+  assert.doesNotThrow(() => resolved({ target: { isPlayer: () => false }, hit }));
+});
+
+test("Skotizo damage achievements still track positive hits only for their active fight's own player", () => {
+  const resolved = achievementHitHook(), target = player(), fight = new Fight({ player: target });
+  const area = { session: { fight } };
+  target.getArea = () => area;
+  const hit = (damage) => ({ getTotalDamage: () => damage });
+  resolved({ target, hit: hit(12) });
+  resolved({ target, hit: hit(0) });
+  assert.equal(fight.stats.damageTaken, 12);
+  const other = { ...player(), getArea: () => area };
+  resolved({ target: other, hit: hit(7) });
+  fight.stopped = true;
+  resolved({ target, hit: hit(9) });
+  assert.equal(fight.stats.damageTaken, 12, "stopped fights and another player cannot change the total");
+  const before = emitted.length;
+  CombatAchievements.judge(fight);
+  assert.equal(emitted.slice(before).some(({ payload }) => payload.task === "Demon Evasion"), false);
 });

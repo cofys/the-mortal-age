@@ -10,9 +10,10 @@ Like OSRS, it is free-to-play, with half experience on free-to-play worlds, wher
 
 - **When:** one star per world. A new star lands every 90 ± 15 minutes, and the first one 20–50 minutes after the server starts. A new star replaces one still standing.
 - **Size:** 6–9, by the Wiki's crash chances: 6 = 25%, 7 = 30%, 8 = 25%, 9 = 20%.
-- **Where:** one of the Wiki's 83 landing-site pins, never the same site twice in a row.
+- **Where:** the data contains 83 landing sites, including Darkmeyer. Ordinary rolls exclude Darkmeyer; when a roll repeats the previous landing site, it redirects to Darkmeyer instead. No site can repeat consecutively, and Darkmeyer cannot be the first landing after startup.
   - Stars land in members areas on free-to-play worlds too, as in OSRS.
-  - The Wiki's Darkmeyer site isn't on its map and isn't included. In OSRS the Darkmeyer site is only used when the roll repeats the last site.
+  - Darkmeyer is the existing `Daeyalt essence mine entrance` site at (3635, 3340, 0), in Morytania. Forecasts use the redirected site, so a repeat correctly forecasts Morytania.
+  - Source: [Shooting Stars landing sites](https://oldschool.runescape.wiki/w/Shooting_Stars#Landing_sites), citing Mod Ash on 12 December 2021.
 - **The landing itself isn't captured.** The cache's `star_landing_star` loc (41019) carries the impact animation (`game_star_meteor_impact`), so it stands for 4 ticks before the crashed star replaces it.
 - **The crashed star** is one 2×2 loc per size, `star_size_<n>_star` (41020, 41021, 41223–41229).
   - An invisible `star_headbar_npc` (10629) stands on its south-west tile.
@@ -50,7 +51,8 @@ Like OSRS, it is free-to-play, with half experience on free-to-play worlds, wher
   - The plugin answers the transcript's conditions: whether the player has mined a star, whether they carry stardust, and whether it's a members world.
 - **Her shop**, Dusuri's Star Shop, sells for stardust: Celestial ring (uncharged) 2,000, Star fragment 3,000, Bag full of gems 300, Soft clay pack 150. The stock is 50/50/100/1,000, as captured.
   - **Value message:** the live game's is "Celestial ring (uncharged): currently costs 2,000 stardust.". The shared shop code still prints "… currently costs 2,000 x stardust.".
-  - **Buy-back price:** the Wiki says she buys at 80% of her price; the shared shop code pays 85%.
+  - **Buy-back price:** [80% of the purchase price](https://oldschool.runescape.wiki/w/Dusuri%27s_Star_Shop#Stock): 1,600 / 2,400 / 240 / 120 stardust. The `shop:sell-price` custom event lets Dusuri supply this rate to the shared shop's displayed refund, Value message and sale payment.
+  - The `shop:can-sell` policy lets her accept her stocked untradeable rewards. Per-item metadata locks still prevent a sale, and other shops keep their existing sale policy.
 
 ## Celestial ring
 

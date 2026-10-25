@@ -171,6 +171,12 @@ function enterHouse(player, buildingMode) {
     player.sendMessage("Expel your guests before entering building mode.");
     return true;
   }
+  if (buildingMode) {
+    // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+    const pin = { player, feature: "poh-building-mode", resume: () => enterHouse(player, true) };
+    api.emitCustomEvent("bank-pin:guard", pin);
+    if (pin.locked) return true;
+  }
   player.getPacketSender().sendInterfaceRemoval();
   houseViewers.delete(player);
   pendingRoomMenus.delete(player);

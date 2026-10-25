@@ -14,9 +14,31 @@ const overrides = require("../data/definitions/npc-drop-overrides.json");
 
 before(() => _test.loadDrops());
 
+test("Shellbane gryphon resolves the current Wiki page rather than the obsolete capitalized duplicate", (t) => {
+  const tables = _test.tablesByNpc.get(14860);
+  assert.equal(tables.length, 1);
+  assert.equal(tables[0].wiki_page, "Shellbane gryphon");
+  assert.equal(tables[0].main_max_roll, 128);
+  assert.equal(tables[0].table_id, "shellbane_gryphon");
+  assert.equal(dump.tables.shellbane_gryphon_2, undefined);
+  const folly = tables[0].entries.find(entry => entry.item_id === 31245);
+  assert.equal(folly.pre_roll, true);
+  assert.equal(folly.out_of, 75);
+  t.mock.method(Math, "random", () => 0);
+  const { __internals } = require("../plugins/npcs/NpcDrops.plugin");
+  const dropPlayer = { getEquipment: () => ({ get: () => null, getItems: () => [] }) };
+  const rolled = __internals.rollTable(tables[0], dropPlayer, null);
+  assert.ok(rolled.some(drop => drop.itemId === 31245), "the current pre-roll is obtainable");
+  assert.ok(rolled.some(drop => drop.itemId === 532), "guaranteed bones remain");
+  assert.ok(rolled.some(drop => drop.itemId === 31235), "guaranteed feathers remain");
+});
+
 test("the generated files hold no hand edits: each override changes something the dump lacks", () => {
   for (const id of Object.keys(overrides.removeNpcs)) assert.ok(!_test.tablesByNpc.has(Number(id)), `${id} removed`);
   for (const id of Object.keys(overrides.addNpcs).filter((key) => key !== "$comment")) {
+    for (const table of overrides.addNpcs[id].tables) {
+      assert.ok(dump.tables[table], `${id}: override references an existing table (${table})`);
+    }
     assert.ok(_test.tablesByNpc.has(Number(id)), `${overrides.addNpcs[id].name} (${id}) has its table`);
   }
   // Overrides that the dump already covers would be dead weight: the dump would win anyway.

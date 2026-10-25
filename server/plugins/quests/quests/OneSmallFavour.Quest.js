@@ -197,6 +197,13 @@ module.exports = function registerOneSmallFavourQuest(api) {
   const BREATHING_SALTS = ItemIdentifiers.BREATHING_SALTS; // 4442
   const AIRTIGHT_POT = ItemIdentifiers.AIRTIGHT_POT; // 4436
   const GUTHIX_REST_4_DOSE = ItemIdentifiers.GUTHIX_REST_4_; // 4417
+  const GUTHIX_REST_DOSES = new Set([
+    ItemIdentifiers.GUTHIX_REST_1_, ItemIdentifiers.GUTHIX_REST_2_,
+    ItemIdentifiers.GUTHIX_REST_3_, GUTHIX_REST_4_DOSE,
+  ]);
+  const GUTHIX_REST_LEARNED_ATTRIBUTE = "one-small-favour:guthix-rest-learned";
+  const GUTHIX_REST_RECIPE_LINE = "Ok, you need to heat some water up in a bowl, then pour it into an empty teacup. Add 1 harralander, 2 guam and 1 marrentill...it'll warm that poor fellow up a treat!";
+  const GUTHIX_REST_LOCKED_MESSAGE = "You need to learn how to make Guthix rest from Sanfew during One Small Favour first.";
   const GUTHIX_REST_ITEM_IDS = [
     GUTHIX_REST_4_DOSE,
     ItemIdentifiers.GUTHIX_REST_3_, // 4419
@@ -754,8 +761,39 @@ module.exports = function registerOneSmallFavourQuest(api) {
     }
   }
 
+  // Stage eleven starts before Sanfew teaches the recipe. Later quest progress
+  // necessarily passed that lesson, including saves made before this flag existed.
+  function knowsGuthixRest(player) {
+    return player.getAttribute(GUTHIX_REST_LEARNED_ATTRIBUTE) === true || stageOf(player) >= STAGE_BLEEMADGE;
+  }
+
+  function learnGuthixRest(event) {
+    const { player, npcId, text, pages } = event;
+    if (npcId !== SANFEW || stageOf(player) !== STAGE_SANFEW || text !== GUTHIX_REST_RECIPE_LINE ||
+        !pages?.some(page => page.page.replace(/^Transcript:/, "") === PAGE)) return;
+    const after = event.after;
+    event.after = () => {
+      after?.();
+      player.setAttribute(GUTHIX_REST_LEARNED_ATTRIBUTE, true);
+    };
+  }
+
+  function validateGuthixRestDrink(event) {
+    if (!GUTHIX_REST_DOSES.has(event.itemId) || knowsGuthixRest(event.player)) return;
+    event.allowed = false;
+    event.message = GUTHIX_REST_LOCKED_MESSAGE;
+  }
+
   function brewGuthixRest(player) {
-    if (!hasItem(player, GUAM_LEAF, 2) || !hasItem(player, MARRENTILL, 1)) {
+    if (!knowsGuthixRest(player)) {
+      player.sendMessage(GUTHIX_REST_LOCKED_MESSAGE);
+      return;
+    }
+    if (player.getSkillManager().getCurrentLevel(Skill.HERBLORE) < 18) {
+      player.sendMessage("You need 18 Herblore to make Guthix rest.");
+      return;
+    }
+    if (!hasItem(player, HARRALANDER, 1) || !hasItem(player, GUAM_LEAF, 2) || !hasItem(player, MARRENTILL, 1)) {
       player.sendMessage("You need 1 harralander, 2 guam leaves and 1 marrentill to brew Guthix's rest.");
       return;
     }
@@ -791,7 +829,6 @@ module.exports = function registerOneSmallFavourQuest(api) {
     }
 
     if (pair.has(HARRALANDER) && (pair.has(BOWL_OF_HOT_WATER) || pair.has(CUP_OF_HOT_WATER))) {
-      if (stageOf(player) === 0) return;
       event.handled = true;
       brewGuthixRest(player);
     }
@@ -1034,6 +1071,7 @@ module.exports = function registerOneSmallFavourQuest(api) {
 
     if (BLEEMADGE_IDS.has(npcId)) {
       if (stage === STAGE_SANFEW) {
+        if (!knowsGuthixRest(player)) return null;
         return hasGuthixRest(player)
           ? "the-various-favours-are-asked-giving-bleemadge-the-tea-and-talking-about-sanfew-s-favour"
           : "the-various-favours-are-asked-talking-to-bleemadge-without-guthix-s-rest";
@@ -1318,6 +1356,8 @@ module.exports = function registerOneSmallFavourQuest(api) {
         event.handled = true;
         return;
       case "30_mgi":
+        if (!BLEEMADGE_IDS.has(event.npcId) || stageOf(player) !== STAGE_SANFEW ||
+            !knowsGuthixRest(player) || !hasGuthixRest(player)) return;
         deleteGuthixRest(player);
         if (stageOf(player) < STAGE_BLEEMADGE) setStage(player, STAGE_BLEEMADGE);
         return;
@@ -1532,7 +1572,8 @@ module.exports = function registerOneSmallFavourQuest(api) {
         if (npcId === SANFEW && stageOf(player) === STAGE_BLEEMADGE_DONE) setStage(player, STAGE_SANFEW_DONE);
         return;
       case "Ok, I'll go and get you some T.R.A.S.H.":
-        if (BLEEMADGE_IDS.has(npcId) && stageOf(player) < STAGE_BLEEMADGE) setStage(player, STAGE_BLEEMADGE);
+        if (BLEEMADGE_IDS.has(npcId) && stageOf(player) === STAGE_SANFEW &&
+            knowsGuthixRest(player) && hasGuthixRest(player)) setStage(player, STAGE_BLEEMADGE);
         return;
       case "Hey there, did you get your T.R.A.S.H?":
         if (BLEEMADGE_IDS.has(npcId) && stageOf(player) === STAGE_ARHEIN_DONE) setStage(player, STAGE_BLEEMADGE_DONE);
@@ -1933,6 +1974,7 @@ module.exports = function registerOneSmallFavourQuest(api) {
   api.persistAttribute(VANE_INSTALLED_ATTRIBUTE);
   api.persistAttribute(SLAGILITH_KILLED_ATTRIBUTE);
   api.persistAttribute(GANG_KILLS_ATTRIBUTE);
+  api.persistAttribute(GUTHIX_REST_LEARNED_ATTRIBUTE, false);
 
   quest = registerQuest(api, {
     key: "one_small_favour",
@@ -1957,6 +1999,8 @@ module.exports = function registerOneSmallFavourQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
+  api.onCustomEvent("npc-dialogue:line", learnGuthixRest);
+  api.onCustomEvent("potions:validate-drink", validateGuthixRestDrink);
   api.onCustomEvent("npc-dialogue:hook", handleHook);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);

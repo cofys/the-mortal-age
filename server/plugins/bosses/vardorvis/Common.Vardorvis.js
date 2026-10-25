@@ -117,7 +117,7 @@ function styleMethod(style) {
  * A styled hit from the boss landing `delay` ticks from now, rolled like any NPC attack. The
  * protection prayer of its style leaves `prayerShare` of the damage; `accurate` skips the roll.
  */
-function strike(npc, player, style, maxHit, delay, { prayer = null, prayerShare = 1, accurate = false } = {}) {
+function strike(npc, player, style, maxHit, delay, { prayer = null, prayerShare = 1, accurate = false, onApplied = null } = {}) {
   const { PendingHit, CombatFactory, World } = core;
   const hit = new PendingHit(npc, player, styleMethod(style), { delay, rollAccuracy: !accurate });
   CombatFactory.applyStyleDamage(hit, Math.max(0, Math.floor(maxHit)), { bypassProtectionPrayer: true });
@@ -125,16 +125,18 @@ function strike(npc, player, style, maxHit, delay, { prayer = null, prayerShare 
     for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * prayerShare));
     hit.updateTotalDamage();
   }
+  if (onApplied) for (const part of hit.getHits()) part.onApplied(onApplied);
   player.getCombat().getHitQueue().addPendingHit(hit, World.getProcessCycle() + Math.max(0, delay));
   return hit;
 }
 
 /** Damage no prayer or armour stops, with its own hitsplat when given. */
-function damage(player, amount, splat = null) {
+function damage(player, amount, splat = null, onApplied = null) {
   const { HitDamage, HitMask } = core;
   const value = Math.max(0, Math.floor(amount));
   const hit = new HitDamage(value, value > 0 ? HitMask.RED : HitMask.BLUE);
   if (splat != null) hit.setSplatTypes(splat, splat);
+  if (onApplied) hit.onApplied(onApplied);
   player.getCombat().getHitQueue().addPendingDamage([hit]);
   return value;
 }

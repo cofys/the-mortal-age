@@ -37,6 +37,9 @@ class PvpDefensiveActionNode {
     if (currentHp <= 0 || player.isDyingReturn()) {
       return { handled: true, status: "failure" };
     }
+    const request = { player, state, nowMs, target, result: null };
+    this.api?.emitCustomEvent?.("player-bots:pvp-defensive-action", request);
+    if (request.result) return request.result;
     if (!pvp.retreat && this.shouldRetreat(player)) {
       pvp.retreat = {
         autoRetaliate: player.autoRetaliateReturn(),

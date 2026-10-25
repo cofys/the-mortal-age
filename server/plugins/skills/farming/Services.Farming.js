@@ -7,8 +7,8 @@ const Patches = require("./Patches.Farming");
 // underwater seaweed) and Cap'n Izzy No-Beard (agility arena, 12) also advertise Pay.
 const GARDENER_RANGE = 10;
 const COMPOST_NAMES = ["", "Compost", "Supercompost", "Ultracompost", "Rotten tomato"];
-const SUPER = new Set(["Pineapple", "Tenti pineapple", "Watermelon", "Coconut", "Coconut shell", "Papaya fruit", "Calquat fruit", "Poison ivy berries", "White berries", "Jangerberries", "Mushroom", "Dragonfruit", "Snape grass", "Celastrus bark", "White lily", "White tree fruit", "Oak roots", "Willow roots", "Maple roots", "Yew roots", "Magic roots"]);
-const COMPOST = new Set(["Weeds", "Grain", "Kebab", "Varlamorian kebab", "Flax", "Redberries", "Cadava berries", "Dwellberries", "Potato", "Onion", "Cabbage", "Tomato", "Sweetcorn", "Strawberry", "Lemon", "Lime", "Cooking apple", "Banana", "Orange", "Curry leaf", "Peach", "Watermelon slice", "Barley malt", "Hammerstone hops", "Asgarnian hops", "Jute fibre", "Kelda hops", "Yanillian hops", "Krandorian hops", "Wildblood hops", "Marigolds", "Rosemary", "Nasturtiums", "Woad leaf", "Limpwurt root", "Willow branch", "Rotten apple", "Apple mush", "Seaweed", "Edible seaweed", "Giant seaweed", "Potato cactus", "Leaves", "Oak leaves", "Willow leaves", "Maple leaves", "Yew leaves", "Magic leaves"]);
+const SUPER = new Set(["Pineapple", "Tenti pineapple", "Watermelon", "Coconut", "Half coconut", "Coconut shell", "Papaya fruit", "Calquat fruit", "Poison ivy berries", "White berries", "Jangerberries", "Mushroom", "Dragonfruit", "Snape grass", "Celastrus bark", "White lily", "White tree fruit", "Oak roots", "Willow roots", "Maple roots", "Yew roots", "Magic roots"]);
+const COMPOST = new Set(["Weeds", "Grain", "Kebab", "Varlamorian kebab", "Flax", "Cotton boll", "Redberries", "Cadava berries", "Dwellberries", "Potato", "Onion", "Cabbage", "Tomato", "Sweetcorn", "Strawberry", "Lemon", "Lime", "Cooking apple", "Banana", "Orange", "Curry leaf", "Peach", "Watermelon slice", "Barley malt", "Hammerstone hops", "Asgarnian hops", "Jute fibre", "Kelda hops", "Yanillian hops", "Krandorian hops", "Wildblood hops", "Marigolds", "Rosemary", "Nasturtiums", "Woad leaf", "Limpwurt root", "Willow branch", "Rotten apple", "Apple mush", "Seaweed", "Edible seaweed", "Giant seaweed", "Potato cactus", "Leaves", "Oak leaves", "Willow leaves", "Maple leaves", "Yew leaves", "Magic leaves"]);
 const SUPER_HERBS = new Set(["TOADFLAX", "AVANTOE", "KWUARM", "SNAPDRAGON", "HUASCA", "CADANTINE", "LANTADYME", "DWARF_WEED", "TORSTOL"]);
 const TOOL_CAPACITY = { "Rake": 100, "Seed dibber": 100, "Spade": 100, "Secateurs": 100, "Magic secateurs": 100,
     "Gardening trowel": 100, "Plant cure": 1000, "Bucket": 1000, "Compost": 1000, "Supercompost": 1000, "Ultracompost": 1000,
@@ -20,15 +20,18 @@ function cropRewards(player, crop) {
     const base = Data.petRate(crop);
     if (!base) return;
     const level = Math.min(99, player.getSkillManager().getCurrentLevel(core.Skill.FARMING));
+    if (crop.type !== "HESPORI" && !Patches.farmFor(player).disableHesporiSeeds) {
+        const denominator = ["BARLEY", "HAMMERSTONE"].includes(crop.key) ? 244 : Math.floor(base / 500);
+        if (Math.random() < 1 / denominator) {
+            const seed = new core.Item(Data.itemId("Hespori seed"));
+            if (player.getInventory().getAddableAmount(seed) >= 1 && Patches.give(player, seed.getId()))
+                player.sendMessage("You find a Hespori seed!");
+        }
+    }
+    // Farming resources have priority over a pet that would need the final backpack slot.
     core.PluginManager.emitCustomEvent("farming:success", { player, skill: core.Skill.FARMING,
         petChance: (base - 25 * level) / (player.getSkillManager().getExperience(core.Skill.FARMING) >= 200000000 ? 15 : 1) });
-    if (crop.type === "HESPORI" || Patches.farmFor(player).disableHesporiSeeds) return;
-    const denominator = ["BARLEY", "HAMMERSTONE"].includes(crop.key) ? 244 : crop.key === "LIMPWURT" ? 449 : Math.floor(base / 500);
-    if (Math.random() < 1 / denominator) {
-        if (player.getInventory().getFreeSlots() || player.getInventory().contains(Data.itemId("Hespori seed"))) Patches.give(player, Data.itemId("Hespori seed"));
-        else core.ItemOnGroundManager.registers(player, new core.Item(Data.itemId("Hespori seed")));
-        player.sendMessage("You find a Hespori seed!");
-    }
+
 }
 
 function binFor(state) {
@@ -44,10 +47,13 @@ function binValue(patch, state) {
     if (bin.closedAt) return states.GROWING[Date.now() - bin.closedAt >= (bin.tier === 2 ? 90 : 60) * Model.MINUTE ? 2 : 0];
     return states.FILLING[bin.count - 1];
 }
-function binAction(player, patch, action, usedId) {
+function binAction(player, patch, action, usedId, usedSlot) {
     const bin = binFor(Patches.stateFor(player, patch));
     const capacity = patch.type === "BIG_COMPOST" ? 30 : 15;
     const inventory = player.getInventory();
+    if (usedId && core.CacheDefinitions.getItem(usedId).noteTemplate >= 0) {
+        player.sendMessage("You cannot use noted items on a compost bin."); return;
+    }
     if (action === "close") {
         if (bin.count !== capacity) { player.sendMessage(`The bin needs ${capacity} items before you can close it.`); return; }
         if (!bin.closedAt) bin.closedAt = Date.now();
@@ -76,7 +82,8 @@ function binAction(player, patch, action, usedId) {
     if (usedId === Data.itemId("Bucket") || action === "empty" || action === "take" || bottomless) {
         if (!bin.open || !bin.count) { player.sendMessage("Open a finished compost bin first."); return; }
         if (bottomless) {
-            if (bin.tier === 4 || !chargeBottomless(player, bin.tier)) return;
+            const bucket = inventory.forSlot(usedSlot);
+            if (bucket?.getId() !== usedId || bin.tier === 4 || !chargeBottomless(player, bin.tier, bucket)) return;
         } else {
             if (!inventory.contains(Data.itemId("Bucket"))) { player.sendMessage("You need an empty bucket."); return; }
             inventory.deleteNumber(Data.itemId("Bucket"), 1);
@@ -109,8 +116,7 @@ function dose(player, id) {
     player.getInventory().deleteNumber(id, 1);
     player.getInventory().addItem(new core.Item(Data.itemId(count > 1 ? `Compost potion(${count - 1})` : "Vial")));
 }
-function chargeBottomless(player, tier) {
-    const bucket = player.getInventory().getItems().find(i => core.CacheDefinitions.getItem(i.getId()).name === "Bottomless compost bucket");
+function chargeBottomless(player, tier, bucket) {
     if (!bucket) return false;
     const charges = Number(bucket.getMetaValue("farming:charges") ?? 0);
     if (charges > 0 && bucket.getMetaValue("farming:tier") !== tier) { player.sendMessage("Empty the bucket before changing compost type."); return false; }
@@ -120,8 +126,9 @@ function chargeBottomless(player, tier) {
     player.getInventory().refreshItems();
     return true;
 }
-function useBottomless(player, patch, id) {
-    const bucket = player.getInventory().getItems().find(i => i.getId() === id);
+function useBottomless(player, patch, id, slot) {
+    const bucket = player.getInventory().forSlot(slot);
+    if (bucket?.getId() !== id) return;
     const charges = Number(bucket?.getMetaValue("farming:charges") ?? 0);
     if (!charges) { player.sendMessage("The bucket is empty."); return; }
     if (Patches.fertilize(player, patch, Number(bucket.getMetaValue("farming:tier")), false)) {
@@ -159,7 +166,8 @@ function farmingItemPair(event) {
         const can = a === seedling.seedling ? b : a;
         if (!/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(can).name)) return;
         event.handled = true;
-        if (!Patches.water(player, can)) return;
+        const canSlot = a === seedling.seedling ? event.usedWithItemSlot : event.usedItemSlot;
+        if (!Patches.water(player, can, canSlot)) return;
         const slot = a === seedling.seedling ? event.usedItemSlot : event.usedWithItemSlot;
         const saplingAt = Model.nextGrowth(Date.now(), 5, Patches.farmFor(player).offset);
         inventory.forSlot(slot).setId(seedling.wateredSeedling).setMetaValue("farming:sapling-at", saplingAt);
@@ -170,7 +178,10 @@ function farmingItemPair(event) {
     const compostTier = COMPOST_NAMES.slice(1, 4).findIndex(name => Data.itemId(name) === a || Data.itemId(name) === b) + 1;
     if (compostTier && [a, b].some(id => core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket")) {
         event.handled = true;
-        if (chargeBottomless(player, compostTier)) {
+        const bucketFirst = names[0] === "Bottomless compost bucket";
+        const bucket = inventory.forSlot(bucketFirst ? event.usedItemSlot : event.usedWithItemSlot);
+        if (bucket?.getId() !== (bucketFirst ? a : b)) return;
+        if (chargeBottomless(player, compostTier, bucket)) {
             inventory.deleteNumber(Data.itemId(COMPOST_NAMES[compostTier]), 1);
             inventory.addItem(new core.Item(Data.itemId("Bucket")));
         }
@@ -271,6 +282,10 @@ function storeTool(player, slot) {
     const capacity = TOOL_CAPACITY[name] ?? (watering ? 1 : 0);
     if (!capacity) return false;
     const farm = Patches.farmFor(player), tools = farm.tools;
+    if (/secateurs/i.test(name) && Object.entries(tools).some(([key, count]) => count > 0
+        && +key !== id && /secateurs/i.test(core.CacheDefinitions.getItem(+key).name))) {
+        player.sendMessage("Withdraw your stored secateurs before storing a different kind."); return true;
+    }
     const used = Object.entries(tools).reduce((sum, [key, count]) => {
         const other = core.CacheDefinitions.getItem(+key).name;
         return sum + (watering ? /^Watering can|^Gricoller's can$/.test(other) ? count : 0
@@ -294,16 +309,25 @@ function farmingItemOnNpc(event) {
     const unnoted = definition.noteTemplate >= 0 ? definition.note : id;
     const name = core.CacheDefinitions.getItem(unnoted).name;
     if (storeTool(player, event.slot)) return;
-    const harvested = name === "Willow branch" || [...Data.CROPS.values()].some(c => c.sapling === id || (!Data.WOOD_TREES.has(c.type) && c.produce === id)
+    const harvested = ["Weeds", "Willow branch"].includes(name) || [...Data.CROPS.values()].some(c => c.sapling === id || (!Data.WOOD_TREES.has(c.type) && c.produce === id)
         || (c.type === "HERB" && core.CacheDefinitions.getItem(c.produce).name.replace(/^Grimy /, "").toLowerCase() === name.toLowerCase()));
     const loc = target.getLocation();
     if (name === "Cabbage" && loc.getX() > 3040 && loc.getX() < 3070 && loc.getY() > 3280 && loc.getY() < 3320) {
         player.sendMessage("I won't note cabbages here!"); return;
     }
     if (!harvested || definition.noteTemplate >= 0 || definition.note < 0) { player.sendMessage("I can note harvested produce and store farming tools."); return; }
-    const amount = player.getInventory().getAmount(id);
-    player.getInventory().deleteNumber(id, amount);
-    player.getInventory().addItem(new core.Item(definition.note, amount));
+    const inventory = player.getInventory(), amount = inventory.getAmount(id);
+    // Reserve the complete output after freeing the produce slots, including stack limits.
+    const planned = new inventory.constructor(player);
+    planned.setItems(inventory.getCopiedItems());
+    for (let slot = 0; slot < planned.capacity(); slot++) {
+        const item = planned.forSlot(slot);
+        if (item.getId() === id) planned.deleteAtSlot(slot, item.getAmount(), false);
+    }
+    const noted = new core.Item(definition.note, amount);
+    if (planned.getAddableAmount(noted) < amount) { inventory.full(); return; }
+    inventory.deleteNumber(id, amount);
+    inventory.addItem(noted);
 }
 function farmingNpc(event) {
     const { player, npc, definition } = event;
@@ -380,8 +404,8 @@ function farmingNpc(event) {
             if (remove) {
                 if (!state.checked) { player.sendMessage("Check the tree's health first."); return; }
                 const price = crop.type === "REDWOOD" ? 2000 : 200;
-                if (player.getInventory().getAmount(Data.itemId("Coins")) < price) { player.sendMessage(`You need ${price} coins.`); return; }
-                player.getInventory().deleteNumber(Data.itemId("Coins"), price); Patches.clearPatch(player, p); return;
+                if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < price) { player.sendMessage(`You need ${price} coins.`); return; }
+                player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, price); Patches.clearPatch(player, p); return;
             }
             if (state.protected || state.status === "dead" || state.status === "grown" || !crop.payment.length) {
                 player.sendMessage("That crop does not need my protection."); return;

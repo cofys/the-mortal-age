@@ -1,0 +1,42 @@
+{
+  "_source": "OSRS Wiki: Pharaoh's_sceptre (teleports, charges, recharging, diary capacities) and Transcript:Guardian_mummy (the recharge talk, in npc-dialogues.json). Ids are cache gamevals; the artefacts and their materials come from plugins/minigames/pyramidplunder/data/pyramid-plunder.json.",
+  "names": {
+    "objs": {
+      "uncharged": "pharaohs_sceptre",
+      "charged": "pharaohs_sceptre_charged",
+      "initial": "pharaohs_sceptre_charged_initial"
+    },
+    "varbits": {
+      "mummyMet": "pharaohs_sceptre_mummy_met",
+      "lastTeleport": "pharaohs_sceptre_last_teleport",
+      "necropolis": "pharaohs_sceptre_necropolis"
+    },
+    "locs": { "obelisk": "necropolis_obelisk" },
+    "npcs": { "mummy": "ntk_mummy_guardian" }
+  },
+  "_capacity": "Charges held: 3 by default, more with each Desert Diary tier (Wiki).",
+  "capacity": { "default": 3, "easy": 10, "medium": 25, "hard": 50, "elite": 100 },
+  "_cost": "Artefacts of one material for a full recharge, noted ones too (Wiki).",
+  "cost": { "gold": 6, "stone": 12, "pottery": 24 },
+  "wildernessLevel": 30,
+  "_destinations": "In the order of the sceptre's options; tiles are the Wiki's map pins (walkable). Jalsavrah is the default for Last-Teleport before any teleport (Wiki).",
+  "destinations": [
+    { "key": "jalsavrah", "name": "Jalsavrah", "tile": [1934, 4428, 3] },
+    { "key": "jaleustrophos", "name": "Jaleustrophos", "tile": [3341, 2827, 0] },
+    { "key": "jaldraocht", "name": "Jaldraocht", "tile": [3232, 2897, 0] },
+    { "key": "jaltevas", "name": "Jaltevas", "tile": [3313, 2718, 0], "needsNecropolis": true }
+  ],
+  "messages": {
+    "prompt": "Where would you like to teleport to?",
+    "charges": "Your sceptre has {charges} charge{s} left.",
+    "empty": "Your sceptre has run out of charges.",
+    "noCharges": "Your sceptre has no charges left. The guardian mummy in Jalsavrah can recharge it.",
+    "check": "Your sceptre has {charges} charge{s} left.",
+    "checkEmpty": "Your sceptre has no charges left.",
+    "uncharged": "You remove the charges from your sceptre.",
+    "unchargeConfirm": "Uncharge the sceptre? Its {charges} charge{s} will be lost.",
+    "needNecropolis": "You must commune with the obelisk in the Necropolis before you can teleport there.",
+    "communed": "The obelisk attunes itself to your sceptre.",
+    "_unverified": "every message here has no capture behind it; the Wiki gives none for the sceptre itself"
+  }
+}

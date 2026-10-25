@@ -65,6 +65,7 @@ function onHitResolved({ attacker, target, hit }) {
   if (!ring || player.getAttribute?.(DISABLED_ATTRIBUTE) === true) {
     return;
   }
+  if (!core.CombatFactory.canReceiveRecoil(attacker)) return;
   const recoil = Math.min(Math.floor(damage / 10) + 1, charges(ring));
   if (recoil <= 0) {
     return;

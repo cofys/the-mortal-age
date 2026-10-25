@@ -22,6 +22,8 @@ const CHAMPION_TEXT_UID = (OVERLAY << 16) | 3;
 const FOES_VARP = 560;
 const DEFAULT_CHAMPION = "TzHaar-Xil-Huz";
 const FIGHT_PIT_SKULL_ICON = 1;
+/** A prayer's head icon when it has none (PrayerData.hint): not an overhead prayer. */
+const NO_HEAD_ICON = -1;
 const CHAMPION_SKULL_TICKS = 6000; // One hour.
 const MIN_PLAYERS = 2;
 const START_DELAY_TICKS = 20;
@@ -240,13 +242,35 @@ function pitCanAttack(event) {
   event.allow = state.phase === "active" && state.participants.has(attacker) && state.participants.has(target);
 }
 
-// ponytail: the skull also goes on gear swaps and overhead prayers in OSRS; only leaving
-// Mor Ul Rek (which covers teleports) and logging out are handled.
+// The champion's skull lasts an hour, but goes (Wiki) on a teleport of any kind, a change of
+// weapons or armour after leaving the Fight Pits, an overhead prayer, logging out, monster
+// damage - and here also on leaving Mor Ul Rek.
 function dropChampionSkull({ player }) {
   if (!champions.has(player)) return;
   champions.delete(player);
   player.setSkullTimer(0);
   player.setSkullIconOverride(null);
+}
+
+// No hook marks a teleport as started, so the skull goes as one is checked (one leaving
+// Mor Ul Rek takes it anyway). Leaves the decision to the other hooks.
+function championTeleports({ player }) {
+  dropChampionSkull({ player });
+}
+
+// Weapons and armour: any worn slot but the ammunition, changed outside the pits.
+function championChangesGear({ player, slot }) {
+  if (slot === core.Equipment.AMMUNITION_SLOT || inside(player, WAITING) || inside(player, ARENA)) return;
+  dropChampionSkull({ player });
+}
+
+// Overhead prayers carry a head icon; the check runs as a prayer is switched on.
+function championPrays({ player, prayer }) {
+  if (prayer?.hint !== undefined && prayer.hint !== NO_HEAD_ICON) dropChampionSkull({ player });
+}
+
+function championHitByMonster({ attacker, target }) {
+  if (attacker?.isNpc?.() && target?.isPlayer?.()) dropChampionSkull({ player: target.getAsPlayer() });
 }
 
 // Runs before the logout save: a fighter logging out comes back in the waiting room, not
@@ -262,7 +286,11 @@ function allowBountyHunterWeapons(event) {
 module.exports = {
   name: "TzhaarFightPits",
   members: true,
-  _test: { enterArena, leaveArena, ATTACK_OPTION_SLOT },
+  _test: {
+    enterArena, leaveArena, ATTACK_OPTION_SLOT, endGame, dropChampionSkull,
+    championTeleports, championChangesGear, championPrays, championHitByMonster,
+    isChampion: (player) => champions.has(player),
+  },
   register(pluginApi) {
     api = pluginApi;
     core = pluginApi.core;
@@ -280,5 +308,10 @@ module.exports = {
     pluginApi.onCustomEvent("bounty-hunter:weapon-area", allowBountyHunterWeapons);
     pluginApi.onPlayerLogout(dropChampionSkull);
     pluginApi.onPlayerLogout(leaveArenaOnLogout);
+    pluginApi.onCanTeleport(championTeleports);
+    pluginApi.onCanEquip(championChangesGear);
+    pluginApi.onCanUnequip(championChangesGear);
+    pluginApi.onPrayerDisabled(championPrays);
+    pluginApi.onCombatHitResolved(championHitByMonster);
   },
 };

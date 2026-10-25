@@ -43,6 +43,10 @@ function claim(event) {
   const { player } = event;
   const site = siteOf(event);
   if (site == null) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "vale-offerings", resume: () => claim(event) };
+  Shared.api().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   Shared.face(player, State.tileOf(site));
   Shared.later(CLAIM_DELAY, () => collect(player, site));
   return true;

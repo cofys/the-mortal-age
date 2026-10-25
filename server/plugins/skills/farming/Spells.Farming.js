@@ -34,20 +34,25 @@ function farmingSpell(event, patch) {
     const state = Patches.stateFor(player, patch);
     if (patch.type.includes("COMPOST") || patch.type === "ANIMA") { player.sendMessage("That spell cannot affect this patch."); return; }
     if (key === "cure plant" && state.status !== "diseased") { player.sendMessage("The plant is not diseased."); return; }
+    if (key === "fertile soil" && state.status === "grown") {
+        player.sendMessage("Composting it isn't going to make it any bigger."); return;
+    }
     if (key === "fertile soil" && (state.weeds || state.compost || state.status === "dead" || ["GRAPES", "CORAL"].includes(patch.type))) {
         player.sendMessage("This patch cannot be treated now."); return;
     }
-    if (key === "resurrect crops" && (state.status !== "dead" || state.resurrected)) { player.sendMessage("You cannot resurrect this crop."); return; }
+    if (key === "resurrect crops" && (state.status !== "dead" || state.resurrected || ["REDWOOD", "HESPORI"].includes(patch.type))) { player.sendMessage("You cannot resurrect this crop."); return; }
     if (!new FarmingSpell(key, event.spellId).cast(player)) return;
     if (key === "cure plant") Patches.cure(player, patch, false);
     else if (key === "fertile soil") {
         const ultra = (Patches.farmFor(player).ultraFertile || player.getPacketSender().getVarbit(5960) > 0) && player.getInventory().getAmount(Data.itemId("Volcanic ash")) >= 2;
         if (ultra) player.getInventory().deleteNumber(Data.itemId("Volcanic ash"), 2);
-        Patches.fertilize(player, patch, ultra ? 3 : 2, false);
+        Patches.fertilize(player, patch, ultra ? 3 : 2, false, 18);
     }
     else {
         const level = Math.min(99, player.getSkillManager().getCurrentLevel(core.Skill.MAGIC));
-        if (Math.random() < 0.5 + (level - 78) / 84) {
+        // OSRS Wiki's integer skilling-success formula: 129/256 at 78, 193/256 at 99.
+        const successes = Math.floor(64 * (level - 36) / 21 + 0.5) + 1;
+        if (Math.floor(Math.random() * 256) < successes) {
             state.resurrected = true;
             state.status = "growing";
             state.nextAt = Model.nextGrowth(Date.now(), Data.CROPS.get(state.crop).minutes, Patches.farmFor(player).offset);

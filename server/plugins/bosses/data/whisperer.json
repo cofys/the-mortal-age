@@ -1,0 +1,526 @@
+{
+  "$comment": "Normal post-quest mechanics from OSRS Wiki The Whisperer/Strategies (2026-10-24); IDs from rev241 gamevals/configs. Authored mechanics data, not a generated definition override. Independently normal level791 actors in Grid Master recording3285 corroborate seed grids/anchors and column coordinates against ordinary Wiki diagrams. Remaining evidence audit: docs/whisperer.md.",
+  "quest": "desert_treasure_ii",
+  "npcs": {
+    "figure": 12203,
+    "boss": 12204,
+    "melee": 12205,
+    "tentacle": 12208,
+    "columnShadow": 12209,
+    "column": 12210,
+    "soul": 12211,
+    "soulShadow": 12212
+  },
+  "animations": {
+    "spawn": 10227,
+    "melee": 10234,
+    "ranged": 10237,
+    "magic": 10243,
+    "teleport": 10247,
+    "screech": 10250,
+    "seeds": 10254,
+    "souls": 10256,
+    "death": 10260,
+    "tentacleSpawn": 10263,
+    "tentacleAttack": 10266,
+    "pickup": 827,
+    "flyback": 9799,
+    "wakeKnockback": 9799,
+    "rangedAlt": 10238,
+    "magicAlt": 10244,
+    "appear": 10248,
+    "screechHold": 10251,
+    "screechBlast": 10252,
+    "binding": 10254,
+    "soulChant": 10257,
+    "soulResolve": 10259
+  },
+  "projectiles": {
+    "ranged": 2444,
+    "magic": 2445,
+    "bind": 2467,
+    "screech": 2471
+  },
+  "objects": {
+    "seedLight": 47573,
+    "seedDark": 47574,
+    "seedReal": 47575,
+    "escape": 47584,
+    "exit": 47586
+  },
+  "site": {
+    "outside": [
+      2656,
+      6386,
+      0
+    ],
+    "arrival": [
+      2656,
+      6380,
+      0
+    ],
+    "boss": [
+      2655,
+      6368,
+      0
+    ],
+    "grave": [
+      2922,
+      5826,
+      0
+    ],
+    "realmOffset": 256,
+    "disturbY": 6371,
+    "arena": [
+      2640,
+      2676,
+      6352,
+      6385,
+      0
+    ],
+    "tentacleBounds": [
+      2641,
+      2675,
+      6353,
+      6384
+    ],
+    "screechY": 6357
+  },
+  "travel": {
+    "sinkhole": [
+      2922,
+      5827,
+      0
+    ],
+    "ropeIds": [
+      49477,
+      48195,
+      48196,
+      48197
+    ],
+    "returnRope": 48198,
+    "undercity": [
+      2587,
+      6436,
+      0
+    ],
+    "teleporters": [
+      [
+        "Palace",
+        2593,
+        6424,
+        49479,
+        15088
+      ],
+      [
+        "Plaza",
+        2617,
+        6417,
+        49480,
+        15089
+      ],
+      [
+        "Northern Science District",
+        2611,
+        6379,
+        49482,
+        15091
+      ],
+      [
+        "Southern Science District",
+        2599,
+        6341,
+        49483,
+        15092
+      ],
+      [
+        "Western Residential District",
+        2643,
+        6434,
+        49484,
+        15093
+      ],
+      [
+        "Cathedral",
+        2652,
+        6405,
+        49481,
+        15090
+      ],
+      [
+        "Eastern Residential District",
+        2691,
+        6415,
+        49485,
+        15094
+      ]
+    ],
+    "teleporterForms": [
+      48201,
+      48202,
+      48203
+    ],
+    "returnBounds": [
+      2580,
+      2595,
+      6428,
+      6444,
+      0
+    ]
+  },
+  "thresholds": [
+    720,
+    495,
+    270
+  ],
+  "maxHit": {
+    "magic": 36,
+    "ranged": 40
+  },
+  "sanity": {
+    "varbit": 15064,
+    "realmVarbit": 15162,
+    "interface": 834,
+    "helper": 10551300,
+    "switchVarbit": 15067,
+    "visitedVarbit": 15065
+  },
+  "soulSets": [
+    {
+      "phrase": "Vita!",
+      "size": 2
+    },
+    {
+      "phrase": "Oratio!",
+      "size": 3
+    },
+    {
+      "phrase": "Sanitas!",
+      "size": 3
+    },
+    {
+      "phrase": "Mors!",
+      "size": 4
+    }
+  ],
+  "items": {
+    "fragment": 28357,
+    "fragmentActive": 28356
+  },
+  "killCountVarp": 3969,
+  "projectileTiming": {
+    "start": 30,
+    "end": 90,
+    "startHeight": 87,
+    "endHeight": 25,
+    "impactTicks": 3
+  },
+  "graphics": {
+    "bind": 2466,
+    "bindingCast": 177,
+    "bindingImpact": 2466,
+    "screech": 2470,
+    "screechWater": 2451
+  },
+  "sounds": {
+    "disturb": 3201,
+    "pulse": 1664,
+    "teleporter": 4794
+  },
+  "song": 749,
+  "timing": {
+    "introPickup": 1,
+    "introTransform": 4,
+    "flybackTicks": 2,
+    "flybackCycles": 60
+  },
+  "messages": {
+    "pulse": "<col=ff289d>Your blackstone fragment pulses with dark energy...",
+    "deplete": "<col=ff3045>Your blackstone fragment loses all its energy.",
+    "unresponsive": "Your blackstone fragment seems unresponsive.",
+    "screech": "<col=a53fff>The Whisperer prepares to let out a powerful screech...",
+    "seeds": "<col=a53fff>Leeches begin to grow from the shadows...",
+    "seedsPerfect": "<col=229628>You manage to deter all of the shadow leeches perfectly, regaining some sanity.",
+    "seedsDone": "<col=229628>You manage to deter all of the shadow leeches.",
+    "seedsFailed": "<col=ff3045>Leeches from the shadows hatch, draining your health and mind!",
+    "souls": "<col=a53fff>The Whisperer begins to call upon the lost...",
+    "soulsFull": "<col=229628>You fully disturb the Whisperer's chant.",
+    "soulsPartial": "<col=229628>You manipulated the Whisperer's chant in your favour.",
+    "soulsFailed": "<col=ff3045>You fail to disrupt the Whisperer's chant.",
+    "bind": "<col=ff3045>The Whisperer binds you in place!",
+    "enrage": "<col=ff289d>The Whisperer pulls you into the Shadow Realm...",
+    "insanity": "<col=ef1020>The darkness of the Shadow Realm begins to consume your mind!",
+    "noFragment": "It would not be wise to proceed without a way to<br>traverse the Shadow Realm."
+  },
+  "scoreboard": {
+    "interface": 830,
+    "close": 2,
+    "parents": [
+      46092,
+      49474
+    ],
+    "readable": [
+      47580,
+      47581,
+      47582,
+      47583
+    ],
+    "components": {
+      "kills": 9,
+      "deaths": 11,
+      "best": 13,
+      "worldKills": 15,
+      "worldDeaths": 17,
+      "worldBest": 19
+    }
+  },
+  "wakeKnockback": {
+    "tiles": 3,
+    "cycles": 60,
+    "ticks": 2
+  },
+  "volley": {
+    "launchDelay": 30,
+    "arrivalCycles": 90,
+    "startHeight": 87.5,
+    "endHeight": 25,
+    "angle": 254,
+    "progress": 128,
+    "impactTicks": 3
+  },
+  "binding": {
+    "launchDelay": 80,
+    "arrivalCycles": 170,
+    "nearArrivalCycles": {
+      "3": 200,
+      "4": 180
+    },
+    "startHeight": 145,
+    "endHeight": 0,
+    "angle": 16,
+    "progress": 150,
+    "impactTicks": 6,
+    "pursuitTicks": 5
+  },
+  "specials": {
+    "screechWaveRows": [
+      [
+        -4,
+        -5,
+        2
+      ],
+      [
+        -3,
+        -6,
+        6
+      ],
+      [
+        -2,
+        -7,
+        7
+      ],
+      [
+        -1,
+        -8,
+        9
+      ],
+      [
+        0,
+        -8,
+        9
+      ],
+      [
+        1,
+        -8,
+        9
+      ],
+      [
+        2,
+        -8,
+        9
+      ],
+      [
+        3,
+        -8,
+        9
+      ],
+      [
+        4,
+        -13,
+        11
+      ],
+      [
+        5,
+        -13,
+        11
+      ],
+      [
+        6,
+        -13,
+        11
+      ],
+      [
+        7,
+        -12,
+        11
+      ],
+      [
+        8,
+        -11,
+        11
+      ],
+      [
+        9,
+        -10,
+        10
+      ],
+      [
+        10,
+        -9,
+        9
+      ],
+      [
+        11,
+        -8,
+        8
+      ],
+      [
+        12,
+        -7,
+        7
+      ],
+      [
+        13,
+        -6,
+        6
+      ],
+      [
+        14,
+        -5,
+        5
+      ],
+      [
+        15,
+        -4,
+        4
+      ],
+      [
+        16,
+        -3,
+        3
+      ],
+      [
+        17,
+        -2,
+        2
+      ],
+      [
+        18,
+        -1,
+        1
+      ],
+      [
+        19,
+        0,
+        0
+      ]
+    ],
+    "screechProjectile": {
+      "cycles": 40,
+      "startHeight": 100,
+      "endHeight": 10,
+      "angle": 127,
+      "progress": 128
+    },
+    "columnHeadbar": {
+      "id": 2,
+      "width": 40,
+      "maximum": 60
+    },
+    "screechY": 6356,
+    "columns": [
+      [
+        2646,
+        6365
+      ],
+      [
+        2648,
+        6361
+      ],
+      [
+        2651,
+        6363
+      ],
+      [
+        2654,
+        6364
+      ],
+      [
+        2657,
+        6364
+      ],
+      [
+        2660,
+        6363
+      ],
+      [
+        2663,
+        6361
+      ],
+      [
+        2665,
+        6365
+      ]
+    ],
+    "souls": [
+      [
+        2650,
+        6375
+      ],
+      [
+        2650,
+        6373
+      ],
+      [
+        2648,
+        6373
+      ],
+      [
+        2660,
+        6375
+      ],
+      [
+        2662,
+        6373
+      ],
+      [
+        2648,
+        6366
+      ],
+      [
+        2650,
+        6364
+      ],
+      [
+        2652,
+        6362
+      ],
+      [
+        2662,
+        6362
+      ],
+      [
+        2662,
+        6364
+      ],
+      [
+        2664,
+        6364
+      ],
+      [
+        2664,
+        6371
+      ]
+    ]
+  }
+}

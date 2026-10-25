@@ -6,21 +6,30 @@ const Spells = require("./Spells.Farming");
 const Tithe = require("./Tithe.Farming");
 const Guild = require("./Guild.Farming");
 const Hespori = require("./Hespori.Farming");
+const Redwood = require("./Redwood.Farming");
 
 const FARM_ATTRIBUTE = "farming:state";
+const TROLL_HERB_PATCH = Data.CACHE.patches.find(p => p.type === "HERB" && p.x === 2826 && p.y === 3694 && p.z === 0);
+const FALADOR_FARM_PATCHES = new Set(Data.CACHE.patches.filter(p => p.z === 0
+    && ["ALLOTMENT", "FLOWER", "HERB"].includes(p.type)
+    && p.x >= 3050 && p.x <= 3058 && p.y >= 3303 && p.y <= 3311).map(Data.patchKey));
 const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
 // Player -> queued rake/harvest, stepped every tick by the farming task.
 const WORK = new Map();
 const RENDERED = new WeakMap();
+const LLETYA_FRUIT_PATCH = Data.CACHE.patches.find(p => p.type === "FRUIT_TREE" && p.x === 2346 && p.y === 3161 && p.z === 0);
 // A patch can be visible from its own 64-tile region or one of its neighbours.
 const PATCHES_BY_REGION = new Map();
+const HARMONY_HERB_PATCH = Data.CACHE.patches.find(p => p.type === "HERB" && p.x === 3789 && p.y === 2837 && p.z === 0);
 for (const patch of Data.CACHE.patches) {
     const rx = Math.floor((patch.x + patch.maxX) / 128), ry = Math.floor((patch.y + patch.maxY) / 128);
     for (let x = rx - 1; x <= rx + 1; x++) {
         for (let y = ry - 1; y <= ry + 1; y++) {
-            const key = `${x}:${y}:${patch.z}`;
-            if (!PATCHES_BY_REGION.has(key)) PATCHES_BY_REGION.set(key, []);
-            PATCHES_BY_REGION.get(key).push(patch);
+            for (const z of patch.type === "REDWOOD" ? [patch.z, patch.z + 1, patch.z + 2] : [patch.z]) {
+                const key = `${x}:${y}:${z}`;
+                if (!PATCHES_BY_REGION.has(key)) PATCHES_BY_REGION.set(key, []);
+                PATCHES_BY_REGION.get(key).push(patch);
+            }
         }
     }
 }
@@ -52,14 +61,17 @@ function requireTool(player, name) {
     player.sendMessage(`You need a ${name.toLowerCase()} to do that.`);
     return false;
 }
-function award(player, xp) {
+function award(player, xp, patch) {
     // Keep the server's configured XP rate; the table contains unmultiplied OSRS XP.
     const worn = new Set(player.getEquipment().getItems().map(i => core.CacheDefinitions.getItem(i.getId()).name));
     const pieces = [[worn.has("Farmer's strawhat"), 0.004],
         [worn.has("Farmer's jacket") || worn.has("Farmer's shirt"), 0.008],
         [worn.has("Farmer's boro trousers"), 0.006], [worn.has("Farmer's boots"), 0.002]];
     const bonus = pieces.reduce((total, [equipped, boost]) => total + (equipped ? boost : 0), 0) + (pieces.every(([equipped]) => equipped) ? 0.005 : 0);
-    player.getSkillManager().addExperiences(core.Skill.FARMING, xp * (1 + bonus));
+    // https://oldschool.runescape.wiki/w/South_Falador_Farm: Medium Diary, all four patches.
+    const diary = { player, diary: "falador", tier: "medium", complete: false };
+    if (patch && FALADOR_FARM_PATCHES.has(Data.patchKey(patch))) core.PluginManager.emitCustomEvent("diary:is-complete", diary);
+    player.getSkillManager().addExperiences(core.Skill.FARMING, xp * (diary.complete === true ? 1.1 : 1) * (1 + bonus));
 }
 function give(player, id, count = 1) {
     const inventory = player.getInventory();
@@ -82,6 +94,7 @@ function choose(player, entries, page = 0) {
     }, ...shown.map(([text]) => text))));
 }
 function clearPatch(player, patch) {
+    if (patch.type === "REDWOOD") redwoodRegrowth.delete(player);
     const farm = farmFor(player);
     farm.patches[Data.patchKey(patch)] = Model.emptyPatch(Date.now(), farm);
     syncPatch(player, patch);
@@ -97,6 +110,7 @@ function syncPatch(player, patch) {
     // Every patch action ends here, so a changed patch reschedules its owner's next growth.
     if (tracked.has(player)) dirty.add(player);
     sender.sendVarbit(patch.varbit, value);
+    if (patch.type === "REDWOOD") Redwood.refresh(player, patch);
     // The client rebuilds loc geometry on object updates, not varbit updates.
     // Use the actual map locs so multi-tile patches retain every shape/rotation.
     for (let x = patch.x; x <= patch.maxX; x++) {
@@ -151,7 +165,7 @@ function rake(player, patch) {
     state.weeds--;
     state.nextAt = Model.nextGrowth(Date.now(), 5, farmFor(player).offset);
     animate(player, ANIM.RAKE);
-    award(player, 4);
+    award(player, 4, patch);
     return state.weeds > 0;
 }
 function plant(player, patch, id) {
@@ -160,14 +174,15 @@ function plant(player, patch, id) {
     if (state.crop || state.scarecrow) { player.sendMessage("There is already something growing here."); return; }
     if (state.weeds) { player.sendMessage("You need to rake the weeds out first."); return; }
     if (!crop || crop.type !== patch.type) { player.sendMessage("That cannot be planted in this patch."); return; }
+    if (patch === TROLL_HERB_PATCH && crop.key === "GOUTWEED") { player.sendMessage("Regular goutweed cannot grow in this patch."); return; }
     if (player.getSkillManager().getCurrentLevel(core.Skill.FARMING) < crop.level) { player.sendMessage(`You need level ${crop.level} Farming to plant that.`); return; }
     const barbarian = farmFor(player).barbarian;
     const bareHanded = !crop.sapling && crop.type !== "GRAPES" && barbarian?.planting > 0 && !hasTool(player, "Seed dibber");
     if (!bareHanded && !requireTool(player, crop.sapling ? "Spade" : "Seed dibber")) return;
     if (patch.type === "GRAPES" && !state.compost) { player.sendMessage("Treat the vine patch with saltpetre first."); return; }
     if (crop.type === "SPIRIT_TREE") {
-        const level = player.getSkillManager().getMaxLevel(core.Skill.FARMING);
-        const limit = level >= 99 ? Infinity : level >= 91 ? 2 : 1;
+        const level = player.getSkillManager().getCurrentLevel(core.Skill.FARMING);
+        const limit = level >= 99 ? Infinity : level >= 96 ? 4 : level >= 93 ? 3 : level >= 88 ? 2 : 1;
         if (Object.values(farmFor(player).patches).filter(s => s.crop === crop.key).length >= limit) {
             player.sendMessage("You cannot grow any more spirit trees at your Farming level."); return;
         }
@@ -204,15 +219,16 @@ function plant(player, patch, id) {
     Object.assign(state, { crop: crop.key, stage: 0, status: "growing", checked: false, protected: false, watered: false,
         lives: 0, plantedAt: Date.now(), nextAt: Model.nextGrowth(Date.now(), crop.minutes, farmFor(player).offset) });
     // Herbs award their planting XP only after the final herb is picked.
-    if (crop.type !== "HERB") award(player, crop.plant);
+    if (crop.type !== "HERB") award(player, crop.plant, patch);
     animate(player, crop.sapling ? ANIM.SAPLING : ANIM.PLANT);
     player.sendMessage(`You plant the ${crop.name.toLowerCase()}.`);
 }
-function water(player, id) {
+function water(player, id, slot) {
     const inventory = player.getInventory();
-    const can = inventory.getItems().find(i => (!id || i.getId() === id) && (core.CacheDefinitions.getItem(i.getId()).name?.match(/^Watering can\([1-8]\)$/)
-        || i.getId() === Data.itemId("Magic watering can") || i.getId() === Data.itemId("Gricoller's can")));
-    if (!can) { player.sendMessage("You need a watering can containing water."); return false; }
+    const matches = i => i && (!id || i.getId() === id) && (core.CacheDefinitions.getItem(i.getId()).name?.match(/^Watering can\([1-8]\)$/)
+        || i.getId() === Data.itemId("Magic watering can") || i.getId() === Data.itemId("Gricoller's can"));
+    const can = slot === undefined ? inventory.getItems().find(matches) : inventory.forSlot(slot);
+    if (!matches(can)) { player.sendMessage("You need a watering can containing water."); return false; }
     const name = core.CacheDefinitions.getItem(can.getId()).name;
     if (name === "Gricoller's can") {
         const charges = Number(can.getMetaValue("farming:water") ?? 0);
@@ -225,13 +241,13 @@ function water(player, id) {
     animate(player, ANIM.WATER);
     return true;
 }
-function waterPatch(player, patch, id) {
+function waterPatch(player, patch, id, slot) {
     const state = stateFor(player, patch);
     if (!state.crop || state.status !== "growing" || !Data.WATERABLE.has(patch.type)) { player.sendMessage("This patch does not need watering."); return; }
     if (state.watered) { player.sendMessage("This crop is already watered."); return; }
-    if (water(player, id)) state.watered = true;
+    if (water(player, id, slot)) state.watered = true;
 }
-function fertilize(player, patch, tier, consume = true) {
+function fertilize(player, patch, tier, consume = true, xp = [0, 18, 26, 36][tier]) {
     const state = stateFor(player, patch);
     if (state.weeds || state.compost || state.status === "dead" || ["ANIMA", "GRAPES", "CORAL"].includes(patch.type)) {
         player.sendMessage(state.compost ? "This patch has already been treated." : "You cannot compost this patch now."); return false;
@@ -244,7 +260,7 @@ function fertilize(player, patch, tier, consume = true) {
     }
     state.compost = tier;
     if (state.status === "grown" && Data.COMPOSTABLE_YIELD.has(patch.type)) state.lives += tier;
-    award(player, [0, 18, 26, 36][tier]);
+    award(player, xp, patch);
     animate(player, ANIM.COMPOST);
     syncPatch(player, patch);
     return true;
@@ -289,7 +305,7 @@ function healthCheck(player, patch) {
     const crop = Data.CROPS.get(state.crop);
     if (!crop || state.status !== "grown" || state.checked) return;
     state.checked = true;
-    award(player, crop.check);
+    award(player, crop.check, patch);
     Services.cropRewards(player, crop);
     player.sendMessage(`The ${crop.name.toLowerCase()} is healthy.`);
     core.PluginManager.emitCustomEvent("farming:check-health", { player, crop: crop.key, patch });
@@ -320,7 +336,7 @@ function harvest(player, patch) {
     if (!(sack && Guild.storeCrop(player, sack, produce, amount)) && !give(player, produce, amount)) return false;
     if (blessing) player.getInventory().deleteNumber(Data.itemId("Bologa's blessing"), 1);
     animate(player, ANIM.HARVEST);
-    award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount));
+    award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount), patch);
     const variable = Data.COMPOSTABLE_YIELD.has(crop.type) || ["BUSH", "CACTUS", "GRAPES", "CORAL"].includes(crop.type);
     // Wiki: a worn Farming cape (or max cape) saves herb lives more often.
     const capePerk = { player, skill: "FARMING", result: false };
@@ -334,7 +350,7 @@ function harvest(player, patch) {
     if (!variable || Math.random() >= chance) state.lives--;
     if (["FLOWER", "BELLADONNA", "CRYSTAL_TREE"].includes(crop.type)) state.lives = 0;
     if (state.lives === 0) {
-        if (crop.type === "HERB") award(player, crop.plant);
+        if (crop.type === "HERB") award(player, crop.plant, patch);
         if (!crop.check) Services.cropRewards(player, crop);
         core.PluginManager.emitCustomEvent("farming:harvest", { player, crop: crop.key, patch });
         if (crop.type === "GRAPES") state.status = "dead";
@@ -377,8 +393,29 @@ function inspect(player, patch) {
     player.sendMessage(`Soil: ${["untreated", "compost", "supercompost", "ultracompost"][state.compost]}.${state.watered ? " The crop is watered." : ""}`);
 }
 function canUsePatch(player, patch) {
+    if (patch === TROLL_HERB_PATCH) {
+        const quest = { player, key: "my_arms_big_adventure", complete: null };
+        core.PluginManager.emitCustomEvent("quest:is-complete", quest);
+        if (quest.complete !== true) { player.sendMessage("You must complete My Arm's Big Adventure to use this herb patch."); return false; }
+    }
     const request = { player, patch, allowed: true };
+    if (patch === LLETYA_FRUIT_PATCH) {
+        const quest = { player, key: "mournings_end_part_i", started: false };
+        core.PluginManager.emitCustomEvent("quest:is-started", quest);
+        if (quest.started !== true) {
+            player.sendMessage("You must start Mourning's End Part I to use this fruit tree patch.");
+            return false;
+        }
+    }
     core.PluginManager.emitCustomEvent("farming:can-use-patch", request);
+    if (request.allowed !== false && patch === HARMONY_HERB_PATCH) {
+        const diary = { player, diary: "morytania", tier: "elite", complete: false };
+        core.PluginManager.emitCustomEvent("diary:is-complete", diary);
+        if (diary.complete !== true) {
+            player.sendMessage("You must complete the elite Morytania Diary to use this herb patch.");
+            return false;
+        }
+    }
     return request.allowed !== false;
 }
 function objectInteraction(event) {
@@ -456,14 +493,14 @@ function itemOnObject(event) {
     if (!gate(player) || !player.getInventory().contains(id)) return;
     Model.advanceFarm(farmFor(player), Date.now());
     const state = stateFor(player, patch);
-    if (patch.type.includes("COMPOST")) { Services.binAction(player, patch, "", id); syncPatch(player, patch); return; }
+    if (patch.type.includes("COMPOST")) { Services.binAction(player, patch, "", id, event.itemSlot); syncPatch(player, patch); return; }
     if (Data.SEEDS.has(id)) plant(player, patch, id);
     else if (id === Data.itemId("Rake")) startWork(player, patch, "rake");
     else if (id === Data.itemId("Spade") && patch.type === "HESPORI" && state.status === "grown") Hespori.harvestHespori(player, patch);
     else if (id === Data.itemId("Spade")) dig(player, patch);
     else if (id === Data.itemId("Plant cure") || id === Data.itemId("Secateurs") || id === Data.itemId("Magic secateurs")) cure(player, patch, true, id);
-    else if (/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id);
-    else if (core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket") Services.useBottomless(player, patch, id);
+    else if (/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id, event.itemSlot);
+    else if (core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket") Services.useBottomless(player, patch, id, event.itemSlot);
     else if (id === Data.itemId("Amulet of Nature")) {
         farmFor(player).boundPatch = Data.patchKey(patch);
         farmFor(player).boundStatus = state.crop ? state.status : "empty";
@@ -519,6 +556,11 @@ function validateTree(event) {
     if (!patch) return;
     const state = stateFor(event.player, patch);
     event.allow = state.status === "grown" && state.checked && !state.stump;
+    if (patch.type === "REDWOOD") {
+        Redwood.advance(state, Date.now());
+        const branch = Redwood.branchIndex(patch, event.object);
+        event.allow = state.status === "grown" && state.checked && branch >= 0 && !state.redwoodBranches?.[branch];
+    }
 }
 function depleteTree(event) {
     const pos = event.object.getLocation();
@@ -526,6 +568,17 @@ function depleteTree(event) {
     if (!patch) return;
     event.handled = true;
     const state = stateFor(event.player, patch);
+    if (patch.type === "REDWOOD") {
+        const branch = Redwood.branchIndex(patch, event.object);
+        if (branch < 0 || state.status !== "grown" || !state.checked) return;
+        Redwood.advance(state, Date.now());
+        state.redwoodBranches ??= [0, 0, 0, 0];
+        if (state.redwoodBranches[branch]) return;
+        state.redwoodBranches[branch] = Date.now() + Redwood.REGROW_TICKS * 600;
+        redwoodRegrowth.set(event.player, Redwood.nextDue(state));
+        syncPatch(event.player, patch);
+        return;
+    }
     state.stump = true;
     state.nextAt = Date.now() + event.respawnTicks * 600;
     syncPatch(event.player, patch);
@@ -540,6 +593,8 @@ const immediate = new Set();
 const dirty = new Set(); // players whose patches changed; rescheduled on the next tick
 const tracked = new WeakSet();
 const seedlingDue = new WeakMap();
+// Only owners of depleted redwood spots need sub-minute checks.
+const redwoodRegrowth = new Map();
 // Players standing in a map square with patches nearby -> their last tile, so nearby patches
 // follow them tile by tile without checking anyone who is nowhere near a patch.
 const nearPatches = new Map();
@@ -593,8 +648,13 @@ function refresh(player) {
     syncNearby(player);
     schedule(player);
     dirty.delete(player);
+    const redwood = Data.CACHE.patches.find(p => p.type === "REDWOOD");
+    const due = Redwood.nextDue(farmFor(player).patches[Data.patchKey(redwood)] ?? {});
+    if (due < Infinity) redwoodRegrowth.set(player, due);
+    else redwoodRegrowth.delete(player);
 }
 function farmingTick() {
+    for (const [player, due] of redwoodRegrowth) if (due <= Date.now()) refresh(player);
     for (const [player, work] of WORK) workStep(player, work);
     for (const player of dirty) schedule(player);
     dirty.clear();
@@ -635,6 +695,7 @@ function advanceTime(event) {
     for (const state of Object.values(farmFor(player).patches)) {
         if (Number.isFinite(state.nextAt)) state.nextAt -= ms;
         if (Number.isFinite(state.plantedAt)) state.plantedAt -= ms;
+        if (state.redwoodBranches) state.redwoodBranches = state.redwoodBranches.map(at => at > 0 ? at - ms : 0);
     }
     for (const container of [player.getInventory(), ...player.getBanks()]) {
         for (const item of container?.getItems() ?? []) {
@@ -661,6 +722,7 @@ function login(event) {
     refresh(player);
 }
 function logout({ player }) {
+    redwoodRegrowth.delete(player);
     WORK.delete(player); RENDERED.delete(player);
     unschedule(player); tracked.delete(player); dirty.delete(player); nearPatches.delete(player); seedlingDue.delete(player);
     Hespori.hesporiLogout({ player });
@@ -686,6 +748,7 @@ function attach(api) {
     api.onItemAction(Services.farmingItemAction);
     api.onItemAction(Guild.rewardItem);
     api.onItemAction(Guild.storageAction);
+    api.onCustomEvent(core.Bank.INVENTORY_OP_EVENT, Guild.bankStorageOp);
     api.onSpellOnObject(spellOnObject);
     api.onButtonClick(Spells.farmingButton);
     api.onCustomEvent("woodcutting:validate-tree", validateTree);

@@ -1,15 +1,15 @@
 /**
  * Blast Furnace, under Keldagrim: ore put on the conveyor belt is smelted with half the coal and
- * the bars collected from the dispenser. The dwarves work the machinery for 72,000 coins an hour
- * from the coffer while the player is in the room, and smiths under level 60 also pay the foreman
- * 2,500 coins for ten minutes. Behaviour is the OSRS Wiki's and the dwarves' transcripts; the
- * belt and dispenser timings, ore limits and messages follow Offline_Scape's port
- * (docs/blast-furnace.md lists which).
+ * the bars collected from the dispenser. Worlds tagged blast-furnace charge for dwarf operation;
+ * other worlds use the shared stove/pump/pedals/repairs in ./blastfurnace/. Smiths under base
+ * level 60 also pay the foreman 2,500 coins for ten minutes. Behaviour comes from the OSRS Wiki
+ * and transcripts; docs/blast-furnace.md distinguishes verified rules from timing estimates.
  */
 const Smithing = require("../skills/Smithing.plugin");
+const Machinery = require("./blastfurnace/Machinery.BlastFurnace");
 
 /** The furnace room. */
-const ROOM = { minX: 1934, maxX: 1959, minY: 4955, maxY: 4976, levels: [0] };
+const { ROOM } = Machinery;
 
 /** The coffer HUD (interface 474) in the toplevel's overlay_hud (161:8). */
 const HUD = 474;
@@ -37,6 +37,7 @@ const FOREMAN_OK_LINE = "Okay, you can use the furnace for ten minutes.";
 
 /** The pot holds 28 ore that makes bars, 254 of coal and of tin, and 28 of each bar. */
 const PRIMARY_LIMIT = 28;
+const NICKEL_LIMIT = 14;
 const SECONDARY_LIMIT = 254;
 const BAR_LIMIT = 28;
 
@@ -51,15 +52,6 @@ const LAVA_FLOW_ANIMATION = 2440;
 const THROW_WATER_ANIMATION = 2450;
 const FILL_ANIMATION = 832;
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
-
-/** The machinery the dwarves keep turning: the belt, its drive belts and the cogs. */
-const BELT_ANIMATION = 2435;
-const GEAR_ANIMATION = 2436;
-const MACHINERY = [
-  [9100, [1943, 4967], BELT_ANIMATION], [9101, [1943, 4966], BELT_ANIMATION], [9101, [1943, 4965], BELT_ANIMATION],
-  [9102, [1944, 4967], GEAR_ANIMATION], [9107, [1944, 4965], GEAR_ANIMATION], [9104, [1945, 4967], GEAR_ANIMATION],
-  [9108, [1945, 4965], GEAR_ANIMATION], [9106, [1945, 4966], GEAR_ANIMATION],
-];
 
 /** The stairs between Keldagrim and the furnace. */
 const FURNACE_ENTRANCE_STAIRS = 9084;
@@ -85,6 +77,7 @@ const pouring = new Map();
 function init(api) {
   pluginApi = api;
   core = api.core;
+  Machinery.init(api);
   const Items = core.ItemIdentifiers;
   const Npcs = core.NpcIdentifiers;
   // varbit: RuneLite VarbitID.BLAST_FURNACE_*; level: the bar the ore makes.
@@ -98,10 +91,16 @@ function init(api) {
     { item: Items.MITHRIL_ORE, npc: Npcs.COL_00FFFF_MITHRIL_ORE_COL, varbit: 952, level: 50, primary: true },
     { item: Items.ADAMANTITE_ORE, npc: Npcs.COL_00FFFF_ADAMANTITE_ORE_COL, varbit: 953, level: 70, primary: true },
     { item: Items.RUNITE_ORE, npc: Npcs.COL_00FFFF_RUNITE_ORE_COL, varbit: 954, level: 85, primary: true },
+    { item: Items.LEAD_ORE, npc: core.CacheDefinitions.getNpcId("blast_furnace_lead_ore"),
+      varbit: core.CacheDefinitions.getVarbitId("blast_furnace_lead_ore"), level: 25, primary: true },
+    { item: Items.NICKEL_ORE, npc: core.CacheDefinitions.getNpcId("blast_furnace_nickel_ore"),
+      varbit: core.CacheDefinitions.getVarbitId("blast_furnace_nickel_ore"), level: 74, primary: true },
   ];
   const barVarbits = new Map([
     [Items.BRONZE_BAR, 941], [Items.IRON_BAR, 942], [Items.STEEL_BAR, 943], [Items.MITHRIL_BAR, 944],
     [Items.ADAMANTITE_BAR, 945], [Items.RUNITE_BAR, 946], [Items.GOLD_BAR, 947], [Items.SILVER_BAR, 948],
+    [Items.LEAD_BAR, core.CacheDefinitions.getVarbitId("blast_furnace_lead_bars")],
+    [Items.CUPRONICKEL_BAR, core.CacheDefinitions.getVarbitId("blast_furnace_cupronickel_bars")],
   ]);
   // Half the coal of a furnace, and iron never fails. Bars needing coal smelt first, so iron
   // ore with coal in the pot becomes steel.
@@ -137,6 +136,10 @@ function stateOf(player) {
 
 function smithingLevel(player) {
   return player.getSkillManager().getCurrentLevel(core.Skill.SMITHING);
+}
+
+function freeSmithing(player) {
+  return player.getSkillManager().getMaxLevel(core.Skill.SMITHING) >= FREE_SMITHING_LEVEL;
 }
 
 function coins(player) {
@@ -199,22 +202,21 @@ function enterRoom({ player }) {
   player.getPacketSender().sendSubInterface(OVERLAY_HUD_UID, HUD, 1);
   syncCoffer(player);
   syncContents(player);
+  Machinery.sync(player, true);
   const hasBars = Object.values(state.bars).some((count) => count > 0);
   setDispenser(player, hasBars ? DISPENSER_COOL : DISPENSER_EMPTY);
-  for (const [id, [x, y], animation] of MACHINERY) {
-    const loc = core.MapObjects.get(id, new core.Location(x, y, 0), null);
-    if (loc) player.getPacketSender().sendObjectAnimation(loc, new core.Animation(animation));
-  }
   smelt(player);
 }
 
 function leaveRoom({ player }) {
   inRoom.delete(player);
+  Machinery.leave(player);
   player.getPacketSender().closeSubInterface(OVERLAY_HUD_UID);
 }
 
 function logout({ player }) {
   inRoom.delete(player);
+  Machinery.leave(player);
   pouring.delete(player);
   for (const ore of belt.filter((entry) => entry.player === player)) {
     if (ore.npc) pluginApi.removeNpc(ore.npc);
@@ -246,6 +248,14 @@ function openAnvilGate({ player, objectId }) {
 // --- The coffer.
 
 function useCoffer({ player }) {
+  // Other minigames' "Coffer" locs (Bounty Hunter) fall through to their own handlers.
+  const location = player.getLocation();
+  if (location.getX() < ROOM.minX || location.getX() > ROOM.maxX ||
+      location.getY() < ROOM.minY || location.getY() > ROOM.maxY || location.getZ() !== 0) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "blast-furnace-coffer", resume: () => useCoffer({ player }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (stateOf(player).coffer === 0 && coins(player) === 0) {
     coinsStatement(player, "There are no coins in the coffer or your inventory.");
     return;
@@ -287,7 +297,7 @@ function withdrawCoins(player, amount) {
 
 function foremanCondition({ player, npcId, text, stepId }) {
   if (npcId !== core.NpcIdentifiers.BLAST_FURNACE_FOREMAN) return null;
-  const level = smithingLevel(player);
+  const level = player.getSkillManager().getMaxLevel(core.Skill.SMITHING);
   const fee = stepId === CHARM_COIN_CONDITION ? CHARM_FEE : FOREMAN_FEE;
   const answers = {
     "If the player has at least 60 Smithing:": level >= FREE_SMITHING_LEVEL,
@@ -328,16 +338,17 @@ function primaryTotal(state) {
 /** Puts every ore the player carries (or just `onlyItemId`) on the belt, up to the pot's limits. */
 function putOre(player, onlyItemId = null) {
   const state = stateOf(player);
-  if (state.coffer === 0) {
+  if (Machinery.automated() && state.coffer === 0) {
     coinsStatement(player, "You must put money in the coffer to pay the workers.");
     return;
   }
-  if (smithingLevel(player) < FREE_SMITHING_LEVEL && Date.now() > state.permitUntil) {
+  if (!freeSmithing(player) && Date.now() > state.permitUntil) {
     statement(player, "You must ask the foreman's permission before using the blast furnace.");
     return;
   }
   const inventory = player.getInventory();
-  const ores = ORES.filter((ore) => (onlyItemId === null || ore.item === onlyItemId) && inventory.getAmount(ore.item) > 0);
+  const ores = ORES.filter((ore) => (onlyItemId === null || ore.item === onlyItemId) &&
+    inventory.getAmount(ore.item) > 0);
   if (!ores.length) {
     statement(player, "You don't have any suitable ores to place onto the conveyor belt.");
     return;
@@ -351,7 +362,9 @@ function putOre(player, onlyItemId = null) {
     }
     const held = inventory.getAmount(ore.item);
     const room = ore.primary ? PRIMARY_LIMIT - primaryTotal(state) : SECONDARY_LIMIT - (state.ores[ore.item] ?? 0);
-    const count = Math.min(held, room);
+    const limit = ore.item === core.ItemIdentifiers.NICKEL_ORE
+      ? Math.min(room, NICKEL_LIMIT - (state.ores[ore.item] ?? 0)) : room;
+    const count = Math.min(held, limit);
     if (count < held) overflow = true;
     if (count <= 0) continue;
     inventory.deleteNumber(ore.item, count);
@@ -366,19 +379,43 @@ function putOre(player, onlyItemId = null) {
   } else if (moved) {
     player.sendMessage("All your ore goes onto the conveyor belt.");
   }
+  if (moved) syncContents(player);
 }
 
 function putOreOnBelt({ player }) {
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "blast-furnace-belt", resume: () => putOreOnBelt({ player }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   putOre(player);
 }
 
 function useOreOnBelt({ player, itemId }) {
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "blast-furnace-belt", resume: () => useOreOnBelt({ player, itemId }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   putOre(player, itemId);
 }
 
 function checkPot({ player }) {
   const { ores } = stateOf(player);
-  listPages(player, ORES.map((ore) => `${itemName(ore.item)}: ${ores[ore.item] ?? 0}`));
+  // Prompt wording is ours; no live capture of this menu yet.
+  pluginApi.sendMultiChatboxPrompt(player, "Melting pot",
+    "Check contents.", () => listPages(player, ORES.map((ore) => `${itemName(ore.item)}: ${ores[ore.item] ?? 0}`)),
+    "Empty the furnace.", () => pluginApi.sendMultiChatboxPrompt(player, "Destroy all ore in the furnace?",
+      "Yes, destroy it.", () => emptyPot(player), "No.", () => {}),
+    "Cancel.", () => player.getPacketSender().sendInterfaceRemoval());
+}
+
+function emptyPot(player) {
+  stateOf(player).ores = {};
+  for (const ore of [...belt]) {
+    if (ore.player !== player) continue;
+    if (ore.npc) pluginApi.removeNpc(ore.npc);
+    belt.splice(belt.indexOf(ore), 1);
+  }
+  syncContents(player);
 }
 
 function barXp(player, bar) {
@@ -391,6 +428,8 @@ function barXp(player, bar) {
 
 /** Turns the pot's ore into bars, up to 28 of each in the dispenser, and pours them. */
 function smelt(player) {
+  if (belt.some((ore) => ore.player === player)) return;
+  if (!Machinery.canSmelt() || Machinery.automated() && stateOf(player).coffer === 0) return;
   const state = stateOf(player);
   let made = false;
   for (const bar of BARS) {
@@ -402,8 +441,9 @@ function smelt(player) {
     player.getSkillManager().addExperiences(core.Skill.SMITHING, barXp(player, bar) * count);
     made = true;
   }
-  syncContents(player);
   if (!made) return;
+  syncContents(player);
+  Machinery.contribution();
   pouring.set(player, 0);
   setDispenser(player, DISPENSER_POURING);
   const dispenser = core.MapObjects.get(BAR_DISPENSER, new core.Location(...BAR_DISPENSER_TILE, 0), null);
@@ -423,6 +463,7 @@ function cool(player) {
 }
 
 function takeBars({ player }) {
+  if (dispenserState(player) === DISPENSER_POURING) return;
   const state = stateOf(player);
   if (dispenserState(player) === DISPENSER_HOT) {
     if (!wearsColdGloves(player)) {
@@ -446,11 +487,17 @@ function takeBars({ player }) {
 }
 
 function take(player, barId, amount) {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || dispenserState(player) === DISPENSER_POURING) return;
+  if (dispenserState(player) === DISPENSER_HOT) {
+    if (!wearsColdGloves(player)) return;
+    cool(player);
+  }
   const state = stateOf(player);
   const count = Math.min(amount, state.bars[barId] ?? 0, player.getInventory().getFreeSlots());
   if (count <= 0) return;
   state.bars[barId] -= count;
   player.getInventory().addItem(new core.Item(barId, count));
+  syncContents(player);
   if (!Object.values(state.bars).some((left) => left > 0)) setDispenser(player, DISPENSER_EMPTY);
   // Ore held back by a full dispenser smelts now there's room.
   smelt(player);
@@ -466,14 +513,17 @@ function coolWithWater(event) {
   const { player, objectId, itemId } = event;
   if (objectId !== BAR_DISPENSER || itemId !== core.ItemIdentifiers.BUCKET_OF_WATER) return;
   event.handled = true;
-  if (dispenserState(player) !== DISPENSER_HOT) {
+  const recipients = [...new Set([player, ...inRoom])].filter((other) =>
+    dispenserState(other) === DISPENSER_HOT &&
+    other.getLocation().isWithinDistance(new core.Location(...BAR_DISPENSER_TILE, 0), 5));
+  if (!recipients.length) {
     player.sendMessage("Nothing interesting happens.");
     return;
   }
   player.performAnimation(new core.Animation(THROW_WATER_ANIMATION));
   player.getInventory().deleteNumber(core.ItemIdentifiers.BUCKET_OF_WATER, 1);
   player.getInventory().addItem(new core.Item(core.ItemIdentifiers.BUCKET, 1));
-  cool(player);
+  for (const recipient of recipients) cool(recipient);
 }
 
 function fillBucket({ player }) {
@@ -490,6 +540,7 @@ function fillBucket({ player }) {
 }
 
 function readGauge({ player }) {
+  Machinery.contribute(player);
   player.getPacketSender().sendInterface(TEMPERATURE_GAUGE_INTERFACE);
 }
 
@@ -497,6 +548,7 @@ function readGauge({ player }) {
 
 function tickBelt() {
   for (const ore of [...belt]) {
+    if (!Machinery.beltRunning() || Machinery.automated() && stateOf(ore.player).coffer === 0) continue;
     ore.tiles++;
     if (ore.tiles <= BELT_TILES) {
       ore.npc?.moveTo(new core.Location(BELT_START[0], BELT_START[1] - ore.tiles, 0));
@@ -518,6 +570,7 @@ function tickDispensers() {
 }
 
 function tickCoffers() {
+  if (!Machinery.automated()) return;
   for (const player of inRoom) {
     const state = stateOf(player);
     if (state.coffer === 0) continue;
@@ -528,9 +581,23 @@ function tickCoffers() {
 
 /** Dispensers before the belt, so bars poured this tick start counting next tick. */
 function tick() {
+  Machinery.tick();
   tickCoffers();
   tickDispensers();
   tickBelt();
+  for (const player of inRoom) {
+    Machinery.sync(player);
+    if (!Machinery.automated() && !belt.some((ore) => ore.player === player)) smelt(player);
+  }
+}
+
+function registerArea() {
+  class BlastFurnaceArea extends core.Area {
+    postEnter(mobile) { if (mobile.isPlayer()) enterRoom({ player: mobile }); }
+    postLeave(mobile, logout) { if (mobile.isPlayer()) leaveRoom({ player: mobile }); }
+    canAttack(attacker, target) { return attacker.isPlayer() && target.isPlayer() ? false : null; }
+  }
+  pluginApi.registerArea(new BlastFurnaceArea([new core.Boundary(ROOM.minX, ROOM.maxX, ROOM.minY, ROOM.maxY, 0)]));
 }
 
 function start() {
@@ -544,14 +611,14 @@ function start() {
 module.exports = {
   name: "BlastFurnace",
   members: true,
-  _test: { init, tick, stateOf, putOre, smelt, takeBars, take, foremanCondition, foremanPaid, enterRoom, coolWithWater, stairs },
+  _test: { init, tick, stateOf, putOre, smelt, takeBars, take, foremanCondition, foremanPaid, enterRoom, leaveRoom, logout, coolWithWater, stairs, checkPot },
   register(api) {
     init(api);
+    Machinery.attach(api);
+    registerArea();
     api.persistAttribute(STATE_ATTRIBUTE);
     api.onServerStartup(start);
     api.onPlayerLogout(logout);
-    api.onZoneEnter(ROOM, enterRoom);
-    api.onZoneExit(ROOM, leaveRoom);
     api.onObjectInteraction("Stairs", { "Climb-down": stairs, "Climb-up": stairs });
     api.onObjectInteraction("Gate", { Open: openAnvilGate });
     api.onObjectInteraction("Coffer", { Use: useCoffer });
@@ -564,6 +631,8 @@ module.exports = {
     for (const ore of ["Coal", "Tin ore", "Copper ore", "Iron ore", "Silver ore", "Gold ore", "Mithril ore", "Adamantite ore", "Runite ore"]) {
       api.onItemOnObject(ore, "Conveyor belt", useOreOnBelt, { noted: false });
     }
+    api.onItemOnObject("Lead ore", "Conveyor belt", useOreOnBelt, { noted: false });
+    api.onItemOnObject("Nickel ore", "Conveyor belt", useOreOnBelt, { noted: false });
     api.onItemOnObject(coolWithWater);
     api.onNpcInteraction("Blast Furnace Foreman", { Pay: payForeman });
     api.onNpcDialogueCondition(foremanCondition);

@@ -13,6 +13,8 @@
 //   --radius <tiles>                   how far an existing spawn may be from the Wiki's (default 4)
 //   --report <file>                    write each map square's gaps as JSON instead (nothing is written)
 //   --only <label>                     add only spawns with this label (e.g. "Sailing sea creature")
+//   --repair-identities                reconcile misidentified literal IDs from Wiki/cache evidence
+//   --spawns <file>                    alternate spawn input/output (default npc-spawns.json)
 //
 // data/definitions/npc-spawn-sync.json holds lasting decisions: cache NPC categories, NPC ids, NPC
 // names (exact or by pattern), Wiki page patterns and areas to label (sea creatures, doors tsps handles as objects, Leagues and
@@ -44,7 +46,7 @@ import path = require("path");
 import { CachePipeline } from "../src/main/typescript/elvarg/game/cache/CachePipeline";
 import { CacheDefinitions } from "../src/main/typescript/elvarg/game/cache/CacheDefinitions";
 
-const { versionIds, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, planAdditions, squareOf, parseLocLines, locationName } = require("./npc-spawn-matching.cjs");
+const { versionIds, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, planAdditions, reconcileIdentities, squareOf, parseLocLines, locationName } = require("./npc-spawn-matching.cjs");
 
 const WIKI_API = "https://oldschool.runescape.wiki/api.php";
 const USER_AGENT = "tsps-npc-spawns (https://github.com/RSPSApp/tsps)";
@@ -202,8 +204,34 @@ function readJson(file: string): any {
     return JSON.parse(fs.readFileSync(path.join(DEFINITIONS, file), "utf8"));
 }
 
-function format(spawns: Spawn[]): string {
-    return `[\n${spawns.map((spawn) => `  ${JSON.stringify(spawn)}`).join(",\n")}\n]\n`;
+/** Validate one record per line, retaining authored whitespace on untouched records. */
+function spawnLines(source: string, spawns: Spawn[], eol: string): string[] {
+    const lines = source.split(eol);
+    const fail = () => { throw new Error("npc-spawns.json isn't in the expected one-spawn-per-line format; not touching it"); };
+    if (lines[0] !== "[" || lines[lines.length - 1] !== "" || lines[lines.length - 2] !== "]") return fail();
+    const rows = lines.slice(1, -2);
+    if (spawns.length === 0 && rows.length === 1 && rows[0] === "") return [];
+    if (rows.length !== spawns.length) return fail();
+    rows.forEach((line, i) => {
+        const trimmed = line.trim();
+        const json = i < rows.length - 1 ? trimmed.slice(0, -1) : trimmed;
+        if (!/^\s+\{/.test(line) || (i < rows.length - 1 && !trimmed.endsWith(","))) return fail();
+        try { if (JSON.stringify(JSON.parse(json)) !== JSON.stringify(spawns[i])) return fail(); }
+        catch { return fail(); }
+    });
+    return rows;
+}
+
+function renderSpawns(original: Spawn[], rows: string[], updated: Spawn[], additions: Spawn[], eol: string): string {
+    const rendered = updated.map((spawn, i) => {
+        if (JSON.stringify(spawn) === JSON.stringify(original[i])) return rows[i];
+        const indent = rows[i].match(/^\s*/)?.[0] ?? "  ";
+        const trailing = rows[i].match(/\s*$/)?.[0] ?? "";
+        return `${indent}${JSON.stringify(spawn)}${i < updated.length - 1 ? "," : ""}${trailing}`;
+    });
+    if (additions.length && rendered.length) rendered[rendered.length - 1] = rendered[rendered.length - 1].replace(/(\s*)$/, ",$1");
+    rendered.push(...additions.map((spawn, i) => `  ${JSON.stringify(spawn)}${i < additions.length - 1 ? "," : ""}`));
+    return `[${eol}${rendered.join(eol)}${eol}]${eol}`;
 }
 
 /** "sx,sy,plane" of each map square -> the place names the Wiki gives spawns in it. */
@@ -254,6 +282,8 @@ function decide(decisions: any, id: number, name: string, page: string, at: { x:
 
 async function main() {
     const reportFile = argValues("--report")[0];
+    const repairIdentities = process.argv.includes("--repair-identities");
+    if (reportFile && repairIdentities) throw new Error("Use --repair-identities without --report; its dry run lists repairs and unresolved identities.");
     const boxes = argValues("--box").map(parseBox);
     if (boxes.length === 0 && reportFile) boxes.push(parseBox("0,0,16383,16383"));
     if (boxes.length === 0) throw new Error("Give the area with --box minX,minY,maxX,maxY[,plane]");
@@ -268,9 +298,11 @@ async function main() {
     const decisions = readJson("npc-spawn-sync.json");
 
     await CachePipeline.initialize(path.resolve(__dirname, ".."));
-    const source = fs.readFileSync(SPAWNS_FILE, "utf8");
+    const spawnsFile = path.resolve(argValues("--spawns")[0] ?? SPAWNS_FILE);
+    const source = fs.readFileSync(spawnsFile, "utf8");
     const spawns: Spawn[] = JSON.parse(source);
-    if (format(spawns) !== source) throw new Error("npc-spawns.json isn't in the expected one-spawn-per-line format; not touching it");
+    const eol = source.includes("\r\n") ? "\r\n" : "\n";
+    const lines = spawnLines(source, spawns, eol);
     const usage = new Map<number, number>();
     for (const spawn of spawns) if (spawn.id !== undefined) usage.set(spawn.id, (usage.get(spawn.id) ?? 0) + 1);
 
@@ -287,6 +319,7 @@ async function main() {
     });
     const unresolved: WikiSpawn[] = [];
     const candidates: Candidate[] = [];
+    const identityEvidence: Candidate[] = [];
     // The Wiki can list one spawn twice: on another map layer drawing the place again (Kalrag's
     // Lair "during Song of the Elves", which aligns onto the same tiles), on two pages of one NPC
     // (Sheep and Sheep (Zanaris)), or in two LocLines of one page (the Stronghold's minotaurs, once
@@ -294,6 +327,18 @@ async function main() {
     const listed = new Set<string>();
     for (const spawn of placed) {
         if (!inBoxes(spawn, boxes) || skipped.has(nameKey(spawn.page))) continue;
+        // Repairs retain raw alternatives before add-only ID selection/deduplication.
+        if (repairIdentities) for (const id of new Set<number>(spawn.versions.flatMap(version => version.ids))) {
+            const name = npcName(id);
+            if (!name || name === "null" || skipped.has(nameKey(name))) continue;
+            const entry: Candidate = { level: spawn.level, name, x: spawn.x, y: spawn.y, id,
+                page: spawn.page, ...decide(decisions, id, name, spawn.page, spawn) };
+            if (spawn.unaligned) {
+                entry.flags.push(`${unaligned.label} (${spawn.mapId})`);
+                entry.skip ||= unaligned.skip;
+            }
+            identityEvidence.push(entry);
+        }
         const id = chooseId(spawn.page, spawn.versions, tags, overrides, usage);
         if (id === null) {
             // Historical and event pages have no real ids; only newer-than-cache NPCs are worth a line.
@@ -314,10 +359,15 @@ async function main() {
         if (radiusOf !== undefined) entry.wanderRadius = radiusOf;
         candidates.push(entry);
     }
-    const existing = named.filter((spawn) => inBoxes(spawn, boxes));
-    const plan = planAdditions(candidates, existing, radius);
     const only = argValues("--only");
-    const add: Candidate[] = plan.add.filter((spawn: Candidate) => !spawn.skip && (only.length === 0 || only.some((label) => spawn.flags.includes(label))));
+    const eligible = (spawn: Candidate) => !spawn.skip && (only.length === 0 || only.some((label) => spawn.flags.includes(label)));
+    const identities = repairIdentities
+        ? reconcileIdentities(spawns, identityEvidence.filter(eligible), npcName, radius, (spawn: Spawn) => inBoxes(spawn, boxes))
+        : { spawns, repairs: [], unresolved: [] };
+    const existing = identities.spawns.filter((spawn: Spawn) => inBoxes(spawn, boxes)).map((spawn: Spawn) =>
+        ({ ...spawn, name: spawn.name ?? (spawn.id !== undefined ? npcName(spawn.id) : undefined) }));
+    const plan = planAdditions(candidates, existing, radius);
+    const add: Candidate[] = plan.add.filter(eligible);
 
     const drops = readJson("npc-drops.json").npcs ?? {};
     const stats = readJson("monsters-complete.json");
@@ -329,6 +379,8 @@ async function main() {
     }
 
     console.log(`Wiki spawns in the area: ${candidates.length}; existing spawns: ${existing.length}; to add: ${add.length}`);
+    for (const repair of identities.repairs) console.log(`  Repair ${repair.name} at ${repair.x},${repair.y},${repair.level}: id ${repair.previousId} -> ${repair.id} (Wiki ${repair.page}, confirmed by cache)`);
+    for (const row of identities.unresolved) console.log(`  Unresolved identity ${row.name} (${row.id}) at ${row.x},${row.y},${row.level}: ${row.reason}`);
     for (const row of plan.report) {
         const adding = add.filter((spawn) => nameKey(spawn.name) === nameKey(row.name) && spawn.level === row.level);
         const ids = [...new Set(adding.map((spawn) => spawn.id))];
@@ -342,10 +394,11 @@ async function main() {
         console.log(`  ${npcName(id)} (${id}) fights but has no ${!drops[id] ? "drop table" : ""}${!drops[id] && !stats[id] ? " or " : ""}${!stats[id] ? "stats" : ""}: rerun the drop dumper`);
     }
 
-    if (!write) { console.log(add.length ? "Dry run: add --write to add them." : "Nothing to add."); return; }
+    if (!write) { console.log(add.length || identities.repairs.length ? "Dry run: add --write to apply." : "Nothing to add or repair."); return; }
     const written = add.map(({ page, flags, skip, ...spawn }) => spawn);
-    if (written.length) fs.writeFileSync(SPAWNS_FILE, format([...spawns, ...written]));
+    if (written.length || identities.repairs.length) fs.writeFileSync(spawnsFile, renderSpawns(spawns, lines, identities.spawns, written, eol));
     console.log(`Wrote ${written.length} spawn(s) to npc-spawns.json.`);
+    if (repairIdentities) console.log(`Repaired ${identities.repairs.length} spawn identity/identities; ${identities.unresolved.length} unresolved.`);
 }
 
 /**

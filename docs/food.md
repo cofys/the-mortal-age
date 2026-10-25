@@ -44,8 +44,38 @@ need no id lists. Tests: `server/tests/food-effects.test.cjs` and `eat-attack-de
 | `leaves` | The item left after the last bite (`Pie dish`, `Bowl`). |
 | `boost`, `drain`, `restore` | Skills by name and amount: a boost to base + amount, a drain from it, a restore up to base. Restore amounts may be `{ "flat", "percent" }` of the base level. |
 | `stamina`, `area`, `option` | Apply the shared stamina effect, require a `food:area` scene check, or consume via a cache action other than Eat. |
-| `runEnergy`, `curePoison`, `poisonImmunity` | Run energy restored, poison and venom cured, seconds of poison immunity. |
+| `runEnergy`, `curePoison`, `cureVenom`, `poisonImmunity` | Run energy restored; ordinary poison cured/venom converted to poison; explicit full poison-and-venom cure; seconds of poison immunity. |
 | `then` | A second heal `ticks` later, with its own effects (hunter meats, 7 ticks). A newer one replaces a pending one. |
+
+## Poison treatments
+
+Checked 24 October 2026 against [Guthix rest](https://oldschool.runescape.wiki/w/Guthix_rest),
+[cooked moonlight antelope](https://oldschool.runescape.wiki/w/Cooked_moonlight_antelope),
+and [Venom](https://oldschool.runescape.wiki/w/Venom):
+
+- Guthix rest converts venom to ordinary poison at the same damage, or reduces
+  existing poison damage by one. A conversion does not also reduce damage on
+  that dose. It restores 5 run energy and heals 5 HP, allowing a boost up to
+  base +5 when already at full HP; it never lowers a higher existing overheal.
+- Moonlight antelope's secondary heal, seven task ticks after eating, removes
+  poison or converts venom at matching damage. Neither treatment grants or
+  replaces immunity. Another hunter meat replaces the pending heal/cure;
+  ordinary food and potion effects do not replace it.
+- Strange fruit explicitly requests the full venom cure and retains its existing
+  short protection and energy restoration.
+
+The shared `ConsumableEffects.curePoison(player, damageReduction)` defaults to
+removing ordinary poison, with an optional reduction in displayed hit damage.
+The server represents poison as five severity points per starting damage and
+venom as direct damage. Conversion preserves damage through that representation
+without submitting or restarting a poison task. The existing explicit
+`curePoisonAndVenom` remains a full purge for callers that need it.
+
+Regressions in `tests/food-poison-treatments.test.cjs` use real Player poison
+fields and CountdownTask ticks, covering treatment stages, expiry timing,
+replacement, death, overheal boundaries and existing immunity. Potion intake,
+quest unlocks, broader antidote/anti-venom tiers and orb remedy selection remain
+separate audits; this correction does not establish complete food/potion parity.
 | `outcomes` | A table of results by `weight`, each with its heal, boosts, drains, `drainRandom` (a random skill but Hitpoints) and messages (kebabs). |
 | `special` | `anglerfish`: its heal from the eater's Hitpoints level (the level levelled up to, not the health left) and its overheal (not in combat in a PvP area). |
 | `wildernessOnly` | Can only be eaten in the Wilderness (blighted food). |
@@ -73,3 +103,53 @@ handled by another plugin (Poisoned cheese, White pearl, ToA's Honey locust, Cas
 use Heal); quest, event and minigame items with their own effects (rock cakes, poison karambwan,
 nightshade, Servery food); event sweets and candy; food only eaten in one
 area (Vampyrium); unobtainable items; and the whole watermelon, which is sliced first.
+
+## Guthix rest recipe permission
+
+The [Guthix rest Wiki page](https://oldschool.runescape.wiki/w/Guthix_rest) says
+Sanfew's recipe explanation during One Small Favour unlocks both making and
+drinking the tea. Making requires 18 Herblore; drinking has no Herblore gate.
+
+One Small Favour owns this permission. Its stage 11 starts before the explanation,
+so continuing past the imported Sanfew recipe line persists the false-default
+`one-small-favour:guthix-rest-learned` flag. Later quest stages already imply
+the lesson was completed, including existing saves without the new flag.
+Interrupting the conversation before completing that line does not unlock it.
+
+Potions emits `potions:validate-drink` with `{ player, itemId, allowed, message }`
+after its normal area/food checks and before dose consumption, effects or
+cooldowns. A content plugin can deny the drink and supply the reason. This keeps
+quest rules in their quest plugin and applies to each normal potion entry point.
+
+`tests/guthix-rest-unlock.test.cjs` covers all four doses, early/later stages,
+dialogue continuation, denied ingredient preservation and the making-only level
+gate. An unlearned player also cannot skip the lesson by handing purchased tea
+to Bleemadge and advancing the quest. This correction retains the existing simplified, single-step brewing
+recipe; it does not claim the staged live-game tea preparation is implemented.
+
+## Hitpoints orb potion selection
+
+The [Poison Wiki page](https://oldschool.runescape.wiki/w/Poison) describes
+preferring stronger remedies, then the least-dosed vessel of the remedy, with
+inventory order breaking dose ties. [Venom](https://oldschool.runescape.wiki/w/Venom)
+also lists Guthix rest as an applicable partial treatment and puts potions ahead
+of other remedies.
+
+The potion handler selects the strongest supported treatment family, then its
+least-dosed vessel, retaining the first slot for a dose tie. Selection uses the
+registered dose chains; consuming the selected vessel still goes through the
+normal drink restrictions, effects, messages, animation and cooldowns.
+Guthix rest is available as a partial treatment when no stronger supported
+potion is carried.
+
+Relative strength follows the Wiki's increasing poison protection tiers and
+explicit anti-venom upgrades. Antipoison/mix, superantipoison/Sanfew, and
+Antidote+/mix share their respective treatment strength. Different families at
+the same strength retain their existing inventory precedence: their exact live
+tie priority has not been established. Non-potion fallback selection and remedies
+not yet registered by Potions remain separate work; this does not establish
+complete health-orb or poison/venom parity.
+
+`tests/health-orb-potion-selection.test.cjs` checks all pairwise supported tier
+comparisons for both afflictions, dose ties, mixes, partial tea, noted items,
+unrelated potions and the existing drink cooldown.

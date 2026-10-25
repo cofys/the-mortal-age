@@ -1002,6 +1002,60 @@ test('unmatched pvp bots walk between seek retries; overlays return to their act
   assert.deepEqual(calls, ['fight']);
 });
 
+test('the PvP action and controller retaliate against bot attacks without a player-click event', () => {
+  const { PvpValidateEngagementNode } = require('../plugins/bots/behaviours/nodes/pvp/PvpValidateEngagementNode.PlayerBots');
+  const { CanAttackResponse } = require('../dist/game/content/combat/CombatFactory');
+  const actor = (name) => ({ ...fakePlayer(name), isPlayer: () => true,
+    isRegistered: () => true, getHitpoints: () => 99, busy: () => false });
+  const player = actor('defender'), quarry = actor('assigned-target'), attacker = actor('rogue');
+  let combatTarget = null, incoming = attacker, permitted = true;
+  const attacks = [];
+  player.getCombat = () => ({ getTarget: () => combatTarget, getAttacker: () => incoming,
+    attack: (target) => { attacks.push(target); combatTarget = target; } });
+  const state = { mode: 'pvp', pvp: {} };
+  const controller = Object.create(PvpController.prototype);
+  const pass = { tick: () => ({ handled: false }) };
+  Object.assign(controller, {
+    botStatesByName: new Map([[player.getUsername(), state]]), behaviorMode: { PVP: 'pvp' },
+    ServerPerf: { measurePhase: (_, fn) => fn() }, ensureLoadout() {},
+    replenishAfterKillNode: pass, jumpKilledTargetNode: pass,
+    freezeAndKiteNode: { ...pass, maybeMoveBetweenHits() {} }, vengeanceNode: pass,
+    combatExecutionNode: { tick: () => 'running' }, getProfile: () => ({}),
+    CombatFactory: { getMethod: () => null, canAttackPermission: (_, target) =>
+      permitted || target !== attacker ? CanAttackResponse.CAN_ATTACK : CanAttackResponse.CANT_ATTACK_IN_AREA },
+  });
+  controller.validateEngagementNode = new PvpValidateEngagementNode({
+    api: { getAreaManager: () => ({ inMulti: () => false }), getCombatFactory: () => controller.CombatFactory },
+    resolveTargetPlayer: (state) => state.pvp.targetPlayer,
+    isValidTarget: controller.isValidTarget.bind(controller),
+  });
+  const action = createPvpCombatAction({}, controller);
+  const tick = () => action.update({ player, state, nowMs: 1000 });
+  const pursue = () => { combatTarget = quarry; state.pvp = {
+    targetPlayer: quarry, targetUsername: quarry.getUsername(), endsAt: 10_000,
+  }; attacks.length = 0; };
+
+  tick();
+  assert.equal(attacks.at(-1), attacker, 'an unmatched bot also fights back');
+  pursue();
+  tick();
+  assert.equal(attacks.at(-1), attacker, 'an assigned quarry cannot lock out retaliation');
+  assert.equal(state.pvp.targetUsername, attacker.getUsername());
+  assert.ok(state.pvp.endsAt > 1000);
+
+  for (const invalid of [
+    null, { ...attacker, getHitpoints: () => 0 }, { ...attacker, isRegistered: () => false },
+    { ...attacker, isPlayer: () => false }, { ...attacker, getPrivateArea: () => ({}) },
+  ]) {
+    pursue(); incoming = invalid; tick();
+    assert.equal(state.pvp.targetPlayer, quarry, 'invalid or absent attackers cannot replace the quarry');
+    assert.equal(attacks.length, 0);
+  }
+  pursue(); incoming = attacker; permitted = false; tick();
+  assert.equal(state.pvp.targetPlayer, quarry, 'retaliation respects combat permissions');
+  assert.equal(attacks.length, 0);
+});
+
 test('idle pvp walking stays inside its hotspot and pauses for movement or combat', () => {
   const hotspot = getWildernessHotspot('edge_mains');
   const { x: spotX, y: spotY } = hotspot.anchor;

@@ -73,6 +73,8 @@ function harvestHespori(player, patch) {
     const fight = { player, patch, area, boss: null, flowers: [], phase: 0, attacks: 0, vinesUntil: 0, escapeClicks: 0 };
     FIGHTS.set(player, fight);
     fight.boss = spawn(fight, core.NpcIdentifiers.HESPORI, patch.x, patch.y);
+    // https://oldschool.runescape.wiki/w/Hespori: immune to ring-of-recoil damage.
+    fight.boss.setAttribute(core.CombatFactory.RECOIL_IMMUNE_ATTRIBUTE, true);
     fight.boss.setHitpoints(300);
     fight.maxHitpoints = 300;
     fight.boss.performAnimation(new core.Animation(ANIMATION.SPAWN));
@@ -238,13 +240,20 @@ function hesporiNpc(event) {
     Patches.choose(player, [[farm.deathbankPaid ? "Collect your items" : "Retrieve items (25,000 coins)", () => {
         if (!player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
         if (!farm.deathbankPaid) {
-            if (player.getInventory().getAmount(Data.itemId("Coins")) < 25000) { player.sendMessage("You need 25,000 coins."); return; }
-            player.getInventory().deleteNumber(Data.itemId("Coins"), 25000);
+            if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < 25000) { player.sendMessage("You need 25,000 coins."); return; }
+            player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, 25000);
             farm.deathbankPaid = true;
         }
-        while (farm.deathbank.length && player.getInventory().getFreeSlots()) {
-            const saved = farm.deathbank.shift();
-            player.getInventory().addItem(new core.Item(saved.id, saved.amount, saved.meta));
+        const inventory = player.getInventory();
+        for (let index = 0; index < farm.deathbank.length;) {
+            const saved = farm.deathbank[index];
+            const item = new core.Item(saved.id, saved.amount, saved.meta);
+            const amount = inventory.getAddableAmount(item);
+            if (amount <= 0) { index++; continue; }
+            inventory.addItem(item.setAmount(amount));
+            saved.amount -= amount;
+            if (saved.amount <= 0) farm.deathbank.splice(index, 1);
+            else index++;
         }
     }]]);
 }

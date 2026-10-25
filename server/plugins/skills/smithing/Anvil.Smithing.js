@@ -9,16 +9,20 @@
  * (898) on the same tick, then each item comes 3 ticks later and every 5 after, with "You hammer
  * the steel and make ten dart tips." Smith with no bar: a message box "You should select an item
  * from your inventory and use it on the anvil."
+ *
+ * The Smiths' uniform (Wiki): each piece is a 20% chance (the full set 100%) that an item takes
+ * 4 ticks instead of 5.
  */
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
 const Godswords = require("./Godswords.Smithing");
 const DragonShields = require("./DragonShields.Smithing");
-const { hasHammer, messageBox, varbit, varp, hammering } = require("./Common.Smithing");
+const { hasHammer, messageBox, varbit, varp, hammering, smithsUniformChance } = require("./Common.Smithing");
 
 const MAIN_MODAL = "toplevel_osrs_stretch:mainmodal";
 const SMITHING_INTERVAL_TICKS = 5;
+const UNIFORM_INTERVAL_TICKS = 4;
 const FIRST_DELAY_TICKS = 3;
 const NO_BAR_MESSAGE = "You should select an item from your inventory and use it on the anvil.";
 const ALL_QUANTITY_CAP = 28;
@@ -95,6 +99,11 @@ function smithOnce(player, product) {
   return true;
 }
 
+/** The ticks to the next item: 4 on a Smiths' uniform roll, otherwise 5. */
+function smithingInterval(player) {
+  return Math.random() < smithsUniformChance(player) ? UNIFORM_INTERVAL_TICKS : SMITHING_INTERVAL_TICKS;
+}
+
 function startSmithing(player, product, amount) {
   if (!product || !Number.isInteger(amount) || amount <= 0 || !unlocked(player, product) || !canSmith(player, product)) return false;
   // All and X stop at what the bars cover, without an out-of-bars message.
@@ -102,7 +111,7 @@ function startSmithing(player, product, amount) {
   Sessions.start(player, {
     type: "smith",
     remaining: Math.min(amount, most),
-    interval: SMITHING_INTERVAL_TICKS,
+    interval: smithingInterval,
     firstDelay: FIRST_DELAY_TICKS,
     step: (smith) => smithOnce(smith, product),
   });
@@ -268,4 +277,4 @@ module.exports = function attach(api) {
   api.onInterfaceActionButton(range(FIRST_PRODUCT_COMPONENT, LAST_PRODUCT_COMPONENT).map(buttonId), chooseProduct);
 };
 
-Object.assign(module.exports, { ANVIL_NAMES: ["Anvil", "An experimental anvil", "Rusted anvil"], useOnAnvil, forget });
+Object.assign(module.exports, { ANVIL_NAMES: ["Anvil", "An experimental anvil", "Rusted anvil"], useOnAnvil, forget, smithingInterval });

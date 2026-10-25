@@ -1,8 +1,10 @@
 /**
  * Helpers shared by the Smithing units: message boxes (optionally running `then` on continue),
- * hammers, the Smithing level, and cache lookups by gameval name.
+ * hammers, the Smithing level, the Smiths' uniform, and cache lookups by gameval name.
  */
 const Core = require("./Core.Smithing");
+// Read directly, not through Core: the Giants' Foundry asks for the uniform too.
+const { ItemIdentifiers: Items } = require("../../../src/main/typescript/elvarg/util/ItemIdentifiers");
 
 function show(player, entry, then) {
   const { DialogueChainBuilder, ActionDialogue } = Core;
@@ -27,6 +29,18 @@ function hasHammer(player) {
   const equipment = player.getEquipment?.();
   const wielded = [Equipment.WEAPON_SLOT, Equipment.SHIELD_SLOT].map((slot) => equipment?.get(slot)?.getId?.());
   return hammers.some((id) => player.getInventory().contains(id) || wielded.includes(id));
+}
+
+/**
+ * The Smiths' uniform (https://oldschool.runescape.wiki/w/Smiths%27_Uniform): "Each piece gives
+ * a 20% chance", "up to a 100% chance with the full set" (tunic, trousers, boots and either
+ * gloves). Used for anvil work and the Giants' Foundry's preform progress.
+ */
+function smithsUniformChance(player) {
+  const equipment = player.getEquipment();
+  const pieces = [Items.SMITHS_TUNIC, Items.SMITHS_TROUSERS, Items.SMITHS_BOOTS].filter((id) => equipment.contains(id)).length
+    + ([Items.SMITHS_GLOVES, Items.SMITHS_GLOVES_I_].some((id) => equipment.contains(id)) ? 1 : 0);
+  return pieces === 4 ? 1 : pieces * 0.2;
 }
 
 function smithingLevel(player) {
@@ -61,4 +75,4 @@ function hammering() {
   return animation("human_smithing");
 }
 
-module.exports = { messageBox, itemBox, hasHammer, smithingLevel, obj, varbit, varp, animation, hammering };
+module.exports = { messageBox, itemBox, hasHammer, smithsUniformChance, smithingLevel, obj, varbit, varp, animation, hammering };

@@ -1,7 +1,7 @@
 {
   "$comment": "What the cache doesn't hold about Smithing. Anvil products (level, bars, amount) come from cache enums 844-846 and their slots from anvil-layout.json (yarn dump:smithing); this file has the furnace recipes and the experience. Item keys are ItemIdentifiers names.",
   "source": "https://oldschool.runescape.wiki/w/Smithing",
-  "$smelting": "Furnace recipes in Smelt-menu order (rsprox captures, rev 227-235 normal worlds: Bronze, Blurite, Iron, Silver, Steel, Gold, Mithril, Adamantite, Runite). Messages: rev 237 captures where docs/smithing.md says so, the same pattern otherwise.",
+  "$smelting": "Furnace recipes in Smelt-menu order (rsprox captures, rev 227-235 normal worlds: Bronze, Blurite, Iron, Silver, Steel, Gold, Mithril, Adamantite, Runite). Messages: rev 237 captures where docs/smithing.md says so, the same pattern otherwise. The newer lead/cupronickel smelt, retrieve and missing-ore messages are our unverified wording, pending live captures.",
   "smelting": [
     {
       "name": "Bronze bar",
@@ -51,6 +51,18 @@
       "missingMessage": "You need at least one silver ore to smelt a silver bar."
     },
     {
+      "name": "Lead bar",
+      "bar": "LEAD_BAR",
+      "level": 25,
+      "xp": 15.5,
+      "ingredients": [["LEAD_ORE", 2]],
+      "barPhrase": "a lead bar",
+      "smeltMessage": "You smelt the lead in the furnace.",
+      "retrieveMessage": "You retrieve a bar of lead.",
+      "missingMessage": "You need at least two lead ore to smelt a lead bar.",
+      "members": true
+    },
+    {
       "name": "Steel bar",
       "bar": "STEEL_BAR",
       "level": 30,
@@ -93,6 +105,18 @@
       "smeltMessage": "You smelt the adamantite in the furnace along with six heaps of coal.",
       "retrieveMessage": "You retrieve a bar of adamantite.",
       "missingMessage": "You need at least one adamantite ore and six coal to smelt an adamantite bar."
+    },
+    {
+      "name": "Cupronickel bar",
+      "bar": "CUPRONICKEL_BAR",
+      "level": 74,
+      "xp": 42,
+      "ingredients": [["COPPER_ORE", 2], ["NICKEL_ORE", 1]],
+      "barPhrase": "a cupronickel bar",
+      "smeltMessage": "You smelt the copper and nickel in the furnace.",
+      "retrieveMessage": "You retrieve a bar of cupronickel.",
+      "missingMessage": "You need at least two copper ore and one nickel ore to smelt a cupronickel bar.",
+      "members": true
     },
     {
       "name": "Runite bar",

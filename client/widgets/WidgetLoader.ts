@@ -222,19 +222,14 @@ export class WidgetLoader {
             }
         }
 
+        // OSRS's legacy format has no child list: a container is its scroll height and hidden
+        // flag, and its children name it as their parent (as IF3 does). Reading the old 317
+        // child list here overran every IF1 container in the cache (247 across 62 groups).
         if (type === 0) {
             w.scrollHeight = buf.readUnsignedShort();
             w.hidden = buf.readUnsignedByte() === 1;
             w.isHidden = w.hidden; // BUGFIX: Sync isHidden for render visibility checks
             w.cachedHidden = w.hidden; // Store original for fallback when scripts change it
-            const count = buf.readUnsignedShort();
-            w.rawChildren = [];
-            for (let i = 0; i < count; i++) {
-                const childId = buf.readUnsignedShort();
-                const childX = buf.readShort();
-                const childY = buf.readShort();
-                w.rawChildren.push({ id: childId, x: childX, y: childY });
-            }
         }
 
         if (type === 1) {
@@ -629,27 +624,7 @@ export class WidgetLoader {
             // The renderer will iterate all widgets and filter by parentUid to find children
             // (This matches OSRS updateInterface which iterates Widget[] and filters by parentId)
 
-            // IF1: Link children defined in Type 0 containers and apply positioning
-            for (const w of widgets.values()) {
-                if (!w.isIf3 && w.type === 0 && w.rawChildren) {
-                    if (!w.children) w.children = [];
-                    for (const rc of w.rawChildren) {
-                        const childUid = (groupId << 16) | (rc.id & 0xffff);
-                        const child = widgets.get(childUid);
-                        if (child) {
-                            // IF1 parents control child position
-                            child.x = rc.x;
-                            child.y = rc.y;
-                            child.parentUid = w.uid;
-
-                            // Avoid duplicates if already linked via parentUid
-                            if (!w.children.includes(child)) {
-                                w.children.push(child);
-                            }
-                        }
-                    }
-                }
-            }
+            // IF1 widgets link to their container through parentUid as well (no child lists).
 
             // Children order comes from cache structure and CC_CREATE at runtime
             // No sorting needed - the natural order should be correct for

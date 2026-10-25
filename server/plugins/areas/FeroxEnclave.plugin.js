@@ -4,11 +4,17 @@
  * Wars free-for-all arena behind the white portal. Each lives in ./ferox/.
  */
 const Ferox = require("./ferox/Common.FeroxEnclave");
+const { isInsideEnclave } = require("./ferox/Bounds.FeroxEnclave");
+
+function allowRandomEvents(request) {
+  if (request.allowed !== false && isInsideEnclave(request.player.getLocation())) request.allowed = true;
+}
 
 module.exports = {
   name: "FeroxEnclave",
   register(api) {
     Ferox.init(api);
+    api.onCustomEvent("random-events:eligibility", allowRandomEvents);
     require("./ferox/Barriers.FeroxEnclave")(api);
     require("./ferox/Pool.FeroxEnclave")(api);
     require("./ferox/FreeForAll.FeroxEnclave")(api);

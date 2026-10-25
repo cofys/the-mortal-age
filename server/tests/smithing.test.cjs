@@ -8,6 +8,8 @@ const { PluginManager } = require("../dist/plugins/PluginManager");
 const { ItemIdentifiers: I } = require("../dist/util/ItemIdentifiers");
 const { Skill } = require("../dist/game/model/Skill");
 const Smithing = require("../plugins/skills/Smithing.plugin");
+const Anvil = require("../plugins/skills/smithing/Anvil.Smithing");
+const Superheat = require("../plugins/skills/smithing/Superheat.Smithing");
 
 const buttons = new Map(), objects = new Map(), itemActions = new Map(), events = new Map(), tasks = [], players = [];
 let disconnect, itemOnObject, CacheDefinitions;
@@ -55,6 +57,7 @@ function playerWith(barId = I.BRONZE_BAR, bars = 27) {
     }),
     getEquipment: () => ({
       get: slot => player.equipped.has(slot) ? { getId: () => player.equipped.get(slot) } : null,
+      contains: id => [...player.equipped.values()].includes(id),
       set: (slot, item) => item.getId() < 0 ? player.equipped.delete(slot) : player.equipped.set(slot, item.getId()),
       refreshItems() {},
     }),
@@ -291,8 +294,8 @@ test("Smelt lists every bar, and smelts on the captured timing", () => {
   objects.get("Furnace").Smelt({ player });
   const menu = lastMenu(player);
   assert.equal(menu.getTitle(), "What would you like to smelt?");
-  assert.deepEqual(menu.getItems(), [I.BRONZE_BAR, I.BLURITE_BAR, I.IRON_BAR, I.SILVER_BAR, I.STEEL_BAR,
-    I.GOLD_BAR, I.MITHRIL_BAR, I.ADAMANTITE_BAR, I.RUNITE_BAR]);
+  assert.deepEqual(menu.getItems(), [I.BRONZE_BAR, I.BLURITE_BAR, I.IRON_BAR, I.SILVER_BAR, I.LEAD_BAR, I.STEEL_BAR,
+    I.GOLD_BAR, I.MITHRIL_BAR, I.ADAMANTITE_BAR, I.CUPRONICKEL_BAR, I.RUNITE_BAR]);
   menu.execute(I.BRONZE_BAR, 2);
   ticks(1);
   assert.equal(player.messages.at(-1), "You smelt the copper and tin together in the furnace.");
@@ -305,6 +308,21 @@ test("Smelt lists every bar, and smelts on the captured timing", () => {
   assert.equal(player.xp, 6.2);
   ticks(5);
   assert.equal(player.items.get(I.BRONZE_BAR), 2);
+});
+
+test("lead and cupronickel stay out of F2P furnace menus and direct starts", (t) => {
+  t.mock.method(PluginManager.getCoreApi().WorldDefinition, "isMembersWorld", () => false);
+  const player = furnaceWith([[I.LEAD_ORE, 2], [I.NICKEL_ORE, 1], [I.COPPER_ORE, 2]]);
+  objects.get("Furnace").Smelt({ player });
+  const listed = lastMenu(player).getItems();
+  assert.ok(!listed.includes(I.LEAD_BAR) && !listed.includes(I.CUPRONICKEL_BAR));
+  const Smelting = require("../plugins/skills/smithing/Smelting.Smithing");
+  const Data = require("../plugins/skills/smithing/Data.Smithing");
+  for (const id of [I.LEAD_BAR, I.CUPRONICKEL_BAR]) {
+    assert.equal(Smelting.startSmelting(player, Data.SMELTING_RECIPES.find((r) => r.barId === id), 1), false);
+  }
+  assert.equal(player.items.get(I.LEAD_ORE), 2);
+  assert.equal(player.xp, 0);
 });
 
 test("Smelt with no ore says so in a message box", () => {
@@ -563,4 +581,120 @@ test("lovakite ore alone isn't ore for a normal furnace", () => {
   objects.get("Furnace").Smelt({ player });
   assert.equal(lastMenu(player), undefined);
   assert.equal(player.statements.length, 1);
+});
+
+// Smithing catalyst (Wiki): a bar that uses coal takes half the coal and one catalyst, for double XP.
+test("a smithing catalyst halves a bar's coal and doubles its XP, one per bar", () => {
+  const player = furnaceWith([[I.IRON_ORE, 2], [I.COAL, 2], [I.SMITHING_CATALYST, 2]]);
+  objects.get("Furnace").Smelt({ player });
+  lastMenu(player).execute(I.STEEL_BAR, 2);
+  ticks(11);
+  assert.equal(player.items.get(I.STEEL_BAR), 2);
+  assert.equal(player.items.get(I.COAL), 0);
+  assert.equal(player.items.get(I.SMITHING_CATALYST), 0);
+  assert.equal(player.xp, 2 * 17.5 * 2);
+});
+
+test("out of catalysts, the next bar takes the full coal; bars without coal leave the catalyst", () => {
+  const player = furnaceWith([[I.IRON_ORE, 2], [I.COAL, 3], [I.SMITHING_CATALYST, 1]]);
+  objects.get("Furnace").Smelt({ player });
+  lastMenu(player).execute(I.STEEL_BAR, 2);
+  ticks(11);
+  assert.equal(player.items.get(I.STEEL_BAR), 2);
+  assert.equal(player.items.get(I.COAL), 0);
+  assert.equal(player.xp, 35 + 17.5);
+
+  const bronze = furnaceWith([[I.COPPER_ORE, 1], [I.TIN_ORE, 1], [I.SMITHING_CATALYST, 1]]);
+  objects.get("Furnace").Smelt({ player: bronze });
+  lastMenu(bronze).execute(I.BRONZE_BAR, 1);
+  ticks(6);
+  assert.equal(bronze.items.get(I.BRONZE_BAR), 1);
+  assert.equal(bronze.items.get(I.SMITHING_CATALYST), 1);
+  assert.equal(bronze.xp, 6.2);
+});
+
+test("with a catalyst, half the coal is enough to choose the bar", () => {
+  const player = furnaceWith([[I.MITHRIL_ORE, 1], [I.COAL, 2], [I.SMITHING_CATALYST, 1]]);
+  objects.get("Furnace").Smelt({ player });
+  lastMenu(player).execute(I.MITHRIL_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.MITHRIL_BAR), 1);
+  assert.equal(player.xp, 60);
+});
+
+test("Varrock armour's second bar takes a second catalyst", (t) => {
+  t.mock.method(Math, "random", () => 0.05);
+  const player = furnaceWith([[I.MITHRIL_ORE, 2], [I.COAL, 4], [I.SMITHING_CATALYST, 2]]);
+  player.equipped.set(4, I.VARROCK_ARMOUR_2);
+  objects.get("Furnace").Smelt({ player, objectId: CacheDefinitions.getLocId("varrock_diary_furnace") });
+  lastMenu(player).execute(I.MITHRIL_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.MITHRIL_BAR), 2);
+  assert.equal(player.items.get(I.COAL), 0);
+  assert.equal(player.items.get(I.SMITHING_CATALYST), 0);
+  assert.equal(player.xp, 2 * 60);
+});
+
+test("Superheat Item makes steel from iron and one coal with a catalyst, at double Smithing XP", () => {
+  const player = furnaceWith([[I.IRON_ORE, 1], [I.COAL, 1], [I.SMITHING_CATALYST, 1]]);
+  const recipe = Superheat.recipeFor(player, I.IRON_ORE);
+  assert.equal(recipe.barId, I.STEEL_BAR);
+  assert.equal(Smithing.smeltingXp(player, recipe), 35);
+  Smithing.consumeIngredients(player, recipe);
+  assert.equal(player.items.get(I.COAL), 0);
+  assert.equal(player.items.get(I.SMITHING_CATALYST), 0);
+  player.items.set(I.IRON_ORE, 1);
+  assert.equal(Superheat.recipeFor(player, I.IRON_ORE).barId, I.IRON_BAR, "no coal left");
+});
+
+// Smiths' uniform (Wiki): each piece a 20% chance, the full set 100%, of a 4-tick item instead of 5.
+test("the Smiths' uniform speeds anvil items from 5 ticks to 4 by chance", (t) => {
+  const player = playerWith();
+  let roll = 0.1;
+  t.mock.method(Math, "random", () => roll);
+  assert.equal(Anvil.smithingInterval(player), 5, "no uniform");
+  player.equipped.set(4, I.SMITHS_TUNIC);
+  assert.equal(Anvil.smithingInterval(player), 4);
+  roll = 0.3;
+  assert.equal(Anvil.smithingInterval(player), 5, "one piece is 20%");
+  player.equipped.set(7, I.SMITHS_TROUSERS);
+  assert.equal(Anvil.smithingInterval(player), 4, "two pieces are 40%");
+  roll = 0.99;
+  player.equipped.set(10, I.SMITHS_BOOTS);
+  assert.equal(Anvil.smithingInterval(player), 5, "three pieces are 60%");
+  player.equipped.set(9, I.SMITHS_GLOVES_I_);
+  assert.equal(Anvil.smithingInterval(player), 4, "the full set is 100%");
+});
+
+test("with the full uniform each anvil item comes 4 ticks after the last", () => {
+  const player = playerWith(I.BRONZE_BAR, 3);
+  for (const [slot, id] of [[4, I.SMITHS_TUNIC], [7, I.SMITHS_TROUSERS], [10, I.SMITHS_BOOTS], [9, I.SMITHS_GLOVES]]) player.equipped.set(slot, id);
+  open(player);
+  click(player, 9);
+  ticks(4);
+  assert.equal(player.items.get(I.BRONZE_DAGGER), 1);
+  ticks(3);
+  assert.equal(player.items.get(I.BRONZE_DAGGER), 1);
+  ticks(1);
+  assert.equal(player.items.get(I.BRONZE_DAGGER), 2);
+});
+
+test("the Smelt menu counts the catalysed bars, then the bars the coal left covers", () => {
+  const Smelting = require("../plugins/skills/smithing/Smelting.Smithing");
+  const steel = Smithing.SMELTING_RECIPES.find((recipe) => recipe.barId === I.STEEL_BAR);
+  assert.equal(Smelting.batches(furnaceWith([[I.IRON_ORE, 2], [I.COAL, 3], [I.SMITHING_CATALYST, 1]]), steel), 2);
+  assert.equal(Smelting.batches(furnaceWith([[I.IRON_ORE, 5], [I.COAL, 4], [I.SMITHING_CATALYST, 9]]), steel), 4);
+  assert.equal(Smelting.batches(furnaceWith([[I.IRON_ORE, 5], [I.COAL, 4]]), steel), 2);
+});
+
+test("Varrock armour's second bar takes the full coal once the catalysts are gone", (t) => {
+  t.mock.method(Math, "random", () => 0.05);
+  const player = furnaceWith([[I.MITHRIL_ORE, 2], [I.COAL, 6], [I.SMITHING_CATALYST, 1]]);
+  player.equipped.set(4, I.VARROCK_ARMOUR_2);
+  objects.get("Furnace").Smelt({ player, objectId: CacheDefinitions.getLocId("varrock_diary_furnace") });
+  lastMenu(player).execute(I.MITHRIL_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.MITHRIL_BAR), 2);
+  assert.equal(player.items.get(I.COAL), 0);
+  assert.equal(player.xp, 60 + 30);
 });

@@ -1,0 +1,162 @@
+{
+  "_source": "https://oldschool.runescape.wiki/w/Grotesque_Guardians, /Strategies, /Dusk and /Dawn (phases, specials, damage, weapon rules, access); the cache for every id. The entrance, bell, exit and messages are from rsprox recordings of the roof (rsprox.net database, rev 227/228; review on PR #976). Values the Wiki doesn't give are marked _calibrated.",
+  "names": {
+    "npcs": {
+      "duskPhase1": "gargboss_dusk_phase1_defensive",
+      "dawnPhase1": "gargboss_dawn_phase1",
+      "dawnFlying": "gargboss_dawn_phase1_transition",
+      "duskToPhase2": "gargboss_dusk_phase1_transition",
+      "duskPhase2": "gargboss_dusk_phase2_attacking",
+      "duskPhase3": "gargboss_dusk_phase3_defensive",
+      "dawnPhase3": "gargboss_dawn_phase3",
+      "dawnDeath": "gargboss_dawn_death",
+      "duskPhase4Spawn": "gargboss_dusk_phase4_spawn",
+      "duskPhase4": "gargboss_dusk_phase4",
+      "duskDeath": "gargboss_dusk_death"
+    },
+    "locs": {
+      "entrance": "slayer_roof_entrance",
+      "exit": "slayer_roof_exit",
+      "bell": ["slayer_roof_bell", "slayer_roof_bell_noquickstart", "slayer_roof_bell_quickstart"]
+    },
+    "items": {
+      "key": "slayer_roof_key"
+    },
+    "varbits": {
+      "unlocked": "gargboss_unlocked_roof",
+      "duskStatueHidden": "gargboss_dusk_statue_hidden",
+      "dawnStatueHidden": "gargboss_dawn_statue_hidden"
+    },
+    "seqs": {
+      "bell": "gg_bell_swinging",
+      "ringBell": "human_sword_slash",
+      "dawnSpawn": "gg_dawn_spawn",
+      "dawnSlash": "gg_dawn_attack_slash",
+      "dawnRanged": "gg_dawn_attack_ranged",
+      "dawnStun": "gg_dawn_attack_stun",
+      "dawnFlyUp": "gg_dawn_fly_up",
+      "dawnFlyDown": "gg_dawn_fly_down",
+      "duskSpawn": "gg_dusk_spawn",
+      "duskSlash": "gg_dusk_attack_slash",
+      "duskSlashDefensive": "gg_dusk_attack_slash_defensive",
+      "duskSpecial": "gg_dusk_attack_special",
+      "duskEnrage": "gg_dusk_enrage",
+      "enragedSlash": "gg_dusk_enrage_attack_slash",
+      "enragedRanged": "gg_dusk_enrage_attack_ranged",
+      "enragedSpecial": "gg_dusk_enrage_attack_special",
+      "forcefield": "gg_dusk_attack_forcefield"
+    },
+    "spotanims": {
+      "dawnRanged": "gargboss_standard_ranged_projectile",
+      "stoneBall": "gargboss_stun_ranged_projectile",
+      "explosion": "gargboss_exploding_projectile",
+      "falling": "gg_falling_projectile",
+      "debris": "gargboss_debris_shadow_90",
+      "lightning": "gg_dawn_lightning_fast",
+      "enragedLightning": "gg_dusk_lightning_enraged",
+      "sphere": "gargboss_healing_sphere_small",
+      "sphereImpact": "gargboss_healing_sphere_small_impact"
+    }
+  },
+  "roof": {
+    "bounds": [1680, 1710, 4560, 4590],
+    "_floor": "the walkable roof (the plinths are in its walls): where the Guardians land and the hazards fall",
+    "floor": [1689, 1704, 4567, 4582],
+    "arrive": [1697, 4567],
+    "dusk": [1689, 4573],
+    "dawn": [1701, 4573],
+    "outside": [3426, 3541, 2]
+  },
+  "_travel": "rsprox: the passageway up moves the player 5 ticks after the click, the escape down 3; a fade around each.",
+  "travel": {
+    "upTicks": 5,
+    "downTicks": 3
+  },
+  "_bell": "rsprox: the player slashes the bell, the bell loc swings with synth sound 3879 (delay 20), and the statues come down about 4 ticks later.",
+  "bell": {
+    "sound": 3879,
+    "soundDelay": 20,
+    "wakeTicks": 4
+  },
+  "phases": {
+    "dawnFliesBelow": 225,
+    "dawnReturnsBelow": 225,
+    "finishThreshold": 9
+  },
+  "dawn": {
+    "rangedMax": 9,
+    "meleeMax": 15,
+    "stoneBall": {
+      "max": 15,
+      "freezeTicks": 10,
+      "every": 5
+    },
+    "attackSpeed": 6
+  },
+  "dusk": {
+    "meleeMax": 15,
+    "enragedMeleeMax": 26,
+    "attackSpeed": 6,
+    "explosion": {
+      "max": 30,
+      "every": 6,
+      "warnTicks": 2
+    }
+  },
+  "rockfall": {
+    "rocks": 9,
+    "max": 22,
+    "stunTicks": 10,
+    "warnTicks": 3,
+    "every": 6
+  },
+  "lightning": {
+    "min": 5,
+    "max": 10,
+    "vortices": 6,
+    "warnTicks": 2,
+    "_calibrated": "how long the lightning phase lasts and how many vortices fall",
+    "ticks": 15
+  },
+  "spheres": {
+    "count": 3,
+    "heal": 90,
+    "_calibrated": "how long the spheres take to reach Dawn",
+    "ticks": 10
+  },
+  "_trample": "Wiki (Grotesque Guardians, /Strategies): standing under Dusk in the 2nd or last phase tramples the player for 30-40.",
+  "trample": {
+    "min": 30,
+    "max": 40,
+    "_calibrated": "how often he tramples someone who stays under him",
+    "every": 4
+  },
+  "prison": {
+    "max": 65,
+    "escapeTicks": 5,
+    "_calibrated": "how often it comes back",
+    "every": 8
+  },
+  "kill": {
+    "monster": "Grotesque Guardians",
+    "slayerXp": 1350
+  },
+  "messages": {
+    "noTask": "You must have an assigned slayer task of Gargoyles or Grotesque Guardians to access the roof.",
+    "unlocked": "You use the key and it is absorbed by the gateway as<br>it activates...",
+    "goUp": "You enter the passageway, and it takes you to the roof of the tower.",
+    "goDown": "You escape down from the slayer tower roof...",
+    "ring": "You ring the bell, the sound echoes out across the roof...",
+    "concentrate": "Concentrate on your fight!",
+    "killCount": "Your Grotesque Guardians kill count is: <col=ff0000>{kills}</col>.",
+    "duration": "Fight duration: <col=ff0000>{time}</col>. Personal best: {best}",
+    "immuneRanged": "Dusk's stone armour absorbs all magic and ranged based attacks.",
+    "wing": "Dusk is defending himself with his wing! He absorbs the attack.",
+    "knockedOut": "You have been knocked out!",
+    "stoned": "You have been trapped in stone!",
+    "trampled": "You get trampled under Dusk's massive body.",
+    "sphere": "You absorb the energy sphere.",
+    "locked": "The roof entrance is locked. Perhaps a key would open it.",
+    "_unverified": "locked has no capture behind it (the recordings use the key on the entrance); stoned is put on Dawn's stone ball, the recordings giving the line but not its attack"
+  }
+}

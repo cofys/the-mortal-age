@@ -1,0 +1,30 @@
+{
+  "source": {
+    "wiki": "https://oldschool.runescape.wiki/",
+    "authoringInput": "osrsreboxed-db/data/dialogues/npc-pages.json",
+    "fields": "Original infobox id and map lines; no export corrections"
+  },
+  "loclines": [],
+  "monsters": [],
+  "npcs": [
+    {
+      "page_name": "Key Master",
+      "page_name_sub": "Key Master",
+      "npc_id": [
+        12599
+      ]
+    },
+    {
+      "page_name": "Patchy",
+      "page_name_sub": "Patchy",
+      "npc_id": [
+        5870
+      ]
+    }
+  ],
+  "npcMaps": {
+    "Key Master": "|map = {{Map|1310,1251|mapID=-1|r=2|mtype=square}}\n|id = 12599",
+    "Patchy": "|map = {{Map|name=Patchy|x=3677|y=2978|r=5|mtype=square}}\n|id = 5870"
+  },
+  "locLineText": {}
+}

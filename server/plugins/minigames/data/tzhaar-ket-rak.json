@@ -1,0 +1,70 @@
+{
+  "_source": "OSRS Wiki: TzHaar-Ket-Rak's_Challenges, Transcript:TzHaar-Ket-Rak, JalTok-Jad, Yt-HurKot, TzHaar (castes), TzRek-Jad; ids are cache gamevals. Tiles, timings, healer counts and the messages are from rsprox.net recordings 3886 (rev 235) and 4308, 91, 550, 1754 (rev 227): every challenge's Jads, completions, deaths with and without kills, and leaving by the cave exit.",
+  "names": {
+    "npcs": { "master": "jad_challenge_master", "masterTalk": "jad_challenge_master_1op", "masterChallenge": "jad_challenge_master_2op", "jad": "jad_challenge_jad", "healer": "jad_challenge_healer" },
+    "varbits": { "met": "jad_challenge_master_met", "transmog": "jad_challenge_transmog_unlock" },
+    "varps": { "c1": "jad_challenge_1_completions", "c2": "jad_challenge_2_completions", "c3": "jad_challenge_3_completions", "c4": "jad_challenge_4_completions", "c5": "jad_challenge_5_completions", "c6": "jad_challenge_6_completions" },
+    "locs": { "exit": "inferno_exit" },
+    "objs": { "tokkul": "tzhaar_token" }
+  },
+  "_rewards": "TokKul per challenge (Wiki Rewards).",
+  "rewards": [80, 190, 480, 1190, 2970, 7430],
+  "ordinals": ["First", "Second", "Third", "Fourth", "Fifth", "Sixth"],
+  "_infernoChallenge": "Challenges 3 and up need TzKal-Zuk defeated at least once (Wiki).",
+  "infernoChallenge": 3,
+  "_arena": "A private copy of the Inferno arena (region 9043; the cave exit is the arena's, 2269,5325). rsprox: the player lands on 2271,5344 facing south 3 ticks after picking (landing seq quest_lunar_landing_on_face), the screen fading out at the pick and back 6 ticks after; the Jads come 18 ticks after the pick, each challenge's on its own tiles (south-west corner, facing as Direction ids: 0 NW 1 N 2 NE 3 W 4 E 5 SW 6 S 7 SE).",
+  "arena": {
+    "bounds": [2240, 2303, 5312, 5375],
+    "player": [2271, 5344],
+    "landTicks": 3,
+    "fadeInTicks": 6,
+    "jadTicks": 18,
+    "_fadeCloseTicks": "Calibrated: the cleared overlay is closed 2 ticks after the fade-in (the recordings do not show it).",
+    "fadeCloseTicks": 2,
+    "landSeq": 4367,
+    "_supports": "The Inferno's rocky supports (rocky_support_multi, as Run.Inferno.js places them), taken out of the copy.",
+    "supports": [[30353, 2257, 5349], [30354, 2274, 5351], [30355, 2267, 5335]],
+    "layouts": [
+      [[2269, 5349, 6]],
+      [[2269, 5334, 1], [2269, 5349, 6]],
+      [[2262, 5338, 2], [2269, 5349, 6], [2276, 5338, 0]],
+      [[2264, 5336, 2], [2264, 5347, 7], [2274, 5336, 0], [2274, 5347, 5]],
+      [[2262, 5343, 4], [2265, 5336, 2], [2269, 5349, 6], [2276, 5343, 3], [2273, 5336, 0]],
+      [[2262, 5338, 2], [2262, 5345, 7], [2269, 5334, 1], [2269, 5349, 6], [2276, 5338, 0], [2276, 5345, 5]]
+    ]
+  },
+  "_outside": "rsprox: out of a challenge (completed, failed or by the cave exit) the player stands on 2544,5111 facing east, before TzHaar-Ket-Rak.",
+  "outside": [2544, 5111],
+  "_jadStaggerTicks": "Calibrated: each Jad's first attack 3 ticks after the one before, as the Inferno's triple Jads (Wiki: so they can be flicked).",
+  "jadFirstAttackTicks": 4,
+  "jadStaggerTicks": 3,
+  "_healers": "rsprox: five Yt-HurKot come for each Jad once its health bar is under half, and go when it dies. Wiki Yt-HurKot: they heal 15-24 every 4 ticks in melee distance (Mod Ash). Their spawn tiles round the Jad are calibrated (the recordings scatter them within a few tiles).",
+  "healers": { "perJad": 5, "healTicks": 4, "healMin": 15, "healMax": 24, "reach": 1, "fightReach": 4, "healAnim": 2639, "healGraphic": 444 },
+  "_endTicks": "rsprox: the completion lines come as the last Jad dies; the player is back outside 5 ticks later and TzHaar-Ket-Rak speaks the tick after.",
+  "endTicks": 5,
+  "_ca": "Combat Achievements: Wiki TzHaar-Ket-Rak's_Challenges#Combat_Achievements. Seconds are game ticks x 0.6.",
+  "ca": {
+    "killCount": { "2": "The II Jad Challenge", "4": "The IV Jad Challenge", "6": "The VI Jad Challenge" },
+    "speed": { "1": ["TzHaar-Ket-Rak's Speed-Trialist", 45], "3": ["TzHaar-Ket-Rak's Speed-Chaser", 180], "5": ["TzHaar-Ket-Rak's Speed-Runner", 300] },
+    "meleeOnly": { "2": "Facing Jad Head-on III", "4": "Facing Jad Head-on IV" },
+    "emptyInventory": { "3": "Supplies? Who Needs 'em?" },
+    "multiStyle": { "3": "Multi-Style Specialist" },
+    "backToBack": "It Wasn't a Fluke"
+  },
+  "messages": {
+    "enter": "You enter the Inferno for TzHaar-Ket-Rak's {ordinal} Challenge.",
+    "completionCount": "Your completion count for TzHaar-Ket-Rak's {ordinal} Challenge is: <col=ff0000>{count}</col>.",
+    "durationBest": "Challenge duration: <col=ff0000>{time}</col> (new personal best)",
+    "duration": "Challenge duration: <col=ff0000>{time}</col>. Personal best: <col=ff0000>{best}</col>",
+    "unlocked": "You've unlocked TzHaar-Ket-Rak's {next} Challenge.",
+    "needInferno": "You need to complete the Inferno to unlock TzHaar-Ket-Rak's {next} Challenge.",
+    "survivedKilled": "You survived for <col=ff0000>{time}</col> and killed {count} {jads}{end}",
+    "survivedNone": "You survived for <col=ff0000>{time}</col> but failed to kill JalTok-Jad{end}",
+    "survivedNoneMulti": "You survived for <col=ff0000>{time}</col> but failed to kill any JalTok-Jads{end}",
+    "perishing": " before perishing.",
+    "notBad": "Not bad for a JalYt. Have some TokKul.",
+    "reward": "TzHaar-Ket-Rak has rewarded you with {amount} TokKul.",
+    "noTeleport": "You can't teleport out of the challenge.",
+    "_unverified": "noTeleport has no capture behind it; nor do the single-Jad death line ('failed to kill JalTok-Jad before perishing.'), a multi-Jad challenge left by the exit, or leaving with kills - those follow the recorded lines. The partial TokKul for k kills is the k-th challenge's reward: recorded for one kill (80), inferred beyond."
+  }
+}

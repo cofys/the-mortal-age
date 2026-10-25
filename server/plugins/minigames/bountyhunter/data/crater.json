@@ -1,0 +1,23 @@
+{
+  "_source": "Read from this cache's map (rev 241): Fort Daimon's walls, the Arena gate locs 47340/47344, the portal locs 47346/47347 and the demonic sigils (floorkit_summoning01_* ground decorations 47436-47445).",
+  "arena": { "minX": 3328, "maxX": 3519, "minY": 3968, "maxY": 4159 },
+  "lobby": { "minX": 3417, "maxX": 3430, "minY": 4057, "maxY": 4070 },
+  "lobbyArrival": { "x": 3423, "y": 4061 },
+  "feroxArrival": { "x": 3140, "y": 3626 },
+  "sigils": [
+    { "x": 3363, "y": 4037 },
+    { "x": 3369, "y": 4098 },
+    { "x": 3386, "y": 4009 },
+    { "x": 3423, "y": 4120 },
+    { "x": 3446, "y": 4005 },
+    { "x": 3473, "y": 4043 },
+    { "x": 3477, "y": 4118 },
+    { "x": 3493, "y": 4021 }
+  ],
+  "exits": [
+    { "x": 3413, "y": 4063, "to": { "x": 3417, "y": 4063 } },
+    { "x": 3423, "y": 4053, "to": { "x": 3423, "y": 4057 } },
+    { "x": 3423, "y": 4074, "to": { "x": 3423, "y": 4070 } },
+    { "x": 3434, "y": 4063, "to": { "x": 3430, "y": 4063 } }
+  ]
+}

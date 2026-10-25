@@ -95,8 +95,13 @@ export class PlayerDeathTask extends Task {
                     });
 
                     if (!handledDeath) {
-                        const botRespawn = this.resolveBotRespawnLocation();
-                        this.player.moveTo(botRespawn ?? GameConstants.DEFAULT_LOCATION);
+                        // Respawn policies run after every dangerous-death observer, including Hardcore.
+                        const respawn = { player: this.player, killer: this.killer ?? null, handled: false };
+                        PluginManager.emitCustomEvent("player:respawn", respawn);
+                        if (!respawn.handled) {
+                            const botRespawn = this.resolveBotRespawnLocation();
+                            this.player.moveTo(botRespawn ?? GameConstants.DEFAULT_LOCATION);
+                        }
                     }
                     GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "respawn");
 

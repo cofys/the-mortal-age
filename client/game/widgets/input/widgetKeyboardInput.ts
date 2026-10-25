@@ -208,13 +208,9 @@ export function processWidgetKeyboardInput(
             }
         }
 
-        // Process all key events for all widgets with onKey handlers.
-        // Typed characters (keyTyped === -1) are text input and don't change
-        // keybind varbits, so only real key presses force a widget refresh -
-        // otherwise every keystroke would invalidate the whole tree.
-        let invalidateNeeded = false;
+        // Widget setters and variable transmit handlers redraw what actually changes.
+        // A key listener alone must not force a full repaint (held camera keys repeat).
         for (const keyEvent of input.keyEvents) {
-            const keyPress = keyEvent.keyTyped !== -1;
             for (const w of keyWidgetsByUid.values()) {
                 const keyCtx: Partial<ScriptEvent> = {
                     mouseX: mx - (w._absX ?? w.x ?? 0),
@@ -224,17 +220,10 @@ export function processWidgetKeyboardInput(
                 };
                 if (w.eventHandlers?.onKey) {
                     deps.getCs2Vm().invokeEventHandler(w, "onKey", keyCtx);
-                    invalidateNeeded ||= keyPress;
                 } else if (w.onKey) {
                     deps.executeScriptListener(w, w.onKey, keyCtx);
-                    invalidateNeeded ||= keyPress;
                 }
             }
-        }
-        // onKey handlers (e.g. the side-tab keybind script) mutate varbits the
-        // renderer caches, so force a refresh once a key press handler has run.
-        if (invalidateNeeded) {
-            widgetManager.invalidateAll();
         }
     }
 }

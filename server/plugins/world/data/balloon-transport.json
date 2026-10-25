@@ -1,0 +1,39 @@
+{
+  "_source": "OSRS Wiki: Balloon_transport_system, Enlightened_Journey and the assistants' pages; the assistants', Auguste's and the quest's transcripts (data/definitions/npc-dialogues.json); ids are cache gamevals (interface zep_balloon_map, the zep_multi_* varbits and locs). No rsprox recording of a flight exists: the landing tiles and timing are calibrated.",
+  "names": {
+    "interface": "zep_balloon_map",
+    "objs": { "logs": "logs", "oak": "oak_logs", "willow": "willow_logs", "yew": "yew_logs", "magic": "magic_logs" }
+  },
+  "quest": "enlightened_journey",
+  "_stations": "Each station's basket (the zep_multi_basket_* multiloc: a rock until its varbit is set) and the button that flies there. Entrana and Taverley are opened by the quest. A route is opened from Entrana with 10 of its logs (3 magic), giving 2,000 Firemaking XP (Wiki); after that a trip there costs one. `land` is calibrated: beside the basket (Taverley and Entrana as the quest lands the player).",
+  "stations": [
+    { "key": "entrana", "label": "Entrana", "button": "btn_ent", "basket": [2806, 3355], "land": [2808, 3354], "log": "logs", "level": 20, "byQuest": true },
+    { "key": "taverley", "label": "Taverley", "button": "btn_tav", "basket": [2939, 3421], "land": [2938, 3421], "log": "logs", "level": 20, "byQuest": true },
+    { "key": "craft", "label": "the Crafting Guild", "button": "btn_craft", "basket": [2924, 3301], "land": [2923, 3301], "log": "oak", "logName": "Oak", "level": 30, "varbit": "zep_multi_craft", "unlockLogs": 10 },
+    { "key": "varrock", "label": "Varrock", "button": "btn_varr", "basket": [3296, 3481], "land": [3295, 3481], "log": "willow", "logName": "Willow", "level": 40, "varbit": "zep_multi_varr", "unlockLogs": 10 },
+    { "key": "castle", "label": "Castle Wars", "button": "btn_cast", "basket": [2461, 3109], "land": [2460, 3109], "log": "yew", "logName": "Yew", "level": 50, "varbit": "zep_multi_cast", "unlockLogs": 10 },
+    { "key": "gnome", "label": "the Grand Tree", "button": "btn_gno", "basket": [2481, 3457], "land": [2480, 3457], "log": "magic", "logName": "Magic", "level": 60, "varbit": "zep_multi_gno", "pilotVarbit": "mm2_zep_gnome_pilot", "unlockLogs": 3 }
+  ],
+  "_pilotVarbit": "mm2_zep_gnome_pilot: shows Assistant Le Smith at the Grand Tree's balloon (his multinpc 4730).",
+  "unlockXp": 2000,
+  "_stationReach": "How far from a basket the player counts as at that station (the assistants stand beside theirs).",
+  "stationReach": 12,
+  "maxWeightKg": 40,
+  "_timing": "Calibrated: fade out at the pick, at the destination 3 ticks later, the screen back at once and the overlay closed 2 ticks after.",
+  "flightTicks": 3,
+  "closeTicks": 2,
+  "messages": {
+    "_transcript": "The assistants' transcript: the log line (with the type), the Entrana search and its refusal. The quest's flight transcript: the weight and pet lines.",
+    "needLog": "You need 1 [type] logs to make this trip.",
+    "entranaSearch": "Weapons are not allowed on Entrana. I must search you first.",
+    "searched": "You are quickly searched.",
+    "entranaRefused": "I'm sorry, no weapons or armour may be worn to Entrana. Come back when you have laid them down.",
+    "weight": "You have too much weight in your bag. You may only bring 40kg of weight.",
+    "pet": "You need to put your pet into your inventory before the flight.",
+    "_calibrated": "No source gives these: a locked route from anywhere but Entrana, the Firemaking level, the logs to open a route, and the line as a route opens.",
+    "locked": "You need to fly from Entrana to open that route first.",
+    "level": "You need a Firemaking level of [level] to fly there.",
+    "unlockLogs": "You need [count] [type] logs to open this route.",
+    "unlocked": "You open the balloon route to [place]."
+  }
+}

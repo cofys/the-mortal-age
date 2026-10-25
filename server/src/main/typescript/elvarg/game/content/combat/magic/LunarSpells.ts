@@ -59,8 +59,6 @@ const teleport = (level: number, experience: number, runes: Item[], x: number, y
 /** Lunar spells that can be fulfilled by the current server primitives. */
 export class LunarSpells {
     private static readonly SELF = new Map<string, LunarSpell>([
-        ["cure me", new LunarSpell({ level: 71, experience: 69, runes: [rune(9075, 2), rune(564, 2), rune(563)] })],
-        ["cure group", new LunarSpell({ level: 74, experience: 74, runes: [rune(9075, 2), rune(564, 2), rune(563, 2)] })],
         ["vengeance", new LunarSpell({ level: 94, experience: 112, runes: [rune(9075, 4), rune(557, 10), rune(560, 2)] })],
         ["dream", new LunarSpell({ level: 79, experience: 82, runes: [rune(9075, 2), rune(556, 5), rune(563)] })],
         ["heal group", new LunarSpell({ level: 95, experience: 124, runes: [rune(9075, 4), rune(557, 15), rune(565, 3)] })],
@@ -101,12 +99,6 @@ export class LunarSpells {
         if (this.handleUtility(player, key)) return true;
         const spell = this.SELF.get(key);
         if (!spell) return false;
-        if (key === "cure me") {
-            return spell.cast(player, () => this.curePoison(player));
-        }
-        if (key === "cure group") {
-            return spell.cast(player, () => this.forNearbyPlayers(player, target => this.curePoison(target)));
-        }
         if (key === "dream") return spell.cast(player, () => {
             for (const skill of Skill.values()) {
                 const current = player.getSkillManager().getCurrentLevel(skill);
@@ -216,7 +208,6 @@ export class LunarSpells {
     public static handlePlayerTarget(player: Player, target: Player, name: string | undefined): boolean {
         const key = name?.trim().toLowerCase() ?? "";
         const definitions: Record<string, SpellData> = {
-            "cure other": { level: 68, experience: 65, runes: [rune(9075), rune(557, 10), rune(563)] },
             "energy transfer": { level: 91, experience: 100, runes: [rune(9075, 3), rune(557, 2), rune(563)] },
             "heal other": { level: 92, experience: 101, runes: [rune(9075, 3), rune(557), rune(565, 3)] },
             "vengeance other": { level: 93, experience: 108, runes: [rune(9075, 3), rune(557, 10), rune(560, 2)] },
@@ -227,7 +218,6 @@ export class LunarSpells {
         const data = definitions[key];
         if (!data || target === player || !this.acceptsAid(target) || !player.getLocation().isWithinDistance(target.getLocation(), 10)) return false;
         const spell = new LunarSpell(data);
-        if (key === "cure other") return spell.cast(player, () => this.curePoison(target));
         if (key === "energy transfer") {
             if (player.getSpecialPercentage() < 100) {
                 player.sendMessage("You need a full special attack bar to cast Energy Transfer.");
@@ -313,12 +303,6 @@ export class LunarSpells {
             return true;
         }
         return new LunarSpell(data).cast(player, () => { item.setId(result); player.getInventory().refreshItems(); });
-    }
-
-    private static curePoison(player: Player): void {
-        player.setPoisonDamage(0);
-        player.setVenomed(false);
-        player.getCombat().getPoisonImmunityTimer().start(12);
     }
 
     private static forNearbyPlayers(player: Player, effect: (target: Player) => void): void {

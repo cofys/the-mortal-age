@@ -35,15 +35,16 @@ function cannotTake(event) {
 
 /**
  * A shared kill's loot is lost, except what the monster's plugin keeps for Ironmen
- * (`ironman:shared-kill-keeps` { player, npc, npcId, keep }: item ids pushed onto `keep`).
+ * (`ironman:shared-kill-keeps` { player, npc, npcId, drops, keep }: item ids pushed onto `keep`).
  */
 function rolledDrops(event) {
   const { player, drops, damagers } = event;
   if (!Common.isIron(player)) return;
   if (!(damagers ?? []).some((other) => other && other !== player)) return;
-  const request = { player, npc: event.npc, npcId: event.npcId, keep: [] };
+  const request = { player, npc: event.npc, npcId: event.npcId, drops, keep: [] };
   Common.api.emitCustomEvent("ironman:shared-kill-keeps", request);
   const kept = drops.filter((drop) => request.keep.includes(drop.itemId));
+  if (kept.length === drops.length) return;
   drops.splice(0, drops.length, ...kept);
   player.sendMessage(Common.message("sharedKill"));
 }

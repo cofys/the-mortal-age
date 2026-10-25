@@ -40,6 +40,52 @@ function fakePlayer({ items, protectItem = false, skulled = false, location = ED
 
 const names = (items) => items.map((item) => item.getDefinition().getName());
 
+test('Bounty Hunter bots use normal death drops, including Protect Item', (t) => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const botLoot = require('../plugins/bots/runtime/DeathLoot.PlayerBots');
+  const at = new Location(3446, 4005);
+  const whip = new Item(I.ABYSSAL_WHIP, 1);
+  const sword = new Item(I.RUNE_SCIMITAR, 1);
+  const food = new Item(I.SHARK, 5);
+  const container = (items) => ({
+    getItems: () => items, getValidItems: () => items,
+    resetItems() { items.length = 0; return this; }, refreshItems() { return this; },
+  });
+  const inventory = container([sword, food]);
+  const equipment = container([whip]);
+  const victim = {
+    ...fakePlayer({ items: [], skulled: true, protectItem: true, location: at }),
+    getInventory: () => inventory, getEquipment: () => equipment,
+    getUsername: () => 'BhBot1', isPlayerBot: () => true,
+  };
+  const killer = { getLocation: () => at, sendMessage: (message) => assert.fail(message) };
+  const ground = [];
+  const emitItemDrop = PluginManager.emitPlayerDeathItemDrop;
+  const register = ItemOnGroundManager.registerLocation;
+  t.after(() => {
+    PluginManager.emitPlayerDeathItemDrop = emitItemDrop;
+    ItemOnGroundManager.registerLocation = register;
+  });
+  botLoot.initBotDeathLootCoreAccess({
+    getWorld: () => ({}),
+    getItemOnGroundManager: () => ({ registerNonGlobals: () => assert.fail('BH must use core drops') }),
+  });
+  PluginManager.emitPlayerDeathItemDrop = (event) => {
+    botLoot.handleBotDeathItemDrop(event);
+    return event.handled;
+  };
+  ItemOnGroundManager.registerLocation = (owner, item, position) => {
+    assert.equal(owner, killer);
+    assert.equal(position, at);
+    ground.push(item);
+  };
+  const kept = PlayerDeathTask.dropItems(victim, killer, at);
+  assert.deepEqual(kept, [whip]);
+  assert.deepEqual(ground, [sword, food]);
+  assert.equal(inventory.getItems().length + equipment.getItems().length, 0);
+});
+
 test('untradeable items compete for the kept slots by value (Wiki: Items Kept on Death)', () => {
   // Skulled with Protect Item: one item kept. The 4.6m staff beat the 125k ballista only once
   // untradeables were ranked; before, the ballista took the slot.

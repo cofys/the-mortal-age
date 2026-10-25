@@ -23,9 +23,9 @@
  * it falls through, so his Knight's Sword/standard dialogue is never stolen.
  *
  * Objects missing from this world's maps are placed at their quest-helper tiles on the
- * first login (the PorcineOfInterest pattern): ledger tables at Port Sarim (3049,3193)
- * and The Pandemonium (3068,2987), the floating grog crate north-west of The
- * Pandemonium (3013,2998), and Steve's locked crate behind the bar (3048,2965).
+ * first login (the PorcineOfInterest pattern): the floating grog crate north-west of The
+ * Pandemonium (3013,2998) and Steve's locked crate behind the bar (3048,2965). The two
+ * ledger tables are placed by the Pandemonium quest plugin at their captured tiles.
  * Steve Beanie (14968) is owner-spawned at (3050,2966).
  *
  * Rewards (OSRS Wiki): 1 Quest point, 1,000 Smithing XP, 800 Sailing XP, 25 sawmill
@@ -169,8 +169,6 @@ module.exports = function registerPryingTimesQuest(api) {
   const THURGO_SPECIAL_KEY_OPTION = "I need some help with a 'special key'.";
 
   // Quest-only scenery tiles (quest-helper positions; objects absent from the maps).
-  const PORT_SARIM_LEDGER_TILE = { x: 3049, y: 3193 };
-  const PANDEMONIUM_LEDGER_TILE = { x: 3068, y: 2987 };
   const GROG_CRATE_TILE = { x: 3013, y: 2998 };
   const STEVE_CRATE_TILE = { x: 3048, y: 2965 };
   const STEVE_SPAWN = { x: 3050, y: 2966 };
@@ -527,8 +525,6 @@ module.exports = function registerPryingTimesQuest(api) {
   function installQuestObjects() {
     if (questObjectsInstalled) return;
     questObjectsInstalled = true;
-    registerQuestObject(PORT_SARIM_LEDGER_ID, PORT_SARIM_LEDGER_TILE);
-    registerQuestObject(PANDEMONIUM_LEDGER_ID, PANDEMONIUM_LEDGER_TILE);
     registerQuestObject(GROG_CRATE_ID, GROG_CRATE_TILE);
     finalCrateObject = registerQuestObject(STEVE_CRATE_ID, STEVE_CRATE_TILE);
   }

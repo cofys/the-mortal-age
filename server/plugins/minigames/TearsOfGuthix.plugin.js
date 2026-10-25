@@ -11,5 +11,6 @@ module.exports = {
   register(api) {
     require("./tearsofguthix/Cave.TearsOfGuthix")(api);
     require("./tearsofguthix/Juna.TearsOfGuthix")(api);
+    require("./tearsofguthix/Chasm.TearsOfGuthix")(api);
   },
 };

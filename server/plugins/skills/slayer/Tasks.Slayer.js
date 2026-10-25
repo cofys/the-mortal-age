@@ -99,7 +99,7 @@ function killBoost(player, npc, id) {
   const killed = killModifiers.get(npc);
   if (killed) return killed.player === player ? modifierBoost(killed, id) : 1;
   const task = current(player);
-  return countsFor(task, npc) ? modifierBoost(task, id) : 1;
+  return countsFor(task, npc, player) ? modifierBoost(task, id) : 1;
 }
 
 function areaById(id) {
@@ -312,28 +312,48 @@ function npcName(npc) {
 }
 
 /** Whether a kill of this NPC (where it died) counts for the player's task. */
-function countsFor(task, npc) {
+function countsFor(task, npc, player = null) {
+  if (!task || !npc) return false;
+  // An encounter can exclude this exact NPC instance (for example an alternate mode)
+  // from task credit and all equipment bonuses that ask slayer:on-task.
+  const query = { player, npc, eligible: true };
+  api.emitCustomEvent("slayer:target-eligible", query);
+  if (query.eligible === false) return false;
+  return countsForTarget(task, { id: npc.getId(), name: npcName(npc), location: npc.getLocation() });
+}
+
+/** The same check from an NPC's id, name and where it is. */
+function countsForTarget(task, { id, name, location }) {
   if (!task) return false;
-  const name = npcName(npc);
   const matches = task.taskId === Data.BOSS_TASK_ID
     ? Data.isBossNpc(task.bossId, name)
-    : Data.npcCountsFor(task.taskId, npc.getId(), name);
+    : Data.npcCountsFor(task.taskId, id, name);
   if (!matches) return false;
-  if (task.masterId === KRYSTILIA && !core.Wilderness.isInLocation(npc.getLocation())) return false;
-  if (task.area && !Data.inArea(task.area, npc.getLocation())) return false;
+  if (task.masterId === KRYSTILIA && !core.Wilderness.isInLocation(location)) return false;
+  if (task.area && !Data.inArea(task.area, location)) return false;
   return true;
 }
 
-/** "slayer:on-task": is this NPC the player's current assignment? */
+/**
+ * "slayer:on-task": is this NPC the player's current assignment? Either { npc } (a live NPC) or
+ * { npcId, location } for an NPC by id, such as a form it isn't in yet.
+ */
 function onTaskEvent(request) {
-  request.onTask = countsFor(current(request.player), request.npc);
+  const task = current(request.player);
+  if (Number.isInteger(request.npcId)) {
+    const name = core.NpcDefinition.forId(request.npcId)?.getName?.() ?? "";
+    const location = request.location ?? request.npc?.getLocation?.();
+    request.onTask = countsForTarget(task, { id: request.npcId, name, location });
+    return;
+  }
+  request.onTask = countsFor(task, request.npc, request.player);
 }
 
 function npcKilled({ killer, npc }) {
   if (!killer?.isPlayer?.() || !npc) return;
   const player = killer;
   const task = current(player);
-  if (!countsFor(task, npc)) return;
+  if (!countsFor(task, npc, player)) return;
   const hitpoints = (npc.getCurrentDefinition?.() ?? npc.getDefinition()).getHitpoints();
   // Superiors.Slayer.js may spawn a superior, or zero this for a superior's own XP.
   const kill = { player, npc, xp: hitpoints };

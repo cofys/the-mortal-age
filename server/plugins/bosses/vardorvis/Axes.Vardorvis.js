@@ -91,8 +91,9 @@ function cutPlayer(fight, axe, bleed) {
   const { maxHit } = Common.data.axes;
   Common.strike(fight.boss, player, "melee", maxHit[fight.awakened ? "awakened" : "normal"], 0, {
     prayer: MELEE_PRAYER, prayerShare: Common.data.axes.prayerShare, accurate: true,
+    onApplied: (amount) => fight.recordDamage(amount),
   });
-  if (bleed) startBleed(player, fight.awakened);
+  if (bleed) startBleed(player, fight.awakened, fight);
 }
 
 /** Each tick: every axe cuts under it, then moves on (or goes, after its last step). */
@@ -126,16 +127,18 @@ function clear(fight) {
 
 // ------------------------------------------------------------------ the bleed
 
-function startBleed(player, awakened) {
+function startBleed(player, awakened, fight) {
   const { bleed } = Common.data.axes;
   const existing = bleeds.get(player);
   if (existing) {
     existing.left = bleed.durationTicks;
+    existing.fight = fight;
     return;
   }
   player.sendMessage(bleed.message);
   for (const id of bleed.sounds) Common.sound(player, id);
   const state = {
+    fight,
     damage: bleed.damage[awakened ? "awakened" : "normal"],
     left: bleed.durationTicks,
     next: bleed.firstTicks,
@@ -160,7 +163,8 @@ function startBleed(player, awakened) {
       const moved = !player.getLocation().equals(state.last);
       state.last = player.getLocation().clone();
       if (state.next <= 0 || (moved && state.since > 1)) {
-        Common.damage(player, state.damage, bleed.splat);
+        const owner = state.fight;
+        Common.damage(player, state.damage, bleed.splat, (amount) => owner?.recordDamage(amount));
         state.since = 0;
         state.next = bleed.intervalTicks;
       }

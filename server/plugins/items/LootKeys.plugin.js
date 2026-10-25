@@ -39,6 +39,11 @@ const setLootKeysEnabled = (player, enabled) => {
 };
 const countKeys = (player) => (player?.getInventory?.()?.getValidItems?.() ?? []).filter(isLootKey).length;
 const lootKeyCountByPlayer = new WeakMap();
+let pluginApi;
+
+function initialize(api) {
+  pluginApi = api;
+}
 
 function syncLootKeySkull(player) {
   const keyCount = countKeys(player);
@@ -60,9 +65,12 @@ function setSettings(player, settings) {
 }
 
 function isEligibleKill(killer, victim) {
-  return killer && victim && killer !== victim && killer.isPlayer?.() && victim.isPlayer?.() &&
-    !killer.isPlayerBot?.() && Wilderness.isIn(killer) && Wilderness.isIn(victim) &&
-    hasEnabledLootKeys(killer) && countKeys(killer) < MAX_KEYS;
+  if (!(killer && victim && killer !== victim && killer.isPlayer?.() && victim.isPlayer?.() &&
+    !killer.isPlayerBot?.() && hasEnabledLootKeys(killer) && countKeys(killer) < MAX_KEYS)) return false;
+  if (Wilderness.isIn(killer) && Wilderness.isIn(victim)) return true;
+  const request = { killer, victim, allowed: false };
+  pluginApi?.emitCustomEvent("loot-keys:eligible-kill", request);
+  return request.allowed === true;
 }
 
 function itemValue(item) {
@@ -277,7 +285,7 @@ function openSkullyPrompt(api, player) {
       } else {
         if (!LootKeys.hasUnlockedLootKeys(player)) player.getInventory().delete(ItemIdentifiers.COINS, UNLOCK_COST);
         LootKeys.setLootKeysEnabled(player, true);
-        player.sendMessage("You will now receive Loot keys for Wilderness player kills.");
+        player.sendMessage("You will now receive Loot keys for Wilderness and Bounty Hunter player kills.");
       }
     },
     `Supplies in keys: ${settings.includeSupplies ? "On" : "Off"}`, () => {
@@ -304,7 +312,6 @@ const DESTROY_CANCEL_UID = (GROUP_ID << 16) | 44;
 const ITEM_MODE_UID = (GROUP_ID << 16) | 16;
 const NOTE_MODE_UID = (GROUP_ID << 16) | 21;
 const ALL_ACTION_FLAGS = (1 << 11) - 2;
-const CHEST_OBJECT_IDS = new Set([43468, 43469, 43484, 43485, 44780, 44781]);
 const FEROX_CHEST = { x: 3138, y: 3626, z: 0, type: 10, face: 2 };
 const FEROX_REGION_ID = ((FEROX_CHEST.x >> 6) << 8) | (FEROX_CHEST.y >> 6);
 const uiState = new WeakMap();
@@ -363,11 +370,27 @@ function openChestKey(player, slot, key) {
   return LootKeys.openKey(player, slot, key) && openChest(player);
 }
 
+function useKeyOnChest(event) {
+  if (!LootKeys.isLootKey(event.item)) return false;
+  const { player } = event;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "loot-chest", resume: () => useKeyOnChest(event) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
+  if (LootKeys.chestItems(event.player).length) openChest(event.player);
+  else openChestKey(event.player, event.itemSlot, event.item);
+  return true;
+}
+
 function openKeySelection(api, player) {
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "loot-chest", resume: () => openKeySelection(api, player) };
+  api.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (LootKeys.chestItems(player).length) return openChest(player);
   const keys = inventoryKeys(player);
   if (!keys.length) {
-    player.sendMessage("You do not currently have any Wilderness Loot Keys. For more information, speak to Skully in the Ferox Enclave.");
+    player.sendMessage("You do not currently have any Loot Keys. For more information, speak to Skully in the Ferox Enclave.");
     return true;
   }
   if (keys.length === 1) return openChestKey(player, keys[0].slot, keys[0].item);
@@ -440,6 +463,7 @@ module.exports = {
   // defer this named Talk-to handler behind the generic NpcDialogues fallback.
   dependsOn: ["Wilderness", "Food"],
   register(api) {
+    initialize(api);
     api.persistAttribute(LootKeys.UNLOCK_ATTRIBUTE);
     api.persistAttribute(LootKeys.ENABLED_ATTRIBUTE);
     api.persistAttribute(LootKeys.SETTINGS_ATTRIBUTE);
@@ -468,12 +492,7 @@ module.exports = {
     api.onNpcInteraction("Skully", { "Talk-to": ({ player }) => { openSkullyPrompt(api, player); return true; } });
     api.onRegionLoaded(installFeroxChest);
     api.onObjectInteraction(CHEST_NAME, { Loot: ({ player }) => openKeySelection(api, player) });
-    api.onItemOnObject((event) => {
-      if (!CHEST_OBJECT_IDS.has(event.objectId) || !LootKeys.isLootKey(event.item)) return;
-      event.handled = true;
-      if (LootKeys.chestItems(event.player).length) openChest(event.player);
-      else openChestKey(event.player, event.itemSlot, event.item);
-    });
+    api.onItemOnObject("Loot key", CHEST_NAME, useKeyOnChest);
     api.onInterfaceActionClick((event) => {
       if (handleChestInterfaceAction(event.player, event)) event.handled = true;
     });

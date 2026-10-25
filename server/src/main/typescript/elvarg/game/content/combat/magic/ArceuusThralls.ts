@@ -10,6 +10,8 @@ import { PathFinder } from "../../../model/movement/path/PathFinder";
 import { Task } from "../../../task/Task";
 import { TaskManager } from "../../../task/TaskManager";
 import { Location } from "../../../model/Location";
+import { Misc } from "../../../../util/Misc";
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 const THRALL_KEY = "arceuus:thrall";
 const THRALL_PURSUIT_KEY = "arceuus:thrall-pursuit";
@@ -33,7 +35,9 @@ export class ArceuusThralls {
         player.setAttribute(THRALL_KEY, thrall);
         World.getAddNPCQueue().push(thrall);
 
-        let ticks = player.getSkillManager().getCurrentLevel(Skill.MAGIC);
+        const duration = { player, ticks: player.getSkillManager().getCurrentLevel(Skill.MAGIC) };
+        PluginManager.emitCustomEvent("magic:thrall-duration", duration);
+        let ticks = duration.ticks;
         let attackTicks = 0;
         TaskManager.submit(new class extends Task {
             constructor() { super(1); }
@@ -82,8 +86,9 @@ export class ArceuusThralls {
 
                 if (++attackTicks % 4 === 0) {
                     thrall.performAnimation(new Animation(thrall.getAttackAnim()));
-                    target.getCombat().getHitQueue().addPendingDamage([new HitDamage(maxHit, HitMask.RED)]);
-                    target.getCombat().addDamage(player, maxHit);
+                    const hit = new HitDamage(Misc.getRandom(maxHit), HitMask.RED).setSource(player)
+                        .onApplied(damage => target.getCombat().addDamage(player, damage));
+                    target.getCombat().getHitQueue().addPendingDamage([hit]);
                 }
             }
         });

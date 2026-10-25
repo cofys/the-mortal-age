@@ -19,7 +19,7 @@ function npc(levels = [100, 100, 100, 100, 100], demon = false) {
   value.isNpc = () => true;
   value.getAsNpc = () => value;
   value.performGraphic = () => {};
-  value.getCombat = () => ({ getSelectedSpell: () => null });
+  value.getCombat = () => ({ getSelectedSpell: () => null, getTarget: () => null });
   return value;
 }
 function method(name) {
@@ -109,4 +109,32 @@ test('Elder maul, Bone dagger, Soulshot, Condemn and Ralos drain NPC current sta
   condemn.handleAfterHitEffects(hit(value, 10));
   assert.equal(value.getCurrentLevel(Skill.MAGIC), 80, 'Condemn never restores already drained stats');
   assert.equal(value.getDefenceLevel(), 85);
+});
+
+test('stat-drain immunity is instance scoped and blocks real special-attack drains', () => {
+  cycle = 0;
+  const immune = npc(), normal = npc();
+  immune.setStatDrainImmune(true);
+  for (const name of ['BandosGodsword', 'ElderMaul', 'Arclight', 'Seercull', 'AccursedSceptre']) {
+    method(name).handleAfterHitEffects(hit(immune, 50));
+  }
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED, Skill.MAGIC]) {
+    immune.setCurrentLevels(skill, 0);
+    assert.equal(immune.getCurrentLevel(skill), 100);
+  }
+  method('BandosGodsword').handleAfterHitEffects(hit(normal, 50));
+  assert.equal(normal.getDefenceLevel(), 50, 'other NPCs remain drainable');
+  assert.throws(() => immune.setCurrentLevels(Skill.MAGIC, NaN), RangeError);
+});
+
+test('enabling immunity clears previous drains and disabling it restores normal behavior', () => {
+  const value = npc();
+  value.setCurrentLevels(Skill.DEFENCE, 20);
+  value.setCurrentLevels(Skill.MAGIC, 30);
+  value.setStatDrainImmune(true);
+  assert.equal(value.getDefenceLevel(), 100);
+  assert.equal(value.getCurrentLevel(Skill.MAGIC), 100);
+  value.setStatDrainImmune(false);
+  value.setDefenceLevel(60);
+  assert.equal(value.getDefenceLevel(), 60);
 });

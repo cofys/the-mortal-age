@@ -2753,7 +2753,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                 (playerFineY - targetFineY) / 32,
                             );
                             const distSq = dx * dx + dy * dy;
-                            if (distSq > 4225 && distSq < 90000) {
+                            if (distSq > 4225) {
                                 // Off the map: rotated edge arrow pinned inside the rim.
                                 const edgeTex = tc.getByNameToken("mapedge,0");
                                 if (edgeTex) {

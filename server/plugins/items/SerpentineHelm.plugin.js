@@ -57,9 +57,7 @@ function processUpkeep(player) {
   }
   // Poison/venom immunity: keep the shared immunity timer alive without curing.
   const immunity = player.getCombat?.()?.getPoisonImmunityTimer?.();
-  if (immunity?.finished?.()) {
-    immunity.start(2);
-  }
+  immunity?.protectBriefly(2, true);
   const inCombat = player.getCombat?.()?.getTarget?.() != null;
   if (!inCombat) {
     player.setAttribute(COMBAT_CHARGE_TICK_ATTRIBUTE, null);

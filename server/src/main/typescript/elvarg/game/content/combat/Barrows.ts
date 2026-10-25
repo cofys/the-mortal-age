@@ -44,7 +44,7 @@ export class Barrows {
 
     private static variantFor(itemId: number): VariantStages | null {
         return VARIANTS.find((variant) =>
-            variant.base === itemId || variant.baseId === itemId || variant.stages.includes(itemId)
+            variant.baseId === itemId || variant.stages.includes(itemId)
         ) ?? null;
     }
 

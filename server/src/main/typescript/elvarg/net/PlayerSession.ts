@@ -509,7 +509,7 @@ export class PlayerSession {
           npcTransformationId,
           equipQty: equipment.map((item) => item?.getAmount?.() ?? 0),
           headIcons: {
-            skull: player.isSkulled() ? player.getSkullIconId() : -1,
+            skull: player.getHeadSkullIcon(),
             prayer: player.getAppearance().getHeadHint(),
           },
         },

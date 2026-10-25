@@ -1,7 +1,8 @@
 /**
  * Smithing's make-X loops (smelting, anvil work, cannonballs): one task ticks every player's
  * session. Each cycle starts `firstDelay` ticks after the session (then every `interval`
- * ticks): `begin(player)` runs the cycle's opening (a message, the animation), and
+ * ticks, or `interval(player)` read as each cycle opens): `begin(player)` runs the cycle's
+ * opening (a message, the animation), and
  * `step(player)` makes the item `finishDelay` ticks later. Either returning false ends the
  * session, as do `remaining` running out and the player moving, dying or logging out.
  */
@@ -63,7 +64,7 @@ function everyTick(fn) {
 
 function advance(player, session) {
   if (session.finishAt == null && tick >= session.nextCycle) {
-    session.nextCycle = tick + session.interval;
+    session.nextCycle = tick + (typeof session.interval === "function" ? session.interval(player) : session.interval);
     if (session.begin && !session.begin(player)) return false;
     session.finishAt = tick + session.finishDelay;
   }

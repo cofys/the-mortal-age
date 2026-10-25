@@ -5,6 +5,7 @@ export class SecondsTimer {
     private running: boolean;
     private startTime: any;
     private endTime: any;
+    private pausedAt: number | null = null;
     private stopwhatch: Stopwatch = new Stopwatch();
 
     constructor() {
@@ -19,6 +20,9 @@ export class SecondsTimer {
         this.stopwhatch.reset();
         this.stopwhatch.start();
         this.startTime = performance.now();
+        if (this.pausedAt !== null) {
+            this.pausedAt = this.startTime;
+        }
         this.running = true;
     }
 
@@ -30,6 +34,22 @@ export class SecondsTimer {
 
     isRunning(): boolean {
         return this.running;
+    }
+
+    /** Holds this timer, including future starts, until resume is called. */
+    pause(): void {
+        if (this.pausedAt === null) {
+            this.pausedAt = performance.now();
+        }
+    }
+
+    resume(): void {
+        if (this.pausedAt !== null) {
+            if (this.running) {
+                this.startTime += performance.now() - this.pausedAt;
+            }
+            this.pausedAt = null;
+        }
     }
 
     secondsRemaining(): number {
@@ -55,7 +75,7 @@ export class SecondsTimer {
         if (!this.running) {
             return 0;
         }
-        return Math.floor((performance.now() - this.startTime) / 1000);
+        return Math.floor(((this.pausedAt ?? performance.now()) - this.startTime) / 1000);
     }
 
     toString(): string {

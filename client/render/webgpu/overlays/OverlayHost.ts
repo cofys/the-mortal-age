@@ -105,6 +105,7 @@ import {
     getInteractNpcModelLoader,
     buildHighlightTrianglePoints as buildHighlightTrianglePointsViaHost,
     buildLocModelHighlightTriangles as buildLocModelHighlightTrianglesViaHost,
+    buildLocModelHighlightParts as buildLocModelHighlightPartsViaHost,
     buildNpcModelHighlightTriangles as buildNpcModelHighlightTrianglesViaHost,
     resolveNpcMovementSequenceIds,
     resolveNpcHighlightTargetFromServerId,
@@ -283,6 +284,26 @@ export class OverlayHost {
             },
             npcModelPoints: (ecsId, serverId) => this.sceneRaycaster?.npcTrianglesProvider?.(ecsId, serverId) ?? undefined,
             npcHeight: (npcTypeId) => this.getNpcDefaultHeight(npcTypeId),
+            locModelPoints: (loc) => buildLocModelHighlightPartsViaHost(this.typedHost, {
+                kind: "loc",
+                locId: loc.id,
+                tileX: loc.tileX,
+                tileY: loc.tileY,
+                plane: loc.plane,
+                locModelType: loc.shape,
+                locRotation: loc.rotation,
+            }),
+            locsAtTile: (worldX, worldY, plane) =>
+                (this.getLocIdsAtTileAllLevels(worldX, worldY) ?? [])
+                    .filter((l) => l.level === plane && typeof l.typeRot === "number")
+                    .map((l) => ({
+                        id: l.id,
+                        tileX: worldX,
+                        tileY: worldY,
+                        plane,
+                        shape: (l.typeRot ?? 0) & 0x3f,
+                        rotation: ((l.typeRot ?? 0) >> 6) & 3,
+                    })),
         };
         this.boundToCssEvent = (gx?: number, gy?: number) =>
             this.toCssEvent(gx, gy, this.currentFrameCount);

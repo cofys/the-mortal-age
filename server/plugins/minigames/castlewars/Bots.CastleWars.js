@@ -23,8 +23,12 @@ const { ActionNode, BotController, SelectorNode } = require("../../../src/main/t
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { buildRoamingPvpMetadata } = require("../../bots/behaviours/pvp/PvpAssignment.PlayerBots");
 const { applyGeneratedPvpLoadout } = require("../../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
-const { PVP_LOADOUT_DEFINITIONS, isLoadoutAvailable } = require("../../bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots");
-const { getPvpProfile } = require("../../bots/behaviours/pvp/PvpProfileRegistry.PlayerBots");
+const {
+  TIER_BANDS,
+  TIER_PROFILE_IDS,
+  pickTierChoice: pickSharedTierChoice,
+  tierCombatLevel,
+} = require("../../bots/behaviours/pvp/PvpTierLoadouts.PlayerBots");
 const FoodPlugin = require("../../items/Food.plugin");
 
 
@@ -96,20 +100,9 @@ const ROLE_LOADOUTS = Object.freeze({
   [ROLES.MAGE]: { loadoutId: "deep_wild_hybrid", archetypeId: "ancients_hybrid" },
 });
 
-// Combat tiers chosen in the lobby prompt. Each maps to a PvP behaviour profile and a
-// combat-level band; bots draw a loadout+archetype inside the band, so a Novice game
-// fights with free-to-play-grade gear and a Veteran game with the full presets.
+// Combat tiers chosen in the lobby prompt (PvpTierLoadouts.PlayerBots): each pins a bot's
+// loadout and combat level band.
 const DEFAULT_BOT_TIER_KEY = "castlewars:bot-tier";
-const TIER_PROFILE_IDS = Object.freeze({
-  novice: "novice",
-  intermediate: "standard",
-  veteran: "veteran",
-});
-const TIER_BANDS = Object.freeze({
-  novice: Object.freeze({ min: 3, max: 80 }),
-  intermediate: Object.freeze({ min: 81, max: 100 }),
-  veteran: Object.freeze({ min: 101, max: 126 }),
-});
 
 let api;
 let game;
@@ -1055,96 +1048,14 @@ function roleOf(player) {
   return player.getAttribute(game.BOT_ROLE_KEY ?? DEFAULT_BOT_ROLE_KEY);
 }
 
-/** Archetype stat lines are [attack, defence, strength, hp, ranged, prayer, magic]. */
-function archetypeCombatLevel(stats) {
-  const [attack, defence, strength, hp, ranged, prayer, magic] = stats;
-  const base = Math.floor((defence + hp + Math.floor(prayer / 2)) * 0.2535) + 1;
-  const offence = Math.max(
-    (attack + strength) * 0.325,
-    Math.floor(ranged * 1.5) * 0.325,
-    Math.floor(magic * 1.5) * 0.325
-  );
-  return Math.min(126, Math.max(3, Math.floor(base + offence)));
-}
-
-/**
- * The level the preset policy will read for this archetype under `profile`: the sparse
- * "novice" profile bumps hitpoints, which moves the archetype's combat level, so the band
- * has to be judged with the same adjustment or the policy gates our forced archetype out.
- */
-function tierCombatLevel(entry, profile) {
-  const stats = [...entry.stats];
-  if ((profile?.confidenceTier ?? 2) <= 1) {
-    stats[3] = Math.max(80, stats[3] - 5);
-  }
-  return archetypeCombatLevel(stats);
-}
-
-/** Every (loadout, archetype) pair of the PvP presets, built once; the tier filter does the rest. */
-let archetypeChoices;
-function getArchetypeChoices() {
-  if (archetypeChoices) {
-    return archetypeChoices;
-  }
-  const entries = new Map((PVP_LOADOUT_DEFINITIONS.archetypes ?? []).map((entry) => [entry.id, entry]));
-  archetypeChoices = [];
-  for (const loadout of PVP_LOADOUT_DEFINITIONS.loadouts ?? []) {
-    if (!isLoadoutAvailable(loadout.id)) {
-      continue;
-    }
-    for (const archetypeId of loadout.archetypes ?? []) {
-      const entry = entries.get(archetypeId);
-      if (entry) {
-        archetypeChoices.push({ loadoutId: loadout.id, archetypeId, tags: loadout.tags ?? [], entry });
-      }
-    }
-  }
-  return archetypeChoices;
-}
-
 /**
  * A deterministic tier- and role-appropriate loadout+archetype for this bot. Archers and
  * mages keep their post's style (a ranged or magic loadout); everyone else takes any
  * loadout of the tier. Returns null for a bot without a tier (plain random PvP presets).
  */
 function pickTierChoice(player, role, tier) {
-  const profileId = TIER_PROFILE_IDS[tier];
-  const band = TIER_BANDS[tier];
-  if (!profileId || !band) {
-    return null;
-  }
-  const profile = getPvpProfile(profileId);
-  const eligible = (choice) => {
-    const minimumProfiles = choice.entry.minimumProfileIds;
-    if (Array.isArray(minimumProfiles) && minimumProfiles.length > 0 && !minimumProfiles.includes(profile.id)) {
-      return false;
-    }
-    const minimumConfidence = Number(choice.entry.minimumConfidenceTier ?? 0);
-    return !(minimumConfidence > 0 && Number(profile.confidenceTier ?? 2) < minimumConfidence);
-  };
-  const all = getArchetypeChoices().filter(eligible);
   const style = role === ROLES.ARCHER ? "range" : role === ROLES.MAGE ? "magic" : null;
-  const styled = style ? all.filter((choice) => choice.tags.includes(style)) : all;
-  let pool = styled.filter((choice) => {
-    const level = tierCombatLevel(choice.entry, profile);
-    return level >= band.min && level <= band.max;
-  });
-  if (pool.length === 0 && styled.length > 0) {
-    // The preset data has no in-band archetype for this style and tier (an intermediate
-    // mage, say): take the style's nearest level band instead of turning the post melee.
-    const level = (choice) => tierCombatLevel(choice.entry, profile);
-    const centre = (band.min + band.max) / 2;
-    const distance = (choice) => Math.abs(level(choice) - centre);
-    const nearest = Math.min(...styled.map(distance));
-    pool = styled.filter((choice) => distance(choice) <= nearest + 10);
-  }
-  const sorted = pool.sort(
-    (a, b) => a.loadoutId.localeCompare(b.loadoutId) || a.archetypeId.localeCompare(b.archetypeId)
-  );
-  if (sorted.length === 0) {
-    return null;
-  }
-  return sorted[botNumber(player) % sorted.length];
+  return pickSharedTierChoice(tier, { index: botNumber(player), style });
 }
 
 function ensureLoadout(player, state, teamId, nowMs) {

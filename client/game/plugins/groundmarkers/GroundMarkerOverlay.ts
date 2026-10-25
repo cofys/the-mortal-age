@@ -1,0 +1,154 @@
+import { FONT_PLAIN_12 } from "../../../ui/fonts";
+import { drawTextGL } from "../../../widgets/components/TextRenderer";
+import type { WidgetOverlay, WidgetOverlayDrawContext } from "../ClientPluginManager";
+import { argbToRgba } from "../npcindicators/NpcIndicatorsConfig";
+import type { ColorTileMarker, GroundMarkerPlugin } from "./GroundMarkerPlugin";
+
+type Rgba = [number, number, number, number];
+type Point = [number, number];
+type Shape = { points: Point[]; stroke: Rgba; fill?: Rgba; width: number };
+type Text = { text: string; x: number; y: number; color: number };
+type Frame = { shapes: Shape[]; texts: Text[]; signature: string };
+type Rect = { x: number; y: number; w: number; h: number };
+
+/** GroundMarkerOverlay.MAX_DRAW_DISTANCE. */
+const MAX_DRAW_DISTANCE = 32;
+
+/** A tile marked before colours existed draws in the marker colour. */
+function tileColor(plugin: GroundMarkerPlugin, marker: ColorTileMarker): number {
+    return marker.color ?? (Number(plugin.config.markerColor()) >>> 0);
+}
+
+/** The markers on the player's plane (both overlays skip the others). */
+function markersOnPlane(plugin: GroundMarkerPlugin): ColorTileMarker[] {
+    if (!plugin.isStarted() || !plugin.isLoggedIn() || plugin.points.length === 0) return [];
+    const plane = plugin.playerPlane();
+    return plugin.points.filter((m) => m.worldPoint.plane === plane);
+}
+
+function frameSignature(frame: Frame): string {
+    if (frame.shapes.length + frame.texts.length === 0) return "";
+    return JSON.stringify([
+        frame.shapes.map((s) => [s.points.map(([x, y]) => [Math.round(x), Math.round(y)]), s.stroke, s.fill, s.width]),
+        frame.texts.map((t) => [t.text, Math.round(t.x), Math.round(t.y), t.color]),
+    ]);
+}
+
+function drawFrame(context: WidgetOverlayDrawContext, frame: Frame): Rect[] {
+    const glr = context.renderer as any;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const grow = (x: number, y: number, pad: number) => {
+        minX = Math.min(minX, x - pad); minY = Math.min(minY, y - pad);
+        maxX = Math.max(maxX, x + pad); maxY = Math.max(maxY, y + pad);
+    };
+    for (const shape of frame.shapes) {
+        glr.drawPolyline?.(shape.points, shape.width, shape.stroke, true);
+        if (shape.fill) glr.drawPolygon?.(shape.points, shape.fill);
+        for (const [x, y] of shape.points) grow(x, y, shape.width);
+    }
+    for (const t of frame.texts) {
+        const font = context.fontLoader(FONT_PLAIN_12);
+        const w = font ? font.measure(t.text) : t.text.length * 7;
+        const h = 16;
+        const x = t.x - w / 2;
+        // OverlayUtil.renderTextLocation: the point is the baseline, with a shadow.
+        drawTextGL(context.renderer, context.fontLoader, t.text, x - 2, t.y - h + 3, w + 4, h, FONT_PLAIN_12,
+            t.color & 0xffffff, 1, 2, true);
+        grow(x, t.y - h, 0);
+        grow(x + w, t.y + 4, 0);
+    }
+    return Number.isFinite(minX) ? [{ x: minX, y: minY, w: maxX - minX, h: maxY - minY }] : [];
+}
+
+/** RuneLite's GroundMarkerOverlay (ABOVE_SCENE): each marked tile's outline and fill, and its label. */
+export class GroundMarkerOverlay implements WidgetOverlay {
+    readonly drawBelowWidgets = true;
+    private frame?: Frame;
+
+    constructor(private readonly plugin: GroundMarkerPlugin) {}
+
+    signature(): string {
+        this.frame = this.build();
+        return this.frame.signature;
+    }
+
+    draw(context: WidgetOverlayDrawContext): Rect[] {
+        const frame = this.frame ?? this.build();
+        this.frame = undefined;
+        return drawFrame(context, frame);
+    }
+
+    private build(): Frame {
+        const frame: Frame = { shapes: [], texts: [], signature: "" };
+        const plugin = this.plugin;
+        const scene = plugin.getClient().sceneGeometry;
+        const markers = markersOnPlane(plugin);
+        const player = plugin.playerTile();
+        if (!scene || markers.length === 0 || !player) return frame;
+        const width = Math.max(0, Number(plugin.config.borderWidth()) || 0);
+        const opacity = Math.max(0, Math.min(255, Number(plugin.config.fillOpacity()) | 0));
+        const fill: Rgba = [0, 0, 0, opacity / 255];
+        for (const marker of markers) {
+            const { x, y, plane } = marker.worldPoint;
+            if (Math.max(Math.abs(x - player.x), Math.abs(y - player.y)) >= MAX_DRAW_DISTANCE) continue;
+            const color = tileColor(plugin, marker);
+            const corners: [number, number][] = [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]];
+            const poly: Point[] = [];
+            for (const [cx, cy] of corners) {
+                const p = scene.worldToScreen(cx, scene.tileHeight(cx, cy, plane), cy);
+                if (!p) break;
+                poly.push([p[0], p[1]]);
+            }
+            if (poly.length === 4) frame.shapes.push({ points: poly, stroke: argbToRgba(color), fill, width });
+            if (marker.label) {
+                const cx = x + 0.5, cy = y + 0.5;
+                const p = scene.worldToScreen(cx, scene.tileHeight(cx, cy, plane), cy);
+                if (p) frame.texts.push({ text: marker.label, x: p[0], y: p[1], color });
+            }
+        }
+        frame.signature = frameSignature(frame);
+        return frame;
+    }
+}
+
+/** RuneLite's GroundMarkerMinimapOverlay (ABOVE_WIDGETS): a 1px outline of each marked tile. */
+export class GroundMarkerMinimapOverlay implements WidgetOverlay {
+    private frame?: Frame;
+
+    constructor(private readonly plugin: GroundMarkerPlugin) {}
+
+    signature(): string {
+        this.frame = this.build();
+        return this.frame.signature;
+    }
+
+    draw(context: WidgetOverlayDrawContext): Rect[] {
+        const frame = this.frame ?? this.build();
+        this.frame = undefined;
+        return drawFrame(context, frame);
+    }
+
+    private build(): Frame {
+        const frame: Frame = { shapes: [], texts: [], signature: "" };
+        const plugin = this.plugin;
+        if (!plugin.config.drawTileOnMinimmap()) return frame;
+        const minimap = plugin.getClient().minimapGeometry;
+        const markers = markersOnPlane(plugin);
+        if (!minimap || markers.length === 0) return frame;
+        if (performance.now() - minimap.drawnAt >= 500 || minimap.plane !== plugin.playerPlane()) return frame;
+        const width = Math.max(1, minimap.scale);
+        for (const marker of markers) {
+            const { x, y } = marker.worldPoint;
+            const corners: [number, number][] = [[x, y], [x, y + 1], [x + 1, y + 1], [x + 1, y]];
+            const poly: Point[] = [];
+            for (const [cx, cy] of corners) {
+                const p = minimap.worldToMinimap(cx, cy);
+                if (!p) break;
+                poly.push([p[0], p[1]]);
+            }
+            if (poly.length === 4) frame.shapes.push({ points: poly, stroke: argbToRgba(tileColor(plugin, marker)), width });
+        }
+        frame.signature = frameSignature(frame);
+        return frame;
+    }
+}

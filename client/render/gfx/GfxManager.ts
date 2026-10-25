@@ -284,14 +284,15 @@ export class GfxManager {
     spawnAtTile(
         spotId: number,
         tile: { x: number; y: number; level?: number },
-        opts?: { heightTiles?: number; startCycle?: number },
+        opts?: { heightTiles?: number; startCycle?: number; loop?: boolean },
     ): number {
         const id = this.nextId++;
         const level = tile.level ?? 0;
+        const loop = opts?.loop === true;
         const chainKey = `${tile.x | 0},${tile.y | 0},${level},${spotId}`;
         const nowMs = (performance?.now?.() as number) || Date.now();
         const last = this.lastTileSpawnMs.get(chainKey);
-        const chained = last !== undefined && nowMs - last <= CHAIN_WINDOW_MS;
+        const chained = !loop && last !== undefined && nowMs - last <= CHAIN_WINDOW_MS;
         this.lastTileSpawnMs.set(chainKey, nowMs);
         if (this.lastTileSpawnMs.size > 4096) {
             for (const [key, at] of this.lastTileSpawnMs) if (nowMs - at > CHAIN_WINDOW_MS) this.lastTileSpawnMs.delete(key);
@@ -316,7 +317,7 @@ export class GfxManager {
             spotId: spotId | 0,
             anchor: opts?.heightTiles ? "offset" : "ground",
             yOffsetTiles: opts?.heightTiles,
-            loop: false,
+            loop,
             startCycle:
                 typeof opts?.startCycle === "number" ? opts.startCycle | 0 : getClientCycle() | 0,
             startTimeMs: undefined,

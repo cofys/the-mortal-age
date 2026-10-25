@@ -509,7 +509,15 @@ export class SkillManager {
      * @return The Skills instance.
      */
     public setCurrentLevel(skill: Skill, level: number, refresh: boolean): SkillManager {
-        this.skills.level[skill.getIndex()] = level < 0 ? 0 : level;
+        const index = skill.getIndex();
+        const previous = this.skills.level[index];
+        const current = level < 0 ? 0 : level;
+        this.skills.level[index] = current;
+        if (previous !== current) {
+            PluginManager.emitCustomEvent("skills:current-level-changed", {
+                player: this.player, skill, previous, current,
+            });
+        }
         if (refresh) {
             this.updateSkill(skill);
         }
@@ -537,12 +545,7 @@ export class SkillManager {
     setCurrentLevels(skill: Skill, level: number, refresh = true) {
         // Java parity: this method updates the temporary/current level only.
         // Max/real level is managed through setMaxLevels/setMaxLevel.
-        this.skills.level[skill.getIndex()] = level < 0 ? 0 : level;
-
-        if (refresh) {
-            this.updateSkill(skill);
-        }
-        return this;
+        return this.setCurrentLevel(skill, level, refresh);
     }
 
     public setCurrentLevelCombat(skill: Skill, level: number) {

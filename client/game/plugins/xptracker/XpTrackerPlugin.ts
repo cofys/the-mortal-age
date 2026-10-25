@@ -333,6 +333,32 @@ export class XpTrackerPlugin extends Plugin {
         return [...this.overlays.values()];
     }
 
+    // ------------------------------------------------------------------ XpTrackerService
+
+    /** RuneLite's XpTrackerService.getStartGoalXp: where the skill's progress bar starts. */
+    getStartGoalXp(skill: SkillId): number {
+        return this.getSkillSnapshot(skill)?.startGoalXp ?? 0;
+    }
+
+    /** RuneLite's XpTrackerService.getEndGoalXp: the skill's goal (next level, XP-drop goal, 200M). */
+    getEndGoalXp(skill: SkillId): number {
+        return this.getSkillSnapshot(skill)?.endGoalXp ?? 0;
+    }
+
+    /** RuneLite's getActionsLeft; Integer.MAX_VALUE (2147483647) when unknown. */
+    getActionsLeft(skill: SkillId): number {
+        return this.getSkillSnapshot(skill)?.actionsRemainingToGoal ?? 2147483647;
+    }
+
+    getXpHr(skill: SkillId): number {
+        return this.getSkillSnapshot(skill)?.xpPerHour ?? 0;
+    }
+
+    /** RuneLite's getTimeTilGoal: the SHORT time-to-goal text. */
+    getTimeTilGoal(skill: SkillId): string {
+        return this.getSkillSnapshot(skill)?.timeTillGoalShort ?? "∞";
+    }
+
     /** The snapshot a canvas box or info box draws; undefined for a skill not tracked. */
     getSkillSnapshot(skill: SkillId): XpSnapshotSingle | undefined {
         const state = this.xpState.get(skill);

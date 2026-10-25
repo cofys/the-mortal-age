@@ -817,6 +817,26 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
             },
             npcModelPoints: (ecsId, serverId) => this.sceneRaycaster?.npcTrianglesProvider?.(ecsId, serverId) ?? undefined,
             npcHeight: (npcTypeId) => this.getNpcDefaultHeight(npcTypeId),
+            locModelPoints: (loc) => render.buildLocModelHighlightParts(this, {
+                kind: "loc",
+                locId: loc.id,
+                tileX: loc.tileX,
+                tileY: loc.tileY,
+                plane: loc.plane,
+                locModelType: loc.shape,
+                locRotation: loc.rotation,
+            }),
+            locsAtTile: (worldX, worldY, plane) =>
+                (this.getLocIdsAtTileAllLevels(worldX, worldY) ?? [])
+                    .filter((l) => l.level === plane && typeof l.typeRot === "number")
+                    .map((l) => ({
+                        id: l.id,
+                        tileX: worldX,
+                        tileY: worldY,
+                        plane,
+                        shape: (l.typeRot ?? 0) & 0x3f,
+                        rotation: ((l.typeRot ?? 0) >> 6) & 3,
+                    })),
         };
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
@@ -1252,8 +1272,12 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.registerNpcSpotAnimation(this, event);
     }
 
-    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
+    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): number | undefined {
         return render.registerWorldSpotAnimation(this, event);
+    }
+
+    override killWorldSpotAnimation(id: number): void {
+        render.killWorldSpotAnimation(this, id);
     }
 
     async init(): Promise<void> {

@@ -50,6 +50,7 @@ module.exports = {
   hasIngredients: Smelting.hasIngredients,
   consumeIngredients: Smelting.consumeIngredients,
   smeltingXp: Smelting.smeltingXp,
+  resolveCatalyst: Smelting.resolveCatalyst,
   /** Fills SMELTING_RECIPES for a plugin that needs them before Smithing registers. */
   loadData: Data.load,
   startBotSmelting,

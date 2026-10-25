@@ -9,6 +9,8 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
+const { ShopDefinition } = require("../dist/game/definition/ShopDefinition");
+const { ShopManager } = require("../dist/game/model/container/shop/ShopManager");
 
 const Common = require("../plugins/skills/shootingstars/Common.ShootingStars");
 const Star = require("../plugins/skills/shootingstars/Star.ShootingStars");
@@ -24,6 +26,7 @@ const ClueGeodes = require("../plugins/skills/mining/ClueGeodes.Mining");
 const { DATA, world } = Common;
 /** The Varrock east bank site, where a capture saw a size-9 star. */
 const VARROCK = DATA.sites.findIndex((site) => site.name === "Varrock (East bank)");
+const DARKMEYER = DATA.sites.findIndex((site) => site.name === "Daeyalt essence mine entrance");
 
 let core;
 const handlers = new Map();
@@ -65,6 +68,7 @@ before(async () => {
     request.pickaxe = { id: core.ItemIdentifiers.RUNE_PICKAXE, attemptIntervalTicks: 3, animation: new core.Animation(624) };
   });
   on("shooting-stars:landed", Noticeboard.landed);
+  on("random-events:eligibility", Common.denyRandomEvents);
   on("mining:level-boost", Ring.addBoost);
   Noticeboard.resetForTests();
   Common.isMembersWorld = () => members;
@@ -78,6 +82,7 @@ beforeEach(() => {
 afterEach(() => {
   if (world.star) Star.remove(world.star);
   world.lastSiteIndex = -1;
+  world.nextSiteIndex = -1;
 });
 
 /** A real player with a recording packet sender. */
@@ -124,6 +129,28 @@ function runTicks(count, random) {
   }
 }
 
+test("crashed stars exclude random events nearby until removal, on their own plane only", () => {
+  const star = Star.land(DATA.sites[VARROCK], 9, VARROCK);
+  const query = (x, y, z = star.z) => {
+    const player = miner({ x, y });
+    player.setLocation(new core.Location(x, y, z));
+    const request = { player, kind: "genie", following: false, allowed: null };
+    fakeApi.emitCustomEvent("random-events:eligibility", request);
+    return request.allowed;
+  };
+  assert.equal(query(star.x - 1, star.y), null, "a falling star has not crashed yet");
+  for (let i = 0; i < DATA.landingTicks; i++) Star.tick(star);
+  assert.equal(query(star.x - 1, star.y), false, "the mining tiles are excluded");
+  assert.equal(query(star.x + 15, star.y + 15), false, "the current vicinity includes its edge");
+  assert.equal(query(star.x + 16, star.y), null, "unrelated players outside the vicinity are untouched");
+  assert.equal(query(star.x - 1, star.y, 1), null, "a different floor stays eligible");
+  const following = { player: miner({ x: star.x - 1, y: star.y }), kind: "mime", following: true, allowed: true };
+  fakeApi.emitCustomEvent("random-events:eligibility", following);
+  assert.equal(following.allowed, false, "the dynamic exclusion also ends existing invitations and overrides general permissions");
+  Star.remove(star);
+  assert.equal(query(star.x - 1, star.y), null, "removal releases the exclusion immediately");
+});
+
 test("the data: every size has its cache loc, and every site is a tile", () => {
   for (const entry of DATA.sizes) {
     assert.equal(core.CacheDefinitions.getObject(entry.loc).name, "Crashed Star", entry.gameval);
@@ -134,17 +161,69 @@ test("the data: every size has its cache loc, and every site is a tile", () => {
   assert.deepEqual(crash, [6, 7, 8, 9]);
 });
 
-test("landing: sizes 6-9 by the Wiki's chances, never the same site twice in a row", () => {
+test("landing: sizes 6-9 by the Wiki's chances, every 75-105 minutes", () => {
   assert.equal(Landing.rollSize(() => 0), 9);
   assert.equal(Landing.rollSize(() => 0.999), 6);
   assert.equal(Landing.rollSize(() => 0.5), 7);
-  world.lastSiteIndex = 0;
-  assert.equal(Landing.rollSite(() => 0), 1);
-  world.lastSiteIndex = 5;
-  for (let i = 0; i < 200; i++) assert.notEqual(Landing.rollSite(), 5);
   const ticks = [Landing.nextInterval(() => 0), Landing.nextInterval(() => 0.999)];
   assert.equal(ticks[0], 75 * 100);
   assert.ok(ticks[1] >= 104 * 100 && ticks[1] <= 105 * 100);
+});
+
+test("landing: regular rolls exclude Darkmeyer, repeated rolls redirect there", () => {
+  assert.ok(DARKMEYER >= 0, "the existing Darkmeyer site must be present");
+  const regularSites = DATA.sites.map((_, index) => index).filter((index) => index !== DARKMEYER);
+  for (const previous of [-1, ...DATA.sites.map((_, index) => index)]) {
+    world.lastSiteIndex = previous;
+    for (let roll = 0; roll < regularSites.length; roll++) {
+      const site = regularSites[roll];
+      assert.equal(Landing.rollSite(() => (roll + 0.5) / regularSites.length), site === previous ? DARKMEYER : site);
+    }
+  }
+  world.lastSiteIndex = -1;
+  assert.equal(Landing.rollSite(() => 0), regularSites[0]);
+  assert.equal(Landing.rollSite(() => 1 - Number.EPSILON), regularSites.at(-1));
+});
+
+test("landing: renaming the Darkmeyer site fails when the module loads", () => {
+  const modulePath = require.resolve("../plugins/skills/shootingstars/Landing.ShootingStars");
+  const cached = require.cache[modulePath];
+  const site = DATA.sites[DARKMEYER];
+  const name = site.name;
+  try {
+    site.name = "Renamed landing site";
+    delete require.cache[modulePath];
+    assert.throws(() => require(modulePath), { message: "Shooting Stars: Darkmeyer landing site is missing." });
+  } finally {
+    site.name = name;
+    require.cache[modulePath] = cached;
+  }
+});
+
+test("landing: a Darkmeyer forecast stays stable and replaces the old star when due", (t) => {
+  let scheduled;
+  Landing({ ...fakeApi, getTaskManager: () => ({ submit: (task) => { scheduled = task; } }), registerCommand() {} });
+  assert.ok(world.ticksToLanding >= 20 * 100 && world.ticksToLanding <= 50 * 100);
+  const previous = landedStar();
+  const regularSites = DATA.sites.map((_, index) => index).filter((index) => index !== DARKMEYER);
+  t.mock.method(Math, "random", () => (regularSites.indexOf(VARROCK) + 0.5) / regularSites.length);
+  world.ticksToLanding = 1;
+  for (let i = 0; i < 2; i++) {
+    const request = {};
+    fakeApi.emitCustomEvent("shooting-stars:forecast", request);
+    assert.equal(request.region, "Morytania");
+    assert.equal(request.minutes, 1 / Common.TICKS_PER_MINUTE);
+    assert.equal(world.nextSiteIndex, DARKMEYER);
+  }
+  scheduled.execute();
+  assert.equal(previous.gone, true);
+  assert.equal(previous.object, null);
+  assert.equal(previous.headbarNpc, null);
+  assert.equal(world.star.siteIndex, DARKMEYER);
+  assert.equal(world.star.site, DATA.sites[DARKMEYER]);
+  assert.equal(world.lastSiteIndex, DARKMEYER);
+  assert.equal(world.nextSiteIndex, VARROCK, "Darkmeyer cannot be rolled again directly");
+  assert.ok(world.ticksToLanding >= 75 * 100 && world.ticksToLanding <= 105 * 100);
 });
 
 test("a star lands as the landing loc, then the crashed star with its headbar", () => {
@@ -314,6 +393,60 @@ test("Dusuri: introduction until met, the Trade action sets star_trader_met, tra
   assert.equal(ask("On members worlds:"), true);
   members = false;
   assert.equal(ask("On free-to-play worlds:"), true);
+});
+
+test("Dusuri: displayed refunds, value messages and actual sales pay 80% for all four rewards", (t) => {
+  const data = require("../data/definitions/shops.json").find((shop) => shop.name === "Dusuri's Star Shop");
+  ShopDefinition.replace([new ShopDefinition(data.id, data.name, data.currency,
+    data.originalStock.map((stock) => ({ ...stock, price: data.prices[stock.id] })), 1, 1, 1, "test")]);
+  ShopManager.initialize();
+  ShopManager.registerItemCurrency(core.ItemIdentifiers.STARDUST);
+  t.mock.method(PluginManager, "emitCustomEvent", (name, request) => {
+    if (name === "shop:sell-price") Dusuri.sellPrice(request);
+    if (name === "shop:can-sell") Dusuri.canSell(request);
+  });
+  const p = miner();
+  const packets = [];
+  p.getSession = () => ({ sendClientPacket: (packet) => packets.push(packet) });
+  p.getInventory().adds(core.ItemIdentifiers.STARDUST, 10000);
+  ShopManager.open(p, data.id);
+  const stockPacket = packets.at(-1).subarray(-20 * data.originalStock.length);
+  const refunds = [1600, 2400, 240, 120];
+  for (let index = 0; index < data.originalStock.length; index++) {
+    const { id } = data.originalStock[index];
+    const price = data.prices[id];
+    const refund = refunds[index];
+    assert.equal(stockPacket.readInt32BE(index * 20 + 12), price);
+    assert.equal(stockPacket.readInt32BE(index * 20 + 16), refund);
+    const before = p.getInventory().getAmount(core.ItemIdentifiers.STARDUST);
+    ShopManager.handleWidgetAction(p, {
+      groupId: ShopManager.MAIN_INTERFACE_ID, childId: 16, buttonNum: 0, option: "Buy 1", slot: index + 1, itemId: id,
+    });
+    assert.equal(p.getInventory().getAmount(core.ItemIdentifiers.STARDUST), before - price);
+    const slot = p.getInventory().getItems().findIndex((item) => item?.getId() === id);
+    assert.ok(slot >= 0);
+    const sale = { groupId: ShopManager.SIDE_INTERFACE_ID, childId: 0, buttonNum: 0, slot, itemId: id };
+    ShopManager.handleWidgetAction(p, { ...sale, option: "Value" });
+    assert.ok(p.log.at(-1).includes(`shop will buy for ${refund.toLocaleString("en-US")} x Stardust.`), p.log.at(-1));
+    ShopManager.handleWidgetAction(p, { ...sale, option: "Sell 1" });
+    assert.equal(p.getInventory().getAmount(id), 0);
+    assert.equal(p.getInventory().getAmount(core.ItemIdentifiers.STARDUST), before - price + refund);
+  }
+  p.getInventory().add(new core.Item(data.originalStock[0].id, 1, { [core.Item.UNTRADEABLE_META]: true }), false);
+  const lockedSlot = p.getInventory().getItems().findIndex((item) => item?.isUntradeable());
+  const before = p.getInventory().getAmount(core.ItemIdentifiers.STARDUST);
+  ShopManager.handleWidgetAction(p, {
+    groupId: ShopManager.SIDE_INTERFACE_ID, childId: 0, buttonNum: 0, option: "Sell 1", slot: lockedSlot,
+  });
+  assert.equal(p.getInventory().getAmount(core.ItemIdentifiers.STARDUST), before, "metadata-locked items remain unsellable");
+  assert.equal(p.getInventory().getAmount(data.originalStock[0].id), 1);
+  ShopManager.close(p);
+  const otherShop = { shopName: "Another shop", buyPrice: 2000, price: 1700 };
+  Dusuri.sellPrice(otherShop);
+  assert.equal(otherShop.price, 1700);
+  const otherSale = { shopName: "Another shop", sellable: false };
+  Dusuri.canSell(otherSale);
+  assert.equal(otherSale.sellable, false);
 });
 
 test("celestial ring: charge with stardust, extra ores up to adamantite spend charges, uncharge returns it", () => {

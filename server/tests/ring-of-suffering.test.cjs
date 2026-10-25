@@ -7,12 +7,13 @@ Server.installProductionPathResolver();
 
 const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { ItemIds } = require("../dist/util/IdEnums");
+const { CombatFactory } = require("../dist/game/content/combat/CombatFactory");
 
 const RingOfSuffering = require("../plugins/items/RingOfSuffering.plugin");
 
 let hitResolved;
 RingOfSuffering.register({
-  core: { ItemIdentifiers: ItemIds },
+  core: { ItemIdentifiers: ItemIds, CombatFactory },
   onCombatHitResolved: (handler) => { hitResolved = handler; },
   onItemAction() {},
   onItemOnItem() {},
@@ -107,4 +108,14 @@ test("the toggle disables the effect without spending charges", () => {
   const disabled = createPlayer({ ring, disabled: true });
   assert.equal(land(disabled, 100).pending.length, 0);
   assert.equal(RingOfSuffering._test.charges(ring), 5, "disabled spends nothing");
+});
+
+test("recoil immunity prevents suffering damage without spending its last charges", () => {
+  const ring = item(ItemIds.RING_OF_SUFFERING_R_, { "ring-of-suffering": 3 });
+  const player = createPlayer({ ring }), enemy = attacker();
+  enemy.getAttribute = key => key === 'combat:recoil-immune';
+  land(player, 100, enemy);
+  assert.deepEqual(enemy.pending, []);
+  assert.equal(RingOfSuffering._test.charges(ring), 3);
+  assert.equal(ring.getId(), ItemIds.RING_OF_SUFFERING_R_);
 });

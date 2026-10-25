@@ -83,6 +83,11 @@ function dialogueLine(request) {
   request.after = () => claim(player, tier);
 }
 
+/** Wiki: the full thrall-duration extension requires claiming Master rewards. */
+function thrallDuration(event) {
+  if (Progress.claimedTiers(event.player).has(MASTER_TIER)) event.ticks *= 2;
+}
+
 const lampTier = (itemId) => Data.tiers().find((tier) => tier.lamp === itemId) ?? null;
 
 function rubLamp({ player, item, itemId, slot }) {
@@ -121,6 +126,7 @@ module.exports = function attachRewards(api) {
   api.onNpcDialogueVariant(dialogueVariant);
   api.onNpcDialogueCondition(dialogueCondition);
   api.onCustomEvent("npc-dialogue:line", dialogueLine);
+  api.onCustomEvent("magic:thrall-duration", thrallDuration);
   api.onItemAction("Antique lamp", { Rub: rubLamp });
 };
 

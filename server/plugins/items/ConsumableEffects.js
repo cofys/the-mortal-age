@@ -13,6 +13,20 @@ function curePoisonAndVenom(player) {
   if (typeof player.setVenomed === "function") player.setVenomed(false);
 }
 
+/** Cure/reduce poison damage without immunity; venom is only converted to poison. */
+function curePoison(player, damageReduction = Infinity) {
+  // Ordinary poison stores five severity points per starting damage; venom
+  // stores its damage directly. A conversion retains that damage, without also
+  // reducing it during the same treatment.
+  const stored = player.getPoisonDamage();
+  const current = Number.isFinite(stored) ? Math.max(0, stored) : 0;
+  const severity = player.isVenomed?.()
+    ? current * 5
+    : Math.max(0, current - damageReduction * 5);
+  player.setPoisonDamage(severity);
+  player.setVenomed(false);
+}
+
 /** Raises a skill to base + flat + percent of base, unless it is already there. */
 function boostSkill(player, skill, flat, percent) {
   const skills = player.getSkillManager();
@@ -56,6 +70,7 @@ function restoreSkillToBaseWithFormula(player, skill, flat, percent) {
 module.exports = {
   restoreRunEnergy,
   curePoisonAndVenom,
+  curePoison,
   boostSkill,
   lowerSkillByCurrent,
   lowerSkillByMax,

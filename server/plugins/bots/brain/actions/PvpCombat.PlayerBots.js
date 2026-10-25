@@ -37,12 +37,11 @@ function createPvpCombatAction(spec, controller) {
       if (state.pvp.retreat) {
         return "running";
       }
-      const target =
-        player.getCombat?.().getTarget?.() ?? state.pvp.targetPlayer ?? null;
-      const targetAlive =
+      const combat = player.getCombat?.();
+      const targetAlive = [combat?.getAttacker?.(), combat?.getTarget?.(), state.pvp.targetPlayer].some((target) =>
         !!target &&
         target.isRegistered?.() !== false &&
-        (target.getHitpoints?.() ?? 1) > 0;
+        (target.getHitpoints?.() ?? 1) > 0);
       if (targetAlive) {
         controller.tick({ player, state, nowMs: ctx.nowMs });
         return "running";

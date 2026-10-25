@@ -10,6 +10,7 @@
  * The kill-count tasks (Skotizo Champion, Skotizo Adept) finish from the count.
  */
 const Common = require("./Common.Skotizo");
+const { Fight } = require("./Fight.Skotizo");
 
 const MONSTER = "Skotizo";
 
@@ -47,7 +48,7 @@ function judge(fight) {
 /** Damage the player takes in their lair, from anything. */
 function hitResolved({ target, hit }) {
   const fight = target?.isPlayer?.() ? target.getArea?.()?.session?.fight : null;
-  if (fight && !fight.stopped && target === fight.player && hit.getTotalDamage() > 0) fight.stats.damageTaken += hit.getTotalDamage();
+  if (fight instanceof Fight && !fight.stopped && target === fight.player && hit.getTotalDamage() > 0) fight.stats.damageTaken += hit.getTotalDamage();
 }
 
 /** The player's blows, before they land: demonbane weapons worn, and the last one's weapon. */

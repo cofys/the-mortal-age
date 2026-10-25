@@ -1,0 +1,139 @@
+{
+  "_description": "Zalcano (https://oldschool.runescape.wiki/w/Zalcano, /Strategies, Rock_Formation, Tephra, Refined_tephra, Imbued_tephra, Golem_(Zalcano), Demonic_Symbol, Zalcano_shard, Smolcano). Names are cache gamevals; tiles are the Wiki's and the map's. Values under a `_calibrated` note have no Wiki figure and are estimates.",
+  "names": {
+    "npcs": {
+      "armoured": "zalcano",
+      "weakened": "zalcano_weak",
+      "golem": "zalcano_golem"
+    },
+    "locs": {
+      "entrance": "zalcano_entrance",
+      "exit": "zalcano_exit",
+      "barrier": "zalcano_barrier",
+      "rockGlowing": "zalcano_rock_active",
+      "rock": "zalcano_rock_partial",
+      "rockDepleted": "zalcano_rock_inactive",
+      "furnace": "zalcano_furnace",
+      "altar": "zalcano_altar",
+      "symbolDamage": "zalcano_symbol_damage",
+      "symbolEmpower": "zalcano_symbol_empower"
+    },
+    "items": {
+      "tephra": "zalcano_ore",
+      "refined": "zalcano_refined_ore",
+      "imbued": "zalcano_imbued_ore",
+      "crystalShard": "prif_crystal_shard",
+      "infernalAshes": "infernal_ashes",
+      "toolSeed": "prif_tool_seed",
+      "uncutOnyx": "uncut_onyx",
+      "shard": "zalcano_pickaxe_kit",
+      "pet": "zalcanopet"
+    },
+    "varps": {
+      "kills": "total_zalcano_kills"
+    },
+    "seqs": {
+      "fallDown": "zalcano_fall_down",
+      "fallenIdle": "zalcano_fallen_idle",
+      "standUp": "zalcano_stand_up",
+      "rockFall": "zalcano_attack_rock_fall",
+      "golemAttack": "zalcano_attack_golem",
+      "rockAttack": "zalcano_attack_magic",
+      "pentagram": "zalcano_pentagram",
+      "barrage": "zalcano_attack_ranged",
+      "refine": "zalcano_furnace",
+      "imbue": "zalcano_runecraft"
+    },
+    "spotanims": {
+      "rockFall": "zalcano_rock_fall",
+      "fireAttack": "zalcano_fire_attack",
+      "golemSpawn": "zalcano_golem_spawn",
+      "oreThrow": "zalcano_ore_throw",
+      "oreHit": "zalcano_ore_hit"
+    }
+  },
+  "prison": {
+    "_bounds": "the room behind the barrier (map square 47,94)",
+    "bounds": [3019, 3048, 6034, 6061],
+    "floor": [3022, 3045, 6037, 6061],
+    "zalcano": [3031, 6048],
+    "entrance": [3281, 6058],
+    "outside": [3282, 6060],
+    "platform": [3033, 6068],
+    "barrierNorth": [3034, 6063],
+    "barrierSouth": [3034, 6061],
+    "_rocks": "the map's own rock formations (south-west corners of the 3x3 locs); the Wiki lists them a tile further north-east",
+    "rocks": [[3025, 6057], [3040, 6057], [3025, 6040], [3040, 6040]],
+    "firstRockWeights": [1, 2, 4, 2],
+    "_firstRockWeights": "north-west, north-east, south-west, south-east: the Wiki has north-east likeliest; the weights themselves are estimates",
+    "golemSpawns": [[3023, 6049], [3044, 6049], [3033, 6038], [3033, 6060]]
+  },
+  "zalcano": {
+    "shield": 300,
+    "hitpoints": 1000,
+    "respawnTicks": 37,
+    "downTicks": [20, 27],
+    "_downTicks": "12-16 seconds (Strategies)",
+    "underDamage": [3, 10],
+    "shockwave": { "damage": 10, "stunTicks": 2, "push": 3 },
+    "golemHeal": 50
+  },
+  "tephra": {
+    "miningXp": 35.2,
+    "refineXp": 10,
+    "imbueXp": 5,
+    "shardChance": 65,
+    "_calibrated": "the Wiki gives no tephra mining rate: the chance per attempt at a glowing rock and an ordinary one, and the extra ore a glowing rock can give",
+    "glowingChance": 0.5,
+    "glowingExtra": 0.3,
+    "rockChance": 0.12,
+    "throwSpeed": 3,
+    "throwRange": 10,
+    "blueMultiplier": 1.5
+  },
+  "mining": {
+    "_maxHit": "by Mining level, plus max((pickaxe level - 40) / 15, 0)",
+    "maxHit": [[95, 33], [85, 32], [75, 31], [1, 30]],
+    "xp": 35.2
+  },
+  "attacks": {
+    "_calibrated": "the Wiki gives no intervals: how often she attacks, how often the glowing rock moves, how many boulders fall, how long symbols last and how fast the golem walks",
+    "every": [8, 12],
+    "rockMoveTicks": 45,
+    "boulders": { "max": 40, "warnTicks": 3, "extra": 3 },
+    "rockBlast": { "max": 28 },
+    "symbols": { "count": [6, 8], "blue": [2, 5], "ticks": 25, "graceTicks": 3, "max": 26, "step": 4, "runDrain": 5 },
+    "barrage": { "min": 1, "max": 5 },
+    "golem": { "walkEvery": 2 }
+  },
+  "rewards": {
+    "shieldMinimum": 5,
+    "uniqueMinimum": 31,
+    "_points": "main points: health + 2 x shield damage; tertiary points: min(health, 400) + 2 x min(shield, 300)",
+    "_calibrated": "the Wiki doesn't give how quantities scale with points: they run linearly from the table's minimum to its maximum at fullPoints",
+    "fullPoints": 1300,
+    "uniqueChance": 200,
+    "seedWeight": 39,
+    "onyxWeight": 1,
+    "shardChance": [1500, 750],
+    "petChance": 2250,
+    "mvpBonus": 0.1
+  },
+  "messages": {
+    "_unverified": "the Wiki gives none of these, except the pet's (Pets.plugin.js)",
+    "needQuest": "You need to have completed Song of the Elves to enter Zalcano's prison.",
+    "peek": "You peek through the barrier. There {verb} {players} inside.",
+    "peekDamaged": "Zalcano has taken some damage.",
+    "noPickaxe": "You need a pickaxe to mine this.",
+    "noTephra": "You have no tephra to refine.",
+    "noRefined": "You have no refined tephra to imbue.",
+    "noImbued": "You need imbued tephra to attack Zalcano.",
+    "mineHer": "Zalcano has fallen: mine her with a pickaxe.",
+    "invulnerable": "Zalcano can only be harmed with imbued tephra.",
+    "fallen": "Zalcano has fallen! Mine her while she's down.",
+    "rises": "Zalcano rises and the tephra crumbles away.",
+    "tooLittle": "You didn't contribute enough to receive a reward.",
+    "killCount": "Your Zalcano kill count is: <col=ff0000>{kills}</col>.",
+    "agh": "Agh!"
+  }
+}

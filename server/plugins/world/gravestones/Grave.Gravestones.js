@@ -158,7 +158,11 @@ function isOpen(player) {
 
 function fee(player, held = Storage.grave(player)) {
   if (!held || held.feePaid) return 0;
-  return Fees.graveFee(held.items, Common.ironmanMode(player) != null);
+  return Math.floor(Fees.graveFee(held.items, Common.ironmanMode(player) != null) * feeMultiplier(held.feeMultiplier));
+}
+
+function feeMultiplier(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : 1;
 }
 
 function sendFee(player, held) {
@@ -374,14 +378,13 @@ function prune(player, held) {
 
 /** Where an instance wants its deaths' graves, or the respawn point for one that doesn't say. */
 function graveSpot(player, location) {
-  const request = { player, location, tile: null };
+  const request = { player, location, tile: null, feeMultiplier: 1 };
   Common.api().emitCustomEvent("gravestones:grave-location", request);
-  if (request.tile) return request.tile;
-  if (player.getPrivateArea?.()) {
+  if (!request.tile && player.getPrivateArea?.()) {
     const respawn = Common.core().GameConstants.DEFAULT_LOCATION;
-    return { x: respawn.getX(), y: respawn.getY(), z: respawn.getZ() };
+    request.tile = { x: respawn.getX(), y: respawn.getY(), z: respawn.getZ() };
   }
-  return null;
+  return { tile: request.tile, feeMultiplier: feeMultiplier(request.feeMultiplier) };
 }
 
 /**
@@ -402,12 +405,15 @@ function store(player, location, records, layout, relocate) {
       return;
     }
   }
-  const spot = graveSpot(player, location);
+  const { tile: spot, feeMultiplier: multiplier } = graveSpot(player, location);
   const deathCoord = spot ?? { x: location.getX(), y: location.getY(), z: location.getZ() };
   const { held: items, overflow } = Common.stack(existing ? held.items : [], records, Common.GRAVE_SLOTS);
   // UNVERIFIED: what doesn't fit goes to Death's Office.
   Storage.sendToOffice(player, overflow);
   held = existing ? held : { items: [], merged: false };
+  // Keep the greater multiplier when merging, so normal-fee contents cannot
+  // acquire a discount by being added to (or followed by) a discounted death.
+  held.feeMultiplier = existing ? Math.max(feeMultiplier(held.feeMultiplier), multiplier) : multiplier;
   held.items = items;
   held.layout = layout;
   held.duration = DURATION;

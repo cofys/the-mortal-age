@@ -207,6 +207,9 @@ Plugins that own a trapdoor (Edgeville's, the Werewolf course's) load first and 
 
 ## Playing an entry
 
+An entry can supply an `approach` tile when surrounding walls block ordinary loc reach.
+The object-route hook walks to that threshold before playing the transition.
+
 The click is handled the tick after the player arrives, so each captured tick comes one tick earlier from the click:
 1. **The animation's tick:** the animation and sound, and the fade out when there is one.
 2. **A tick later:** the minimap goes off.
@@ -222,6 +225,25 @@ Movement is blocked meanwhile. The sequence stops if the player is moved, dies o
 - **Ladders and stairs Ladders handles:** Ladders asks other plugins first (`ladders:climb`), and an entry answers before Ladders guesses from the map. See [climbing.md](climbing.md).
 
 **Free-to-play worlds:** the plugin isn't members-only, because free-to-play ladders are in the data. FreeToPlay already moves anyone who ends up in a members area back to free land.
+
+## Prifddinas gates and clan towers (#954)
+
+The rev 241 cache places two City Gate leaves at each north, south, east and west entrance,
+in both the overworld and city map. Six leaves had captured entries; the other ten now use
+their paired cache placements, the captured gate fade/sound/two-tick transition, and clear
+landing tiles on the opposite map. The map offset is (1024, 2752). Each gate's `approach`
+is its walkable threshold: surrounding walls otherwise prevent the interaction from firing.
+
+The eight `prif_clan_tower_teleporter` platforms (36490) exist at the same x/y on planes 0
+and 2. Their cache action is **Channel**, not the Step-on label suggested in #954. All sixteen
+placements now travel between those floors and allow walking off the landing platform.
+The [Wiki](https://oldschool.runescape.wiki/w/Prifddinas) describes the city and its districts;
+cache placements confirm the paired tower floors. Platform coordinates and the two-tick delay
+come from the issue reporter's tested route.
+
+shortcut: the ten uncaptured gate landings and platform timing are inferred from cache
+geometry, existing gate captures and #954; replace them when live OSRS captures are available.
+No new animation or sound is claimed for the uncaptured platforms.
 
 ## Not done yet
 

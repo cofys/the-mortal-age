@@ -49,7 +49,9 @@ const player = {
 Events.initialize({
     core: { Location,
         NpcIdentifiers: require("../../server/dist/util/NpcIdentifiers").NpcIdentifiers,
-        ItemIdentifiers: require("../../server/dist/util/ItemIdentifiers").ItemIdentifiers },
+        ItemIdentifiers: require("../../server/dist/util/ItemIdentifiers").ItemIdentifiers,
+        MapObjects: { mapObjects: new Map(), getHash: () => 0 },
+        Wilderness: { isPvpArea: () => false } },
     persistAttribute(key: string, defaultValue?: unknown) { persistedAttributes.set(key, defaultValue); },
     emitCustomEvent() {}, getRegionManager: () => ({ blocked: () => false, canMovestart: () => true }),
     spawnNpc(definition: any) {

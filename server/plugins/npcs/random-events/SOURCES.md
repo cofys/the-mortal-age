@@ -61,15 +61,77 @@ and combat-following set, including ignoring and declining it without movement.
 Normal-world rsprox captures 3147/rev232 and 2483 show an emote-unlock interface and
 initial Count Check placement only; they provide no spawn-timing evidence.
 
-The Wiki also lists many no-event zones and says old Hunter areas block teleporting
-events. Managed `Area` instances are conservatively treated as unavailable, except the
-Wilderness where only non-teleporting events remain eligible. This avoids spawning in
-unclassified managed boss/minigame/bank areas but also suppresses events in safe managed
-areas. The server exposes no shared zone metadata for ordinary banks or old Hunter
-areas, so their exact boundaries and exceptions remain unimplemented pending reliable
-coordinates or flags.
+### Location eligibility
+
+[Locations without random events](https://oldschool.runescape.wiki/w/Random_events#Locations_without_random_events),
+[reduced pools](https://oldschool.runescape.wiki/w/Random_events#Locations_with_fewer_random_events),
+and [bank exceptions](https://oldschool.runescape.wiki/w/Random_events#Bank_locations_with_random_events)
+drive `Locations.RandomEvents.js` and its local `data/locations.json`. Ordinary banks
+block new invitations, including Genie/Count Check/Jekyll. Those three can **follow**
+into a bank; other invitations end immediately on entering a forbidden location,
+including when an interaction arrives before the next player process. The
+[1 November 2023 update](https://oldschool.runescape.wiki/w/Update:Forestry_Tweaks,_Security_%26_More)
+is recorded by the Wiki as allowing these three followers into banks, not as
+allowing fresh bank spawns. Owner testing commands retain the same location rules.
+
+Bank roof boxes enclose the connected roof tiles around `Bank booth` placements
+from cache revision 241 (`yarn dump:loc --json "Bank booth" "Closed bank booth"`).
+The live roof bit is also required: a street or roof gap inside the enclosing
+rectangle remains eligible. Roofless booths and bank chests exclude adjacent
+standing tiles, with the Wiki's named exceptions for Giants' Foundry, Myths' Guild,
+Rogues' Den, Trouble Brewing's bank and the Hosidius charcoal furnaces. Ferox answers
+the `random-events:eligibility` custom event using its existing captured town
+polygon, so the full roster can appear inside its barriers; the Wilderness buffer
+keeps the teleport-event restriction.
+
+The four original Hunter biomes (Feldip, Piscatoris, Rellekka and Uzer) exclude
+teleporting events. Their map footprints follow the Wiki's named habitats and the
+cache/Wiki-sourced creature placements. Later hunting grounds, other planes, and
+the surrounding towns do not inherit this rule. Underwater and the Kalphite Lair
+use the Wiki's explicit reduced pools, including the Drill Demon exception in
+the latter. Managed Giants' Foundry, the public dark caves, Slayer Tower basement
+and Creature Creation no longer suppress events simply because they are Areas.
+The passive `DogQuestArea` covering Varrock's public streets is also allowed.
+These permissions identify the Area itself: other arenas owned by the shared
+Quests plugin remain excluded, and public-area permission does not bypass banks.
+Other unclassified managed areas remain excluded.
+
+The Grand Exchange plaza is excluded using the active terrain's circular underlay-55
+component and its overlay-173 paving rim (three tiles wide). The stored spans follow
+those painted tiles, retaining grass corners; the exact server cutoff on the outward
+footpaths is uncaptured. The older cannon polygon names an unverified private-server
+source and was not used. Actual-cache tests check the plaza, rim and grass samples.
+
+[Forestry: Part Two](https://oldschool.runescape.wiki/w/Update:Forestry:_Part_Two)
+disabled random events around crashed stars. Shooting Stars answers the same custom
+eligibility event from its current star state, after the crash and until removal,
+on that star's plane. Its existing 15-tile vicinity is used; the live-OSRS radius is
+unverified. The permission is queried live, so no copied landing rectangles or stale
+star zones remain after removal. There is no Forestry-event runtime in this checkout
+(only Forestry tree timers and item storage), hence no active Forestry event to query.
+
+Limits: cache landscape and creature habitats are **not** captured live-OSRS
+server-zone boundaries. Roofless/chest zone edges and the original Hunter edges
+remain approximations; this is not evidence for exact tile-for-tile parity.
+The star radius, GE footpath cutoff and combat eligibility edge case above are not
+captured. No generated osrsreboxed data is changed.
 No events spawn while the `random-events:enabled` world config is false; active events
 still expire.
+
+Agent MCP's existing `advance_time` now advances the persisted scheduling clock and
+invitation lifetime. It does not advance teleport-session puzzles or their tick tasks.
+Live checks on worktree MCP 49819 covered Draynor street spawning, Dwarf removal
+on bank entry, retaining Genie on entry while refusing a fresh bank invitation,
+Feldip's Mime refusal/Genie acceptance, and Mime invitations inside Ferox and the
+managed Giants' Foundry. Advancing the natural scheduler at Lumbridge produced a
+Beekeeper invitation without moving the player. Further live checks covered GE
+plaza refusal versus adjacent grass permission inside `DogQuestArea`, removing a
+following Genie on entry to the paving, refusing invitations by a crashed star,
+allowing them beyond its vicinity, and releasing the old exclusion on replacement.
+The targeted Random Events,
+Ferox, Shooting Stars and food suites pass 120 tests, including actual-cache
+bank/street/floor and GE terrain checks, the live-star exclusion lifecycle,
+and the registered Slayer Tower and Creature Creation Areas.
 
 Rewards require inventory capacity and retain the event on failure. Stackable gifts
 can join an existing stack; Jekyll's exchange frees its exact herb slot. State clears
@@ -84,10 +146,10 @@ enable flag. Omit the index for a random event. The zero-based indices are:
 0 Genie, 1 Sandwich Lady, 2 Drunken Dwarf, 3 Rick Turpentine, 4 Certers,
 5 Mysterious Old Man, 6 Dr Jekyll, 7 Strange Plant. F2P only exposes indices 0–5.
 The command replaces your previous event using its normal cleanup, and retains
-eligibility, traversable spawning, ownership, expiry and reward checks. Its
+location eligibility, traversable spawning, ownership, expiry and reward checks. Its
 description is registered for command search.
 
-Verify after build: `node --test tests/random-events.test.cjs tests/food-effects.test.cjs`.
+Verify after build: `node --test tests/random-events.test.cjs tests/ferox-enclave.test.cjs tests/food-effects.test.cjs tests/shooting-stars.test.cjs`.
 These tests exercise real plugin registration with controlled lifecycle/collision/
 inventory adapters, plus the real Inventory reward path. From `client/`, run
 `yarn tsx tests/widget-loader.test.ts` to check the plugin's actual selection flags

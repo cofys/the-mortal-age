@@ -27,13 +27,13 @@ function target() {
 }
 function lightning(source, victim) {
   let value;
-  const oldMax = core.DamageFormulas.sourceMaxHit;
-  core.DamageFormulas.sourceMaxHit = () => 0;
+  const oldBounds = core.DamageFormulas.sourceHitBounds;
+  core.DamageFormulas.sourceHitBounds = () => ({ minimum: 0, maximum: 0 });
   const old = CombatFactory.addPendingHit;
   CombatFactory.addPendingHit = (hit) => { value = hit; };
   try { special('SaradominSword').combatMethod.handleAfterHitEffects({ isAccurate: () => true,
     getAttacker: () => source, getTarget: () => victim }); }
-  finally { CombatFactory.addPendingHit = old; core.DamageFormulas.sourceMaxHit = oldMax; }
+  finally { CombatFactory.addPendingHit = old; core.DamageFormulas.sourceHitBounds = oldBounds; }
   return value;
 }
 test('lightning is a capped delayed Magic hit paying 2 Magic XP per damage', () => {
@@ -56,8 +56,8 @@ test('lightning never inherits a newly activated special hit count, skip flag or
   assert.equal(hit.getCombatType(), CombatType.MAGIC);
 });
 test('fixed Magic hits keep Elysian and incoming damage reductions', () => {
-  const oldMax = core.DamageFormulas.sourceMaxHit, oldRandom = Math.random;
-  core.DamageFormulas.sourceMaxHit = () => 0;
+  const oldBounds = core.DamageFormulas.sourceHitBounds, oldRandom = Math.random;
+  core.DamageFormulas.sourceHitBounds = () => ({ minimum: 0, maximum: 0 });
   Math.random = () => 0;
   try {
     const source = { isNpc: () => true, isPlayer: () => false, getAsNpc: () => source,
@@ -69,7 +69,7 @@ test('fixed Magic hits keep Elysian and incoming damage reductions', () => {
     registerIncomingDamageModifier((entity, damage) => { if (entity === victim) damage.multiplyDamage(0.5); });
     const hit = new core.PendingHit(source, victim, { type: () => CombatType.MAGIC, accuracyDefenceType: (type) => type }, { damage: 16, rollAccuracy: false });
     assert.equal(hit.getTotalDamage(), 6, '16 reduced by Elysian25%, then incoming50%');
-  } finally { core.DamageFormulas.sourceMaxHit = oldMax; Math.random = oldRandom; }
+  } finally { core.DamageFormulas.sourceHitBounds = oldBounds; Math.random = oldRandom; }
 });
 test('guild cyclopes reject real lightning through existing non-melee immunity and give no XP', () => {
   let immune;
@@ -157,12 +157,12 @@ test('scythe cleaves three forward tiles across NPCs and players in multi with a
   const Scythe = require('../plugins/items/ScytheOfVitur.plugin');
   let resolver, multi = true;
   Scythe.register({ core: { ...core,
-    AreaManager: { inMulti: () => multi }, World: { getNpcs: () => npcs, getPlayers: () => players },
+    World: { getNpcs: () => npcs, getPlayers: () => players },
     CombatFactory: { canAttackSecondaryTarget: (_a, _b, c) => c.attackable !== false,
       applyStyleDamage: (hit, max) => { hit.max = max; hit.damage = max; } },
     DamageFormulas: { calculateMaxMeleeHit: () => 48 },
     PendingHit: class { constructor(a, target) { this.target = target; this.damage = 48; } getTotalDamage() { return this.damage ?? 0; } setTotalDamage(value) { this.damage = value; } },
-  }, onServerStartup: (fn) => fn(), onItemAction() {}, onItemOnItem() {},
+  }, getAreaManager: () => ({ inMulti: () => multi }), onServerStartup: (fn) => fn(), onItemAction() {}, onItemOnItem() {},
     registerCombatMethodResolver: (value) => { resolver = value; } });
   const actor = (x, y, player = false, size = 1) => {
     const value = { getLocation: () => loc(x, y), isNpc: () => !player, isPlayer: () => player,
@@ -207,7 +207,7 @@ test('scythe queue caps a corrupted victim across every hit before awarding XP',
     PluginManager.emitPlayerDealtDamage = options.damageHook;
     let resolver;
     delete require.cache[require.resolve('../plugins/items/ScytheOfVitur.plugin')];
-    require('../plugins/items/ScytheOfVitur.plugin').register({ core: { ...core, AreaManager: { inMulti: () => false } },
+    require('../plugins/items/ScytheOfVitur.plugin').register({ core, getAreaManager: () => ({ inMulti: () => false }),
       onServerStartup: (handler) => handler(), onItemAction() {}, onItemOnItem() {},
       registerCombatMethodResolver: (value) => { resolver = value; } });
     const hits = resolver.resolve(source).hits(source, victim);

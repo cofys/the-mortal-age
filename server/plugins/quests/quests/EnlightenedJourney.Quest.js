@@ -142,6 +142,8 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
 
   const FLAGS_ATTRIBUTE = "quest.enlightened_journey.flags";
   const SAPLING_ATTRIBUTE = "quest.enlightened_journey.sapling";
+  /** Set once Auguste has flown the player back to Entrana: Assistant Stan keeps Taverley's balloon. */
+  const STAN_ATTRIBUTE = "quest.enlightened_journey.taverley_stan";
   const BIT_RED_DYE = 1 << 0;
   const BIT_YELLOW_DYE = 1 << 1;
   const BIT_SANDBAGS = 1 << 2;
@@ -166,7 +168,10 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
   const REQUIRED_BRANCHES = 12;
   const BRANCHES_PER_CUT = 6;
   const FLIGHT_LOGS = 10;
-  const MAX_FLIGHT_WEIGHT = 40;
+  const MAX_FLIGHT_WEIGHT = 40; // kg (Wiki)
+  const GRAMS_PER_KG = 1000;
+  const PICCARD_AUGUSTE = 1; // zep_multi_piccard: Auguste at Taverley
+  const PICCARD_STAN = 2; // zep_multi_piccard: Assistant Stan at Taverley
 
   const TAVERLEY_LANDING = new Location(2938, 3421, 0);
   const ENTRANA_ARRIVAL = new Location(2808, 3354, 0);
@@ -245,18 +250,21 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
     return false;
   }
 
-  /** Inventory + worn weight in the same units the equipment stats tab adds up. */
+  /**
+   * Inventory + worn weight in kg, as the equipment stats tab adds it up: the cache's weights are
+   * grams, and a stack counts once.
+   */
   function carriedWeight(player) {
-    let weight = 0;
+    let grams = 0;
     for (const item of [
       ...player.getInventory().getItems(),
       ...player.getEquipment().getItems(),
     ]) {
       if (item?.getId?.() > 0 && (item.getAmount?.() ?? 0) > 0) {
-        weight += Number(item.getDefinition().getWeight()) || 0;
+        grams += Number(item.getDefinition().getWeight()) || 0;
       }
     }
-    return weight;
+    return grams / GRAMS_PER_KG;
   }
 
   function hasContraband(player) {
@@ -710,7 +718,7 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
     if (quest.getStage(player) < STAGE_BALLOON_READY) return;
     if (!held(player, LOGS, FLIGHT_LOGS) || !held(player, TINDERBOX)) return;
     player.getInventory().deleteNumber(LOGS, FLIGHT_LOGS);
-    player.getPacketSender().sendVarbit(VARBIT_ZEP_MULTI_PICCARD, 1);
+    player.getPacketSender().sendVarbit(VARBIT_ZEP_MULTI_PICCARD, PICCARD_AUGUSTE);
     quest.setStage(player, STAGE_LANDED);
     player.moveTo(TAVERLEY_LANDING);
     player.sendMessage("You arrive safely in Taverley.");
@@ -769,6 +777,10 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
         event.handled = true;
         event.end = true;
         player.moveTo(ENTRANA_ARRIVAL);
+        // Auguste bases himself in Entrana from here ("I will base my operations in Entrana");
+        // Assistant Stan keeps the Taverley balloon.
+        player.setAttribute(STAN_ATTRIBUTE, 1);
+        player.getPacketSender().sendVarbit(VARBIT_ZEP_MULTI_PICCARD, PICCARD_STAN);
         return;
       default:
         // The linear "With ..." material-check run: remember the matching branch
@@ -947,7 +959,9 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
       stage >= STAGE_BALLOON_READY ? 2 : stage >= STAGE_BASKET_BUILT ? 1 : 0;
     const sender = player.getPacketSender();
     sender.sendVarbit(VARBIT_ZEP_MULTI_BASKET, basket);
-    sender.sendVarbit(VARBIT_ZEP_MULTI_PICCARD, stage >= STAGE_LANDED ? 1 : 0);
+    const piccard = stage < STAGE_LANDED ? 0
+      : quest.isComplete(player) && player.getAttribute(STAN_ATTRIBUTE) ? PICCARD_STAN : PICCARD_AUGUSTE;
+    sender.sendVarbit(VARBIT_ZEP_MULTI_PICCARD, piccard);
   }
 
   function handleLogin({ player }) {
@@ -1056,6 +1070,7 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
 
   api.persistAttribute(FLAGS_ATTRIBUTE);
   api.persistAttribute(SAPLING_ATTRIBUTE);
+  api.persistAttribute(STAN_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "enlightened_journey",

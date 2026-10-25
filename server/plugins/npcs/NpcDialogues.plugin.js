@@ -936,14 +936,16 @@ module.exports = {
 
     /**
      * Plays one named variant of an NPC's transcript outside Talk-to (a door that has the
-     * guard speak, an item used on an NPC): { player, npc?, npcId, variant, select?, handled }.
+     * guard speak, an item used on an NPC): { player, npc?, npcId, variant, select?, exact?, handled }.
      * `select(steps)` can narrow the variant to the steps that apply (a right-click shortcut).
+     * A missing variant plays the NPC's default transcript unless `exact` is set.
      */
     api.onCustomEvent("npc-dialogue:start", (request) => {
       const definition = NpcDefinition.forId(request.npcId);
       if (!request.player || !definition) return;
       const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant };
       const resolved = resolveTranscript(event);
+      if (request.exact && resolved?.variant !== request.variant) return;
       const steps = typeof request.select === "function" && resolved?.steps ? request.select(resolved.steps) : resolved?.steps;
       if (!steps?.length) return;
       startDialogue(api, event, steps, resolved.branches, resolved.context);

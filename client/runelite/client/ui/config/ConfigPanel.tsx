@@ -6,6 +6,7 @@ import {
     type ConfigSectionDef,
 } from "@runelite/client/config/ConfigItem";
 import { parseConfigValue } from "@runelite/client/config/ConfigManager";
+import { Keybind } from "@runelite/client/config/Keybind";
 import type { ConfigManager } from "@runelite/client/config/ConfigManager";
 
 const DEFAULT_SECTION = "";
@@ -106,10 +107,19 @@ function ConfigField({
                 >
                     {enumEntries.map(([name]) => (
                         <option key={name} value={name}>
-                            {name}
+                            {item.enumLabels?.[name] ?? name}
                         </option>
                     ))}
                 </select>
+            </label>
+        );
+    }
+
+    if (item.keybind) {
+        return (
+            <label className="rl-sidebar-field">
+                {label}
+                <KeybindButton value={value instanceof Keybind ? value : Keybind.NOT_SET} onChange={update} />
             </label>
         );
     }
@@ -204,6 +214,39 @@ function ConfigField({
                 onChange={(event) => update(event.target.value)}
             />
         </label>
+    );
+}
+
+/**
+ * RuneLite's HotkeyButton: click, then press the key (with any modifiers) to bind it. Escape
+ * cancels; Backspace or Delete clears it to "Not set".
+ */
+function KeybindButton({ value, onChange }: { value: Keybind; onChange: (next: Keybind) => void }): JSX.Element {
+    const [listening, setListening] = useState(false);
+    return (
+        <button
+            type="button"
+            className="rl-sidebar-keybind"
+            onClick={() => setListening(true)}
+            onBlur={() => setListening(false)}
+            onKeyDown={(event) => {
+                if (!listening) return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === "Escape") {
+                    setListening(false);
+                    return;
+                }
+                if (event.key === "Backspace" || event.key === "Delete") {
+                    onChange(Keybind.NOT_SET);
+                } else {
+                    onChange(Keybind.fromEvent(event.nativeEvent));
+                }
+                setListening(false);
+            }}
+        >
+            {listening ? "Press a key…" : value.describe()}
+        </button>
     );
 }
 

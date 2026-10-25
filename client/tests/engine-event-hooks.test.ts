@@ -13,6 +13,8 @@ import { InputManager } from "../game/InputManager";
 import { ClientState } from "../game/ClientState";
 import { handleInboundWorld } from "../network/serverConnection/handlers/inboundWorld";
 import { dispatchMenuAction, setMenuEventHooks } from "../ui/menu/menuEvents";
+import { processWidgetKeyboardInput } from "../game/widgets/input/widgetKeyboardInput";
+import { Opcodes } from "../rs/cs2/Opcodes";
 
 const vars = new VarManager({ load: () => ({ baseVar: 12, startBit: 0, endBit: 1 }) } as any);
 const changes: number[][] = [];
@@ -181,6 +183,56 @@ for (const consumer of ["none", "filter", "handler"] as const) {
     held.onKeyDown({ code: "KeyW", key: "w", keyCode: 87, repeat: true, preventDefault() {} } as KeyboardEvent);
     assert.equal(held.keyEvents.length, 1, "other keys still repeat");
     (held as any).onKeyUp(ctrl);
+}
+
+// Camera keys still reach native scripts; unchanged widgets must retain their cached drawing.
+{
+    const held = new InputManager();
+    const label = { uid: 123, text: "Inventory" };
+    const keyWidget = { uid: 124, eventHandlers: { onKey: { scriptId: 101, intArgs: [] } } };
+    let fullRepaints = 0, keyCalls = 0;
+    const dirtyWidgets: number[] = [];
+    const manager: any = {
+        rootInterface: 161, interfaceParents: new Map(), beginBatch() {}, endBatch() {},
+        getWidgetByUid: () => label,
+        invalidateAll: () => fullRepaints++,
+        invalidateWidgetRender: (widget: any) => dirtyWidgets.push(widget.uid),
+    };
+    const keyboardVm = new Cs2Vm({ widgetManager: manager, loadScript: (id: number) => scripts.get(id) } as any);
+    keyboardVm.scriptPreListeners.add(() => keyCalls++);
+    const deps: any = {
+        getCs2Vm: () => keyboardVm, getVarManager: () => vars,
+        getPendingInputDialogAction: () => null, getPendingTradeQuantityAction: () => null,
+        getCustomInterfaces: () => ({ handleSearchKeyEvents: () => false }),
+    };
+    const frame: any = {
+        input: held, mx: 0, my: 0, allRoots: [keyWidget], visibleMap: new Map(), getStaticChildren: () => [],
+    };
+    for (const [code, keyCode] of [["ArrowLeft", 37], ["ArrowRight", 39]] as const) {
+        const press = { code, key: code, keyCode, preventDefault() {} } as KeyboardEvent;
+        for (let i = 0; i < 31; i++) {
+            held.onKeyDown({ ...press, repeat: i > 0 } as KeyboardEvent);
+            processWidgetKeyboardInput(deps, frame, manager);
+            held.keyEvents.length = 0;
+            assert.equal(held.isKeyDown(code), true, "camera rotation stays held");
+        }
+        (held as any).onKeyUp(press);
+    }
+    assert.equal(keyCalls, 62, "initial and repeated arrows still reach native key listeners");
+    assert.equal(fullRepaints, 0, "camera keys must not force a full UI repaint on every repeat");
+
+    const changeLabel = new Script();
+    changeLabel.id = 102;
+    changeLabel.instructions = Int32Array.from([Opcodes.SCONST, Opcodes.ICONST, Opcodes.IF_SETTEXT, Opcodes.RETURN]);
+    changeLabel.intOperands = Int32Array.from([0, label.uid, 0, 0]);
+    changeLabel.stringOperands = ["Settings", null, null, null];
+    scripts.set(changeLabel.id, changeLabel);
+    keyWidget.eventHandlers.onKey.scriptId = changeLabel.id;
+    held.onKeyDown({ code: "F1", key: "F1", keyCode: 112, preventDefault() {} } as KeyboardEvent);
+    processWidgetKeyboardInput(deps, frame, manager);
+    assert.equal(label.text, "Settings", "native key scripts still change widgets");
+    assert.deepEqual(dirtyWidgets, [label.uid], "the changed widget is redrawn by its setter");
+    assert.equal(fullRepaints, 0, "a widget change does not repaint unrelated panels");
 }
 
 const action = { param0: 0, param1: 0, opcode: 57, identifier: 1, itemId: -1, option: "Click", target: "", screenX: 0, screenY: 0 };

@@ -198,6 +198,27 @@ export function getInteractHighlightDrawTargets(host: WebGLOsrsRendererHost, ): 
         const out = host.interactHighlightDrawTargets;
         out.length = 0;
 
+        // Plugin loc outlines (Object Markers), drawn whatever Interact Highlight says.
+        for (const outline of host.osrsClient.clientPlugins.locOutlines?.() ?? []) {
+            const { loc } = outline;
+            const trianglePoints = host.buildLocModelHighlightTriangles({
+                kind: "loc",
+                locId: loc.id,
+                tileX: loc.tileX,
+                tileY: loc.tileY,
+                plane: loc.plane,
+                locModelType: loc.shape,
+                locRotation: loc.rotation,
+            });
+            if (!trianglePoints || trianglePoints.length < 3) continue;
+            out.push({
+                trianglePoints,
+                color: outline.color,
+                alpha: outline.alpha,
+                outlineRadius: Math.max(0.5, outline.width * 0.95),
+            });
+        }
+
         // Plugin NPC outlines (NPC Indicators), drawn whatever Interact Highlight says.
         for (const outline of host.osrsClient.clientPlugins.npcOutlines?.() ?? []) {
             const npcEcs = host.osrsClient.npcEcs;

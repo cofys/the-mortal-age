@@ -3,6 +3,15 @@ import type { WidgetInputControllerDeps, WidgetInputFrame, WidgetInputState } fr
 import type { WidgetInteractionController } from "../WidgetInteractionController";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
 
+/** A widget's TS mouse listener (RuneLite's JavaScriptCallback), isolated from the input loop. */
+function runJsListener(listener: () => void): void {
+    try {
+        listener();
+    } catch (error) {
+        console.warn("[widgets] mouse listener failed", error);
+    }
+}
+
 export function processWidgetHoverInput(
     deps: WidgetInputControllerDeps,
     state: WidgetInputState,
@@ -25,6 +34,8 @@ export function processWidgetHoverInput(
             // If the cache/runtime explicitly marked this widget as "no listeners", skip.
             if (w.hasListeners === false) return false;
             return !!(
+                w.jsListeners?.onMouseOver ||
+                w.jsListeners?.onMouseLeave ||
                 w.eventHandlers?.onMouseOver ||
                 w.eventHandlers?.onMouseLeave ||
                 w.eventHandlers?.onMouseRepeat ||
@@ -59,7 +70,9 @@ export function processWidgetHoverInput(
             const old = state.hoveredWidgetsByUid.get(uid);
             if (!old) continue;
             const eventCtx = createMouseEventContext(old);
-            if (old.eventHandlers?.onMouseLeave) {
+            if (old.jsListeners?.onMouseLeave) {
+                runJsListener(old.jsListeners.onMouseLeave);
+            } else if (old.eventHandlers?.onMouseLeave) {
                 deps.getCs2Vm().invokeEventHandler(old, "onMouseLeave", eventCtx);
             } else if (Array.isArray(old.onMouseLeave) && old.onMouseLeave.length > 0) {
                 deps.executeScriptListener(old, old.onMouseLeave, eventCtx);
@@ -74,7 +87,9 @@ export function processWidgetHoverInput(
             if (uid === 0) continue;
             if (!nextHoveredUids.has(uid) || state.hoveredWidgetUids.has(uid)) continue;
             const eventCtx = createMouseEventContext(w);
-            if (w.eventHandlers?.onMouseOver) {
+            if (w.jsListeners?.onMouseOver) {
+                runJsListener(w.jsListeners.onMouseOver);
+            } else if (w.eventHandlers?.onMouseOver) {
                 deps.getCs2Vm().invokeEventHandler(w, "onMouseOver", eventCtx);
             } else if (Array.isArray(w.onMouseOver) && w.onMouseOver.length > 0) {
                 deps.executeScriptListener(w, w.onMouseOver, eventCtx);

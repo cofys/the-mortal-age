@@ -163,6 +163,11 @@ export class CacheDefinitions {
         return this.idByName(GamevalKind.VARP).get(name) ?? null;
     }
 
+    /** An inventory's id by its gameval name (`trail_puzzleinv`), or null. */
+    static getInventoryId(name: string): number | null {
+        return this.idByName(GamevalKind.INV).get(name) ?? null;
+    }
+
     /** A loc's id by its gameval name (`ent_totems_site_1_base`), or null. */
     static getLocId(name: string): number | null {
         return this.idByName(GamevalKind.LOC).get(name) ?? null;

@@ -639,20 +639,26 @@ export class WebGPUActors {
     }
 
     /** Port of overlays4.ts registerWorldSpotAnimation (graphics anchored to a tile). */
-    registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
+    registerWorldSpotAnimation(event: WorldSpotAnimationEvent): number | undefined {
         try {
             const heightUnits = Number(event.height ?? 0) | 0;
-            this.gfx?.manager.spawnAtTile(
+            return this.gfx?.manager.spawnAtTile(
                 event.spotId | 0,
                 { x: event.tile.x | 0, y: event.tile.y | 0, level: event.tile.level ?? 0 },
                 {
                     heightTiles: heightUnits !== 0 ? heightUnits / 128 : undefined,
                     startCycle: event.startCycle | 0,
+                    loop: event.loop,
                 },
             );
         } catch (error) {
             console.warn("[webgpu] registerWorldSpotAnimation failed", error);
         }
+        return undefined;
+    }
+
+    killWorldSpotAnimation(id: number): void {
+        this.gfx?.manager.kill(id);
     }
 
     getProjectileManager(): IProjectileManager | undefined {

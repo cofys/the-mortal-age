@@ -1,0 +1,114 @@
+{
+  "names": {
+    "npcs": {
+      "attacking": "cerberus_attacking",
+      "sitting": "cerberus_sitting",
+      "resetting": "cerberus_resetting",
+      "soulRanged": "cerberus_spectre_ranged",
+      "soulMagic": "cerberus_spectre_magic",
+      "soulMelee": "cerberus_spectre_melee"
+    },
+    "locs": {
+      "winch": "hellhound_winch",
+      "portcullis": "hellhound_iron_gate_active",
+      "caves": ["hellhound_cave_entrance_01", "hellhound_cave_entrance_02", "hellhound_cave_entrance_03"]
+    },
+    "seqs": {
+      "stand": "cerberus_idle_to_stand",
+      "sit": "cerberus_stand_to_sit",
+      "magic": "cerberus_fire_breath",
+      "ranged": "cerberus_attack_range",
+      "melee": "cerberus_bite",
+      "howl": "cerberus_howl",
+      "lava": "cerberus_special_attack_flame",
+      "soulRanged": "spectre_ghost_range_attack",
+      "soulMagic": "spectre_ghost_mage_attack",
+      "soulMelee": "spectre_ghost_melee_attack"
+    },
+    "spotanims": {
+      "magic": "hh_hellfire_burst",
+      "magicHit": "hh_hellfire_hit",
+      "ranged": "hh_bone_ball_spin",
+      "rangedHit": "hh_bone_ball_burst",
+      "lavaFlight": "cerberus_special_attack_flame",
+      "lavaPool": "fire_liquid",
+      "soulMelee": "spectre_melee_proj"
+    }
+  },
+  "arenas": [
+    {
+      "name": "west",
+      "winch": [1291, 1254],
+      "outside": [1292, 1254],
+      "spawn": [1238, 1250],
+      "entry": [1240, 1226],
+      "bounds": [1224, 1256, 1225, 1270]
+    },
+    {
+      "name": "north",
+      "winch": [1307, 1269],
+      "outside": [1307, 1268],
+      "spawn": [1302, 1314],
+      "entry": [1304, 1290],
+      "bounds": [1288, 1320, 1289, 1334]
+    },
+    {
+      "name": "east",
+      "winch": [1328, 1254],
+      "outside": [1327, 1254],
+      "spawn": [1366, 1250],
+      "entry": [1368, 1226],
+      "bounds": [1352, 1384, 1225, 1270]
+    }
+  ],
+  "caveExit": [2873, 9847, 0],
+  "combat": {
+    "maxHit": 23,
+    "attackSpeed": 6,
+    "attackDistance": 10,
+    "tripleEvery": 10,
+    "tripleSpacing": 2,
+    "souls": {
+      "below": 400,
+      "every": 7,
+      "damage": 30,
+      "drain": 30,
+      "spawnDelay": 3,
+      "spacing": 2,
+      "row": [[1, 6], [2, 6], [3, 6]],
+      "drainWard": 20,
+      "_row": "unsourced: where the souls appear behind her"
+    },
+    "lava": {
+      "below": 200,
+      "every": 5,
+      "pools": 3,
+      "spread": 3,
+      "landDelay": 2,
+      "landDamage": 10,
+      "tickDamage": 15,
+      "tickEvery": 2,
+      "lasts": 10,
+      "tickDamageShielded": 12,
+      "tickDamageSuperAntifire": 11,
+      "_lasts": "unsourced: the Wiki says only that the pools dissipate after a few seconds"
+    },
+    "skipChance": 0.1
+  },
+  "kill": {
+    "killCountVarp": 1525,
+    "slayerXp": 690,
+    "monster": "Cerberus",
+    "_slayerXp": "monsters-complete's slayer_xp; the NPC definition doesn't load that field yet"
+  },
+  "messages": {
+    "noTask": "You need a hellhound or Cerberus Slayer task to fight Cerberus.",
+    "peekEmpty": "No adventurers are inside the cave.",
+    "peekOne": "1 adventurer is inside the cave.",
+    "peekMany": "{count} adventurers are inside the cave.",
+    "killCount": "Your Cerberus kill count is: <col=ff0000>{kills}</col>.",
+    "lava": "Grrrrrrrrrrrrrr",
+    "souls": "Aaarrrooooooo"
+  },
+  "_messages": "Unsourced: noTask, peekEmpty, peekOne and peekMany (no capture of the winch). The rest are the Wiki's."
+}

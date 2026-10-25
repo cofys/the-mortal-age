@@ -1,4 +1,5 @@
 const Data = require("./Data.Farming");
+const Redwood = require("./Redwood.Farming");
 
 const MINUTE = 60_000;
 function advanceTithe(plant, now) {
@@ -31,7 +32,7 @@ function emptyPatch(now, farm, weeds = 0) {
 }
 function startingLives(crop, compost) {
     if (Data.COMPOSTABLE_YIELD.has(crop.type)) return 3 + compost;
-    if (crop.type === "CORAL") return 4;
+    if (crop.type === "CORAL") return 6;
     if (crop.type === "GRAPES") return 5;
     return Math.max(1, crop.lives);
 }
@@ -48,11 +49,16 @@ function diseaseChance(crop, compost, watered, iasor) {
 const HERB_LOW = { GUAM: 25, MARRENTILL: 28, TARROMIN: 31, HARRALANDER: 36, GOUTWEED: 39,
     RANARR: 39, TOADFLAX: 43, IRIT: 46, AVANTOE: 50, KWUARM: 54, SNAPDRAGON: 57, HUASCA: 59,
     CADANTINE: 60, LANTADYME: 64, DWARF_WEED: 67, TORSTOL: 71 };
+// Low/high life-save parameters published by the corresponding seed Wiki calculators.
+const TEXTILE_HOP_CTS = { FLAX: [140, 194], HEMP: [120, 178], COTTON: [82, 142] };
 const CROP_LOW = { POTATO: 101, ONION: 105, CABBAGE: 107, TOMATO: 112, SWEETCORN: 88, STRAWBERRY: 103,
-    BARLEY: 103, HAMMERSTONE: 104, ASGARNIAN: 108, KRANDORIAN: 120, WILDBLOOD: 128 };
+    BARLEY: 103, HAMMERSTONE: 104, ASGARNIAN: 108, KRANDORIAN: 121, WILDBLOOD: 128 };
+// Post-August-2026 low/high parameters published by each frag's Wiki yield calculator.
+const CORAL_CTS = { ELKHORN_CORAL: [85, 182], PILLAR_CORAL: [25, 180], UMBRAL_CORAL: [-50, 178] };
 function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0, attas = false) {
     let low, high;
     if (crop.type === "HERB") { low = HERB_LOW[crop.key]; high = 80; }
+    else if (CORAL_CTS[crop.key]) { [low, high] = CORAL_CTS[crop.key]; }
     else if (crop.type === "SEAWEED") { low = 150; high = 210; }
     else if (crop.key === "CACTUS") { low = -76; high = 178; }
     else if (crop.key === "GRAPE") { low = -50; high = 180; }
@@ -60,6 +66,7 @@ function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0,
     else if (crop.key === "WATERMELON") { low = 126; high = 180; }
     else if (crop.key === "YANILLIAN") { low = 116; high = 180; }
     else if (crop.key === "JUTE") { low = 113; high = 180; }
+    else if (TEXTILE_HOP_CTS[crop.key]) { [low, high] = TEXTILE_HOP_CTS[crop.key]; }
     else if (CROP_LOW[crop.key]) { low = CROP_LOW[crop.key]; high = 180; }
     else {
         // ponytail: unpublished CTS endpoints, estimated from wiki yields; not claimed as exact OSRS rates.
@@ -75,6 +82,17 @@ function activeAnima(farm, at) {
     return Object.values(farm.patches).find(s => s.crop && Data.CACHE.timing[s.crop]?.type === "ANIMA"
         && at >= s.plantedAt && at < s.nextAt + (8 - s.stage - 1) * 640 * MINUTE && s.status !== "dead")?.crop;
 }
+function kronosGrowth(farm, at, minutes, random, skips) {
+    if (activeAnima(farm, at) !== "KRONOS") return 1;
+    const key = `${at}:${minutes}`;
+    if (!skips.has(key)) {
+        let extra = 0;
+        // ponytail: shared repeatable skips are documented, but their probability is unpublished.
+        while (extra < 12 && random() < 0.1) extra++;
+        skips.set(key, extra);
+    }
+    return 1 + skips.get(key);
+}
 function diseaseFree(farm, patch, state, at) {
     const crop = Data.CROPS.get(state.crop);
     if (state.protected || ["POISON_IVY", "HESPORI", "CRYSTAL_TREE"].includes(crop.key) || ["ANIMA", "GRAPES"].includes(crop.type)) return true;
@@ -84,6 +102,8 @@ function diseaseFree(farm, patch, state, at) {
     if (farm.hosidiusProtected && patch.x >= 1720 && patch.x <= 1760 && patch.y >= 3540 && patch.y <= 3565) return true;
     if (farm.faladorProtected && patch.type === "TREE" && patch.x === 3003 && patch.y === 3372) return true;
     if (farm.fortisProtected && patch.type === "HERB" && patch.x === 1581 && patch.y === 3094) return true;
+    // Harmony Island's diary unlock grants a permanently disease-free herb patch.
+    if (patch.type === "HERB" && patch.x === 3789 && patch.y === 2837 && patch.z === 0) return true;
     if (crop.type !== "ALLOTMENT") return false;
     for (const flower of Data.CACHE.patches.filter(p => p.type === "FLOWER" && p.z === patch.z && Math.abs(p.x - patch.x) < 32 && Math.abs(p.y - patch.y) < 32)) {
         const s = farm.patches[Data.patchKey(flower)];
@@ -122,12 +142,14 @@ function weeding(farm, patch, state) {
 function nextDue(farm) {
     let due = Infinity;
     for (const { patch, state } of patchStates(farm)) {
+        if (state.crop === "REDWOOD") due = Math.min(due, Redwood.nextDue(state));
         if (growing(state) || weeding(farm, patch, state)) due = Math.min(due, state.nextAt);
     }
     return due;
 }
 
 function advanceFarm(farm, now, random = Math.random) {
+    for (const { state } of patchStates(farm)) if (state.crop === "REDWOOD") Redwood.advance(state, now);
     const kronos = new Map();
     const planted = [];
     for (const entry of patchStates(farm)) if (growing(entry.state)) planted.push(entry);
@@ -145,36 +167,34 @@ function advanceFarm(farm, now, random = Math.random) {
         const at = state.nextAt;
         if (state.status === "grown") {
             if (state.stump) { state.stump = false; continue; }
-            const ticks = 1 + Math.floor((now - at) / (crop.regrow * MINUTE));
-            state.lives = Math.min(startingLives(crop, state.compost), state.lives + ticks);
+            const maximum = startingLives(crop, state.compost);
+            // Partial patches need chronological rolls, including anima planting and expiry.
+            // Once full, skip empty work in bulk; at most the produce cap needs individual ticks.
+            const ticks = state.lives >= maximum ? 1 + Math.floor((now - at) / (crop.regrow * MINUTE)) : 1;
+            if (state.lives < maximum) state.lives = Math.min(maximum,
+                state.lives + kronosGrowth(farm, at, crop.regrow, random, kronos));
             state.nextAt = at + ticks * crop.regrow * MINUTE;
             continue;
         }
         if (state.status === "diseased") { state.status = "dead"; continue; }
-        let growth = 1;
-        if (crop.type !== "ANIMA" && activeAnima(farm, at) === "KRONOS") {
-            const key = `${at}:${crop.minutes}`;
-            if (!kronos.has(key)) {
-                let extra = 0;
-                // ponytail: the wiki describes shared repeatable skips but does not publish the roll; calibrate this estimate when measured.
-                while (extra < 12 && random() < 0.1) extra++;
-                kronos.set(key, extra);
+        const growth = crop.type === "ANIMA" ? 1 : kronosGrowth(farm, at, crop.minutes, random, kronos);
+        // Kronos skips still visit every stage and stop at the first disease roll that succeeds.
+        for (let step = 0; step < growth && state.status === "growing"; step++) {
+            state.stage = Math.min(crop.stages, state.stage + 1);
+            if (crop.type === "ANIMA") {
+                if (state.stage >= crop.stages) state.status = "dead";
+            } else if (state.stage >= crop.stages) {
+                state.status = "grown";
+                state.lives = startingLives(crop, state.compost);
+            } else if (Data.CACHE.states[crop.type][crop.key].DISEASED?.[state.stage] != null
+                && state.stage < crop.stages - (crop.type === "FRUIT_TREE" ? 1 : 0)
+                && !diseaseFree(farm, patch, state, at)
+                && random() < diseaseChance(crop, state.compost, state.watered, activeAnima(farm, at) === "IASOR")) {
+                state.status = "diseased";
             }
-            growth += kronos.get(key);
+            state.watered = false;
+
         }
-        state.stage = Math.min(crop.stages, state.stage + growth);
-        if (crop.type === "ANIMA") {
-            if (state.stage >= crop.stages) state.status = "dead";
-        } else if (state.stage >= crop.stages) {
-            state.status = "grown";
-            state.lives = startingLives(crop, state.compost);
-        } else if (Data.CACHE.states[crop.type][crop.key].DISEASED?.[state.stage] != null
-            && state.stage < crop.stages - (crop.type === "FRUIT_TREE" ? 1 : 0)
-            && !diseaseFree(farm, patch, state, at)
-            && random() < diseaseChance(crop, state.compost, state.watered, activeAnima(farm, at) === "IASOR")) {
-            state.status = "diseased";
-        }
-        state.watered = false;
         state.nextAt = nextGrowth(at, state.status === "diseased" ? crop.minutes * 2
             : state.status === "grown" && crop.regrow ? crop.regrow : crop.minutes, farm.offset);
     }
@@ -200,6 +220,7 @@ function patchValue(patch, state) {
     // The cache distinguishes these actions even though RuneLite coalesces their timer states.
     if (crop.type === "SPIRIT_TREE" && state.status === "grown") return state.checked ? 20 : 44;
     if (crop.type === "GRAPES" && state.status === "grown" && state.checked) return 15 - Math.max(1, Math.min(5, state.lives));
+    if (crop.type === "REDWOOD" && state.status === "grown" && state.checked) return Redwood.value(state);
     if (state.stump) return visual.STUMP?.[0] ?? visual.HARVESTABLE?.[0];
     if (crop.type === "GRAPES" && state.status === "dead") return 15;
     if (state.status === "dead") return (visual.DEAD ?? states.ANYHERB?.DEAD)?.[Math.max(1, state.stage)] ?? visual.GROWING[crop.stages];

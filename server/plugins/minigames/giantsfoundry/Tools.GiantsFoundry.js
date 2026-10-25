@@ -23,6 +23,7 @@
  */
 
 const Shared = require("./Shared.GiantsFoundry");
+const { smithsUniformChance } = require("../../skills/smithing/Common.Smithing");
 
 const TOOL = { HAMMER: 0, GRIND: 1, POLISH: 2 };
 
@@ -52,11 +53,6 @@ const SCRIPT_SWEET_SPOT = 6122;
 const SWEET_SPOT_TICKS = 9;
 const SWEET_SPOT_BONUS = 50;
 const SOUND_SWEET_SPOT = 2192;
-const UNIFORM = [
-  Shared.ITEM.SMITHS_TUNIC, Shared.ITEM.SMITHS_TROUSERS, Shared.ITEM.SMITHS_BOOTS,
-];
-const UNIFORM_GLOVES = [Shared.ITEM.SMITHS_GLOVES, Shared.ITEM.SMITHS_GLOVES_I];
-const UNIFORM_CHANCE = 0.2;
 
 /** Persisted per preform. */
 const FIELD = { SWEET_PLAN: "sweetSpots", DOUBLE_XP: "doubleXp" };
@@ -121,14 +117,6 @@ function planSweetSpots(stages) {
   });
 }
 
-function uniformPieces(player) {
-  const equipment = player.getEquipment();
-  let pieces = 0;
-  for (const id of UNIFORM) if (equipment.contains(id)) pieces++;
-  if (UNIFORM_GLOVES.some((id) => equipment.contains(id))) pieces++;
-  return pieces;
-}
-
 // ============================================================================
 // Working a machine
 // ============================================================================
@@ -190,7 +178,7 @@ function machineTick(player, state, bonus = 0) {
     return;
   }
   let progress = spec.progress + bonus;
-  if (Math.random() < uniformPieces(player) * UNIFORM_CHANCE) progress += spec.uniformBonus;
+  if (Math.random() < smithsUniformChance(player)) progress += spec.uniformBonus;
   const next = Math.min(MAX_COMPLETION, completion + progress);
   Shared.sound(player, spec.sound);
   Shared.set(player, Shared.VARBIT.COMPLETION, next);
@@ -320,5 +308,5 @@ module.exports = function attachTools(api) {
 
 Object.assign(module.exports, {
   TOOL, TOOLS, stageCount, stageOf, stageTool, heatZone, inZone, sweetSpotCount, planSweetSpots,
-  uniformPieces, resetPreform, MESSAGE, DAMAGE,
+  resetPreform, MESSAGE, DAMAGE,
 });

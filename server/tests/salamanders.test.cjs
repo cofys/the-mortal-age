@@ -176,7 +176,7 @@ test("Blaze applies equipment magic damage after its hidden salamander bonus", (
   const { DamageFormulas } = PluginManager.getCoreApi();
   const player = wielding(I.BLACK_SALAMANDER, FightType.SALAMANDER_BLAZE);
   const spell = Salamanders._test.blazeSpell(player);
-  player.getCombat = () => ({ getSelectedSpell: () => spell });
+  player.getCombat = () => ({ getSelectedSpell: () => spell, getTarget: () => null });
   player.getAttribute = () => undefined;
   player.getPrayerActive = () => [];
   player.getBonusManager = () => ({ getOtherBonus: () => [0, 0, 15] });

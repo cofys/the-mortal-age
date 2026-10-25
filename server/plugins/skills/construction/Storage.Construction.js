@@ -106,6 +106,11 @@ function openHouseStorage(event) {
   if (!context) return false;
   const { house, furniture } = context;
   if (house.owner !== event.player) { listStorage(event); return true; }
+  const { player } = event;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "poh-costume-room", resume: () => openHouseStorage(event) };
+  api.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   api.sendMultiChatboxPrompt(event.player, "Costume storage", "Deposit inventory", () => {
     for (let slot = 0; slot < 28; slot++) depositHouseItem(event.player, house, furniture, slot);
     event.player.sendMessage("Stored eligible costume items. Use an item on the furniture to deposit it individually.");
@@ -116,6 +121,12 @@ function openHouseStorage(event) {
 function storeItemOnFurniture(event) {
   const context = currentFurniture(event);
   if (!context) return false;
+  const { player } = event;
+  if (context.house.owner !== player) { player.sendMessage("You cannot store that item here."); return true; }
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "poh-costume-room", resume: () => storeItemOnFurniture(event) };
+  api.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if (!depositHouseItem(event.player, context.house, context.furniture, event.itemSlot)) event.player.sendMessage("You cannot store that item here.");
   return true;
 }

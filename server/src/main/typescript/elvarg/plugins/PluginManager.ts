@@ -1289,11 +1289,11 @@ export class PluginManager {
     }
   }
 
-  public static emitCanBank(player: any): boolean | null {
+  public static emitCanBank(player: any, source?: string): boolean | null {
     if (PluginManager.canBankHooks.length === 0) {
       return null;
     }
-    const event: PluginCanBankEvent = { player, allow: null };
+    const event: PluginCanBankEvent = { player, allow: null, source };
     for (const hook of PluginManager.canBankHooks) {
       PluginManager.executeHook(hook, event, "can_bank", "can_bank");
       if (event.allow !== null) {
@@ -2275,6 +2275,7 @@ export class PluginManager {
       EquipPacketListener: require("../net/packet/impl/EquipPacketListener").EquipPacketListener,
       PlayerDeathTask: require("../game/task/impl/PlayerDeath").PlayerDeathTask,
       CombatPoisonData: require("../game/task/impl/CombatPoisonEffect").CombatPoisonData,
+      CombatPoisonEffect: require("../game/task/impl/CombatPoisonEffect").CombatPoisonEffect,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
       CacheMaps: require("../game/cache/CacheMaps").CacheMaps,
       MapRegionReplacementManager: require("../game/collision/MapRegionReplacementManager").MapRegionReplacementManager,
@@ -4053,7 +4054,7 @@ export class PluginManager {
         require("../util/PlayerPunishment").PlayerPunishment,
       emitCanEat: (player, itemId) => PluginManager.emitCanEat(player, itemId),
       emitCanDrink: (player, itemId) => PluginManager.emitCanDrink(player, itemId),
-      emitCanBank: (player) => PluginManager.emitCanBank(player),
+      emitCanBank: (player, source) => PluginManager.emitCanBank(player, source),
       emitCanBankItem: (player, item) => PluginManager.emitCanBankItem(player, item),
       emitShouldKeepItemOnDeath: (player, item) =>
         PluginManager.emitShouldKeepItemOnDeath(player, item),

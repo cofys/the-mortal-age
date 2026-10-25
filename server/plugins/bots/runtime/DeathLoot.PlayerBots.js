@@ -58,7 +58,8 @@ function isEligibleBotRewardKill(killer, victim) {
 }
 
 function shouldSuppressDefaultBotDrops(victim) {
-  return victim?.isPlayerBot?.() === true;
+  // Other areas use normal server deaths; only Wilderness bots have custom rewards.
+  return victim?.isPlayerBot?.() === true && Wilderness.isIn(victim);
 }
 
 function resolveProfileId(victim, runtime) {

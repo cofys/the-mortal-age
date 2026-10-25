@@ -26,11 +26,23 @@ function sync(player, force = false) {
   sender.sendConfig(POISON_TIMER_TYPE_VARP, state[1]);
 }
 
+function onLogin(event) {
+  sync(event.player, true);
+}
+
+function onProcess({ player }) {
+  sync(player);
+}
+
+function onLogout({ player }) {
+  states.delete(player);
+}
+
 module.exports = {
   name: "Poison Timer",
   register(api) {
-    api.onPlayerLogin(({ player }) => sync(player, true));
-    api.onPlayerProcess(({ player }) => sync(player));
-    api.onPlayerLogout(({ player }) => states.delete(player));
+    api.onPlayerLogin(onLogin);
+    api.onPlayerProcess(onProcess);
+    api.onPlayerLogout(onLogout);
   },
 };

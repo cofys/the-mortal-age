@@ -26,8 +26,8 @@ const fakeApi = {
   },
   getBonusManager: () => ({ ATTACK_MAGIC: 3 }),
   onCombatHitRoll() {},
-  registerMagicHitModifier() {},
-  registerMagicAttackAccuracyModifier() {},
+  registerMagicHitModifier() { assert.fail('general weakness belongs to the shared elemental plugin'); },
+  registerMagicAttackAccuracyModifier() { assert.fail('general weakness belongs to the shared elemental plugin'); },
   getPrayerHandler: () => ({ PROTECT_FROM_MELEE: 1, PROTECT_FROM_MISSILES: 2, PROTECT_FROM_MAGIC: 3 }),
   persistAttribute() {},
   onCombatHitResolved(handler) { fakeApi.hitResolved = handler; },
@@ -261,31 +261,6 @@ test("row clearing: weak fire hints on ice, blast-tier clears", () => {
     assert.equal(hit.getHits()[0].getDamage(), 0);
     assert.ok(attacker.messages.some((text) => /strong enough/.test(text)));
   }
-});
-
-function fakeDuelist(spell, targetId) {
-  const target = { isNpc: () => true, getId: () => targetId };
-  return {
-    isPlayer: () => true,
-    getCombat: () => ({ getSelectedSpell: () => spell, getPreviousCast: () => null, getTarget: () => target }),
-  };
-}
-
-test("weakness damage: double on elementals, +50% on titans, else untouched", () => {
-  assert.equal(Minions._test.weaknessDamage(fakeDuelist("WATER_WAVE", 14150), 20), 40);
-  assert.equal(Minions._test.weaknessDamage(fakeDuelist("FIRE_WAVE", 14151), 20), 40);
-  assert.equal(Minions._test.weaknessDamage(fakeDuelist("WATER_WAVE", 12596), 20), 30);
-  assert.equal(Minions._test.weaknessDamage(fakeDuelist("FIRE_WAVE", 14147), 21), 31);
-  assert.equal(Minions._test.weaknessDamage(fakeDuelist("FIRE_WAVE", 14150), 20), 20);
-  assert.equal(Minions._test.weaknessDamage(fakeDuelist("WATER_WAVE", 2085), 20), 20);
-});
-
-test("weakness accuracy: +50% for the weak element on titans only", () => {
-  assert.equal(Minions._test.weaknessAccuracy(fakeDuelist("WATER_SURGE", 12596), 100), 150);
-  assert.equal(Minions._test.weaknessAccuracy(fakeDuelist("FIRE_SURGE", 14147), 100), 150);
-  assert.equal(Minions._test.weaknessAccuracy(fakeDuelist("FIRE_SURGE", 12596), 100), 100);
-  assert.equal(Minions._test.weaknessAccuracy(fakeDuelist("WATER_SURGE", 14150), 100), 100);
-  assert.equal(Minions._test.weaknessAccuracy(fakeDuelist("WATER_SURGE", 2085), 100), 100);
 });
 
 test("row accuracy: the right element always lands on row tiles", () => {

@@ -867,6 +867,8 @@ module.exports = function registerTroubledTortugansQuest(api) {
     if (event.objectId !== CAVE_ENTRANCE_OBJECT_ID) return false;
     const { player } = event;
     if (quest.getStage(player) < STAGE_CAVE_OPEN) return false;
+    // After the quest the cave is the Shellbane gryphon's (ShellbaneGryphon.plugin.js).
+    if (quest.isComplete(player)) return false;
     spawnCaveGryphon(player);
     player.moveTo(new Location(CAVE_ENTRY_TILE.x, CAVE_ENTRY_TILE.y, CAVE_ENTRY_TILE.z));
     return true;
@@ -874,6 +876,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
 
   function exitCave(event) {
     if (event.objectId !== CAVE_EXIT_OBJECT_ID) return false;
+    if (quest.isComplete(event.player)) return false;
     event.player.moveTo(new Location(CAVE_EXIT_TILE.x, CAVE_EXIT_TILE.y, CAVE_EXIT_TILE.z));
     return true;
   }

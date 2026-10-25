@@ -270,7 +270,7 @@ module.exports = function registerInfernoMonsters(api, hooks) {
     }
   });
   api.registerNpcCombatMethodProvider([Npcs.JAL_ZEK, Npcs.JAL_ZEK_2], JalZekCombat);
-  api.registerNpcCombatMethodProvider([Npcs.JALTOK_JAD, Npcs.JALTOK_JAD_2], JalTokJadCombat);
+  api.registerNpcCombatMethodProvider([Npcs.JALTOK_JAD, Npcs.JALTOK_JAD_2, Npcs.JALTOK_JAD_3], JalTokJadCombat);
 
   return { later, land };
 };

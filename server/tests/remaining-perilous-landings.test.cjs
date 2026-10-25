@@ -157,7 +157,7 @@ test('shop Squeeze-through 51005 is a captured two-way transition and the real o
   assert.equal(door.getDefinition().getInteractions()[0], 'Squeeze-through');
 
   let objectHook;
-  const api = { core, persistAttribute() {}, onObjectInteraction(fn) { objectHook = fn; }, onItemOnObject() {}, onCustomEvent() {} };
+  const api = { core, persistAttribute() {}, onObjectInteraction(fn) { objectHook = fn; }, onItemOnObject() {}, onObjectRoute() {}, onCustomEvent() {} };
   require('../plugins/world/LocTeleports.plugin').register(api);
   const p = player();
   p.performAnimation = animation => { p.animation = animation.getId(); };

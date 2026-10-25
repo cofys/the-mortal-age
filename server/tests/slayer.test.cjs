@@ -232,6 +232,76 @@ test("kills give Slayer XP equal to the monster's hitpoints and count down", () 
   assert.equal(varp(player, "slayer_count"), 1, "not on task");
 });
 
+test("content can exclude an exact NPC from both on-task queries and task kill credit", t => {
+  const player = createPlayer();
+  giveTask(player, 3, "Bloodveld", 3);
+  const excluded = npcNamed("Bloodveld");
+  const regular = npcNamed("Bloodveld");
+  const prior = handlers.events.get("slayer:target-eligible");
+  let queries = 0;
+  handlers.events.set("slayer:target-eligible", [(request) => {
+    assert.equal(request.eligible, true, "eligible by default");
+    if (request.npc === excluded) {
+      assert.equal(request.player, player);
+      request.eligible = false;
+      queries++;
+    }
+  }]);
+  t.after(() => prior ? handlers.events.set("slayer:target-eligible", prior) : handlers.events.delete("slayer:target-eligible"));
+  const onTask = npc => {
+    const request = { player, npc, onTask: false };
+    for (const fn of handlers.events.get("slayer:on-task")) fn(request);
+    return request.onTask;
+  };
+  assert.equal(onTask(excluded), false);
+  kill(player, excluded);
+  assert.equal(varp(player, "slayer_count"), 3);
+  assert.equal(player.xp.length, 0);
+  assert.equal(onTask(regular), true, "same cache ID in another instance stays eligible");
+  kill(player, regular);
+  assert.equal(varp(player, "slayer_count"), 2);
+  assert.equal(player.xp.length, 1);
+  assert.ok(queries >= 2, "query and authoritative death handling both consult content");
+});
+
+test("a target eligibility veto removes black-mask and imbued helmet accuracy and damage bonuses", t => {
+  const player = createPlayer();
+  giveTask(player, 3, "Bloodveld", 3);
+  const target = npcNamed("Bloodveld");
+  target.getAsNpc = () => target;
+  player.getAsPlayer = () => player;
+  player.getCombat = () => ({ getTarget: () => target });
+  let head = core.ItemIdentifiers.SLAYER_HELMET_I_;
+  player.getEquipment = () => ({ getItems: () => [new core.Item(head)] });
+  const modifiers = {};
+  const api = new Proxy({
+    core,
+    emitCustomEvent(name, payload) { for (const fn of handlers.events.get(name) ?? []) fn(payload); },
+    registerMeleeAttackAccuracyModifier: fn => { modifiers.meleeAccuracy = fn; },
+    registerMeleeHitModifier: fn => { modifiers.meleeDamage = fn; },
+    registerRangedAttackAccuracyModifier: fn => { modifiers.rangedAccuracy = fn; },
+    registerRangedHitModifier: fn => { modifiers.rangedDamage = fn; },
+    registerMagicAttackAccuracyModifier: fn => { modifiers.magicAccuracy = fn; },
+    registerMagicHitModifier: fn => { modifiers.magicDamage = fn; },
+  }, { get: (api, key) => api[key] ?? (() => {}) });
+  require("../plugins/items/SlayerHelmet.plugin").register(api);
+  let eligible = true;
+  const prior = handlers.events.get("slayer:target-eligible");
+  handlers.events.set("slayer:target-eligible", [request => { if (request.npc === target) request.eligible = eligible; }]);
+  t.after(() => prior ? handlers.events.set("slayer:target-eligible", prior) : handlers.events.delete("slayer:target-eligible"));
+  for (const [kind, boosted] of [["meleeAccuracy", 140], ["meleeDamage", 140], ["rangedAccuracy", 138],
+    ["rangedDamage", 138], ["magicAccuracy", 138], ["magicDamage", 138]]) {
+    eligible = true;
+    assert.equal(modifiers[kind](player, 120), boosted, kind);
+    eligible = false;
+    assert.equal(modifiers[kind](player, 120), 120, `${kind} veto`);
+  }
+  head = core.ItemIdentifiers.BLACK_MASK;
+  eligible = false;
+  assert.equal(modifiers.meleeAccuracy(player, 120), 120);
+  assert.equal(modifiers.meleeDamage(player, 120), 120);
+});
+
 test("no points for the first four tasks, then the master's points and the streak multipliers", () => {
   const player = createPlayer();
   const finish = (masterId) => {
@@ -429,6 +499,27 @@ test("a gargoyle waits at 0 hitpoints for the rock hammer", () => {
   const auto = { npc: fresh, preventDeath: false };
   Finishers.beforeDeath(auto);
   assert.equal(auto.preventDeath, false, "Gargoyle Smasher with a hammer finishes it");
+});
+
+test("the rock hammer also finishes the Grotesque Guardians, each with its own line ('Dusk cracks apart.')", () => {
+  const player = createPlayer();
+  player.inventory.push([4162, 1]);
+  player.performAnimation = () => {};
+  const finishers = require("../plugins/skills/data/slayer-finishers.json").finishers;
+  for (const name of ["Dusk", "Dawn"]) {
+    const guardian = npcNamed(name);
+    let hitpoints = 6;
+    Object.assign(guardian, {
+      getAttribute: () => undefined, setAttribute() {},
+      getHitpoints: () => hitpoints, setHitpoints: (value) => { hitpoints = value; },
+      getCombat: () => ({ getKiller: () => player }),
+    });
+    const event = { player, target: guardian, itemId: 4162, handled: false };
+    Finishers.itemOnNpc(event);
+    assert.equal(event.handled, true, name);
+    assert.equal(player.messages.at(-1), finishers.find((f) => f.names.includes(name)).finished, name);
+    assert.equal(player.messages.at(-1), `${name} cracks apart.`, name);
+  }
 });
 
 test("superiors: Bigger and Badder spawns one 1 time in 200, worth ten times its hitpoints", () => {

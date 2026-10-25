@@ -31,6 +31,10 @@ export interface ConfigItemDef<T = unknown> {
     step?: number;
     /** Enum values shown as a dropdown, in declaration order. */
     enum?: Record<string, unknown>;
+    /** What the dropdown shows for each enum name (RuneLite's enum toString), when not the name. */
+    enumLabels?: Record<string, string>;
+    /** A Keybind (RuneLite's Keybind), stored as "keyCode:modifiers". */
+    keybind?: boolean;
     default: T;
 }
 

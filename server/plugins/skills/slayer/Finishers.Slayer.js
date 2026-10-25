@@ -1,11 +1,11 @@
 "use strict";
 
 /**
- * Finishing items (data/slayer-finishers.json): gargoyles, rockslugs, desert lizards and
- * zygomites stay alive at 0 hitpoints until an item finishes them (used on them at or below
- * the threshold). With the matching unlock (Gargoyle Smasher, Slug Salter, Reptile Freezer,
- * 'Shroom Sprayer) and the item in the inventory, the killing hit does it on its own; a brine
- * sabre kills rockslugs outright. Fungicide refills a spray.
+ * Finishing items (data/slayer-finishers.json): gargoyles (and the Grotesque Guardians),
+ * rockslugs, desert lizards and zygomites stay alive at 0 hitpoints until an item finishes them
+ * (used on them at or below the threshold). With the matching unlock (Gargoyle Smasher, Slug
+ * Salter, Reptile Freezer, 'Shroom Sprayer) and the item in the inventory, the killing hit does
+ * it on its own; a brine sabre kills rockslugs outright. Fungicide refills a spray.
  */
 const DATA = require("../data/slayer-finishers.json");
 const Tasks = require("./Tasks.Slayer");
@@ -15,6 +15,7 @@ const FINISHED_ATTRIBUTE = "slayer:finished";
 
 let core = null;
 const byName = new Map();
+/** Item id -> the finishers it works on (the rock hammer does the gargoyles and the Guardians). */
 const items = new Map();
 
 function init(api) {
@@ -22,7 +23,9 @@ function init(api) {
   for (const finisher of DATA.finishers) {
     for (const name of finisher.names) byName.set(name, finisher);
     for (const id of [...(finisher.items ?? []), ...(finisher.consumed ?? []), ...(finisher.sprays ?? []), finisher.emptySpray]) {
-      if (id != null) items.set(id, finisher);
+      if (id == null) continue;
+      if (!items.has(id)) items.set(id, new Set());
+      items.get(id).add(finisher);
     }
   }
 }
@@ -94,8 +97,8 @@ const LAST_LEGS_ATTRIBUTE = "slayer:last-legs";
 
 /** Using a finishing item on its monster. */
 function itemOnNpc(event) {
-  const finisher = items.get(event.itemId);
-  if (!finisher || finisherFor(event.target) !== finisher) return;
+  const finisher = finisherFor(event.target);
+  if (!finisher || items.get(event.itemId)?.has(finisher) !== true) return;
   event.handled = true;
   const { player, target } = event;
   if (event.itemId === finisher.emptySpray) {

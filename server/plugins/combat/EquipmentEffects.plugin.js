@@ -10,6 +10,7 @@ const registerDemonbaneEffects = require("./effects/Demonbane.EquipmentEffects")
 const registerVampyrebaneEffects = require("./effects/Vampyrebane.EquipmentEffects");
 const registerSpiritShieldEffects = require("./effects/SpiritShields.EquipmentEffects");
 const registerBlackjackEffects = require("./effects/Blackjack.EquipmentEffects");
+const registerColossalBladeEffects = require("./effects/ColossalBlade.EquipmentEffects");
 
 module.exports = {
   name: "EquipmentEffects",
@@ -26,5 +27,6 @@ module.exports = {
     registerVampyrebaneEffects(api);
     registerSpiritShieldEffects(api);
     registerBlackjackEffects(api);
+    registerColossalBladeEffects(api);
   },
 };

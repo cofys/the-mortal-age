@@ -96,7 +96,7 @@ function createPlayer({ hp = 50, maxHp = 99, at = new Location(3222, 3222, 0) } 
     getTimers: () => timers,
     getCombat: () => ({
       delayAttack: (ticks) => attackDelays.push(ticks),
-      getPoisonImmunityTimer: () => ({ secondsRemaining: () => 0, start() {} }),
+      getPoisonImmunityTimer: () => ({ protectBriefly(seconds, venom) { assert.equal(seconds, 18); assert.equal(venom, true); } }),
       getTarget: () => null,
       getAttacker: () => null,
     }),

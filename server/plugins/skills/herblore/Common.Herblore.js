@@ -83,10 +83,10 @@ function recipesWith(firstId, secondId) {
       || recipe.ingredients.find(({ id }) => id === firstId).count >= 2));
 }
 
-/** "herblore:clean" `{ grimyId, clean }`: the clean herb a grimy one becomes (Zahur). */
+/** "herblore:clean" `{ grimyId, clean, level }`: clean herb and its required Herblore level. */
 function answerClean(request) {
   const herb = herbFor(request?.grimyId);
-  if (herb) request.clean = herb.cleanId;
+  if (herb) { request.clean = herb.cleanId; request.level = herb.level; }
 }
 
 /** "herblore:unfinished" `{ herbId, potion }`: the unfinished potion a clean herb makes (Zahur). */

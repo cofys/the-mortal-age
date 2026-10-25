@@ -21,6 +21,8 @@ const MAX_HITS = 3;
 const SCYTHES = new Set(["scythe of vitur", "holy scythe of vitur", "sanguine scythe of vitur"]);
 
 let core;
+/** The area registry, for multicombat (api.getAreaManager(): api.core has no AreaManager). */
+let areas;
 let scytheMethod = null;
 let chargedIds = new Set();
 let unchargedByCharged = new Map();
@@ -97,7 +99,7 @@ function consumeSwingCharge(player, hits) {
 
 /** The facing tile and its two neighbours form the scythe's forward arc. */
 function cleaveTargets(character, target) {
-  if (!character.getLocation || !target.getLocation || !core.AreaManager.inMulti(character) || !core.AreaManager.inMulti(target)) return [];
+  if (!character.getLocation || !target.getLocation || !areas.inMulti(character) || !areas.inMulti(target)) return [];
   const origin = character.getLocation();
   const location = target.getLocation();
   const dx = Math.sign(location.getX() - origin.getX());
@@ -224,6 +226,7 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
+    areas = api.getAreaManager();
     api.onServerStartup(initializeIds);
     api.onItemAction("Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });
     api.onItemAction("Holy Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });

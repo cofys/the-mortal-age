@@ -1,0 +1,104 @@
+{
+  "_description": "The Shellbane gryphon (https://oldschool.runescape.wiki/w/Shellbane_gryphon, /Strategies, Shellbane_Gryphon_Cave, Elder_Nama, Whirlwind, Tortugan_shield). Names are cache gamevals; tiles are the map's. Values under a `_calibrated` note have no Wiki figure.",
+  "names": {
+    "npcs": {
+      "boss": "gryphon_boss",
+      "nama": "slayer_gryphon_boss_guardian_vis"
+    },
+    "locs": {
+      "_entrance": "the multiloc parent: clicks arrive with its id (varbit 18321 shows it blocked or clear)",
+      "entrance": "tt_lair_entrance",
+      "exit": "tt_lair_exit",
+      "whirlwind1": "gryphon_boss_whirlwind_initial_1",
+      "whirlwindActive1": "gryphon_boss_whirlwind_active_1",
+      "whirlwind2": "gryphon_boss_whirlwind_initial_2",
+      "whirlwindActive2": "gryphon_boss_whirlwind_active_2",
+      "whirlwind3": "gryphon_boss_whirlwind_initial_3",
+      "whirlwindActive3": "gryphon_boss_whirlwind_active_3",
+      "whirlwind4": "gryphon_boss_whirlwind_initial_4",
+      "whirlwindActive4": "gryphon_boss_whirlwind_active_4",
+      "whirlwind5": "gryphon_boss_whirlwind_initial_5",
+      "whirlwindActive5": "gryphon_boss_whirlwind_active_5"
+    },
+    "items": {
+      "shield": "tortugan_shield"
+    },
+    "varps": {
+      "kills": "total_gryphon_boss_kills"
+    },
+    "seqs": {
+      "spawn": "gryphon_boss_spawn01",
+      "melee": "gryphon_boss_melee_attack01",
+      "ranged": "gryphon_boss_ranged01",
+      "spit": "gryphon_boss_spit01",
+      "whirlwind": "gryphon_boss_whirlwind01"
+    },
+    "spotanims": {
+      "rangedProjectile": "gryphon_ranged_projectile",
+      "rangedImpact": "gryphon_ranged_impact",
+      "spitProjectile": "gryphon_spit_attack_projectile",
+      "spitSplash": "gryphon_spit_s"
+    }
+  },
+  "quest": "troubled_tortugans",
+  "slayerLevel": 51,
+  "cave": {
+    "_bounds": "the boss's cave under the Great Conch (the walkable floor runs x 3168-3189, y 8866-8881)",
+    "bounds": [3160, 3200, 8860, 8892],
+    "floor": [3168, 3189, 8866, 8881],
+    "arrive": [3168, 8873],
+    "boss": [3178, 8871],
+    "outside": [3176, 2476, 0],
+    "_respawnTicks": "the infobox says 20 ticks (12 seconds since 17 Dec 2025)",
+    "respawnTicks": 20
+  },
+  "combat": {
+    "maxHit": 22,
+    "attackSpeed": 5,
+    "_calibrated": "the Wiki gives no weights: how often a ranged auto replaces a melee one, and how often a special replaces an auto",
+    "rangedChance": 0.25,
+    "specialEvery": 4
+  },
+  "knockback": {
+    "max": 30,
+    "weight": 40,
+    "warnTicks": 2,
+    "stunTicks": 2,
+    "push": 3,
+    "_heavyWeight": "a heavy player's knockback weight against 1 for each other special: the Wiki's 'prioritises' gives no figure",
+    "heavyWeight": 0.25
+  },
+  "spit": {
+    "landTicks": 3,
+    "hits": 6,
+    "_every": "the Wiki's captures: one value every 5 ticks",
+    "every": 5,
+    "min": 3,
+    "max": 12,
+    "_calibrated": "the Wiki's talk page: about +125 ranged defence brings every splat down to 3",
+    "fullDefence": 125
+  },
+  "whirlwind": {
+    "count": 5,
+    "every": 3,
+    "armTicks": 6,
+    "burstTicks": 25,
+    "_burstTicks": "15 seconds after they turn active",
+    "perTick": [[2, 3], [5, 6], [8, 9], [10, 12], [11, 15]],
+    "burst": [[20, 24], [25, 29], [30, 39], [40, 49], [50, 70]],
+    "radius": [0, 1, 2, 3, 99]
+  },
+  "messages": {
+    "_unverified": "noTask, devastating, spit/whirlwind/burst/corrosion stop, heavyEquipment and regains are the Wiki's; the rest have no capture",
+    "noTask": "You can only fight the gryphon in this cave if you've been assigned to do so by a Slayer Master.",
+    "noLevel": "You need a Slayer level of 51 to fight the Shellbane gryphon.",
+    "devastating": "<col=ff0000>The gryphon's attacks are devastating! You need some sort of protection!</col>",
+    "heavyEquipment": "The gryphon tries to pick you up, but fails thanks to your heavy equipment.",
+    "regains": "<col=ff0000>The gryphon regains its focus and strikes!</col>",
+    "corroding": "<col=ff0000>Your armour has started to corrode.</col>",
+    "stopsCorroding": "<col=00ff00>Your armour stops corroding.</col>",
+    "whirlwind": "<col=ff0000>The gryphon aggressively flaps its wings...</col>",
+    "burst": "<col=ff0000>The whirlwinds explode outwards in a large gust of wind!</col>",
+    "killCount": "Your Shellbane gryphon kill count is: <col=ff0000>{kills}</col>."
+  }
+}

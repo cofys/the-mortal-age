@@ -12,6 +12,7 @@ import { World } from "../../../World";
 import { PluginManager } from "../../../../plugins/PluginManager";
 import { CombatSpecial } from "../CombatSpecial";
 import { resolveSpecialAttackType, WeaponSpecialTraits } from "../WeaponSpecialTraits";
+import { Spell } from "../magic/Spell";
 
 type RollCacheEntry = {
     cycle: number;
@@ -237,7 +238,7 @@ export class AccuracyFormulasDpsCalc {
             attRoll = AccuracyFormulasDpsCalc.attackRangedRoll(entity);
             attRoll = PluginManager.modifyRangedAttackRoll(entity, enemy, attRoll);
         } else if (attackStyle === CombatType.MAGIC) {
-            attRoll = AccuracyFormulasDpsCalc.attackMagicRoll(entity);
+            attRoll = AccuracyFormulasDpsCalc.attackMagicRoll(entity, enemy);
         } else {
             return null;
         }
@@ -613,17 +614,15 @@ export class AccuracyFormulasDpsCalc {
         return cache.defenseMagicRoll;
     }
 
-    public static attackMagicRoll(entity: Mobile): number {
+    public static attackMagicRoll(entity: Mobile, targetOverride?: Mobile): number {
         const cache = this.getRollCache(entity);
-        if (cache.attackMagicRoll != null) {
-            return cache.attackMagicRoll;
-        }
         let accuracyBonus = (entity.isNpc()
             ? AccuracyFormulasDpsCalc.npcAttackBonus(entity, 7)
             : entity.getAsPlayer().getBonusManager().getAttackBonus()[BonusManager.ATTACK_MAGIC]);
 
-        let attRoll = AccuracyFormulasDpsCalc.effectiveMagicLevel(entity);
-        attRoll *= (accuracyBonus + 64);
+        // Cache only the actor's raw roll, never a target/spell-dependent bonus.
+        const baseAttackRoll = cache.attackMagicRoll ??= Math.floor(AccuracyFormulasDpsCalc.effectiveMagicLevel(entity) * (accuracyBonus + 64));
+        let attRoll = baseAttackRoll;
         if (entity.isPlayer()) {
             attRoll = Math.floor(applyMagicAttackAccuracyModifiers(entity, attRoll));
         }
@@ -640,7 +639,13 @@ export class AccuracyFormulasDpsCalc {
             attRoll = AccuracyFormulasDpsCalc.scaleSpecial(attRoll, demonbaneMultiplier);
         }
 
-        cache.attackMagicRoll = Math.floor(attRoll);
-        return cache.attackMagicRoll;
+        const request = { attacker: entity, target: targetOverride ?? entity.getCombat().getTarget(),
+            spell: entity.getCombat().getSelectedSpell(), context: Spell.getCalculationContext(entity, entity.getCombat().getSelectedSpell()),
+            baseAttackRoll, attackRoll: Math.floor(attRoll) };
+        PluginManager.emitCustomEvent("combat:magic-attack-roll-modify", request);
+        request.attackRoll = Number.isFinite(request.attackRoll) && request.attackRoll >= 0 ? Math.floor(request.attackRoll) : Math.floor(attRoll);
+        const modifiedRoll = request.attackRoll;
+        PluginManager.emitCustomEvent("combat:magic-attack-roll", request);
+        return Number.isFinite(request.attackRoll) && request.attackRoll >= 0 ? Math.floor(request.attackRoll) : modifiedRoll;
     }
 }

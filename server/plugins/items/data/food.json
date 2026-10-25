@@ -206,7 +206,7 @@
     {"name": "Square sandwich", "heal": 6},
     {"name": "Steak sandwich", "heal": 6},
     {"name": "Stew", "heal": 11, "leaves": "Bowl"},
-    {"name": "Strange fruit", "heal": 0, "runEnergy": 30, "curePoison": true, "poisonImmunity": 18, "message": "You eat the fruit. It tastes great, some of your energy is restored!"},
+    {"name": "Strange fruit", "heal": 0, "runEnergy": 30, "cureVenom": true, "poisonImmunity": 18, "message": "You eat the fruit. It tastes great, some of your energy is restored!"},
     {"name": "Strawberry", "heal": {"flat": 1, "percent": 6}},
     {"name": "Stuffed snake", "heal": 20},
     {"name": "Summer pie", "bites": ["Summer pie", "Half a summer pie"], "heal": 11, "eatDelay": [1, 1], "leaves": "Pie dish", "messages": ["You eat half the Summer pie.", "You eat the remaining Summer pie."], "boost": {"agility": 5}, "runEnergy": 10},

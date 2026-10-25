@@ -421,7 +421,8 @@ test("the situation shows what the bot can see", () => {
   assert.match(text, /Not yet \(levels too low\): yew_trees/);
 });
 
-test("a bot with no real player near makes no calls of its own, but still answers", () => {
+test("a bot with no real player near makes no calls of its own, but still answers", (t) => {
+  t.mock.method(Date, "now", () => 10000);
   const { mind, provider } = mindSetup();
   mind.services.watched = () => false;
   const now = Date.now();

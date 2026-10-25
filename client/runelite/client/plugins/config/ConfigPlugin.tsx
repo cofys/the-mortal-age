@@ -5,6 +5,7 @@ import { PluginListPanel } from "../../ui/plugin/PluginListPanel";
 import { Plugin, type PluginDescriptor } from "../Plugin";
 import { inject } from "../PluginInjector";
 import { PluginManager } from "../PluginManager";
+import { onConfigurationRequest } from "./configurationRequests";
 
 function WrenchIcon({ label }: { label: string }): JSX.Element {
     return (
@@ -29,6 +30,7 @@ export class ConfigPlugin extends Plugin {
     private readonly pluginManager = inject(PluginManager);
     private readonly configManager = inject(ConfigManager);
     private navButton?: NavigationButton;
+    private unsubscribeRequests?: () => void;
 
     protected async startUp(): Promise<void> {
         const pluginManager = this.pluginManager;
@@ -42,9 +44,15 @@ export class ConfigPlugin extends Plugin {
             ))
             .build();
         this.clientToolbar.addNavigation(this.navButton);
+        // "Configure ..." entries: show this panel; it opens the requested plugin's settings.
+        this.unsubscribeRequests = onConfigurationRequest(() => {
+            if (this.navButton) this.clientToolbar.openPanel(this.navButton);
+        });
     }
 
     protected async shutDown(): Promise<void> {
+        this.unsubscribeRequests?.();
+        this.unsubscribeRequests = undefined;
         if (this.navButton) this.clientToolbar.removeNavigation(this.navButton);
         this.navButton = undefined;
     }

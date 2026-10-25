@@ -7,7 +7,7 @@
     "z": 0
   },
   "zones": [
-    { "_description": "Global zone", "tags": [] },
+    { "_description": "Global zone", "tags": ["blast-furnace"] },
     { "minX": 3324, "maxX": 3392, "minY": 3201, "maxY": 3266, "z": 0, "tags": ["duel"] },
     { "minX": 3334, "maxX": 3392, "minY": 3267, "maxY": 3279, "z": 0, "tags": ["duel"] },
     { "minX": 3312, "maxX": 3323, "minY": 3225, "maxY": 3247, "z": 0, "tags": ["duel"] },

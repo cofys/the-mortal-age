@@ -95,7 +95,8 @@ function resolve(hold, escaped) {
     player.sendMessage(strangle.tightenMessage);
     player.performAnimation(new Common.core.Animation(BLOCK_ANIM));
     const max = strangle.maxHit[fight.awakened ? "awakened" : "normal"];
-    Common.damage(player, Common.randomInt(Math.ceil(max * strangle.minShare), max));
+    Common.damage(player, Common.randomInt(Math.ceil(max * strangle.minShare), max),
+      null, (amount) => fight.recordDamage(amount));
   }
   if (boss.isRegistered() && boss.getHitpoints() > 0) {
     boss.performAnimation(new Common.core.Animation(strangle.endAnim));

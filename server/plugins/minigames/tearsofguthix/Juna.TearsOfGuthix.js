@@ -20,6 +20,7 @@ const QUEST_COMPLETE = 2;
 const STORIES_VARBIT = 452;
 const STORIES_ATTRIBUTE = "tears-of-guthix:stories";
 const REMINDERS_ATTRIBUTE = "tears-of-guthix:reminders";
+const LAST_REMINDER_ATTRIBUTE = "tears-of-guthix:last-reminder";
 /** Set while a conversation came from right-click "Story" rather than Talk-to. */
 const VIA_STORY_ATTRIBUTE = "tears-of-guthix:via-story";
 
@@ -136,9 +137,19 @@ function onAction(event) {
   if (!isJuna(event)) return;
   const { player, stepId } = event;
   if (stepId === STEP.ENTER) {
-    Cave.enter(player);
     event.handled = true;
     event.end = true;
+    const { daysLeft, adventures } = eligibility(player);
+    if (Cave.isPlaying(player)) return;
+    if (!questDone(player) || daysLeft > 0 || !adventures) {
+      player.sendMessage("You are not yet eligible to collect the Tears of Guthix.");
+      return;
+    }
+    if (!emptyHands(player)) {
+      player.sendMessage("You must have both hands free to hold the bowl.");
+      return;
+    }
+    Cave.enter(player);
   } else if (stepId === STEP.LEAVE) {
     Cave.finish(player);
     event.handled = true;
@@ -177,13 +188,30 @@ function tellStory({ player }) {
 
 function login({ player }) {
   if (stories(player) > 0) sender(player).sendVarbit(STORIES_VARBIT, stories(player));
+  if (!questDone(player) || player.getAttribute(REMINDERS_ATTRIBUTE) !== true ||
+    player.getAttribute(LAST_REMINDER_ATTRIBUTE) === Cave.today()) return;
+  const { daysLeft, adventures } = eligibility(player);
+  if (daysLeft > 0 || !adventures) return;
+  player.sendMessage("You are eligible to drink from the Tears of Guthix.");
+  player.setAttribute(LAST_REMINDER_ATTRIBUTE, Cave.today());
+}
+
+function journal(request) {
+  const { daysLeft, adventures, xpDue } = eligibility(request.player);
+  if (daysLeft === 0 && adventures) {
+    request.lines.push("I am eligible to collect the Tears of Guthix again.");
+    return;
+  }
+  if (daysLeft > 0) request.lines.push(`I can collect the Tears again in ${daysLeft} ${daysLeft === 1 ? "day" : "days"}.`);
+  if (!adventures) request.lines.push(`I must gain 1 Quest Point or ${xpDue.toLocaleString("en-US")} XP before my next visit.`);
 }
 
 module.exports = function registerJuna(pluginApi) {
   api = pluginApi;
   junaNpcId = api.core.NpcIdentifiers.JUNA;
-  api.persistAttribute(STORIES_ATTRIBUTE);
-  api.persistAttribute(REMINDERS_ATTRIBUTE);
+  api.persistAttribute(STORIES_ATTRIBUTE, 0);
+  api.persistAttribute(REMINDERS_ATTRIBUTE, false);
+  api.persistAttribute(LAST_REMINDER_ATTRIBUTE);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:choice", onChoice);
@@ -192,6 +220,7 @@ module.exports = function registerJuna(pluginApi) {
   api.onCustomEvent("npc-dialogue:line", fillLine);
   api.onObjectInteraction(JUNA_LOC_NAME, { Story: tellStory });
   api.onPlayerLogin(login);
+  api.onCustomEvent("tears-of-guthix:journal", journal);
 };
 
 module.exports._test = { eligibility, answerCondition, verdictSteps, setApi: (value) => { api = value; junaNpcId = value.core.NpcIdentifiers.JUNA; } };

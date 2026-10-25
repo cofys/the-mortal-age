@@ -51,6 +51,8 @@ export type WorldSpotAnimationEvent = {
     tile: { x: number; y: number; level?: number };
     height?: number;
     startCycle: number;
+    /** Repeats until killed (a client graphic, e.g. a loot beam), rather than playing once. */
+    loop?: boolean;
 };
 
 export interface HitsplatEventPayload {
@@ -657,7 +659,13 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
     registerNpcSpotAnimation(_event: NpcSpotAnimationEvent): void {}
 
-    registerWorldSpotAnimation(_event: WorldSpotAnimationEvent): void {}
+    /** Plays a graphic on a tile; returns its id, for killWorldSpotAnimation. */
+    registerWorldSpotAnimation(_event: WorldSpotAnimationEvent): number | undefined {
+        return undefined;
+    }
+
+    /** Removes a graphic registerWorldSpotAnimation started (a looping one never ends by itself). */
+    killWorldSpotAnimation(_id: number): void {}
 
     // World objects (LOC packets). Backends rebuild the affected map squares.
     onLocChange(
@@ -712,7 +720,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         const changed = this.changedVarps;
         this.changedVarps = new Set();
         const client = this.osrsClient;
-        const varbitLoader = client.loaderFactory?.getVarBitTypeLoader?.();
+        const varbitLoader = client.varManager.varbitLoader;
         // Builds read the workers' copy of the vars, squares loaded later too.
         client.updateVars();
         if (!client.locTypeLoader || !varbitLoader) return;

@@ -4,6 +4,26 @@ export class HitDamage {
     private damage: number;
     private hitmask: HitMask;
     private startHitmask: HitMask;
+    private appliedObservers: Array<(damageTaken: number) => void> = [];
+
+    /** Observes health actually lost when this hit lands, before reactive healing. */
+    public onApplied(observer: (damageTaken: number) => void): this {
+        this.appliedObservers.push(observer);
+        return this;
+    }
+
+    /** Called by the hit queue; observers are consumed even if one throws. */
+    public notifyApplied(damageTaken: number): void {
+        const observers = this.appliedObservers;
+        this.appliedObservers = [];
+        for (const observer of observers) {
+            try {
+                observer(damageTaken);
+            } catch (error) {
+                console.error('[HitDamage] Applied observer failed', error);
+            }
+        }
+    }
 
     constructor(damage: number, hitmask: HitMask) {
         this.damage = damage;

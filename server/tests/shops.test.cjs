@@ -184,6 +184,20 @@ test("notes sell as the item they stand for", () => {
   assert.deepEqual(stockOf(), [[BRONZE_AXE, 2], [STEEL_AXE, 4]]);
 });
 
+test("invalid shop:sell-price responses preserve the default refund", (t) => {
+  let override;
+  t.mock.method(PluginManager, "emitCustomEvent", (name, request) => {
+    if (name === "shop:sell-price") request.price = override;
+  });
+  for (const price of [NaN, Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    override = price;
+    const player = openShop(0);
+    player.getInventory().add(new Item(STEEL_AXE, 1), false);
+    sell(player, 0);
+    assert.equal(player.getInventory().getAmount(COINS), Math.floor(200 * 0.85));
+  }
+});
+
 test("a sale whose payment wouldn't fit is refused, unless selling frees the slot", () => {
   const player = openShop(0);
   player.getInventory().add(new Item(STEEL_AXE_NOTE, 5), false);

@@ -152,12 +152,20 @@ function isPool(objectId) {
 
 function net({ player, objectId }) {
   if (!isPool(objectId)) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "tempoross-reward-pool", resume: () => net({ player, objectId }) };
+  Shared.api().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   search(player, 1);
   return true;
 }
 
 function bigSearch({ player, objectId }) {
   if (!isPool(objectId)) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "tempoross-reward-pool", resume: () => bigSearch({ player, objectId }) };
+  Shared.api().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   search(player, BIG_SEARCH);
   return true;
 }

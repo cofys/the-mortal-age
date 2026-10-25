@@ -94,6 +94,33 @@ function squareOf(spawn) {
 }
 
 /**
+ * Reconcile literal IDs whose cache name contradicts the authored spawn name.
+ * Only one nearby, same-plane Wiki/cache-confirmed identity is sufficient evidence.
+ * Correct variants and explicit cache keys are retained; inputs are never mutated.
+ */
+function reconcileIdentities(existingSpawns, wikiSpawns, cacheName, radius, inScope = () => true) {
+  const repairs = [], unresolved = [];
+  const cached = id => { try { return nameKey(cacheName(id)); } catch { return ''; } };
+  const spawns = existingSpawns.map(spawn => {
+    const expected = nameKey(spawn.name);
+    if (!inScope(spawn) || !expected || spawn.key != null || !Number.isInteger(spawn.id) ||
+        cached(spawn.id) === expected) return spawn;
+    const evidence = wikiSpawns.filter(candidate => !candidate.skip && nameKey(candidate.name) === expected &&
+      Number.isInteger(candidate.id) && cached(candidate.id) === expected && distance(spawn, candidate) <= radius);
+    const ids = [...new Set(evidence.map(candidate => candidate.id))];
+    if (ids.length !== 1) {
+      unresolved.push({ name: spawn.name, id: spawn.id, x: spawn.x, y: spawn.y, level: spawn.level,
+        candidates: ids, reason: ids.length ? 'ambiguous Wiki identities' : 'no matching Wiki/cache evidence' });
+      return spawn;
+    }
+    repairs.push({ name: spawn.name, previousId: spawn.id, id: ids[0], x: spawn.x, y: spawn.y,
+      level: spawn.level, page: evidence[0].page });
+    return { ...spawn, id: ids[0] };
+  });
+  return { spawns, repairs, unresolved };
+}
+
+/**
  * Which Wiki spawns the existing ones in the same boxes lack. Per NPC name and plane:
  * 1. each Wiki spawn takes the nearest unmatched existing spawn of that name within `radius`;
  * 2. existing spawns of that name left over in the same map square still count, so only the
@@ -245,4 +272,4 @@ function alignLayers(wikiSpawns, existingSpawns, minVotes = 2) {
   return { shiftOf, layers };
 }
 
-module.exports = { versionIds, SURFACE_LAYERS, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions, squareOf, parseLocLines, locationName };
+module.exports = { versionIds, SURFACE_LAYERS, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions, reconcileIdentities, squareOf, parseLocLines, locationName };

@@ -316,7 +316,7 @@ export function deriveRawMenuEntriesForWidget(
     const verb = getWidgetTargetVerb(w, targetMask);
 
     // Check if widget has onOp handler (either new or old style)
-    const hasOnOpHandler = !!(w?.onOp || w?.eventHandlers?.onOp);
+    const hasOnOpHandler = !!(w?.onOp || w?.eventHandlers?.onOp || w?.jsListeners?.onOp);
 
     // inventory/container item menus treat targetVerb ("Use") as its own entry,
     // not as a placeholder that fills empty action slots. Filling null action slots causes

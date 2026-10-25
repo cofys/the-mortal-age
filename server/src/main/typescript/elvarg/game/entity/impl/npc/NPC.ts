@@ -168,6 +168,7 @@ export class NPC extends Mobile {
     /** Scales the combat XP players get for damaging this NPC (OSRS gives some bosses less). */
     private combatXpMultiplier: number = 1;
     private readonly drainedLevels = new Map<Skill, { level: number; cycle: number }>();
+    private statDrainImmune = false;
     private static readonly STAT_RESTORE_TICKS = 100;
     /** Ticks per level a drained stat comes back; a boss can restore faster (the Corporeal Beast). */
     private statRestoreTicks = NPC.STAT_RESTORE_TICKS;
@@ -512,11 +513,18 @@ export class NPC extends Mobile {
     public setCurrentLevels(skill: Skill, level: number): void {
         if (!Number.isFinite(level)) throw new RangeError("Invalid NPC combat level");
         const base = this.getMaxLevel(skill);
+        if (this.statDrainImmune && level < base) return;
         this.getCurrentLevel(skill);
         const cycle = this.drainedLevels.get(skill)?.cycle ?? World.getProcessCycle();
         level = Math.max(0, Math.min(base, Math.floor(level)));
         if (level === base) this.drainedLevels.delete(skill);
         else this.drainedLevels.set(skill, { level, cycle });
+    }
+
+    /** Encounter-owned immunity; never changes another NPC or its shared definition. */
+    public setStatDrainImmune(immune: boolean): void {
+        this.statDrainImmune = immune;
+        if (immune) this.drainedLevels.clear();
     }
 
     public getDefenceLevel(): number {

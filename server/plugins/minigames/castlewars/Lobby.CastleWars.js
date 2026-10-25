@@ -19,11 +19,7 @@ const BOT_TIER_ATTRIBUTE = "castlewars:bot-tier";
 const BOTS_PER_TEAM = 30;
 // The lobby prompt's bot choices; the label is what the player clicks, the value the tier
 // Bots.CastleWars pins each spawned bot's loadout and combat level band to.
-const BOT_TIER_OPTIONS = Object.freeze([
-  ["Novice", "novice"],
-  ["Intermediate", "intermediate"],
-  ["Veteran", "veteran"],
-]);
+const { TIER_OPTIONS: BOT_TIER_OPTIONS } = require("../../bots/behaviours/pvp/PvpTierLoadouts.PlayerBots");
 // One entry per bot slot: attackers, flag runners, stand guards, one keeper per gate, two
 // battlement archers, two battlement mages and one catapult crew, per team.
 const BOT_ROLE_MIX = Object.freeze([

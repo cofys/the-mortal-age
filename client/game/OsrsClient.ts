@@ -148,6 +148,7 @@ import {
 } from "../network/ServerConnection";
 import { ClientPacketId, createPacket, queuePacket, flushPackets } from "../network/packet";
 import { WebGLMapSquare } from "../render/WebGLMapSquare";
+import { withClientSpotAnims } from "../render/gfx/clientGraphics";
 import type { MinimapIcon } from "../render/loader/SdMapData";
 import { type NpcInstance, npcOwnerMapId } from "../render/npc/NpcRenderTemplate";
 import { MenuTargetType, type OsrsMenuEntry } from "../rs/MenuEntry";
@@ -216,6 +217,7 @@ import { isDropTarget, isWidgetUseTarget } from "../widgets/WidgetFlags";
 import { markWidgetInteractionDirty } from "../widgets/WidgetInteraction";
 import { WidgetManager } from "../widgets/WidgetManager";
 import { WidgetSessionManager } from "../widgets/WidgetSessionManager";
+import { runWidgetJsOp } from "../widgets/custom/dynamicWidgets";
 import { applyQuestListWidgetGroups, questListPreferences } from "../widgets/custom/questList";
 import { cleanupInterfaceClickTargets, cleanupWidgetClickTarget } from "../widgets/gl/widgets-gl";
 import { layoutWidgets } from "../widgets/layout/WidgetLayout";
@@ -698,6 +700,8 @@ export class OsrsClient {
 
     // Hovered tile state (for devoverlay label)
     hoveredTile?: { tileX: number; tileY: number; plane?: number };
+    /** RuneLite's getSelectedSceneTile: the tile under the mouse, as Walk here picks it each frame. */
+    selectedSceneTile?: { tileX: number; tileY: number; plane?: number };
     hoveredTileScreen?: { x: number; y: number };
 
     runMode: boolean = true; // Start as run mode to match orb's visual state because run is enabled by default on first login.
@@ -1333,7 +1337,7 @@ export class OsrsClient {
             getSeqTypeLoader: () => this.seqTypeLoader,
             getSeqFrameLoader: () => this.seqFrameLoader,
             getBasTypeLoader: () => this.basTypeLoader,
-            getSkeletalSeqLoader: () => this.loaderFactory?.getSkeletalSeqLoader?.(),
+            getSkeletalSeqLoader: () => this.skeletalSeqLoader,
             varManager: this.varManager,
             widgetManager: this.widgetManager,
             playerEcs: this.playerEcs,
@@ -3564,8 +3568,7 @@ export class OsrsClient {
                                             npcTypeLoader: this.npcTypeLoader,
                                             seqTypeLoader: this.seqTypeLoader,
                                             seqFrameLoader: this.seqFrameLoader,
-                                            skeletalSeqLoader:
-                                                this.loaderFactory?.getSkeletalSeqLoader?.(),
+                                            skeletalSeqLoader: this.skeletalSeqLoader,
                                             varManager: this.varManager,
                                             basTypeLoader: this.basTypeLoader,
                                         });
@@ -3981,6 +3984,7 @@ export class OsrsClient {
     }
 
     private handleNativeWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
+        if (runWidgetJsOp(event)) return;
         if (this.clientPlugins.handleWidgetAction(event)) return;
         const uid = event.widget?.uid | 0;
         // The logout tab's "World Switcher" button, and the same option on the logout tab's
@@ -4690,7 +4694,7 @@ export class OsrsClient {
                     npcTypeLoader: undefined,
                     seqTypeLoader: this.seqTypeLoader,
                     seqFrameLoader: this.seqFrameLoader,
-                    skeletalSeqLoader: this.loaderFactory.getSkeletalSeqLoader?.(),
+                    skeletalSeqLoader: this.skeletalSeqLoader,
                     varManager: this.varManager,
                     basTypeLoader: this.basTypeLoader,
                 });
@@ -6503,7 +6507,8 @@ export class OsrsClient {
             this.seqFrameLoader = this.loaderFactory.getSeqFrameLoader();
             this.skeletalSeqLoader = this.loaderFactory.getSkeletalSeqLoader?.();
             this.worldEntityTypeLoader = this.loaderFactory.getWorldEntityTypeLoader?.();
-            this.spotAnimTypeLoader = this.loaderFactory.getSpotAnimTypeLoader();
+            // Client graphics (loot beams) resolve before the cache's spot anims.
+            this.spotAnimTypeLoader = withClientSpotAnims(this.loaderFactory.getSpotAnimTypeLoader());
             this.locTypeLoader = this.loaderFactory.getLocTypeLoader();
             this.objTypeLoader = this.loaderFactory.getObjTypeLoader();
             try {

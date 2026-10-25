@@ -70,6 +70,12 @@ async function main(): Promise<void> {
     toolbar.openPanel(xp);
     toolbar.openPanel(notes);
     assert.deepEqual(opened, ["Notes"], "only a button that's in the toolbar opens");
+    const selectedPanel = new SidebarStore();
+    const offOpen = toolbar.onOpenPanel((b) => selectedPanel.select(b.tooltip));
+    toolbar.openPanel(notes);
+    toolbar.openPanel(notes);
+    assert.equal(selectedPanel.getState().selected, "Notes", "programmatic opening selects an already-open panel rather than toggling it closed");
+    offOpen();
 
     // Plugins add their button while enabled and remove it when turned off.
     const configManager = new ConfigManager(undefined, new MemoryStorage());

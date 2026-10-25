@@ -10,6 +10,7 @@ module.exports = {
     api.onServerStartup(Events.initialize.bind(null, api));
     api.onServerShutdown(Events.shutdown);
     api.onPlayerLogin(Events.login);
+    api.onCustomEvent("agent:advance-time", Events.advanceTime);
     api.onPlayerProcess(Events.processPlayer);
     api.onPlayerLogout(Events.logoutCleanup);
     api.onPlayerDisconnect(Events.logoutCleanup);

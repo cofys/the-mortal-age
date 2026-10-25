@@ -4,6 +4,8 @@ const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 
 let pluginApi;
+/** The can-bank check's source for a deposit box (the Bank PIN, for one, lets these through). */
+const DEPOSIT_BOX_SOURCE = "deposit-box";
 
 // RuneLite/OpenRune: interface.bank_depositbox and its cache-native components.
 const IFACE = 192;
@@ -63,7 +65,7 @@ function open(player) {
 function deposit(player, slot, itemId, amount) {
   // Single choke point: even an amount entered after the prompt was opened
   // must re-check the bank veto before anything moves.
-  if (pluginApi.emitCanBank(player) === false) return false;
+  if (pluginApi.emitCanBank(player, DEPOSIT_BOX_SOURCE) === false) return false;
   const inv = player?.getInventory?.();
   const slotItem = inv?.forSlot?.(slot);
   if (!inv || !slotItem || slotItem.getId() !== itemId) return false;
@@ -89,7 +91,7 @@ function promptAmount(player, callback) {
 
 function handleDepositContainerAction(player, interfaceId, itemId, slot, clickType) {
   if (interfaceId !== CONTAINER || player.getInterfaceId?.() !== IFACE) return false;
-  if (pluginApi.emitCanBank(player) === false) return true;
+  if (pluginApi.emitCanBank(player, DEPOSIT_BOX_SOURCE) === false) return true;
 
   // cache script bank_depositbox_drawslot: op1 is selected quantity,
   // op2-6 are 1/5/10/X/All, and op10 is Examine.
@@ -117,7 +119,7 @@ function handleDepositContainerAction(player, interfaceId, itemId, slot, clickTy
 
 function handleDepositButton(player, button) {
   if (!player || player.getInterfaceId?.() !== IFACE) return false;
-  if (pluginApi.emitCanBank(player) === false) return true;
+  if (pluginApi.emitCanBank(player, DEPOSIT_BOX_SOURCE) === false) return true;
 
   const quantity = BTN_QUANTITIES.get(button);
   if (quantity) {
@@ -166,7 +168,7 @@ function promptItemOnBooth(event) {
 }
 
 function openDepositBox({ player }) {
-  if (pluginApi.emitCanBank(player) !== false) open(player);
+  if (pluginApi.emitCanBank(player, DEPOSIT_BOX_SOURCE) !== false) open(player);
 }
 
 module.exports = {
@@ -192,7 +194,7 @@ module.exports = {
     api.onItemOnObject((event) => {
       if (!isDepositBooth(event)) return;
       event.handled = true;
-      if (pluginApi.emitCanBank(event.player) === false) return;
+      if (pluginApi.emitCanBank(event.player, DEPOSIT_BOX_SOURCE) === false) return;
       promptItemOnBooth(event);
     });
   },

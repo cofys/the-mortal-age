@@ -37,6 +37,8 @@ const npcOfSize = (size) => ({ getHitpoints: () => 1000, isNpc: () => true, getA
 let rerolled = [];
 let maxHit = 0;
 let resolver;
+let multi = false;
+let worldNpcs = [];
 class MeleeCombatMethod {}
 class PendingHit {
     constructor() {
@@ -54,9 +56,14 @@ Scythe.register({
         ItemIdentifiers,
         MeleeCombatMethod,
         PendingHit,
-        CombatFactory: { applyStyleDamage: (hit, max) => { rerolled.push(max); hit.damage = max; } },
+        CombatFactory: {
+            applyStyleDamage: (hit, max) => { rerolled.push(max); hit.damage = max; },
+            canAttackSecondaryTarget: () => true,
+        },
         DamageFormulas: { calculateMaxMeleeHit: () => maxHit },
+        World: { getNpcs: () => worldNpcs, getPlayers: () => [] },
     },
+    getAreaManager: () => ({ inMulti: () => multi }),
     registerCombatMethodResolver: (r) => { resolver = r; },
     onServerStartup: (handler) => handler(),
     onItemAction: () => {},
@@ -85,6 +92,25 @@ test('the scythe hits once per tile of target width, up to three', () => {
 test('each scythe hit has half the max of the one before, rounded down', () => {
     assert.deepEqual(swing(npcOfSize(3), 47).rerolled, [23, 11], '47 -> 23 -> 11');
     assert.deepEqual(swing(npcOfSize(3), 48).rerolled, [24, 12]);
+});
+
+test('the cleave reads multicombat from the area manager: a swing with located targets never throws', () => {
+    const at = (x, y) => ({ getX: () => x, getY: () => y, getZ: () => 0 });
+    const located = (x, y) => ({ ...npcOfSize(1), getLocation: () => at(x, y), getAsNpc: () => ({ getSize: () => 1 }) });
+    const target = located(10, 11);
+    const beside = located(11, 11);
+    worldNpcs = [target, beside];
+    const attacker = { ...player({ [Equipment.WEAPON_SLOT]: SCYTHE }), getLocation: () => at(10, 10) };
+    const method = resolver.resolve(attacker);
+    maxHit = 40;
+    multi = false;
+    assert.deepEqual(method.hits(attacker, target).length, 1, 'single-way: the target alone');
+    assert.deepEqual(Scythe._test.cleaveTargets(attacker, target), []);
+    multi = true;
+    assert.deepEqual(Scythe._test.cleaveTargets(attacker, target), [beside], 'multi: the next tile of the arc');
+    assert.equal(method.hits(attacker, target).length, 2);
+    multi = false;
+    worldNpcs = [];
 });
 
 test('every bow of Faerdhinen fires its own arrows, not the ammo slot', () => {

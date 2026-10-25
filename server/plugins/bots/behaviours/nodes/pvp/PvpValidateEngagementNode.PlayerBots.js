@@ -25,6 +25,16 @@ class PvpValidateEngagementNode {
     if (!player || !state || !pvp) {
       return { handled: true, status: "failure", target: null };
     }
+    // Bot attacks bypass the player-click reaction hook; defend against the actual attacker.
+    const attacker = player.getCombat?.().getAttacker?.();
+    if (attacker?.isPlayer?.() === true && attacker !== pvp.targetPlayer &&
+        this.isValidTarget?.(player, attacker) &&
+        this.CombatFactory.canAttackPermission(player, attacker, false,
+          this.CombatFactory.getMethod(player)) === CanAttackResponse.CAN_ATTACK) {
+      pvp.targetPlayer = attacker;
+      pvp.targetUsername = attacker.getUsername();
+      pvp.endsAt = Math.max(pvp.endsAt ?? 0, nowMs + 30_000);
+    }
     if (!pvp.targetUsername) {
       this.setPhase?.(state, this.pvpPhase?.SEEKING ?? "seeking");
       if (pvpOnly) {

@@ -3,6 +3,8 @@
 const core = require("./Core.Farming");
 const Data = require("./Data.Farming");
 const Patches = require("./Patches.Farming");
+// Native bank-side item op labelled by cache param 595, shared with StorageItems.
+const BANK_STORAGE_OP = 9;
 const CONTRACTS = [
     [[45, 1, "POTATO MARIGOLD ONION CABBAGE ROSEMARY TOMATO SWEETCORN NASTURTIUM WOAD LIMPWURT STRAWBERRY"],
         [45, 2, "REDBERRIES CADAVABERRIES DWELLBERRIES"], [48, 2, "JANGERBERRIES"], [55, 3, "CACTUS"],
@@ -106,18 +108,20 @@ function rewardItem(event) {
     let rewards = item.getMetaValue("farming:rewards");
     if (!rewards) { rewards = name === "Seed pack" ? contents(3, false) : Array.from({ length: 7 }, () => roll(HERBS)); item.setMetaValue("farming:rewards", rewards); }
     if (action === "check") { event.player.sendMessage(`There are ${rewards.length} rewards remaining.`); return; }
+    const initialCount = rewards.length;
     do {
         const reward = rewards[0];
         if (!reward) break;
         if (action === "bank-all") {
             const bank = event.player.getBank(0);
-            if (bank.isFull() && !bank.contains(reward.id)) { event.player.sendMessage("Your bank is full."); return; }
-            bank.addItem(new core.Item(reward.id, reward.count));
-        } else if (!Patches.give(event.player, reward.id, reward.count)) return;
+            const received = new core.Item(reward.id, reward.count);
+            if (bank.getAddableAmount(received) < reward.count) { event.player.sendMessage("Your bank is full."); break; }
+            bank.addItem(received);
+        } else if (!Patches.give(event.player, reward.id, reward.count)) break;
         rewards.shift();
     } while (rewards.length && ["take-all", "bank-all"].includes(action));
     if (!rewards.length) event.player.getInventory().deleteAtSlot(event.slot);
-    else if (name === "Herb box") item.setId(Data.itemId("Open herb box"));
+    else if (name === "Herb box" && rewards.length < initialCount) item.setId(Data.itemId("Open herb box"));
     event.player.getInventory().refreshItems();
 }
 
@@ -125,12 +129,34 @@ function containerKind(item) {
     const name = core.CacheDefinitions.getItem(item.getId()).name.toLowerCase();
     return name === "seed box" || name === "open seed box" ? "seed" : name === "herb sack" || name === "open herb sack" ? "herb" : undefined;
 }
+function bankStorageOp(event) {
+    const { player } = event;
+    if (event.handled || event.op !== BANK_STORAGE_OP || !core.Bank.isOpen(player)) return;
+    const inventory = player.getInventory(), container = inventory.forSlot(event.slot);
+    if (container !== event.item || !containerKind(container)) return;
+    event.handled = true;
+    const stored = container.getMetaValue("farming:stored") ?? {};
+    for (const [key, count] of Object.entries(stored)) {
+        const id = Number(key);
+        if (!Number.isInteger(id) || id <= 0 || id >= core.CacheDefinitions.getCounts().items || !Number.isSafeInteger(count) || count <= 0) continue;
+        const bank = player.getBank(core.Bank.getTabForItem(player, id));
+        const item = new core.Item(id, count), amount = bank.getAddableAmount(item);
+        if (amount <= 0) continue;
+        bank.add(item.setAmount(amount), false);
+        stored[key] -= amount;
+        if (!stored[key]) delete stored[key];
+    }
+    container.setMetaValue("farming:stored", stored);
+    player.getBank(player.getCurrentBankTab()).refreshItems();
+    inventory.refreshItems();
+}
 function storeCrop(player, container, id, maximum) {
     const kind = containerKind(container);
     if (!kind) return 0;
     if (kind === "herb" && player.getSkillManager().getCurrentLevel(core.Skill.HERBLORE) < 58) return 0;
     const crop = [...Data.CROPS.values()].find(c => kind === "seed" ? c.seed === id : c.type === "HERB" && c.produce === id);
     if (!crop || (kind === "seed" && !core.CacheDefinitions.getItem(id).stackability)) return 0;
+    if (kind === "herb" && !core.CacheDefinitions.getItem(id).name?.startsWith("Grimy ")) return 0;
     const stored = (container.getMetaValue("farming:stored") ?? {});
     if (kind === "seed" && !stored[id] && Object.keys(stored).length >= 6) return 0;
     const amount = Math.min(maximum, (kind === "herb" ? 30 : 2147483647) - (stored[id] ?? 0));
@@ -168,12 +194,23 @@ function storageAction(event) {
     } else {
         const stored = (container.getMetaValue("farming:stored") ?? {});
         if (action === "check") event.player.sendMessage(Object.entries(stored).map(([id, amount]) => `${amount} ${core.CacheDefinitions.getItem(+id).name}`).join(", ") || "The container is empty.");
-        else for (const [id, count] of Object.entries(stored)) {
+        else for (const [id, count] of withdrawalEntries(stored, kind)) {
             const amount = Math.min(count, kind === "seed" ? inventory.contains(+id) || !inventory.isFull() ? count : 0 : inventory.getFreeSlots());
             if (amount && Patches.give(event.player, +id, amount)) { stored[id] -= amount; if (!stored[id]) delete stored[id]; }
         }
     }
     inventory.refreshItems();
+}
+// https://oldschool.runescape.wiki/w/Herb_sack: Empty starts with the lowest-level herb.
+function withdrawalEntries(stored, kind) {
+    const entries = Object.entries(stored);
+    if (kind !== "herb") return entries;
+    const levels = new Map(entries.map(([id]) => {
+        const request = { grimyId: +id };
+        core.PluginManager.emitCustomEvent("herblore:clean", request);
+        return [id, request.level ?? Infinity];
+    }));
+    return entries.sort(([a], [b]) => levels.get(a) - levels.get(b) || +a - +b);
 }
 function guildObject(event) {
     if (event.definition?.getName()?.toLowerCase() !== "seed vault") return;
@@ -200,4 +237,4 @@ function guildObject(event) {
     Patches.choose(player, entries);
 }
 
-Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, guildObject });
+Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject });

@@ -15,7 +15,7 @@ const BLUE = "blue";
 const GREEN = "green";
 const NONE = "none";
 const STREAM_TICKS = 16;
-// ponytail: the Wiki gives the 16-tick stay and the order, not the gap between moves; six moves
+// shortcut: the Wiki gives the 16-tick stay and the order, not the gap between moves; six moves
 // are spread evenly over the 16 ticks until a capture says otherwise.
 const MOVE_OFFSETS = [0, 3, 5, 8, 11, 13];
 
@@ -86,21 +86,23 @@ function wallAt(x, y) {
   return WALLS.findIndex((wall) => wall.x === x && wall.y === y);
 }
 
-/** Starts the world's streams and redraws the walls as they move. */
-function startStreams(core) {
-  const { GameObject, Location, LocModelType, ObjectManager, Task, TaskManager } = core;
-  const redraw = (index, colour) => {
-    const wall = WALLS[index];
-    const decoration = new GameObject(
-      DECORATIONS[wall.side][colour],
-      new Location(wall.x, wall.y, WALL_PLANE),
-      LocModelType.WALL_DECORATION_INSIDE,
-      wall.face,
-      null,
-    );
-    ObjectManager.register(decoration, true);
-  };
-  const streams = createStreams({ onChange: redraw });
+/** Draw the world's current colour in either the public cave or one private visit. */
+function drawWall(core, index, colour, area = null) {
+  const { GameObject, Location, LocModelType, ObjectManager } = core;
+  const wall = WALLS[index];
+  const decoration = new GameObject(
+    DECORATIONS[wall.side][colour],
+    new Location(wall.x, wall.y, WALL_PLANE),
+    LocModelType.WALL_DECORATION_INSIDE,
+    wall.face,
+    area,
+  );
+  ObjectManager.register(decoration, true);
+}
+
+function startStreams(core, onChange) {
+  const { Task, TaskManager } = core;
+  const streams = createStreams({ onChange });
   TaskManager.submit(new (class extends Task {
     constructor() { super(1); }
     execute() { streams.tick(); }
@@ -108,4 +110,4 @@ function startStreams(core) {
   return streams;
 }
 
-module.exports = { BLUE, GREEN, NONE, STREAM_TICKS, WALLS, wallAt, createStreams, startStreams };
+module.exports = { BLUE, GREEN, NONE, STREAM_TICKS, WALLS, wallAt, createStreams, drawWall, startStreams };

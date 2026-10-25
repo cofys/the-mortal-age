@@ -1,0 +1,502 @@
+{
+  "captureId": 1637,
+  "downloadUrl": "https://rsprox.net/download/1637",
+  "revision": 226,
+  "worldActivity": "-",
+  "worldFlags": 1,
+  "captureSha256": "d8bb6476c210cf18a2592c74f523175b29928d373109c102d3c46eb3e5570181",
+  "decoderSourceSha256": "928a1e6fb41ba7e00a5876d894ab3082f33f5d345e88fad847c516aa2ef8d76c",
+  "runeLiteCommit": "9fad2c588ca957ae47d883b09544725a796ed9fe",
+  "runeLiteTimerSourceSha256": "fbd7c3d1989f69bef23f1309671ae8285e91788e400a71b1e63aa52483993523",
+  "events": [
+    {
+      "value": 20,
+      "tick": 4945,
+      "event": "poison"
+    },
+    {
+      "value": 19,
+      "tick": 4975,
+      "event": "poison"
+    },
+    {
+      "event": "selectedCureClick",
+      "op": 2,
+      "itemId": 12913,
+      "tick": 4979
+    },
+    {
+      "value": -50,
+      "tick": 4980,
+      "event": "poison"
+    },
+    {
+      "after": {
+        "23": 12915
+      },
+      "event": "selectedCureInventory",
+      "before": {
+        "23": 12913
+      },
+      "tick": 4980
+    },
+    {
+      "value": -49,
+      "tick": 5005,
+      "event": "poison"
+    },
+    {
+      "value": -48,
+      "tick": 5035,
+      "event": "poison"
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5064,
+      "group": 11,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5066,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5067,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5068,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5069,
+      "group": 219,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5072,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "value": -47,
+      "tick": 5073,
+      "event": "poison"
+    },
+    {
+      "child": 565,
+      "event": "closeInterface",
+      "group": 162,
+      "tick": 5073
+    },
+    {
+      "value": -46,
+      "tick": 5103,
+      "event": "poison"
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5133,
+      "group": 219,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5135,
+      "group": 229,
+      "type": 0
+    },
+    {
+      "value": -45,
+      "tick": 5147,
+      "event": "poison"
+    },
+    {
+      "child": 565,
+      "event": "closeInterface",
+      "group": 162,
+      "tick": 5147
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5162,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5164,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5165,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5166,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5167,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5168,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5168,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5169,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5170,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5171,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5171,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5172,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5172,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5173,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5173,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5174,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5174,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5175,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5175,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5176,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5177,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5177,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5178,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5179,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5180,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5180,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5181,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5182,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5182,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5183,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "value": -44,
+      "tick": 5184,
+      "event": "poison"
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5184,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "child": 565,
+      "event": "closeInterface",
+      "group": 162,
+      "tick": 5184
+    },
+    {
+      "value": -43,
+      "tick": 5214,
+      "event": "poison"
+    },
+    {
+      "value": -42,
+      "tick": 5244,
+      "event": "poison"
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5250,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5252,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5253,
+      "group": 219,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5255,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5258,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "child": 565,
+      "event": "closeInterface",
+      "group": 162,
+      "tick": 5265
+    },
+    {
+      "value": -41,
+      "tick": 5274,
+      "event": "poison"
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5277,
+      "group": 217,
+      "type": 0
+    },
+    {
+      "parentChild": 565,
+      "event": "openInterface",
+      "parentGroup": 162,
+      "tick": 5278,
+      "group": 231,
+      "type": 0
+    },
+    {
+      "child": 565,
+      "event": "closeInterface",
+      "group": 162,
+      "tick": 5279
+    },
+    {
+      "value": -40,
+      "tick": 5304,
+      "event": "poison"
+    },
+    {
+      "value": -39,
+      "tick": 5334,
+      "event": "poison"
+    },
+    {
+      "value": -38,
+      "tick": 5364,
+      "event": "poison"
+    }
+  ]
+}

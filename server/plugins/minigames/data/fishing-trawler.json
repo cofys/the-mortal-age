@@ -1,0 +1,316 @@
+{
+  "_source": "https://oldschool.runescape.wiki/w/Fishing_Trawler and /Strategies (rules, points, rewards); a normal-world capture of a full trip on the official Trawler world (leak batches, tentacle and rail values and timings, the timer, messages, the sailing interfaces); the cache for every id. Values neither gives are marked _calibrated.",
+  "names": {
+    "locs": {
+      "leak": "trawler_hull_leak",
+      "netLeft": "trawlernet_l",
+      "netRight": "trawlernet_r",
+      "rewardNet": "trawlernetland",
+      "railBroken": "trawler_shiprail_broken_op",
+      "railFloorBroken": "trawler_shiprail_broken_floor_op",
+      "barrels": [
+        "sinkingbarrel1",
+        "sinkingbarrel2",
+        "sinkingbarrel3"
+      ],
+      "crateBuckets": "trawler_crate_bucket",
+      "crateHammers": "trawler_crate_hammer",
+      "crateAxes": "trawler_crate_axes"
+    },
+    "items": {
+      "bucket": "bucket_bailing",
+      "bucketFull": "bucket_bailingfull",
+      "swampPaste": "swamppaste",
+      "rope": "rope",
+      "hammer": "hammer",
+      "bronzeAxe": "bronze_axe",
+      "anglerHat": "trawler_reward_hat",
+      "anglerTop": "trawler_reward_top",
+      "anglerLegs": "trawler_reward_legs",
+      "anglerBoots": "trawler_reward_boots",
+      "blessedAxe": "anma_axe"
+    },
+    "varbits": {
+      "water": "trawler_water_percentage",
+      "netRipped": "trawler_netinfo",
+      "minutes": "trawler_timeinfo",
+      "catch": "trawler_catchinfo",
+      "contribution": "trawler_activity",
+      "tentaclePort": "tentacle_port",
+      "tentacleStarboard": "tentacle_starboard",
+      "railPort": "shiprail_port",
+      "railStarboard": "shiprail_starboard",
+      "hull": [
+        "trawler_hull_00",
+        "trawler_hull_01",
+        "trawler_hull_02",
+        "trawler_hull_03",
+        "trawler_hull_04",
+        "trawler_hull_05",
+        "trawler_hull_06",
+        "trawler_hull_07",
+        "trawler_hull_08",
+        "trawler_hull_09",
+        "trawler_hull_10",
+        "trawler_hull_11",
+        "trawler_hull_12",
+        "trawler_hull_13",
+        "trawler_hull_14",
+        "trawler_hull_15"
+      ],
+      "status": "trawler_status"
+    },
+    "interfaces": {
+      "overlay": "trawler_overlay",
+      "journey": "ship_journey",
+      "start": "trawler_start"
+    },
+    "seqs": {
+      "fill": "human_pickuptable",
+      "bail": "human_pickupfloor",
+      "hammer": "human_hammer_hit",
+      "tentacleAttack": "tentacle_trawler_monster_attack",
+      "tentacleRecoil": "tentacle_trawler_monster_recoil"
+    }
+  },
+  "lobby": {
+    "bounds": [
+      2660,
+      2673,
+      3160,
+      3185,
+      1
+    ],
+    "_note": "the docked trawler's deck at Port Khazard"
+  },
+  "boat": {
+    "bounds": [
+      1876,
+      1899,
+      4814,
+      4833
+    ],
+    "arrive": [
+      1887,
+      4825,
+      1
+    ],
+    "_note": "the dry trawler copy; its leaks are on the lower deck (plane 0)"
+  },
+  "wreck": {
+    "bounds": [
+      1936,
+      1962,
+      4814,
+      4836
+    ],
+    "arrive": [
+      1952,
+      4826,
+      0
+    ]
+  },
+  "shore": [
+    2672,
+    3209,
+    0
+  ],
+  "port": [
+    2675,
+    3170,
+    0
+  ],
+  "values": {
+    "hull": {
+      "default": 0,
+      "patched": 1,
+      "leak": 2
+    },
+    "tentacle": {
+      "none": 0,
+      "attacking": 2,
+      "sweeping": 3
+    },
+    "rail": {
+      "intact": 0,
+      "damaged": 1,
+      "broken": 2
+    },
+    "status": {
+      "atSea": 2
+    }
+  },
+  "timing": {
+    "departTicks": 100,
+    "departWarnings": [
+      {
+        "ticksLeft": 33,
+        "seconds": 20
+      },
+      {
+        "ticksLeft": 17,
+        "seconds": 10
+      }
+    ],
+    "sailTicks": 21,
+    "trawlTicks": 500,
+    "timerFirstDrop": 27,
+    "leakEvery": 5,
+    "leakBatchMin": 6,
+    "leakBatchMax": 11,
+    "tentacleEvery": 75,
+    "tentacleRipAt": 5,
+    "tentacleSweepTicks": 5,
+    "railDamagedAt": 3,
+    "railBreakMin": 12,
+    "railBreakMax": 17,
+    "tentacleChops": 3,
+    "fillDelay": 1,
+    "_calibrated": "water per open leak, a bail's water, the random net rip, how long an unchopped tentacle stays, and the chops it takes",
+    "waterPerLeakTick": 0.024,
+    "bailWater": 3,
+    "netRipChancePerTick": 0.004,
+    "netRipChancePerPlayer": 0.001,
+    "tentacleLifetime": 60,
+    "_leaks": "leakBatchMin/Max: the spots leaking after each 5-tick batch (the capture's 6-11 of 16)"
+  },
+  "points": {
+    "bail": 2,
+    "patch": 5,
+    "net": 7,
+    "chop": 10,
+    "rail": 10,
+    "max": 255,
+    "rewardMinimum": 50
+  },
+  "xp": {
+    "patchConstruction": 5,
+    "netCrafting": 5,
+    "chopWoodcutting": 5,
+    "railConstruction": 5
+  },
+  "catch": {
+    "_calibrated": "per-player base fish per catching tick: about 14 for a solo trip with some downtime, falling with crew size towards the Wiki's 13-15 for full groups at a full meter",
+    "basePerTick": 0.035,
+    "crewFalloff": 0.04,
+    "crewFloor": 0.6,
+    "krakenRate": 0.5,
+    "meterLow": 100,
+    "meterHigh": 255,
+    "meterBonus": 0.5,
+    "junkMax": 2,
+    "tierSuccess": 0.66,
+    "_tiers": "each fish tries the highest tier the player can catch first, then the next one down: about 0.67 lobster at 40 and 0.21 at 50 once swordfish appears (the Wiki's chart)"
+  },
+  "fish": [
+    [
+      "raw_shrimp",
+      15,
+      0.7
+    ],
+    [
+      "raw_anchovies",
+      15,
+      0.7
+    ],
+    [
+      "raw_sardine",
+      15,
+      0.7
+    ],
+    [
+      "oystershell",
+      16,
+      51
+    ],
+    [
+      "raw_tuna",
+      35,
+      48
+    ],
+    [
+      "raw_lobster",
+      40,
+      54
+    ],
+    [
+      "raw_swordfish",
+      50,
+      60
+    ],
+    [
+      "raw_shark",
+      76,
+      66
+    ],
+    [
+      "raw_seaturtle",
+      79,
+      57
+    ],
+    [
+      "raw_mantaray",
+      81,
+      69
+    ]
+  ],
+  "junk": [
+    "digsitearrow",
+    "broken_glass",
+    "digsitestaff",
+    "digsitebuttons",
+    "digsitearmour1",
+    "old_boot",
+    "pot_empty",
+    "digsitesword"
+  ],
+  "junkXp": 0.5,
+  "anglerChance": 12,
+  "rewardFishingLevel": 15,
+  "messages": {
+    "boardBusy": "A trawler is already at sea. You will leave on the next one.",
+    "depart": "You set sail on the trawler.",
+    "netRipped": "The net has ripped!",
+    "kraken": "The Kraken is attacking!",
+    "noPaste": "You need some swamp paste to fill the leak.",
+    "filled": "You fill the leak with swamp paste.",
+    "noBucketWater": "There isn't enough water here to bail.",
+    "bailed": "You bail some water from the ship.",
+    "emptied": "You empty the bucket over the side.",
+    "netFixed": "You repair the net.",
+    "netFailed": "You fail to repair the net in the harsh conditions.",
+    "netFine": "The net is in good condition.",
+    "chopFail": "You swing at the tentacle but miss.",
+    "chopHit": "You hit the tentacle.",
+    "chopDrove": "The tentacle retreats into the sea.",
+    "noAxe": "You need an axe to chop down this tentacle.<br>You do not have an axe which you have the woodcutting level to use.",
+    "noHammer": "You need a hammer to fix the rail.",
+    "railFixed": "You fix the rail.",
+    "sinking": "<col=ef1020>The trawler is sinking!</col>",
+    "sunk": "The trawler has sunk. Climb onto a barrel to get back to shore.",
+    "swim": "You climb onto the barrel and drift back to shore.",
+    "tooLittle": "You didn't help enough to earn a share of the catch.",
+    "lowLevel": "You need a Fishing level of 15 to receive a share of the catch.",
+    "nothingInNet": "There is nothing in the net for you.",
+    "collected": "You collect your catch from the net. It is sent to your bank.",
+    "bankFull": "Your bank is too full to hold all of your catch. The rest stays in the net.",
+    "rewardWaiting": "<col=ef1020>You have a catch waiting in the trawler net. It will be thrown back if you sail again.</col>",
+    "destroyedReward": "Your uncollected catch from the last trip has been thrown back.",
+    "angler": "You find a piece of the angler's outfit in the net!",
+    "departIn": "Trawler will leave in {seconds} seconds.",
+    "krakenRipped": "The Kraken has ripped the net!",
+    "earned": "You have helped enough to earn a portion of the catch.",
+    "contributed": "You have contributed enough to earn rewards! Contribution:{points}/{max}",
+    "summary": "Nets fixed:<col=ff0000>{nets}</col> Leaks patched:<col=ff0000>{leaks}</col> Water bailed:<col=ff0000>{bailed}</col> Tentacles hacked and railings fixed:<col=ff0000>{tentacles}</col>.",
+    "toShore": "Murphy turns the boat towards shore."
+  },
+  "sounds": {
+    "fill": 2581
+  },
+  "portFromY": 4826,
+  "heron": {
+    "chance": 5000,
+    "fullMeterChance": 2500
+  },
+  "_messages": "Captured live: departIn, netRipped, krakenRipped, kraken, noAxe, earned, contributed, summary, toShore. Every other message here is unverified."
+}

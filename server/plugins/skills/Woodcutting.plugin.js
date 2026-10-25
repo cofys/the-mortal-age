@@ -20,6 +20,7 @@ const Weather = require("./woodcutting/Weather.Woodcutting");
 const Wilderness = require("./woodcutting/Wilderness.Woodcutting");
 const Mastery = require("./woodcutting/Mastery.Woodcutting");
 const Supply = require("./woodcutting/Supply.Woodcutting");
+const FarmedRedwood = require("./farming/Redwood.Farming");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -586,6 +587,12 @@ const FARMED_HARDWOODS = ["camphor", "ironwood", "rosewood"].map((name) => ({
   ...TREES.find((tree) => tree.name === name),
   respawnTicks: 150,
 }));
+const FARMED_TREES = [...FARMED_HARDWOODS, {
+  ...TREES.find((tree) => tree.name === "redwood"),
+  despawnTicks: 0,
+  depleteChance: FarmedRedwood.DEPLETION_ROLL,
+  respawnTicks: FarmedRedwood.REGROW_TICKS,
+}];
 
 
 
@@ -780,6 +787,13 @@ function rollBirdNestId(player) {
   ]).id;
 }
 
+/** Wiki: a worn Woodcutting cape (or max cape) makes nests 10% likelier. */
+function wearsWoodcuttingCape(player) {
+  const request = { player, skill: "WOODCUTTING", result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
+}
+
 /**
  * Woodcutting depth seam: "woodcutting:nest-roll" lets depth modules scale the bird-nest
  * drop chance (storms shake nests loose, dawn wakes the birds). Additive only.
@@ -791,7 +805,7 @@ function maybeDropBirdNest(player, nestMultiplier = 1) {
   const event = { player, multiplier: nestMultiplier };
   pluginApi.emitCustomEvent("woodcutting:nest-roll", event);
   const multiplier = event.multiplier > 0 ? event.multiplier : 0;
-  const baseChance = isWearing(player, Equipment.CAPE_SLOT, WOODCUTTING_CAPE_IDS)
+  const baseChance = wearsWoodcuttingCape(player)
     ? WOODCUTTING_CAPE_NEST_MULTIPLIER / BIRD_NEST_DROP_CHANCE
     : 1 / BIRD_NEST_DROP_CHANCE;
   if (Math.random() >= baseChance * multiplier) {
@@ -1168,13 +1182,14 @@ function handleChop(event) {
 
 function requestedChop(event) {
   // Patch hardwoods share log ids with the wild trees but regrow on farming's own timer.
-  let tree = [...FARMED_HARDWOODS, ...TREES].find(tree => tree.logId === event.logId);
+  let tree = [...FARMED_TREES, ...TREES].find(tree => tree.logId === event.logId);
   if (tree && event.removeOnly) tree = { ...tree, logId: -1, xpReward: 0, multi: false };
   if (tree) event.handled = startWoodcutting(event.player, event.object, tree, activeSessionsRef);
 }
 
 function requestedAxe(event) {
-  event.axe = findBestUsableAxe(event.player);
+  const candidate = event.itemId == null ? null : AXES.find((axe) => axe.id === event.itemId);
+  event.axe = event.itemId == null ? findBestUsableAxe(event.player) : candidate && canUseAxe(event.player, candidate) ? candidate : null;
 }
 
 module.exports = {

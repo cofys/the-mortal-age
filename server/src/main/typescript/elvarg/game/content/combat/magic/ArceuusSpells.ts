@@ -99,7 +99,7 @@ class ArceuusTeleportSpell extends Spell {
 const rune = (id: number, amount = 1) => new Item(id, amount);
 const teleport = (level: number, experience: number, runes: Item[], x: number, y: number, z = 0, cooldown?: TeleportSpell["cooldown"]) =>
     new ArceuusTeleportSpell({ level, experience, runes, destination: new Location(x, y, z), cooldown });
-const THRALL_COOLDOWN = { attribute: "arceuus:thrall-until", duration: 30_000 };
+const THRALL_COOLDOWN = { attribute: "arceuus:thrall-until", duration: 10_000 };
 
 /** Self-cast Arceuus spells. Targeted spells remain in their respective packet handlers. */
 export class ArceuusSpells {
@@ -311,7 +311,8 @@ export class ArceuusSpells {
 
     public static applyCorruption(caster: Player, target: Player): void {
         const total = Number(caster.getAttribute(this.CORRUPTION) ?? 0);
-        if (total <= 0 || this.hasWard(target)) return;
+        const validTarget = () => target.isRegistered() && target.getHitpoints() > 0 && !ArceuusSpells.hasWard(target);
+        if (total <= 0 || !validTarget()) return;
         const marked = caster.getAttribute(this.CORRUPTION_MARKED) === true;
         caster.setAttribute(this.CORRUPTION, null);
         caster.setAttribute(this.CORRUPTION_MARKED, null);
@@ -323,8 +324,13 @@ export class ArceuusSpells {
         const delay = marked ? 5 : 10;
         TaskManager.submit(new class extends Task {
             constructor() { super(delay); }
+            onTick(): void {
+                // Death/departure can end before the next 5/10-tick drain.
+                // Observe the target each tick so respawn cannot revive this effect.
+                if (this.isRunning() && !validTarget()) this.stop();
+            }
             execute(): void {
-                if (!target.isRegistered() || ArceuusSpells.hasWard(target) || index >= drains.length) {
+                if (!validTarget() || index >= drains.length) {
                     this.stop();
                     return;
                 }

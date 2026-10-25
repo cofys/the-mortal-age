@@ -81,6 +81,11 @@ function showRedeemOptions(event) {
 }
 
 function redeemBond(event) {
+  const { player } = event;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "bond", resume: () => redeemBond(event) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   showRedeemOptions(event);
 }
 
@@ -113,6 +118,10 @@ function convertBond(event) {
   if (inventory.getItems()[slot]?.getId?.() !== UNTRADEABLE_BOND) {
     return;
   }
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "bond", resume: () => convertBond(event) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return;
   const fee = convertFee();
   if (!spendCoins(player, fee)) {
     player.sendMessage(

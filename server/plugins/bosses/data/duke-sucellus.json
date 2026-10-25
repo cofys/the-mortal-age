@@ -1,0 +1,433 @@
+{
+  "$comment": "Authored Duke encounter configuration. IDs/actions and map placements verified in cache revision 241; current normal mechanics from OSRS Wiki Duke Sucellus/Strategies and resource pages. Normal-world recording 1703 establishes visual packet details; quest-specific damage and preparation amounts are not substituted for current repeatable normal mode.",
+  "quest": "desert_treasure_ii",
+  "instance": {
+    "sourceChunkX": 378,
+    "sourceChunkY": 803,
+    "width": 4,
+    "height": 5
+  },
+  "npcs": {
+    "asleep": 12167,
+    "awake": 12191,
+    "dead": 12192,
+    "vent": 12198,
+    "vatTimer": 12197,
+    "cones": [
+      12199,
+      12200,
+      12201
+    ]
+  },
+  "site": {
+    "entry": 49138,
+    "escape": 47565,
+    "leave": 47566,
+    "gate": [
+      3039,
+      6433,
+      0
+    ],
+    "outside": [
+      3039,
+      6432,
+      0
+    ],
+    "arrival": [
+      3039,
+      6434,
+      0
+    ],
+    "boss": [
+      3036,
+      6452,
+      0
+    ],
+    "loot": [
+      3039,
+      6451,
+      0
+    ],
+    "postquestDoor": {
+      "id": 49513,
+      "tile": [
+        2926,
+        10354,
+        0
+      ]
+    },
+    "mouth": [
+      3039,
+      6453
+    ]
+  },
+  "normal": {
+    "hitpoints": 485,
+    "stats": [
+      300,
+      345,
+      275,
+      0,
+      310
+    ],
+    "meter": 200,
+    "poison": 100,
+    "attackTicks": 5,
+    "enrageHp": 121,
+    "enrageTicks": 4,
+    "chip": 11,
+    "protectedChip": 5,
+    "slam": 56,
+    "protectedSlam": 42,
+    "magic": 48,
+    "protectedMagic": 24,
+    "gaze": 101
+  },
+  "items": {
+    "musca": 28341,
+    "muscaPowder": 28342,
+    "arder": 28345,
+    "arderPowder": 28346,
+    "salt": 28349,
+    "poison": 28351,
+    "pestle": 233,
+    "ironPickaxe": 1267,
+    "awakenerOrb": 28334
+  },
+  "objects": {
+    "salt": 47522,
+    "musca": 47524,
+    "muscaDepleted": 47525,
+    "arder": 47528,
+    "arderDepleted": 47529,
+    "vat": 47536,
+    "readyVat": 47539,
+    "pestle": 47560,
+    "pickaxe": 47561,
+    "pestleTaken": 47567,
+    "pickaxeTaken": 47568,
+    "scoreboard": 47563,
+    "inactiveSalt": 47523,
+    "inactiveMusca": 47532,
+    "inactiveArder": 47534,
+    "inactiveVat": 47537,
+    "inactivePestle": 47567,
+    "inactivePickaxe": 47568,
+    "scoreboardParent": 46091
+  },
+  "resources": {
+    "musca": [
+      3048,
+      6453,
+      0
+    ],
+    "arder": [
+      3030,
+      6453,
+      0
+    ],
+    "salts": [
+      [
+        3033,
+        6448,
+        0
+      ],
+      [
+        3043,
+        6448,
+        0
+      ]
+    ],
+    "vats": [
+      [
+        3034,
+        6438,
+        0
+      ],
+      [
+        3043,
+        6438,
+        0
+      ]
+    ],
+    "pestle": [
+      3034,
+      6434,
+      0
+    ],
+    "pickaxe": [
+      3044,
+      6434,
+      0
+    ],
+    "scoreboard": [
+      3041,
+      6430,
+      0
+    ],
+    "picks": 8,
+    "ingredients": 6,
+    "fermentTicks": 6
+  },
+  "pillars": [
+    [
+      3033,
+      6440,
+      3,
+      1
+    ],
+    [
+      3033,
+      6444,
+      3,
+      1
+    ],
+    [
+      3033,
+      6452,
+      3,
+      1
+    ],
+    [
+      3043,
+      6440,
+      3,
+      1
+    ],
+    [
+      3043,
+      6444,
+      3,
+      1
+    ],
+    [
+      3043,
+      6452,
+      3,
+      1
+    ]
+  ],
+  "vents": [
+    [
+      3036,
+      6442
+    ],
+    [
+      3039,
+      6442
+    ],
+    [
+      3042,
+      6442
+    ],
+    [
+      3036,
+      6446
+    ],
+    [
+      3039,
+      6446
+    ],
+    [
+      3042,
+      6446
+    ],
+    [
+      3036,
+      6450
+    ],
+    [
+      3039,
+      6450
+    ],
+    [
+      3042,
+      6450
+    ]
+  ],
+  "extremities": [
+    {
+      "tile": [
+        3028,
+        6445
+      ],
+      "id": 47544,
+      "face": 3
+    },
+    {
+      "tile": [
+        3028,
+        6441
+      ],
+      "id": 47545,
+      "face": 3
+    },
+    {
+      "tile": [
+        3028,
+        6449
+      ],
+      "id": 47546,
+      "face": 3
+    },
+    {
+      "tile": [
+        3049,
+        6445
+      ],
+      "id": 47546,
+      "face": 1
+    },
+    {
+      "tile": [
+        3049,
+        6441
+      ],
+      "id": 47544,
+      "face": 1
+    },
+    {
+      "tile": [
+        3049,
+        6449
+      ],
+      "id": 47545,
+      "face": 1
+    }
+  ],
+  "animations": {
+    "wake": 10179,
+    "melee": 10176,
+    "magic": 10177,
+    "gaze": 10180,
+    "death": 10181,
+    "eyeWake": 10186,
+    "eyeSleep": 10184,
+    "eyeAwake": 10185,
+    "eyeRouse": [
+      10187,
+      10188,
+      10189
+    ],
+    "gas": 10178
+  },
+  "graphics": {
+    "gasSpawn": 2431,
+    "gasIdle": 2432,
+    "gasEnd": 2433,
+    "magicProjectile": 2434,
+    "magicImpact": 2435,
+    "gasProjectile": 2436,
+    "chip": 2437,
+    "slam": 2438,
+    "meleeNpc": 2439,
+    "meleeRow": [
+      2440,
+      2441,
+      2442,
+      2443,
+      2442,
+      2441,
+      2440
+    ],
+    "freeze": 1575,
+    "iceFreeze": 369,
+    "meleeBody": 2439,
+    "iceWarning": 1447,
+    "iceImpact": 538
+  },
+  "magic": {
+    "startCycle": 50,
+    "endCycle": 120,
+    "startHeight": 87.5,
+    "endHeight": 25,
+    "slope": 5,
+    "distanceOffset": 32,
+    "impactSlot": 2
+  },
+  "preparation": {
+    "ventColumns": [
+      3036,
+      3039,
+      3042
+    ],
+    "eyeBands": {
+      "west": [
+        3030,
+        3032
+      ],
+      "east": [
+        3046,
+        3048
+      ]
+    },
+    "ice": {
+      "columns": [
+        3030,
+        3031,
+        3032,
+        3033,
+        3045,
+        3046,
+        3047,
+        3048
+      ],
+      "minY": 6435,
+      "maxY": 6450,
+      "skipY": 6438,
+      "entranceColumns": [
+        3033,
+        3045
+      ],
+      "entranceMaxY": 6436
+    },
+    "freezeSlot": 4,
+    "freezeHeight": 124,
+    "iceFreezeSlot": 2,
+    "eyeConeX": {
+      "west": 3028,
+      "east": 3046
+    }
+  },
+  "timing": {
+    "wake": 5,
+    "chip": 0,
+    "slam": 2,
+    "magic": 4,
+    "gazeWarning": 5,
+    "gaze": 6,
+    "gasWarning": 6,
+    "gasDuration": 5,
+    "gasVisualDelay": 120,
+    "gasVisualStart": 6,
+    "gasVisualDuration": 5,
+    "gasDespawn": 4,
+    "prepCycle": 6,
+    "eyeCycle": 15,
+    "eyeStagger": 2,
+    "eyeReset": 5,
+    "eyeWarning": 2,
+    "iceWarning": 4,
+    "respawn": 24,
+    "gasSpitInterval": 3,
+    "combatGasMinTicks": 12,
+    "combatGasMaxTicks": 14
+  },
+  "killCountVarp": 3967,
+  "meters": {
+    "poison": {
+      "id": 62,
+      "width": 160
+    },
+    "vat": {
+      "id": 33,
+      "width": 50
+    },
+    "poisonSplat": 65
+  },
+  "gazeOverlay": {
+    "group": 829,
+    "targetGroup": 161,
+    "targetComponent": 1
+  }
+}

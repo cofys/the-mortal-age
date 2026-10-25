@@ -339,12 +339,13 @@ export function registerWorldSpotAnimation(host: WebGLOsrsRendererHost, event: {
         tile: { x: number; y: number; level?: number };
         height?: number;
         startCycle: number;
-    }): void {
+        loop?: boolean;
+    }): number | undefined {
 
         try {
             const heightUnits = Number(event.height ?? 0) | 0;
             const heightTiles = heightUnits !== 0 ? heightUnits / 128 : undefined;
-            host.gfxManager?.spawnAtTile(
+            return host.gfxManager?.spawnAtTile(
                 event.spotId | 0,
                 {
                     x: event.tile.x | 0,
@@ -354,12 +355,17 @@ export function registerWorldSpotAnimation(host: WebGLOsrsRendererHost, event: {
                 {
                     heightTiles,
                     startCycle: event.startCycle | 0,
+                    loop: event.loop,
                 },
             );
         } catch (err) {
             console.warn("[renderer] registerWorldSpotAnimation error", err);
         }
-    
+        return undefined;
+}
+
+export function killWorldSpotAnimation(host: WebGLOsrsRendererHost, id: number): void {
+    host.gfxManager?.kill(id);
 }
 
 export function resolvePlayerIdleSeqMaxId(host: WebGLOsrsRendererHost, ): number {

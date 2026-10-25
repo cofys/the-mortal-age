@@ -27,9 +27,21 @@ cp docs/drops-json/npc-drops.json ../tsps/server/data/definitions/npc-drops.json
 cp docs/drops-json/subtables.json ../tsps/server/data/definitions/npc-drop-subtables.json
 ```
 
-- **Never edit the generated files by hand:** the next dump overwrites them. Put the change in `npc-drop-overrides.json` instead.
+- **Never edit generated files or repair them through an override:** fix the canonical source/parser, add a regression, regenerate twice, and import exact output. Generated conflicts are resolved by regeneration.
 - **The drop dumper reads monster pages** already fetched by the monster updater (`scripts.monsters.update`), and takes NPC ids from osrsreboxed-db's monster database. A monster that's new since the last monster update gets no table until that runs.
 - **Noted drops:** the dump marks entries the Wiki shows as "(noted)" (`noted: true`), which needs osrsreboxed-db's `fix/drops-noted` branch until it's merged.
+
+## God Wars variant loot
+
+The four generals use `gwdRareDrop`, `gwdGem` and nested `gwdMegaRare`, exported from their own Wiki source page. Their 128-slot variant tables have no empty outcomes and do not respond to ring of wealth. The main accesses preserve the source 8/127 and 2/127 chances.
+
+All main uniques and supplies are one exclusive loot outcome. Exact source fractions use a common pool of 1,524 integer subslots (127×12): armour 1/381, hilt 1/508 and shard 1/762 rates remain exact, and unique-table Coins 1.25/127 are preserved. The ordinary coin remainders are 330/336/396/480 over 1,524 for Zilyana/Graardor/K'ril/Kree; adding the exact nested variant coin routes reproduces displayed inclusive rates 31.2/31.7/36.7/43.7 over 127. The earlier local 29/30/34/42 remainder model was incorrect because it omitted unique probabilities and rounded fractional coins.
+
+Imported output is from [canonical God Wars #15](https://github.com/RSPSApp/osrsreboxed-db/pull/15), built on canonical #14; this branch also retains the safe import/reward ownership from TSPS #882. Full NPC mapping and non-God-Wars data are unchanged. The generated hashes are `cecdb21e757007a75893b721ae9a81d283ba62c6cc409cfe808dd9af8120068f` (NPCs) and `70cfdff188712ed9321f6bfaed89de16e352b81ac7ffb2cb0dffbc13fa8203f3` (subtables).
+
+The existing drop-import preservation suite checks every variant slot with and without wealth, exact pool weights and supply bundles, and the real roller's single unique outcome. Guaranteed/tertiary loot, Nex pairs, quest-only empty mappings and the Mimic/Feud reward paths retain their previous ownership.
+
+Verification for this import: TypeScript build and 26 focused integration tests pass. The full server suite has 4,945 passes and two unrelated browser/network environment failures; the complete affected files pass 44/44 outside the sandbox, including the ephemeral localhost connection the sandbox denied. Those results are disclosed separately from a green full-suite run.
 
 ## The overrides
 

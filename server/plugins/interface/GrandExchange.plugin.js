@@ -38,7 +38,9 @@ const OFFERS_ATTRIBUTE = "grand-exchange-offers";
 const LIMITS_ATTRIBUTE = "grand-exchange-limits";
 const LIMIT_WINDOW_MS = 4 * 60 * 60 * 1000;
 const OFFER_MIN_DELAY_MS = 5_000;
-const OFFER_MAX_DELAY_MS = 10 * 60_000;
+// Milliseconds; applies to newly placed offers.
+const MAX_TRADE_DELAY_CONFIG = "GrandExchange:maxTradeDelay";
+const OFFER_MAX_DELAY_MS = 60 * 60_000;
 const OFFER_ILLIQUID_MIN_MS = 60_000;
 const OFFER_ILLIQUID_MAX_MS = 5 * 60_000;
 // At the guide price an offer has a tenth of the volume wait; crossing it by a
@@ -119,23 +121,27 @@ function changePrice(offer, slot) {
   return current;
 }
 
+/** A null delay leaves the offer open until the player aborts it. */
 function fillDelayMs(offer, random = Math.random) {
-  const volume = Number(marketQuote(offer.itemId).volume);
-  if (!Number.isFinite(volume) || volume <= 0) {
-    return OFFER_ILLIQUID_MIN_MS + random() * (OFFER_ILLIQUID_MAX_MS - OFFER_ILLIQUID_MIN_MS);
-  }
-  const quantity = Math.max(1, Number(offer.quantity) || 1);
-  const expectedMinutes = quantity / (volume / 1440);
-  // No order book: approximate resting liquidity from the distance to the guide.
-  // Overpaying a buy (or undercutting a sell) crosses faster; the reverse waits.
-  // ponytail: price-distance heuristic, replace with a resting order book if fill
-  // order needs to depend on the actual queue at each price.
+  // shortcut: approximate liquidity from guide-price distance, replace with an order book if queue order matters.
   const guide = guidePrice(offer);
-  const distance = guide > 0 ? (offerPrice(offer) - guide) / guide : 0;
+  const unitPrice = offerPrice(offer);
+  const distance = (unitPrice - guide) / guide;
   const aggressiveness = offer.sell ? -distance : distance;
-  const priceFactor = OFFER_GUIDE_DELAY * Math.exp(-OFFER_PRICE_SENSITIVITY * aggressiveness);
-  const delay = expectedMinutes * 60_000 * (0.75 + 0.75 * random()) * priceFactor;
-  return Math.max(OFFER_MIN_DELAY_MS, Math.min(OFFER_MAX_DELAY_MS, delay));
+  const fillChance = offer.sell ? guide / unitPrice : unitPrice / guide;
+  if (aggressiveness < 0 && random() >= fillChance) return null;
+
+  const volume = Number(marketQuote(offer.itemId).volume);
+  const quantity = Math.max(1, Number(offer.quantity) || 1);
+  const delay = Number.isFinite(volume) && volume > 0
+    ? quantity / (volume / 1440) * 60_000 * (0.75 + 0.75 * random()) * OFFER_GUIDE_DELAY
+    : OFFER_ILLIQUID_MIN_MS + random() * (OFFER_ILLIQUID_MAX_MS - OFFER_ILLIQUID_MIN_MS);
+  const configuredMaxDelay = Number(pluginApi?.getPluginConfig(MAX_TRADE_DELAY_CONFIG, OFFER_MAX_DELAY_MS));
+  const maxDelay = Number.isFinite(configuredMaxDelay) && configuredMaxDelay >= OFFER_MIN_DELAY_MS && configuredMaxDelay <= MAX
+    ? configuredMaxDelay : OFFER_MAX_DELAY_MS;
+  const volumeDelay = Math.max(OFFER_MIN_DELAY_MS, Math.min(maxDelay, delay));
+  const priceFactor = Math.exp(-OFFER_PRICE_SENSITIVITY * aggressiveness);
+  return Math.max(OFFER_MIN_DELAY_MS, Math.min(maxDelay, volumeDelay * priceFactor));
 }
 
 function limitKey(itemId) {
@@ -201,7 +207,7 @@ function saveOffers(player) {
 }
 
 function scheduleCompletion(player, offer) {
-  if (offer.finished) return;
+  if (offer.finished || offer.completesAt === null) return;
   let timers = completionTimers.get(player);
   if (!timers) completionTimers.set(player, timers = new Set());
   const timer = setTimeout(() => {
@@ -382,9 +388,9 @@ function confirm(player, offer) {
     sender.sendMessage("Choose a smaller quantity (maximum trade value is 2,147,483,647 coins).");
     return;
   }
-  const remaining = remainingLimit(player, offer.itemId);
+  const remaining = offer.sell ? Infinity : remainingLimit(player, offer.itemId);
   if (amount > remaining) {
-    sender.sendMessage(`You can only buy or sell ${itemLimit(offer.itemId)} of that item every 4 hours (${remaining} remaining).`);
+    sender.sendMessage(`You can only buy ${itemLimit(offer.itemId)} of that item every 4 hours (${remaining} remaining).`);
     return;
   }
   const inventory = player.getInventory();
@@ -410,9 +416,10 @@ function confirm(player, offer) {
     return;
   }
   inventory.setItems(result.getItems()).refreshItems();
-  const finished = { ...offer, total, finished: false, completesAt: Date.now() + fillDelayMs(offer) };
+  const delay = fillDelayMs(offer);
+  const finished = { ...offer, total, finished: false, completesAt: delay === null ? null : Date.now() + delay };
   completedOffers(player)[offer.slot] = finished;
-  recordLimit(player, offer.itemId, amount);
+  if (!offer.sell) recordLimit(player, offer.itemId, amount);
   saveOffers(player);
   offers.delete(player);
   viewing.set(player, offer.slot);
@@ -521,6 +528,10 @@ function openGrandExchange({ player }) {
     if (request.message) player.sendMessage(request.message);
     return true;
   }
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "grand-exchange", resume: () => openGrandExchange({ player }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   if ([GE, GE_COLLECT].includes(player.getInterfaceId())) player.getPacketSender().sendInterfaceRemoval();
   if (player.busy()) {
     player.sendMessage("Finish what you are doing before opening the Grand Exchange.");
@@ -561,7 +572,7 @@ function openGrandExchange({ player }) {
     .sendInterfaceFlagsRange(uid(23), 0, 1, 2)
     // Same item operations as the normal inventory panel.
     .sendInterfaceFlagsRange(SIDE_ITEMS, 0, 27, 1086);
-  sender.sendMessage("Grand Exchange: live guide prices. Adjust the price if you like; fills depend on trade volume and each item has a four-hour limit.");
+  sender.sendMessage("Grand Exchange: live guide prices. Fills depend on trade volume and your price; buy limits reset every four hours.");
   return true;
 }
 

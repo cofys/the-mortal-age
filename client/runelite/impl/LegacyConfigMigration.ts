@@ -17,6 +17,11 @@ export interface LegacyConfigMigration {
     enabledKey?: string;
     /** Legacy field name that holds a raw (non-JSON) string, e.g. the old notes key. */
     rawStringAs?: string;
+    /**
+     * Runs on every start, after the blob copy: moves a plugin's own earlier settings to new keys.
+     * It records its own one-shot flag.
+     */
+    migrate?: (configManager: ConfigManager) => void;
 }
 
 /** One-shot shim: old JSON/boolean/string blobs are copied into `rl.config.*` keys. */
@@ -25,7 +30,10 @@ export function runLegacyConfigMigrations(
     configManager: ConfigManager,
 ): void {
     for (const migration of migrations) {
-        if (configManager.isMigrated(migration.name)) continue;
+        if (configManager.isMigrated(migration.name)) {
+            migration.migrate?.(configManager);
+            continue;
+        }
         const blob = readBlob(configManager, migration);
         if (blob) {
             for (const [legacyField, value] of Object.entries(blob)) {
@@ -64,6 +72,7 @@ export function runLegacyConfigMigrations(
             }
         }
         configManager.markMigrated(migration.name);
+        migration.migrate?.(configManager);
     }
 }
 

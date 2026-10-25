@@ -172,6 +172,9 @@ export class UseItemPacketListener {
     };
     PluginManager.emitNpcRoute(routeEvent);
     player.getMovementQueue().walkToEntity(target, () => {
+      // Inventory rearrangement and NPC removal can happen while walking to the target.
+      if (player.getInventory().getItems()[slot] !== item || item.getId() !== itemId ||
+          item.getAmount() <= 0 || World.getNpcs().get(targetIndex) !== target) return;
       player.setPositionToFace(target.getLocation());
       PluginManager.emitItemOnNpc({
         player,

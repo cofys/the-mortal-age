@@ -23,6 +23,8 @@ type CombatStats = {
     demon?: boolean;
     attributes?: string[];
     members?: boolean;
+    elementalWeaknessType?: number;
+    elementalWeaknessPercent?: number;
     attackType?: CombatType;
     slayerLevel?: number;
     attackBonuses?: {
@@ -181,6 +183,10 @@ export class NpcDefinitionLoader extends DefinitionLoader {
      * own default alone.
      */
     public static fromMonsterDump(monster: any): CombatStats {
+        const weaknessType = Number.isInteger(monster.elemental_weakness_type) && monster.elemental_weakness_type >= 1 && monster.elemental_weakness_type <= 4
+            ? monster.elemental_weakness_type : 0;
+        const weaknessPercent = Number.isFinite(monster.elemental_weakness_percent) && monster.elemental_weakness_percent >= 0
+            ? Math.floor(monster.elemental_weakness_percent) : 0;
         return {
             name: monster.name,
             // The cache has no NPC examine text (OSRS sends it from the server),
@@ -201,6 +207,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             demon: Array.isArray(monster.attributes) && monster.attributes.includes("demon"),
             attributes: Array.isArray(monster.attributes) ? monster.attributes.map(String) : undefined,
             members: monster.members === true,
+            elementalWeaknessType: weaknessType,
+            elementalWeaknessPercent: weaknessType ? weaknessPercent : 0,
             attackType: NpcDefinitionLoader.resolveAttackType(monster.attack_type),
             slayerLevel:
                 monster.slayer_monster === true && monster.slayer_level > 0
@@ -243,12 +251,24 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         return CombatType.MELEE;
     }
 
+    /** Status rules have one canonical source, independent of combat-stat snapshots. */
+    public static applyStatusImmunities(definition: NpcDefinition, cacheName: string, source: any): void {
+        if (!source || typeof source.name !== "string" || normalizeName(source.name) !== normalizeName(cacheName)) return;
+        Object.assign(definition, {
+            immunePoison: source.immune_poison === true,
+            immuneVenom: source.immune_venom === true,
+        });
+    }
+
     load(): boolean {
         NpcDefinition.definitions.clear();
         const directory = path.resolve(GameConstants.DEFINITIONS_DIRECTORY);
         // Combat stats, including aggression, come straight from the vendored dump.
         // Animations are not in it and keep coming from the files below.
         const monsters = this.readOptional(directory, "monsters-complete.json") ?? {};
+        const statusSource = this.readOptional(directory, "npc-status-immunities.json");
+        if (statusSource && statusSource.schema_version !== 1) throw new Error("Unsupported NPC status immunity schema");
+        const statusImmunities = statusSource?.npcs ?? {};
         const animationFile = this.read(directory, "npc-combat-defs.json");
         const observedAnimations = this.read(directory, "npc-animations.json") as Record<string, number[]>;
         const animations: Record<string, CombatAnimation> = {};
@@ -349,6 +369,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
 
         const ids = new Set([
             ...Object.keys(monsters),
+            ...Object.keys(statusImmunities),
             ...Object.keys(animationFile.npcs ?? {}),
             ...Object.keys(animations), ...Object.keys(observedAnimations),
             ...Object.keys(projectiles),
@@ -382,6 +403,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
                 Object.assign(definition, {
                     stats: levels,
                     rangedDefenceBonuses: { light: stat.defenceBonuses?.light, heavy: stat.defenceBonuses?.heavy },
+                      elementalWeaknessType: stat.elementalWeaknessType ?? 0,
+                      elementalWeaknessPercent: stat.elementalWeaknessPercent ?? 0,
                     // getExamine() falls back to a generic line, so keep the raw field here.
                     examine: stat.examine ?? definition.examine,
                     hitpoints: stat.hitpoints ?? definition.getHitpoints(),
@@ -400,6 +423,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             } else if (stat) {
                 mismatched++;
             }
+
+            NpcDefinitionLoader.applyStatusImmunities(definition, cached.name, statusImmunities[key]);
 
             if (Number.isInteger(projectiles[key])) {
                 definition.projectileId = projectiles[key];

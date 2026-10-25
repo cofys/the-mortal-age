@@ -49,7 +49,7 @@ function createPlayer({ helm = null, weapon = 0, inCombat = true, scales = 0 } =
   if (helm) equipment[Equipment.HEAD_SLOT] = helm;
   if (weapon) equipment[Equipment.WEAPON_SLOT] = item(weapon);
   const attributes = new Map();
-  const immunity = { starts: 0, finished: () => true, start() { this.starts++; } };
+  const immunity = { starts: 0, protectBriefly(seconds, venom) { assert.equal(seconds, 2); assert.equal(venom, true); this.starts++; } };
   const messages = [];
   const player = {
     attributes,

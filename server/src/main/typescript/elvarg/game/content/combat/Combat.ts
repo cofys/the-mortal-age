@@ -5,6 +5,7 @@ import type { Mobile } from "../../entity/impl/Mobile";
 import type { Player } from "../../entity/impl/player/Player";
 import { CoordinateState } from "../../entity/impl/npc/NPCMovementCoordinator";
 import { SecondsTimer } from "../../model/SecondsTimer";
+import { PoisonClock } from "./PoisonClock";
 import { StatementDialogue } from "../../model/dialogues/entries/impl/StatementDialogue";
 import { TickStopwatch } from "../../../util/TickStopwatch";
 import { ServerPerf } from "../../../util/ServerPerf";
@@ -49,6 +50,7 @@ export class Combat {
     private readonly lastAttack = new TickStopwatch();
     // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
     private poisonImmunityTimer: SecondsTimer | null = null;
+    private poisonClock: PoisonClock | null = null;
     private fireImmunityTimer: SecondsTimer | null = null;
     private teleblockTimer: SecondsTimer | null = null;
     private prayerBlockTimer: SecondsTimer | null = null;
@@ -567,7 +569,15 @@ export class Combat {
     public setAmmunition(ammunition: Ammunition | null): void { this.ammunition = ammunition; }
     public getRangeAmmoData(): RangedData { return this.ammunition as unknown as RangedData; }
     public setRangeAmmoData(data: RangedData): void { this.ammunition = data as unknown as Ammunition; }
-    public getPoisonImmunityTimer(): SecondsTimer { return this.poisonImmunityTimer ??= new SecondsTimer(); }
+    public getPoisonImmunityTimer(): SecondsTimer {
+        return this.character.isPlayer() ? this.getPoisonClock() : (this.poisonImmunityTimer ??= new SecondsTimer());
+    }
+    public getPoisonClock(): PoisonClock {
+        return this.poisonClock ??= new PoisonClock(() => {
+            const { CombatPoisonEffect } = require("../../task/impl/CombatPoisonEffect") as typeof import("../../task/impl/CombatPoisonEffect");
+            CombatPoisonEffect.resume(this.character);
+        });
+    }
     public getFireImmunityTimer(): SecondsTimer { return this.fireImmunityTimer ??= new SecondsTimer(); }
     public getTeleblockTimer(): SecondsTimer { return this.teleblockTimer ??= new SecondsTimer(); }
     public getPrayerBlockTimer(): SecondsTimer { return this.prayerBlockTimer ??= new SecondsTimer(); }

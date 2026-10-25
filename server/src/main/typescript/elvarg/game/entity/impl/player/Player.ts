@@ -163,6 +163,8 @@ export class Player extends Mobile {
     private static readonly VIEW_DISTANCE_REGROW_CYCLES = 10;
     public skullType: SkullType;
     private skullIconOverride: number | null = null;
+    /** The override shows even without a skull timer (risk skulls); otherwise only while skulled. */
+    private skullIconOverrideAlways = false;
     public combatSpecial: CombatSpecial;
     private vengeanceTimer = new SecondsTimer();
     private wildernessLevel: number;
@@ -206,6 +208,7 @@ export class Player extends Mobile {
         this.setHasVengeance(false);
         this.getCombat().getFireImmunityTimer().stop();
         this.getCombat().getPoisonImmunityTimer().stop();
+        this.getCombat().getPoisonClock().resetPhase();
         this.getCombat().getTeleblockTimer().stop();
         this.getTimers().cancel(TimerKey.FREEZE);
         this.getTimers().cancel(TimerKey.FREEZE_IMMUNITY);
@@ -600,6 +603,7 @@ export class Player extends Mobile {
             username: this.getUsername(),
         });
         this.getRelations().updateLists(false);
+        CombatPoisonEffect.suspend(this);
         TaskManager.cancelTasks(this);
         this.setHasVengeance(false);
         this.getVengeanceTimer().stop();
@@ -643,6 +647,7 @@ export class Player extends Mobile {
         } else if (autocastSpell == null || this.getEquipment().hasStaffEquipped()) {
             Autocasting.setAutocast(this, autocastSpell);
         }
+        CombatPoisonEffect.resume(this);
         for (const [varpId, value] of Object.entries(this.audioSettings)) {
             this.getPacketSender().sendConfig(Number(varpId), value);
         }
@@ -877,10 +882,14 @@ export class Player extends Mobile {
     }
 
     public setInterfaceId(interfaceId: number): this {
+        const previousId = this.interfaceId;
         if (this.interfaceId >= 0 && interfaceId >= 0 && this.interfaceId !== interfaceId) {
             PluginManager.emitCustomEvent("interface:closed", { player: this, interfaceId: this.interfaceId });
         }
         this.interfaceId = interfaceId;
+        if (previousId !== interfaceId) {
+            PluginManager.emitCustomEvent("interface:changed", { player: this, previousId, interfaceId });
+        }
         return this;
     }
 
@@ -1210,14 +1219,24 @@ export class Player extends Mobile {
         return this.skullIconOverride ?? this.skullType.getIconId();
     }
 
-    public setSkullIconOverride(iconId: number | null): void {
+    public setSkullIconOverride(iconId: number | null, always = false): void {
         const normalizedIconId = Number.isInteger(iconId) && iconId >= 0 ? iconId : null;
-        if (this.skullIconOverride === normalizedIconId) {
+        const normalizedAlways = normalizedIconId !== null && always;
+        if (this.skullIconOverride === normalizedIconId && this.skullIconOverrideAlways === normalizedAlways) {
             return;
         }
 
         this.skullIconOverride = normalizedIconId;
+        this.skullIconOverrideAlways = normalizedAlways;
         this.getUpdateFlag().flag(Flag.APPEARANCE);
+    }
+
+    /** The skull drawn over the player's head, or -1 for none. */
+    public getHeadSkullIcon(): number {
+        if (this.skullIconOverrideAlways) {
+            return this.skullIconOverride;
+        }
+        return this.isSkulled() ? this.getSkullIconId() : -1;
     }
 
     public setSkullType(skullType: SkullType) {

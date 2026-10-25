@@ -581,6 +581,15 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     refreshQuestList(player);
   }
 
+  /** Managing Miscellania reads and moves approval after the quest (it keeps varbit misc_approval here). */
+  function handleGetApproval(request) {
+    if (request?.player) request.value = approval(request.player);
+  }
+
+  function handleSetApproval({ player, value }) {
+    if (player && Number.isFinite(value)) setApproval(player, value);
+  }
+
   function sendSideVarbits(player) {
     const sender = player.getPacketSender();
     const value = bits(player);
@@ -1132,7 +1141,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     if (stepId === ACTION_OPEN_MANAGING) {
       event.handled = true;
       event.end = true;
-      player.sendMessage("Managing Miscellania is not yet available on this world.");
+      api.emitCustomEvent("miscellania:open", { player });
       return;
     }
     if (stepId === ACTION_ROYAL_TROUBLE) {
@@ -1399,6 +1408,8 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   api.onCustomEvent("mining:success", handleSkillingSuccess);
   api.onCustomEvent("woodcutting:success", handleSkillingSuccess);
   api.onCustomEvent("fishing:success", handleSkillingSuccess);
+  api.onCustomEvent("miscellania:get-approval", handleGetApproval);
+  api.onCustomEvent("miscellania:set-approval", handleSetApproval);
   api.onPlayerLogin(handleLogin);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrapComplete);
 };

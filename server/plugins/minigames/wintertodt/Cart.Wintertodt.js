@@ -85,10 +85,20 @@ function startSearch(player, count) {
 }
 
 function search(event) {
+  const { player } = event;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "reward-cart", resume: () => search(event) };
+  Shared.api().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   return startSearch(event.player, 1);
 }
 
 function bigSearch(event) {
+  const { player } = event;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "reward-cart", resume: () => bigSearch(event) };
+  Shared.api().emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   return startSearch(event.player, BIG_SEARCH);
 }
 

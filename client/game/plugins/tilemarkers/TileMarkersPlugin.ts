@@ -1,80 +1,95 @@
-import { ConfigChanged } from "@runelite/api/events";
+import { GameState } from "@runelite/api/GameState";
+import type { ConfigOf } from "@runelite/client/config/ConfigItem";
 import { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
-import { inject } from "@runelite/client/plugins/PluginInjector";
-import {
-    TileMarkersConfig,
-    readTileMarkersConfig,
-    type TileMarkersPluginConfig,
-    type TileMarkersPluginState,
-} from "./TileMarkersConfig";
+import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
+import { toRuneLiteGameState } from "../../../runelite/impl/GameStateMapping";
+import { ClientState } from "../../ClientState";
+import type { OsrsClient } from "../../OsrsClient";
+import { TileMarkersConfig } from "./TileMarkersConfig";
+import { TileIndicatorsOverlay } from "./TileIndicatorsOverlay";
 
-type TileMarkersPluginListener = () => void;
+export type Tile = { x: number; y: number; plane: number };
 
+/**
+ * RuneLite 1.13.3 Tile Indicators: the destination tile, the tile under the mouse and the
+ * player's true tile, each drawn with its own border colour, fill and width. (The files keep
+ * the plugin's earlier Tile Markers name; its settings move to RuneLite's on first start.)
+ */
 export class TileMarkersPlugin extends Plugin {
     static descriptor: PluginDescriptor = {
-        name: "Tile Markers",
-        description: "Highlights destination and true tile positions.",
-        tags: ["overlay"],
-        configKey: "tilemarkersplugin",
+        name: "Tile Indicators",
+        description: "Highlight the tile you are currently moving to",
+        tags: ["highlight", "overlay"],
+        enabledByDefault: false,
+        configKey: "tileindicatorsplugin",
     };
 
     static config = TileMarkersConfig;
 
-    private readonly listeners: Set<TileMarkersPluginListener> = new Set();
-    private readonly configManager = inject(ConfigManager);
+    private readonly configManager: ConfigManager;
+    readonly config: ConfigOf<typeof TileMarkersConfig>;
+    private readonly osrsClient: OsrsClient;
+    readonly widgetOverlay: TileIndicatorsOverlay;
 
-    private config: TileMarkersPluginConfig;
-    private state: TileMarkersPluginState;
-    private version = 0;
-
-    constructor() {
+    constructor(osrsClient?: OsrsClient, configManager?: ConfigManager) {
         super();
-        this.config = readTileMarkersConfig(this.configManager, this.isEnabled());
-        this.state = { config: this.config, version: this.version };
+        this.osrsClient = osrsClient ?? inject<OsrsClient>(CLIENT_TOKEN);
+        this.configManager = configManager ?? inject(ConfigManager);
+        this.config = this.configManager.getConfig(TileMarkersConfig);
+        this.widgetOverlay = new TileIndicatorsOverlay(this);
     }
 
-    onConfigChanged(event: ConfigChanged): void {
-        if (event.getGroup() === TileMarkersConfig.group) this.refresh();
+    getClient(): OsrsClient {
+        return this.osrsClient;
     }
 
-    subscribe(listener: TileMarkersPluginListener): () => void {
-        this.listeners.add(listener);
-        return () => {
-            this.listeners.delete(listener);
-        };
+    isLoggedIn(): boolean {
+        return toRuneLiteGameState((this.osrsClient as any)?.gameState) === GameState.LOGGED_IN;
     }
 
-    getState(): TileMarkersPluginState {
-        return this.state;
+    /** varbit CUTSCENE_STATUS. */
+    inCutscene(): boolean {
+        return ((this.osrsClient as any).varManager?.getVarbit?.(542) ?? 0) === 1;
     }
 
-    tileMarkersConfig(): TileMarkersPluginConfig {
-        return this.getConfig();
+    private playerIndex(): number | undefined {
+        const client: any = this.osrsClient;
+        return client.playerEcs?.getIndexForServerId?.(client.controlledPlayerServerId);
     }
 
-    getConfig(): TileMarkersPluginConfig {
-        return { ...this.state.config, enabled: this.isEnabled() };
+    playerPlane(): number {
+        const index = this.playerIndex();
+        return index === undefined ? ClientState.plane | 0 : (this.osrsClient as any).playerEcs.getLevel(index) | 0;
     }
 
-    setConfig(nextConfig: Partial<TileMarkersPluginConfig>): void {
-        for (const [property, value] of Object.entries(nextConfig)) {
-            if (value === undefined || property === "enabled") continue;
-            this.configManager.setConfigValue(TileMarkersConfig, property, value);
+    /** client.getLocalDestinationLocation, on the player's plane. */
+    destinationTile(): Tile | undefined {
+        let x = ClientState.destinationWorldX | 0;
+        let y = ClientState.destinationWorldY | 0;
+        if (x === 0 && y === 0) {
+            const lx = ClientState.destinationX | 0;
+            const ly = ClientState.destinationY | 0;
+            if (lx === 0 && ly === 0) return undefined;
+            x = ClientState.localToWorldX(lx) | 0;
+            y = ClientState.localToWorldY(ly) | 0;
         }
-        this.refresh();
+        return { x, y, plane: this.playerPlane() };
     }
 
-    private refresh(): void {
-        this.config = readTileMarkersConfig(this.configManager, this.isEnabled());
-        this.version++;
-        this.state = { config: this.config, version: this.version };
-        for (const listener of this.listeners) {
-            try {
-                listener();
-            } catch (err) {
-                console.log("[tile-markers-plugin] listener failed", err);
-            }
-        }
+    /** wv.getSelectedSceneTile: the tile under the mouse, as Walk here picks it. */
+    hoveredTile(): Tile | undefined {
+        const tile = (this.osrsClient as any).selectedSceneTile as { tileX: number; tileY: number; plane?: number } | undefined;
+        return tile ? { x: tile.tileX | 0, y: tile.tileY | 0, plane: tile.plane ?? this.playerPlane() } : undefined;
+    }
+
+    /** player.getWorldLocation: the tile the server has the player on, moving or not. */
+    trueTile(): Tile | undefined {
+        const client: any = this.osrsClient;
+        const state = client.playerMovementSync?.getState?.(client.controlledPlayerServerId);
+        if (state) return { x: state.tileX | 0, y: state.tileY | 0, plane: this.playerPlane() };
+        const index = this.playerIndex();
+        if (index === undefined) return undefined;
+        return { x: client.playerEcs.getX(index) >> 7, y: client.playerEcs.getY(index) >> 7, plane: this.playerPlane() };
     }
 }

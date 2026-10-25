@@ -13,8 +13,8 @@
  *   the smithing catalyst and the ore pack back for 80% of their price, refuses the colossal
  *   blade and his grog, and tells anything else "You keep that.".
  *
- * The catalyst, the double ammo mould and the colossal blade's own effects are not part of
- * this plugin (docs/giants-foundry.md lists them as follow-ups).
+ * The catalyst, the double ammo mould, the uniform and the colossal blade work in Smithing and
+ * combat (docs/giants-foundry.md, "Rewards outside the minigame").
  */
 
 const DATA = require("../data/giants-foundry.json");

@@ -18,6 +18,8 @@ const INTERVAL_CONFIG = "ShootingStars:intervalMinutes";
 const ANNOUNCE_CONFIG = "ShootingStars:announce";
 
 const TICKS_PER_MINUTE = 100;
+// shortcut: use the star's existing 15-tile vicinity; replace when the OSRS exclusion radius is captured.
+const RANDOM_EVENT_RADIUS = 15;
 
 let api = null;
 let core = null;
@@ -61,12 +63,30 @@ function isMembersWorld() {
   return core.WorldDefinition.isMembersWorld() !== false;
 }
 
+/**
+ * "shooting-stars:current" { player } -> tile: a tile beside the star that has landed, or none
+ * while no star is down. The star's x,y is the south-west of its 2x2 footprint.
+ */
+function locateStar(request) {
+  const star = world.star;
+  if (!star || star.gone) return;
+  request.tile = [star.x - 1, star.y, star.z];
+}
+
 /** The star's 2x2 footprint is reachable from any tile next to it. */
 function isNextToStar(player, star) {
   const at = player.getLocation();
   const dx = at.getX() - star.x;
   const dy = at.getY() - star.y;
   return at.getZ() === star.z && dx >= -1 && dx <= 2 && dy >= -1 && dy <= 2;
+}
+
+function denyRandomEvents(request) {
+  const star = world.star;
+  if (!star || star.gone || star.landingTicks > 0) return;
+  const at = request.player.getLocation();
+  if (at.getZ() === star.z && Math.abs(at.getX() - star.x) <= RANDOM_EVENT_RADIUS &&
+    Math.abs(at.getY() - star.y) <= RANDOM_EVENT_RADIUS) request.allowed = false;
 }
 
 function starCentre(star) {
@@ -159,12 +179,14 @@ module.exports = {
   TICKS_PER_MINUTE,
   world,
   bind,
+  locateStar,
   sizeEntry,
   sizeOfLoc,
   minutesToTicks,
   intervalMinutes,
   isMembersWorld,
   isNextToStar,
+  denyRandomEvents,
   starCentre,
   playersNear,
   areaSound,

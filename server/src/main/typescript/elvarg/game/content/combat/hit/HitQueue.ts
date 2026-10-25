@@ -66,8 +66,10 @@ export class HitQueue {
 
     /** Takes a hit off the owner's hitpoints, then runs effects that react to the result. */
     private applyDamage(hit: HitDamage): HitDamage {
+        const healthBefore = this.character.getHitpoints();
         const applied = this.character.decrementHealth(hit);
         if (applied.getDamage() > 0 || this.character.getHitpoints() > 0) this.lastAppliedHit = applied;
+        hit.notifyApplied(Math.max(0, healthBefore - this.character.getHitpoints()));
         CombatFactory.handleRedemption(this.character);
         return applied;
     }

@@ -3,12 +3,16 @@ const Data = require("./Data.Farming");
 const Model = require("./Model.Farming");
 const Patches = require("./Patches.Farming");
 const Guild = require("./Guild.Farming");
+const Bologa = require("./Bologa.Farming");
+
+const BOLOGA_UNLOCK_COST = 75000;
 
 const CROPS = [
     { name: "Golovanova", level: 34, xp: 6, object: core.ObjectIdentifiers.GOLOVANOVA_SEEDLING },
     { name: "Bologano", level: 54, xp: 14, object: core.ObjectIdentifiers.BOLOGANO_SEEDLING },
     { name: "Logavano", level: 74, xp: 23, object: core.ObjectIdentifiers.LOGAVANO_SEEDLING },
 ];
+const TANGLEROOT_BASE_DENOMINATOR = 7_494_389;
 const REWARDS = [["Farmer's strawhat", 75], ["Farmer's jacket", 150], ["Farmer's shirt", 150],
     ["Farmer's boro trousers", 125], ["Farmer's boots", 50], ["Compost", 1], ["Supercompost", 5], ["Grape seed", 2],
     ["Gricoller's can", 200], ["Seed box", 250], ["Herb sack", 250], ["Herb box", 30], ["Seed pack", 30], ["Bologa's blessing", 1, 20]];
@@ -105,7 +109,10 @@ function titheObject(event) {
             }
             Patches.choose(player, [100, 1000, 10000].map(amount => [`Take ${amount}`, () => {
                 if (!player.getLocation().isWithinDistance(object.getLocation(), 4)) return;
-                if (CROPS.some(other => other !== c && player.getInventory().contains(Data.itemId(other.name + " seed")))) return;
+                if (player.getSkillManager().getCurrentLevel(core.Skill.FARMING) < c.level) { player.sendMessage(`You need level ${c.level} Farming.`); return; }
+                if (CROPS.some(other => other !== c && (player.getInventory().contains(Data.itemId(other.name + " seed")) || player.getInventory().contains(Data.itemId(other.name + " fruit"))))) {
+                    player.sendMessage("You can only use one type of seed at a time."); return;
+                }
                 const count = Math.min(amount, 10000 - player.getInventory().getAmount(Data.itemId(c.name + " seed")));
                 if (count > 0) Patches.give(player, Data.itemId(c.name + " seed"), count);
             }]));
@@ -139,7 +146,7 @@ function titheObject(event) {
     else if (plant.stage === 3) {
         if (Patches.give(player, Data.itemId(CROPS[plant.crop].name + " fruit"))) {
             Patches.award(player, CROPS[plant.crop].xp);
-            core.PluginManager.emitCustomEvent("farming:success", { player, petChance: 7494000 - player.getSkillManager().getMaxLevel(core.Skill.FARMING) * 25 });
+            core.PluginManager.emitCustomEvent("farming:success", { player, petBase: TANGLEROOT_BASE_DENOMINATOR });
             player.performAnimation(new core.Animation(2282));
             plot.plant = undefined;
         }
@@ -167,7 +174,7 @@ function titheItem(event) {
             plot.plant.fertilized = true;
             plot.plant.nextAt = Date.now() + Math.max(0, plot.plant.nextAt - Date.now()) / 2;
             player.performAnimation(new core.Animation(2283));
-        } else if (/watering can|Gricoller's can/i.test(core.CacheDefinitions.getItem(id).name) && !plot.plant.watered && Patches.water(player, id)) plot.plant.watered = true;
+        } else if (/watering can|Gricoller's can/i.test(core.CacheDefinitions.getItem(id).name) && !plot.plant.watered && Patches.water(player, id, event.itemSlot)) plot.plant.watered = true;
     }
     redraw(game, plot);
 }
@@ -191,14 +198,15 @@ function titheNpc(event) {
         const { player } = event, score = scoreFor(player);
         if (score.bologa) { player.sendMessage("You may buy my blessings from Farmer Gricoller."); return; }
         Patches.choose(player, [["Unlock grape blessings (75,000 coins)", () => {
-            if (score.bologa || !player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
+            if (score !== scoreFor(player) || score.bologa || !player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
             if (player.getSkillManager().getCurrentLevel(core.Skill.PRAYER) < 50) { player.sendMessage("You need level 50 Prayer."); return; }
-            if (!player.getEquipment().getItems().some(i => /zamorak|unholy/i.test(core.CacheDefinitions.getItem(i.getId()).name))) {
-                player.sendMessage("Wear an item dedicated to Zamorak first."); return;
-            }
-            if (player.getInventory().getAmount(Data.itemId("Coins")) < 75000) { player.sendMessage("You need 75,000 coins."); return; }
-            player.getInventory().deleteNumber(Data.itemId("Coins"), 75000);
+            const outfitProblem = Bologa.outfitProblem(player);
+            if (outfitProblem) { player.sendMessage(outfitProblem); return; }
+            // Cache Coins 995 is currency; a different, non-stackable quest item is also named Coins.
+            if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < BOLOGA_UNLOCK_COST) { player.sendMessage("You need 75,000 coins."); return; }
+            player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, BOLOGA_UNLOCK_COST);
             score.bologa = true; player.sendMessage("You can now purchase grape blessings from Gricoller.");
+            core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "bologa-unlock" });
         }]]);
         return;
     }
@@ -210,7 +218,7 @@ function titheNpc(event) {
     const entries = REWARDS.map(([name, cost, amount]) => [`${name} (${cost} points)`, () => {
         if (!player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
         if (score.points < cost) { player.sendMessage("You do not have enough points."); return; }
-        if (name === "Herb sack" && player.getSkillManager().getCurrentLevel(core.Skill.HERBLORE) < 58) { player.sendMessage("You need level 58 Herblore."); return; }
+        if (name === "Herb sack" && player.getSkillManager().getMaxLevel(core.Skill.HERBLORE) < 58) { player.sendMessage("You need a base Herblore level of 58."); return; }
         if (name === "Bologa's blessing" && !score.bologa) { player.sendMessage("First arrange for Bologa to bless your grapes."); return; }
         const itemId = Data.itemId(name);
         const received = name === "Seed pack"

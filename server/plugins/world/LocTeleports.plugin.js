@@ -285,6 +285,12 @@ function claimLadder(request) {
   if (play(request.player, request.object, request.clickType)) request.handled = true;
 }
 
+/** Route to an explicit threshold when surrounding walls block ordinary loc reach. */
+function routeToLoc(event) {
+  const approach = entryFor(event.object, event.clickType)?.approach;
+  if (!event.destination && approach) event.destination = { x: approach[0], y: approach[1], z: approach[2] };
+}
+
 /** Let a captured portal keep its transition semantics instead of swinging it as a local door. */
 function claimDoorToggle(request) {
   if (request.handled) return;
@@ -301,6 +307,7 @@ module.exports = {
     swaps = loadSwaps();
     api.persistAttribute(TIED_ATTRIBUTE);
     api.onObjectInteraction(useLoc);
+    api.onObjectRoute(routeToLoc);
     api.onItemOnObject(useItemOnLoc);
     api.onCustomEvent("ladders:climb", claimLadder);
     api.onCustomEvent("door:toggle", claimDoorToggle);

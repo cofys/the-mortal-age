@@ -53,6 +53,13 @@ class Fight {
     this.hudShown = false;
     this.over = false;
     this.stopped = false;
+    this.perfectKill = true;
+  }
+
+  /** Only damage actually taken during this fight can spoil its loot bonus. */
+  recordDamage(amount) {
+    if (amount <= 0 || this.over || this.stopped || this.session.ended || this.session.fight !== this) return;
+    this.perfectKill = false;
   }
 
   /** Runs `action` `ticks` ticks into the fight. */
@@ -176,8 +183,12 @@ class Fight {
     const [low, high] = this.stats.maxHit;
     this.boss.performAnimation(new Common.core.Animation(boss.meleeAnim));
     this.boss.setPositionToFace(this.player.getLocation());
+    // Use the same protection snapshot as the damage roll; changing prayer during
+    // its delay cannot turn unprotected damage into chip damage (or the reverse).
+    const protectedMelee = Common.protectedFrom(this.player, MELEE_PRAYER);
     const hit = Common.strike(this.boss, this.player, "melee", low + Math.round((high - low) * this.missing()), 1, {
       prayer: MELEE_PRAYER, prayerShare: boss.prayerShare,
+      onApplied: (amount) => { if (!protectedMelee) this.recordDamage(amount); },
     });
     hit.__vardorvisLifesteal = true;
   }
@@ -356,6 +367,14 @@ function onDeath(event) {
   if (fight && !fight.stopped && fight.session.fight === fight) fight.won();
 }
 
+/** The grade is frozen at lethal damage, before the delayed death/loot event. */
+function dropContext({ player, npc, context }) {
+  const fight = fightOf(npc);
+  if (!context || !fight || fight.boss !== npc || fight.player !== player || !fight.over || fight.stopped ||
+      fight.session.ended || fight.session.fight !== fight || npc.getHitpoints() > 0) return;
+  context.perfectKill = fight.perfectKill;
+}
+
 function attachFight(api) {
   api.persistAttribute(Common.KILLS_ATTRIBUTE, 0);
   api.persistAttribute(Common.AWAKENED_KILLS_ATTRIBUTE, 0);
@@ -365,6 +384,7 @@ function attachFight(api) {
   api.onCombatHitResolved(hitResolved);
   api.onNpcBeforeDeath(beforeDeath);
   api.onNpcDeath(onDeath);
+  api.onCustomEvent("npc-drops:context", dropContext);
   api.onPlayerLogin(sendAwakenedKillCount);
 }
 

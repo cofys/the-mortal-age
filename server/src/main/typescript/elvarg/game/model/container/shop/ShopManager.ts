@@ -453,7 +453,7 @@ export class ShopManager {
             return {
                 slot, itemId: entry.itemId, quantity: entry.amount,
                 defaultQuantity: shop.originalAmounts.get(entry.itemId) ?? 0,
-                priceEach: price, sellPrice: Math.max(1, Math.floor(price * this.SALES_TAX)),
+                priceEach: price, sellPrice: definition ? this.sellPrice(shop, definition, player) : 0,
             };
         });
         player.setInterfaceId(this.MAIN_INTERFACE_ID);
@@ -543,18 +543,13 @@ export class ShopManager {
             return;
         }
         const definition = ItemDefinition.forId(itemId);
-        let price = this.itemPrice(shop, definition, player);
-        if (!fromShop) {
-            if (!item?.isSellable?.()) {
-                player.sendMessage(
-                    "This item cannot be sold to a shop."
-                );
-                return;
-            }
-            if (price > 1) {
-                price = Math.floor(price * this.SALES_TAX);
-            }
+        if (!fromShop && !this.canSell(shop, item)) {
+            player.sendMessage(
+                "This item cannot be sold to a shop."
+            );
+            return;
         }
+        const price = fromShop ? this.itemPrice(shop, definition, player) : this.sellPrice(shop, definition, player);
         if (price <= 0) {
             player.sendMessage("This item has no value.");
             return;
@@ -678,7 +673,7 @@ export class ShopManager {
             return;
         }
         const definition = ItemDefinition.forId(stockId);
-        if (!item.isSellable()) {
+        if (!this.canSell(shop, item)) {
             player.sendMessage("This item cannot be sold.");
             return;
         }
@@ -695,17 +690,14 @@ export class ShopManager {
             : [slot, ...inventory.getItems().map((_, index) => index).filter((index) => index !== slot)];
         const sellable = slots.filter((index) => {
             const held = inventory.getItems()[index];
-            return held?.getId() === itemId && held.isSellable();
+            return held?.getId() === itemId && this.canSell(shop, held);
         });
         const held = sellable.reduce((total, index) => total + inventory.getItems()[index].getAmount(), 0);
         let quantity = Math.min(this.normalizeAmount(amount), this.MAX_ACTION_AMOUNT, held);
         if (quantity <= 0) {
             return;
         }
-        let price = this.itemPrice(shop, definition, player);
-        if (price > 1) {
-            price = Math.floor(price * this.SALES_TAX);
-        }
+        const price = this.sellPrice(shop, definition, player);
         if (price <= 0) {
             player.sendMessage("This item has no value.");
             return;
@@ -859,6 +851,43 @@ export class ShopManager {
             /general store/i.test(shop.definition.getName());
     }
 
+    private static canSell(shop: RuntimeShop, item: Item): boolean {
+        if (!item || item.isUntradeable()) return false;
+        const request = {
+            shopId: shop.definition.getId(), shopName: shop.definition.getName(),
+            itemId: item.getId(), sellable: item.isSellable(),
+        };
+        PluginManager.emitCustomEvent("shop:can-sell", request);
+        return request.sellable === true;
+    }
+
+    private static sellPrice(shop: RuntimeShop, definition: ItemDefinition, player?: any): number {
+        // The default refund derives from the live (scarcity/kingdom-scaled)
+        // price, so selling into a scarce shop pays better. The event's
+        // buyPrice is the item's canonical shop price without those scalers:
+        // shop rules phrased as a share of the purchase price (e.g. Dusuri's
+        // 80% refund) mean the list price, not a scarcity-inflated one.
+        const livePrice = this.itemPrice(shop, definition, player);
+        const price = livePrice > 1 ? Math.floor(livePrice * this.SALES_TAX) : livePrice;
+        const request = {
+            shopId: shop.definition.getId(), shopName: shop.definition.getName(),
+            itemId: definition.getId(), buyPrice: this.basePrice(shop, definition), price,
+        };
+        PluginManager.emitCustomEvent("shop:sell-price", request);
+        return Number.isSafeInteger(request.price) && request.price >= 0 ? request.price : price;
+    }
+
+    /** The item's canonical shop price: per-shop override, else its definition value. */
+    private static basePrice(shop: RuntimeShop, definition: ItemDefinition): number {
+        const override = shop.itemPrices.get(definition.getId());
+        if (override != null && override > 0) {
+            return override;
+        }
+        return shop.definition.getCurrency() === "BLOOD_MONEY"
+            ? Number(definition.getBloodMoneyValue?.() ?? 0)
+            : Number(definition.getValue?.() ?? 0);
+    }
+
     /**
      * Base price from the item definition (or a per-shop override), scaled
      * by live scarcity and by kingdom affiliation: low stock vs the shop's
@@ -872,16 +901,7 @@ export class ShopManager {
      * so wanderers are never mispriced as home customers.
      */
     private static itemPrice(shop: RuntimeShop, definition: ItemDefinition, player?: any): number {
-        const override = shop.itemPrices.get(definition.getId());
-        let base: number;
-        if (override != null && override > 0) {
-            base = override;
-        } else {
-            base =
-                shop.definition.getCurrency() === "BLOOD_MONEY"
-                    ? Number(definition.getBloodMoneyValue?.() ?? 0)
-                    : Number(definition.getValue?.() ?? 0);
-        }
+        const base = this.basePrice(shop, definition);
         if (!(base > 0)) {
             return base;
         }

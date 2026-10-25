@@ -22,7 +22,7 @@ function caster(fightType, { autocasting = false } = {}) {
         getPrayerActive: () => new Array(40).fill(false),
         getSkillManager: () => ({ getCurrentLevel: () => 99 }),
         getFightType: () => fightType,
-        getCombat: () => ({ getAutocastSpell: () => (autocasting ? {} : null), getSelectedSpell: () => null }),
+        getCombat: () => ({ getAutocastSpell: () => (autocasting ? {} : null), getSelectedSpell: () => null, getTarget: () => null }),
         getEquipment: () => ({ getItems: () => new Array(14).fill({ getId: () => -1 }) }),
         getBonusManager: () => ({
             getAttackBonus: () => [0, 0, 0, 0, 0],
@@ -102,8 +102,9 @@ test('the Slayer\'s staff (e) is a staff, as the plain one is', () => {
 function arceuusPlayer({ magic = 99, prayer = 50, energy = 40, weapon = -1 } = {}) {
     const attributes = new Map();
     const player = {
-        attributes, graphics: [], animations: [], messages: [], freezes: [], prayer, energy,
-        isPlayer: () => true, isNpc: () => false, isRegistered: () => true, getAsPlayer: () => player,
+        attributes, graphics: [], animations: [], messages: [], freezes: [], prayer, energy, hitpoints: 99, registered: true,
+        isPlayer: () => true, isNpc: () => false, isRegistered: () => player.registered, getAsPlayer: () => player,
+        getHitpoints: () => player.hitpoints,
         getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
         performGraphic: (graphic) => player.graphics.push(graphic?.getId?.() ?? null),
         performAnimation: (animation) => player.animations.push(animation.getId()),
@@ -262,6 +263,93 @@ test('corruption: certain with the Mark at casting (50% without), with its hit g
     }
 });
 
+function corruptionTask(t, total, marked) {
+    const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
+    const { TaskManager } = require('../dist/game/task/TaskManager');
+    const { Task } = require('../dist/game/task/Task');
+    const tasks = [], caster = arceuusPlayer(), target = arceuusPlayer(), drains = [];
+    let tick = 0;
+    t.mock.method(TaskManager, 'submit', task => { task.setRunning(true); tasks.push(task); });
+    const skills = target.getSkillManager();
+    skills.decreaseCurrentLevel = (_skill, amount) => { target.prayer -= amount; drains.push([tick, amount]); };
+    target.getSkillManager = () => skills;
+    caster.setAttribute('arceuus:corruption', total);
+    caster.setAttribute('arceuus:corruption-marked', marked);
+    withRandom(0, () => ArceuusSpells.applyCorruption(caster, target));
+    assert.equal(tasks.length, 1);
+    const task = tasks[0];
+    assert.ok(task instanceof Task, 'exercise the real scheduled task countdown and onTick');
+    return { caster, target, task, drains, advance(count) { for (let i = 0; i < count; i++) { tick++; task.tick(); } } };
+}
+
+test('corruption drains retain their exact 5/10-tick schedule and amounts after the caster dies or leaves', t => {
+    for (const [total, amounts] of [[6, [1,2,3]], [12, [2,4,6]]]) {
+        for (const marked of [false, true]) {
+            const h = corruptionTask(t, total, marked), interval = marked ? 5 : 10;
+            h.caster.hitpoints = 0; h.caster.registered = false;
+            h.advance(interval * 3 + 2);
+            assert.deepEqual(h.drains, amounts.map((amount, index) => [interval * (index + 1), amount]));
+            assert.equal(h.target.prayer, 50 - total);
+            assert.equal(h.task.isRunning(), false, 'no fourth drain');
+        }
+    }
+});
+
+test('corruption cannot resume after target death and respawn between its drain ticks', t => {
+    for (const marked of [false, true]) {
+        const h = corruptionTask(t, 12, marked), interval = marked ? 5 : 10;
+        h.advance(1); h.target.hitpoints = 0;
+        h.advance(1); h.target.hitpoints = 99;
+        h.advance(interval * 3);
+        assert.deepEqual(h.drains, [], 'the dead tick ends this effect even if respawn precedes its first drain');
+        assert.equal(h.task.isRunning(), false);
+    }
+});
+
+test('corruption does not drain a target dead on the scheduled drain tick', t => {
+    for (const marked of [false, true]) {
+        const h = corruptionTask(t, 6, marked), interval = marked ? 5 : 10;
+        h.advance(interval - 1); h.target.hitpoints = 0; h.advance(1);
+        assert.deepEqual(h.drains, []);
+        assert.equal(h.task.isRunning(), false);
+    }
+});
+
+test('corruption cannot resume after its target unregisters and returns between drains', t => {
+    const h = corruptionTask(t, 12, false);
+    h.advance(10); h.target.registered = false;
+    h.advance(1); h.target.registered = true; h.advance(30);
+    assert.deepEqual(h.drains, [[10,2]]);
+    assert.equal(h.task.isRunning(), false);
+});
+
+test('Ward nullifies an active corruption effect between drains', t => {
+    const h = corruptionTask(t, 12, true);
+    h.advance(1); h.target.setAttribute('arceuus:ward-until', Number.MAX_SAFE_INTEGER);
+    h.advance(1); h.target.setAttribute('arceuus:ward-until', null); h.advance(20);
+    assert.deepEqual(h.drains, []);
+    assert.equal(h.task.isRunning(), false);
+});
+
+test('corruption refuses initially dead or unregistered targets without consuming the prepared spell', t => {
+    const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
+    const { TaskManager } = require('../dist/game/task/TaskManager');
+    const tasks = [];
+    t.mock.method(TaskManager, 'submit', task => tasks.push(task));
+    for (const invalid of ['dead', 'unregistered', 'warded']) {
+        const caster = arceuusPlayer(), target = arceuusPlayer();
+        caster.setAttribute('arceuus:corruption', 12); caster.setAttribute('arceuus:corruption-marked', true);
+        if (invalid === 'dead') target.hitpoints = 0;
+        else if (invalid === 'unregistered') target.registered = false;
+        else target.setAttribute('arceuus:ward-until', Number.MAX_SAFE_INTEGER);
+        withRandom(0, () => ArceuusSpells.applyCorruption(caster, target));
+        assert.deepEqual(target.graphics, []);
+        assert.equal(caster.getAttribute('arceuus:corruption'), 12);
+        assert.equal(caster.getAttribute('arceuus:corruption-marked'), true);
+    }
+    assert.deepEqual(tasks, []);
+});
+
 test("a manual cast keeps its cast animation: the combat reset after it doesn't replace it", () => {
     const { Combat } = require('../dist/game/content/combat/Combat');
     const { MagicCombatMethod } = require('../dist/game/content/combat/method/impl/MagicCombatMethod');
@@ -292,7 +380,7 @@ test('magic impact effects use the launched spell after another spell has been c
  const {Sounds}=require('../dist/game/Sounds');const old=Sounds.sendSound,calls=[];Sounds.sendSound=()=>{};
  const launched={spellId:()=>-1,endGraphic:()=>null,impactSound:()=>null,finishCast:(a,t,accurate,damage)=>calls.push([accurate,damage])};
  const attacker={getHitpoints:()=>99,getCombat:()=>({getPreviousCast:()=>({finishCast:()=>assert.fail('a later spell cannot replace the launched bind')})})};
- const target={getHitpoints:()=>99};const hit={getAttacker:()=>attacker,getTarget:()=>target,isAccurate:()=>true,getTotalDamage:()=>7,getSpell:()=>launched};
+ const target={getHitpoints:()=>99};const hit={getAttacker:()=>attacker,getTarget:()=>target,isAccurate:()=>true,getTotalDamage:()=>7,getSpell:()=>launched,getSpellContext:()=>null};
  try{new MagicCombatMethod().handleAfterHitEffects(hit);assert.deepEqual(calls,[[true,7]]);hit.getSpell=()=>null;new MagicCombatMethod().handleAfterHitEffects(hit);assert.equal(calls.length,1);}finally{Sounds.sendSound=old;}
 });
 

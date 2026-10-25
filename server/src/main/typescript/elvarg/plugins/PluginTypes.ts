@@ -375,6 +375,8 @@ export interface PluginPlayerAttackEvent {
 export interface PluginCanBankEvent {
   player: any;
   allow: boolean | null;
+  /** Who asks: "open" (Bank.open), "deposit-box", or undefined for any other check. */
+  source?: string;
 }
 
 /** Called immediately before one item is deposited into a bank. */
@@ -1171,7 +1173,7 @@ export interface PluginApi {
    */
   emitCanEat(player: any, itemId: number): boolean | null;
   emitCanDrink(player: any, itemId: number): boolean | null;
-  emitCanBank(player: any): boolean | null;
+  emitCanBank(player: any, source?: string): boolean | null;
   emitCanBankItem(player: any, item: any): boolean | null;
   emitShouldKeepItemOnDeath(player: any, item: any): boolean | null;
   emitFiremakingBlocked(event: PluginFiremakingBlockedEvent): boolean;
@@ -1384,6 +1386,7 @@ export interface PluginCoreApi {
   PlayerDeathTask: any;
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
+  CombatPoisonEffect: any;
   CacheDefinitions: any;
   CacheMaps: any;
   MapRegionReplacementManager: any;

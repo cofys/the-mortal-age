@@ -26,10 +26,16 @@ export type MenuTransform = (
 ) => SimpleMenuEntry[];
 
 let transform: MenuTransform | undefined;
+let managedMenus: MenuTransform | undefined;
 
 /** Installed once by the client: the client plugins' transformMenuEntries chain. */
 export function setMenuTransform(next: MenuTransform | undefined): void {
     transform = next;
+}
+
+/** Installed once by the client: RuneLite's MenuManager, which adds options to given widgets. */
+export function setManagedMenus(next: MenuTransform | undefined): void {
+    managedMenus = next;
 }
 
 /**
@@ -54,6 +60,14 @@ export function applyMenuTransform(
     prepared: boolean = false,
 ): SimpleMenuEntry[] {
     if (!prepared) entries = preparePluginMenu(entries, context);
+    // MenuManager adds its options as the entries are added, before plugins see the menu.
+    if (managedMenus && context.surface !== "world") {
+        try {
+            entries = managedMenus(entries, context);
+        } catch (err) {
+            console.warn?.("[menu] managed menus failed", err);
+        }
+    }
     if (!transform || !reachesPlugins(context)) return buildPluginMenu(entries, context);
     try {
         return buildPluginMenu(transform(entries, context), context);

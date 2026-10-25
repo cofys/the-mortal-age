@@ -23,8 +23,8 @@
  * Source: https://github.com/GregHib/void/blob/2b8e267836a8469757c73694ea4d57f2f1c28458/game/src/main/kotlin/content/area/misthalin/lumbridge/swamp/chams_of_tears/Juna.kt
  * (plus quest/member/tears_of_guthix/TearsOfGuthix.kt).
  *
- * Gaps (no dump/index support): the sapphire-lantern / light-creature travel to
- * the chasm; Temple of Ikov does not track the Lucien choice, so both Lucien
+ * Chasm travel is in minigames/tearsofguthix/Chasm.TearsOfGuthix.js.
+ * Gaps: Temple of Ikov does not track the Lucien choice, so both Lucien
  * story conditions answer false.
  */
 module.exports = function registerTearsOfGuthixQuest(api) {
@@ -92,6 +92,8 @@ module.exports = function registerTearsOfGuthixQuest(api) {
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
     if (stage >= STAGE_COMPLETE) {
+      const status = { player, lines: [] };
+      api.emitCustomEvent("tears-of-guthix:journal", status);
       return [
         "<str>I met Juna the serpent in a deep chasm beneath the</str>",
         "<str>Lumbridge Swamp Caves. I made a bowl out of magical stone in</str>",
@@ -101,6 +103,8 @@ module.exports = function registerTearsOfGuthixQuest(api) {
         "",
         "Now Juna will let me into the cave to collect the Tears if I",
         "tell her stories of my adventures.",
+        "",
+        ...status.lines,
       ];
     }
     if (stage >= STAGE_STONE_BOWL) {

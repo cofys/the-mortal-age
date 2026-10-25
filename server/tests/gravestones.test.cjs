@@ -84,6 +84,41 @@ function death(player, items, { killer = null, x = 3222, y = 3218 } = {}) {
 
 const graveOf = (player) => player.getAttribute("gravestones:grave");
 
+test('an encounter grave discount survives persistence and does not discount the Office', t => {
+  const Grave = require('../plugins/world/gravestones/Grave.Gravestones');
+  const player = account('discounted');
+  custom['gravestones:grave-location'] = request => {
+    request.tile = { x: 3220, y: 3218, z: 0 };
+    request.feeMultiplier = 0.25;
+  };
+  t.after(() => { delete custom['gravestones:grave-location']; });
+  death(player, [[ABYSSAL_WHIP, 1]]);
+  assert.equal(graveOf(player).feeMultiplier, 0.25);
+  player.setAttribute('gravestones:grave', JSON.parse(JSON.stringify(graveOf(player))));
+  assert.equal(Grave.fee(player), 250);
+  assert.equal(Fees.officeFee(ABYSSAL_WHIP, false), 6000, 'Office valuation is unchanged');
+});
+
+test('invalid encounter discounts retain normal fees and merged graves cannot launder fees', t => {
+  const Grave = require('../plugins/world/gravestones/Grave.Gravestones');
+  t.after(() => { delete custom['gravestones:grave-location']; });
+  for (const multiplier of [-1, 2, NaN, '0.25']) {
+    const player = account(`invalid-${String(multiplier)}`);
+    custom['gravestones:grave-location'] = request => { request.feeMultiplier = multiplier; };
+    death(player, [[ABYSSAL_WHIP, 1]]);
+    assert.equal(Grave.fee(player), 1000);
+  }
+  const player = account('merged-discounts');
+  custom['gravestones:grave-location'] = request => { request.feeMultiplier = 0.25; };
+  death(player, [[ABYSSAL_WHIP, 1]]);
+  delete custom['gravestones:grave-location'];
+  death(player, [[ARMADYL_GODSWORD, 1]]);
+  assert.equal(Grave.fee(player), 11000, 'normal-fee items cannot enter a discounted grave');
+  custom['gravestones:grave-location'] = request => { request.feeMultiplier = 0.25; };
+  death(player, [[ABYSSAL_WHIP, 1]]);
+  assert.equal(Grave.fee(player), 12000, 'a later discounted death cannot discount the existing contents');
+});
+
 test("grave fees: free under 100k, then 1k, 10k or 100k each, 500k at most; ironmen pay half", () => {
   const records = [{ id: ABYSSAL_WHIP, amount: 1 }, { id: ARMADYL_GODSWORD, amount: 1 }, { id: RUNE_SCIMITAR, amount: 1 }];
   assert.equal(Fees.graveFee(records, false), 11000);

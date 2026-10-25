@@ -159,6 +159,10 @@ function customiseBoat({ player, npc }) {
   const name = npc.getDefinition?.()?.getName?.() ?? "";
   const dock = content().docks.find((candidate) => candidate.shipwright === name);
   if (!dock) return false;
+  // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
+  const pin = { player, feature: "customise-boat", resume: () => customiseBoat({ player, npc }) };
+  pluginApi.emitCustomEvent("bank-pin:guard", pin);
+  if (pin.locked) return true;
   openBoatSelection(player, MODE.CUSTOMISE, dock, (slot) => enterShipyard(player, dock, slot));
 }
 

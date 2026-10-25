@@ -36,6 +36,7 @@ before(async () => {
     core,
     persistAttribute() {},
     onObjectInteraction: (handler) => (hooks.object = handler),
+    onObjectRoute: (handler) => (hooks.route = handler),
     onItemOnObject: (handler) => (hooks.itemOnObject = handler),
     onCustomEvent: (name, handler) => (hooks[name] = handler),
     sendMultiChatboxPrompt: (player, title, ...pairs) => prompts.push({ title, options: pairs.filter((_, i) => i % 2 === 0), pick: (text) => pairs[pairs.indexOf(text) + 1]() }),
@@ -98,6 +99,65 @@ test("every entry is a placed loc with that option in the rev 241 cache, once pe
   }
   // Left to their own work: the shipyard, spirit trees, the magic mushtree.
   assert.ok(!data.locs.some((entry) => /^(sailing_|spirittree|fossil_magic_mushtree)/.test(entry.name)));
+});
+
+test("every Prifddinas gate leaf can be clicked from its walkable side and crosses the city boundary", () => {
+  const gates = data.locs.filter((entry) => /^prif_wall_gate_(left|right)(_exit)?$/.test(entry.name));
+  assert.equal(gates.length, 16, "both leaves, inside and outside, at all four gates");
+  const emitRoute = PluginManager.emitObjectRoute;
+  const emitInteraction = PluginManager.emitObjectInteraction;
+  PluginManager.emitObjectRoute = (event) => hooks.route(event);
+  PluginManager.emitObjectInteraction = (event) => { hooks.object(event); return event.handled; };
+  try {
+    for (const entry of gates) {
+      const object = locAt(entry.id, entry.x, entry.y, entry.z);
+      const [x, y, z] = entry.approach;
+      assert.equal(core.RegionManager.getClipping(x, y, z, null) & 0x200100, 0, "approach is outside the gate's collision");
+      const dx = x < entry.x ? -1 : x >= entry.x + 2 ? 1 : 0;
+      const dy = y < entry.y ? -1 : y >= entry.y + 2 ? 1 : 0;
+      const visit = explorer([x + dx * 3, y + dy * 3, z]);
+      new ObjectActionPacketListener().executeAction(visit.player, object.getId(), entry.x, entry.y, 1);
+      for (let tick = 0; tick < 20; tick++) {
+        core.World.processCycle++;
+        visit.player.getMovementQueue().process();
+        runTicks(visit, 1);
+        core.TaskManager.processRemainingWalkTo();
+      }
+      const at = visit.player.getLocation();
+      assert.deepEqual([at.getX(), at.getY(), at.getZ()], entry.to, `${entry.id} at ${entry.x},${entry.y}`);
+      assert.equal(at.getX() > 3000, entry.option === "Enter", "Enter reaches the city, Exit reaches the overworld");
+      core.RegionManager.loadMapFiles(at.getX(), at.getY());
+      assert.equal(core.RegionManager.getClipping(at.getX(), at.getY(), at.getZ(), null) & 0x200100, 0, "arrival is clear");
+      assert.equal(visit.player.getMovementQueue().isMovementBlocked(), false);
+    }
+  } finally {
+    PluginManager.emitObjectRoute = emitRoute;
+    PluginManager.emitObjectInteraction = emitInteraction;
+  }
+});
+
+test("all eight Prifddinas clan-tower platforms Channel up and down and allow walking off", () => {
+  const positions = [[3280,6125], [3306,6099], [3306,6065], [3280,6039], [3246,6039], [3220,6065], [3220,6099], [3246,6125]];
+  const platforms = data.locs.filter((entry) => entry.name === "prif_clan_tower_teleporter");
+  assert.equal(platforms.length, 16);
+  for (const [x, y] of positions) for (const z of [0, 2]) {
+    const object = locAt(36490, x, y, z);
+    const entry = LocTeleports._test.entryFor(object, 1);
+    assert.equal(CacheDefinitions.getObject(object.getId()).actions[0], "Channel");
+    assert.equal(entry.option, "Channel");
+    const visit = explorer([x - 1, y, z]);
+    const event = { player: visit.player, object, clickType: 1, handled: false };
+    hooks.object(event);
+    assert.equal(event.handled, true);
+    runTicks(visit, 2);
+    const at = visit.player.getLocation();
+    assert.deepEqual([at.getX(), at.getY(), at.getZ()], [x, y, 2 - z]);
+    assert.equal(visit.player.getMovementQueue().isMovementBlocked(), false);
+    assert.equal(core.RegionManager.canMove(x, y, x - 1, y, 2 - z, 1, 1, null), true, "the landing can walk off the platform");
+  }
+  const other = { object: locAt(36490, 3280, 6125, 0), clickType: 2, destination: null };
+  hooks.route(other);
+  assert.equal(other.destination, null, "uncatalogued options keep ordinary routing");
 });
 
 test("the SOTE supply cave Exit returns to a walkable tile beside its surface entrance", () => {

@@ -6,6 +6,7 @@ import type { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { RuneLiteConfig } from "@runelite/client/config/RuneLiteConfig";
 import { PluginConfigView } from "./PluginConfigView";
 import { PluginListItem } from "./PluginListItem";
+import { onConfigurationRequest, takePendingConfiguration } from "@runelite/client/plugins/config/configurationRequests";
 
 /** The client's own settings row, pinned above the plugins (RuneLite's "RuneLite" entry). */
 const CLIENT_NAME = "RSPS.app";
@@ -32,7 +33,14 @@ export function PluginListPanel({
     const [, forceUpdate] = useReducer((version: number) => version + 1, 0);
     useEffect(() => pluginManager.subscribe(forceUpdate), [pluginManager]);
     const [search, setSearch] = useState("");
-    const [view, setView] = useState<View>({ kind: "list" });
+    const [view, setView] = useState<View>(() => {
+        const requested = takePendingConfiguration();
+        return requested ? { kind: "plugin", pluginClass: requested } : { kind: "list" };
+    });
+    useEffect(() => onConfigurationRequest((pluginClass) => {
+        takePendingConfiguration();
+        setView({ kind: "plugin", pluginClass });
+    }), []);
     const back = (): void => setView({ kind: "list" });
 
     if (view.kind === "client") {

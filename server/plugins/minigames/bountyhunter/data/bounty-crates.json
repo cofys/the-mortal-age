@@ -1,0 +1,25 @@
+{
+  "_source": "OSRS Wiki: Bounty crate (tier 1) ... (tier 9) rewards tables, after the 7 February 2024 artefact change. Item keys are ItemIdentifiers names.",
+  "restore": "BLIGHTED_SUPER_RESTORE_4_",
+  "food": ["BLIGHTED_ANGLERFISH", "BLIGHTED_KARAMBWAN", "BLIGHTED_MANTA_RAY"],
+  "artefactChance": 10,
+  "artefacts": [
+    ["ANCIENT_EMBLEM", 40],
+    ["ANCIENT_TOTEM", 30],
+    ["ANCIENT_STATUETTE", 15],
+    ["ANCIENT_MEDALLION", 9],
+    ["ANCIENT_EFFIGY", 4],
+    ["ANCIENT_RELIC", 2]
+  ],
+  "tiers": [
+    { "coins": [40000, 60000], "restores": [3, 9], "food": [15, 45] },
+    { "coins": [80000, 120000], "restores": [3, 9], "food": [15, 45] },
+    { "coins": [120000, 180000], "restores": [3, 9], "food": [15, 45] },
+    { "coins": [160000, 240000], "restores": [6, 18], "food": [45, 120] },
+    { "coins": [200000, 300000], "restores": [6, 18], "food": [45, 120] },
+    { "coins": [240000, 360000], "restores": [6, 18], "food": [45, 120] },
+    { "coins": [280000, 420000], "restores": [12, 24], "food": [75, 180] },
+    { "coins": [320000, 480000], "restores": [12, 24], "food": [75, 180] },
+    { "coins": [400000, 600000], "restores": [12, 24], "food": [75, 180] }
+  ]
+}

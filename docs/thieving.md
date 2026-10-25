@@ -1,4 +1,4 @@
-# Thieving: pickpocketing and blackjacking
+# Thieving: stalls, pickpocketing and blackjacking
 
 Pickpocketing is built from the OSRS Wiki: the [Thieving](https://oldschool.runescape.wiki/w/Thieving#Pickpocketing) page, each target's own page (its skilling success chart, Thieving info and loot), and the [Coin pouch](https://oldschool.runescape.wiki/w/Coin_pouch), [Rogue equipment](https://oldschool.runescape.wiki/w/Rogue_equipment), [Gloves of silence](https://oldschool.runescape.wiki/w/Gloves_of_silence), [Dodgy necklace](https://oldschool.runescape.wiki/w/Dodgy_necklace) and [Thieving cape](https://oldschool.runescape.wiki/w/Thieving_cape) pages. Item and NPC ids come from the cache.
 
@@ -11,6 +11,29 @@ Pickpocketing is built from the OSRS Wiki: the [Thieving](https://oldschool.rune
 | `server/plugins/skills/thieving/Blackjacking.Thieving.js` | Pollnivnian bandit/thug lure, knockout and the shared pickpocket target event. |
 | `server/plugins/skills/thieving/Pickpocket.Thieving.js` | The pickpocket itself: checks, timing, success, loot, failure and the equipment effects. |
 | `server/plugins/skills/thieving/CoinPouch.Thieving.js` | Opening coin pouches ("Open-all" and "Open"). |
+
+## Stalls
+
+`server/plugins/skills/Thieving.plugin.js` owns stall theft, alongside the pickpocket modules.
+
+### Sources
+
+- [Thieving: stalls](https://oldschool.runescape.wiki/w/Thieving#Stalls): success is guaranteed outside an owner's/guard's line of sight; multiple players may steal during the same tick. Current restock times are bakery/tea/seed 4 ticks, silk/wine 8, fur 12, silver 32, spice 10 and gem 100. Keldagrim bakery is 16 ticks.
+- [Wine stall](https://oldschool.runescape.wiki/w/Market_stall_(wine)): level 22, 27 XP; bottle of wine/grapes/jug/jug of water/jug of wine weights 11/17/39/20/13 out of 100.
+- [Silver ore](https://oldschool.runescape.wiki/w/Silver_ore#Item_sources), [silver bar](https://oldschool.runescape.wiki/w/Silver_bar#Item_sources), [tiara](https://oldschool.runescape.wiki/w/Tiara#Item_sources): ordinary silver-stall weights 16/3/1 out of 20. Level 50 and 205 XP; spice is level 65 and 92 XP.
+- [Thieving training](https://oldschool.runescape.wiki/w/Thieving_training#Levels_5%E2%80%9325:_Bakery_stalls): standing under the baker is a safe spot, so an owner sharing the thief's tile does not spot them.
+- [Prifddinas marketplace](https://oldschool.runescape.wiki/w/Prifddinas#Meilyr_district), [Keldagrim](https://oldschool.runescape.wiki/w/Keldagrim#Shops): named owners supplement the generic merchant names.
+- [Port Roberts](https://oldschool.runescape.wiki/w/Port_Roberts#Marketplace_thieving): its stalls never deplete. Their automatic stealing and timed guard/jail activity is separate content and is not implemented here.
+
+IDs and actions were checked in cache `osrs-241_2026-10-20` with `dump:loc`, `CacheDefinitions` and the cache's LOC gamevals. Ardougne silver/spice are 11734/11733. Draynor wine is 14011 (`Market stall`, `Steal-From`); its empty 14012 retains the same action, so it must not grant loot. Other empty models are 634 (ordinary), 6944 (Hosidius bakery), 6984 (Keldagrim), 36568 (Prifddinas) and 51932 (Fortis).
+
+### Validation and limits
+
+After `yarn build`, run `node --test tests/thieving-stalls.test.cjs tests/thieving-pickpocket.test.cjs` from `server/`. The tests cover registration, requirements, loot/XP, shared depletion, simultaneous thieves, stale clicks, restock, collision-visibility decisions, dead/busy/out-of-range guards, unrelated owners, empty wine stalls and private-area destruction.
+
+Live worktree MCP checks confirmed an Ardougne knight catches silver theft and enters combat without loot/XP; an unseen Kourend silver theft gives +205 XP, changes 11734 to 634, rejects a stale 11734 click, then restores 11734 after 32 ticks. Fortis spice and Draynor wine both dispatch their real cache options and can be caught by guards.
+
+No live-OSRS packet capture was available. Five tiles is a provisional lookout radius, not a measured OSRS hunt range. Visibility uses the existing projectile collision ray, with no invented facing cone. Guards already targeting another actor are not diverted from their fight; this exclusion and the exact catch messages/timing have not been calibrated against a capture. Merchant trading restrictions after theft are outside this change.
 
 ## Targets
 

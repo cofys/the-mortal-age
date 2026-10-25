@@ -1035,8 +1035,12 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.actors?.registerNpcSpotAnimation(event);
     }
 
-    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
-        this.actors?.registerWorldSpotAnimation(event);
+    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): number | undefined {
+        return this.actors?.registerWorldSpotAnimation(event);
+    }
+
+    override killWorldSpotAnimation(id: number): void {
+        this.actors?.killWorldSpotAnimation(id);
     }
 
     override onLocChange(oldId: number, newId: number, tile: { x: number; y: number }, level: number, opts?: LocChangeOptions): void {

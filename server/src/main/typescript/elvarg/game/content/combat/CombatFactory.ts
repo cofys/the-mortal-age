@@ -98,6 +98,7 @@ const isDeveloperQueuedAttackSpec = (entity: Mobile): entity is Player => {
 export class CombatFactory {
     private static readonly RANDOM = new RandomGen();
     public static readonly RECOIL_DAMAGE_ATTRIBUTE = "ring-of-recoil:damage";
+    public static readonly RECOIL_IMMUNE_ATTRIBUTE = "combat:recoil-immune";
     public static readonly CRYSTAL_BOW_SHOTS_ATTRIBUTE = "crystal-bow:shots-in-stage";
     public static readonly CRYSTAL_BOW_ITEM_ATTRIBUTE = "crystal-bow:tracked-item";
     /**
@@ -184,7 +185,8 @@ export class CombatFactory {
             maxHit = PluginManager.modifyRangedMaxHit(entity, victim, maxHit);
             damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride, applySpecialTraits);
         } else if (type == CombatType.MAGIC) {
-            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride, applySpecialTraits);
+            const bounds = DamageFormulas.sourceHitBounds(entity, CombatType.MAGIC, victim);
+            damage = CombatFactory.rollSpecialDamage(entity, bounds.maximum, boundsOverride, applySpecialTraits, bounds.minimum);
         }
 
         // Wiki (Ward of Arceuus): demons hit 10% less, that 10% rounded down first.
@@ -279,10 +281,10 @@ export class CombatFactory {
      * 0..maxHit roll; with traits it honours per-hit min/max multipliers, flat
      * bonuses and a maximum cap.
      */
-    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): number {
+    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): number {
         const traits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (!traits && !boundsOverride) {
-            return Misc.randomInclusive(0, maxHit);
+            return Misc.randomInclusive(Math.min(maxHit, Math.max(0, minimumFloor)), maxHit);
         }
         let minimum = Math.floor(
             maxHit * (boundsOverride?.minimumMultiplier ?? traits?.minimumDamageMultiplier ?? 0)
@@ -307,6 +309,7 @@ export class CombatFactory {
             minimum = maximum;
             maximum = swap;
         }
+        minimum = Math.max(minimum, Math.min(maximum, Math.max(0, minimumFloor)));
         return Misc.randomInclusive(Math.max(0, minimum), Math.max(0, maximum));
     }
 
@@ -971,7 +974,19 @@ export class CombatFactory {
             return;
         }
 
-        const isVenom = poisonOrbType === 2;
+        let isVenom = poisonOrbType === 2;
+        if (entity.isNpc()) {
+            const definition = entity.getAsNpc().getCurrentDefinition();
+            if (isVenom && definition.isVenomImmune()) {
+                isVenom = false;
+                // Venom stores damage; ordinary poison stores five severity
+                // points per starting damage. Keep the converted poison's hit.
+                poisonSeverity *= 5;
+            }
+            if (!isVenom && definition.isPoisonImmune()) {
+                return;
+            }
+        }
 
         // If the entity is a player, we check for poison immunity. If they have
         // no immunity then we send them a message telling them that they are
@@ -979,9 +994,12 @@ export class CombatFactory {
         const alreadyPoisoned = entity.isPoisoned();
         if (entity.isPlayer()) {
             let player = (entity as Player);
-            if (!player.getCombat().getPoisonImmunityTimer().finished()) {
+            const protection = player.getCombat().getPoisonClock();
+            if (isVenom ? protection.isVenomImmune() : !protection.finished()) {
                 return;
             }
+            // An accepted venom replaces the ordinary negative poison counter.
+            if (isVenom) protection.clearCounter();
             if (!alreadyPoisoned) {
                 player.sendMessage("You have been poisoned!");
             }
@@ -1022,11 +1040,17 @@ export class CombatFactory {
         return damage > 0 ? Math.floor(damage / 10) + 1 : 0;
     }
 
+    /** Content may disable ring recoil without suppressing other reflected damage. */
+    public static canReceiveRecoil(target: Mobile): boolean {
+        return target.getAttribute?.(CombatFactory.RECOIL_IMMUNE_ATTRIBUTE) !== true;
+    }
+
     /**
      * Rebounds ring of recoil damage to the attacker. The ring's 40 charges are
      * tracked per player and its last recoil deals only what is left.
      */
     public static handleRecoil(player: Player, attacker: Mobile, damage: number) {
+        if (!CombatFactory.canReceiveRecoil(attacker)) return;
         let returnDmg = CombatFactory.recoilDamage(damage);
         if (returnDmg <= 0) {
             return;

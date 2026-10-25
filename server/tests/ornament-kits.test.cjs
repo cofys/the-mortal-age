@@ -134,6 +134,17 @@ test("a kit applies to a degraded Barrows piece, and Echo Ahrim's reverts to its
   assert.deepEqual(degraded.getMeta(), { barrows: { remaining: 750 } });
 });
 
+test("plain Ahrim's robetop degrades as plain while Echo Ahrim's keeps its cosmetic stage", () => {
+  assert.equal(
+    Barrows.stageItemIdFor(ItemIds.AHRIMS_ROBETOP, 1),
+    Barrows.stageItemId(ItemIds.AHRIMS_ROBETOP, 1),
+  );
+  assert.equal(
+    Barrows.stageItemIdFor(ItemIds.ECHO_AHRIMS_ROBETOP, 1),
+    ItemIds.ECHO_AHRIMS_ROBETOP_75,
+  );
+});
+
 test("a kit does not work on the wrong item, and noted kits are filtered", () => {
   const kit = item(12538);
   const dragonScimitar = item(4587);

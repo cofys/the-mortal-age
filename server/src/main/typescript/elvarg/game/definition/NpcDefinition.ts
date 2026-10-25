@@ -26,6 +26,8 @@ export class NpcDefinition {
     private aggressiveTolerance: boolean = true;
     private poisonous: boolean = false;
     private venomous: boolean = false;
+    private immunePoison: boolean = false;
+    private immuneVenom: boolean = false;
     private demon: boolean = false;
     /** The Wiki's monster attributes: undead, demon, dragon, kalphite, ... */
     private attributes: readonly string[] = [];
@@ -50,6 +52,13 @@ export class NpcDefinition {
     private combatLevel: number = 0;
     private stats: number[] = [...NpcDefinition.DEFAULT_STATS];
     private rangedDefenceBonuses: Partial<Record<"light" | "heavy", number>> = {};
+    private elementalWeaknessType = 0;
+    private elementalWeaknessPercent = 0;
+
+    public getElementalWeakness(): { type: number; percent: number } | null {
+        return this.elementalWeaknessType >= 1 && this.elementalWeaknessType <= 4 && this.elementalWeaknessPercent > 0
+            ? { type: this.elementalWeaknessType, percent: this.elementalWeaknessPercent } : null;
+    }
 
     public getRangedDefenceBonus(type: "light" | "standard" | "heavy"): number {
         return (type === "standard" ? undefined : this.rangedDefenceBonuses[type]) ?? this.stats[14] ?? 0;
@@ -226,6 +235,14 @@ export class NpcDefinition {
     
     public isVenomous(): boolean {
         return this.venomous;
+    }
+
+    public isPoisonImmune(): boolean {
+        return this.immunePoison;
+    }
+
+    public isVenomImmune(): boolean {
+        return this.immuneVenom;
     }
 
     public isDemon(): boolean {
