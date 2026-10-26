@@ -125,7 +125,7 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
   const { Skill } = require('../dist/game/model/Skill');
   const { Location: Loc } = require('../dist/game/model/Location');
   const real = { cooking: Cooking.isCookingActive, firemaking: Firemaking.isFiremakingActive,
-    light: Firemaking.startBotInventoryFiremaking, canBurn: Firemaking.canPlayerBurnLog };
+    light: Firemaking.startBotInventoryFiremaking, canBurn: Firemaking.canPlayerBurnLog, logs: Firemaking.LIGHTABLE_LOGS };
   const RAW_SHRIMPS = 317;
   const LOGS = 1511;
   const items = new Map([[RAW_SHRIMPS, 27]]);
@@ -137,6 +137,7 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
     Cooking.isCookingActive = () => false;
     Firemaking.isFiremakingActive = () => false;
     Firemaking.canPlayerBurnLog = () => true;
+    Firemaking.LIGHTABLE_LOGS = [{ itemId: LOGS }];
     Firemaking.startBotInventoryFiremaking = (_, logId) => { lit = logId; return true; };
     const world = {
       core: { Skill, World: { getObjects: () => objects } },
@@ -167,7 +168,7 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
     assert.equal(a.update({ player, nowMs: 9000 }), 'success', 'nothing left to cook');
   } finally {
     Object.assign(Cooking, { isCookingActive: real.cooking });
-    Object.assign(Firemaking, { isFiremakingActive: real.firemaking, startBotInventoryFiremaking: real.light, canPlayerBurnLog: real.canBurn });
+    Object.assign(Firemaking, { isFiremakingActive: real.firemaking, startBotInventoryFiremaking: real.light, canPlayerBurnLog: real.canBurn, LIGHTABLE_LOGS: real.logs });
   }
 });
 
@@ -460,18 +461,20 @@ test('forced facing is re-sent after walking (same-coordinate setPositionToFace 
   const { UpdateFlag } = require('../dist/game/model/UpdateFlag');
   const { Location: Loc } = require('../dist/game/model/Location');
   const { Flag } = require('../dist/game/model/Flag');
-  const mobile = {
+  const { Direction } = require('../dist/game/model/Direction');
+  const mobile = Object.assign(Object.create(Mobile.prototype), {
     positionToFace: null,
     updateFlag: new UpdateFlag(),
-    getUpdateFlag() { return this.updateFlag; },
-  };
+  });
+  mobile.setLocation(new Loc(0, 0, 0));
   const tree = new Loc(2, 2, 0);
-  Mobile.prototype.setPositionToFace.call(mobile, tree);
+  mobile.setPositionToFace(tree);
   assert.ok(mobile.updateFlag.flagged(Flag.FACE_POSITION), 'the first set flags the face');
+  assert.equal(mobile.getFacingDirection(), Direction.NORTH_EAST, 'the real helper updates the heading');
   mobile.updateFlag.reset(); // the packet was sent; walking turned the visual facing
-  Mobile.prototype.setPositionToFace.call(mobile, tree);
+  mobile.setPositionToFace(tree);
   assert.equal(mobile.updateFlag.flagged(Flag.FACE_POSITION), false, 'same coordinates no-op');
-  Mobile.prototype.forcePositionToFace.call(mobile, tree);
+  mobile.forcePositionToFace(tree);
   assert.ok(mobile.updateFlag.flagged(Flag.FACE_POSITION), 'force re-sends the face');
 });
 
@@ -1056,6 +1059,57 @@ test('the PvP action and controller retaliate against bot attacks without a play
   assert.equal(attacks.length, 0);
 });
 
+test('PvP brains retaliate before eating consumes the turn, including an assigned attacker', () => {
+  const { PvpValidateEngagementNode } = require('../plugins/bots/behaviours/nodes/pvp/PvpValidateEngagementNode.PlayerBots');
+  const { CanAttackResponse } = require('../dist/game/content/combat/CombatFactory');
+  const actor = (name) => ({ ...fakePlayer(name), isPlayer: () => true,
+    isRegistered: () => true, getHitpoints: () => 99, busy: () => false });
+  const player = actor('defender'), quarry = actor('assigned-target'), attacker = actor('incoming');
+  let combatTarget = null, permitted = true, fleeing = false, actions = 0;
+  const attacks = [];
+  player.getCombat = () => ({ getTarget: () => combatTarget, getAttacker: () => attacker,
+    attack: (target) => { attacks.push(target); combatTarget = target; } });
+  const state = { mode: 'pvp', pvp: { targetPlayer: quarry, targetUsername: quarry.getUsername() } };
+  const controller = Object.create(PvpController.prototype);
+  Object.assign(controller, {
+    botStatesByName: new Map([[player.getUsername(), state]]), behaviorMode: { PVP: 'pvp' },
+    maintainCombatBoostsActionNode: { tick: () => 'failure' },
+    defensiveActionNode: { tick: () => ({ handled: fleeing }) },
+    eatFoodActionNode: { tick: () => 'success' },
+    resolveTargetPlayer: (state) => state.pvp.targetPlayer,
+    CombatFactory: { getMethod: () => null, canAttackPermission: () => permitted
+      ? CanAttackResponse.CAN_ATTACK : CanAttackResponse.CANT_ATTACK_IN_AREA },
+  });
+  controller.validateEngagementNode = new PvpValidateEngagementNode({
+    api: { getAreaManager: () => ({ inMulti: () => false }), getCombatFactory: () => controller.CombatFactory },
+    isValidTarget: controller.isValidTarget.bind(controller),
+  });
+  const brain = new BotBrain({ player, state, registry: fakeRegistry(),
+    activity: { id: 'pvp', mode: 'pvp', actions: [{ id: 'fight', update: () => { actions++; return 'running'; } }] },
+    world: { supportTick: (context) => controller.tickSupport(context) },
+  });
+  brain.tick(1000);
+  assert.equal(actions, 0, 'eating holds the normal action');
+  assert.deepEqual(attacks, [attacker], 'support still establishes a legal return attack');
+  assert.equal(state.pvp.targetPlayer, attacker, 'an unrelated assignment cannot hide the actual attacker');
+  assert.equal(state.pvp.targetUsername, attacker.getUsername());
+  assert.equal(state.pvp.endsAt, 31000);
+  brain.tick(1600);
+  assert.equal(attacks.length, 1, 'established combat is not reissued each turn');
+  combatTarget = null;
+  brain.tick(2200);
+  assert.equal(attacks.length, 2, 'the assigned target is re-engaged if combat was interrupted');
+  combatTarget = null;
+  permitted = false;
+  brain.tick(2800);
+  assert.equal(attacks.length, 2, 'area and single-combat permissions still apply');
+  permitted = true;
+  fleeing = true;
+  state.pvp.retreat = {};
+  brain.tick(3400);
+  assert.equal(attacks.length, 2, 'a committed retreat remains in control');
+});
+
 test('idle pvp walking stays inside its hotspot and pauses for movement or combat', () => {
   const hotspot = getWildernessHotspot('edge_mains');
   const { x: spotX, y: spotY } = hotspot.anchor;
@@ -1566,6 +1620,27 @@ test('the NPC cluster index never places a cluster in the Wilderness', () => {
   assert.ok(nearestClusters(index, ['Goblin'], { x: 3222, y: 3218, z: 0 })[0].distance < 100);
   assert.equal(nearestClusters(index, ['Goblin'], { x: 3100, y: 3700, z: 0 })
     .some((cluster) => cluster.y >= 3520 && cluster.y <= 3967 && cluster.x >= 2944 && cluster.x <= 3392), false);
+});
+
+test('bots discover unvisited NPC spawns and count activated spawns only once', () => {
+  const { npcClustersFor, nearestClusters } = require('../plugins/bots/brain/NpcClusterIndex.PlayerBots');
+  const at = { getX: () => 3222, getY: () => 3218, getZ: () => 0 };
+  const npc = (owner) => ({
+    getSpawnPosition: () => at,
+    getDefinition: () => ({ name: 'Chicken' }),
+    getSpawnLineage: () => ({ owner }),
+  });
+  const world = { core: {
+    NpcSpawnDefinition: { all: () => [{ getId: () => 1, getPosition: () => at }] },
+    NpcDefinition: { forId: () => ({ name: 'Chicken' }) },
+    World: { getNpcs: () => [npc('npc-spawns'), npc('a plugin')] },
+  } };
+  const index = npcClustersFor(world, 'name', (definition) => definition.name);
+  const [cluster] = nearestClusters(index, ['Chicken'], { x: 3222, y: 3218, z: 0 });
+  assert.equal(cluster.count, 2, 'one recorded spawn plus one plugin spawn');
+  const unvisited = { core: { ...world.core, World: { getNpcs: () => [] } } };
+  const [pending] = nearestClusters(npcClustersFor(unvisited, 'name', (definition) => definition.name), ['Chicken'], { x: 3000, y: 3000, z: 0 });
+  assert.equal(pending.count, 1, 'a bot can choose a destination before its NPCs exist');
 });
 
 test('replacing a training brain stops its NPC fight and releases its claim', () => {

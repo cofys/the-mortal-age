@@ -90,6 +90,8 @@ const PVP_PHASE = Object.freeze({
   DEAD: "dead",
 });
 const MANAGED_PVP_PRAYERS = Object.freeze([
+  PrayerHandler.PROTECT_ITEM,
+  PrayerHandler.SMITE,
   PrayerHandler.PROTECT_FROM_MAGIC,
   PrayerHandler.PROTECT_FROM_MISSILES,
   PrayerHandler.PROTECT_FROM_MELEE,
@@ -216,9 +218,6 @@ class PvpController {
     // Support nodes run before every brain action through tickSupport.
     this.eatFoodActionNode = new EatFoodActionNode(botStatesByName, api, {
       lowHpRatio: options.botEatLowHpRatio,
-      minHeal: options.botEatHealMin,
-      maxHeal: options.botEatHealMax,
-      maxCharges: options.botEatMaxCharges,
     });
     this.maintainCombatBoostsActionNode = new MaintainCombatBoostsActionNode(
       botStatesByName
@@ -1118,6 +1117,10 @@ class PvpController {
       }
     }
     if (this.eatFoodActionNode.tick({ ...base }) !== "failure") {
+      // Eating consumes the brain turn, but must not leave an incoming attacker unanswered.
+      if (resolved?.state?.mode === this.behaviorMode.PVP) {
+        this.validateEngagementNode?.retaliate(resolved);
+      }
       return { skip: true };
     }
     return { skip: false };
@@ -1173,7 +1176,7 @@ class PvpController {
     }
 
     const target = validation?.target ?? null;
-    // Establish combat before support actions can consume this decision.
+    // Establish combat before the remaining combat actions can consume this decision.
     if (target && player.getCombat().getTarget() !== target &&
         this.CombatFactory.canAttackPermission(player, target, false,
           this.CombatFactory.getMethod(player)) === CanAttackResponse.CAN_ATTACK) {

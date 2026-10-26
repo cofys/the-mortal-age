@@ -1,5 +1,6 @@
 // Run after `yarn build`: node --test tests/runecrafting-exit-portals.test.cjs
 // An altar's exit portal leads back outside its ruins, as rsprox captures show (docs/loc-teleports.md).
+// Crafting at the altars: docs/runecrafting.md.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test, before } = require("node:test");
@@ -100,6 +101,7 @@ test("the Rune Essence mine's portals send the player back to the wizard who sen
 // Wiki: talismans are used on ruins; a matching worn tiara reveals the Enter option.
 function runecrafter(headId = -1) {
   const player = visitor();
+  player.onEquipmentChanged = () => {};
   const bits = new Map();
   const equipment = new Equipment(player);
   equipment.setItem(Equipment.HEAD_SLOT, new Item(headId, headId === -1 ? 0 : 1));
@@ -223,4 +225,89 @@ test('Named item-on-object hooks match the player-visible multiloc and reject it
     assert.equal(PluginManager.emitItemOnObject(event), false);
     assert.equal(calls, 2);
   } finally { PluginManager.itemOnObjectHooks = hooks; }
+});
+
+// Crafting at the altars.
+const { Inventory } = require("../dist/game/model/container/impl/Inventory");
+const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
+const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
+
+function crafter(level, items) {
+  const player = visitor();
+  const xp = [];
+  const dialogues = [];
+  const inventory = new Inventory(player);
+  items.forEach(([id, amount], slot) => inventory.setItem(slot, new Item(id, amount)));
+  Object.assign(player, {
+    xp, dialogues, inventory,
+    getInventory: () => inventory,
+    getSkillManager: () => ({
+      getCurrentLevel: () => level,
+      addExperiences: (_skill, amount) => xp.push(amount),
+    }),
+    getDialogueManager: () => ({ startDialogues: (chain) => dialogues.push(chain.getDialogues().get(0).getText()) }),
+    performGraphic: (graphic) => player.log.push(`graphic ${graphic.getId()} height ${graphic.getHeight()}`),
+    performAnimation: (animation) => player.log.push(`animation ${animation.getId()}`),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getAttribute: () => undefined,
+  });
+  return player;
+}
+
+function amount(player, itemId) {
+  return player.inventory.getAmount(itemId);
+}
+
+function craft(player, objectId, option = "Craft-rune") {
+  const handler = handlers[`${option === "Bind" ? "Blood Altar" : "Altar"}:${option}`];
+  return handler({ player, objectId, handled: false });
+}
+
+test("an altar converts every essence in the inventory, rune and pure together (Wiki: Runecraft)", () => {
+  const player = crafter(99, [[ItemIdentifiers.RUNE_ESSENCE, 1], [ItemIdentifiers.RUNE_ESSENCE, 1], [ItemIdentifiers.PURE_ESSENCE, 1]]);
+  assert.equal(craft(player, ObjectIdentifiers.ALTAR_35), true);
+  assert.equal(amount(player, ItemIdentifiers.WATER_RUNE), 18, "three essence at 6 water runes each");
+  assert.equal(amount(player, ItemIdentifiers.RUNE_ESSENCE), 0);
+  assert.equal(amount(player, ItemIdentifiers.PURE_ESSENCE), 0);
+  assert.deepEqual(player.xp, [18], "6 XP for each of the three essence");
+  assert.ok(player.log.includes("graphic 186 height 92"), "the craft graphic's captured height");
+});
+
+test("the Wrath Altar crafts wrath runes from pure essence at 95 Runecraft (Wiki: Wrath Altar)", () => {
+  const player = crafter(99, [[ItemIdentifiers.PURE_ESSENCE, 1], [ItemIdentifiers.PURE_ESSENCE, 1], [ItemIdentifiers.RUNE_ESSENCE, 1]]);
+  assert.equal(craft(player, ObjectIdentifiers.ALTAR_58), true);
+  assert.equal(amount(player, ItemIdentifiers.WRATH_RUNE), 2, "one rune an essence, no multiples");
+  assert.equal(amount(player, ItemIdentifiers.RUNE_ESSENCE), 1, "rune essence stays");
+  assert.deepEqual(player.xp, [16]);
+
+  const low = crafter(94, [[ItemIdentifiers.PURE_ESSENCE, 1]]);
+  craft(low, ObjectIdentifiers.ALTAR_58);
+  assert.deepEqual(low.log, ["message You need a Runecrafting level of at least 95 to craft this."]);
+  assert.equal(amount(low, ItemIdentifiers.PURE_ESSENCE), 1);
+});
+
+test("a pure essence altar without pure essence refuses in a message box (rsprox capture 1636)", () => {
+  const player = crafter(99, [[ItemIdentifiers.RUNE_ESSENCE, 1]]);
+  assert.equal(craft(player, ObjectIdentifiers.ALTAR_83), true);
+  assert.deepEqual(player.dialogues, ["You do not have any pure essences to bind."]);
+  assert.equal(amount(player, ItemIdentifiers.RUNE_ESSENCE), 1);
+  assert.equal(amount(player, ItemIdentifiers.BLOOD_RUNE), 0);
+});
+
+test("Kourend's Blood Altar binds dark essence fragments, not pure essence (Wiki; rsprox capture 1673)", () => {
+  const pure = crafter(99, [[ItemIdentifiers.PURE_ESSENCE, 1]]);
+  assert.equal(craft(pure, ObjectIdentifiers.BLOOD_ALTAR, "Bind"), true);
+  assert.deepEqual(pure.dialogues, ["You have nothing suitable to bind."]);
+  assert.equal(amount(pure, ItemIdentifiers.BLOOD_RUNE), 0);
+  assert.equal(amount(pure, ItemIdentifiers.PURE_ESSENCE), 1);
+
+  const fragments = crafter(77, Array.from({ length: 10 }, () => [ItemIdentifiers.DARK_ESSENCE_FRAGMENTS, 1]));
+  craft(fragments, ObjectIdentifiers.BLOOD_ALTAR, "Bind");
+  assert.equal(amount(fragments, ItemIdentifiers.BLOOD_RUNE), 10, "one blood rune a fragment");
+  assert.equal(amount(fragments, ItemIdentifiers.DARK_ESSENCE_FRAGMENTS), 0);
+  assert.ok(Math.abs(fragments.xp[0] - 238) < 1e-9, "23.8 XP a fragment");
+
+  const low = crafter(76, [[ItemIdentifiers.DARK_ESSENCE_FRAGMENTS, 1]]);
+  craft(low, ObjectIdentifiers.BLOOD_ALTAR, "Bind");
+  assert.deepEqual(low.log, ["message You need a Runecrafting level of at least 77 to craft this."]);
 });

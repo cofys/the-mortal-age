@@ -16,7 +16,10 @@ TeleportHandler.checkReqs = (player, target, wildernessLevel) => {
   teleports.push({ target: [target.getX(), target.getY(), target.getZ()], wildernessLevel });
   return true;
 };
-TeleportHandler.teleport = (player, target, type, warning, onArrival) => onArrival?.();
+/** When set, arrivals wait here instead of landing at once (something can happen mid-teleport). */
+let pendingArrivals = null;
+TeleportHandler.teleport = (player, target, type, warning, onArrival) =>
+  (pendingArrivals ? pendingArrivals.push(onArrival) : onArrival?.());
 
 let prompts = [];
 let itemAction;
@@ -28,12 +31,24 @@ const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 const Jewellery = require("../plugins/items/Jewellery.plugin");
 const customEvents = [];
+/** Players the Colosseum plugin would say have the Hero title. */
+const colosseumHeroes = new Set();
+class DialogueChainBuilder {
+  add(dialogue) { this.dialogue = dialogue; return this; }
+}
+class StatementDialogue {
+  constructor(index, text) { this.text = text; }
+}
 Jewellery.register({
   getBonusManager: () => ({ update() {} }),
-  core: { ObjectIdentifiers, ItemIdentifiers },
+  core: { ObjectIdentifiers, ItemIdentifiers, DialogueChainBuilder, StatementDialogue },
   onItemAction: (handler) => { itemAction = handler; },
   onItemOnObject: (handler) => { itemOnObject = handler; },
-  emitCustomEvent: (name, payload) => customEvents.push([name, payload]),
+  onSpellCast() {},
+  emitCustomEvent: (name, payload) => {
+    customEvents.push([name, payload]);
+    if (name === "colosseum:has-rank" && payload.rank === "Hero") payload.reached = colosseumHeroes.has(payload.player);
+  },
   sendMultiChatboxPrompt: (player, title, ...pairs) => {
     const options = [];
     for (let i = 0; i < pairs.length; i += 2) options.push({ text: pairs[i], pick: pairs[i + 1] });
@@ -54,8 +69,11 @@ function container(capacity) {
 
 function createPlayer({ farming = 1 } = {}) {
   const messages = [];
+  const statements = [];
   return {
     messages,
+    statements,
+    getDialogueManager: () => ({ startDialogues: (chain) => statements.push(chain.dialogue.text) }),
     inventory: container(28),
     equipment: container(14),
     getInventory() { return this.inventory; },
@@ -90,6 +108,7 @@ function pick(text) {
 beforeEach(() => {
   teleports.length = 0;
   prompts = [];
+  pendingArrivals = null;
 });
 
 test("rubbing a glory offers its destinations and uses a charge on arrival", () => {
@@ -256,6 +275,9 @@ test("the ring of wealth's Rub submenu and worn options follow the cache's order
   const { ACTIONS } = require("../plugins/items/RingOfWealth.plugin");
   assert.deepEqual(ACTIONS.slice(0, 4).map((action) => action.teleport.label),
     ["Miscellania", "Grand Exchange", "Falador Park", "Dondakan"], "sub-op 2 is the Grand Exchange");
+  const landing = ACTIONS[1].teleport.destination;
+  assert.deepEqual([landing.getX(), landing.getY(), landing.getZ()], [3163, 3478, 0],
+    'land on the southern approach, clear of the bank');
   assert.deepEqual(ACTIONS.slice(4).map((action) => action.type), ["boss-log", "coin-collection"]);
 });
 
@@ -281,12 +303,197 @@ test("the slayer ring's Rub submenu is its actions: Check, Teleport, then Master
   assert.equal(teleports.length, before, "Master, Partner and Log don't teleport");
 });
 
-test("the ring of dueling's fourth destination is the Fortis Colosseum", () => {
+test("the ring of dueling's Fortis Colosseum teleport needs the Colosseum's Hero title", () => {
   const player = createPlayer();
   const ring = new Item(ItemIds.RING_OF_DUELING_8_, 1);
   player.inventory.setItem(0, ring);
+
+  // rsprox 723: "You rub the ring...", then this message box; no teleport, no charge.
   inventoryClick(player, ring, "Rub", { subOpId: 4 });
+  assert.equal(player.messages.at(-1), "You rub the ring...");
+  assert.deepEqual(player.statements,
+    ["This destination is unlocked by reaching <col=ff0000>Hero</col> status in the Fortis<br>Colosseum."]);
+  assert.equal(teleports.length, 0);
+  assert.equal(ring.getId(), ItemIds.RING_OF_DUELING_8_);
+
+  // rsprox 3238: Rub still lists it; picking it while locked is refused the same way.
+  inventoryClick(player, ring, "Rub");
+  assert.deepEqual(prompts.at(-1).options.map((entry) => entry.text),
+    ["Emir's Arena", "Castle Wars", "Ferox Enclave", "Fortis Colosseum", "Nowhere"]);
+  pick("Fortis Colosseum");
+  assert.equal(player.statements.length, 2);
+  assert.equal(teleports.length, 0);
+
+  colosseumHeroes.add(player);
+  try {
+    inventoryClick(player, ring, "Rub", { subOpId: 4 });
+  } finally {
+    colosseumHeroes.delete(player);
+  }
   assert.deepEqual(teleports.at(-1).target, [1793, 3107, 0]);
+  assert.equal(ring.getId(), ItemIds.RING_OF_DUELING_7_);
+});
+
+test("the Colosseum answers the Hero check from the player's best Glory", () => {
+  const Lobby = require("../plugins/minigames/colosseum/Lobby.Colosseum");
+  const Shared = require("../plugins/minigames/colosseum/Shared.Colosseum");
+  const attributes = new Map();
+  const player = { getAttribute: (key) => attributes.get(key) };
+  const ask = () => {
+    const request = { player, rank: "Hero", reached: false };
+    Lobby.answerHasRank(request);
+    return request.reached;
+  };
+  attributes.set(Shared.ATTR.GLORY, 11999);
+  assert.equal(ask(), false, "Gladiator is not yet Hero");
+  attributes.set(Shared.ATTR.GLORY, 12000);
+  assert.equal(ask(), true);
+  attributes.set(Shared.ATTR.GLORY, 20000);
+  assert.equal(ask(), true, "Grand Champion keeps the Hero unlock");
+});
+
+test("the slayer ring teleports up to level 30 Wilderness (Wiki)", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.SLAYER_RING_8_, 1);
+  player.inventory.setItem(0, ring);
+  inventoryClick(player, ring, "Rub", { subOpId: 2 });
+  pick("Slayer Tower");
+  assert.equal(teleports.at(-1).wildernessLevel, 30);
+});
+
+test("the charge is spent on arrival even if the piece was equipped mid-teleport", () => {
+  const player = createPlayer();
+  const glory = new Item(ItemIds.AMULET_OF_GLORY_4_, 1);
+  player.inventory.setItem(0, glory);
+  pendingArrivals = [];
+  inventoryClick(player, glory, "Rub");
+  pick("Edgeville");
+  assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY_4_, "nothing is spent before arrival");
+
+  // Equipping can move a copy of the item rather than the same object.
+  player.inventory.setItem(0, null);
+  const worn = new Item(ItemIds.AMULET_OF_GLORY_4_, 1);
+  player.equipment.setItem(Equipment.AMULET_SLOT, worn);
+  pendingArrivals.shift()();
+  assert.equal(worn.getId(), ItemIds.AMULET_OF_GLORY_3_);
+  assert.ok(player.messages.includes("<col=7f007f>Your amulet has three charges left.</col>"));
+});
+
+test("a piece gone before arrival spends nothing and says nothing", () => {
+  const player = createPlayer();
+  const necklace = new Item(ItemIds.GAMES_NECKLACE_3_, 1);
+  player.inventory.setItem(0, necklace);
+  pendingArrivals = [];
+  inventoryClick(player, necklace, "Rub");
+  pick("Burthorpe");
+  player.inventory.setItem(0, null);
+  const before = player.messages.length;
+  pendingArrivals.shift()();
+  assert.equal(player.messages.length, before);
+});
+
+test("two players' jewellery never shares charge state", () => {
+  const alice = createPlayer();
+  const bob = createPlayer();
+  const aliceGlory = new Item(ItemIds.AMULET_OF_GLORY_4_, 1);
+  const bobGlory = new Item(ItemIds.AMULET_OF_GLORY_4_, 1);
+  alice.inventory.setItem(0, aliceGlory);
+  bob.equipment.setItem(Equipment.AMULET_SLOT, bobGlory);
+  pendingArrivals = [];
+  inventoryClick(alice, aliceGlory, "Rub");
+  pick("Karamja");
+  // Alice's amulet leaves her mid-teleport; Bob's identical amulet must not pay for her trip.
+  alice.inventory.setItem(0, null);
+  pendingArrivals.shift()();
+  assert.equal(bobGlory.getId(), ItemIds.AMULET_OF_GLORY_4_);
+  assert.equal(bob.messages.length, 0);
+
+  equippedClick(bob, bobGlory, 2, "Edgeville");
+  pendingArrivals.shift()();
+  assert.equal(bobGlory.getId(), ItemIds.AMULET_OF_GLORY_3_);
+  assert.equal(aliceGlory.getId(), ItemIds.AMULET_OF_GLORY_4_);
+});
+
+test("banking and death keep jewellery's charge id", async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  await CachePipeline.initialize();
+  require("../plugins/items/ItemDefinitionLoader.plugin").register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
+  const { Inventory } = require("../dist/game/model/container/impl/Inventory");
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const { PlayerStatus } = require("../dist/game/model/PlayerStatus");
+  const { PlayerDeathTask } = require("../dist/game/task/impl/PlayerDeath");
+  const { Location } = require("../dist/game/model/Location");
+  const { PlayerRights } = require("../dist/game/model/rights/PlayerRights");
+
+  // Banking: the charge is the item id, so a deposit and withdrawal give back the same glory (3).
+  const sender = new Proxy({}, { get: () => () => sender });
+  const banker = {
+    getUsername: () => "banker", sendMessage() {}, isSearchingBank: () => false, getPacketSender: () => sender,
+    getStatus: () => PlayerStatus.BANKING, insertModeReturn: () => false, getInterfaceId: () => Bank.MAIN_INTERFACE_ID,
+    getCurrentBankTab: () => 0, setCurrentBankTab() {}, withdrawAsNote: () => false, isPlaceholders: () => false,
+    isPlayerBot: () => false, getBankCustomQuantity: () => 0, getBankQuantityMode: () => 0,
+  };
+  banker.inventory = new Inventory(banker).resetItems();
+  banker.banks = Array.from({ length: Bank.TOTAL_BANK_TABS }, () => new Bank(banker).resetItems());
+  banker.getInventory = () => banker.inventory;
+  banker.getBank = (tab = 0) => banker.banks[tab];
+  banker.setBank = (tab, bank) => { banker.banks[tab] = bank; };
+  banker.getInventory().add(new Item(ItemIds.AMULET_OF_GLORY_3_, 1), false);
+  Bank.deposit(banker, ItemIds.AMULET_OF_GLORY_3_, 0, 1, true);
+  assert.equal(banker.getBank(0).getAmount(ItemIds.AMULET_OF_GLORY_3_), 1);
+  Bank.withdraw(banker, ItemIds.AMULET_OF_GLORY_3_, 0, 1, 0);
+  assert.deepEqual(banker.getInventory().getValidItems().map((item) => item.getId()), [ItemIds.AMULET_OF_GLORY_3_]);
+
+  // Death: the kept jewellery is the same charged pieces.
+  const carried = [new Item(ItemIds.AMULET_OF_GLORY_3_, 1), new Item(ItemIds.RING_OF_DUELING_5_, 1),
+    new Item(ItemIds.SKILLS_NECKLACE_2_, 1)];
+  const victim = {
+    getInventory: () => ({ getItems: () => carried }), getEquipment: () => ({ getItems: () => [] }),
+    getSkullTimer: () => 0, getSkullType: () => 0, getPrayerActive: () => new Array(40).fill(false),
+    getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99 }),
+    getLocation: () => new Location(3090, 3490, 0), getRights: () => PlayerRights.NONE,
+  };
+  assert.deepEqual(PlayerDeathTask.getItemsToKeep(victim).map((item) => item.getId()).sort(),
+    carried.map((item) => item.getId()).sort());
+
+  // An imbued ring of wealth loses its imbue on death but keeps its three charges.
+  const { removeImbueOnDeath } = require("../plugins/items/RingOfWealth.plugin")._test;
+  const ring = new Item(20788, 1);
+  removeImbueOnDeath({ item: ring, killer: { getInventory: () => ({ forceAdd() {} }) } }, null);
+  assert.equal(ring.getId(), 11984, "ring of wealth (3)");
+});
+
+test("the ring of wealth spends its charge on arrival, from wherever the ring is", () => {
+  const RingOfWealth = require("../plugins/items/RingOfWealth.plugin");
+  const { teleport, TELEPORTS } = RingOfWealth._test;
+  const player = createPlayer();
+  const other = createPlayer();
+  const ring = new Item(11984, 1);
+  const othersRing = new Item(11984, 1);
+  player.inventory.setItem(0, ring);
+  other.equipment.setItem(Equipment.RING_SLOT, othersRing);
+  pendingArrivals = [];
+  teleport(player, { interfaceId: 149, slot: 0 }, ring, TELEPORTS[0].destination);
+  assert.equal(ring.getId(), 11984, "nothing is spent before arrival");
+
+  player.inventory.setItem(0, null);
+  const worn = new Item(11984, 1);
+  player.equipment.setItem(Equipment.RING_SLOT, worn);
+  pendingArrivals.shift()();
+  assert.equal(worn.getId(), 11986, "ring of wealth (2)");
+  assert.equal(othersRing.getId(), 11984, "another player's ring is untouched");
+
+  TeleportHandler.checkReqs = () => false;
+  try {
+    teleport(player, { interfaceId: Equipment.INVENTORY_INTERFACE_ID, slot: Equipment.RING_SLOT }, worn, TELEPORTS[0].destination);
+  } finally {
+    TeleportHandler.checkReqs = (p, target, wildernessLevel) => {
+      teleports.push({ target: [target.getX(), target.getY(), target.getZ()], wildernessLevel });
+      return true;
+    };
+  }
+  assert.equal(pendingArrivals.length, 0);
+  assert.equal(worn.getId(), 11986, "a refused teleport keeps the charge");
 });
 
 function useOnObject(player, item, objectId) {

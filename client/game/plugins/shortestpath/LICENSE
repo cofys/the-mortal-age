@@ -1,0 +1,42 @@
+This directory is a TypeScript port of Shortest Path, a RuneLite plugin hub plugin by Skretzo and
+contributors: https://github.com/Skretzo/shortest-path, release v1.22.5
+(commit 142e73e2a5f840bb16e227e564a036156f4cfc77). Its transport TSVs and item-variations.tsv are
+copied unchanged into client/public/shortestpath/. It is distributed under the BSD 2-Clause
+licence below, as upstream's LICENSE file gives it.
+
+server/scripts/export-collision-map.cjs keeps the door exclusions and the door and floor rules of
+CollisionMapDumper.java from https://github.com/osrs-pathfinding/shortest-path-tooling
+(commit 92bf3c26ee3d21cb7ecbca69ba8420a6ae146a61), Copyright (c) 2016-2017, Adam
+<Adam@sigterm.info> and Copyright (c) 2022, Skretzo <https://github.com/Skretzo>, under the same
+BSD 2-Clause licence.
+
+quests.ts is RuneLite's Quest enum (runelite-parent-1.13.3), Copyright (c) 2019 Abex, under the
+same BSD 2-Clause licence.
+
+--------------------------------------------------------------------------------------------------
+
+BSD 2-Clause License
+
+Copyright (c) <YEAR>, <COPYRIGHT HOLDER>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

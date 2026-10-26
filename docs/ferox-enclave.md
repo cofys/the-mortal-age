@@ -20,11 +20,11 @@ All object ids and tiles are checked against this cache.
   - **On the choice, or straight away:** `busy` = 1; you face the way through; animation 4282 (`sos_security_door_drag`) and sound 4193 (2 loops, delay 30).
   - **A tick later:** a one-tile teleport through, `busy` = 0, and the animation is reset.
 - **Teleblocked:** a teleblocked player can't come in: "A magical force prevents you from entering the Ferox Enclave while teleblocked." (our wording, kept from before).
-- **Varbits:** 6549 (`pvp_adjacent_area_client`) is 1 inside the town, and 10530 (`wildy_hub_buffer`) is 1 in the buffer by the barriers. Both are kept up to date every tick near Ferox.
+- **Varbits:** 6549 (`pvp_adjacent_area_client`) is 1 inside the town, and 10530 (`wildy_hub_buffer`) is 1 in the buffer by the barriers. Both are kept up to date by the local Ferox Area and cleared when the player leaves, including teleports, floor changes and direct entry into another area.
 - **Not like OSRS:** in OSRS the buffer counts as Wilderness (varbit 5963 = 1). Here the Wilderness plugin counts it as safe ground, as before, so 5963 stays 0 there. Attacks there are still only allowed when someone is teleblocked.
 
 ## Safe ground
-Players can't attack each other inside the town or in its buffer, unless one of them is teleblocked (Wiki). This was already in LootKeys and moved here unchanged.
+Players can't attack each other inside the town or in its buffer, unless one of them is teleblocked (Wiki). This was already in LootKeys and moved here unchanged. The safety veto now belongs to the local Ferox Area, covering the town and its barrier buffer. The Area delegates its surrounding PvP ground and UI to the Wilderness rules; the teleblock exception removes only the Ferox veto and does not bypass those rules.
 
 ## Pools of Refreshment
 - **Captured:** animation 7305 (`poh_pool_drink`), "You feel reinvigorated after drinking from the pool.", varp 456 = −1 (disease), and `busy` from the next tick.

@@ -52,7 +52,14 @@ function getLocPlaneCullLevel(
 const DOOR_NAME_KEYWORDS = ["door", "gate", "trapdoor", "portcullis", "grill"];
 const DOOR_ACTION_KEYWORDS = ["open", "close", "unlock", "lock"];
 
+/**
+ * Whether a loc is drawn in a square's door geometry, which a door-only reload rebuilds on its
+ * own. Locs whose type loops an animation are drawn with the animated locs instead, as OSRS
+ * animates every loc with a sequence: the house portal (its Lock option), Light doors and
+ * Hot vent doors stood still in the door geometry.
+ */
 export function isDoorLocType(locType: LocType): boolean {
+    if (locType.seqId !== -1) return false;
     // Quick string-based heuristics that cover doors, gates, trapdoors, portcullis, etc.
     const name = locType.name?.toLowerCase?.() ?? "";
     let hasDoorName = false;

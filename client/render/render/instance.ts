@@ -261,11 +261,17 @@ export async function doInstanceSceneBuild(host: WebGLOsrsRendererHost,
             extraLocs,
         };
 
-        const mapData = await host.osrsClient.workerPool.queueLoad<
-            SdMapLoaderInput,
-            SdMapData | undefined,
-            SdMapDataLoader
-        >(host.dataLoader, input);
+        let mapData: SdMapData | undefined;
+        host.instanceBuildsInFlight++;
+        try {
+            mapData = await host.osrsClient.workerPool.queueLoad<
+                SdMapLoaderInput,
+                SdMapData | undefined,
+                SdMapDataLoader
+            >(host.dataLoader, input);
+        } finally {
+            host.instanceBuildsInFlight--;
+        }
 
         if (build !== host.instanceBuildSeq || !host.instanceActive) return;
 
@@ -369,6 +375,31 @@ export function scheduleInstanceLocRebuild(host: WebGLOsrsRendererHost, ): void 
             );
         }, 100);
     
+}
+
+/**
+ * A loc change in the instance. One that only touches doors, or only other locs, rebuilds just
+ * that geometry of the drawn scene, as a map square does (scheduleLocGeometryUpdate): rebuilding
+ * the whole scene made a house door open a second after its click. Anything else, or a change
+ * while a whole-scene build is still on its way, rebuilds the scene.
+ */
+export function scheduleInstanceLocUpdate(
+    host: WebGLOsrsRendererHost,
+    group: "loc" | "door" | "full",
+): void {
+    const scene = host.instanceSceneMap;
+    if (
+        group === "full" ||
+        !scene ||
+        !host.mapManager.getMap(scene.mapX, scene.mapY) ||
+        host.instanceLocRebuildTimer !== null ||
+        host.pendingInstanceScene !== null ||
+        host.instanceBuildsInFlight > 0
+    ) {
+        host.scheduleInstanceLocRebuild();
+        return;
+    }
+    host.scheduleLocGeometryUpdate(scene.mapX, scene.mapY, group);
 }
 
 export function clearInstance(host: WebGLOsrsRendererHost, ): void {

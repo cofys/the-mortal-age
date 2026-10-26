@@ -11,39 +11,26 @@
 const PLAIN_SKULLS = 21;
 const GOLDEN_SKULLS = 28;
 const TIER_LIMITS = [200_000, 800_000, 2_000_000, 8_000_000];
-const KEPT_UNSKULLED = 3;
 // ponytail: a sweep every 2 ticks over crater players; hook inventory/equipment changes if it shows up in ::pluginperf.
 const SWEEP_TICKS = 2;
 
 let core;
 let bh;
-let pluginApi;
 const inCrater = new Set();
 
-/** Coins lost on death: tradeables minus the most valuable kept items (ItemsKeptOnDeath's rules). */
+/**
+ * Coins lost on death: the tradeables a death would drop (PlayerDeathTask.getItemsToKeep picks the
+ * kept ones), priced like the Items Kept on Death guide risk value (PlayerDeathTask.keepValue).
+ */
 function riskOf(player) {
-  const items = [];
-  for (const item of [...player.getInventory().getItems(), ...player.getEquipment().getItems()]) {
-    if (!item || item.getId() <= 0 || item.getAmount() <= 0 || !item.isTradeable()) continue;
-    if (pluginApi.emitShouldKeepItemOnDeath(player, item) === true) continue;
-    items.push({ value: Math.max(0, Number(item.getDefinition().getValue()) || 0), amount: item.getAmount() });
-  }
-  items.sort((a, b) => b.value - a.value);
-  let keep = keptOnDeath(player);
+  const { PlayerDeathTask } = core;
+  const kept = new Set(PlayerDeathTask.getItemsToKeep(player));
   let risk = 0;
-  for (const { value, amount } of items) {
-    const kept = Math.min(keep, amount);
-    keep -= kept;
-    risk += value * (amount - kept);
+  for (const item of [...player.getInventory().getItems(), ...player.getEquipment().getItems()]) {
+    if (!item || item.getId() <= 0 || item.getAmount() <= 0 || kept.has(item) || !item.isTradeable()) continue;
+    risk += Math.max(0, Number(PlayerDeathTask.keepValue(item)) || 0) * item.getAmount();
   }
   return Math.min(risk, Number.MAX_SAFE_INTEGER);
-}
-
-function keptOnDeath(player) {
-  const skulled = player.isSkulled();
-  if (skulled && player.getSkullType() === core.SkullType.RED_SKULL) return 0;
-  const prayers = pluginApi.getPrayerHandler();
-  return (skulled ? 0 : KEPT_UNSKULLED) + (prayers.isActivated(player, prayers.PROTECT_ITEM) ? 1 : 0);
 }
 
 function skullIcon(risk, skulled) {
@@ -94,11 +81,10 @@ function startSweep() {
 
 module.exports = function attachRiskSkulls(api, state) {
   core = api.core;
-  pluginApi = api;
   bh = state;
   api.onPlayerLogout(forget);
   api.onServerStartup(startSweep);
   api.onCustomEvent("bounty-hunter:risk", answerRisk);
 };
 
-Object.assign(module.exports, { _test: { riskOf, skullIcon, keptOnDeath, sweep, inCrater } });
+Object.assign(module.exports, { _test: { riskOf, skullIcon, sweep, inCrater } });

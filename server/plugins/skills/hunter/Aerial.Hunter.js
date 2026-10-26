@@ -76,7 +76,7 @@ function fish({ player, npc, npcId }) {
     }
     xp(player, def.hunterXp, "aerial-fishing", npcId);
     player.getSkillManager().addExperiences(H.core.Skill.FISHING, def.fishingXp);
-    H.api.emitCustomEvent("fishing:success", { player, skill: H.core.Skill.FISHING, petBase: 636833 });
+    H.api.emitCustomEvent("fishing:success", { player, skill: H.core.Skill.FISHING, petBase: 636833, itemId: fish });
   });
   if (started) {
     player.getPacketSender().sendGraphic(new H.core.Graphic(1631), player.getLocation());

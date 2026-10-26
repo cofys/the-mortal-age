@@ -15,6 +15,8 @@ type CachedTrack = {
     unlockBit?: number;
     autoUnlock: boolean;
     parentRowId?: number;
+    /** The in-game unlock hint, column 2: "in Varrock.", "during the Dragon Slayer II quest.". */
+    unlockHint?: string;
 };
 
 const MUSIC_DATA: MusicData = (() => {
@@ -43,6 +45,7 @@ export class Music {
             if (slot.length < 2 && parentRowId >= 0) {
                 slot = rowsById.get(parentRowId)?.column(5) ?? [];
             }
+            const unlockHint = row.string(2);
             return [{
                 rowId: row.id,
                 id,
@@ -50,6 +53,7 @@ export class Music {
                 ...(slot.length >= 2 ? { unlockBank: Number(slot[0]), unlockBit: Number(slot[1]) } : {}),
                 autoUnlock: row.int(6) === 1,
                 ...(parentRowId >= 0 ? { parentRowId } : {}),
+                ...(unlockHint ? { unlockHint } : {}),
             }];
         });
     }

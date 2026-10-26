@@ -53,7 +53,7 @@
     "gwdSide": [2883, 5280, 2],
     "altarExit": [2897, 5203, 0],
     "essenceRequired": 40,
-    "itemKeywords": ["ancient ", "zaryte ", "torva ", "virtus ", " of darkness", "ring of endurance"]
+    "itemKeywords": ["ancient ", "zaryte ", "torva ", "virtus ", " of darkness"]
   },
   "chamber": {
     "box": { "minX": 2910, "maxX": 2940, "minY": 5188, "maxY": 5218, "z": 0 },

@@ -200,6 +200,26 @@ class DarkLureSpell extends CombatArceuusEffectSpell {
     }
 }
 
+const TELE_BLOCK_HIT = 1299;
+const TELE_BLOCK_FAIL = 1300;
+
+/**
+ * Tele Block's projectile shows whether it lands (Wiki: since 25 February 2016): teleport_reverse, a
+ * purple sphere, when it hits, as in rsprox captures, and the old tele_block_travel_forfail when it
+ * fails. The hit is rolled after the cast starts, so the projectile goes out with the roll, that tick.
+ */
+class TeleBlockSpell extends CombatEffectSpell {
+    public castProjectile(): Projectile {
+        return null;
+    }
+
+    public onHitCalc(hit: PendingHit): void {
+        super.onHitCalc(hit);
+        const projectile = hit.isAccurate() ? TELE_BLOCK_HIT : TELE_BLOCK_FAIL;
+        Projectile.createProjectile(hit.getAttacker(), hit.getTarget(), projectile, 0, 20, 43, 31).sendProjectile();
+    }
+}
+
 const ARCEUUS_MARK_UNTIL = "arceuus:mark-until";
 
 const hasArceuusMark = (target: Mobile): boolean =>
@@ -941,7 +961,7 @@ export class CombatSpells {
             return 19;
         },
         startGraphic() {
-            return new Graphic(327, 6553600);
+            return null; // None live; 327 is the Slayer salt sprinkle.
         },
         baseExperience() {
             return 30;
@@ -1558,7 +1578,7 @@ export class CombatSpells {
             return Projectile.createProjectile(cast, castOn, 174, 0, 20, 43, 31);
         },
         endGraphic() {
-            return new Graphic(107);
+            return new Graphic(80, GraphicHeight.HIGH); // Live, a Stun that lands shows stunned; 107 is Weaken's impact.
         },
         startGraphic() {
             return new Graphic(173, 6553600);
@@ -1577,13 +1597,12 @@ export class CombatSpells {
         }
     });
 
-    public static TELEBLOCK = new CombatEffectSpell({
+    public static TELEBLOCK = new TeleBlockSpell({
         castAnimation: function () {
             return new Animation(1819);
         },
-        castProjectile: function (cast, castOn) {
-            return Projectile.createProjectile(cast, castOn, 344, 0, 20, 43, 31);
-        },
+        // TeleBlockSpell sends it once the hit is rolled; 344 was the ballista special.
+        castProjectile: () => null,
         spellEffect: function (cast, castOn) {
             if (castOn.isPlayer()) {
                 let player = castOn as Player;
@@ -1696,7 +1715,7 @@ export class CombatSpells {
     public static ICE_RUSH = new CombatAncientSpellExtend(
         () => { return new Animation(1978); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(8 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(8 * multiplier), null, cast, "ice"); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 360, 0, 20, 43, 31); },
         () => { return new Graphic(361); },
@@ -1776,7 +1795,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(16 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(16 * multiplier), null, cast, "ice"); },
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(363) },
@@ -1858,7 +1877,7 @@ export class CombatSpells {
 
         () => { return new Animation(1978); },
         () => { return new Graphic(366, 6553600); },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(24 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(24 * multiplier), null, cast, "ice"); },
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(367) },
@@ -1936,7 +1955,7 @@ export class CombatSpells {
 
         () => { return new Animation(1979); },
         () => { return null; },
-        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(32 * multiplier)); },
+        (cast: Mobile, castOn: Mobile, damage: number, multiplier: number) => { getCombatFactory().freezeTicks(castOn, Math.floor(32 * multiplier), null, cast, "ice"); },
         () => { return 1; },
         (cast: Mobile, castOn: Mobile) => { return null; },
         () => { return new Graphic(369) },

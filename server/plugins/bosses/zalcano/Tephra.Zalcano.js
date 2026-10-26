@@ -10,6 +10,8 @@
  * - once she has fallen, mine her: up to 30-33 by Mining level, +1 a dragon pickaxe, +2 crystal,
  *   35.2 Mining XP a hit.
  * Each player has one action at a time, driven by the prison's tick and dropped when they move.
+ * The messages, the throw and mining animations and the blue symbol's spotanim are recorded
+ * (rsprox 4057, 1073-1075; zalcano.json `messages`).
  */
 const Common = require("./Common.Zalcano");
 
@@ -37,6 +39,15 @@ function begin(player, kind, extra = {}) {
   actions.set(player, { kind, from: player.getLocation(), next: 0, ...extra });
 }
 
+/** The recorded Zalcano mining animation for a pickaxe (human_mining_zalcano_<pickaxe>), else its usual one. */
+function miningAnimation(pickaxe) {
+  const { CacheDefinitions, Animation } = Common.core;
+  const name = CacheDefinitions.getObjNames?.().get(pickaxe?.id);
+  const seq = name ? CacheDefinitions.getSeqId(`human_mining_zalcano_${name}`) : null;
+  if (seq !== null && seq !== undefined) return new Animation(seq);
+  return pickaxe?.animation ?? new Animation(624);
+}
+
 function stop(player) {
   if (!actions.delete(player)) return;
   player.performAnimation?.(Common.core.Animation.DEFAULT_RESET_ANIMATION);
@@ -56,6 +67,7 @@ function mineRock(prison, { player, objectId }) {
     return true;
   }
   begin(player, "rock");
+  Common.spam(player, Common.message("swingRock"));
   return true;
 }
 
@@ -87,6 +99,7 @@ function mineZalcano(prison, { player, npc }) {
     return true;
   }
   begin(player, "zalcano");
+  Common.spam(player, Common.message("swingZalcano"));
   return true;
 }
 
@@ -115,8 +128,8 @@ function tickActions(prison, players, random = Math.random) {
     }
     if (tick < action.next) continue;
     if (action.kind === "rock") tickRock(prison, player, action, random);
-    else if (action.kind === "refine") tickConvert(player, action, "tephra", "refined", "SMITHING", Common.data.tephra.refineXp, Common.ids.seqs.refine);
-    else if (action.kind === "imbue") tickConvert(player, action, "refined", "imbued", "RUNECRAFTING", Common.data.tephra.imbueXp, Common.ids.seqs.imbue);
+    else if (action.kind === "refine") tickConvert(player, action, "tephra", "refined", "SMITHING", Common.data.tephra.refineXp, Common.ids.seqs.refine, "refined");
+    else if (action.kind === "imbue") tickConvert(player, action, "refined", "imbued", "RUNECRAFTING", Common.data.tephra.imbueXp, Common.ids.seqs.imbue, "imbued");
     else if (action.kind === "zalcano") tickMineZalcano(prison, player, action);
   }
 }
@@ -126,20 +139,30 @@ function tickRock(prison, player, action, random) {
   const pickaxe = bestPickaxe(player);
   const rock = rockBeside(prison, player);
   if (!pickaxe || !rock || fightOf(prison)?.phase === "dead") { stop(player); return; }
-  player.performAnimation(pickaxe.animation ?? new Common.core.Animation(624));
+  const inventory = player.getInventory();
+  if (inventory.getFreeSlots() <= 0) {
+    stop(player);
+    Common.box(player, Common.message("full"));
+    return;
+  }
+  player.performAnimation(miningAnimation(pickaxe));
   action.next = prison.tickCount + (pickaxe.attemptIntervalTicks ?? 3);
   if (random() >= (rock.glowing ? tephra.glowingChance : tephra.rockChance)) return;
-  const inventory = player.getInventory();
   let ore = rock.glowing && random() < tephra.glowingExtra ? 2 : 1;
   while (ore-- > 0 && inventory.getFreeSlots() > 0) {
     inventory.adds(Common.ids.items.tephra, 1);
     addXp(player, "MINING", tephra.miningXp);
   }
-  if (random() < 1 / tephra.shardChance) inventory.adds(Common.ids.items.crystalShard, Common.randomInt(1, 3));
-  if (inventory.getFreeSlots() === 0) stop(player);
+  Common.spam(player, Common.message("mined"));
+  // Recorded: the full-pack box comes the tick after the ore that filled it.
+  if (inventory.getFreeSlots() <= 0) action.next = prison.tickCount + 1;
+  if (random() < 1 / tephra.shardChance) {
+    inventory.adds(Common.ids.items.crystalShard, Common.randomInt(1, 3));
+    player.sendMessage(Common.message("shard"));
+  }
 }
 
-function tickConvert(player, action, fromKey, toKey, skill, xp, seq) {
+function tickConvert(player, action, fromKey, toKey, skill, xp, seq, messageKey) {
   const { items } = Common.ids;
   const inventory = player.getInventory();
   if (!inventory.contains(items[fromKey])) { stop(player); return; }
@@ -147,6 +170,7 @@ function tickConvert(player, action, fromKey, toKey, skill, xp, seq) {
   inventory.adds(items[toKey], 1);
   addXp(player, skill, xp);
   player.performAnimation(new Common.core.Animation(seq));
+  Common.spam(player, Common.message(messageKey));
   action.next = 0;
 }
 
@@ -161,11 +185,17 @@ function tickMineZalcano(prison, player, action) {
   const fight = fightOf(prison);
   const pickaxe = bestPickaxe(player);
   if (!fight || fight.phase !== "down" || fight.finished() || !pickaxe) { stop(player); return; }
-  player.performAnimation(pickaxe.animation ?? new Common.core.Animation(624));
+  player.performAnimation(miningAnimation(pickaxe));
   action.next = prison.tickCount + (pickaxe.attemptIntervalTicks ?? 3);
+  // Recorded: the first swing only swings; each later one chips, her hit landing a tick after.
+  if (!action.swung) {
+    action.swung = true;
+    return;
+  }
+  Common.spam(player, Common.message("chipped"));
   const damage = Common.randomInt(1, miningMaxHit(level(player, "MINING"), pickaxe));
   const { PendingHit, CombatFactory } = Common.core;
-  CombatFactory.addPendingHit(new PendingHit(player, fight.npc, miningMethod(), { delay: 0, damage, experience: false, rollAccuracy: false }));
+  CombatFactory.addPendingHit(new PendingHit(player, fight.npc, miningMethod(), { delay: 1, damage, experience: false, rollAccuracy: false }));
   addXp(player, "MINING", Common.data.mining.xp);
 }
 
@@ -231,6 +261,8 @@ function defineMethods() {
       const player = character.getAsPlayer();
       this.empowered = player.__zalPrison?.fight?.empowered(player) === true;
       spendImbued(player);
+      player.performAnimation(new Common.core.Animation(Common.ids.seqs.throw));
+      if (imbuedCount(player) === 0) player.sendMessage(Common.message("lastOne"));
       const distance = Common.distanceToNpc(player.getLocation(), target);
       this.delay = 1 + Math.floor((3 + distance) / 6);
       new Projectile(player.getLocation(), target.getLocation().transform(1, 1), target, Common.ids.spotanims.oreThrow, 30, this.delay * 30, 40, 31, null).sendProjectile();

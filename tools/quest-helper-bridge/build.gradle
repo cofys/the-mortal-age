@@ -1,0 +1,56 @@
+plugins { id 'java'; id 'application' }
+repositories {
+  maven { url = 'https://repo.runelite.net'; content { includeGroupByRegex('net\\.runelite.*') } }
+  mavenCentral()
+}
+def runeLiteVersion = providers.gradleProperty('runeLiteVersion').get()
+// A checkout of Zoinkwiz/quest-helper at the pinned commit (see README.md).
+def questHelperSource = providers.gradleProperty('questHelperSource').orElse(providers.environmentVariable('QUEST_HELPER_SOURCE')).getOrElse('quest-helper-upstream')
+dependencyLocking { lockAllConfigurations() }
+dependencies {
+  implementation "net.runelite:client:${runeLiteVersion}"
+  compileOnly 'org.projectlombok:lombok:1.18.30'
+  annotationProcessor 'org.projectlombok:lombok:1.18.30'
+  implementation 'org.jetbrains:annotations:23.0.0'
+  testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
+  implementation 'org.mockito:mockito-core:5.17.0'
+}
+sourceSets.main.java.srcDir("${questHelperSource}/src/main/java")
+sourceSets.main.resources.srcDir("${questHelperSource}/src/main/resources")
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release.set(21) }
+test { useJUnitPlatform(); systemProperty 'java.awt.headless', 'true'; maxHeapSize = '2g'; testLogging { events 'failed'; showStandardStreams = true } }
+application { mainClass = 'local.questbridge.BridgeServer'; applicationDefaultJvmArgs = ['-Djava.awt.headless=true'] }
+tasks.register('verifyPinnedSource') {
+ doLast {
+  def output = new ByteArrayOutputStream()
+  exec { commandLine 'git', '-C', questHelperSource, 'rev-parse', 'HEAD'; standardOutput = output }
+  if (output.toString().trim() != '06da90f982518a093f2fe1c9cfac5547fa7053d3') throw new GradleException('Upstream Quest Helper revision does not match the pinned source')
+  exec { commandLine 'git', '-C', questHelperSource, 'diff', '--exit-code', '--', 'src/main' }
+ }
+}
+tasks.named('compileJava') { dependsOn 'verifyPinnedSource' }
+tasks.register('sourceNotices') {
+ outputs.file(layout.buildDirectory.file('notices/UPSTREAM-SOURCE-NOTICES.txt'))
+ doLast {
+  def notices = new LinkedHashSet<String>()
+  fileTree("${questHelperSource}/src/main").matching { include '**/*.java' }.files.sort().each { source ->
+   def text = source.getText('UTF-8')
+   if (text.startsWith('/*')) notices.add(text.substring(0, text.indexOf('*/') + 2))
+  }
+  def target = layout.buildDirectory.file('notices/UPSTREAM-SOURCE-NOTICES.txt').get().asFile
+  target.parentFile.mkdirs()
+  target.text = 'Quest Helper source commit06da90f982518a093f2fe1c9cfac5547fa7053d3\n\n' + notices.join('\n\n')
+ }
+}
+distributions { main { contents { from('UPSTREAM-LICENSE'); from('README.md'); from('src/main/resources/catalog.json') { into 'provenance' }; from(tasks.named('sourceNotices')) { into 'licenses' } } } }
+tasks.register('pinRuntime') { doLast { file('resolved-runtime.txt').text = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.sort { it.moduleVersion.id.toString() }.collect { "${it.moduleVersion.id} ${it.file.name}" }.join('\n') } }
+dependencies { implementation 'com.google.code.gson:gson:2.11.0' }
+configurations { javaFormatter }
+dependencies { javaFormatter('com.google.googlejavaformat:google-java-format:1.24.0:all-deps') { transitive = false } }
+tasks.register('formatBridge', Exec) {
+ doFirst {
+  commandLine "${System.getProperty('java.home')}/bin/java", '-jar', configurations.javaFormatter.singleFile, '--replace'
+  args fileTree('src').matching { include '**/*.java' }.files.sort().collect { it.absolutePath }
+ }
+}
+

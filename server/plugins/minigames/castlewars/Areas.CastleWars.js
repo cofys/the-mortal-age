@@ -255,23 +255,16 @@ function respawnInStartRoom(event) {
     return;
   }
   game.dropCarriedFlag(player);
+  game.clearCastleWarsItems(player, data.DEATH_REMOVE_ITEM_IDS);
   game.resetIdleTicks(player);
   player.smartMoves(game.getTeamData(teamId).respawnBounds);
   event.handled = true;
 }
 
-/** Game items vanish on death instead of dropping; a carried banner falls as the flag. */
-function keepGameItemsOffTheFloor(event) {
-  const player = event?.player;
-  const itemId = event?.item?.getId?.();
-  if (!player || !itemId || !game.castleWarsAreas.has(player.getArea()) || !data.DEATH_REMOVE_ITEM_IDS.has(itemId)) {
-    return;
+function keepItemsOnDeath(event) {
+  if (game.castleWarsAreas.has(event.player?.getArea?.())) {
+    event.shouldDrop = false;
   }
-  const { SARADOMIN_BANNER, ZAMORAK_BANNER } = core.ItemIdentifiers;
-  if (itemId === SARADOMIN_BANNER || itemId === ZAMORAK_BANNER) {
-    game.dropCarriedFlag(player);
-  }
-  event.handled = true;
 }
 
 function allowBountyHunterWeapons(event) {
@@ -289,5 +282,5 @@ module.exports = function attachCastleWarsAreas(api, castleWars) {
   api.onCanEquip(protectTeamColours);
   api.onCanUnequip(protectTeamColours);
   api.onPlayerDeath(respawnInStartRoom);
-  api.onPlayerDeathItemDrop(keepGameItemsOffTheFloor);
+  api.onShouldDropItemsOnDeath(keepItemsOnDeath);
 };

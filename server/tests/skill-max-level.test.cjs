@@ -91,12 +91,14 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
       getPrivateArea: () => area, setArea(a) {area=a;}, getWildernessLevel: () => 0,
       getLocation: () => location, moveTo(p) { location = p; },
       getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-      getPacketSender: () => ({ sendConfig: (id, value) => configs.set(id, value), sendVarbit: (id,value) => configs.set(id,value), sendProjectile() {}, sendGraphic() {} }),
+      getPacketSender: () => ({ sendConfig: (id, value) => configs.set(id, value), sendVarbit: (id,value) => configs.set(id,value), sendProjectile() {}, sendGraphic() {}, sendSound() {} }),
       getCombat: () => ({ getTarget: () => null, getAttacker: () => null, getHitQueue: () => ({ addPendingDamage() {} }) }),
       getPrayerActive: () => ({}),
       getMovementQueue: () => ({ canWalk: () => false, reset() {} }),
       getForceMovement: () => force, setForceMovement(f) {force=f;}, getUpdateFlag: () => ({flag(){}}), getRunEnergy: () => 50, setRunEnergy() {},
-      performAnimation() {}, sendMessage() {},
+      performAnimation(a) { this.animations.push(a.getId()); }, sendMessage(text) { this.messages.push(text); },
+      animations: [], messages: [], statements: [],
+      getDialogueManager() { const statements = this.statements; return { startDialogues(chain) { statements.push(chain); } }; },
     };
   }
   const p = player(), stranger = player();
@@ -183,31 +185,86 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     p.counts.clear(); Math.random = () => 0;
 
     const [baseId] = Houses.bases.keys(), houseObject = new core.GameObject(baseId, p.getLocation().clone(), 10, 0, null);
+    const varp = () => p.configs.get(Houses.bases.get(baseId).transformVarp);
+    const statementText = () => [...p.statements.at(-1).dialogues.values()].map(d => d.text).join("\n");
     p.counts.set(I.BIRD_HOUSE, 1); p.counts.set(I.HAMMERSTONE_SEED, 10);
-    Houses.use({ player: p, object: houseObject, objectId: baseId, itemId: I.BIRD_HOUSE }); advance(2);
+    Houses.use({ player: p, object: houseObject, objectId: baseId, itemId: I.BIRD_HOUSE });
+    assert.equal(p.counts.has(I.BIRD_HOUSE), false, "a carried birdhouse is placed on the arrival tick");
+    assert.equal(varp(), 1); assert.equal(p.animations.at(-1), 827, "human_pickupfloor");
+    // Seeds only reports the seed level (captures 545, 1863, 1875).
     Houses.seeds({ player: p, object: houseObject });
+    assert.equal(p.counts.get(I.HAMMERSTONE_SEED), 10, "Seeds does not take seeds");
+    assert.match(statementText(), /seed level is: 0\/10/);
+    Houses.use({ player: p, object: houseObject, objectId: baseId, itemId: I.HAMMERSTONE_SEED });
     const state = p.attrs.get(Houses.ATTRIBUTE)[baseId];
-    assert.equal(state.seeds, 10); assert.equal(Houses.status(state), 1);
+    assert.equal(state.seeds, 10); assert.equal(p.counts.has(I.HAMMERSTONE_SEED), false);
+    assert.equal(Houses.status(state), 2); assert.equal(varp(), 3, "full of seed shows the Empty/Reset variant at once (varp 22->24 live)");
+    assert.match(statementText(), /now full of seed and will start to catch birds/);
+    Houses.seeds({ player: p, object: houseObject });
+    assert.match(statementText(), /set and consuming seed\. Seed level is: 10\/10/);
+    state.filled = Date.now() - Houses.DURATION * 0.75;
+    assert.equal(Houses.seedLevel(state), 3, "a seed per bird, a bird per tenth of the wait");
+    state.filled = Date.now();
     Houses.empty({ player: p, object: houseObject }); advance(2);
     assert.equal(p.attrs.get(Houses.ATTRIBUTE)[baseId], state, "timer cannot be bypassed");
     state.filled = Date.now() - Houses.DURATION;
     const restored = JSON.parse(JSON.stringify(p.attrs.get(Houses.ATTRIBUTE)));
     p.attrs.set(Houses.ATTRIBUTE, restored); Houses.login({ player: p });
-    assert.equal(p.configs.get(Houses.bases.get(baseId).transformVarp), 3);
-    const beforeXp = p.experience.get(Skill.HUNTER);
-    Houses.empty({ player: p, object: houseObject }); advance(2);
+    assert.equal(varp(), 3);
+    const beforeXp = p.experience.get(Skill.HUNTER), dropsBefore = drops.length;
+    Houses.empty({ player: p, object: houseObject });
+    assert.equal(p.counts.has(I.CLOCKWORK), false, "the empty lands a tick after arrival");
+    advance(1);
     assert.equal(p.experience.get(Skill.HUNTER) - beforeXp, 112);
     assert.equal(p.counts.get(I.CLOCKWORK), 1);
+    assert.equal(p.counts.has(I.RAW_BIRD_MEAT), false, "raw bird meat never goes to the inventory");
+    const meat = drops.slice(dropsBefore).filter(args => args[1].getId() === I.RAW_BIRD_MEAT);
+    assert.equal(meat.length, 10, "ten raw bird meat on the floor");
+    assert.ok([30, 40, 50, 60].includes(p.counts.get(I.FEATHER)));
+    assert.equal(varp(), 0);
+    assert.match(p.messages.at(-1), /^You dismantle and discard the trap, retrieving (a nest|\d+ nests), 10 dead birds, \d0 feathers and 112 Hunter XP\.$/);
     Houses.empty({ player: p, object: houseObject }); advance(2);
     assert.equal(p.counts.get(I.CLOCKWORK), 1, "birdhouse loot only collected once");
+    // Feathers are always 30, 40, 50 or 60 (Wiki); the old roll gave anything from 30 to 100.
+    const feathers = new Set();
+    for (const r of [0, 0.3, 0.6, 0.99]) { Math.random = () => r; feathers.add(Houses.loot(p, { tier: 0 }).find(([id]) => id === I.FEATHER)[1]); }
+    Math.random = () => 0;
+    assert.deepEqual([...feathers].sort((a, b) => a - b), [30, 40, 50, 60]);
+    // Wiki Bird house trapping/Seeds: these take ten to fill; only herb seeds from ranarr up and wildblood take five.
+    for (const seed of [I.WATERMELON_SEED, I.SNAPE_GRASS_SEED, I.WHITEBERRY_SEED, I.POISON_IVY_SEED, I.WHITE_LILY_SEED, I.BARLEY_SEED])
+      assert.equal(Houses.seedValue(seed), 1, core.ItemDefinition.forId(seed).getName());
+    for (const seed of [I.RANARR_SEED, I.TORSTOL_SEED, I.WILDBLOOD_SEED]) assert.equal(Houses.seedValue(seed), 2);
+    // Reset without logs still empties, then fails two ticks later (recording 716).
+    p.counts.clear(); p.messages.length = 0;
+    p.attrs.get(Houses.ATTRIBUTE)[baseId] = { tier: 0, seeds: 10, filled: Date.now() - Houses.DURATION };
+    Houses.reset({ player: p, object: houseObject }); advance(1);
+    assert.equal(p.counts.get(I.CLOCKWORK), 1, "reset empties before checking for logs");
+    advance(2);
+    assert.equal(p.messages.at(-1), "You need logs to make a birdhouse.");
+    assert.equal(p.attrs.get(Houses.ATTRIBUTE)[baseId], undefined);
     p.counts.clear(); p.counts.set(I.CLOCKWORK, 1);
     p.attrs.get(Houses.ATTRIBUTE)[baseId] = { tier: 0, seeds: 10, filled: Date.now() - Houses.DURATION };
     p.counts.set(I.LOGS, 1); p.counts.set(I.HAMMER, 1); p.counts.set(I.CHISEL, 1);
-    Houses.reset({ player: p, object: houseObject }); advance(2);
+    Houses.reset({ player: p, object: houseObject }); advance(4);
     assert.equal(p.attrs.get(Houses.ATTRIBUTE)[baseId].seeds, 0, "reset rebuilds an unseeded birdhouse");
     assert.equal(p.counts.get(I.CLOCKWORK), 1, "reset reuses clockwork without creating another");
     assert.equal(p.counts.has(I.LOGS), false);
     assert.equal(p.experience.get(Skill.CRAFTING), 15);
+    // Build on an empty space with no birdhouse makes one from logs: crafted two ticks in, placed a tick later.
+    delete p.attrs.get(Houses.ATTRIBUTE)[baseId]; p.counts.clear();
+    p.counts.set(I.CLOCKWORK, 1); p.counts.set(I.LOGS, 1); p.counts.set(I.HAMMER, 1); p.counts.set(I.CHISEL, 1);
+    Houses.build({ player: p, object: houseObject });
+    assert.equal(p.animations.at(-1), 7057, "birdhouse_make");
+    advance(2);
+    assert.equal(p.counts.get(I.BIRD_HOUSE), 1); assert.equal(p.experience.get(Skill.CRAFTING), 30);
+    advance(1);
+    assert.equal(p.counts.has(I.BIRD_HOUSE), false); assert.equal(varp(), 1);
+    delete p.attrs.get(Houses.ATTRIBUTE)[baseId]; p.counts.clear(); p.counts.set(I.REDWOOD_BIRD_HOUSE, 1);
+    p.levels.set(Skill.HUNTER, 10);
+    Houses.build({ player: p, object: houseObject });
+    assert.equal(p.messages.at(-1), "You do not have a birdhouse with the required hunter level to build here.");
+    assert.equal(p.counts.get(I.REDWOOD_BIRD_HOUSE), 1);
+    p.levels.delete(Skill.HUNTER);
     p.counts.clear(); p.counts.set(I.SNOWY_KNIGHT, 1); p.levels.set(Skill.HITPOINTS, 50);
     Catching.release({ player: p, itemId: I.SNOWY_KNIGHT });
     assert.equal(p.levels.get(Skill.HITPOINTS), 58); assert.equal(p.counts.get(I.BUTTERFLY_JAR), 1);
@@ -259,6 +316,55 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     Catching.catchNpc({player:q,npc:moth,npcId:moth.getId()});q.levels.set(Skill.HUNTER,74);advance(2);
     assert.equal(q.counts.get(I.BUTTERFLY_JAR),1,"level drain during the catch preserves the jar");
     q.levels.clear();q.equipment.clear();q.counts.clear();Math.random=()=>0.5;
+
+    // Implings (rsprox captures 1342/1389/1510/2520 + Leagues; Wiki Implings): the catch lands on the
+    // click's tick with live messages, sound 2623 and the caught animation; Puro-Puro spawns return in 7/50.
+    const N=core.NpcIdentifiers,said=[],sounds=[],grabs=[];
+    const iq=player(),packets=iq.getPacketSender();
+    iq.sendMessage=m=>said.push(m);iq.getPacketSender=()=>({...packets,sendSound:id=>sounds.push(id)});
+    iq.performAnimation=a=>grabs.push(a.getId());
+    const puroTile=new core.Location(2567,4320,0),outsideTile=new core.Location(3000,3000,0);
+    iq.moveTo(puroTile);iq.equipment.set(core.Equipment.WEAPON_SLOT,I.BUTTERFLY_NET);iq.counts.set(I.IMPLING_JAR,2);
+    Math.random=()=>0;
+    const baby=prey(N.BABY_IMPLING_2,puroTile.clone());
+    Catching.catchNpc({player:iq,npc:baby,npcId:baby.getId()});
+    assert.equal(iq.counts.get(I.BABY_IMPLING_JAR),1,"the jar is filled on the click's tick, not two ticks later");
+    assert.equal(iq.counts.get(I.IMPLING_JAR),1);
+    assert.deepEqual(said,["You manage to catch the impling and squeeze it into a jar."]);
+    assert.deepEqual(sounds,[2623]);assert.deepEqual(grabs,[6606]);
+    assert.equal(iq.experience.get(Skill.HUNTER),18,"Puro-Puro XP");
+    assert.deepEqual(baby.animations.map(a=>a.getId()),[6615]);
+    assert.equal(baby.isVisible(),true,"the caught impling stays for its animation");
+    advance(2);assert.equal(baby.isVisible(),false,"and is gone two ticks after the catch");
+    advance(6);assert.equal(baby.isVisible(),false);
+    advance(1);assert.equal(baby.isVisible(),true,"a Puro-Puro baby impling returns 7 ticks after it is removed");
+    const earth=prey(N.EARTH_IMPLING_2,puroTile.clone());
+    Catching.catchNpc({player:iq,npc:earth,npcId:earth.getId()});
+    assert.equal(iq.counts.get(I.EARTH_IMPLING_JAR),1);
+    advance(51);assert.equal(earth.isVisible(),false);
+    advance(1);assert.equal(earth.isVisible(),true,"earth and essence implings return after 50 ticks");
+    said.length=0;
+    Catching.catchNpc({player:iq,npc:baby,npcId:baby.getId()});
+    assert.deepEqual(said,["You don't have an empty impling jar in which to keep an impling."]);
+    iq.equipment.clear();iq.counts.set(I.IMPLING_JAR,1);iq.levels.set(Skill.HUNTER,45);said.length=0;
+    Catching.catchNpc({player:iq,npc:earth,npcId:earth.getId()});
+    assert.deepEqual(said,["You need a Hunter level of at least 46 to catch this impling barehanded."]);
+    iq.equipment.set(core.Equipment.WEAPON_SLOT,I.BUTTERFLY_NET);iq.levels.set(Skill.HUNTER,35);said.length=0;
+    Catching.catchNpc({player:iq,npc:earth,npcId:earth.getId()});
+    assert.deepEqual(said,["You need a Hunter level of at least 36 to catch this impling."]);
+    assert.equal(iq.counts.get(I.IMPLING_JAR),1,"a refused catch keeps the jar");
+    iq.equipment.clear();iq.levels.delete(Skill.HUNTER);iq.counts.clear();iq.moveTo(outsideTile);
+    iq.setSize(0);said.length=0;
+    const wild=prey(N.EARTH_IMPLING,outsideTile.clone());
+    Catching.catchNpc({player:iq,npc:wild,npcId:wild.getId()});
+    assert.deepEqual(said,["You'll need to clear some space in your pack to catch this impling without a jar."]);
+    iq.setSize(28);said.length=0;grabs.length=0;iq.experience.clear();
+    Catching.catchNpc({player:iq,npc:wild,npcId:wild.getId()});
+    assert.deepEqual(said,["You manage to catch the impling and acquire some loot."]);
+    assert.deepEqual(grabs,[7171],"barehanded catches play hunting_impling_catch");
+    assert.ok(iq.counts.size>0,"barehanded loot arrives on the same tick");
+    assert.equal(iq.experience.get(Skill.HUNTER),27,"Gielinor XP");
+    advance(102);
 
     const crabId=[...Crabs.bases].find(([id])=>Crabs.species(new core.GameObject(id,q.getLocation(),10,0,null)).level===21)[0];
     const crabObject=new core.GameObject(crabId,q.getLocation().clone(),10,0,null);
@@ -520,6 +626,7 @@ function feedbackPlayer(core) {
   const inventory = {
     getItems: () => [...counts].map(([id, n]) => new core.Item(id, n)),
     get: slot => [...counts].map(([id, n]) => new core.Item(id, n))[slot],
+    getSlotForItemId: id => [...counts.keys()].indexOf(id),
     contains: id => (counts.get(id) ?? 0) > 0, getAmount: id => counts.get(id) ?? 0,
     deleteNumber(id, n) { const remaining = (counts.get(id) ?? 0) - n; if (remaining > 0) counts.set(id, remaining); else counts.delete(id); },
     deleteAtSlot(slot, n) { this.deleteNumber(this.get(slot).getId(), n); },
@@ -554,9 +661,13 @@ function feedbackPlayer(core) {
 
 function registerFeedbackPlugin(name, core, extra = {}) {
   // Like the plugin API, every handler a hook name gets runs until one handles the event.
-  const handlers = {}, hooks = {};
+  const handlers = {}, hooks = { customEvents: new Map() };
   const api = new Proxy({ core, log() {}, ...extra }, {
     get: (target, key) => target[key] ?? ((...args) => {
+      if (key === "onCustomEvent") {
+        const [name, handler] = args;
+        hooks.customEvents.set(name, [...(hooks.customEvents.get(name) ?? []), handler]);
+      }
       (handlers[key] ??= []).push(args.find(arg => typeof arg === "function"));
       hooks[key] ??= (event, ...rest) => {
         let result;
@@ -701,33 +812,37 @@ test("as captured: a combat level gained waits behind the skill's pop-up", () =>
   } finally { core.TaskManager.submit = submit; }
 });
 
-test("burying resolves inventory and XP together on tick two; movement, logout and cancellation preserve the bone", () => {
+test("burying resolves inventory and XP on click; movement, logout and cancellation cannot repeat or refund it", () => {
   const { PluginManager } = require("../dist/plugins/PluginManager");
   const core = PluginManager.getCoreApi(), tasks = [];
   const hooks = registerFeedbackPlugin("skills/Prayer", core, {
     getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
   });
-  for (const mode of ["complete", "walk-before-resolve", "logout", "cancel"]) {
+  for (const mode of ["complete", "walk-before-message", "logout", "cancel"]) {
     const p = feedbackPlayer(core);
-    p.counts.set(core.ItemIdentifiers.BONES, 1);
+    p.counts.set(core.ItemIdentifiers.BONES, 2);
     let xp = 0;
     p.skills = { stopSkillable() {}, addExperiences(s, n) { assert.equal(s, Skill.PRAYER); xp += n; } };
     assert.equal(hooks.onItemFirstAction({ player: p, itemId: core.ItemIdentifiers.BONES, slot: 0 }), true);
     const task = tasks.pop();
     assert.equal(task.key, p, "logout cancels tasks by player identity");
     assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1);
-    task.tick();
-    if (mode === "walk-before-resolve") p.moveTo(new core.Location(3001, 3000, 0));
+    assert.equal(xp, 5, "the clicked bone awards XP immediately");
+    if (mode === "walk-before-message") p.moveTo(new core.Location(3001, 3000, 0));
     if (mode === "logout") p.isRegistered = () => false;
     if (mode === "cancel") task.stop();
     task.tick();
-    assert.equal(xp > 0, mode === "complete", mode);
-    assert.equal(p.counts.has(core.ItemIdentifiers.BONES), mode !== "complete", mode);
+    task.tick();
+    assert.equal(xp, 5, mode);
+    assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1, mode);
+    assert.deepEqual(p.messages, mode === "logout" || mode === "cancel"
+      ? ["You dig a hole in the ground..."]
+      : ["You dig a hole in the ground...", "You bury the bones."], mode);
     assert.equal(task.isRunning(), false);
   }
 });
 
-test("Fletching keeps going while moving, stops on the next click and never restarts its animation after a level-up", async () => {
+test("Fletching keeps going while moving, stops on the next click and resumes after a level-up is acknowledged", async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   const { PluginManager } = require("../dist/plugins/PluginManager");
   // Fletching names its animations by gameval; an earlier test may have opened the cache already.
@@ -747,7 +862,7 @@ test("Fletching keeps going while moving, stops on the next click and never rest
       getCurrentLevel: () => 99, getTotalLevel: () => 100, getCombatLevel: () => 3, stopSkillable() {},
       addExperiences() {
         xp++;
-        if (mode === "level-up") feedback.onPlayerLevelUp({ player: p, skill: Skill.FLETCHING, oldLevel: 1, newLevel: 2 });
+        if (mode === "level-up" && xp === 1) feedback.onPlayerLevelUp({ player: p, skill: Skill.FLETCHING, oldLevel: 1, newLevel: 2 });
       },
     };
     p.counts.set(core.ItemIdentifiers.KNIFE, 1); p.counts.set(core.ItemIdentifiers.LOGS, 2);
@@ -764,9 +879,156 @@ test("Fletching keeps going while moving, stops on the next click and never rest
     }
     assert.equal(xp, { moving: 2, click: 0, "level-up": 1 }[mode]);
     assert.equal(p.counts.get(core.ItemIdentifiers.LOGS) ?? 0, { moving: 0, click: 2, "level-up": 1 }[mode]);
-    assert.equal(task.isRunning(), false);
-    if (mode === "level-up") assert.equal(p.animations.at(-1), 65535);
+    assert.equal(task.isRunning(), mode === "level-up");
+    if (mode === "level-up") {
+      assert.equal(p.animations.at(-1), 65535, "the popup holds the remaining batch and animation");
+      assert.equal(feedback.onInterfaceActionButton({ player: p }), true);
+      for (let n = 0; n < 7 && task.isRunning(); n++) task.execute();
+      assert.equal(xp, 2, "Continue finishes the remaining batch exactly once");
+      assert.equal(p.counts.get(core.ItemIdentifiers.LOGS) ?? 0, 0);
+      assert.equal(task.isRunning(), false);
+    }
     assert.equal(p.sent.some(([type]) => type === "sendSoundEffect"), false, "animation frames supply the audio");
+  }
+});
+
+test("level-up acknowledgement waits through nested skill and combat popups before resuming the original session", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const { pauseForLevelUp } = require("../plugins/skills/SkillActions");
+  const core = PluginManager.getCoreApi(), sessions = new Map();
+  const p = levelledPlayer(core, { combat: 90 });
+  const session = {};
+  sessions.set(p, session);
+  let resumed = 0, nested = false;
+  const submit = core.TaskManager.submit;
+  core.TaskManager.submit = () => {};
+  const hooks = registerFeedbackPlugin("interface/SkillLevelUp", core, {
+    emitCustomEvent(name, event) {
+      if (name !== "level-up:popup-opened") return;
+      pauseForLevelUp(event, sessions, (player) => sessions.delete(player), () => resumed++);
+      if (!nested) {
+        nested = true;
+        hooks.onPlayerLevelUp({ player: p, skill: Skill.HITPOINTS, oldLevel: 50, newLevel: 51 });
+      }
+    },
+  });
+  try {
+    hooks.onPlayerLogin({ player: p });
+    p.setCombat(91);
+    hooks.onPlayerLevelUp({ player: p, skill: Skill.ATTACK, oldLevel: 50, newLevel: 51 });
+    assert.equal(session.levelUpPaused, true);
+    assert.equal(p.stopped, 0, "the cancellable action is held rather than destroyed");
+    for (let popup = 0; popup < 2; popup++) {
+      assert.equal(hooks.onInterfaceActionButton({ player: p }), true);
+      assert.equal(session.levelUpPaused, true, "later popups keep the session paused");
+      assert.equal(resumed, 0);
+    }
+    assert.equal(hooks.onInterfaceActionButton({ player: p }), true);
+    assert.equal(session.levelUpPaused, false);
+    assert.equal(resumed, 1);
+    assert.equal(hooks.onInterfaceActionButton({ player: p }), false);
+  } finally { core.TaskManager.submit = submit; }
+});
+
+test("a shared Smithing task holds only the levelled player's remaining work until Continue", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const Core = require("../plugins/skills/smithing/Core.Smithing");
+  const Sessions = require("../plugins/skills/smithing/Sessions.Smithing");
+  const core = PluginManager.getCoreApi();
+  const tasks = [];
+  const api = { core, getTaskManager: () => ({ submit: (task) => tasks.push(task) }), onServerStartup: (start) => start() };
+  Core.init(api);
+  Sessions(api);
+  const p = levelledPlayer(core), other = levelledPlayer(core);
+  let made = 0, otherMade = 0;
+  const hooks = registerFeedbackPlugin("interface/SkillLevelUp", core, {
+    emitCustomEvent(name, event) { if (name === "level-up:popup-opened") Sessions.pause(event); },
+  });
+  Sessions.start(p, {
+    type: "test", remaining: 2, interval: 1,
+    step() {
+      if (++made === 1) hooks.onPlayerLevelUp({ player: p, skill: Skill.SMITHING, oldLevel: 1, newLevel: 2 });
+      return true;
+    },
+  });
+  Sessions.start(other, { type: "test", remaining: 4, interval: 1, step() { otherMade++; return true; } });
+  try {
+    for (let tick = 0; tick < 6; tick++) tasks[0].execute();
+    assert.equal(made, 1, "no resources are processed while the popup is open");
+    assert.equal(otherMade, 4, "another player's session continues normally");
+    assert.equal(hooks.onInterfaceActionButton({ player: p }), true);
+    for (let tick = 0; tick < 4; tick++) tasks[0].execute();
+    assert.equal(made, 2, "only the original remaining work resumes");
+    assert.equal(Sessions.typeOf(p), null);
+  } finally {
+    Sessions.stop(p, false);
+    Sessions.stop(other, false);
+  }
+});
+
+test("a popup from the first altar offering pauses its newly created loop until acknowledged", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const core = PluginManager.getCoreApi(), tasks = [];
+  const submit = core.TaskManager.submit, random = Math.random;
+  core.TaskManager.submit = (task) => { task.setRunning(true); tasks.push(task); };
+  Math.random = () => 0.99;
+  const altar = registerFeedbackPlugin("skills/BoneAltars", core, {
+    emitCustomEvent(name, request) { if (name === "prayer:bone") request.bone = { xp: 4.5 }; },
+  });
+  const hooks = registerFeedbackPlugin("interface/SkillLevelUp", core, {
+    emitCustomEvent(name, event) {
+      for (const handler of altar.customEvents.get(name) ?? []) handler(event);
+    },
+  });
+  const p = levelledPlayer(core);
+  p.getEquipment = () => ({ getItems: () => [] });
+  p.setPositionToFace = () => {};
+  p.counts.set(core.ItemIdentifiers.BONES, 2);
+  let offerings = 0;
+  p.skills.addExperiences = () => {
+    if (++offerings === 1) hooks.onPlayerLevelUp({ player: p, skill: Skill.PRAYER, oldLevel: 1, newLevel: 2 });
+  };
+  const at = new core.Location(2947, 3820, 0);
+  try {
+    altar.onItemOnObject({ player: p, object: { getLocation: () => at },
+      objectId: core.CacheDefinitions.getLocId("chaosaltar"), itemId: core.ItemIdentifiers.BONES, location: at });
+    for (let tick = 0; tick < 10; tick++) tasks[0].execute();
+    assert.equal(offerings, 1);
+    assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1);
+    assert.equal(hooks.onInterfaceActionButton({ player: p }), true);
+    for (let tick = 0; tick < 8 && tasks[0].isRunning(); tick++) tasks[0].execute();
+    assert.equal(offerings, 2);
+    assert.equal(p.counts.get(core.ItemIdentifiers.BONES) ?? 0, 0);
+    assert.equal(tasks[0].isRunning(), false);
+  } finally {
+    core.TaskManager.submit = submit;
+    Math.random = random;
+  }
+});
+
+test("walking, replacement actions, popup cancellation and logout never resume a paused skill", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const { pauseForLevelUp } = require("../plugins/skills/SkillActions");
+  const core = PluginManager.getCoreApi();
+  for (const mode of ["world-input", "interface-close", "item", "movement", "logout", "disconnect", "death", "replacement"]) {
+    const p = levelledPlayer(core), sessions = new Map([[p, {}]]);
+    let resumed = 0;
+    const hooks = registerFeedbackPlugin("interface/SkillLevelUp", core, {
+      emitCustomEvent(name, event) {
+        if (name === "level-up:popup-opened") pauseForLevelUp(event, sessions, (player) => sessions.delete(player), () => resumed++);
+      },
+    });
+    hooks.onPlayerLevelUp({ player: p, skill: Skill.FISHING, oldLevel: 1, newLevel: 2 });
+    if (mode === "world-input" || mode === "interface-close") {
+      const name = mode === "world-input" ? "player:world-input" : "interface:closed";
+      for (const handler of hooks.customEvents.get(name)) handler({ player: p, interfaceId: 233 });
+    } else if (mode === "item") hooks.onCanUseItem({ player: p, action: "action" });
+    else if (mode === "movement") p.moveTo(new core.Location(3001, 3000, 0));
+    else if (mode === "replacement") sessions.set(p, {});
+    else hooks[{ logout: "onPlayerLogout", disconnect: "onPlayerDisconnect", death: "onPlayerDeath" }[mode]]({ player: p });
+    hooks.onInterfaceActionButton({ player: p });
+    assert.equal(resumed, 0, mode);
+    if (mode !== "replacement") assert.equal(sessions.has(p), false, mode);
   }
 });
 

@@ -1,0 +1,238 @@
+{
+  "_about": "Shades of Mort'ton, the minigame (https://oldschool.runescape.wiki/w/Shades_of_Mort%27ton_(minigame)) after the quest (quests/ShadesOfMortton.Quest.js keeps the quest's own steps). Recorded: rsprox 232/03119 and 232/03118 (shades fought and burned, normal worlds), 227/01858 (the catacombs: the entrance, a bronze door and a bronze chest, a Leagues world whose mechanics match). The chests' loot is the Wiki's red-key tables (every colour uses them: the Wiki's per-colour rates weren't read).",
+  "shades": [
+    {"shadow": "shadeshadow_level1", "shade": "shade_level1", "remains": "shade_bones1"},
+    {"shadow": "shadeshadow_level2", "shade": "shade_level2", "remains": "shade_bones2"},
+    {"shadow": "shadeshadow_level3", "shade": "shade_level3", "remains": "shade_bones3"},
+    {"shadow": "shadeshadow_level4", "shade": "shade_level4", "remains": "shade_bones4"},
+    {"shadow": "shadeshadow_level5", "shade": "shade_level5", "remains": "shade_bones5"},
+    {"shadow": "shadeshadow_level6", "shade": "shade_level6", "remains": "shade_bones6"}
+  ],
+  "_shade": "Recorded (232/03119 [39]-[170]): a shadow rises into its shade, the same NPC, as it is hit or as it attacks (shade_rise), and sinks back to its shadow about 68 ticks after its last fight; its remains always drop (private 100 ticks, gone at 200).",
+  "riseAnimation": 1288,
+  "revertTicks": 68,
+  "keyMetals": ["bronze", "steel", "black", "silver", "gold"],
+  "keyColours": {"bloodred": "red", "brown": "brown", "crimson": "crimson", "black": "black", "purple": "purple"},
+  "catacombs": {
+    "_entrance": "Recorded (227/01858 [15240]-[15242]): a key opens the hillside's wooden doors (not used up), the doors swing open, and 2 ticks on the player is inside.",
+    "entranceDoors": ["shadelairentrancel", "shadelairentrancer"],
+    "openDoors": {"shadelairentrancel": "shadelairdooropenl", "shadelairentrancer": "shadelairdooropenr"},
+    "inside": [3493, 9725, 0],
+    "unlockAnimation": 832,
+    "sounds": {"locked": 2402, "door": 69, "chest": 52},
+    "doors": {
+      "Solid bronze door": "bronze",
+      "Solid steel door": "steel",
+      "Solid black door": "black",
+      "Solid silver door": "silver",
+      "Solid gold door": "gold"
+    }
+  },
+  "chests": {
+    "_coins": "Wiki: a roll in the metal's range; coins are (roll - the loot's value) / 3 when the loot is worth less. Swamp paste always comes on top.",
+    "openTicks": 4,
+    "coinRolls": {
+      "bronze": [400, 600],
+      "steel": [900, 1100],
+      "black": [1500, 2000],
+      "silver": [3600, 7000],
+      "gold": [4500, 9500]
+    },
+    "coinDivisor": 3,
+    "swampPaste": {"bronze": [5, 10], "steel": [15, 30], "black": [25, 40], "silver": [25, 40], "gold": [40, 70]},
+    "loot": {
+      "bronze": {
+        "denominator": 98.56,
+        "items": [
+          [1361, 1, 1, 1, "Black axe"],
+          [1141, 1, 1, 5, "Steel med helm"],
+          [562, 12, 29, 14, "Chaos rune"],
+          [1729, 1, 1, 7, "Amulet of defence"],
+          [1637, 1, 1, 2, "Sapphire ring"],
+          [2355, 1, 1, 5, "Silver bar"],
+          [2357, 1, 1, 6, "Gold bar"],
+          [2359, 3, 3, 5, "Mithril bar"],
+          [2677, 1, 1, 2, "Clue scroll (easy)"]
+        ]
+      },
+      "steel": {
+        "denominator": 134.35,
+        "items": [
+          [1311, 1, 1, 1, "Steel 2h sword"],
+          [4580, 1, 1, 1, "Black spear"],
+          [1327, 1, 1, 10, "Black scimitar"],
+          [1097, 1, 1, 5, "Studded chaps"],
+          [1105, 1, 1, 5, "Steel chainbody"],
+          [1193, 1, 1, 2, "Steel kiteshield"],
+          [1151, 1, 1, 7, "Black med helm"],
+          [1143, 1, 1, 3, "Mithril med helm"],
+          [2361, 3, 3, 6, "Adamantite bar"],
+          [1639, 1, 1, 2, "Emerald ring"],
+          [1725, 1, 1, 6, "Amulet of strength"],
+          [562, 10, 29, 11, "Chaos rune"],
+          [561, 10, 29, 15, "Nature rune"],
+          [2801, 1, 1, 3, "Clue scroll (medium)"]
+        ]
+      },
+      "black": {
+        "denominator": 140.98,
+        "items": [
+          [1381, 1, 1, 1, "Staff of air"],
+          [1383, 1, 1, 1, "Staff of water"],
+          [1385, 1, 1, 1, "Staff of earth"],
+          [1387, 1, 1, 1, "Staff of fire"],
+          [4580, 1, 1, 4, "Black spear"],
+          [1367, 1, 1, 3, "Black battleaxe"],
+          [1119, 1, 1, 2, "Steel platebody"],
+          [1107, 1, 1, 5, "Black chainbody"],
+          [1195, 1, 1, 6, "Black kiteshield"],
+          [1179, 1, 1, 9, "Black sq shield"],
+          [1165, 1, 1, 3, "Black full helm"],
+          [1641, 1, 1, 7, "Ruby ring"],
+          [1727, 1, 1, 2, "Amulet of magic"],
+          [561, 10, 29, 6.6, "Nature rune"],
+          [560, 10, 29, 4.4, "Death rune"],
+          [2801, 1, 1, 4, "Clue scroll (medium)"],
+          [3678, 1, 1, 1, "Flamtaer hammer"]
+        ]
+      },
+      "silver": {
+        "denominator": 152.39,
+        "items": [
+          [1245, 1, 1, 11, "Adamant spear"],
+          [1259, 1, 1, 11, "Adamant spear(p)"],
+          [4580, 1, 1, 6, "Black spear"],
+          [1289, 1, 1, 3, "Rune sword"],
+          [1391, 1, 1, 9, "Battlestaff"],
+          [1125, 1, 1, 4, "Black platebody"],
+          [1085, 1, 1, 4, "Mithril plateskirt"],
+          [1113, 1, 1, 1, "Rune chainbody"],
+          [1643, 1, 1, 6, "Diamond ring"],
+          [1731, 1, 1, 2, "Amulet of power"],
+          [560, 10, 30, 9, "Death rune"],
+          [565, 10, 30, 6, "Blood rune"],
+          [3678, 1, 1, 11, "Flamtaer hammer"],
+          [2722, 1, 1, 2, "Clue scroll (hard)"]
+        ]
+      },
+      "gold": {
+        "denominator": 143.91,
+        "items": [
+          [1245, 1, 1, 7, "Adamant spear"],
+          [1259, 1, 1, 6, "Adamant spear(p)"],
+          [1289, 1, 1, 3, "Rune sword"],
+          [1391, 3, 3, 11, "Battlestaff"],
+          [1303, 1, 1, 5, "Rune longsword"],
+          [1215, 1, 1, 2, "Dragon dagger"],
+          [1305, 1, 1, 1, "Dragon longsword"],
+          [1434, 1, 1, 1, "Dragon mace"],
+          [1161, 1, 1, 8, "Adamant full helm"],
+          [1147, 1, 1, 3, "Rune med helm"],
+          [1113, 1, 1, 2, "Rune chainbody"],
+          [1615, 1, 1, 2, "Dragonstone"],
+          [1645, 1, 1, 3, "Dragonstone ring"],
+          [560, 10, 29, 9, "Death rune"],
+          [566, 10, 29, 6, "Soul rune"],
+          [3678, 1, 1, 4, "Flamtaer hammer"],
+          [12073, 1, 1, 1, "Clue scroll (elite)"]
+        ]
+      }
+    }
+  },
+  "_messages": "Recorded: logsOn, remainsOn, lighting, keyUnlock, needKey, tombDoor, tombDoorBack, wrongKey, treasure, swampPaste. Mine: noTreasureCoins (the recording always had coins), noRoom, noTinderbox, firemaking, weakLogs, pyreBusy. The quest's: needQuest.",
+  "messages": {
+    "keyUnlock": "You use your Shade key to unlock the door.",
+    "needKey": "You need a key to open this door.",
+    "tombDoor": "You open the ominous tomb door.",
+    "tombDoorBack": "You walk back through the ominous door.",
+    "wrongKey": "You don't have the correct key.<br>You need a {metal} key with a {colour} trim to open this chest.",
+    "treasure": "You find some treasure and {coins} gold coins. The key strangely dissolves into the chest lock.",
+    "noTreasureCoins": "You find some treasure. The key strangely dissolves into the chest lock.",
+    "swampPaste": "You find {paste} doses of swamp paste at the bottom of the chest.",
+    "noRoom": "You don't have enough inventory space to take the treasure.",
+    "logsOn": "You put some logs on the pyre.",
+    "remainsOn": "You place the shade's remains on the logs.",
+    "lighting": "You attempt to light the funeral pyre.",
+    "noTinderbox": "You need a tinderbox to light the pyre.",
+    "firemaking": "You need a Firemaking level of {level} to light these logs.",
+    "weakLogs": "These logs won't burn hot enough to cremate those remains.",
+    "pyreBusy": "Someone else is using that pyre.",
+    "needQuest": "You can't do that until you have made your own funeral pyre logs."
+  },
+  "_pyres": "Recorded (227/01846 [10247]-[10272], 232/03118): pyre logs on the funeral pyre ('You put some logs on the pyre.', the pyre shows its wood), remains on the logs ('You place the shade's remains on the logs.'), Light ('You attempt to light the funeral pyre.'), the fire 3 ticks on with the experience, the Shade Spirit 2 ticks later, and 4 ticks after that the reward on the stone stand (private, gone after 500 ticks) with a puff of smoke as the pyre empties. Wiki: the woods (Firemaking level and experience), the remains' Prayer experience and the wood each needs, 21% coins or else a key.",
+  "pyres": {
+    "woods": [
+      ["logs", 5, 50],
+      ["oak", 20, 70],
+      ["willow", 35, 100],
+      ["teak", 40, 120],
+      ["arctic_pine", 47, 158.5],
+      ["maple", 50, 175],
+      ["mahogany", 55, 210],
+      ["yew", 65, 255],
+      ["camphor", 71, 320],
+      ["magic", 80, 404.5],
+      ["ironwood", 85, 435],
+      ["redwood", 95, 500],
+      ["rosewood", 97, 590]
+    ],
+    "remains": {
+      "shade_bones1": {
+        "prayer": 25,
+        "minWood": 5,
+        "coins": [200, 300],
+        "keys": [[79, ["bronze_bloodred", "bronze_brown", "bronze_crimson"]]]
+      },
+      "shade_bones2": {
+        "prayer": 37.5,
+        "minWood": 5,
+        "coins": [400, 500],
+        "keys": [
+          [12.5, ["bronze_black", "bronze_purple"]],
+          [66.5, ["steel_bloodred", "steel_brown", "steel_crimson"]]
+        ]
+      },
+      "shade_bones3": {
+        "prayer": 61,
+        "minWood": 35,
+        "coins": [600, 700],
+        "keys": [[12.5, ["steel_black", "steel_purple"]], [66.5, ["black_bloodred", "black_brown", "black_crimson"]]]
+      },
+      "shade_bones4": {
+        "prayer": 79.5,
+        "minWood": 65,
+        "coins": [800, 900],
+        "keys": [
+          [28.2, ["black_crimson", "black_black", "black_purple"]],
+          [50.8, ["silver_bloodred", "silver_brown"]]
+        ]
+      },
+      "shade_bones5": {
+        "prayer": 100,
+        "minWood": 80,
+        "coins": [2000, 4000],
+        "keys": [
+          [63.4, ["silver_brown", "silver_crimson", "silver_black", "silver_purple"]],
+          [15.6, ["gold_bloodred"]]
+        ]
+      },
+      "shade_bones6": {
+        "prayer": 120.5,
+        "minWood": 95,
+        "coins": [2000, 7000],
+        "keys": [[79, ["gold_bloodred", "gold_brown", "gold_crimson", "gold_black", "gold_purple"]]]
+      }
+    },
+    "stand": "pyre_stand",
+    "standReach": 4,
+    "spirit": "shade_heaven",
+    "anims": {"place": 832, "light": 733},
+    "graphics": {"fire": 292, "smoke": 188},
+    "sounds": {"spirit": 748},
+    "fireTicks": 3,
+    "spiritTicks": 2,
+    "rewardTicks": 4,
+    "spiritLeavesTicks": 7,
+    "rewardDespawnTicks": 500
+  }
+}

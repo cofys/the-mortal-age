@@ -22,6 +22,7 @@ import { MovementQueue } from "../../../model/movement/MovementQueue";
 import { GameConstants } from "../../../GameConstants";
 import { Animation } from "../../../model/Animation";
 import { PluginManager } from "../../../../plugins/PluginManager";
+import type { NpcSpawnLineage } from "./NpcSpawnLineage";
 
 /**
  * A headbar besides the hitpoints one, for this tick's update: `fill` to `endFill` (in the
@@ -155,6 +156,10 @@ export class NPC extends Mobile {
     private isDying: boolean;
     private owner: Player;
     private ownerOnly: boolean = false;
+    /** What spawned this NPC; its respawn clones keep it. */
+    private spawnLineage: NpcSpawnLineage | null = null;
+    /** Held while this NPC is live, so no second one with the key can spawn. */
+    private uniqueKey: string | null = null;
     private multiCombat: boolean = false;
     private visible: boolean = true;
     private face: FacingDirection = FacingDirection.SOUTH;
@@ -616,6 +621,24 @@ export class NPC extends Mobile {
         return this;
     }
 
+    public getSpawnLineage(): NpcSpawnLineage | null {
+        return this.spawnLineage;
+    }
+
+    public setSpawnLineage(lineage: NpcSpawnLineage | null): NPC {
+        this.spawnLineage = lineage;
+        return this;
+    }
+
+    public getUniqueKey(): string | null {
+        return this.uniqueKey;
+    }
+
+    public setUniqueKey(key: string | null): NPC {
+        this.uniqueKey = key;
+        return this;
+    }
+
     /** Owner-scoped spawns (quest instances) are only visible to their owner. */
     public isOwnerOnly(): boolean {
         return this.ownerOnly;
@@ -881,6 +904,8 @@ export class NPC extends Mobile {
         // A respawn clone must keep its scope, or it leaks to every player.
         if (this.getOwner?.()) npc.setOwner(this.getOwner());
         if (this.isOwnerOnly?.()) npc.setOwnerOnly(true);
+        npc.setSpawnLineage(this.spawnLineage);
+        npc.setUniqueKey(this.uniqueKey);
         return npc;
     }
 

@@ -1,5 +1,6 @@
 import { RTCDataChannel, RTCPeerConnection } from "node-datachannel/polyfill";
 import { WebSocket } from "ws";
+import { getWorldDefinition } from "../../game/definition/WorldDefinition";
 import type { BinaryChannel } from "../BinaryChannel";
 import { DataChannelBinaryChannel } from "./DataChannelBinaryChannel";
 
@@ -138,6 +139,14 @@ export class WebRtcGameConnector {
     if (message.type === "registered") {
       this.registrationAttempts = 0;
       console.info(`[webrtc] registered world ${this.worldId} with signalling relay`);
+      // The world list details /host sends; it also renders a spawn minimap preview, which a home server cannot.
+      const { description, spawn } = getWorldDefinition();
+      this.send({ type: "world-manifest", manifest: { description, maxPlayers: null, spawn } });
+      return;
+    }
+    // A bad listing only loses the world list details; a relay from before world-manifest answers invalid_signal.
+    if (message.type === "error" && (message.message === "invalid_world_manifest" || message.message === "invalid_signal")) {
+      console.warn("[webrtc] signalling relay rejected the world list details");
       return;
     }
     if (message.type === "status-request") {

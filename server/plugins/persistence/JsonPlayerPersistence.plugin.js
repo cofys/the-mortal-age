@@ -226,7 +226,6 @@ class JsonPlayerPersistence extends PlayerPersistence {
         poisonImmunityTimer: 0,
         fireImmunityTimer: 0,
         teleblockTimer: 0,
-        specialAttackRestoreTimer: 0,
         skullTimer: 0,
         running: false,
         runEnergy: 100,

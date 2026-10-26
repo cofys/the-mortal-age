@@ -103,7 +103,7 @@ export abstract class ItemContainer {
     ensureContainersLoaded();
     let items: Item[] = [];
     for (let item of this.items) {
-      if (item != null && item.getId() > 0) {
+      if (item != null && item.getId() >= 0) {
         if (
           item.getAmount() > 0 ||
           (this instanceof Bank && item.getAmount() == 0)
@@ -141,14 +141,14 @@ export abstract class ItemContainer {
   public isSlotOccupied(slot: number): boolean {
     return (
       this.items[slot] != null &&
-      this.items[slot].getId() > 0 &&
+      this.items[slot].getId() >= 0 &&
       this.items[slot].getAmount() > 0
     );
   }
 
   public swap(fromSlot: number, toSlot: number): ItemContainer {
     let temporaryItem = this.getItems()[fromSlot];
-    if (temporaryItem == null || temporaryItem.getId() <= 0) {
+    if (temporaryItem == null || temporaryItem.getId() < 0) {
       return this;
     }
     this.setItem(fromSlot, this.getItems()[toSlot]);
@@ -158,7 +158,7 @@ export abstract class ItemContainer {
 
   public shiftSwap(fromSlot: number, toSlot: number): ItemContainer {
     let temporaryItem = this.getItems()[fromSlot];
-    if (temporaryItem == null || temporaryItem.getId() <= 0) {
+    if (temporaryItem == null || temporaryItem.getId() < 0) {
       return this;
     }
     return this;
@@ -233,7 +233,7 @@ export abstract class ItemContainer {
     ensureContainersLoaded();
     for (let i = 0; i < this.capacity(); i++) {
       if (
-        this.items[i].getId() <= 0 ||
+        this.items[i].getId() < 0 ||
         (this.items[i].getAmount() <= 0 && !(this instanceof Bank))
       ) {
         return i;
@@ -419,7 +419,7 @@ export abstract class ItemContainer {
     }
     for (let item of items) {
       if (
-        item.getId() > 0 &&
+        item.getId() >= 0 &&
         (item.getAmount() > 0 ||
           (item.getAmount() == 0 && this instanceof Bank))
       ) {
@@ -437,7 +437,7 @@ export abstract class ItemContainer {
       for (let i = 0; i < this.capacity() - 1; i++) {
         if (
           this.getItems()[i] == null ||
-          this.getItems()[i].getId() <= 0 ||
+          this.getItems()[i].getId() < 0 ||
           (this.getItems()[i].getAmount() <= 0 && !(this instanceof Bank))
         ) {
           this.swap(i + 1, i);
@@ -472,7 +472,7 @@ export abstract class ItemContainer {
   /** How much of an item add() can accept, without changing either item or container. */
   public getAddableAmount(item: Item): number {
     const requested = Math.max(0, Math.floor(item.getAmount()));
-    if (item.getId() <= 0 || !Number.isFinite(requested) || requested <= 0) return 0;
+    if (item.getId() < 0 || !Number.isFinite(requested) || requested <= 0) return 0;
     if (getItemDefinition().forId(item.getId()).isStackable() || this.stackType() == StackType.STACKS) {
       const meta = JSON.stringify(item.getMeta() ?? null);
       const existing = this.items.find((held) => held.getId() === item.getId() &&
@@ -486,7 +486,7 @@ export abstract class ItemContainer {
   public add(item: Item, refresh: boolean): ItemContainer {
     ensureContainersLoaded();
     if (
-      item.getId() <= 0 ||
+      item.getId() < 0 ||
       (item.getAmount() <= 0 && !(this instanceof Bank))
     ) {
       return this;
@@ -579,7 +579,7 @@ export abstract class ItemContainer {
     }
 
     const item = this.items[slot];
-    if (!item || item.getId() <= 0 || item.getAmount() <= 0) {
+    if (!item || item.getId() < 0 || item.getAmount() <= 0) {
       return this;
     }
 
@@ -635,7 +635,7 @@ export abstract class ItemContainer {
     toContainer: ItemContainer
   ): ItemContainer {
     if (
-      item.getId() <= 0 ||
+      item.getId() < 0 ||
       (item.getAmount() <= 0 && !(this instanceof Bank)) ||
       slot < 0
     ) {

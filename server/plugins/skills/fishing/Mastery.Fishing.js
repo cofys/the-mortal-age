@@ -37,7 +37,7 @@ let core = null;
 let hiddenSpotIds = new Set();
 
 function getRep(player) {
-  return Number(player.getAttribute(REP_ATTRIBUTE)) || 0;
+  return Number(player.getAttribute?.(REP_ATTRIBUTE)) || 0;
 }
 
 function tierFor(rep) {
@@ -57,7 +57,7 @@ function addRep(player, amount, reason) {
   if (!(amount > 0)) return;
   const before = tierFor(getRep(player));
   const rep = getRep(player) + amount;
-  player.setAttribute(REP_ATTRIBUTE, rep);
+  player.setAttribute?.(REP_ATTRIBUTE, rep);
   const after = tierFor(rep);
   if (after && after !== before) {
     player.sendMessage(`The Fishing Guild names you ${after.name}! (${rep} reputation)`);

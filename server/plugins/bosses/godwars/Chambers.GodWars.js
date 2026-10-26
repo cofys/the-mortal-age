@@ -43,6 +43,9 @@ function loadChamberSpawns() {
 /** Player -> their private chamber while they are in it. */
 const instances = new Map();
 
+/** Numbers each private chamber, so its NPCs' unique keys are its own. */
+let chamberSerial = 0;
+
 let InstanceClass = null;
 
 function instanceClass() {
@@ -54,6 +57,7 @@ function instanceClass() {
       this.faction = faction;
       this.player = player;
       this.isGodWarsInstance = true;
+      this.serial = ++chamberSerial;
       const { chunkX, chunkY, width, height } = faction.instance;
       for (let plane = 0; plane < PLANES; plane++) {
         for (let x = 0; x < width; x++) {
@@ -87,16 +91,18 @@ function instanceClass() {
     }
 
     spawnChamber() {
-      for (const row of chamberSpawns.get(this.faction.key) ?? []) this.spawn(row);
+      (chamberSpawns.get(this.faction.key) ?? []).forEach((row, slot) => this.spawn(row, slot));
     }
 
-    spawn(row) {
+    /** One NPC per spawn row: a respawn never lands while the row's NPC is still alive. */
+    spawn(row, slot) {
       if (this.isDestroyed()) return;
       const at = this.copyOf([row.x, row.y, row.level ?? 0]);
-      const npc = Common.api.spawnNpc({ id: row.id, x: at.getX(), y: at.getY(), z: at.getZ(), wanderRadius: 4 });
+      const unique = `godwars:chamber:${this.serial}:${slot}`;
+      const npc = Common.api.spawnNpc({ id: row.id, x: at.getX(), y: at.getY(), z: at.getZ(), wanderRadius: 4, unique });
       if (!npc) return;
       npc.__skipDefaultRespawn = true;
-      npc.__godwarsChamber = { area: this, row };
+      npc.__godwarsChamber = { area: this, row, slot };
       this.add(npc);
     }
 
@@ -306,7 +312,7 @@ function respawnInChamber(event) {
   const chamber = event.npc?.__godwarsChamber;
   if (!chamber) return;
   event.npc.__skipDefaultRespawn = true;
-  Common.later(Common.data.respawnTicks, () => chamber.area.spawn(chamber.row));
+  Common.later(Common.data.respawnTicks, () => chamber.area.spawn(chamber.row, chamber.slot));
 }
 
 function attachChambers(api) {

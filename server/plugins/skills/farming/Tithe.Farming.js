@@ -36,6 +36,20 @@ function sync(player) {
     const score = scoreFor(player);
     player.getPacketSender().sendVarbit(4893, score.points).sendVarbit(4900, score.score);
 }
+function showOverlay(player) {
+    const crop = CROPS.findIndex(c => player.getInventory().contains(Data.itemId(c.name + " seed"))
+        || player.getInventory().contains(Data.itemId(c.name + " fruit")));
+    const sender = player.getPacketSender();
+    // Cache script1195 renders the fruit icon and existing batch/points varbits.
+    sender.sendVarbit(4901, crop + 1);
+    sender.sendSubInterface(core.CacheDefinitions.getComponentId("toplevel_osrs_stretch:overlay_hud"),
+        core.CacheDefinitions.getInterfaceId("hosidius_strip_farming"), 1);
+}
+function closeOverlay(player) {
+    const sender = player.getPacketSender();
+    if (sender.isSubInterfaceOpen(core.CacheDefinitions.getInterfaceId("hosidius_strip_farming")))
+        sender.closeSubInterface(core.CacheDefinitions.getComponentId("toplevel_osrs_stretch:overlay_hud"));
+}
 function enter(player) {
     const area = new TitheArea();
     player.getArea()?.leave(player, false);
@@ -46,6 +60,7 @@ function enter(player) {
     core.PluginManager.emitCustomEvent("tithe-farm:entered", { player });
     player.getPacketSender().sendVarbit(4909, 1);
     sync(player);
+    showOverlay(player);
 }
 function redraw(game, plot) {
     const p = plot.plant;
@@ -64,6 +79,7 @@ function titheLogout({ player }) {
     const game = GAMES.get(player);
     if (!game) return;
     GAMES.delete(player);
+    closeOverlay(player);
     if (player.getArea() === game.area) game.area.leave(player, true);
     else game.area.destroy();
 }
@@ -166,6 +182,7 @@ function titheItem(event) {
         if (player.getSkillManager().getCurrentLevel(core.Skill.FARMING) < CROPS[crop].level || !Patches.requireTool(player, "Seed dibber")) return;
         player.getInventory().deleteNumber(id, 1);
         plot.plant = { crop, stage: 0, watered: false, dead: false, fertilized: false, nextAt: Date.now() + 60000 };
+        player.getPacketSender().sendVarbit(4901, crop + 1);
         player.performAnimation(new core.Animation(2291));
     } else if (plot.plant && id === Data.itemId("Spade")) {
         plot.plant = undefined; player.performAnimation(new core.Animation(830));

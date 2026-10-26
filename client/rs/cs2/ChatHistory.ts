@@ -31,6 +31,28 @@ export interface ChatMessage {
     isFromIgnored?: boolean;
 }
 
+/** Chat timestamp modes of setting 119 "Chat timestamps" (varbit 12384, chat_settimestamps). */
+export const CHAT_TIMESTAMPS_OFF = 0;
+export const CHAT_TIMESTAMPS_SERVER_TIME = 1;
+export const CHAT_TIMESTAMPS_LOCAL_TIME = 2;
+
+/**
+ * The timestamp string the chatbox scripts prefix to a line (proc 4742 affixes it when
+ * chat_gettimestamps != 0): "[HH:MM:SS]" in UTC for server time, in the device's zone for
+ * local time, and "" when timestamps are off. The exact text of the native client is not
+ * documented; this is the format assumed.
+ */
+export function formatChatTimestamp(timestampMs: number, mode: number): string {
+    if (mode !== CHAT_TIMESTAMPS_SERVER_TIME && mode !== CHAT_TIMESTAMPS_LOCAL_TIME) return "";
+    const date = new Date(timestampMs);
+    const [hours, minutes, seconds] =
+        mode === CHAT_TIMESTAMPS_SERVER_TIME
+            ? [date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]
+            : [date.getHours(), date.getMinutes(), date.getSeconds()];
+    const two = (n: number) => String(n).padStart(2, "0");
+    return `[${two(hours)}:${two(minutes)}:${two(seconds)}]`;
+}
+
 // Max messages per type to avoid unbounded growth
 const MAX_MESSAGES_PER_TYPE = 100;
 
@@ -174,6 +196,8 @@ export class ChatHistoryStore {
         prefix: string;
         text: string;
         friendStatus: number;
+        /** Arrival time in ms since the epoch, for the chat timestamp setting. */
+        timestamp: number;
     } | null {
         const list = this.messagesByType.get(type);
         if (!list || list.length === 0) return null;
@@ -189,6 +213,7 @@ export class ChatHistoryStore {
             prefix: msg.prefix,
             text: msg.runeLiteFormatMessage ?? msg.text,
             friendStatus: msg.isFromFriend ? 1 : msg.isFromIgnored ? 2 : 0,
+            timestamp: msg.timestamp,
         };
     }
 

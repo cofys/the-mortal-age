@@ -7,30 +7,46 @@ const { before, test } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const questsPlugin = require("../plugins/quests/Quests.plugin.js");
 
 const loginHooks = [];
 const deathHooks = [];
+const questLabels = [];
 
 before(async () => {
   await require("../dist/game/cache/CachePipeline").CachePipeline.initialize(require("node:path").resolve(__dirname, ".."));
-  const { PluginManager } = require("../dist/plugins/PluginManager");
   const core = PluginManager.getCoreApi();
-  // Every other api call is a no-op; only the login and death hooks are kept.
-  const api = new Proxy({}, {
-    get: (_, property) => {
+  // Retain real profiling for login/death; other registrations are outside these tests.
+  const recordingApi = (api) => new Proxy(api, {
+    get: (target, property) => {
       if (property === "core") return core;
-      if (property === "onPlayerLogin") return (handler) => loginHooks.push(handler);
-      if (property === "onPlayerDeath") return (handler) => deathHooks.push(handler);
+      if (property === "withProfileLabel") return (label) => {
+        questLabels.push(label);
+        return recordingApi(target.withProfileLabel(label));
+      };
+      if (property === "onPlayerLogin") return (handler) => {
+        loginHooks.push(handler);
+        return target.onPlayerLogin(handler);
+      };
+      if (property === "onPlayerDeath") return (handler) => {
+        deathHooks.push(handler);
+        return target.onPlayerDeath(handler);
+      };
       return () => undefined;
     },
   });
   const quiet = console.log;
   console.log = () => {};
   try {
-    require("../plugins/quests/Quests.plugin.js").register(api);
+    questsPlugin.register(recordingApi(PluginManager.createApi("Quests")));
   } finally {
     console.log = quiet;
   }
+});
+
+test("quests receive separate profiling labels in their registration order", () => {
+  assert.deepEqual(questLabels, questsPlugin.QUESTS.map((quest) => `Quests/${quest}`));
 });
 
 function playerSendingTo(sent, bot) {
@@ -97,4 +113,40 @@ test("a real player's death still runs the quests' death hooks", () => {
   const { player, reads } = recordingPlayer(false);
   die(player);
   assert.ok(reads.includes("getAttribute"), "the quest death handlers read the dying player's stage");
+});
+
+test("quest profiling keeps separate stats and original callback names while skipping bots", () => {
+  const enabled = PluginManager.isPluginPerformanceProfilingEnabled();
+  PluginManager.resetPluginPerformanceStats();
+  PluginManager.setPluginPerformanceProfilingEnabled(true);
+  try {
+    const { player, reads } = recordingPlayer(true);
+    PluginManager.emitPlayerLogin({ player, username: "DevBot1", isNewAccount: false });
+    const rows = PluginManager.getPluginPerformanceSnapshot(questsPlugin.QUESTS.length + 1);
+    assert.ok(rows.length > 100, "each quest's login is timed separately");
+    const shared = rows.find((row) => row.pluginName === "Quests");
+    assert.ok(shared, "shared quest-list hooks retain the parent bucket");
+    assert.equal(shared.calls, 3, "shared login hooks register once");
+    for (const [quest, handler] of [["RecipeForDisaster", "syncQuestState"], ["CooksAssistant", "handleLogin"], ["DragonSlayer", "syncState"]]) {
+      const row = rows.find((entry) => entry.pluginName === `Quests/${quest}`);
+      assert.ok(row, `${quest} has its own stats`);
+      assert.equal(row.calls, 1);
+      assert.equal(row.errors, 0);
+      assert.equal(row.maxEventName, "player_login");
+      assert.equal(row.maxHandlerName, handler);
+    }
+    assert.deepEqual(reads.filter((key) => key !== "isPlayerBot"), [], "profiled login still skips bot quest work");
+
+    PluginManager.resetPluginPerformanceStats();
+    PluginManager.emitPlayerDeath({ player, killer: null, itemsLost: true, handled: false });
+    const horror = PluginManager.getPluginPerformanceSnapshot(questsPlugin.QUESTS.length)
+      .find((entry) => entry.pluginName === "Quests/HorrorFromTheDeep");
+    assert.ok(horror, "Horror from the Deep has its own death stats");
+    assert.equal(horror.maxEventName, "player_death");
+    assert.equal(horror.maxHandlerName, "handlePlayerDeath");
+    assert.deepEqual(reads.filter((key) => key !== "isPlayerBot"), [], "profiled death still skips bot quest work");
+  } finally {
+    PluginManager.setPluginPerformanceProfilingEnabled(enabled);
+    PluginManager.resetPluginPerformanceStats();
+  }
 });

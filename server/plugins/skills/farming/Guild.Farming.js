@@ -215,8 +215,13 @@ function withdrawalEntries(stored, kind) {
 function guildObject(event) {
     if (event.definition?.getName()?.toLowerCase() !== "seed vault") return;
     event.handled = true;
-    const { player, object } = event, farm = Patches.farmFor(player), vault = farm.vault ??= {};
+    const { player, object } = event;
     const near = () => player.getLocation().isWithinDistance(object.getLocation(), 5);
+    if (!near()) return;
+    const pin = { player, feature: "seed-vault", resume: () => guildObject(event) };
+    core.PluginManager.emitCustomEvent("bank-pin:guard", pin);
+    if (pin.locked) return;
+    const farm = Patches.farmFor(player), vault = farm.vault ??= {};
     const entries = [["Deposit all seeds and saplings", () => {
         if (!near()) return;
         for (const item of [...player.getInventory().getValidItems()]) {

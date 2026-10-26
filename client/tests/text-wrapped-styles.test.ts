@@ -82,4 +82,11 @@ assert.equal(decorations.length, 4);
 render(`${styles}one<br><br>plain`);
 assert.deepEqual(runs.filter((r) => r.color !== 0x00ff00).map((r) => [r.y, r.color]), [[0, RED], [24, DEFAULT]], "empty explicit lines retain their height");
 
+// The draw reports where the text landed: a buff timer's "11m" centred in a full-screen box.
+assert.deepEqual(
+    drawWrappedTextGL(glr, () => font, "11m", 10, 20, 880, 927, 0, DEFAULT, 12, false, 1, 1),
+    { x: 448, y: 483, width: 3, height: 1 },
+);
+assert.equal(drawWrappedTextGL(glr, () => font, "", 10, 20, 880, 927, 0, DEFAULT), undefined);
+
 console.log("text-wrapped-styles: ok");

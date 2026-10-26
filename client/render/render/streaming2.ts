@@ -221,6 +221,17 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
             !host.pendingLocUpdates.has(mapId) &&
             !host.pendingDoorLocUpdates.has(mapId) &&
             host.pendingLocGeometryUpdates.has(mapId);
+        // A loc reload of the drawn instance scene builds it from its template chunks.
+        const scene = host.instanceSceneMap;
+        const instance =
+            host.instanceActive && host.instanceTemplateChunks &&
+            scene?.mapX === mapX && scene.mapY === mapY
+                ? {
+                      templateChunks: host.instanceTemplateChunks,
+                      regionX: host.instanceRegionX,
+                      regionY: host.instanceRegionY,
+                  }
+                : undefined;
         const input: SdMapLoaderInput = snapshotMapInput({
             mapProfileEnabled: isMapProfileEnabled(),
             persistentCache: isLowEndDevice,
@@ -236,8 +247,11 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
             locOnly,
             loadedTextureIds: host.loadedTextureIds,
             locOverrides: host.locOverrides,
-            extraLocs: host.getExtraLocsForMap(mapX, mapY),
-            locSpawns: host.locSpawns,
+            instance,
+            extraLocs: instance
+                ? host.getInstanceExtraLocs(mapX, mapY)
+                : host.getExtraLocsForMap(mapX, mapY),
+            locSpawns: instance ? undefined : host.locSpawns,
             terrainOverrides: host.terrainOverrides,
             mapRegionReplacements: regionReplacements,
         });

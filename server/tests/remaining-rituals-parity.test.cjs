@@ -407,11 +407,10 @@ test("Shades of Mort'ton repairs to native 100/20, sanctifies serum and complete
   h.give(I.SACRED_OIL_4_, 5);
   h.hooks.itemOnItem[0]({ player: h.player, usedItemId: I.SACRED_OIL_4_, usedWithItemId: I.MAGIC_LOGS });
   assert.equal(h.quest.getStage(h.player), 70);
-  h.itemOnObject(I.MAGIC_PYRE_LOGS, O.FUNERAL_PYRE);
+  // The funeral pyres are the minigame's (ShadesOfMortton.plugin.js): it tells the quest.
+  h.emit('shades-of-mortton:pyre-logs');
   assert.equal(h.quest.getStage(h.player), 75);
-  h.give(I.LOAR_REMAINS, 1);
-  h.itemOnObject(I.LOAR_REMAINS, O.FUNERAL_PYRE);
-  h.itemOnObject(I.TINDERBOX, O.FUNERAL_PYRE);
+  h.emit('shades-of-mortton:cremated');
   assert.equal(h.quest.getStage(h.player), 80);
 
   h.action(N.ULSQUIRE_SHAUNCY, 'LyXCwi');

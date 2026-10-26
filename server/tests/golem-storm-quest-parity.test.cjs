@@ -19,7 +19,7 @@ runtime.startTranscript = (api, player, npcId, page, variant, select) => {
 function setup(register, options = {}) {
   const hooks = { custom: new Map(), variants: [], conditions: [], login: [], logout: [], zoneEnter: [], objects: [], itemActions: [], itemOnNpc: [], itemOnObject: [], itemOnItem: [], npcs: [] };
   const tasks = [];
-  const spawned = [], removed = [], ground = [], cameras = [], shakes = [], statements = [], sceneObjects = [];
+  const spawned = [], removed = [], ground = [], cameras = [], shakes = [], statements = [], sceneObjects = [], overheads = [];
   let tick = 0;
   const executed = new Set();
   const core = {
@@ -31,8 +31,9 @@ function setup(register, options = {}) {
       constructor(bounds) { this.bounds = bounds; this.members = []; }
       enter(player) { player.__area = this; this.members.push(player); }
       leave(player) { this.members = this.members.filter((member) => member !== player); if (player.__area === this) player.__area = null; }
-      add(member) { this.members.push(member); }
-      detach() {}
+      add(member) { this.members.push(member); member.setArea?.(this); }
+      detach(member) { this.members = this.members.filter(candidate => candidate !== member); }
+      remove(member) { this.detach(member); member.setArea?.(null); }
     },
     GameObject: class { constructor(id, location, type, rotation, area) { Object.assign(this, { id, location, type, rotation, area }); } },
     ObjectManager: { register(object) { sceneObjects.push(object); }, deregister(object) { sceneObjects.splice(sceneObjects.indexOf(object), 1); } },
@@ -41,6 +42,10 @@ function setup(register, options = {}) {
     DialogueChainBuilder: class { add(part) { this.part = part; return this; } },
     StatementDialogue: class { static send(player, text) { statements.push(text); } },
   };
+  if (options.realDialogue) {
+    const realCore = PluginManager.getCoreApi();
+    for (const key of ['ActionDialogue', 'DialogueChainBuilder', 'StatementDialogue']) core[key] = realCore[key];
+  }
   const api = new Proxy({
     core,
     persistAttribute() {},
@@ -64,11 +69,15 @@ function setup(register, options = {}) {
       for (const fn of hooks.custom.get(name) ?? []) fn(event);
     },
     spawnNpc(def) {
-      const npc = { def, getId: () => def.id, getOwner: () => def.owner, getLocation: () => new core.Location(def.x, def.y, def.z),
-        setPositionToFace() {}, isRegistered: () => true };
+      let location = new core.Location(def.x, def.y, def.z), area = null;
+      const npc = { def, getId: () => def.id, getOwner: () => def.owner, getLocation: () => location,
+        moveTo: to => { location = to; }, getPrivateArea: () => area, getArea: () => area, setArea: value => { area = value; },
+        getCurrentDefinition: () => core.NpcDefinition.forId(def.id), isVisible: () => true,
+        isOwnerOnly: () => def.ownerOnly === true, forceChat: text => overheads.push({ actor: npc, text, tick }),
+        setPositionToFace() {}, isRegistered: () => !npc.removed };
       spawned.push(npc); return npc;
     },
-    removeNpc(npc) { removed.push(npc); },
+    removeNpc(npc) { npc.removed = true; removed.push(npc); },
     getItemOnGroundManager: () => ({
       getGroundItem: (owner, id, location) => ground.find((item) => item.id === id && item.location.x === location.x && item.location.y === location.y),
       registerLocation: (player, item, location, privateArea = player.getPrivateArea()) => ground.push({ id: item.getId(), location, privateArea }),
@@ -80,7 +89,7 @@ function setup(register, options = {}) {
   const quest = runtime.getRegisteredQuests().at(-1);
 
   const attrs = new Map(), inventory = new Map(), varbits = new Map(), messages = [];
-  let location = new core.Location(0, 0, 0), dialogue = null;
+  let location = new core.Location(0, 0, 0), dialogue = null, npcViewDistance = 15;
   const sender = new Proxy({
     sendVarbit(id, value) { varbits.set(id, value); return sender; },
     getVarbit(id) { return varbits.get(id) ?? 0; },
@@ -88,9 +97,11 @@ function setup(register, options = {}) {
     sendCameraLookAt(x, y, height, motion) { cameras.push({ kind: 'look', x, y, height, motion }); return sender; },
     sendCameraReset() { cameras.push({ kind: 'reset' }); return sender; },
     sendCameraShake(slot, random) { shakes.push({ slot, random }); return sender; },
+    sendInterfaceRemoval() { if (options.realDialogue) player.getDialogueManager().reset(); return sender; },
   }, { get(target, key) { return target[key] ?? (() => sender); } });
   const player = {
     getUsername: () => 'parity-test',
+    getAppearance: () => ({ isMale: () => true }),
     getAttribute: (key) => attrs.get(key),
     setAttribute(key, value) { attrs.set(key, value); },
     getPacketSender: () => sender,
@@ -108,6 +119,12 @@ function setup(register, options = {}) {
     moveTo(value) { location = value; },
     getPrivateArea: () => player?.__area ?? null,
     getArea: () => player.__area,
+    getNpcViewDistance: () => npcViewDistance,
+    setNpcViewDistance(distance) { npcViewDistance = distance == null ? 15 : Math.max(1, Math.min(127, Math.trunc(distance))); },
+    getLocalNpcs: () => spawned.filter(npc => !npc.removed
+      && location.isViewableFromWithin(npc.getLocation(), npcViewDistance)
+      && npc.getPrivateArea() === player.getPrivateArea()),
+    forceChat: text => overheads.push({ actor: player, text, tick }),
     setUntargetable() {},
     getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
     getDialogueManager: () => ({
@@ -119,6 +136,11 @@ function setup(register, options = {}) {
     isRegistered: () => true,
     isPlayer: () => true,
   };
+  if (options.realDialogue) {
+    const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+    const manager = new DialogueManager(player);
+    player.getDialogueManager = () => manager;
+  }
   const emit = (name, event) => api.emitCustomEvent(name, { player, ...event });
   const advance = () => {
     tick++;
@@ -127,7 +149,7 @@ function setup(register, options = {}) {
     }
   };
   return { api, core, quest, attrs, inventory, varbits, messages, player, tasks, spawned, removed, ground, transcripts, hooks, emit, advance,
-    cameras, shakes, statements, sceneObjects,
+    cameras, shakes, statements, sceneObjects, overheads,
     setLocation(x, y, z = 0) { location = new core.Location(x, y, z); } };
 }
 
@@ -494,42 +516,73 @@ test('Shadow: real five-word menus use reverse for first and direct tome order f
   const BOOK_ORDER = ['Camerinthum', 'Agrith-Naar', 'Tarren', 'Caldar', 'Nahudu'];
   const SPOKEN_ORDER = ['Nahudu', 'Caldar', 'Tarren', 'Agrith-Naar', 'Camerinthum'];
 
-  const driveRitual = (h, transcript, words, npcId) => {
+  const driveRitual = (h, transcript, words, npcId, { cancelFirstEcho = false } = {}) => {
     assert.equal(transcript.select instanceof Function, true, 'plugin supplied the five-menu expansion');
     const steps = transcript.select(record.variants[transcript.variant]);
     let next = 0;
+    let prompt = null;
+    h.core.MultiChatboxPrompt.getPending = player => player === h.player ? prompt : null;
     h.api.sendMultiChatboxPrompt = (player, title, ...pairs) => {
-      const word = words[next];
-      for (let i = 0; i < pairs.length; i += 2) {
-        if (String(pairs[i]).toLowerCase() === word.toLowerCase()) { next++; pairs[i + 1](); return true; }
-      }
-      return false;
+      prompt = pairs;
+      return true;
     };
-    h.player.getDialogueManager = () => ({
-      reset() {},
-      startDialogues(chain) {
-        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
-          try { entry.send(h.player); } catch {}
-        }
-      },
-    });
-    const sender = new Proxy({ sendInterfaceRemoval() {} }, { get: (t, k) => t[k] ?? (() => sender) });
-    h.player.getPacketSender = () => sender;
+    const manager = h.player.getDialogueManager();
+    const { ActionDialogue } = require('../dist/game/model/dialogues/entries/impl/ActionDialogue');
+    const cast = h.spawned.filter(npc => npc.isRegistered());
+    assert.equal(cast.length, 7, 'the ritual has its seven actual quest actors');
+    for (const actor of cast) {
+      assert.equal(actor.getOwner(), h.player);
+      assert.equal(actor.getPrivateArea(), h.player.getPrivateArea(), 'the ritual actors share the player scene');
+    }
+    const initialStage = h.quest.getStage(h.player);
+    if (initialStage === 80) assert.ok(h.player.getNpcViewDistance() >= 20, 'the full captured first cast is in view');
     const conditionHook = { pluginName: 'ritual-parity', handler: (event) => h.hooks.conditions[0](event) };
     PluginManager.npcDialogueConditionHooks.unshift(conditionHook);
     try {
-      const event = { player: h.player, npc: { getId: () => npcId }, npcId,
-        definition: { getName: () => (npcId === 903 ? 'Matthew' : 'Denath'), getId: () => npcId } };
+      const npc = h.spawned.find(actor => actor.getId() === npcId && actor.isRegistered());
+      assert.ok(npc, 'the current ritual speaker is a real quest spawn');
+      const event = { player: h.player, npc, npcId, definition: npc.getCurrentDefinition() };
       startDialogue(h.api, event, steps, record.branches,
         { player: h.player, npc: event.npc, npcId, definition: event.definition, pages: [] });
+      let remaining = 200;
+      while ((manager.isActive() || prompt) && remaining-- > 0) {
+        if (prompt) {
+          const pairs = prompt;
+          prompt = null;
+          const index = pairs.findIndex((value, i) => i % 2 === 0 && String(value).toLowerCase() === words[next]?.toLowerCase());
+          assert.ok(index >= 0, `missing ritual word ${words[next]}`);
+          next++;
+          pairs[index + 1]();
+        } else if (manager.getCurrent() instanceof ActionDialogue) {
+          if (cancelFirstEcho && next === 1 && h.overheads.length === 8) {
+            const spoken = [...h.overheads];
+            manager.reset();
+            for (let i = 0; i < 4; i++) h.advance();
+            assert.deepEqual(h.overheads, spoken, 'cancelling the timed chorus cannot speak or open the next word');
+            assert.equal(next, 1);
+            assert.equal(h.quest.getStage(h.player), initialStage, 'an interrupted ritual cannot advance the quest');
+            assert.equal(h.player.getNpcViewDistance(), 15, 'the interrupted ritual restores normal NPC range');
+            return;
+          }
+          h.advance(); // automatic overhead owns the next two game ticks
+        } else {
+          manager.advance();
+        }
+      }
+      assert.ok(remaining > 0, 'the ritual dialogue finishes without skipping timed actions');
     } finally {
       PluginManager.npcDialogueConditionHooks.splice(PluginManager.npcDialogueConditionHooks.indexOf(conditionHook), 1);
     }
+    assert.equal(cancelFirstEcho, false, 'the requested first-echo cancellation must be reached');
     assert.equal(next, 5, 'all five menus were answered');
+    const echoes = h.overheads.filter(({ text }) => words.some(word => text === `${word}...` || text === `${word}!`));
+    assert.equal(echoes.length, 35, 'all seven ritual actors speak each of the five echoes');
+    for (const actor of cast) assert.equal(echoes.filter(echo => echo.actor === actor).length, 5);
+    assert.equal(h.overheads.some(({ text }) => text.includes('[Word ')), false, 'every spoken word placeholder is filled');
   };
 
   const prepare = (stage) => {
-    const h = setup((api) => require('../plugins/quests/quests/ShadowOfTheStorm.Quest')(api));
+    const h = setup((api) => require('../plugins/quests/quests/ShadowOfTheStorm.Quest')(api), { realDialogue: true });
     h.quest.setStage(h.player, stage);
     h.attrs.set('quest.shadow_of_the_storm.incantation', 4371);
     h.attrs.set('quest.shadow_of_the_storm.helpers', 15);
@@ -547,24 +600,38 @@ test('Shadow: real five-word menus use reverse for first and direct tome order f
   driveRitual(first, first.transcripts.at(-1), SPOKEN_ORDER, first.core.NpcIdentifiers.DENATH);
   for (let i = 0; i < 3; i++) first.advance();
   assert.equal(first.quest.getStage(first.player), 90, 'first ritual is Denath order reversed');
+  assert.equal(first.player.getNpcViewDistance(), 15, 'the resolved ritual restores normal NPC range');
 
   const firstWrong = prepare(80);
   firstWrong.hooks.itemActions[0]({ player: firstWrong.player, itemId: firstWrong.core.ItemIdentifiers.DEMONIC_SIGIL, option: 'Chant' });
   driveRitual(firstWrong, firstWrong.transcripts.at(-1), BOOK_ORDER, firstWrong.core.NpcIdentifiers.DENATH);
   for (let i = 0; i < 3; i++) firstWrong.advance();
   assert.equal(firstWrong.quest.getStage(firstWrong.player), 80, 'direct tome order fails the first ritual');
+  assert.equal(firstWrong.player.getNpcViewDistance(), 15);
 
   const second = prepare(110);
   second.hooks.itemActions[0]({ player: second.player, itemId: second.core.ItemIdentifiers.DEMONIC_SIGIL, option: 'Chant' });
   driveRitual(second, second.transcripts.at(-1), BOOK_ORDER, second.core.NpcIdentifiers.MATTHEW);
   for (let i = 0; i < 3; i++) second.advance();
   assert.equal(second.quest.getStage(second.player), 120, 'second ritual uses direct tome order');
+  assert.equal(second.player.getNpcViewDistance(), 15);
 
   const secondWrong = prepare(110);
   secondWrong.hooks.itemActions[0]({ player: secondWrong.player, itemId: secondWrong.core.ItemIdentifiers.DEMONIC_SIGIL, option: 'Chant' });
   driveRitual(secondWrong, secondWrong.transcripts.at(-1), SPOKEN_ORDER, secondWrong.core.NpcIdentifiers.MATTHEW);
   for (let i = 0; i < 3; i++) secondWrong.advance();
   assert.equal(secondWrong.quest.getStage(secondWrong.player), 110, 'reversed order fails the second ritual');
+  assert.equal(secondWrong.player.getNpcViewDistance(), 15);
+
+  const cancelled = prepare(80);
+  cancelled.hooks.itemActions[0]({ player: cancelled.player, itemId: cancelled.core.ItemIdentifiers.DEMONIC_SIGIL, option: 'Chant' });
+  driveRitual(cancelled, cancelled.transcripts.at(-1), SPOKEN_ORDER, cancelled.core.NpcIdentifiers.DENATH, { cancelFirstEcho: true });
+
+  const loggedOut = prepare(80);
+  loggedOut.hooks.itemActions[0]({ player: loggedOut.player, itemId: loggedOut.core.ItemIdentifiers.DEMONIC_SIGIL, option: 'Chant' });
+  assert.ok(loggedOut.player.getNpcViewDistance() >= 20);
+  for (const logout of loggedOut.hooks.logout) logout({ player: loggedOut.player });
+  assert.equal(loggedOut.player.getNpcViewDistance(), 15, 'logout restores normal NPC range');
 });
 
 test('Shadow: server completion 130 mirrors the native 7-bit varbit as 125 on login', () => {

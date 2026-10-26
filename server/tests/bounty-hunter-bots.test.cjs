@@ -19,9 +19,7 @@ const core = PluginManager.getCoreApi();
 before(async () => {
   await CachePipeline.initialize();
   core.RegionManager.init();
-  require('../plugins/items/Food.plugin').register({
-    core, persistAttribute() {}, onPlayerLogin() {}, onItemAction() {},
-  });
+  require('../plugins/items/Food.plugin').register(PluginManager.createApi('BountyHunterFoodRegression'));
 });
 
 test('lobby entry spawns funded, skulled PK bots and restores their entry fee after death', (t) => {
@@ -29,7 +27,7 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   const tasks = [];
   const spawned = [];
   const removed = [];
-  const populationRolls = [20, 50];
+  const populationRolls = [30, 50];
   const runtime = { botStatesByName: new Map(), spawnPvpBot };
   const human = { isPlayerBot: () => false };
   const bh = { lobby: new Set([human]), arena: new Set(), isArenaTile: () => true, inArena: () => false };
@@ -68,7 +66,7 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
     core: {
       Task: class {},
       Misc: { random: (min, max) => {
-        assert.deepEqual([min, max], [20, 50]);
+        assert.deepEqual([min, max], [30, 50]);
         assert.ok(populationRolls.length, 'roll only once per new population');
         return populationRolls.shift();
       } },
@@ -89,13 +87,13 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   enter({ player: { isPlayerBot: () => true } });
   assert.equal(spawned.length, 0, 'bots cannot populate the crater');
   enter({ player: human });
-  assert.deepEqual(spawned.map((bot) => bot.getUsername()), Array.from({ length: 20 }, (_, i) => `BhBot${i + 1}`));
+  assert.deepEqual(spawned.map((bot) => bot.getUsername()), Array.from({ length: 30 }, (_, i) => `BhBot${i + 1}`));
   for (const bot of spawned) {
     assert.equal(bot.isSkulled(), true);
     assert.equal(Coffer.balance(bot), Coffer.playerMinimumDeposit(bot));
   }
   enter({ player: human });
-  assert.equal(spawned.length, 20, 'another entry cannot duplicate the population');
+  assert.equal(spawned.length, 30, 'another entry cannot duplicate the population');
 
   const defender = spawned[0], rogue = spawned[1], quarry = spawned[2];
   const pvp = runtime.botStatesByName.get(defender.getUsername()).pvp;
@@ -131,28 +129,40 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   rich.setAttribute('bounty-hunter:coffer', 200_000);
   tasks[0].execute();
   assert.equal(Coffer.balance(rich), 200_000, 'funding preserves an existing surplus');
+
+  for (const bot of [...spawned]) bot.requestLogout();
+  assert.equal(removed.length, 30);
+  tasks[0].execute();
+  assert.equal(spawned.length, 31, 'an occupied crater recovers even after every bot leaves');
+  assert.equal(populationRolls.length, 1, 'departures keep the existing population target');
+  for (let index = 1; index < 30; index++) tasks[0].execute();
+  assert.equal(spawned.length, 60, 'one replacement per tick restores the roster without a burst');
+  tasks[0].execute();
+  assert.equal(spawned.length, 60, 'a full roster stops spawning');
   bh.lobby.clear();
   bh.arena.add(human);
   tasks[0].execute();
-  assert.equal(removed.length, 0, 'entering the arena keeps the population');
+  assert.equal(removed.length, 30, 'entering the arena keeps the population');
   const otherHuman = { isPlayerBot: () => false };
   bh.lobby.add(otherHuman);
   enter({ player: otherHuman });
   bh.arena.delete(human);
   tasks[0].execute();
-  assert.equal(removed.length, 0, 'one player leaving cannot remove another player\'s opponents');
+  assert.equal(removed.length, 30, 'one player leaving cannot remove another player\'s opponents');
   bh.lobby.delete(otherHuman);
   bh.arena.add(spawned[0]);
   tasks[0].execute();
-  assert.equal(removed.length, 20, 'the next tick removes every bot when the last real player leaves');
+  assert.equal(removed.length, 60, 'the next tick removes every bot when the last real player leaves');
   tasks[0].execute();
-  assert.equal(removed.length, 20, 'an empty crater does no more bot work');
+  assert.equal(removed.length, 60, 'an empty crater does no more bot work');
   bh.arena.clear();
   bh.lobby.add(human);
   enter({ player: human });
-  assert.equal(spawned.length, 70, 'the next visit rolls a fresh population, including the upper limit');
-  assert.equal(spawned.at(-1).getUsername(), 'BhBot70', 'fresh names: the last bots may still be online');
-  for (const bot of spawned) hooks.get('logout')({ player: bot });
+  assert.equal(spawned.length, 110, 'the next visit rolls a fresh population, including the upper limit');
+  assert.equal(spawned.at(-1).getUsername(), 'BhBot110', 'fresh names: the last bots may still be online');
+  bh.lobby.clear();
+  bh.arena.clear();
+  tasks[0].execute();
 });
 
 test('the shared tier picker still answers each tier', () => {

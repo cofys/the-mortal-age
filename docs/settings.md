@@ -34,6 +34,7 @@ The client only reports the click. The server sets the variable and sends it bac
 | Update clan 'last seen' records | 431 | varbit 16118 `clan_disable_lastseen` |
 | Show chat effects | 34 | varp 171 `option_chat` |
 | Split friends private chat | 35 | varp 287 `option_pm`, then script 83 `splitpm_changed` |
+| Chat timestamps (dropdown: Off, On (Server time), On (Local time)) | 119 | varbit 12384 `settings_chat_timestamps` = option, then script 4586 `settings_chat_timestamps`; a fresh account starts on 1 (server time), as live sends at login in 532 of 540 rsprox recordings |
 | Enable precise timing | 82 | varbit 11866 `option_precise_timing` |
 | Combat Achievement Tasks - Repeat completion | 160 | varbit 12456 |
 | Player Trade options | 312 | varbit 6580 `tradeoption_disabled` |
@@ -70,7 +71,7 @@ All on the tick the level is gained:
 4. **Total level:** on passing a multiple of 25, `Congratulations, you've reached a total level of <n>.`
 5. **Pop-up**, unless set to Disabled: script 2379 (`toplevel_chatbox_resetbackground`), then `levelup_display` (233) in the chatbox modal with `<col=000080>Congratulations, you just advanced a <Skill> level.`, `Your <Skill> level is now <n>.`, `Click here to continue`, and only that skill's icon shown.
 
-With pop-ups disabled, players kept skilling and fighting straight through their level-ups (one recording has 539 in a row). So skilling stops only when the pop-up opens: SkillLevelUp emits `level-up:popup-opened` `{ player, skill }` and the skilling plugins (Cooking, Farming, Firemaking, Fishing, Fletching, Mining, Smithing, Woodcutting) stop on it.
+With pop-ups disabled, players kept skilling and fighting straight through their level-ups (one recording has 539 in a row). With pop-ups enabled, SkillLevelUp emits `level-up:popup-opened` `{ player, skill, pause }`; skilling plugins retain their current session and pause its progress. Continuing the last queued skill/combat notification resumes that session with its remaining resources and work. Moving, starting another action, closing/replacing the popup, dying or logging out cancels it. Resume-on-Continue follows issue #1071's requested behavior; the captured popup packets remain unchanged.
 
 **Combat level.** A tick after the skill's level-up: `Congratulations, you've just advanced your Combat level. You are now level <n>.` with the same graphic and sounds. With pop-ups on, its pop-up comes when the skill's is continued: `<col=000080>Congratulations, you just advanced a combat level.` (or `<n> combat levels.`), `Your combat level is now <n>.`, with the combat icon (233:55 in rev 241).
 

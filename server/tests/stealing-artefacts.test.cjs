@@ -24,7 +24,8 @@ T.bind({ core });
 
 function player({ thieving = 99, items = {}, attributes = {} } = {}) {
   const attrs = new Map(Object.entries(attributes));
-  const inventory = new Map(Object.entries(items).map(([id, amount]) => [Number(id), amount]));
+  // A lockpick unless the test says otherwise (Wiki: one is needed for the drawers).
+  const inventory = new Map(Object.entries({ 1523: 1, ...items }).map(([id, amount]) => [Number(id), amount]));
   const p = {
     messages: [],
     xp: 0,
@@ -219,4 +220,16 @@ test("the transcript's [location] is filled from the assigned house", () => {
   };
   T.fillLocation(request);
   assert.equal(request.text, `You need to recover an artefact for me. It can be found in the ${T.HOUSES[4].label}.`);
+});
+
+test("the drawers need a lockpick or a hair clip (Wiki)", () => {
+  const p = player({ thieving: 99, items: { 1523: 0 } });
+  T.assignTask(p, T.HOUSES[0]);
+  T.pickLock({ player: p, objectId: T.HOUSES[0].drawer });
+  assert.equal(p.messages.at(-1), T.MESSAGES.noLockpick);
+  assert.equal(p.xp, 0);
+  assert.equal(artefactsHeld(p), 0);
+  p.inventory.set(11682, 1);
+  T.pickLock({ player: p, objectId: T.HOUSES[0].drawer });
+  assert.equal(p.messages.at(-1), T.MESSAGES.stole, "a hair clip does too");
 });

@@ -7,11 +7,14 @@ const { Location } = require("../../../src/main/typescript/elvarg/game/model/Loc
 const { MapObjects } = require("../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 
 const BARRIER_IDS = [39652, 39653];
+// Includes the town, every barrier and the safe buffer outside them.
+const AREA = { minX: 3110, maxX: 3170, minY: 3605, maxY: 3660 };
 const BOUNDARY = [[3126,3618],[3130,3618],[3131,3617],[3139,3617],[3140,3618],[3144,3618],[3144,3620],[3150,3626],[3153,3626],[3154,3627],[3156,3627],[3156,3634],[3155,3634],[3155,3636],[3156,3636],[3156,3647],[3148,3647],[3147,3646],[3139,3646],[3138,3645],[3138,3640],[3125,3640],[3125,3633],[3123,3631],[3123,3623],[3124,3622],[3126,3622]];
 
 function tile(location) {
   const value = Location.readTile(location);
-  return value && value.z === 0 ? value : null;
+  return value && value.z === 0 && value.x >= AREA.minX && value.x <= AREA.maxX
+    && value.y >= AREA.minY && value.y <= AREA.maxY ? value : null;
 }
 
 function isInsideEnclave(location) {
@@ -67,4 +70,4 @@ function crossingTarget(playerLocation, object) {
   return { entering: isInsideEnclave(target), target, delta };
 }
 
-module.exports = { BARRIER_IDS, BOUNDARY, isInsideEnclave, isSafeLocation, isInBuffer, crossingTarget };
+module.exports = { AREA, BARRIER_IDS, BOUNDARY, isInsideEnclave, isSafeLocation, isInBuffer, crossingTarget };

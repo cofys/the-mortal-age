@@ -8,6 +8,7 @@ const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Flag } = require("../../src/main/typescript/elvarg/game/model/Flag");
 const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL } = require("./Teleports.Jewellery");
 const QuestRuntime = require("../quests/QuestRuntime");
+const { castRechargeDragonstone } = require("./RechargeDragonstone.Jewellery");
 
 /** Item param holding a worn item's first equipment option (RuneLite: OC_ITEM_OP1). */
 const WORN_OPTION_PARAM = 451;
@@ -62,28 +63,39 @@ function chargeMessage(piece, charges) {
   return `Your ${piece.noun} has ${count} ${unit}s left.`;
 }
 
-/** The container (inventory or equipment) and slot still holding this exact item. */
-function findItem(player, item) {
-  for (const container of [player.getInventory(), player.getEquipment()]) {
+/**
+ * The container (inventory or equipment) and slot holding the item: this exact object, or
+ * else a carried item with the id it had (moving it between the inventory and equipment
+ * mid-teleport can replace the object).
+ */
+function findItem(player, item, itemId = item.getId()) {
+  const containers = [player.getInventory(), player.getEquipment()];
+  for (const container of containers) {
     const slot = container.getItems().indexOf(item);
-    if (slot >= 0) return { container, slot };
+    if (slot >= 0) return { container, slot, item };
+  }
+  for (const container of containers) {
+    const slot = container.getItems().findIndex((other) => other?.getId() === itemId);
+    if (slot >= 0) return { container, slot, item: container.getItems()[slot] };
   }
   return null;
 }
 
-/** Uses one charge on arrival, swapping in the next item or crumbling the last one. */
-function useCharge(player, item) {
-  const entry = JEWELLERY_BY_ITEM.get(item.getId());
-  if (!entry) return;
+/**
+ * Uses one charge on arrival, swapping in the next item or crumbling the last one. `castId`
+ * is the item's id when the teleport started.
+ */
+function useCharge(player, item, castId = item.getId()) {
+  const location = findItem(player, item, castId);
+  const entry = location ? JEWELLERY_BY_ITEM.get(location.item.getId()) : null;
+  if (!entry || entry.charges <= 0) return;
   const { piece, charges } = entry;
   player.sendMessage(`<col=${CHARGE_COLOUR}>${chargeMessage(piece, charges)}</col>`);
   if (charges === Infinity) return;
-  const location = findItem(player, item);
-  if (!location) return;
   const nextId = nextItemId(piece, charges);
   const equipped = location.container === player.getEquipment();
   if (nextId != null) {
-    item.setId(nextId);
+    location.item.setId(nextId);
   } else if (equipped) {
     location.container.setItem(location.slot, new Item(-1, 0));
   } else {
@@ -111,11 +123,28 @@ function teleport(player, item, destination) {
     player.sendMessage(piece.emptyMessage);
     return;
   }
+  if (destination.colosseumRank && !colosseumRankReached(player, destination.colosseumRank)) {
+    statement(player, destination.lockedMessage);
+    return;
+  }
   const target = destinationTile(player, destination);
   if (!TeleportHandler.checkReqs(player, target, piece.wildernessLevel ?? DEFAULT_WILDERNESS_LEVEL)) {
     return;
   }
-  TeleportHandler.teleport(player, target, TeleportType.NORMAL, false, () => useCharge(player, item));
+  const castId = item.getId();
+  TeleportHandler.teleport(player, target, TeleportType.NORMAL, false, () => useCharge(player, item, castId));
+}
+
+/** Whether the player has reached a Fortis Colosseum Glory title (the Colosseum plugin answers). */
+function colosseumRankReached(player, rank) {
+  const request = { player, rank, reached: false };
+  pluginApi.emitCustomEvent("colosseum:has-rank", request);
+  return request.reached === true;
+}
+
+function statement(player, text) {
+  const { DialogueChainBuilder, StatementDialogue } = pluginApi.core;
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
 }
 
 /** Burning amulet destinations are all in the Wilderness, so ask first. */
@@ -250,6 +279,8 @@ function handleJewelleryAction(event) {
     const destination = piece.destinations[event.subOpId - 1];
     if (destination) {
       event.handled = true;
+      // A Rub submenu teleport rubs first, as Rub does (rsprox 723, 3170).
+      if (piece.rubMessage && entry.charges > 0) player.sendMessage(piece.rubMessage);
       confirmAndTeleport(player, item, destination);
     }
     return;
@@ -334,6 +365,7 @@ module.exports = {
     BonusManager = api.getBonusManager();
     api.onItemAction(handleJewelleryAction);
     api.onItemOnObject(rechargeAtFountain, { noted: false });
+    api.onSpellCast(castRechargeDragonstone.bind(null, api));
   },
   _test: { JEWELLERY_BY_ITEM, chargeMessage, nextItemId, useCharge },
 };

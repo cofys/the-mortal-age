@@ -5,7 +5,8 @@
  * chatter uses the "Auguste" page. This plugin supplies the variant selector for
  * Auguste (all four cache ids), the prose-condition answers, the material hand-in
  * side effects, the origami balloon crafts, the sand pit/basket frame work and the
- * first-flight shortcut that lands the player in Taverley.
+ * first flight, played at the balloon controls (BalloonTransport's Controls unit, the
+ * "taverley" route), with the transcript's crash sites.
  *
  * Stages (varbit 2866 "zep_quest", varp 912 bits 0-7 - see below): 1 accepted,
  * 2 first experiment done (origami balloon handed over), 3 second experiment done
@@ -25,11 +26,17 @@
  * 1,500 Woodcutting and 4,000 Firemaking XP, the bomber jacket and cap, and the
  * balloon transport system. (The issue text said 2 QP; the Wiki says 1.)
  *
+ * The flight: choosing a "fly" option takes the 10 logs (from the inventory or log
+ * storage, as chosen) and flies the balloon controls' three screens. A landing on
+ * Taverley's target moves the quest to stage 7. A bail over Entrana lands there; a
+ * crash loses the logs and keeps the balloon (stage 6, Wiki): on Entrana from the first
+ * screen, at sea from the second (Auguste's lines, then the plank swims the player to
+ * Entrana) and in the woods from the third (the dirt leads out east of Falador). A
+ * logout at the controls loses the logs.
+ *
  * Gaps/approximations:
- * - The balloon flight minigame (the three scrolling screens, sandbag/log fuel,
- *   bail/crash branches) is not reproduced; choosing a "fly" option consumes the
- *   10 logs and lands the player safely in Taverley, which is what the quest's
- *   completion needs. The four crash variants are therefore unreachable.
+ * - No recording of the quest flight exists: the Taverley screens are transcribed from
+ *   the Wiki's Balloon path images, and the crash sites' tiles are calibrated.
  * - The "balloon construction diagram" open_interface has no cache interface; the
  *   step is owned silently and the surrounding dialogue explains the design.
  * - The post-quest balloon transport interface (Auguste's "Do you want to use
@@ -175,6 +182,18 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
 
   const TAVERLEY_LANDING = new Location(2938, 3421, 0);
   const ENTRANA_ARRIVAL = new Location(2808, 3354, 0);
+  /** Where the woods crash site's dirt comes out (the balloon routes' "falador" crash site). */
+  const FALADOR_EAST = new Location(3058, 3374, 0);
+  /** The balloon controls' route the quest flies (plugins/world/data/balloon-routes.json). */
+  const FLIGHT_STATION = "taverley";
+  /** Past Entrana a crash comes down at sea (screen 2) or in the woods (screen 3), with Auguste. */
+  const FAILING = "getting-ready-for-first-flight-failing-on-the";
+  const CRASH_SCENES = {
+    ocean: { npcId: NpcIdentifiers.AUGUSTE_3, variant: `${FAILING}-second-stage` },
+    woods: { npcId: NpcIdentifiers.AUGUSTE_4, variant: `${FAILING}-final-stage` },
+  };
+  const PLANK = ObjectIdentifiers.PLANK_13; // zep_plank, the sea crash site's way out
+  const CRASH_SITE_EXIT = ObjectIdentifiers.DIRT; // zep_dirt_exit, the woods crash site's
   const TAVERLEY_RADIUS = 20;
 
   const CONTRABAND_SLOTS = [
@@ -299,6 +318,9 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
   /** Which transcript variant Auguste plays, by quest stage. */
   function selectVariant({ npcId, player }) {
     if (!AUGUSTE_NPC_IDS.has(npcId)) return null;
+    // Auguste at a crash site talks about the crash, never a flight from there.
+    const scene = Object.values(CRASH_SCENES).find((entry) => entry.npcId === npcId);
+    if (scene) return { page: PAGE, variant: scene.variant };
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) {
       return nearTaverley(player)
@@ -713,15 +735,37 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
     }
   }
 
-  /** The ten/ten logs onto Auguste's fire; the flight lands in Taverley. */
-  function startFlight(player) {
-    if (quest.getStage(player) < STAGE_BALLOON_READY) return;
+  /** The ten logs onto Auguste's fire, from `source`: the balloon controls fly to Taverley. */
+  function startFlight(player, source) {
+    if (quest.getStage(player) !== STAGE_BALLOON_READY) return;
     if (!held(player, LOGS, FLIGHT_LOGS) || !held(player, TINDERBOX)) return;
-    player.getInventory().deleteNumber(LOGS, FLIGHT_LOGS);
+    api.emitCustomEvent("balloon-transport:quest-flight", { player, station: FLIGHT_STATION, logs: FLIGHT_LOGS, source });
+  }
+
+  /** Landed on Taverley's target: Auguste is there, and the quest moves on. */
+  function flightLanded({ player, station }) {
+    if (station !== FLIGHT_STATION || quest.getStage(player) !== STAGE_BALLOON_READY) return;
     player.getPacketSender().sendVarbit(VARBIT_ZEP_MULTI_PICCARD, PICCARD_AUGUSTE);
     quest.setStage(player, STAGE_LANDED);
-    player.moveTo(TAVERLEY_LANDING);
-    player.sendMessage("You arrive safely in Taverley.");
+  }
+
+  /** Crashed past Entrana: Auguste's words at the sea or woods crash site (the transcript). */
+  function flightCrashed({ player, station, site }) {
+    if (station !== FLIGHT_STATION || quest.getStage(player) !== STAGE_BALLOON_READY) return;
+    const scene = CRASH_SCENES[site];
+    if (scene) startTranscript(api, player, scene.npcId, PAGE, scene.variant);
+  }
+
+  /** The plank at the sea crash site swims the player back to Entrana. */
+  function usePlank(event) {
+    if (event.objectId !== PLANK) return false;
+    startTranscript(api, event.player, NpcIdentifiers.AUGUSTE_3, PAGE, `${CRASH_SCENES.ocean.variant}-using-the-plank-to-return-to-land`);
+  }
+
+  /** The dirt at the woods crash site leads out, east of Falador. */
+  function leaveCrashSite(event) {
+    if (event.objectId !== CRASH_SITE_EXIT) return false;
+    startTranscript(api, event.player, NpcIdentifiers.AUGUSTE_4, PAGE, `${CRASH_SCENES.woods.variant}-leaving-the-crash-site`);
   }
 
   /** Stage directions and messages on the Enlightened Journey page. */
@@ -757,12 +801,28 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
         }
         return;
       case "_G1qps":
-      case "UrzuZs":
-      case "XJPKij":
-      case "RS5ufp": // open_interface "Balloon transport flying"
+      case "XJPKij": // open_interface "Balloon transport flying", logs from the inventory
         event.handled = true;
         event.end = true;
-        startFlight(player);
+        startFlight(player, "inventory");
+        return;
+      case "UrzuZs":
+      case "RS5ufp": // the same, logs from storage
+        event.handled = true;
+        event.end = true;
+        startFlight(player, "storage");
+        return;
+      case "vxF1CK":
+      case "hBVZFm": // "The balloon crashes." - the controls already said it
+        event.handled = true;
+        return;
+      case "o9tHqW": // fade out to the player climbing back onto land (Entrana, per the Wiki's plank)
+        event.handled = true;
+        player.moveTo(ENTRANA_ARRIVAL);
+        return;
+      case "NWvWY2": // fade out to the player outside Falador's eastern wall
+        event.handled = true;
+        player.moveTo(FALADOR_EAST);
         return;
       case "kV2c6g": // Quest complete!
         event.handled = true;
@@ -1102,6 +1162,10 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnNpc(handleItemOnNpc, { noted: false });
+  api.onObjectInteraction("Plank", { Use: usePlank });
+  api.onObjectInteraction("Dirt", { Leave: leaveCrashSite });
+  api.onCustomEvent("balloon-transport:flight-landed", flightLanded);
+  api.onCustomEvent("balloon-transport:flight-crashed", flightCrashed);
   api.onPlayerLogin(handleLogin);
   api.onCustomEvent("player:bootstrap-complete", sendWorldVarbits);
   api.onCustomEvent("agent:advance-time", advanceTime);

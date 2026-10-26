@@ -114,8 +114,9 @@ test('Ribbiting follows recorded stages22→24→26→28→30→32; chest needs 
   h.continueUntil(p, () => p.text.includes('Tell them we have a deal')); assert.equal(h.quest.getStage(p), 30);
   p.manager.advance(); h.talk(p, N.SUE);
   h.continueUntil(p, () => p.text.includes('true hero')); assert.equal(h.quest.isComplete(p), false);
+  assert.notEqual(p.varbits.get(9845), 1, 'the hardwood patch remains locked before the final reply');
   p.manager.advance(); assert.equal(h.quest.getStage(p), 32); assert.equal(p.attrs.get('quest.points'), 1);
-  assert.deepEqual(p.xp, [[core.Skill.WOODCUTTING.getIndex(), 2000]]); assert.notEqual(p.varbits.get(9845), 1);
+  assert.deepEqual(p.xp, [[core.Skill.WOODCUTTING.getIndex(), 2000]]); assert.equal(p.varbits.get(9845), 1);
   h.talk(p, N.MARCELLUS); assert.equal(p.varbits.get(9845), 1);
 });
 

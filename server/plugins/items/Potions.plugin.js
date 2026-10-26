@@ -49,11 +49,18 @@ const PRAYER_ENHANCE_INTERVAL_MS = 6 * 600;
 const AREA_MESSAGES = { "chambers-of-xeric": "You can only sip this potion while inside the Chambers of Xeric." };
 /** Shared 60-second cycle that decays every temporary skill boost by one (Wiki). */
 const ATTR_BOOST_CYCLE = "potions:boost-cycle";
+/** Whether Preserve has already stretched the current boost cycle. */
+const ATTR_BOOST_CYCLE_PRESERVED = "potions:boost-cycle-preserved";
+/** When Preserve was last switched on. */
+const ATTR_PRESERVE_SINCE = "potions:preserve-since";
 /** When the player logged out; timed effects are paused while offline. */
 const ATTR_PAUSED_AT = "potions:paused-at";
 const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE, ATTR_PRAYER_ENHANCE, ATTR_BOOST_CYCLE, ATTR_PAUSED_AT];
 
 const BOOST_DECAY_MS = 60 * 1000;
+/** Wiki (Temporary skill boost): Preserve stretches the cycle to 90 seconds once it has been on 15. */
+const PRESERVE_EXTENSION_MS = 30 * 1000;
+const PRESERVE_WARMUP_MS = 15 * 1000;
 const MENAPHITE_DURATION_MS = 5 * 60 * 1000;
 const MENAPHITE_RESTORE_INTERVAL_MS = 15 * 1000;
 const PRAYER_REGEN_DURATION_MS = 8 * 60 * 1000;
@@ -365,8 +372,10 @@ function timedEffectSkillIndexes(player) {
 }
 
 /**
- * Wiki: temporary boosts and drains move one point toward base every minute on a
- * continuous cycle. Prayer points and Hitpoints are not covered.
+ * Wiki: temporary boosts drop one point toward base every minute on a continuous cycle, which
+ * Preserve stretches to 90 seconds. Prayer points are not covered, and Hitpoints above base
+ * drop on the core's Hitpoints timer; lowered stats are restored by the core
+ * (Player.processStatRestoration).
  */
 function processBoostDecay(player) {
   const now = Date.now();
@@ -378,6 +387,12 @@ function processBoostDecay(player) {
   if (now < nextDecayAt) {
     return;
   }
+  if (preserveStretchesCycle(player, now)) {
+    player.setAttribute(ATTR_BOOST_CYCLE, nextDecayAt + PRESERVE_EXTENSION_MS);
+    player.setAttribute(ATTR_BOOST_CYCLE_PRESERVED, true);
+    return;
+  }
+  player.setAttribute(ATTR_BOOST_CYCLE_PRESERVED, false);
   const elapsed = now - nextDecayAt;
   player.setAttribute(ATTR_BOOST_CYCLE, nextDecayAt + BOOST_DECAY_MS * (Math.floor(elapsed / BOOST_DECAY_MS) + 1));
 
@@ -391,10 +406,20 @@ function processBoostDecay(player) {
     const base = getMaxLevel(player, skill);
     if (current > base) {
       setCurrentLevel(player, skill, current - 1);
-    } else if (current < base) {
-      setCurrentLevel(player, skill, current + 1);
     }
   }
+}
+
+/** Preserve stretches a cycle once, when it has been on for 15 seconds as the cycle ends. */
+function preserveStretchesCycle(player, now) {
+  if (player.getAttribute(ATTR_BOOST_CYCLE_PRESERVED)) return false;
+  const { PrayerHandler } = pluginApi.core;
+  if (!PrayerHandler.isActivated(player, PrayerHandler.PRESERVE)) return false;
+  return now - Number(player.getAttribute(ATTR_PRESERVE_SINCE)) >= PRESERVE_WARMUP_MS;
+}
+
+function notePreserveActivated({ player, prayerId }) {
+  if (prayerId === pluginApi.core.PrayerHandler.PRESERVE) player.setAttribute(ATTR_PRESERVE_SINCE, Date.now());
 }
 
 function startStamina(player) {
@@ -530,6 +555,7 @@ function registerPotion(definition) {
 
 // https://oldschool.runescape.wiki/w/Free-to-play_Ironman_guide#Boosts
 registerPotion({ name: "Beer", chains: [[Items.BEER]], emptyItemId: Items.BEER_GLASS,
+  drink: { messages: () => ["You drink the beer. You feel slightly reinvigorated...", "...and slightly dizzy too."] },
   requiresFoodPermission: true, shareable: false, effect: (player) => {
     heal(player, 1);
     boostSkill(player, Skill.STRENGTH, 1, 0.02);
@@ -1039,12 +1065,7 @@ registerPotion({
       [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]
     ),
 });
-registerPotion({
-  name: "Overload",
-  chains: [doseChain("OVERLOAD_4_", "OVERLOAD_3_", "OVERLOAD_2_", "OVERLOAD_1_")],
-  canUse: (player) => getCurrentLevel(player, Skill.HITPOINTS) > 50,
-  effect: applyOverload,
-});
+// Nightmare Zone's Overload (11730-11733) is drunk only in a dream: NightmareZone.plugin.js owns it.
 registerPotion({
   name: "Overload (+)",
   chains: [doseChain("OVERLOAD_4__5", "OVERLOAD_3__5", "OVERLOAD_2__5", "OVERLOAD_1__5")],
@@ -1481,6 +1502,17 @@ function cureFromHealthOrb({ player }) {
   if (!fallback.handled) player.sendMessage("You haven't got anything capable of curing your poison.");
 }
 
+/**
+ * "potions:dose-family" `{ itemId, family }`: an unnoted potion's family for decanting, from the cache's
+ * dose enum where it has one (`doseFamily`): `{ byDose, doses, max }`, `byDose[0]` the empty vessel.
+ * Left null for anything else.
+ */
+function answerDoseFamily(request) {
+  const family = request?.itemId > 0 ? doseFamily(request.itemId) : null;
+  if (!family || family.doses <= 0) return;
+  request.family = { byDose: [...family.byDose], doses: family.doses, max: family.max };
+}
+
 module.exports = {
   name: "Potions",
   isPotionItem(itemId) {
@@ -1490,7 +1522,7 @@ module.exports = {
     applyPrayerRestore, applySanfewRestore, applyAncientBrew, restorePrayerOverheal, applyDivine, processDivine,
     applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration, clearPrayerRegeneration,
     applyRankFrothyPotion, applyFoulChunkyPotion, applyRancidSlimyPotion, applyJarOfCongealedBlood,
-    processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
+    processBoostDecay, notePreserveActivated, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
     findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
     cureFromHealthOrb,
   },
@@ -1499,6 +1531,8 @@ module.exports = {
   },
   register(api) {
     api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
+    api.onCustomEvent("potions:dose-family", answerDoseFamily);
+    api.onCustomEvent("prayer:activated", notePreserveActivated);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);
     PERSISTED_ATTRIBUTES.forEach((key) => api.persistAttribute(key));

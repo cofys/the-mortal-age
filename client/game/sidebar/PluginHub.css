@@ -1,5 +1,5 @@
 /* The plugin hub: its list, the on/off switch, and a plugin's settings view, after RuneLite's
-   plugin list. Colours and fonts are Sidebar.css's variables. */
+   PluginListPanel and PluginListItem. Colours and fonts are Sidebar.css's variables. */
 
 /* Plugin hub list (PluginListPanel / PluginListItem) */
 .rl-plugin-list {
@@ -9,156 +9,183 @@
     min-height: 0;
 }
 
+/* IconTextField: 30 high, DARKER_GRAY, the search icon in a 30 wide cell, a red clear button. */
+.rl-plugin-search-bar {
+    padding: 10px 10px 0;
+}
+
 .rl-plugin-search {
-    margin: 12px 12px 10px;
-    padding: 6px 8px;
-    border: 1px solid var(--rl-medium-gray);
-    background: var(--rl-dark-gray);
+    display: flex;
+    align-items: center;
+    height: 30px;
+    background: var(--rl-darker-gray);
+    cursor: text;
+}
+
+.rl-plugin-search:hover {
+    background: var(--rl-dark-gray-hover);
+}
+
+.rl-plugin-search-icon {
+    flex: 0 0 30px;
+    width: 24px;
+    height: 24px;
+    object-fit: none;
+    image-rendering: pixelated;
+}
+
+.rl-plugin-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0 0 0 4px;
+    border: none;
+    background: none;
     color: var(--rl-text);
     outline: none;
 }
 
-.rl-plugin-search::placeholder {
-    color: var(--rl-light-gray);
+.rl-plugin-search input::selection {
+    background: var(--rl-orange-soft);
 }
 
-.rl-plugin-search:focus {
-    border-color: var(--rl-orange);
+.rl-plugin-search input::-webkit-search-cancel-button {
+    display: none;
 }
 
+.rl-plugin-search:focus-within {
+    box-shadow: inset 0 -1px var(--rl-orange);
+}
+
+.rl-plugin-search-clear {
+    flex: 0 0 30px;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--rl-error);
+    cursor: pointer;
+}
+
+.rl-plugin-search-clear:hover {
+    color: #ff9696;
+}
+
+/* Rows: 20 high, 5 apart, inside a 8/10/10/10 border. */
 .rl-plugin-list-items {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 0 0 12px 12px;
+    gap: 5px;
+    padding: 8px 10px 10px;
 }
 
 .rl-plugin-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 44px;
-    margin-right: 8px;
-    padding: 0 8px 0 10px;
-    background: var(--rl-dark-gray);
-}
-
-.rl-plugin-item:hover {
-    background: var(--rl-hover);
-}
-
-.rl-plugin-item-main {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
     flex-direction: column;
-    padding: 6px 0;
-    border: none;
-    background: none;
-    color: inherit;
-    text-align: left;
-}
-
-button.rl-plugin-item-main {
-    cursor: pointer;
-}
-
-.rl-plugin-item-name {
-    color: var(--rl-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.rl-plugin-item.off .rl-plugin-item-name {
-    color: var(--rl-light-gray);
-}
-
-.rl-plugin-item-desc {
-    font-family: var(--rl-font-small);
-    color: var(--rl-light-gray);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.rl-plugin-item-failure {
-    font-family: var(--rl-font-small);
-    color: var(--rl-error);
-}
-
-.rl-plugin-item-cog {
-    width: 28px;
-    height: 28px;
     flex: 0 0 auto;
+}
+
+.rl-plugin-item-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 20px;
+}
+
+.rl-plugin-item-pin {
+    flex: 0 0 21px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     border: none;
     background: none;
-    color: var(--rl-light-gray);
     cursor: pointer;
 }
 
-.rl-plugin-item-cog:hover {
+.rl-plugin-item-pin img {
+    image-rendering: pixelated;
+    /* The unpinned star: RuneLite's grayscale copy at 0.77 luminance. */
+    filter: grayscale(1) brightness(0.77);
+}
+
+.rl-plugin-item-pin.on img {
+    filter: none;
+}
+
+.rl-plugin-item-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--rl-text);
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+button.rl-plugin-item-name {
+    cursor: pointer;
+}
+
+.rl-plugin-item-name:hover {
     color: var(--rl-orange);
 }
 
-.rl-plugin-item-icon {
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+.rl-plugin-item-failure {
+    padding-left: 24px;
+    font-family: var(--rl-font-small);
+    color: var(--rl-error);
 }
 
-/* On/off switch: orange when on, as RuneLite's */
+.rl-plugin-item-buttons {
+    flex: 0 0 50px;
+    display: grid;
+    grid-template-columns: 25px 25px;
+    height: 20px;
+}
+
+.rl-plugin-item-cog,
 .rl-switch {
-    position: relative;
-    width: 32px;
-    height: 18px;
-    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
     border: none;
-    border-radius: 9px;
-    background: var(--rl-medium-gray);
+    background: none;
     cursor: pointer;
-    transition: background 120ms ease;
 }
 
-.rl-switch-knob {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--rl-light-gray);
-    transition:
-        transform 120ms ease,
-        background 120ms ease;
+.rl-plugin-item-cog img,
+.rl-switch img {
+    image-rendering: pixelated;
 }
 
-.rl-switch.on {
-    background: var(--rl-orange-soft);
+/* RuneLite's icon buttons: the icon at 0.7 alpha while hovered. */
+.rl-plugin-item-pin:hover img,
+.rl-plugin-item-cog:hover img,
+.rl-switch:hover img {
+    opacity: 0.7;
 }
 
-.rl-switch.on .rl-switch-knob {
-    transform: translateX(14px);
-    background: var(--rl-orange);
+/* Off: the "on" switch in grayscale at 0.61 luminance, flipped so the knob is on the left. */
+.rl-switch:not(.on) img {
+    filter: grayscale(1) brightness(0.61);
+    transform: scaleX(-1);
 }
 
 .rl-switch:focus-visible,
+.rl-plugin-item-pin:focus-visible,
 .rl-plugin-item-cog:focus-visible,
-.rl-plugin-item-main:focus-visible,
+.rl-plugin-item-name:focus-visible,
 .rl-plugin-config-back:focus-visible {
     outline: 1px solid var(--rl-orange);
-    outline-offset: 1px;
+    outline-offset: -1px;
 }
 
 /* One plugin's settings (PluginConfigView) */
@@ -174,7 +201,7 @@ button.rl-plugin-item-main {
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border-bottom: 1px solid var(--rl-dark-gray);
+    border-bottom: 1px solid var(--rl-darker-gray);
 }
 
 .rl-plugin-config-back {
@@ -218,5 +245,5 @@ button.rl-plugin-item-main {
 .rl-plugin-config-body {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 4px 14px 14px;
+    padding: 4px 10px 10px;
 }

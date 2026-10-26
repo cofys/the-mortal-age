@@ -26,6 +26,8 @@ export type WorldGameframe = (typeof WORLD_GAMEFRAMES)[number];
 
 export interface WorldDefinitionData {
     spawn: WorldPosition;
+    /** Shown under the world's name in the world list (up to 120 characters). */
+    description: string;
     zones: WorldZone[];
     experienceMultiplier: number;
     /** Optional: when set, players are switched to this layout on login. */
@@ -177,6 +179,10 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
         throw new WorldDefinitionValidationError("world.json membersWorld must be a boolean");
     }
     const membersWorld = world.membersWorld !== false;
+    const description = world.description ?? "";
+    if (typeof description !== "string" || description.length > 120) {
+        throw new WorldDefinitionValidationError("world.json description must be a string of at most 120 characters");
+    }
     const zones = world.zones.map((zone, index) =>
         parseWorldZone(zone, `world.json zones[${index}]`)
     );
@@ -187,6 +193,7 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
     }
     return {
         spawn,
+        description: description.trim(),
         zones,
         experienceMultiplier,
         membersWorld,
@@ -270,6 +277,7 @@ function syncRuntime(): void {
 function copyWorldDefinition(): WorldDefinitionData {
     return {
         spawn: { ...definition.spawn },
+        description: definition.description,
         zones: definition.zones.map((zone) => ({ ...zone, tags: [...zone.tags] })),
         experienceMultiplier: definition.experienceMultiplier,
         membersWorld: definition.membersWorld,

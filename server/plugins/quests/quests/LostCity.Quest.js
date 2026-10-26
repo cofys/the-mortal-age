@@ -16,10 +16,13 @@
  * Stages (varp 147): 1 started, 2 spoken to Shamus, 3 spirit defeated,
  * 4 branch chopped, 5 staff made, 6 complete.
  *
- * Gaps (no dump support): the reference's combat-45/skills warning is answered
- * from live stats; the tree spirit and Shamus are spawned owner-only and not
- * reaped on logout. The warrior/archer/monk/wizard post-shamus lines are reused
- * once the branch exists (the dump has no separate post-quest adventurer text).
+ * The tree spirit and Shamus are spawned owner-only per player, reused on
+ * repeated chops, and reaped on logout and quest completion.
+ * The warrior has a separate post-quest transcript; the other adventurers reuse
+ * their after-shamus lines because the dump has no post-quest variant for them.
+ *
+ * Entrana.plugin owns the shared ferry search and boat travel. The Cave monk's
+ * warning and one-way dungeon ladder remain part of this quest's route.
  */
 module.exports = function registerLostCityQuest(api) {
   const {
@@ -30,7 +33,7 @@ module.exports = function registerLostCityQuest(api) {
     Equipment,
     Location,
   } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { registerQuest, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Lost City";
 
@@ -82,13 +85,56 @@ module.exports = function registerLostCityQuest(api) {
   const TREE_SPIRIT_TILE = { x: 2860, y: 9737, z: 0 };
   const ZANARIS_TILE = { x: 2452, y: 4473, z: 0 };
 
+  // One-way ladder 2408 at 2820,3374 and Cave monk 1164 both land here; 2820,9774
+  // itself is blocked map data.
+  const ENTRANA_DUNGEON_LANDING = { x: 2822, y: 9774, z: 0 };
+
+  const CAVE_DESCENT_ACTION_ID = "u31XRz";
+  const ENTRANA_LADDER_OBJECT_ID = 2408;
+  const ENTRANA_LADDER_TILE = { x: 2820, y: 3374, z: 0 };
+
+  /** Owner-only quest NPCs by player, so a repeat chop reuses one and logout/complete reaps it. */
+  const spawnedByPlayer = new WeakMap();
+
   const START_HOOK = "quest:lost-city:start";
 
   let quest;
   let pluginApi;
 
+  function trackedNpc(player, key) {
+    const npc = spawnedByPlayer.get(player)?.[key];
+    if (!npc) return null;
+    return typeof npc.isRegistered === "function" && !npc.isRegistered() ? null : npc;
+  }
+
+  function spawnTrackedNpc(player, key, definition) {
+    const existing = trackedNpc(player, key);
+    if (existing) return existing;
+    const npc = pluginApi.spawnNpc(definition);
+    if (!npc) return null;
+    const state = spawnedByPlayer.get(player) ?? {};
+    state[key] = npc;
+    spawnedByPlayer.set(player, state);
+    return npc;
+  }
+
+  function clearTrackedNpc(player, key) {
+    const state = spawnedByPlayer.get(player);
+    if (!state) return;
+    const npc = state[key];
+    state[key] = null;
+    if (npc && (typeof npc.isRegistered !== "function" || npc.isRegistered())) pluginApi.removeNpc(npc);
+  }
+
+  function reapTrackedNpcs(player) {
+    clearTrackedNpc(player, "shamus");
+    clearTrackedNpc(player, "spirit");
+    spawnedByPlayer.delete(player);
+  }
+
   const hasItem = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
-  const hasAxe = (player) => AXE_ITEM_IDS.some((id) => hasItem(player, id));
+  const hasAxe = (player) => AXE_ITEM_IDS.some((id) => hasItem(player, id)
+    || player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.() === id);
   const woodcuttingLevel = (player) => player.getSkillManager().getCurrentLevel(Skill.WOODCUTTING);
 
   function buildJournal(player, questHandle) {
@@ -150,22 +196,20 @@ module.exports = function registerLostCityQuest(api) {
       const combat = typeof skills.getCombatLevel === "function" ? skills.getCombatLevel() : 999;
       const crafting = skills.getCurrentLevel(Skill.CRAFTING);
       const woodcutting = skills.getCurrentLevel(Skill.WOODCUTTING);
-      return combat < 45 && (crafting >= 31 || woodcutting >= 36);
+      return combat < 45 && (crafting < 31 || woodcutting < 36);
     }
     return null;
   }
 
   function adventurerVariant(stage, firstVariant, againVariant, afterShamusVariant) {
-    if (stage >= STAGE_SPIRIT_DEFEATED) return afterShamusVariant;
+    if (stage >= STAGE_SPOKEN_SHAMUS) return afterShamusVariant;
     if (stage >= STAGE_STARTED) return againVariant;
     return firstVariant;
   }
 
   function shamusVariant(stage, player) {
-    if (stage >= STAGE_SPIRIT_DEFEATED) return "talking-to-a-tool-leprechaun-leprechaun-in-a-tree-subsequent-talks";
-    if (stage >= STAGE_SPOKEN_SHAMUS) return "talking-to-a-tool-leprechaun-leprechaun-in-a-tree-attempting-to-chop-the-tree-after-shamus-has-appeared";
+    if (stage >= STAGE_SPOKEN_SHAMUS) return "talking-to-a-tool-leprechaun-leprechaun-in-a-tree-subsequent-talks";
     if (stage >= STAGE_STARTED) {
-      quest.setStage(player, STAGE_SPOKEN_SHAMUS);
       return "talking-to-a-tool-leprechaun-leprechaun-in-a-tree-first-talk";
     }
     return "talking-to-a-tool-leprechaun-leprechaun-in-a-tree-talking-to-shamus-before-starting-the-quest";
@@ -175,6 +219,7 @@ module.exports = function registerLostCityQuest(api) {
     const stage = quest.getStage(player);
     switch (npcId) {
       case WARRIOR_NPC_ID:
+        if (stage >= STAGE_COMPLETE) return { page: "Warrior (Lost City)", variant: "standard-dialogue-after-lost-city" };
         return adventurerVariant(
           stage,
           "starting-out-adventurer-camp-warrior",
@@ -205,7 +250,7 @@ module.exports = function registerLostCityQuest(api) {
       case SHAMUS_NPC_ID:
         return shamusVariant(stage, player);
       case CAVE_MONK_NPC_ID:
-        return "the-island-of-entrana-cave-monk";
+        return { page: "Cave monk", variant: "standard-dialogue" };
       default:
         if (TOOL_LEPRECHAUN_NPC_IDS.has(npcId)) return "talking-to-a-tool-leprechaun";
         return null;
@@ -217,8 +262,11 @@ module.exports = function registerLostCityQuest(api) {
     if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
   }
 
-  function handleTreeSpiritDeath({ killer, npcId }) {
+  function handleTreeSpiritDeath({ killer, npcId, npc }) {
     if (npcId !== TREE_SPIRIT_NPC_ID || !killer) return;
+    const state = spawnedByPlayer.get(killer);
+    if (!npc || state?.spirit !== npc) return;
+    state.spirit = null;
     if (quest.getStage(killer) === STAGE_SPOKEN_SHAMUS) {
       quest.setStage(killer, STAGE_SPIRIT_DEFEATED);
       killer.sendMessage("With the Tree spirit defeated, you may now chop the tree.");
@@ -239,7 +287,7 @@ module.exports = function registerLostCityQuest(api) {
       event.handled = true;
       return;
     }
-    pluginApi.spawnNpc({
+    spawnTrackedNpc(player, "shamus", {
       id: SHAMUS_NPC_ID,
       ...SHAMUS_TILE,
       wanderRadius: 5,
@@ -271,7 +319,7 @@ module.exports = function registerLostCityQuest(api) {
       return;
     }
     if (stage === STAGE_SPOKEN_SHAMUS) {
-      pluginApi.spawnNpc({
+      spawnTrackedNpc(player, "spirit", {
         id: TREE_SPIRIT_NPC_ID,
         ...TREE_SPIRIT_TILE,
         owner: player,
@@ -322,7 +370,41 @@ module.exports = function registerLostCityQuest(api) {
     player.sendMessage("The world starts to shimmer...");
     player.moveTo(new Location(ZANARIS_TILE.x, ZANARIS_TILE.y, ZANARIS_TILE.z));
     if (!quest.isComplete(player)) quest.complete(player);
+    reapTrackedNpcs(player);
     event.handled = true;
+  }
+
+  /** Shamus directions and the Cave monk's one-way descent. */
+  function handleDialogueAction(event) {
+    if (event.handled) return;
+    const { player } = event;
+    const stepId = event.stepId ?? event.step?.id;
+    if (!player || !stepId) return;
+    if ((stepId === "qdoJ9W" || stepId === "OyPO7t") && event.npcId === SHAMUS_NPC_ID) {
+      if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_SPOKEN_SHAMUS);
+      clearTrackedNpc(player, "shamus");
+      event.handled = true;
+      return;
+    }
+    if (stepId === CAVE_DESCENT_ACTION_ID) {
+      if (event.npcId !== CAVE_MONK_NPC_ID) return;
+      player.moveTo(new Location(ENTRANA_DUNGEON_LANDING.x, ENTRANA_DUNGEON_LANDING.y, ENTRANA_DUNGEON_LANDING.z));
+      event.handled = true;
+    }
+  }
+
+  /** Ladder 2408 has no pair in the cache; play the Cave monk's descent warning. */
+  function claimEntranaLadder(request) {
+    if (request.handled || request.objectId !== ENTRANA_LADDER_OBJECT_ID) return;
+    const at = request.object?.getLocation?.();
+    if (!at || at.getX() !== ENTRANA_LADDER_TILE.x || at.getY() !== ENTRANA_LADDER_TILE.y
+      || at.getZ() !== ENTRANA_LADDER_TILE.z) return;
+    request.handled = true;
+    startTranscript(pluginApi, request.player, CAVE_MONK_NPC_ID, "Cave monk", "when-trying-to-go-down-the-ladder");
+  }
+
+  function handleLogout({ player }) {
+    if (player) reapTrackedNpcs(player);
   }
 
   pluginApi = api;
@@ -333,16 +415,22 @@ module.exports = function registerLostCityQuest(api) {
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 3,
-    rewardItemId: DRAMEN_STAFF_ITEM_ID,
-    rewardItemLabel: "A Dramen staff",
-    otherRewards: ["Access to Zanaris", "Ability to wield a Dramen staff"],
+    scrollItemId: DRAMEN_STAFF_ITEM_ID,
+    otherRewards: [
+      "Access to Zanaris",
+      "Ability to craft Cosmic Runes",
+      "Ability to buy and wield Dragon Daggers & Longswords",
+    ],
     buildJournal,
   });
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
+  api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onCustomEvent("ladders:climb", claimEntranaLadder);
   api.onNpcDeath(handleTreeSpiritDeath);
+  api.onPlayerLogout(handleLogout);
   api.onObjectInteraction(handleTreeChop);
   api.onObjectInteraction(handleDramenTreeChop);
   api.onObjectInteraction(handleZanarisDoor);

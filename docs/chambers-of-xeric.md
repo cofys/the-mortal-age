@@ -219,6 +219,7 @@ Recordings 820 (a duo, six anvil visits) and 3389 (solo) show the whole fight.
 - He leaves on his 9th swing the first time and his 16th after each repair; back from the anvil he is enraged until his 6th swing.
 - At the anvil (12-21 ticks) sparks come every 4 ticks, two at each raider, and he heals every 3 ticks (85 at 8,400 hitpoints).
 - Every room's exit crystal shatters with loc anim 7506 and area sounds 1021 and 3821, and is gone 4 ticks later.
+- Defence specials on him follow the Wiki's rules: the first dragon warhammer or elder maul special always lands, and failed ones still drain ([defence-drain-specials.md](defence-drain-specials.md)).
 
 ## Muttadiles, from rsprox captures
 

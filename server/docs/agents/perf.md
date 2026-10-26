@@ -26,3 +26,8 @@ methods show up under their plugin as `area:process`, `area:canAttack` and so on
 
 `server_perf` and `plugin_perf` read the same data without the timed window. `load_status`
 shows what load is online.
+
+Plugin totals accumulate since the last reset; average and maximum are per callback, not
+per tick. `top` is the event with the largest cumulative total, while `slowest` names the
+event and original handler behind the maximum single call. Quest hooks and areas use
+`Quests/<QuestName>` labels; shared quest-list work stays under `Quests`.

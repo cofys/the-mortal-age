@@ -79,10 +79,17 @@ Original clue roll ranges come from the complete unmodified canonical
 The state and session tests cover multiple caskets, loss recovery, simultaneous
 death, the clicked slot, corrupt metadata and the real player save/load path.
 
+## Casket acquisition
+
+Elite reward caskets (and master's, once that tier lands) roll their Wiki Mimic chance in Treasure
+Trails and ask `treasure-trails:mimic-casket`. `Reward.Mimic.js` answers for an opted-in player who
+holds no Mimic, on the rolled chance or the dry protection (the first Mimic on the 25th elite or 10th
+master casket, `mimic:encountered`). The Mimic keeps the casket's clue rolls through
+`initializeCasket`, and Treasure Trails prints "The chest turned out to be the Mimic!". See
+[treasure-trails.md](treasure-trails.md).
+
 ## Not yet implemented
 
-- **Casket acquisition:** elite/master reward caskets don't open in TSPS yet (no clue
-  system), so the entry item is `::item`-only for now.
 - **Reward delivery:** engine tables (Wiki-sourced Elite `the_mimic` +
   Master `the_mimic_2`, incl. the Always plank) roll on kill but pay on Open
   outside the arena: one full pass plus one extra-rolls pass per remaining roll
@@ -90,8 +97,6 @@ death, the clicked slot, corrupt metadata and the real player save/load path.
   one "little extra reward" line for the first non-plank drop, and the clue
   loot window (group 73) as display. Six chances master, five elite (fresh
   chests default elite); every leave or death with the fight on costs one,
-  simultaneous death does not; at zero the chest disappears. The obtain line ("The chest turned out to be
-  the Mimic!") waits on the clue system with acquisition, pity counters and
-  acquisition integration. Origin/attempt state is implemented above. Tertiary scroll case, ring rate shift and base4–6 elite/5–7 master clue rolls
+  simultaneous death does not; at zero the chest disappears. Origin/attempt state is implemented above. Tertiary scroll case, ring rate shift and base4–6 elite/5–7 master clue rolls
   are follow-ups with the same.
 - **Death retrieval fee** (NR: 90k at the strange casket) and the boss timer.

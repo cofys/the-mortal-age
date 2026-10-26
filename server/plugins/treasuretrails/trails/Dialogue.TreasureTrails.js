@@ -4,7 +4,11 @@
 // "npc-dialogue:start" with a `select` that only captures the steps). The trail decides what
 // happens; the transcript supplies the words, with the wording most transcripts share as a fallback.
 // The transcripts name the "talk again with the scroll" variant several ways.
-const PUZZLE_HOLDING_SUFFIXES = ["while-holding-the-puzzle-box", "when-holding-the-puzzle-box", "talking-again-while-holding-the-puzzle-box"];
+// Master's light-or-puzzle-box NPCs add their own names for it, some with no tier in them.
+const PUZZLE_HOLDING_SUFFIXES = ["while-holding-the-puzzle-box", "when-holding-the-puzzle-box", "talking-again-while-holding-the-puzzle-box",
+  "while-holding-the-light-or-puzzle-box", "talking-while-holding-the-light-or-puzzle-box", "while-holding-the-light-puzzle-box",
+  "talking-again", "with-inventory-space-available-talking-again"];
+const UNTIERED_PUZZLE_HOLDING = ["treasure-trails-talking-again-while-holding-the-light-or-puzzle-box", "treasure-trails-talking-again"];
 const AGAIN_SUFFIXES = ["when-talked-to-again", "when-spoken-to-again", "talking-again", "spoken-to-again", "talked-to-again",
   "talked-to-when-talked-to-again", "speaking-to-him-again-with-the-challenge-scroll-in-the-inventory", "answering-the-clue", "solving-the-challenge"];
 let api;
@@ -74,9 +78,11 @@ function speech(steps, random = Math.random) {
  * "without having solved" variant, or the matching branch of a "holding the puzzle box" one.
  */
 function puzzleTranscript(player, npc, npcId, tier, solved) {
-  const own = transcript(player, npc, npcId, `treasure-trails-${tier}-when-talked-to-${solved ? "having" : "without-having"}-solved-the-puzzle-box`);
+  const having = solved ? "having" : "without-having";
+  const own = firstTranscript(player, npc, npcId, [`treasure-trails-${tier}-when-talked-to-${having}-solved-the-puzzle-box`,
+    `treasure-trails-${tier}-if-talked-to-${having}-solved-the-puzzle-box`]);
   if (own) return own;
-  const holding = firstTranscript(player, npc, npcId, PUZZLE_HOLDING_SUFFIXES.map(suffix => `treasure-trails-${tier}-${suffix}`));
+  const holding = firstTranscript(player, npc, npcId, [...PUZZLE_HOLDING_SUFFIXES.map(suffix => `treasure-trails-${tier}-${suffix}`), ...UNTIERED_PUZZLE_HOLDING]);
   return branch(holding, text => /solved/i.test(text) && /\bnot\b/i.test(text) !== solved);
 }
 
@@ -102,7 +108,8 @@ function message(steps, casket = false) {
 }
 
 // The transcripts' name placeholder, as NpcDialogues fills it ("Thanks [player name]!").
-const PLAYER_NAME = /\[(?:player name|playername|player)(\.?)\]|<player name>/gi;
+// Falo's "[Fremennik name]" is the player's name too, as Royal Trouble fills it.
+const PLAYER_NAME = /\[(?:player name|playername|player|Fremennik name)(\.?)\]|<player name>/gi;
 
 function named(text, player) {
   const name = player.getUsername?.();
@@ -121,9 +128,32 @@ function play(player, npcId, spoken, onEnd) {
   player.getDialogueManager().startDialogues(chain);
 }
 
+/**
+ * Lines, then `give` with an item box of what was given, then more lines: an NPC handing something
+ * over mid-speech (master's torn parts: "Here you go.", the part, then their compliment).
+ */
+function playHandOver(player, npcId, before, give, itemId, text, after = []) {
+  const chain = new core.DialogueChainBuilder();
+  let index = 0;
+  const say = line => chain.add(line.player != null ? new core.PlayerDialogue(index++, named(line.player, player)) :
+    new core.NpcDialogue(index++, npcId, named(line.npc, player)));
+  before.forEach(say);
+  chain.add(new core.ActionDialogue(index++, { execute: give }));
+  chain.add(new core.ItemStatementDialogue(index++, itemId, text));
+  after.forEach(say);
+  chain.add(new core.EndDialogue(index));
+  player.getDialogueManager().startDialogues(chain);
+}
+
+/** A plain message box, as live sends for a solved puzzle or light box. */
+function mesbox(player, text) {
+  player.getDialogueManager().startDialogues(new core.DialogueChainBuilder()
+    .add(new core.StatementDialogue(0, text)).add(new core.EndDialogue(1)));
+}
+
 function itemBox(player, itemId, text) {
   player.getDialogueManager().startDialogues(new core.DialogueChainBuilder()
     .add(new core.ItemStatementDialogue(0, itemId, text)).add(new core.EndDialogue(1)));
 }
 
-module.exports = { attach, transcript, againTranscript, puzzleTranscript, lines, speech, branch, wrongBranch, correctBranch, message, play, itemBox };
+module.exports = { attach, transcript, againTranscript, puzzleTranscript, lines, speech, branch, wrongBranch, correctBranch, message, play, playHandOver, itemBox, mesbox };

@@ -3593,6 +3593,7 @@
   {"level":0,"name":"Monk of Entrana","x":3049,"y":3235,"id":1167},
   {"level":0,"name":"Seagull","x":3050,"y":3203,"id":1338},
   {"level":0,"name":"Veos","x":3054,"y":3245,"id":1063},
+  {"level":0,"name":"Cabin Boy Herbert","x":3053,"y":3245,"id":11126,"direction":6,"wanderRadius":0},
   {"level":0,"name":"Spider","x":2257,"y":10463,"id":8137},
   {"level":0,"name":"Spider","x":2261,"y":10472,"id":8137},
   {"level":0,"name":"Spider","x":2267,"y":10478,"id":8137},

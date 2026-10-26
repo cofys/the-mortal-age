@@ -1,5 +1,6 @@
 import { Task } from "../Task";
 import { NPC } from "../../entity/impl/npc/NPC";
+import { NpcSpawnLineage } from "../../entity/impl/npc/NpcSpawnLineage";
 import { World } from "../../World";
 
 export class NPCRespawnTask extends Task {
@@ -8,12 +9,19 @@ export class NPCRespawnTask extends Task {
     super(ticks);
     this.npc = npc;
     }
-    
+
     public execute() {
-        // Register the new entity..
-        World.getAddNPCQueue().push(this.npc.clone());
-    
-        // Stop the task
         this.stop();
+        // Its source was reloaded or removed: the replacement is already in the world.
+        if (this.npc.getSpawnLineage()?.isRetired()) {
+            return;
+        }
+        const clone = this.npc.clone();
+        const key = this.npc.getUniqueKey();
+        // A unique NPC another spawn already brought back stays single.
+        if (key !== null && !NpcSpawnLineage.claimUnique(key, clone)) {
+            return;
+        }
+        World.getAddNPCQueue().push(clone);
     }
 }

@@ -146,9 +146,13 @@ function hideHud(player, fadeOut = false) {
 
 // --------------------------------------------------------------- the bosses
 
+/** The public lair's Scurrius: one at a time, however its respawn is reached. */
+const PUBLIC_UNIQUE_KEY = "scurrius:public";
+
 function spawnBoss(id, area) {
   const [x, y, z] = Common.SPAWN_TILE;
-  const npc = api.spawnNpc({ id, x, y, z, wanderRadius: 0 });
+  const unique = area ? undefined : PUBLIC_UNIQUE_KEY;
+  const npc = api.spawnNpc({ id, x, y, z, wanderRadius: 0, unique });
   if (!npc) return null;
   npc.setFace(core.Direction.SOUTH);
   npc.__skipDefaultRespawn = true;
@@ -164,7 +168,7 @@ function spawnBoss(id, area) {
 }
 
 function spawnPublicBoss() {
-  publicBoss = spawnBoss(Common.PUBLIC_ID, null);
+  publicBoss = spawnBoss(Common.PUBLIC_ID, null) ?? publicBoss;
 }
 
 /** A kill: the next Scurrius 30 ticks after this one is gone. */

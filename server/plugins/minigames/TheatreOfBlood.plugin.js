@@ -20,6 +20,7 @@ module.exports = {
     require("./tob/Xarpus.TheatreOfBlood")(api);
     require("./tob/Verzik.TheatreOfBlood")(api);
     require("./tob/Rewards.TheatreOfBlood")(api);
+    require("./tob/InfoBoard.TheatreOfBlood")(api);
     require("./tob/Commands.TheatreOfBlood")(api);
   },
 };

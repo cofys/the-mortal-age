@@ -26,6 +26,8 @@ let ABYSS_OBSTACLES;
 let PICKAXE_IDS;
 let AXE_IDS;
 let CRAFT_RUNES_GRAPHIC;
+/** The craft graphic (spotanim runecrafting) plays at height 92 (rsprox capture 1693). */
+const CRAFT_RUNES_GRAPHIC_HEIGHT = 92;
 let CRAFT_RUNES_ANIMATION;
 let RUNE_ESSENCE_MINE;
 let ABYSS_INNER_RING;
@@ -90,7 +92,7 @@ function initialize(api) {
     ObjectIdentifiers,
   } = api.core);
 
-  CRAFT_RUNES_GRAPHIC = new Graphic(186, api.core.GraphicHeight.HIGH);
+  CRAFT_RUNES_GRAPHIC = new Graphic(186, 0, CRAFT_RUNES_GRAPHIC_HEIGHT);
   CRAFT_RUNES_ANIMATION = new Animation(791);
   RUNE_ESSENCE_MINE = new Location(2913, 4832, 0);
   ABYSS_INNER_RING = new Location(3040, 4839, 0);
@@ -116,23 +118,33 @@ function initialize(api) {
     ItemIdentifiers.DRAGON_AXE,
   ];
 
+  // What each altar binds. Wiki (Runecraft): clicking an altar converts all the essence in the
+  // inventory, so rune and pure essence go together where both work.
+  const ANY_ESSENCE = { ids: [ItemIdentifiers.RUNE_ESSENCE, ItemIdentifiers.PURE_ESSENCE], missing: "You don't have any essence in your inventory." };
+  const PURE_ESSENCE_ONLY = { ids: [ItemIdentifiers.PURE_ESSENCE], missing: "You do not have any pure essences to bind.", mesbox: true };
+  // Kourend's Blood Altar binds dark essence fragments, never pure essence (Wiki: Blood Altar (Kourend)).
+  const DARK_ESSENCE = { ids: [ItemIdentifiers.DARK_ESSENCE_FRAGMENTS], missing: "You have nothing suitable to bind.", mesbox: true };
+
   RUNES_BY_ALTAR_ID = new Map([
-    [ObjectIdentifiers.ALTAR_33, { runeId: ItemIdentifiers.AIR_RUNE, level: 1, xp: 5, pureOnly: false, multiplier: [[11, 2], [22, 3], [33, 4], [44, 5], [55, 6], [66, 7], [77, 8], [88, 9], [99, 10]] }],
-    [ObjectIdentifiers.ALTAR_34, { runeId: ItemIdentifiers.MIND_RUNE, level: 2, xp: 5.5, pureOnly: false, multiplier: [[14, 2], [28, 3], [42, 4], [56, 5], [70, 6], [84, 7], [98, 8]] }],
-    [ObjectIdentifiers.ALTAR_35, { runeId: ItemIdentifiers.WATER_RUNE, level: 5, xp: 6, pureOnly: false, multiplier: [[19, 2], [38, 3], [57, 4], [76, 5], [95, 6]] }],
-    [ObjectIdentifiers.ALTAR_36, { runeId: ItemIdentifiers.EARTH_RUNE, level: 9, xp: 6.5, pureOnly: false, multiplier: [[26, 2], [52, 3], [78, 4]] }],
-    [ObjectIdentifiers.ALTAR_37, { runeId: ItemIdentifiers.FIRE_RUNE, level: 14, xp: 7, pureOnly: false, multiplier: [[35, 2], [70, 3]] }],
-    [ObjectIdentifiers.ALTAR_38, { runeId: ItemIdentifiers.BODY_RUNE, level: 20, xp: 7.5, pureOnly: false, multiplier: [[46, 2], [92, 3]] }],
-    [ObjectIdentifiers.ALTAR_39, { runeId: ItemIdentifiers.COSMIC_RUNE, level: 27, xp: 8, pureOnly: true, multiplier: [[59, 2]] }],
-    [ObjectIdentifiers.ALTAR_55, { runeId: ItemIdentifiers.CHAOS_RUNE, level: 35, xp: 8.5, pureOnly: true, multiplier: [[74, 2]] }],
-    [ObjectIdentifiers.ALTAR_57, { runeId: ItemIdentifiers.ASTRAL_RUNE, level: 40, xp: 8.7, pureOnly: true, multiplier: [[82, 2]] }],
-    [ObjectIdentifiers.ALTAR_46, { runeId: ItemIdentifiers.NATURE_RUNE, level: 44, xp: 9, pureOnly: true, multiplier: [[91, 2]] }],
-    [ObjectIdentifiers.ALTAR_40, { runeId: ItemIdentifiers.LAW_RUNE, level: 54, xp: 9.5, pureOnly: true, multiplier: [[95, 2]] }],
-    [ObjectIdentifiers.ALTAR_56, { runeId: ItemIdentifiers.DEATH_RUNE, level: 65, xp: 10, pureOnly: true, multiplier: [[99, 2]] }],
-    [ObjectIdentifiers.BLOOD_ALTAR, { runeId: ItemIdentifiers.BLOOD_RUNE, level: 75, xp: 27, pureOnly: true, multiplier: [] }],
+    [ObjectIdentifiers.ALTAR_33, { runeId: ItemIdentifiers.AIR_RUNE, level: 1, xp: 5, essence: ANY_ESSENCE, multiplier: [[11, 2], [22, 3], [33, 4], [44, 5], [55, 6], [66, 7], [77, 8], [88, 9], [99, 10]] }],
+    [ObjectIdentifiers.ALTAR_34, { runeId: ItemIdentifiers.MIND_RUNE, level: 2, xp: 5.5, essence: ANY_ESSENCE, multiplier: [[14, 2], [28, 3], [42, 4], [56, 5], [70, 6], [84, 7], [98, 8]] }],
+    [ObjectIdentifiers.ALTAR_35, { runeId: ItemIdentifiers.WATER_RUNE, level: 5, xp: 6, essence: ANY_ESSENCE, multiplier: [[19, 2], [38, 3], [57, 4], [76, 5], [95, 6]] }],
+    [ObjectIdentifiers.ALTAR_36, { runeId: ItemIdentifiers.EARTH_RUNE, level: 9, xp: 6.5, essence: ANY_ESSENCE, multiplier: [[26, 2], [52, 3], [78, 4]] }],
+    [ObjectIdentifiers.ALTAR_37, { runeId: ItemIdentifiers.FIRE_RUNE, level: 14, xp: 7, essence: ANY_ESSENCE, multiplier: [[35, 2], [70, 3]] }],
+    [ObjectIdentifiers.ALTAR_38, { runeId: ItemIdentifiers.BODY_RUNE, level: 20, xp: 7.5, essence: ANY_ESSENCE, multiplier: [[46, 2], [92, 3]] }],
+    [ObjectIdentifiers.ALTAR_39, { runeId: ItemIdentifiers.COSMIC_RUNE, level: 27, xp: 8, essence: PURE_ESSENCE_ONLY, multiplier: [[59, 2]] }],
+    [ObjectIdentifiers.ALTAR_55, { runeId: ItemIdentifiers.CHAOS_RUNE, level: 35, xp: 8.5, essence: PURE_ESSENCE_ONLY, multiplier: [[74, 2]] }],
+    [ObjectIdentifiers.ALTAR_57, { runeId: ItemIdentifiers.ASTRAL_RUNE, level: 40, xp: 8.7, essence: PURE_ESSENCE_ONLY, multiplier: [[82, 2]] }],
+    [ObjectIdentifiers.ALTAR_46, { runeId: ItemIdentifiers.NATURE_RUNE, level: 44, xp: 9, essence: PURE_ESSENCE_ONLY, multiplier: [[91, 2]] }],
+    [ObjectIdentifiers.ALTAR_40, { runeId: ItemIdentifiers.LAW_RUNE, level: 54, xp: 9.5, essence: PURE_ESSENCE_ONLY, multiplier: [[95, 2]] }],
+    [ObjectIdentifiers.ALTAR_56, { runeId: ItemIdentifiers.DEATH_RUNE, level: 65, xp: 10, essence: PURE_ESSENCE_ONLY, multiplier: [[99, 2]] }],
+    // Wiki: 95 Runecraft, 8 XP an essence, no multiples.
+    [ObjectIdentifiers.ALTAR_58, { runeId: ItemIdentifiers.WRATH_RUNE, level: 95, xp: 8, essence: PURE_ESSENCE_ONLY, multiplier: [] }],
+    // Wiki: 77 Runecraft, 23.8 XP and one blood rune a fragment.
+    [ObjectIdentifiers.BLOOD_ALTAR, { runeId: ItemIdentifiers.BLOOD_RUNE, level: 77, xp: 23.8, essence: DARK_ESSENCE, multiplier: [] }],
   ]);
   // The true Blood Altar binds pure essence (Wiki: 77 Runecraft, 10.5 XP an essence).
-  RUNES_BY_ALTAR_ID.set(ObjectIdentifiers.ALTAR_83, { runeId: ItemIdentifiers.BLOOD_RUNE, level: 77, xp: 10.5, pureOnly: true, multiplier: [] });
+  RUNES_BY_ALTAR_ID.set(ObjectIdentifiers.ALTAR_83, { runeId: ItemIdentifiers.BLOOD_RUNE, level: 77, xp: 10.5, essence: PURE_ESSENCE_ONLY, multiplier: [] });
 
   TALISMANS = new Map([
     [ItemIdentifiers.AIR_TALISMAN, { name: "Air talisman", runeId: ItemIdentifiers.AIR_RUNE, x: 2841, y: 4829, ruinX: 2983, ruinY: 3288 }],
@@ -265,29 +277,26 @@ function craftRunesAtAltar(player, runeData) {
     return 0;
   }
 
-  const essenceId = runeData.pureOnly
-    ? ItemIdentifiers.PURE_ESSENCE
-    : player.getInventory().contains(ItemIdentifiers.RUNE_ESSENCE)
-      ? ItemIdentifiers.RUNE_ESSENCE
-      : player.getInventory().contains(ItemIdentifiers.PURE_ESSENCE)
-        ? ItemIdentifiers.PURE_ESSENCE
-        : -1;
-
-  if (essenceId === -1) {
-    player.sendMessage(
-      runeData.pureOnly
-        ? "You need Pure essence to craft runes using this altar."
-        : "You don't have any essence in your inventory."
-    );
+  const { essence } = runeData;
+  if (!essence.ids.some((essenceId) => player.getInventory().contains(essenceId))) {
+    // The true Blood Altar's and Kourend's refusals are message boxes (rsprox captures 1636, 1673).
+    if (essence.mesbox) {
+      const { DialogueChainBuilder, StatementDialogue } = pluginApi.core;
+      player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, essence.missing)));
+    } else {
+      player.sendMessage(essence.missing);
+    }
     return 0;
   }
 
   const amountPerEssence = runeMultiplier(level, runeData);
   let craftedEssence = 0;
-  while (player.getInventory().contains(essenceId)) {
-    player.getInventory().deleteNumber(essenceId, 1);
-    player.getInventory().addItem(new Item(runeData.runeId, amountPerEssence));
-    craftedEssence++;
+  for (const essenceId of essence.ids) {
+    while (player.getInventory().contains(essenceId)) {
+      player.getInventory().deleteNumber(essenceId, 1);
+      player.getInventory().addItem(new Item(runeData.runeId, amountPerEssence));
+      craftedEssence++;
+    }
   }
 
   if (craftedEssence > 0) {
@@ -304,6 +313,7 @@ function craftRunesAtAltar(player, runeData) {
       petBase: runeData.runeId === ItemIdentifiers.BLOOD_RUNE ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE,
       rolls: craftedEssence,
       runeId: runeData.runeId,
+      amountPerEssence,
     });
   }
 

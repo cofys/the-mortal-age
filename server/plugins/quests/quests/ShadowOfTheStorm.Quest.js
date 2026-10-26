@@ -325,6 +325,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   const demonNpcs = new WeakMap();
   /** player -> incantation words picked this run. */
   const ritualPicks = new WeakMap();
+  const ritualViewDistances = new WeakMap();
   /** player -> whether the kiln last searched is the correct one. */
   const kilnSearchCorrect = new WeakMap();
 
@@ -467,10 +468,12 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     }
     for (const spawn of cast) {
       const existing = tracked.get(spawn.key);
-      if (existing) {
+      if (existing && existing.isRegistered?.() !== false && existing.getPrivateArea?.()?.isDestroyed?.() !== true) {
+        syncWizardArea(player, existing);
         existing.moveTo?.(new Location(spawn.x, spawn.y, 2));
         continue;
       }
+      if (existing) api.removeNpc(existing);
       const npc = api.spawnNpc({
         id: spawn.id,
         x: spawn.x,
@@ -480,8 +483,37 @@ module.exports = function registerShadowOfTheStormQuest(api) {
         owner: player,
         ownerOnly: true,
       });
-      if (npc) tracked.set(spawn.key, npc);
+      if (npc) {
+        tracked.set(spawn.key, npc);
+        syncWizardArea(player, npc);
+      }
     }
+  }
+
+  function syncWizardArea(player, npc) {
+    if (npc.getOwner?.() !== player || npc.isOwnerOnly?.() !== true) return;
+    const previous = npc.getPrivateArea?.() ?? null;
+    const area = Scenes.get(player)?.area ?? null;
+    if ((player.getPrivateArea?.() ?? null) !== area) return;
+    if (previous === area) return;
+    previous?.remove(npc);
+    if (area) area.add(npc);
+    else npc.setArea(null);
+  }
+
+  /** Keep the quest's temporary cast when the camera scene's private area is destroyed. */
+  function releaseRitualCast(player, scene) {
+    for (const npc of wizardNpcs.get(player)?.values() ?? []) {
+      if (npc.getOwner?.() === player && npc.isOwnerOnly?.() === true && npc.getPrivateArea?.() === scene.area) {
+        scene.area.remove(npc);
+      }
+    }
+  }
+
+  function restoreRitualView(player) {
+    if (!ritualViewDistances.has(player)) return;
+    player.setNpcViewDistance(ritualViewDistances.get(player));
+    ritualViewDistances.delete(player);
   }
 
   function removeWizard(player, key) {
@@ -856,7 +888,8 @@ module.exports = function registerShadowOfTheStormQuest(api) {
    * restores controls if the player leaves or logs out.
    */
   function startFirstRitualClosing(player) {
-    const scene = Scenes.open(player, "shadow-first-ritual-close", [[2706, 2738, 4879, 4918, 2]]);
+    const scene = Scenes.open(player, "shadow-first-ritual-close", [[2706, 2738, 4879, 4918, 2]], { beforeEnd: releaseRitualCast });
+    ensureWizardNpcs(player);
     cameraBeat(scene, 0, [2722, 4900, 500], [2717, 4901, 150]);
     Scenes.later(scene, 1, () => Scenes.camera(player, [2718, 4900, 900], [2717, 4901, 150], { rate: 1, rate2: 1 }));
     cameraBeat(scene, 1, [2716, 4904, 300], [2719, 4902, 150]);
@@ -900,6 +933,12 @@ module.exports = function registerShadowOfTheStormQuest(api) {
       return;
     }
     if (!packedIncantation(player)) assignIncantation(player);
+    // Dave's captured tile is twenty tiles away; the whole chorus must be local and visible.
+    if (typeof player.getNpcViewDistance === "function") {
+      if (!ritualViewDistances.has(player)) ritualViewDistances.set(player, player.getNpcViewDistance());
+      const distance = Math.max(...RITUAL_CAST.map(({ x, y }) => Math.max(Math.abs(x - RITUAL_TILE.x), Math.abs(y - RITUAL_TILE.y)))) + 1;
+      player.setNpcViewDistance(Math.max(player.getNpcViewDistance(), distance));
+    }
     ritualPicks.delete(player);
     setStage(player, STAGE_RITUAL);
     playRitualMenus(player, NpcIdentifiers.DENATH, FIRST_RITUAL_VARIANT, () =>
@@ -920,7 +959,8 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     if (!hasItem(player, DEMONIC_SIGIL_ITEM_ID) || !hasSilverlight(player)) return;
     ritualPicks.delete(player);
     // Capture 3333 t2429: the summoning camera starts with the first word menu.
-    Scenes.open(player, "shadow-second-ritual", [[2706, 2738, 4879, 4918, 2]]);
+    Scenes.open(player, "shadow-second-ritual", [[2706, 2738, 4879, 4918, 2]], { beforeEnd: releaseRitualCast });
+    ensureWizardNpcs(player);
     Scenes.camera(player, [2720, 4894, 550], [2720, 4900, 150]);
     playRitualMenus(player, NpcIdentifiers.MATTHEW, SECOND_RITUAL_VARIANT, () =>
       resolveSecondIncantation(player)
@@ -971,6 +1011,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   }
 
   function resolveFirstIncantation(player) {
+    restoreRitualView(player);
     if (quest.getStage(player) !== STAGE_RITUAL) return;
     const correct = firstRitualCorrect(player);
     ritualPicks.delete(player);
@@ -1257,10 +1298,21 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     }
     if (text.includes("[Word ")) {
       const picks = ritualPicks.get(event.player) ?? [];
-      text = text.replace(/\[Word (\d)\]/g, (match, number) => {
+      text = text.replace(/\[Word (\d)(!)?\]/g, (match, number, emphasis) => {
         const pick = picks[Number(number) - 1];
-        return pick === undefined ? match : INCANTATION_WORDS[pick];
+        return pick === undefined ? match : INCANTATION_WORDS[pick] + (emphasis ?? "");
       });
+    }
+    if (event.step?.speaker === "[Everyone]" && event.step.presentation === "overhead") {
+      const stage = quest.getStage(event.player);
+      if (stage === STAGE_RITUAL || stage === STAGE_READY) {
+        const cast = stage === STAGE_RITUAL ? RITUAL_CAST : SECOND_CAST;
+        const tracked = wizardNpcs.get(event.player);
+        event.actors = cast.map(({ key }) => {
+          const actor = tracked?.get(key);
+          return actor?.getOwner?.() === event.player && actor.isOwnerOnly?.() === true ? actor : undefined;
+        });
+      }
     }
     // Native NpcDialogues resolves the pblmt4 condition at build time and can
     // emit the branch as a condition_chosen action; the resolved line is the
@@ -1595,6 +1647,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
 
   function handleLogout({ player }) {
     if (!player) return;
+    restoreRitualView(player);
     Scenes.end(player, true);
     removeAllWizards(player);
     removeDemon(player);

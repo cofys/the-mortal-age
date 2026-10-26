@@ -5,6 +5,7 @@
 // Maze, Mime, Pillory, Quiz Master, Surprise Exam, Beekeeper). The areas, NPCs and scenery
 // ship in the world/cache data; a session only owns the player's stay, the dynamic pieces
 // it spawns, the return tile and the teleport refusal inside the area.
+const Rewards = require("./Rewards.RandomEvents");
 const LUMBRIDGE = { x: 3222, y: 3218 };
 const RETURN_LOCATION_ATTRIBUTE = "random-events:return-location";
 const sessions = new Map();
@@ -148,31 +149,12 @@ function owns(player, itemId) {
   return false;
 }
 
-/** Gives rewards, dropping anything that no longer fits at the player's feet. */
+/** Gives rewards at the player's tile through the shared reward path, then `message`. */
 function grant(session, rewards, message = null) {
   const player = session.player;
   if (!player.isRegistered()) return;
-  const inventory = player.getInventory();
-  const items = rewards.map(reward => new api.core.Item(
-    typeof reward === "number" ? reward : reward.id,
-    typeof reward === "number" ? 1 : reward.amount));
-  const slots = items.filter(item => !item.getDefinition().isStackable() ||
-    !inventory.containsNumber(item.getId())).length;
-  if (inventory.getFreeSlots() >= slots) {
-    for (const item of items) inventory.addItem(item);
-  } else {
-    dropAtFeet(session, items);
-    player.sendMessage("Your inventory is too full, so your reward was placed on the floor.");
-  }
+  Rewards.give(api, player, rewards);
   if (message) player.sendMessage(message);
-}
-
-function dropAtFeet(session, items) {
-  const manager = api.getItemOnGroundManager?.();
-  if (!manager) return;
-  for (const item of items) {
-    manager.registerLocation(session.player, item, session.player.getLocation().clone());
-  }
 }
 
 /** Sends the player home. A blocked return tile falls back to Lumbridge, as OSRS does. */

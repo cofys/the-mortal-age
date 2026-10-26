@@ -30,7 +30,7 @@ const PAGE = 'Secrets of the North';
 const pages = [{ page: PAGE }];
 const noop = () => {};
 
-function harness({ completed = [] } = {}) {
+function harness({ completed = [], realGeometry = false, hazeelFirst = false } = {}) {
   const events = {}, hooks = {}, tasks = [], transcripts = [], objects = [], npcs = [], prompts = [], persisted = [];
   const delayed = [];
   class FakeCountdown {
@@ -47,8 +47,8 @@ function harness({ completed = [] } = {}) {
           for (let i = delayed.length - 1; i >= 0; i--) if (delayed[i].key === key) delayed.splice(i, 1);
         },
       },
-      MapObjects: { get: () => null },
-      ObjectManager: { register: object => objects.push(object), deregister: noop },
+      MapObjects: realGeometry ? core.MapObjects : { get: () => null },
+      ObjectManager: realGeometry ? core.ObjectManager : { register: object => objects.push(object), deregister: noop },
     },
     persistAttribute: (key, value) => persisted.push([key, value]),
     sendMultiChatboxPrompt: (player, title, ...pairs) => { prompts.push({ player, title, pairs }); },
@@ -61,13 +61,19 @@ function harness({ completed = [] } = {}) {
       if (name === 'quest:is-started' && event) event.started = completedQuests.has(event.key);
     },
     spawnNpc: definition => {
-      let removed = false, at = new core.Location(definition.x, definition.y, definition.z);
+      let at = new core.Location(definition.x, definition.y, definition.z);
+      const flags = new Set();
       const npc = {
         ...definition,
         getId: () => definition.id,
         getOwner: () => definition.owner,
         getLocation: () => at,
-        isRegistered: () => !removed,
+        isRegistered: () => npc.removed !== true,
+        hasFlag: flag => flags.has(flag),
+        setFlag: (flag, enabled = true) => {
+          if (enabled) flags.add(flag); else flags.delete(flag);
+          return npc;
+        },
         getCombat: () => ({ attack: target => { npc.attacked = target; }, reset: noop }),
         setCombatXpMultiplier: noop, setPositionToFace: value => { npc.faced = value; },
         setNpcTransformationId: id => { npc.transformed = id; }, performAnimation: noop,
@@ -94,7 +100,10 @@ function harness({ completed = [] } = {}) {
     transcripts.push({ page: args[3], npcId: args[2], variant });
     return true;
   };
-  try { require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api); }
+  try {
+    if (hazeelFirst) require('../plugins/quests/quests/HazeelCult.Quest')(api);
+    require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  }
   finally { runtime.startTranscript = original; }
 
   const quest = runtime.getRegisteredQuests().at(-1);
@@ -184,6 +193,8 @@ function player() {
   const songs = [], cameras = [], interfaces = [];
   let interfaceId = null;
   const packet = new Proxy({
+    getVarbit: id => varbits.get(id) ?? 0,
+    getVarp: () => 0,
     sendVarbit: (id, value) => { varbits.set(id, value); return packet; },
     sendConfig: () => packet,
     sendSong: id => { songs.push(id); return packet; },
@@ -212,7 +223,7 @@ function player() {
     getPacketSender: () => packet,
     getLocation: () => location,
     moveTo: value => { location = value; },
-    getArea: () => area, setArea: value => { area = value; },
+    getArea: () => area, getPrivateArea: () => area, setArea: value => { area = value; },
     isPlayer: () => true, isNpc: () => false, getIndex: () => 1, getAsPlayer: () => p,
     getDialogueManager: () => ({ isActive: () => false, reset: noop, startDialogues: noop }),
     getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
@@ -221,6 +232,7 @@ function player() {
     getEnteredAmountAction: () => p.enterAction,
     sendMessage: text => messages.push(text),
     isPlayerBot: () => false,
+    getRights: () => core.PlayerRights.NONE,
     getUsername: () => p.username ?? 'north-tester',
     getSkillManager: () => ({
       getMaxLevel: () => p.maxLevel ?? 99,
@@ -368,8 +380,6 @@ test('barman bribe is paid once and cannot be paid without 100 coins', () => {
   h.condition(p, '8h0Upv', 'If the player has 100 coins:');
   assert.equal(stage(h, p), 4);
   assert.equal(p.items.get(I.COINS), 200);
-  h.action(p, '8Nhp3b');
-  assert.match(p.messages.at(-1), /^You give 100 coins to the barman\.$/);
   h.talk('Khazard Barman', p, N.KHAZARD_BARMAN);
   assert.equal(variant(h), 'on-the-trail-talking-to-the-khazard-barman-after-giving-him-100-coins');
 });
@@ -415,6 +425,24 @@ test('Evelot fight and death advance to the cult meeting, with interruption-safe
   assert.equal(variant(h), 'on-the-trail-talking-to-evelot-after-defeating-her');
   h.talk('Guard', p, N.GUARD_180);
   assert.equal(variant(h), 'on-the-trail-talking-to-the-carnillean-guard-after-the-conversation-with-evelot');
+});
+
+test('North spawn cleanup preserves another quest\'s Alomone for the same player', () => {
+  const h = harness(), p = player();
+  p.attributes.set('quest.hazeel_cult.side', 1); // Alomone survived on the helped-cult branch.
+  const foreign = h.api.spawnNpc({
+    id: N.ALOMONE, x: 2609, y: 9670, z: 0, owner: p, ownerOnly: true,
+  });
+  h.login(p);
+  assert.equal(foreign.isRegistered(), true, 'inactive North cannot remove Hazeel Cult\'s NPC');
+
+  h.setStage(p, 7);
+  const owned = h.npcs.find(n => n !== foreign && n.id === N.ALOMONE && n.isRegistered());
+  assert.ok(owned, 'North creates its own cult-meeting actor');
+  assert.equal(foreign.isRegistered(), true, 'creating the North actor preserves the foreign actor');
+  h.setStage(p, 13);
+  assert.equal(owned.isRegistered(), false, 'leaving the meeting removes North\'s actor');
+  assert.equal(foreign.isRegistered(), true, 'cleanup still preserves the foreign actor');
 });
 
 test('cult meeting spawns Hazeel only on the opposed side and advances through the guard', () => {
@@ -853,7 +881,7 @@ test('rev-241 hidden-room route: false wall claim reaches the ladder landing and
 
   const approach = new core.Location(2572, 3270, 1);
   const landing = new core.Location(2572, 3271, 2);
-  const chestTile = new core.Location(2572, 3270, 2);
+  const chestTile = new core.Location(2571, 3269, 2);
   const ladder = MapObjects.get(16683, new core.Location(2573, 3271, 1), null);
   assert.ok(ladder, 'cache ladder 16683 exists at the captured tile');
   const stand = location => ({ getLocation: () => location, getSize: () => 1, getPrivateArea: () => null });
@@ -868,13 +896,13 @@ test('rev-241 hidden-room route: false wall claim reaches the ladder landing and
   assert.equal(RegionManager.blocked(new core.Location(2570, 3268, 1), null), false, 'z1 staircase landing walkable');
   assert.equal(RegionManager.blocked(approach, null), false, 'false-wall standing tile walkable');
   assert.equal(RegionManager.blocked(landing, null), false, 'z2 ladder landing walkable');
-  assert.equal(RegionManager.blocked(chestTile, null), false, 'hidden chest tile walkable');
+  assert.equal(RegionManager.blocked(chestTile, null), true, 'canonical chest occupies its existing cache footprint');
   const ladderDef = ObjectDefinition.forId(16683);
   assert.equal(PathFinder.reachedObject(stand(approach), 2573, 3271, ladderDef.getSizeX(), ladderDef.getSizeY(),
     ladder.getFace(), ladder.getType(), ladderDef.getBlockingMask()), false,
   'plain reach is blocked, so the route/claim is required');
   const chestDef = ObjectDefinition.forId(46572);
-  assert.equal(PathFinder.reachedObject(stand(landing), 2572, 3270, 1, 1, 0, 10, chestDef.getBlockingMask()),
+  assert.equal(PathFinder.reachedObject(stand(new core.Location(2572, 3269, 2)), 2571, 3269, 1, 1, 1, 10, chestDef.getBlockingMask()),
     true, 'landing reaches the hidden chest');
 
   assert.match(JSON.stringify(dialogues['a-death-in-the-family-knocking-at-the-false-wall']), /"Yes\."/,
@@ -1053,10 +1081,11 @@ test('real NpcDialogues: false-wall message action arms Yes/No through the actua
   assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3271, 2]);
   assert.equal(RegionManager.blocked(new core.Location(2572, 3271, 2), null), false, 'real z2 landing walkable');
   const chestDef = ObjectDefinition.forId(46572);
+  yes.moveTo(new core.Location(2572, 3269, 2));
   const landingStand = { getLocation: () => yes.getLocation(), getSize: () => 1, getPrivateArea: () => null };
-  assert.equal(PathFinder.reachedObject(landingStand, 2572, 3270, 1, 1, 0, 10, chestDef.getBlockingMask()),
+  assert.equal(PathFinder.reachedObject(landingStand, 2571, 3269, 1, 1, 1, 10, chestDef.getBlockingMask()),
     true, 'real landing reaches the hidden chest');
-  emitObject(yes, 46572, 2572, 3270, 2);
+  emitObject(yes, 46572, 2571, 3269, 2);
   assert.equal((yes.getAttribute('secrets-of-the-north:evidence') ?? 0) & 8, 8, 'real chest message marked evidence');
 
   // Leave, then the persistent passage still lets the real wall page re-enter.
@@ -1071,7 +1100,7 @@ test('real NpcDialogues: false-wall message action arms Yes/No through the actua
   tickTasks();
   assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3271, 2],
     'real ladder works after re-entry');
-  emitObject(yes, 46572, 2572, 3270, 2);
+  emitObject(yes, 46572, 2571, 3269, 2);
   assert.equal((yes.getAttribute('secrets-of-the-north:evidence') ?? 0) & 8, 8);
 
   // Simulate an already-true saved flag after relog.
@@ -1445,7 +1474,7 @@ test('login re-installs the exact SOTN objects at their real tiles', () => {
     [`${object.getId()}@${object.getLocation().getX()},${object.getLocation().getY()},${object.getLocation().getZ()}`, object]));
   for (const key of [
     '46590@2544,9698,0', '46590@2533,9617,0', '46592@2535,9621,0',
-    '46564@2573,3269,1', '46569@2575,3268,1', '46707@2572,3270,1', '46572@2572,3270,2',
+    '46564@2573,3269,1', '46569@2575,3268,1',
     '46601@2916,10338,0', '46602@2924,10329,0', '46603@2918,10321,0',
     '46584@2621,3193,0', '46608@2916,10329,0', '46839@2845,10332,0', '46598@2860,4258,0',
   ]) assert.ok(placements.has(key), `missing placement ${key}`);
@@ -1585,4 +1614,168 @@ test('scroll hand-in sends QH native 52 while retaining the SCROLL_READ stage', 
   varbits.length = 0;
   runtime.sendQuestVarps({ player: p });
   assert.equal(varbits.filter(([id]) => id === 14722).at(-1)?.[1], 52, 'login/resend keeps native52');
+});
+
+test('real NpcDialogues: barman bribe deducts 100 once and renders WN9Bk8 once', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  const { startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
+  if (!CachePipeline.isInitialized()) await CachePipeline.initialize(path.resolve('.'));
+  RegionManager.init();
+  new NpcDefinitionLoader().load();
+
+  const api = PM.createApi('qh728-barman-real-dialogues');
+  require('../plugins/npcs/NpcDialogues.plugin').register(api);
+  require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  const north = runtime.getRegisteredQuests().filter(q => q.key === 'secrets_of_the_north').at(-1);
+
+  const p = new Player(null);
+  const messages = [];
+  const sender = new Proxy({}, {
+    get: (target, key) => {
+      if (key === 'getVarbit') return () => 0;
+      if (key === 'isSubInterfaceOpen') return () => false;
+      if (key === 'isChatboxInterface') return () => true;
+      if (key === 'closeInterruptibleInterfaces') return () => {};
+      return () => sender;
+    },
+  });
+  p.getPacketSender = () => sender;
+  p.sendMessage = text => messages.push(String(text));
+  p.getInventory().adds(I.COINS, 300);
+  north.setStage(p, 3);
+
+  const record = require('../data/definitions/npc-dialogues.json')['Secrets of the North'];
+  const event = { player: p, npcId: N.KHAZARD_BARMAN, definition: NpcDefinition.forId(N.KHAZARD_BARMAN) };
+  startDialogue(api, event, record.variants['on-the-trail-talking-to-the-khazard-barman'], record.branches,
+    { ...event, pages: [{ page: 'Secrets of the North' }] });
+
+  const target = 'Do you know anyone called Evelot?';
+  for (let i = 0; i < 300; i++) {
+    const pending = MultiChatboxPrompt.getPending(p);
+    if (pending) {
+      const index = pending.options.indexOf(target);
+      if (index < 0) break;
+      assert.equal(MultiChatboxPrompt.handleInterfaceActionClick({
+        player: p, buttonId: MultiChatboxPrompt.OPTIONS_WIDGET_ID, groupId: 219,
+        slot: index + 1, action: index + 1,
+      }), true);
+      continue;
+    }
+    if (!p.getDialogueManager().getCurrent()) break;
+    if (!p.getDialogueManager().handleResume(231 << 16 | 5, 1)) break;
+    if (messages.includes('You give 100 coins to the barman.')) break;
+  }
+  assert.equal(p.getInventory().getAmount(I.COINS), 200, 'bribe deducted exactly once');
+  assert.equal(north.getStage(p), 4, 'conditional route advanced to the bribed stage');
+  assert.equal(messages.filter(text => text === 'You give 100 coins to the barman.').length, 1,
+    'canonical message rendered exactly once');
+});
+
+
+test('real SOTN installation preserves Hazeel mansion wall and upstairs chest routes', () => {
+  const {RegionManager:R}=require('../dist/game/collision/RegionManager');
+  const {MapObjects:M}=require('../dist/game/entity/impl/object/MapObjects');
+  const {ObjectDefinition:D}=require('../dist/game/definition/ObjectDefinition');
+  const {MovementQueue}=require('../dist/game/model/movement/MovementQueue');
+  const {RsmodRouteFinding}=require('../dist/game/model/movement/path/RsmodRouteFinding');
+  D.init();R.init();R.loadMapFiles(2570,3270);
+  const h=harness({realGeometry:true,hazeelFirst:true}),p=player();
+  p.setAttribute('quest.hazeel_cult.stage',6);p.setAttribute('quest.hazeel_cult.side',1);p.items.set(I.CHEST_KEY_3,1);
+  // A Hazeel actor has never started SOTN; nevertheless login installs shared fixtures.
+  h.login(p);
+  const wallTile=new core.Location(2572,3270,1);
+  const wall=M.get(46902,wallTile.clone(),null);assert.ok(wall);
+  assert.equal(wall.getType(),0);assert.equal(wall.getFace(),1);
+  assert.equal(M.get(46707,wallTile.clone(),null),null,'no duplicate rectangular wall child');
+  let open;
+  require('../plugins/objects/Doors.plugin').register(new Proxy({
+    core:{...core,Sounds:{sendSound:noop},TaskManager:{submit:noop,cancelTasks:noop}},
+    onObjectInteraction:(name,actions)=>{if(name==='Door')open=actions.Open;},
+  },{get:(t,k)=>t[k]??noop}));
+  const door=M.get(1540,new core.Location(2572,3268,1),null);assert.ok(door);
+  open({player:p,object:door,objectId:1540,definition:D.forId(1540),location:door.getLocation(),clickType:1});
+  const rf=new RsmodRouteFinding(R.getClipping.bind(R));
+  const route=(z,sx,sy,x,y)=>rf.findRoute({level:z,srcX:sx,srcY:sy,srcSize:1,
+    destX:x,destY:y,destWidth:1,destLength:1,locShape:-1,moveNear:false,privateArea:null});
+  const mq=new MovementQueue(p);
+  const canReach=(object,z,x,y)=>{const loc=object.getLocation(),spec=mq.buildObjectRouteSpec(object);
+    return rf.reachedAbsolute({level:z,srcX:x,srcY:y,srcSize:1,destX:loc.getX(),destY:loc.getY(),
+      destWidth:spec.reachWidth,destLength:spec.reachLength,locAngle:spec.reachAngle,
+      locShape:spec.reachShape,blockAccessFlags:spec.reachBlockAccessFlags,privateArea:null});};
+  let approach;
+  for(let y=3268;y<=3272;y++)for(let x=2570;x<=2574;x++) {
+    if(canReach(wall,1,x,y)&&route(1,2570,3268,x,y).success)approach=[x,y];
+  }
+  assert.ok(approach,'ordinary first-floor route reaches canonical wall edge after actual door opens');
+  const chest=M.get(46903,new core.Location(2571,3269,2),null);assert.ok(chest);
+  let chestApproach;
+  for(let y=3267;y<=3272;y++)for(let x=2569;x<=2574;x++) {
+    if(canReach(chest,2,x,y)&&route(2,2573,3271,x,y).success)chestApproach=[x,y];
+  }
+  assert.ok(chestApproach,'SOTN startup leaves normal Hazeel chest approach from ladder landing');
+  // Follow the real Hazeel transcript/Yes, ladder and item-on-chest flow after startup.
+  const {DialogueManager}=require('../dist/game/model/dialogues/DialogueManager');
+  const manager=new DialogueManager(p);p.getDialogueManager=()=>manager;p.getFrameUpdater=()=>null;
+  p.getPacketSender().sendInterfaceRemoval=()=>{manager.reset();return p.getPacketSender();};
+  const click=(id,object)=>{const e={player:p,objectId:id,object,location:object.getLocation(),clickType:1,
+    definition:D.forPlayer(object.getId(),p),handled:false};
+    for(const fn of h.hooks.onObjectInteraction??[]){fn(e);if(e.handled)break;}return e;};
+  p.moveTo(new core.Location(2571,3270,1));click(46902,wall);
+  const prompt=h.prompts.at(-1);assert.ok(prompt,'ordinary corridor approach starts canonical wall prompt');
+  assert.equal(prompt.title,'Push against the wall?');
+  const yes=prompt.pairs.indexOf('Yes.');assert.ok(yes>=0);prompt.pairs[yes+1]();
+  assert.deepEqual([p.getLocation().getX(),p.getLocation().getY(),p.getLocation().getZ()],[2572,3271,1]);
+  const ladder=M.get(16683,new core.Location(2573,3271,1),null);assert.ok(ladder);click(16683,ladder);
+  assert.deepEqual([p.getLocation().getX(),p.getLocation().getY(),p.getLocation().getZ()],[2573,3271,2]);
+  assert.equal(route(2,p.getLocation().getX(),p.getLocation().getY(),...chestApproach).success,true);
+  p.moveTo(new core.Location(...chestApproach,2));
+  const itemEvent={player:p,objectId:46903,object:chest,itemId:I.CHEST_KEY_3,location:chest.getLocation(),
+    definition:D.forPlayer(46903,p),handled:false};
+  for(const fn of h.hooks.onItemOnObject??[]){fn(itemEvent);if(itemEvent.handled)break;}
+  assert.equal(itemEvent.handled,true);assert.equal(p.items.get(I.HAZEEL_SCROLL),1);
+  assert.equal(p.getAttribute('quest.hazeel_cult.stage'),7,'normal key-on-chest earns the scroll checkpoint');
+
+  const clips=[];for(let y=3268;y<=3272;y++)for(let x=2570;x<=2574;x++)clips.push(R.getClipping(x,y,2,null));
+  const investigator=player();investigator.setAttribute('quest.secrets_of_the_north.stage',2);h.login(investigator);
+  const at=new core.Location(2571,3269,2);
+  const own=M.getPrivateArea(investigator,46572,at.clone());assert.ok(own);assert.equal(own.getOwner(),investigator);
+  assert.equal(own.getType(),chest.getType());assert.equal(own.getFace(),chest.getFace());
+  const inspect={player:investigator,object:own,objectId:46572,clickType:1,location:at.clone(),
+    definition:D.forPlayer(own.getId(),investigator),handled:false};
+  for(const fn of h.hooks.onObjectInteraction??[]){fn(inspect);if(inspect.handled)break;}
+  assert.equal(inspect.handled,true);
+  assert.equal(h.transcripts.at(-1).variant,'a-death-in-the-family-inspecting-the-chest');
+  assert.equal(M.getPrivateArea(p,46572,at.clone()),null,'unrelated Hazeel actor does not receive Inspect visual');
+  assert.equal(M.getPrivateArea(p,46710,at.clone()),chest,'Hazeel still resolves original Search parent');
+  const after=[];for(let y=3268;y<=3272;y++)for(let x=2570;x<=2574;x++)after.push(R.getClipping(x,y,2,null));
+  assert.deepEqual(after,clips,'owner visual adds no shared clipping');
+  assert.equal(route(2,2573,3271,...chestApproach).success,true);
+  for(const fn of h.hooks.onPlayerLogout??[])fn({player:investigator});
+  assert.equal(M.getPrivateArea(investigator,46572,at.clone()),null);
+  assert.equal(M.get(46903,at.clone(),null),chest,'cleanup leaves original geometry');
+  h.login(investigator);assert.ok(M.getPrivateArea(investigator,46572,at.clone()),'relog restores only owner visual');
+  investigator.setAttribute('quest.secrets_of_the_north.stage',3);h.login(investigator);
+  assert.equal(M.getPrivateArea(investigator,46572,at.clone()),null,'leaving investigation restores base chest');
+});
+
+
+test('both real quest handlers respect canonical wall ownership in server registration order', () => {
+  const h=harness({hazeelFirst:true});
+  function click(p){const e={player:p,objectId:46902,clickType:1,handled:false,
+    location:new core.Location(2572,3270,1),definition:{getInteractions:()=>['Knock-at']}};
+    for(const fn of h.hooks.onObjectInteraction??[]){fn(e);if(e.handled)break;}return e;}
+  const hc=player();hc.setAttribute('quest.hazeel_cult.stage',6);hc.setAttribute('quest.hazeel_cult.side',1);
+  hc.moveTo(new core.Location(2573,3270,1));
+  assert.equal(click(hc).handled,true);assert.equal(h.transcripts.length,0,'active HC owns its wall');
+  const north=player();north.setAttribute('quest.hazeel_cult.stage',9);north.setAttribute('quest.hazeel_cult.side',1);
+  north.setAttribute('quest.secrets_of_the_north.stage',2);north.moveTo(new core.Location(2573,3270,1));
+  assert.equal(click(north).handled,true);
+  assert.equal(h.transcripts.at(-1).variant,'a-death-in-the-family-knocking-at-the-false-wall');
 });

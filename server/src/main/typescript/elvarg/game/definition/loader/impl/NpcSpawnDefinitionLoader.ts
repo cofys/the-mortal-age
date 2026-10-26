@@ -2,12 +2,14 @@ import { World } from "../../../World";
 import { NpcDefinition } from "../../NpcDefinition";
 import { NpcSpawnDefinition } from "../../NpcSpawnDefinition";
 import { NPC } from "../../../entity/impl/npc/NPC";
+import { NpcSpawnLineage } from "../../../entity/impl/npc/NpcSpawnLineage";
 import { Direction } from "../../../model/Direction";
 import { Location } from "../../../model/Location";
 import { DefinitionLoader } from "../DefinitionLoader";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { NpcIdentifiers } from "../../../../util/NpcIdentifiers";
 import { PluginManager } from "../../../../plugins/PluginManager";
+import { ServerPerf } from "../../../../util/ServerPerf";
 
 interface RawNpcSpawnDefinition {
     /** Numeric cache id. Use `key` instead to name a constant in NpcIdentifiers. */
@@ -42,7 +44,12 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
      * numbering. Read the other way, every NPC without a direction faced north.
      */
     private static readonly CACHE_TO_CLIENT_DIRECTION = [5, 6, 7, 3, 4, 0, 1, 2];
-    private static readonly spawnedNpcs = new Set<NPC>();
+    /** The spawns the last load applied, with their respawn clones. */
+    private static lineage: NpcSpawnLineage | null = null;
+    public static readonly LINEAGE_OWNER = "npc-spawns";
+    private static readonly pendingByRegion = new Map<string, NpcSpawnDefinition[]>();
+    // A surrounding 64-tile square gives ordinary wanderers time to move before entering view.
+    private static readonly MAX_DEFERRED_WANDER_RADIUS = 32;
 
     public load(): boolean {
         const loaded = this.loadSources<RawNpcSpawnDefinition>(
@@ -76,11 +83,11 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
 
         NpcSpawnDefinition.replace(definitions);
         const applied = this.applyToWorld(definitions);
-        (invalid > 0 || unsupported > 0 || applied < definitions.length ? console.warn : console.debug)(
+        (invalid > 0 || unsupported > 0 ? console.warn : console.debug)(
             `[npc-spawns] Loaded ${definitions.length} definitions from ` +
             `${loaded.sources.map((source) => source.name).join("+") || "none"} ` +
             `(candidates=${totalCandidates}, invalid=${invalid}, unsupported=${unsupported}, vetoed=${vetoed}, ` +
-            `applied=${applied})`
+            `active=${applied}, deferred=${definitions.length - applied})`
         );
         return loaded.failures === 0;
     }
@@ -134,37 +141,28 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
     }
 
     private applyToWorld(definitions: NpcSpawnDefinition[]): number {
-        this.removePreviouslyAppliedNpcs();
-        const availableCapacity = Math.max(
-            0,
-            World.getNpcs().capacityReturn() - World.getNpcs().sizeReturn() - 1
-        );
-        if (definitions.length > availableCapacity) {
-            console.warn(
-                `[npc-spawns] NPC pool full: applying ${availableCapacity} of ${definitions.length} spawns`
-            );
-        }
+        // A reload replaces them all, respawn clones and queued respawns included.
+        NpcSpawnDefinitionLoader.lineage?.retire();
+        const lineage = new NpcSpawnLineage(NpcSpawnDefinitionLoader.LINEAGE_OWNER);
+        NpcSpawnDefinitionLoader.lineage = lineage;
+        NpcSpawnDefinitionLoader.pendingByRegion.clear();
         let applied = 0;
-        for (const definition of definitions.slice(0, availableCapacity)) {
-            const npc = NPC.create(definition.getId(), definition.getPosition());
-            npc.getMovementCoordinator().setRadius(
-                definition.getRadius() ?? NpcSpawnDefinitionLoader.DEFAULT_WANDER_RADIUS
-            );
-            npc.setFace(definition.getFacing());
-
-            const describedNpc = npc as NPC & {
-                setDescription?(description: string): void;
-            };
-            if (definition.getDescription() && describedNpc.setDescription) {
-                describedNpc.setDescription(definition.getDescription());
-            }
-            if (World.getNpcs().add(npc)) {
-                NpcSpawnDefinitionLoader.spawnedNpcs.add(npc);
+        for (const definition of definitions) {
+            // Wide-ranging NPCs may wander into view far from their original square.
+            if ((definition.getRadius() ?? NpcSpawnDefinitionLoader.DEFAULT_WANDER_RADIUS) >
+                NpcSpawnDefinitionLoader.MAX_DEFERRED_WANDER_RADIUS && NpcSpawnDefinitionLoader.spawn(definition)) {
                 applied++;
+                continue;
             }
+            const at = definition.getPosition();
+            const key = `${at.getZ()}:${at.getX() >> 6}:${at.getY() >> 6}`;
+            const pending = NpcSpawnDefinitionLoader.pendingByRegion.get(key);
+            if (pending) pending.push(definition);
+            else NpcSpawnDefinitionLoader.pendingByRegion.set(key, [definition]);
         }
 
         for (const player of World.getPlayers()) {
+            applied += NpcSpawnDefinitionLoader.activateNear(player.getLocation(), player.getNpcViewDistance());
             const localNpcs = player.getLocalNpcs();
             if (Array.isArray(localNpcs)) {
                 localNpcs.length = 0;
@@ -173,24 +171,41 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         return applied;
     }
 
-    private removePreviouslyAppliedNpcs(): void {
-        const addQueue = World.getAddNPCQueue();
-        const removeQueue = World.getRemoveNPCQueue();
-        for (const npc of NpcSpawnDefinitionLoader.spawnedNpcs) {
-            for (let index = addQueue.indexOf(npc); index !== -1; index = addQueue.indexOf(npc)) {
-                addQueue.splice(index, 1);
+    /** Called for humans and bots, before login/map-square hooks and visibility updates. */
+    public static activateNear(location: Location, viewDistance = 15): number {
+        if (!NpcSpawnDefinitionLoader.lineage || NpcSpawnDefinitionLoader.pendingByRegion.size === 0) return 0;
+        return ServerPerf.measurePhase("world.activate_npc_spawns", () => {
+            let applied = 0;
+            const regionX = location.getX() >> 6;
+            const regionY = location.getY() >> 6;
+            const radius = Math.max(1, Math.ceil((viewDistance + NpcSpawnDefinitionLoader.MAX_DEFERRED_WANDER_RADIUS) / 64));
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dy = -radius; dy <= radius; dy++) {
+                    const key = `${location.getZ()}:${regionX + dx}:${regionY + dy}`;
+                    const pending = NpcSpawnDefinitionLoader.pendingByRegion.get(key);
+                    if (!pending) continue;
+                    const remaining: NpcSpawnDefinition[] = [];
+                    for (const definition of pending) {
+                        if (NpcSpawnDefinitionLoader.spawn(definition)) applied++;
+                        else remaining.push(definition);
+                    }
+                    if (remaining.length) NpcSpawnDefinitionLoader.pendingByRegion.set(key, remaining);
+                    else NpcSpawnDefinitionLoader.pendingByRegion.delete(key);
+                }
             }
-            for (
-                let index = removeQueue.indexOf(npc);
-                index !== -1;
-                index = removeQueue.indexOf(npc)
-            ) {
-                removeQueue.splice(index, 1);
-            }
-            if (npc.isRegistered()) {
-                World.getNpcs().remove(npc);
-            }
-        }
-        NpcSpawnDefinitionLoader.spawnedNpcs.clear();
+            // shortcut: activated NPCs stay alive to preserve scripts and respawn timers; add sleeping only with state-safe lifecycle support.
+            return applied;
+        });
+    }
+
+    private static spawn(definition: NpcSpawnDefinition): boolean {
+        if (World.getNpcs().isFull()) return false;
+        const npc = NPC.create(definition.getId(), definition.getPosition().clone());
+        npc.getMovementCoordinator().setRadius(definition.getRadius() ?? NpcSpawnDefinitionLoader.DEFAULT_WANDER_RADIUS);
+        npc.setFace(definition.getFacing());
+        npc.setSpawnLineage(NpcSpawnDefinitionLoader.lineage);
+        const describedNpc = npc as NPC & { setDescription?(description: string): void };
+        if (definition.getDescription() && describedNpc.setDescription) describedNpc.setDescription(definition.getDescription());
+        return World.getNpcs().add(npc);
     }
 }

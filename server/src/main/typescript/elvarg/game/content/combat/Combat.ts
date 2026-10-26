@@ -26,6 +26,7 @@ import type { MovementQueue } from "../../model/movement/MovementQueue";
 import type { Location } from "../../model/Location";
 import { Misc } from "../../../util/Misc";
 import { TaskManager } from "../../task/TaskManager";
+import { TimerKey } from "../../../util/timers/TimerKey";
 
 type CombatCycleState = {
     cycle: number;
@@ -254,6 +255,13 @@ export class Combat {
         if (!movement.getMobility().canMove()) {
             this.trace(`bail=immobile:${movement.getMobility().constructor.name}`, target);
             state.mobilityBlocked = true;
+            // A frozen player's attack on a target out of reach ends there, as live answers it.
+            if (this.character.isPlayer() && this.character.getTimers().has(TimerKey.FREEZE)) {
+                if (this.character.getAsPlayer().isPlayerBot?.() !== true) {
+                    this.character.getAsPlayer().sendMessage("I can't reach that!");
+                }
+                this.cancelIfCurrent(target, state.generation);
+            }
             return;
         }
 

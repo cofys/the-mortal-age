@@ -311,8 +311,21 @@ export class PlayerDeathTask extends Task {
         });
     }
 
-    /** The items a death lets the player keep: the three most valuable (four with Protect Item, none skulled). */
-    public static getItemsToKeep(player: Player): Item[] {
+    /**
+     * What an item is worth when a death picks the kept ones: its Grand Exchange guide price, or its
+     * high alchemy value when it has none (Wiki: Items Kept on Death; rsprox recording 430). Never
+     * the store value: a 35m pair of ranger boots has a store value of 200.
+     */
+    public static keepValue(item: Item): number {
+        const definition = item.getDefinition();
+        return definition.hasGrandExchangeValue() ? definition.getGrandExchangeValue() : definition.getHighAlchValue();
+    }
+
+    /**
+     * The items a death lets the player keep: the three most valuable (four with Protect Item, none
+     * skulled). The Items Kept on Death interface passes the count its own toggles give.
+     */
+    public static getItemsToKeep(player: Player, amountToKeep = PlayerDeathTask.getAmountToKeep(player)): Item[] {
         const items: Item[] = [];
         const alwaysKept: Item[] = [];
         for (const item of [...player.getInventory().getItems(), ...player.getEquipment().getItems()]) {
@@ -338,7 +351,7 @@ export class PlayerDeathTask extends Task {
             items.push(item);
         }
 
-        items.sort((a: Item, b: Item) => b.getDefinition().getValue() - a.getDefinition().getValue());
-        return [...items.slice(0, PlayerDeathTask.getAmountToKeep(player)), ...alwaysKept];
+        items.sort((a: Item, b: Item) => PlayerDeathTask.keepValue(b) - PlayerDeathTask.keepValue(a));
+        return [...items.slice(0, amountToKeep), ...alwaysKept];
     }
 }

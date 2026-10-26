@@ -63,6 +63,7 @@ function buildApi(overrides = {}) {
     registerRangedDefenseModifier: noop,
     registerMagicDefenseModifier: noop,
     onCombatHitRoll: noop,
+    onCombatHitDamage: noop,
     onPlayerDealtDamage: noop,
     onCombatHitResolved: noop,
     onPlayerLogin: noop,
@@ -442,6 +443,48 @@ test("barrows amulet of the damned crumbles and the target rows read the new equ
   items[2] = new Item(Barrows.AMULET_OF_THE_DAMNED_FULL);
   assert.equal(EquipmentStats._test.getTargetBonuses(player).undead, undefined,
     "replacing it refreshes the target rows from the worn equipment");
+});
+
+test("Verac's Defiler hits for certain, through prayer, and for 1 more against monsters", (t) => {
+  const { HitDamage } = require("../dist/game/content/combat/hit/HitDamage");
+  const { HitMask } = require("../dist/game/content/combat/hit/HitMask");
+  const hooks = {};
+  const { api } = buildApi({
+    onCombatHitRoll: (handler) => { hooks.roll = handler; },
+    onCombatHitDamage: (handler) => { hooks.damage = handler; },
+    getCombatFactory: () => ({ inCombat: () => false, addPendingHit() {}, fullVeracs: (entity) => entity.veracs === true }),
+  });
+  BarrowsEquipment.register(api);
+  const attacker = { veracs: true, isNpc: () => false, isPlayer: () => true };
+  const monster = { isNpc: () => true, isPlayer: () => false };
+  const player = { isNpc: () => false, isPlayer: () => true };
+
+  // The order PendingHit uses: the roll hooks, then the damage hooks on the rolled hitsplat.
+  const swing = (target, rolled, combatType = CombatType.MELEE) => {
+    const roll = { attacker, target, combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false };
+    hooks.roll(roll);
+    const damage = new HitDamage(rolled, rolled > 0 ? HitMask.RED : HitMask.BLUE);
+    hooks.damage?.({ attacker, target, combatType, hit: {}, damage, accurate: roll.forceAccurate });
+    return { roll, damage: damage.getDamage() };
+  };
+
+  t.mock.method(Math, "random", () => 0);
+  const proc = swing(monster, 6);
+  assert.equal(proc.roll.forceAccurate, true);
+  assert.equal(proc.roll.bypassProtectionPrayer, true);
+  assert.equal(proc.damage, 7, "a Defiler hit on a monster does 1 extra damage");
+  assert.equal(swing(monster, 0).damage, 1, "even when the damage roll was 0");
+  assert.equal(swing(player, 6).damage, 6, "no extra damage against players");
+  assert.equal(swing(monster, 6, CombatType.RANGED).damage, 6, "only melee attacks proc");
+
+  Math.random.mock.mockImplementation(() => 0.9);
+  const ordinary = swing(monster, 6);
+  assert.equal(ordinary.roll.forceAccurate, false);
+  assert.equal(ordinary.damage, 6, "an ordinary hit is unchanged");
+
+  Math.random.mock.mockImplementation(() => 0);
+  attacker.veracs = false;
+  assert.equal(swing(monster, 6).damage, 6, "the set must be complete");
 });
 
 test("the equipment panel shows weight and set effects and re-renders on an equipment change", () => {

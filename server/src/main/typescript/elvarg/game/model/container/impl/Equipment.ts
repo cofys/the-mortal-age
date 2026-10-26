@@ -71,6 +71,7 @@ export class Equipment extends ItemContainer {
         if ((this.getPlayer().getNpcTransformationId?.() ?? -1) >= 0) {
             this.sendWornInventory();
         }
+        this.getPlayer().onEquipmentChanged();
         require("../../../../plugins/PluginManager").PluginManager.emitCustomEvent("equipment:changed", { player: this.getPlayer() });
         return this;
     }

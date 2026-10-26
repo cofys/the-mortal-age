@@ -4,6 +4,7 @@ import { Player } from "../player/Player";
 import { Location } from "../../../model/Location";
 import { GameObject } from "./GameObject";
 import { MapObjects } from "./MapObjects";
+import { PluginContext } from "../../../../plugins/PluginContext";
 
 import type { PrivateArea } from "../../../model/areas/impl/PrivateArea";
 export class ObjectManager {
@@ -109,6 +110,26 @@ export class ObjectManager {
         }
     }
 
+    /** The runtime objects registered in one 64x64 region (all planes, any private area). */
+    public static objectsInRegion(regionX: number, regionY: number): readonly GameObject[] {
+        const objects = ObjectManager.objectsByRegion.get(`${regionX},${regionY}`);
+        return objects ? [...objects] : ObjectManager.NONE;
+    }
+
+    /**
+     * Takes out every object a plugin registered, as the server shuts down: plugins never
+     * reload, so nothing else would. A stand-in for a map object (a door closed again) stays.
+     */
+    public static removePluginObjects(): number {
+        let removed = 0;
+        for (const object of [...World.getObjects()]) {
+            if (!object.getSpawnedBy() || object.isBaseMap()) continue;
+            ObjectManager.deregister(object, true);
+            removed++;
+        }
+        return removed;
+    }
+
     /** The runtime objects registered on a tile (any private area). */
     public static objectsAt(location: Location): readonly GameObject[] {
         return ObjectManager.objectsByTile.get(ObjectManager.tileKey(location)) ?? ObjectManager.NONE;
@@ -190,6 +211,7 @@ export class ObjectManager {
     }
 
     public static register(object: GameObject, playerUpdate: boolean) {
+        if (object.getSpawnedBy() === null) object.setSpawnedBy(PluginContext.current());
         // Check for matching object on this tile.
         for (const o of [...ObjectManager.objectsAt(object.getLocation())]) {
             if (o.getType() === object.getType() && object.getPrivateArea() == o.getPrivateArea()

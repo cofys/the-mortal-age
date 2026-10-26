@@ -29,6 +29,9 @@ const COINS = 995;
 /** Guards chase a carrying player within this many tiles; an adjacent guard catches. */
 const SIGHT_RADIUS = 8;
 
+/** Wiki: "A lockpick or hair clip is required to steal artefacts ... from drawers". */
+const LOCKPICKS = [1523, 11682];
+
 const MESSAGES = {
   caught: "The guards catch you and confiscate the artefact!",
   stole: "You pick the lock and retrieve the goods.",
@@ -36,6 +39,8 @@ const MESSAGES = {
   unbankable: "You can't bank stolen artefacts.",
   noSpace: "You don't have enough inventory space.",
   level: `You need a Thieving level of ${THIEVING_LEVEL} to steal artefacts.`,
+  /** Calibrated: no recording has the drawers without a lockpick. */
+  noLockpick: "You need a lockpick or a hair clip to pick the lock.",
 };
 
 /** The six houses Khaled assigns, and the drawer each holds. */
@@ -233,6 +238,7 @@ module.exports = {
   COINS,
   SIGHT_RADIUS,
   MESSAGES,
+  LOCKPICKS,
   HOUSES,
   DRAWER_IDS,
   LEENZ_TILE,

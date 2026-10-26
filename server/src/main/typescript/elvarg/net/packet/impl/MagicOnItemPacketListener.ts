@@ -17,6 +17,11 @@ import { PluginManager } from "../../../plugins/PluginManager";
 import { CombatRange } from "../../../game/content/combat/CombatRange";
 import { Spell } from "../../../game/content/combat/magic/Spell";
 import { ArceuusItemSpells } from "../../../game/content/combat/magic/ArceuusItemSpells";
+import { EffectSpells } from "../../../game/content/combat/magic/EffectSpells";
+import { DialogueChainBuilder } from "../../../game/model/dialogues/builders/DialogueChainBuilder";
+import { ItemStatementDialogue } from "../../../game/model/dialogues/entries/impl/ItemStatementDialogue";
+import { OptionDialogue } from "../../../game/model/dialogues/entries/impl/OptionDialogue";
+import { DialogueOption } from "../../../game/model/dialogues/DialogueOption";
 import { Task } from "../../../game/task/Task";
 import { TaskManager } from "../../../game/task/TaskManager";
 
@@ -29,6 +34,18 @@ export class MagicOnItemPacketListener {
   private static readonly HIGH_ALCH_XP = 65;
   private static readonly LOW_ALCH_FIRE_RUNES = 3;
   private static readonly HIGH_ALCH_FIRE_RUNES = 5;
+  /** Wiki (High/Low Level Alchemy): a cast every 5 ticks, Low Level Alchemy every 3. */
+  private static readonly HIGH_ALCH_CAST_TICKS = 5;
+  private static readonly LOW_ALCH_CAST_TICKS = 3;
+  /** human_castlowlvlalchemy / lowlvlalchemy_casting (rsprox 1098), the high-level pair (rsprox 3215). */
+  private static readonly LOW_ALCH_ANIMATION = 712;
+  private static readonly LOW_ALCH_GRAPHIC = 112;
+  private static readonly HIGH_ALCH_ANIMATION = 713;
+  private static readonly HIGH_ALCH_GRAPHIC = 113;
+  /** The process cycle from which the next alchemy may be cast. */
+  private static readonly ALCH_NEXT_CAST_ATTRIBUTE = "magic:alchemy-next-cast";
+  /** An alchemy clicked during the last one's cast, cast as soon as it ends. */
+  private static readonly ALCH_QUEUED_ATTRIBUTE = "magic:alchemy-queued";
   private static readonly TELEKINETIC_GRAB_SPELL_ID = 1168;
   private static readonly TELEKINETIC_GRAB_LEVEL = 33;
   private static readonly TELEKINETIC_GRAB_XP = 43;
@@ -213,9 +230,20 @@ export class MagicOnItemPacketListener {
     );
   }
 
-  private castAlchemy(player: any, spellId: number, item: any, itemId: number): void {
+  /**
+   * One alchemy cast on the item in `slot`. A cast clicked before the last one has finished
+   * waits for it (Wiki: "If you cast a second alchemy spell before your last one finishes, it's
+   * now queued up"); a later click replaces the waiting one. An untradeable item asks first, as
+   * live does (rsprox 3215): "That item cannot be traded." beside it, then Proceed/Cancel.
+   */
+  private castAlchemy(player: any, spellId: number, slot: number, itemId: number, confirmed = false): void {
     const inventory = player.getInventory();
+    const item = inventory.getItems()[slot];
+    if (!item || item.getId() !== itemId) {
+      return;
+    }
     const isHighAlch = spellId === MagicOnItemPacketListener.HIGH_ALCH_SPELL_ID;
+    const spell = isHighAlch ? EffectSpells.HIGH_ALCHEMY : EffectSpells.LOW_ALCHEMY;
     const requiredLevel = isHighAlch
       ? MagicOnItemPacketListener.HIGH_ALCH_LEVEL
       : MagicOnItemPacketListener.LOW_ALCH_LEVEL;
@@ -225,15 +253,24 @@ export class MagicOnItemPacketListener {
     const experience = isHighAlch
       ? MagicOnItemPacketListener.HIGH_ALCH_XP
       : MagicOnItemPacketListener.LOW_ALCH_XP;
-    const definition = item?.getDefinition?.();
+    const definition = item.getDefinition?.();
 
     if (player.getSkillManager().getCurrentLevel(Skill.MAGIC) < requiredLevel) {
       player.sendMessage(`You need a Magic level of ${requiredLevel} to cast this spell.`);
       return;
     }
-    const policy = { player, itemId, spellId, allowed: !!item?.isTradeable?.() && !!item?.isSellable?.()
+    // Zone rules (Pest Control) ride the same hook as every other spell.
+    if (PluginManager.emitSpellDisabled(player, MagicSpellbook.NORMAL, spellId, spell) === true) {
+      return;
+    }
+    // Untradeable items alch too, after a warning (rsprox 3215: Iban's staff for 12 coins); only
+    // the server's own untradeable flag (PvP preset items) keeps an item out. A plugin that turns
+    // the cast into something else clears `confirm`.
+    const policy = { player, itemId, spellId, allowed: !item.isUntradeable?.()
       && definition.getHighAlchValue() > 0 && definition.getLowAlchValue() > 0,
-      coins: isHighAlch ? definition.getHighAlchValue() : definition.getLowAlchValue() };
+      coins: isHighAlch ? definition.getHighAlchValue() : definition.getLowAlchValue(),
+      castTicks: isHighAlch ? MagicOnItemPacketListener.HIGH_ALCH_CAST_TICKS : MagicOnItemPacketListener.LOW_ALCH_CAST_TICKS,
+      confirm: !definition.isTradeable?.() };
     PluginManager.emitCustomEvent("magic:alchemy-policy", policy);
     if (itemId === ItemIdentifiers.COINS || !policy.allowed || !Number.isSafeInteger(policy.coins) || policy.coins < 0) {
       player.sendMessage("This spell can not be cast on this item.");
@@ -249,17 +286,70 @@ export class MagicOnItemPacketListener {
     if (player.getSpellbook()?.getInterfaceId?.() !== MagicSpellbook.NORMAL.getInterfaceId()) {
       return;
     }
+    if (!confirmed && policy.confirm) {
+      this.confirmUntradeableAlchemy(player, spellId, slot, itemId, definition.getName());
+      return;
+    }
+    const now = World.getProcessCycle();
+    const nextCast = Number(player.getAttribute(MagicOnItemPacketListener.ALCH_NEXT_CAST_ATTRIBUTE) ?? 0);
+    if (now < nextCast) {
+      this.queueAlchemy(player, { spellId, slot, itemId }, nextCast - now);
+      return;
+    }
 
-    inventory.deleteNumber(itemId, 1);
+    // The clicked slot, not the first of that id: a preset-protected copy may sit earlier.
+    inventory.deleteAtSlot(slot, 1);
     this.consumeRunes(player, runes);
+    player.setAttribute(MagicOnItemPacketListener.ALCH_NEXT_CAST_ATTRIBUTE, now + policy.castTicks);
 
-    player.performAnimation(new Animation(712));
+    player.performAnimation(new Animation(isHighAlch
+      ? MagicOnItemPacketListener.HIGH_ALCH_ANIMATION
+      : MagicOnItemPacketListener.LOW_ALCH_ANIMATION));
     Sounds.sendSound(player, isHighAlch ? Sound.HIGH_ALCHEMY : Sound.LOW_ALCHEMY);
     if (policy.coins > 0) inventory.adds(ItemIdentifiers.COINS, policy.coins);
     PluginManager.emitCustomEvent("magic:alchemy-completed", { player, itemId, spellId });
-    player.performGraphic(new Graphic(112, GraphicHeight.HIGH));
+    player.performGraphic(new Graphic(isHighAlch
+      ? MagicOnItemPacketListener.HIGH_ALCH_GRAPHIC
+      : MagicOnItemPacketListener.LOW_ALCH_GRAPHIC, GraphicHeight.HIGH));
     player.getSkillManager().addExperiences(Skill.MAGIC, experience);
     player.getPacketSender().sendTab(6);
+  }
+
+  /** The waiting cast is cast once the current one ends; only one waits at a time. */
+  private queueAlchemy(player: any, cast: { spellId: number; slot: number; itemId: number }, ticks: number): void {
+    const waiting = player.getAttribute(MagicOnItemPacketListener.ALCH_QUEUED_ATTRIBUTE);
+    player.setAttribute(MagicOnItemPacketListener.ALCH_QUEUED_ATTRIBUTE, cast);
+    if (waiting) {
+      return;
+    }
+    const listener = this;
+    TaskManager.submit(new class extends Task {
+      constructor() { super(ticks, false); }
+      execute(): void {
+        this.stop();
+        const queued = player.getAttribute(MagicOnItemPacketListener.ALCH_QUEUED_ATTRIBUTE);
+        player.setAttribute(MagicOnItemPacketListener.ALCH_QUEUED_ATTRIBUTE, null);
+        if (!queued || !player.isRegistered?.() || player.getHitpoints?.() <= 0) {
+          return;
+        }
+        listener.castAlchemy(player, queued.spellId, queued.slot, queued.itemId, true);
+      }
+    });
+  }
+
+  private confirmUntradeableAlchemy(player: any, spellId: number, slot: number, itemId: number, itemName: string): void {
+    const spellName = spellId === MagicOnItemPacketListener.HIGH_ALCH_SPELL_ID ? "High Level Alchemy" : "Low Level Alchemy";
+    const warning = `That item cannot be traded.<br>Really cast ${spellName} on it?`;
+    player.sendMessage(warning.replace("<br>", " "));
+    const chain = new DialogueChainBuilder()
+      .add(new ItemStatementDialogue(0, itemId, warning))
+      .add(new OptionDialogue(1, {
+        executeOption: (option: DialogueOption) => {
+          player.getPacketSender().sendInterfaceRemoval();
+          if ((option as number) === 1) this.castAlchemy(player, spellId, slot, itemId, true);
+        },
+      }, `Proceed to cast ${spellName} on it.`, "Cancel the alchemy spell.").setTitle(itemName));
+    player.getDialogueManager().startDialogues(chain);
   }
 
   private findVisibleGroundItem(player: any, groundItemId: number, position: Location): any | null {
@@ -309,7 +399,7 @@ export class MagicOnItemPacketListener {
     if (!item || item.getId() !== itemId) {
       return false;
     }
-    this.castAlchemy(player, spellId, item, itemId);
+    this.castAlchemy(player, spellId, slot, itemId);
     return true;
   }
 

@@ -1,0 +1,1758 @@
+{
+  "_about": "Soul Wars (https://oldschool.runescape.wiki/w/Soul_Wars). Recorded: rsprox 227/00079 (two games), 234/03277 (the tutorial and five games), 229/00668 (the main-game lobby); seasonal worlds, so their Zeal is boosted and not used. Arena coords are the template's (the match copies it into an instance). Wiki values are marked; calibrated ones are guesses.",
+  "_entry": "Wiki: total level 500 and combat 40; no food, potions, capes, followers or non-combat items in the waiting area; not poisoned, envenomed or diseased. Recorded: the back-slot refusal.",
+  "entry": {
+    "totalLevel": 500,
+    "combat": 40
+  },
+  "_lobby": "Recorded: the Edgeville portal (3082,3473) and Ferox's (3156,10025) to (2206,2858); the leave portal's menu; the waiting-area barrier at (2199,2842) (west of it is the waiting area); HUD 434 shows 'N/20' below 20 and the count above it; the countdown runs 290 ticks once 20 wait, 'The next Soul Wars game will start shortly.' 20 ticks before. Calibrated: the lobby and waiting-area bounds.",
+  "lobby": {
+    "arrive": [
+      2206,
+      2858,
+      0
+    ],
+    "afterGame": [
+      2210,
+      2851,
+      0
+    ],
+    "bounds": [
+      2180,
+      2828,
+      2230,
+      2870
+    ],
+    "waiting": [
+      2180,
+      2830,
+      2198,
+      2856
+    ],
+    "barrier": [
+      2199,
+      2842
+    ],
+    "edgeville": [
+      3082,
+      3476,
+      0
+    ],
+    "ferox": [
+      3158,
+      10027,
+      0
+    ]
+  },
+  "minPlayers": 20,
+  "countdownTicks": 290,
+  "shortlyAt": 20,
+  "countdown": [
+    [
+      230,
+      "4 minutes"
+    ],
+    [
+      200,
+      "3 minutes"
+    ],
+    [
+      150,
+      "2 minutes"
+    ],
+    [
+      100,
+      "1 minute"
+    ],
+    [
+      50,
+      "30 seconds"
+    ],
+    [
+      20,
+      "10 seconds"
+    ]
+  ],
+  "_match": "Recorded: 1500 ticks, 'Time remaining' every 250, five avatar kills ends it two ticks on; the teams' bases. Wiki: more kills wins, equal is a draw. Calibrated: the arena's chunk rectangle (all the template tiles the recordings saw).",
+  "arena": {
+    "chunk": [
+      264,
+      359
+    ],
+    "size": [
+      24,
+      13
+    ]
+  },
+  "gameTicks": 1500,
+  "timeEvery": 250,
+  "killsToWin": 5,
+  "endDelay": 2,
+  "bases": {
+    "blue": [
+      2141,
+      2908,
+      0
+    ],
+    "red": [
+      2275,
+      2919,
+      0
+    ]
+  },
+  "_avatars": "Recorded: their tiles, strength as the share of damage they block (100% blocks everything: 'Your attacks seem to have no effect on the avatar.' about every 18 ticks), the defeat and the 35-tick return. Wiki: 1,500 HP, combat 525.",
+  "avatars": {
+    "blue": {
+      "npc": 10531,
+      "name": "Avatar of Creation",
+      "tile": [
+        2125,
+        2889,
+        0
+      ]
+    },
+    "red": {
+      "npc": 10532,
+      "name": "Avatar of Destruction",
+      "tile": [
+        2285,
+        2929,
+        0
+      ]
+    }
+  },
+  "avatarHp": 1500,
+  "returnTicks": 35,
+  "noEffectEvery": 18,
+  "_souls": "Recorded: Forgotten Souls (46: 10534/10535; 76: 10536/10537) and wolves (10533) where the recordings saw them; a soul drops 2 fragments, kept for its killer 100 ticks and gone at 200. Wiki: souls are the only fragment source; wolves drop bones. Calibrated: how many roam at once, and their respawn.",
+  "creatures": {
+    "weak": {
+      "npcs": [
+        10534,
+        10535
+      ],
+      "count": 8,
+      "drop": [
+        25201,
+        2
+      ]
+    },
+    "strong": {
+      "npcs": [
+        10536,
+        10537
+      ],
+      "count": 4,
+      "drop": [
+        25201,
+        2
+      ]
+    },
+    "wolf": {
+      "npcs": [
+        10533
+      ],
+      "count": 4,
+      "drop": [
+        25199,
+        1
+      ]
+    }
+  },
+  "creatureRespawn": [
+    20,
+    40
+  ],
+  "spawnTiles": {
+    "weak": [
+      [
+        2152,
+        2928
+      ],
+      [
+        2155,
+        2925
+      ],
+      [
+        2156,
+        2923
+      ],
+      [
+        2156,
+        2925
+      ],
+      [
+        2156,
+        2927
+      ],
+      [
+        2156,
+        2928
+      ],
+      [
+        2157,
+        2918
+      ],
+      [
+        2157,
+        2926
+      ],
+      [
+        2157,
+        2928
+      ],
+      [
+        2157,
+        2933
+      ],
+      [
+        2158,
+        2926
+      ],
+      [
+        2158,
+        2930
+      ],
+      [
+        2159,
+        2922
+      ],
+      [
+        2159,
+        2924
+      ],
+      [
+        2159,
+        2925
+      ],
+      [
+        2159,
+        2926
+      ],
+      [
+        2159,
+        2927
+      ],
+      [
+        2159,
+        2930
+      ],
+      [
+        2159,
+        2935
+      ],
+      [
+        2160,
+        2921
+      ],
+      [
+        2160,
+        2922
+      ],
+      [
+        2160,
+        2923
+      ],
+      [
+        2160,
+        2926
+      ],
+      [
+        2160,
+        2931
+      ],
+      [
+        2160,
+        2934
+      ],
+      [
+        2160,
+        2935
+      ],
+      [
+        2161,
+        2916
+      ],
+      [
+        2161,
+        2922
+      ],
+      [
+        2161,
+        2923
+      ],
+      [
+        2161,
+        2930
+      ],
+      [
+        2161,
+        2933
+      ],
+      [
+        2161,
+        2934
+      ],
+      [
+        2161,
+        2936
+      ],
+      [
+        2161,
+        2937
+      ],
+      [
+        2162,
+        2921
+      ],
+      [
+        2162,
+        2922
+      ],
+      [
+        2162,
+        2930
+      ],
+      [
+        2162,
+        2934
+      ],
+      [
+        2163,
+        2921
+      ],
+      [
+        2163,
+        2924
+      ],
+      [
+        2163,
+        2925
+      ],
+      [
+        2163,
+        2930
+      ],
+      [
+        2163,
+        2931
+      ],
+      [
+        2163,
+        2933
+      ],
+      [
+        2164,
+        2923
+      ],
+      [
+        2164,
+        2925
+      ],
+      [
+        2164,
+        2928
+      ],
+      [
+        2164,
+        2930
+      ],
+      [
+        2164,
+        2931
+      ],
+      [
+        2164,
+        2934
+      ],
+      [
+        2165,
+        2922
+      ],
+      [
+        2165,
+        2923
+      ],
+      [
+        2165,
+        2930
+      ],
+      [
+        2165,
+        2931
+      ],
+      [
+        2166,
+        2923
+      ],
+      [
+        2166,
+        2924
+      ],
+      [
+        2166,
+        2926
+      ],
+      [
+        2166,
+        2928
+      ],
+      [
+        2166,
+        2929
+      ],
+      [
+        2166,
+        2930
+      ],
+      [
+        2166,
+        2931
+      ],
+      [
+        2166,
+        2935
+      ],
+      [
+        2167,
+        2920
+      ],
+      [
+        2167,
+        2923
+      ],
+      [
+        2167,
+        2924
+      ],
+      [
+        2167,
+        2925
+      ],
+      [
+        2167,
+        2927
+      ],
+      [
+        2167,
+        2928
+      ],
+      [
+        2167,
+        2929
+      ],
+      [
+        2167,
+        2932
+      ],
+      [
+        2167,
+        2936
+      ],
+      [
+        2168,
+        2921
+      ],
+      [
+        2168,
+        2922
+      ],
+      [
+        2168,
+        2923
+      ],
+      [
+        2168,
+        2924
+      ],
+      [
+        2168,
+        2927
+      ],
+      [
+        2168,
+        2930
+      ],
+      [
+        2168,
+        2936
+      ],
+      [
+        2169,
+        2921
+      ],
+      [
+        2169,
+        2922
+      ],
+      [
+        2169,
+        2926
+      ],
+      [
+        2169,
+        2927
+      ],
+      [
+        2169,
+        2928
+      ],
+      [
+        2169,
+        2935
+      ],
+      [
+        2169,
+        2936
+      ],
+      [
+        2170,
+        2917
+      ],
+      [
+        2170,
+        2922
+      ],
+      [
+        2170,
+        2926
+      ],
+      [
+        2170,
+        2928
+      ],
+      [
+        2170,
+        2931
+      ],
+      [
+        2171,
+        2924
+      ],
+      [
+        2171,
+        2925
+      ],
+      [
+        2171,
+        2926
+      ],
+      [
+        2171,
+        2931
+      ],
+      [
+        2171,
+        2933
+      ],
+      [
+        2172,
+        2925
+      ],
+      [
+        2172,
+        2928
+      ],
+      [
+        2172,
+        2929
+      ],
+      [
+        2172,
+        2931
+      ],
+      [
+        2172,
+        2934
+      ],
+      [
+        2173,
+        2930
+      ],
+      [
+        2173,
+        2936
+      ],
+      [
+        2174,
+        2919
+      ],
+      [
+        2174,
+        2920
+      ],
+      [
+        2174,
+        2926
+      ],
+      [
+        2174,
+        2927
+      ],
+      [
+        2176,
+        2925
+      ],
+      [
+        2238,
+        2892
+      ],
+      [
+        2239,
+        2900
+      ],
+      [
+        2240,
+        2886
+      ],
+      [
+        2240,
+        2893
+      ],
+      [
+        2241,
+        2894
+      ],
+      [
+        2241,
+        2895
+      ],
+      [
+        2242,
+        2888
+      ],
+      [
+        2242,
+        2892
+      ],
+      [
+        2242,
+        2895
+      ],
+      [
+        2243,
+        2886
+      ],
+      [
+        2243,
+        2894
+      ],
+      [
+        2243,
+        2896
+      ],
+      [
+        2244,
+        2889
+      ],
+      [
+        2244,
+        2893
+      ],
+      [
+        2244,
+        2894
+      ],
+      [
+        2244,
+        2897
+      ],
+      [
+        2244,
+        2899
+      ],
+      [
+        2245,
+        2887
+      ],
+      [
+        2245,
+        2889
+      ],
+      [
+        2245,
+        2890
+      ],
+      [
+        2245,
+        2902
+      ],
+      [
+        2246,
+        2887
+      ],
+      [
+        2246,
+        2890
+      ],
+      [
+        2246,
+        2894
+      ],
+      [
+        2246,
+        2895
+      ],
+      [
+        2246,
+        2896
+      ],
+      [
+        2247,
+        2887
+      ],
+      [
+        2248,
+        2893
+      ],
+      [
+        2248,
+        2895
+      ],
+      [
+        2248,
+        2898
+      ],
+      [
+        2248,
+        2899
+      ],
+      [
+        2248,
+        2902
+      ],
+      [
+        2249,
+        2886
+      ],
+      [
+        2249,
+        2887
+      ],
+      [
+        2249,
+        2889
+      ],
+      [
+        2249,
+        2891
+      ],
+      [
+        2249,
+        2892
+      ],
+      [
+        2249,
+        2895
+      ],
+      [
+        2249,
+        2897
+      ],
+      [
+        2249,
+        2898
+      ],
+      [
+        2249,
+        2900
+      ],
+      [
+        2250,
+        2888
+      ],
+      [
+        2250,
+        2892
+      ],
+      [
+        2250,
+        2896
+      ],
+      [
+        2250,
+        2898
+      ],
+      [
+        2251,
+        2886
+      ],
+      [
+        2251,
+        2891
+      ],
+      [
+        2251,
+        2893
+      ],
+      [
+        2251,
+        2896
+      ],
+      [
+        2251,
+        2897
+      ],
+      [
+        2251,
+        2898
+      ],
+      [
+        2251,
+        2902
+      ],
+      [
+        2252,
+        2897
+      ],
+      [
+        2253,
+        2891
+      ],
+      [
+        2253,
+        2896
+      ],
+      [
+        2253,
+        2901
+      ],
+      [
+        2254,
+        2886
+      ],
+      [
+        2254,
+        2889
+      ],
+      [
+        2254,
+        2890
+      ],
+      [
+        2254,
+        2899
+      ],
+      [
+        2255,
+        2887
+      ],
+      [
+        2255,
+        2888
+      ],
+      [
+        2255,
+        2889
+      ],
+      [
+        2256,
+        2891
+      ]
+    ],
+    "strong": [
+      [
+        2188,
+        2930
+      ],
+      [
+        2189,
+        2931
+      ],
+      [
+        2190,
+        2935
+      ],
+      [
+        2191,
+        2891
+      ],
+      [
+        2192,
+        2889
+      ],
+      [
+        2192,
+        2893
+      ],
+      [
+        2194,
+        2926
+      ],
+      [
+        2194,
+        2938
+      ],
+      [
+        2195,
+        2928
+      ],
+      [
+        2195,
+        2931
+      ],
+      [
+        2196,
+        2929
+      ],
+      [
+        2197,
+        2889
+      ],
+      [
+        2197,
+        2928
+      ],
+      [
+        2199,
+        2928
+      ],
+      [
+        2200,
+        2893
+      ],
+      [
+        2201,
+        2889
+      ],
+      [
+        2202,
+        2895
+      ],
+      [
+        2202,
+        2928
+      ],
+      [
+        2202,
+        2935
+      ],
+      [
+        2203,
+        2936
+      ],
+      [
+        2203,
+        2942
+      ],
+      [
+        2205,
+        2892
+      ],
+      [
+        2205,
+        2929
+      ],
+      [
+        2206,
+        2882
+      ],
+      [
+        2206,
+        2928
+      ],
+      [
+        2206,
+        2929
+      ],
+      [
+        2208,
+        2932
+      ],
+      [
+        2209,
+        2885
+      ],
+      [
+        2209,
+        2926
+      ],
+      [
+        2209,
+        2927
+      ],
+      [
+        2210,
+        2891
+      ],
+      [
+        2210,
+        2894
+      ],
+      [
+        2211,
+        2928
+      ],
+      [
+        2212,
+        2927
+      ],
+      [
+        2213,
+        2927
+      ],
+      [
+        2213,
+        2932
+      ],
+      [
+        2214,
+        2895
+      ],
+      [
+        2214,
+        2928
+      ],
+      [
+        2215,
+        2892
+      ],
+      [
+        2215,
+        2931
+      ],
+      [
+        2216,
+        2886
+      ],
+      [
+        2217,
+        2928
+      ],
+      [
+        2217,
+        2929
+      ],
+      [
+        2218,
+        2927
+      ],
+      [
+        2219,
+        2889
+      ],
+      [
+        2219,
+        2896
+      ],
+      [
+        2221,
+        2894
+      ],
+      [
+        2221,
+        2925
+      ],
+      [
+        2222,
+        2929
+      ],
+      [
+        2223,
+        2895
+      ],
+      [
+        2223,
+        2896
+      ],
+      [
+        2224,
+        2929
+      ],
+      [
+        2225,
+        2935
+      ],
+      [
+        2226,
+        2928
+      ],
+      [
+        2226,
+        2932
+      ],
+      [
+        2228,
+        2929
+      ]
+    ],
+    "wolf": [
+      [
+        2190,
+        2897
+      ],
+      [
+        2191,
+        2896
+      ],
+      [
+        2192,
+        2896
+      ],
+      [
+        2194,
+        2888
+      ],
+      [
+        2194,
+        2933
+      ],
+      [
+        2195,
+        2893
+      ],
+      [
+        2195,
+        2939
+      ],
+      [
+        2196,
+        2888
+      ],
+      [
+        2196,
+        2895
+      ],
+      [
+        2196,
+        2927
+      ],
+      [
+        2197,
+        2895
+      ],
+      [
+        2198,
+        2927
+      ],
+      [
+        2199,
+        2889
+      ],
+      [
+        2199,
+        2928
+      ],
+      [
+        2200,
+        2927
+      ],
+      [
+        2200,
+        2934
+      ],
+      [
+        2201,
+        2932
+      ],
+      [
+        2202,
+        2928
+      ],
+      [
+        2204,
+        2928
+      ],
+      [
+        2205,
+        2928
+      ],
+      [
+        2206,
+        2936
+      ],
+      [
+        2209,
+        2886
+      ],
+      [
+        2209,
+        2892
+      ],
+      [
+        2209,
+        2928
+      ],
+      [
+        2211,
+        2932
+      ],
+      [
+        2212,
+        2928
+      ],
+      [
+        2213,
+        2928
+      ],
+      [
+        2213,
+        2934
+      ],
+      [
+        2215,
+        2927
+      ],
+      [
+        2215,
+        2928
+      ],
+      [
+        2217,
+        2886
+      ],
+      [
+        2218,
+        2930
+      ],
+      [
+        2220,
+        2887
+      ],
+      [
+        2220,
+        2927
+      ],
+      [
+        2220,
+        2928
+      ],
+      [
+        2222,
+        2926
+      ],
+      [
+        2222,
+        2934
+      ]
+    ]
+  },
+  "dropPrivateTicks": 100,
+  "dropLifeTicks": 200,
+  "_obelisk": "Recorded: the obelisk at (2206,2911) takes every fragment: -2% enemy strength each when the team holds it, -0.5% otherwise (with the hint), and the refusals.",
+  "obelisk": {
+    "tile": [
+      2206,
+      2911
+    ],
+    "locs": {
+      "neutral": 40449,
+      "blue": 40450,
+      "red": 40451
+    },
+    "held": 2,
+    "unheld": 0.5
+  },
+  "_control": "Recorded: alignment 0 (blue) - 60 (neutral) - 120 (red), contested and holder varbits; 2 a tick with a small majority, up to 8 with a big one; the holder changes at the ends with the capture line and the loc swaps; uncontested it drifts back to the holder at 2 a tick. Calibrated: the capture zones' bounds.",
+  "control": {
+    "obelisk": {
+      "name": "Soul Obelisk",
+      "zone": [
+        2198,
+        2903,
+        2215,
+        2920
+      ],
+      "alignment": "soul_wars_obelisk_alignment",
+      "contested": "soul_wars_obelisk_contested",
+      "holder": "soul_wars_obelisk_holder"
+    },
+    "east": {
+      "name": "eastern graveyard",
+      "zone": [
+        2246,
+        2916,
+        2262,
+        2934
+      ],
+      "alignment": "soul_wars_east_gy_alignment",
+      "contested": "soul_wars_east_gy_contested",
+      "holder": "soul_wars_east_gy_holder"
+    },
+    "west": {
+      "name": "western graveyard",
+      "zone": [
+        2153,
+        2889,
+        2170,
+        2907
+      ],
+      "alignment": "soul_wars_west_gy_alignment",
+      "contested": "soul_wars_west_gy_contested",
+      "holder": "soul_wars_west_gy_holder"
+    }
+  },
+  "captureRate": {
+    "min": 2,
+    "max": 8,
+    "perPlayer": 2,
+    "drift": 2
+  },
+  "_graveyards": "Recorded: a death on the same tick as 'Oh dear, you are dead!' goes to the team's held graveyard (red east, blue west, as held); 17 ticks a ghost; the sanctuary's barriers let the living out only; the immunity graphic as they leave. Inferred: no graveyard held sends them to their base.",
+  "graveyards": {
+    "east": {
+      "respawn": [
+        [
+          2253,
+          2924
+        ],
+        [
+          2253,
+          2925
+        ],
+        [
+          2253,
+          2926
+        ]
+      ],
+      "barriers": {
+        "neutral": 40458,
+        "blue": 40452,
+        "red": 40455
+      },
+      "barrierTiles": [
+        [
+          2253,
+          2923,
+          1
+        ],
+        [
+          2253,
+          2927,
+          3
+        ]
+      ]
+    },
+    "west": {
+      "respawn": [
+        [
+          2162,
+          2897
+        ],
+        [
+          2162,
+          2898
+        ],
+        [
+          2162,
+          2899
+        ]
+      ],
+      "barriers": {
+        "neutral": 40459,
+        "blue": 40453,
+        "red": 40456
+      },
+      "barrierTiles": [
+        [
+          2162,
+          2896,
+          1
+        ],
+        [
+          2162,
+          2900,
+          3
+        ]
+      ]
+    }
+  },
+  "ghostTicks": 17,
+  "immuneTicks": 6,
+  "_supplies": "Recorded: the tables' Take-1/5/10 and Take-from (X); a potion boosts Attack, Strength, Defence, Ranged and Magic by 5 + 15%; a bandage heals about 15% (Wiki: 1 + 15% of max HP, and all run energy, curing poison).",
+  "items": {
+    "fragment": 25201,
+    "bones": 25199,
+    "bandages": 25202,
+    "potions": [
+      25203,
+      25204,
+      25205,
+      25206
+    ],
+    "capes": {
+      "blue": 25208,
+      "red": 25207
+    }
+  },
+  "_bones": "Wiki: buried in a graveyard (or the base) they give the team's avatar 1% strength back, a third of that in a graveyard the team doesn't hold; a death drops one set plus every bone and fragment carried. Unrecorded: the burial line.",
+  "boneStrength": 1,
+  "_activity": "Recorded: the bar (varbit soul_wars_activity_value) is 800, falling 3 a tick from 18 ticks in, reset by actions. Wiki: an empty bar removes the player, and they wait 10 minutes to rejoin. Unrecorded: the removal's line.",
+  "activity": {
+    "max": 800,
+    "drain": 3,
+    "from": 18,
+    "banTicks": 1000
+  },
+  "_zeal": "Wiki: at most 40 for a loss, 50 a draw, 60 a win; full only with 10:15 played; contributions capped at fragments 30, areas 6, avatar damage 260, bones 15. Calibrated: player kills capped at 10, and each contribution's share of its cap adding up, with 2.5 shares (a mix, not one category) for the most.",
+  "zeal": {
+    "loss": 40,
+    "draw": 50,
+    "win": 60,
+    "fullTicks": 1025,
+    "caps": {
+      "fragments": 30,
+      "areas": 6,
+      "damage": 260,
+      "bones": 15,
+      "kills": 10
+    },
+    "sharesForFull": 2.5
+  },
+  "music": {
+    "lobby": 686,
+    "game": 685,
+    "end": 285
+  },
+  "messages": {
+    "backSlot": "You can't enter a waiting area while wearing something on your back.",
+    "restricted": "Food, potions, capes, followers and non-combat items are all restricted.",
+    "requirements": "You need a total level of 500 and a combat level of 40 to play Soul Wars.",
+    "poisoned": "You can't enter a waiting area while poisoned, envenomed or diseased.",
+    "banned": "You were removed from your last game for inactivity, so you must wait before joining another.",
+    "leaveWaiting": "Are you sure you want to leave?",
+    "leavePortal": "Where would you like to go?",
+    "shortly": "The next Soul Wars game will start shortly.",
+    "begun": "The game of Soul Wars has begun!",
+    "nomadStart": "The time is now! Crush their souls!",
+    "time": "Time remaining: {time}",
+    "noEffect": "Your attacks seem to have no effect on the avatar.",
+    "teammates": "You can't attack your teammates!",
+    "defeated": "<col={colour}>The {team} team has defeated the {avatar}!</col>",
+    "returned": "<col={colour}>The {avatar} has returned!</col>",
+    "captured": "<col={colour}>The {team} team has taken control of the {place}!</col>",
+    "charged": "You charge the Soul Obelisk with soul fragments and weaken the enemy avatar.",
+    "notHeld": "Your soul fragments will have a greater effect if your team controls the Soul Obelisk.",
+    "avatarDown": "You don't need to do that as the enemy avatar has been defeated.",
+    "avatarWeak": "You don't need to do that as the enemy avatar has already been fully weakened.",
+    "gameEnded": "You can't do that as the game has ended.",
+    "noFragments": "You don't have any soul fragments to sacrifice.",
+    "exitOnly": "You can only exit this sanctuary, not enter it.",
+    "ghostWait": "You must wait for another {seconds} second{s} before you rejoin the battle.",
+    "enemyBarrier": "You can't pass through the enemy team's barrier.",
+    "potion": "You use a potion to boost yourself.",
+    "bandage": "You use a bandage to heal yourself.",
+    "noBandage": "You do not currently need bandaging.",
+    "bury": "You bury the bones.",
+    "buryWhere": "You need to bury these bones in your base or a graveyard.",
+    "avatarFull": "Your avatar is already at full strength.",
+    "takeX": "How many would you like to take?",
+    "won": "<col={colour}>The {team} team was victorious!</col>",
+    "draw": "The game has ended in a draw!",
+    "zealFirst": "You earned {zeal} Zeal.",
+    "zeal": "You earned {zeal} Zeal. You now have {tokens} Zeal Tokens to spend.",
+    "inactive": "You have been removed from the game for inactivity.",
+    "needTutorial": "You need to see the Nomad's demonstration before you can join a battle."
+  },
+  "minPlayersFloor": 2,
+  "_rewards": "The Nomad's Trade opens interface 442 (rsprox 227/00079, 00076): the lists are the cache's (scripts 535-538, 675, 842; enums below); every selection is client-side and reaches the server only as the confirm button's sub (the entry's index). Recorded: Spoils of War bought 10 at a time ('How many would you like to buy? (1-10)', 'You purchase some Spoils of war for 300 Tokens.', synth 2304), a Slayer helmet imbued in place for 500 (synth 2655). Cache: XP per token floor(L*L/600) * 30 (melee, Hitpoints), 27 (Ranged, Magic), 14 (Prayer) from level 30; Prayer 70 for the Soul cape, 40 for the Ectoplasmator. Inferred: the XP line, the XP 'X' prompt, and a Buy 1 giving one batch (enum 3652's count) of the blighted supplies.",
+  "rewards": {
+    "interface": "soul_wars_rewards",
+    "openScript": 535,
+    "modalScript": 2524,
+    "enums": {
+      "xpTokens": 3538,
+      "imbuedOf": 3541,
+      "imbueIndex": 3545,
+      "imbueItem": 3544,
+      "imbueBase": 3542,
+      "imbueCost": 3543,
+      "otherItem": 3553,
+      "otherCost": 3540,
+      "otherBatch": 3652
+    },
+    "xpRows": [
+      ["ATTACK", 30],
+      ["STRENGTH", 30],
+      ["DEFENCE", 30],
+      ["RANGED", 27],
+      ["MAGIC", 27],
+      ["HITPOINTS", 30],
+      ["PRAYER", 14]
+    ],
+    "xpMinLevel": 30,
+    "prayerFor": {
+      "25346": 70,
+      "25344": 70,
+      "25340": 40
+    },
+    "quantityVarp": 3426,
+    "xpAmountVarp": 2971,
+    "synths": {
+      "refused": 2277,
+      "bought": 2304,
+      "imbued": 2655
+    },
+    "messages": {
+      "howMany": "How many would you like to buy? (1-{max})",
+      "howManyTokens": "How many tokens would you like to spend? (1-{max})",
+      "bought": "You purchase some {name} for {cost} Tokens.",
+      "imbued": "<col=3366ff>You sense a newfound power emanating from your {name}...</col>",
+      "xp": "You receive {xp} {skill} experience.",
+      "noItem": "You don't have that item to imbue.",
+      "noRoom": "You don't have enough inventory space."
+    }
+  },
+  "_tutorial": "The Nomad's demonstration, as recorded (rsprox 234/03277 [24]-[398]): one instance shared by everyone in it (the template is x1880-2143 z5904-6047; the copy is x1920-2111, the 24 chunks an instance may have, which holds everything the demonstration uses); six Nomads (10548-10553) that each player sees by varbit soul_wars_tutorial (3798); a Zimberfizz of their own to kill (10517, then 10518); the steps' instructions on soul_wars_tutorial_instructions (261). Pages are [speaker, text, chathead animation]; 'box' pages are messageboxes. Lines the recording lacks are the Wiki's transcript (npc-dialogues.json, Nomad): talking out of turn, a lost fragment, I'll pass / Actually, I'm good., the poison refusal, Leave-tutorial and the guide.",
+  "tutorial": {
+    "chunk": [240, 738],
+    "size": [24, 18],
+    "land": [1935, 5958, 0],
+    "walkTo": [1935, 5974, 0],
+    "nomads": {
+      "10548": [1935, 5975, 0],
+      "10549": [1930, 6002, 0],
+      "10550": [1963, 5995, 0],
+      "10551": [2009, 5987, 0],
+      "10552": [2099, 5990, 0],
+      "10553": [1944, 5977, 0]
+    },
+    "scenery": [
+      [10520, [1933, 5960, 0]],
+      [10521, [2093, 6001, 0]],
+      [10554, [2006, 5990, 0]],
+      [10522, [2016, 6000, 0]],
+      [10522, [2025, 6002, 0]],
+      [10522, [2008, 5999, 0]],
+      [10523, [1966, 5998, 0]],
+      [10524, [1974, 6004, 0]],
+      [10523, [1978, 5992, 0]],
+      [10525, [2018, 5999, 0]],
+      [10526, [2024, 6002, 0]],
+      [10525, [2014, 6002, 0]]
+    ],
+    "imps": {
+      "ruins": [10517, [1964, 5994, 0]],
+      "obelisk": [10518, [2014, 5986, 0]]
+    },
+    "obelisk": [2014, 5983, 0],
+    "redBase": [2095, 5996, 0],
+    "redBaseWalk": [2095, 5982, 0],
+    "graveyard": [1947, 5977, 0],
+    "portal": [1951, 5977, 0],
+    "lobbyExit": [2212, 2857, 0],
+    "items": {
+      "cape": 25195,
+      "icon": 25213,
+      "fragment": 25196,
+      "guide": 25197
+    },
+    "iconSlot": 11,
+    "ghost": 10538,
+    "redStrength": "98%",
+    "arrowHeight": 110,
+    "obeliskArrow": 200,
+    "anims": {
+      "teleOtherImpact": 1816,
+      "teleOtherCasting": 1818,
+      "castTeleport": 714,
+      "terrified": 2836,
+      "death": 836,
+      "nomadBlast": 1979,
+      "impDeath": 172
+    },
+    "spotanims": {
+      "teleOtherImpact": 342,
+      "teleOtherCasting": 343,
+      "teleport": 111,
+      "smokepuff": 86,
+      "blastImpact": 89
+    },
+    "projectile": 88,
+    "sounds": {
+      "teleOtherCast": 199,
+      "teleOtherLand": 200,
+      "impAppears": 1930,
+      "pickup": 2582,
+      "charge": 4526,
+      "blast": 178
+    },
+    "instructions": {
+      "0": ["Soul Wars demonstration", "Follow the directional arrow on the minimap to find Nomad. Speak with him to start the demonstration."],
+      "1": ["Supplies", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about supply areas."],
+      "2": ["Souls", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about collecting souls."],
+      "4": ["Zimberfizz", "Follow the directional arrow on the minimap to find Zimberfizz the imp. Defeat him in combat to claim the soul fragment he is carrying."],
+      "5": ["Soul fragments", "Follow the directional arrow on the minimap to find the soul fragment. Pick it up to continue the demonstration."],
+      "6": ["The Soul Obelisk", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about the Soul Obelisk."],
+      "7": ["Zimberfizz returns", "Follow the directional arrow on the minimap to find Zimberfizz. Defeat him in combat to start taking control of the Soul Obelisk."],
+      "8": ["Area control", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about taking control of areas in Soul Wars."],
+      "11": ["Charging the Soul Obelisk", "Follow the directional arrow on the minimap to find the Soul Obelisk. Use the soul fragment on the Obelisk to charge the Obelisk and weaken the enemy avatar."],
+      "12": ["Angry avatars", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about the avatars."],
+      "14": ["Ghosts", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about being a ghost."],
+      "15": ["Death", "Follow the directional arrow on the minimap to find Nomad. Speak with him to learn about death in Soul Wars."],
+      "16": ["Leaving Soul Wars", "Follow the directional arrow on the minimap to find the blue exit portal. Use the portal to return to the waiting area."]
+    },
+    "lines": {
+      "intro": [
+        ["player", "Excuse me, what is this place?", 554],
+        ["npc", "What is this place? This is Soul Wars, a glorious battleground where you must fight to crush the souls of your enemies!", 573],
+        ["player", "Really? Are souls easy to crush?", 554],
+        ["npc", "Easier than you'd imagine.", 8542],
+        ["player", "I see. So how does it all work?", 554],
+        ["npc", "I can give you a demonstration if you're interested?", 567]
+      ],
+      "again": [["npc", "Ah, you again. Are you ready for that demonstration?", 567]],
+      "letsDoIt": [["player", "Let's do it.", 567]],
+      "restricted": [
+        ["npc", "Hmm, it looks like you have some restricted items with you. You should put them somewhere safe before we continue. Food, potions, capes, followers and non-combat items are all restricted.", 578]
+      ],
+      "poisoned": [
+        ["npc", "Hmm, you're not looking so great. You should cure yourself of poison before I give you the demonstration.", 578]
+      ],
+      "started": [["npc", "Very well. Let's get started.", 567]],
+      "notNow": [["npc", "So be it. You know where to find me if you change your mind.", 588]],
+      "avatars": [
+        ["npc", "Welcome to Soul Wars! Let's get started.", 567],
+        ["player", "So, what's this place all about?", 554],
+        ["npc", "To the south you will have seen an avatar. You must fight to protect your team's avatar, and defeat the opposing team's avatar.", 569],
+        ["player", "Are you crazy? Have you seen the size of it?", 571],
+        ["npc", "You're here to fight, not whine.", 614],
+        ["player", "But how am I supposed to take on one of those?", 575],
+        ["npc", "By capturing the Soul Obelisk, which lies at the centre of the battleground, and offering it soul fragments.", 593],
+        ["npc", "Let's head towards the Obelisk now. I can point out some of the important landmarks on the way. Meet me to the north when you are ready to learn more.", 569]
+      ],
+      "supplies": [
+        ["npc", "You might find this little area behind me useful for defending your avatar. There's one in the other team's base, too.", 569],
+        ["npc", "During battle, you can gather supplies here to aid you and your teammates.", 568],
+        ["npc", "The Soul Obelisk is just a little way from here. Let's continue on; I'll meet you to the east.", 568]
+      ],
+      "souls": [
+        ["npc", "Now, to have a chance against an avatar, you are going to need souls. Lots of souls.", 593],
+        ["player", "What am I going to do with souls?", 554],
+        ["npc", "The Soul Obelisk is immensely powerful and, by channelling souls into it, you can weaken the enemy avatar.", 569],
+        ["player", "How does that work?", 554],
+        ["npc", "All I know is that it does, and that you should do it. Lots.", 593],
+        ["player", "So, where do I get these souls from?", 554],
+        ["npc", "You can kill the souls that inhabit the arena ruins and harvest their soul fragments.", 568],
+        ["npc", "For the purposes of this demonstration however, we will use my minion Zimberfizz.", 568]
+      ],
+      "heel": [["npc", "Zimberfizz! Heel!", 609]],
+      "zimberfizz": [
+        ["npc", "When you kill a creature in Soul Wars, they will leave a soul fragment behind, which you can use to charge the Soul Obelisk.", 569],
+        ["npc", "Zimberfizz has such a soul fragment. Why don't you kill him and take it?", 555],
+        ["player", "You want me to kill him?", 554],
+        ["npc", "Yes!", 609]
+      ],
+      "killHim": [["npc", "Come on! Kill him already and get that soul fragment.", 614]],
+      "onward": [
+        ["npc", "Good job! Let's carry on to the Soul Obelisk and channel this soul fragment into it. It's just to the east, over a bridge and on a small island.", 569]
+      ],
+      "lostFragment": [
+        ["npc", "Good job! Now, you've got that soul fragment, right?", 554],
+        ["player", "About that...", 575],
+        ["npc", "You've lost it? You're lucky you're not in a real battle yet!", 614]
+      ],
+      "lostAtObelisk": [
+        ["npc", "Here we are at the Soul Obelisk. Now, you've got that soul fragment, right?", 554],
+        ["player", "About that...", 575],
+        ["npc", "You've lost it? You're lucky you're not in a real battle yet!", 614]
+      ],
+      "newFragment": [
+        ["npc", "Here, have this one. Just look after it this time.", 568],
+        ["player", "I'll try...", 575]
+      ],
+      "makeSpace": [["npc", "Make some space and I'll give you one. Just look after it this time.", 568]],
+      "obelisk": [
+        ["npc", "Here we are at the Soul Obelisk. Now, to reap the full benefit of the soul fragment, you will need to first be in control of the Obelisk.", 569],
+        ["player", "How do I do that?", 554],
+        ["npc", "Various areas of the battleground can come under your team's control. To gain control, you must have more team members than the opposing team in these areas.", 570],
+        ["npc", "If you outnumber the enemy, you will gradually take control. Let's try it out now.", 568],
+        ["npc", "We shall use Zimberfizz to represent an enemy team member.", 568]
+      ],
+      "minionHeel": [["npc", "Minion! Heel!", 609]],
+      "returns": [
+        ["npc", "Come on, give him a good kick.", 609],
+        ["player", "I thought he was dead? Didn't we kill him earlier?", 575],
+        ["npc", "Ha! He wishes! No, his service to me is far from over.", 605]
+      ],
+      "kick": [["npc", "Come on, give him a good kick.", 609]],
+      "poorGuy": [
+        ["player", "Poor little guy.", 610],
+        ["npc", "Ha! I'm sure he loves the attention, right Zimberfizz?", 605]
+      ],
+      "outnumber": [
+        ["npc", "Right, now that Zimberfizz is no longer in the Obelisk's capturable area, you outnumber the enemy! The Soul Obelisk will now begin to fall under your control.", 569],
+        ["box", "Note the Obelisk's progress bar in the top-left of your screen. As you gain control over an area, this bar will fill with the colour of your team."],
+        ["box", "Once the bar is filled with your team's colour, you gain control of the area."]
+      ],
+      "controlled": [
+        ["box", "You now have control over the Soul Obelisk; it has taken on your team's colour as a result. This is also shown by the Obelisk icon in the top-left of your screen."],
+        ["box", "The three icons at the top-left of the screen tell you which team has control of the capturable areas."],
+        ["npc", "Right. Now, go and charge the Obelisk with that soul fragment and see what happens.", 593]
+      ],
+      "goCharge": [["npc", "Go on, use the soul fragment on the Obelisk.", 593]],
+      "charged": [["box", "You charge the Soul Obelisk and weaken the enemy avatar."]],
+      "angry": [
+        ["npc", "Good job! Now that you have charged the Obelisk, the enemy avatar will have been weakened.", 568],
+        ["box", "Note the display in the top-left of the screen. See how the red avatar's strength has decreased."],
+        ["box", "The number shown here represents the percentage of your damage that the avatar will block."],
+        ["player", "So, once I've charged the Obelisk, can I just kick back and wait for the end of the game?", 593],
+        ["npc", "Ha! I think not! I'm not about to reward those who don't put the effort in!", 606],
+        ["box", "Note the orange bar in the top-left of the screen. This bar represents how active you have been during the game."],
+        ["box", "Over the course of the battle, the bar will slowly drain. Should the bar drain completely you will be removed from the game due to your inactivity."],
+        ["box", "You can refill the bar by performing actions in the game, such as dealing damage or charging the Obelisk."],
+        ["player", "Oh well. Say, do you think the enemy avatar minds us weakening it like this?", 555],
+        ["npc", "Hmm, why don't we go find out?", 554]
+      ],
+      "redBase": [
+        ["npc", "So, here we are in the enemy base.", 567],
+        ["player", "Is that the enemy avatar over there?", 554],
+        ["npc", "Yeah, and it looks like you made it pretty mad.", 554],
+        ["player", "What? You're the one that told me to weaken it!", 571],
+        ["npc", "Ha! Don't worry - I won't let it kill you.", 605],
+        ["player", "Phew!", 567],
+        ["npc", "Of course, that doesn't mean I won't kill you.", 592],
+        ["player", "What did you say?", 571]
+      ],
+      "ghost": [
+        ["player", "Wooooooooooo!", 588],
+        ["npc", "What?", 575],
+        ["player", "Woooooo! Woooooo!", 588],
+        ["npc", "Sorry, I don't speak ghost.", 575]
+      ],
+      "alive": [["npc", "There we go! Much better.", 567]],
+      "death": [
+        ["box", "When you die in Soul Wars, you become a ghost."],
+        ["box", "After 10 seconds as a ghost, you return to life and can carry on with the fight."],
+        ["player", "Hey! You killed me.", 614],
+        ["npc", "At least it wasn't permanent! Think of it as an opportunity to learn.", 606],
+        ["player", "How so?", 554],
+        ["npc", "The other team will be after you and any soul fragments you have collected, after all.", 568],
+        ["npc", "I needed to show you what happens when you fall in battle.", 568],
+        ["player", "Did you turn me into a ghost?", 554],
+        ["npc", "Not exactly. The Soul Obelisk tried to claim your soul, as it does with all who perish in the battleground.", 593],
+        ["npc", "Only my power brought you here, and returned you to life.", 568],
+        ["player", "Erm, thanks, I guess.", 575],
+        ["npc", "You're more useful to me alive... for now.", 592],
+        ["player", "Are there any other painful things to learn about this place?", 597],
+        ["npc", "There is much more to this place, but you don't need to know about it yet.", 593],
+        ["npc", "If you want to learn more, I can give you a Soul Wars guide upon our return to the lobby.", 568]
+      ],
+      "portal": [
+        ["npc", "Use the large blue portal at the back of this graveyard to return to the lobby. Why not sign up for a battle while you're there?", 569]
+      ],
+      "seeYou": [
+        ["npc", "Use the portal over there to return to the waiting area. I'll see you on the other side!", 569]
+      ],
+      "back": [
+        ["npc", "Here we are. Just head into the western waiting area if you want to join a battle.", 568],
+        ["player", "That's all well and good, but what do I get out of all of this?", 555],
+        ["npc", "I can offer you experience in various skills, and items I have found on my travels.", 568]
+      ],
+      "guideOffer": [
+        ["npc", "I have a copy of the Soul Wars guide here. It contains information that I didn't have time to cover.", 555],
+        ["npc", "You don't need to know it all to get started, but the section on burying bones could be useful.", 606],
+        ["npc", "Did you want to take it and read it in your own time?", 554]
+      ],
+      "guideYes": [["player", "Yes, please.", 567]],
+      "guideHave": [["npc", "Hmm, it looks like you already have one.", 554], ["npc", "Oh, alright then.", 567]],
+      "guideGiven": [["npc", "Here you go.", 567], ["player", "Thanks!", 567]],
+      "guideNo": [["player", "No thanks.", 567]],
+      "noGuideRoom": [["player", "Okay, thanks.", 567]]
+    },
+    "messages": {
+      "notYourImp": "You've got no reason to bother that poor imp.",
+      "needTutorial": "You need to see the Nomad's demonstration before you can join a battle."
+    }
+  }
+}

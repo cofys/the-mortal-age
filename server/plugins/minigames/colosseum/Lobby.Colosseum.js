@@ -103,6 +103,15 @@ function fillRank(request) {
   }
 }
 
+/**
+ * Whether the player has reached a Glory title, for other plugins (the ring of dueling's
+ * Fortis Colosseum teleport needs Hero). Titles come from the best Glory, so they stay earned.
+ */
+function answerHasRank(request) {
+  const required = Shared.RANKS.find(([, title]) => title === request.rank)?.[0];
+  if (required !== undefined && request.player) request.reached = Shared.gloryOf(request.player) >= required;
+}
+
 module.exports = function registerColosseumLobby(api) {
   Shared.bind(api);
   api.persistAttribute(Shared.ATTR.INTRO);
@@ -114,9 +123,11 @@ module.exports = function registerColosseumLobby(api) {
   api.onObjectInteraction("Bank chest", { Use: bankChest, Collect: bankChest });
   api.onNpcDialogueVariant(minimusVariant);
   api.onCustomEvent("npc-dialogue:line", fillRank);
+  api.onCustomEvent("colosseum:has-rank", answerHasRank);
   api.onPlayerLogin(syncIntroOnLogin);
 };
 
 module.exports.tunnel = tunnel;
 module.exports.bankChest = bankChest;
 module.exports.minimusVariant = minimusVariant;
+module.exports.answerHasRank = answerHasRank;

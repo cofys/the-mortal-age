@@ -1,10 +1,4 @@
-const { CombatType } = require("../../src/main/typescript/elvarg/game/content/combat/CombatType");
-const { CombatEquipment } = require("../../src/main/typescript/elvarg/game/content/combat/CombatEquipment");
-const { AccuracyFormulasDpsCalc } = require("../../src/main/typescript/elvarg/game/content/combat/formula/AccuracyFormulasDpsCalc");
-const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
-
 const ATTR_DRAGONFIRE_STATE = "combat:dragonfire:protection";
-const DRAGONFIRE_WARNING_MS = 30 * 1000;
 
 const DragonfireProtectionTier = Object.freeze({
   NONE: 0,
@@ -12,18 +6,42 @@ const DragonfireProtectionTier = Object.freeze({
   SUPER_ANTIFIRE: 2,
 });
 
-const PARTIAL_RESIST_MESSAGE = "You manage to resist some of the dragon fire.";
-const FULL_BURN_MESSAGE = "You're horribly burnt by the dragon fire!";
-const FULL_PROTECTION_MESSAGE = "You are completely protected from the dragon fire.";
+// rsprox captures: the expiry warning comes 30 ticks before an antifire potion ends (1149, 1740,
+// 3279, 4053) and 20 before a super antifire potion ends (355, 3316, 3318).
+const EXPIRY_WARNING_MS = Object.freeze({
+  [DragonfireProtectionTier.ANTIFIRE]: 30 * 600,
+  [DragonfireProtectionTier.SUPER_ANTIFIRE]: 20 * 600,
+});
+const EXPIRY_MESSAGE_COLOUR = "7f007f";
 
-let PrayerHandler;
+// Wiki Dragonfire, damage reduction table (chromatic and metallic dragons): a shield or
+// Protect from Magic sets the damage range before the roll, a won Magic accuracy roll caps it
+// at 30, and an antifire potion subtracts 15 from the rolled damage.
+const SHIELD_MAX_HIT = 5;
+const PRAYER_MAX_HIT = 10;
+const RESISTED_MAX_HIT = 30;
+const ANTIFIRE_REDUCTION = 15;
+
+const RESIST_MESSAGE = "You manage to resist some of the dragon fire!";
+const FULL_BURN_MESSAGE = "You're horribly burnt by the dragon fire!";
+const SHIELD_MESSAGE = "Your shield absorbs most of the dragon fire!";
+const PRAYER_MESSAGE = "Your prayers resist some of the dragon fire!";
+const ANTIFIRE_MESSAGE = "Your antifire potion helps to protect you from the dragon's breath!";
+const SUPER_ANTIFIRE_MESSAGE = "Your super antifire potion completely protects you from the dragon fire!";
+
+let core;
 
 /** Called from each plugin that uses this module, before any dragonfire logic runs. */
 function initDragonfireProtectionCoreAccess(api) {
-  PrayerHandler = api.getPrayerHandler();
+  core = api.core;
 }
 
-function normalizeState(player, options = {}) {
+/**
+ * Current protection state, or null. Every reader expires a finished state here, and the expiry
+ * notice goes with it, so a dragon attack on the expiry tick (NPCs process before players)
+ * still tells the player exactly once.
+ */
+function normalizeState(player) {
   if (!player) {
     return null;
   }
@@ -37,6 +55,7 @@ function normalizeState(player, options = {}) {
   const nowMs = Date.now();
   if (state && Number.isFinite(state.endsAt) && nowMs >= state.endsAt) {
     clearDragonfireProtection(player);
+    player.getPacketSender?.().sendMessage?.(`<col=${EXPIRY_MESSAGE_COLOUR}>Your ${state.label} has expired.</col>`);
     return null;
   }
 
@@ -97,16 +116,12 @@ function processDragonfireProtection(player) {
   }
 
   const remainingMs = state.endsAt - Date.now();
-  if (remainingMs <= 0) {
-    clearDragonfireProtection(player);
-    player.getPacketSender?.().sendMessage?.(`Your ${state.label} has expired.`);
-    return;
-  }
 
-  if (state.warned !== true && remainingMs <= DRAGONFIRE_WARNING_MS) {
+  const warningMs = EXPIRY_WARNING_MS[state.tier] ?? EXPIRY_WARNING_MS[DragonfireProtectionTier.ANTIFIRE];
+  if (state.warned !== true && remainingMs <= warningMs) {
     state.warned = true;
     player.setAttribute?.(ATTR_DRAGONFIRE_STATE, state);
-    player.getPacketSender?.().sendMessage?.(`Your ${state.label} is about to expire.`);
+    player.getPacketSender?.().sendMessage?.(`<col=${EXPIRY_MESSAGE_COLOUR}>Your ${state.label} is about to expire.</col>`);
   }
 }
 
@@ -114,47 +129,60 @@ function getDragonfireProtectionTier(player) {
   return normalizeState(player)?.tier ?? DragonfireProtectionTier.NONE;
 }
 
+/**
+ * Regular (chromatic, brutal and metallic) dragonfire against a player. `prayerProtects` is false
+ * for metallic dragons, whose fire ignores Protect from Magic. Returns the damage and the
+ * messages to send, one per protection layer as live sends them.
+ */
 function resolveChromaticDragonfireDamage(attacker, player, options = {}) {
+  const { CombatEquipment, CombatType, AccuracyFormulasDpsCalc, Misc, PrayerHandler } = core;
   const maxHit = Number.isFinite(options.maxHit) ? Math.max(0, Math.trunc(options.maxHit)) : 50;
-  const closeRange = options.closeRange !== false;
   const tier = getDragonfireProtectionTier(player);
-  const hasShield = CombatEquipment.hasDragonProtectionGear(player);
-  const hasPrayer = PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC);
 
-  if (
-    tier >= DragonfireProtectionTier.SUPER_ANTIFIRE ||
-    (tier >= DragonfireProtectionTier.ANTIFIRE && (hasShield || (closeRange && hasPrayer)))
-  ) {
-    return {
-      damage: 0,
-      accurate: true,
-      message: FULL_PROTECTION_MESSAGE,
-    };
+  if (tier >= DragonfireProtectionTier.SUPER_ANTIFIRE) {
+    return { damage: 0, accurate: true, messages: [spam(SUPER_ANTIFIRE_MESSAGE)] };
   }
 
-  if (hasShield) {
-    return {
-      damage: Misc.getRandom(10),
-      accurate: true,
-      message: PARTIAL_RESIST_MESSAGE,
-    };
+  let accurate = true;
+  let max;
+  const messages = [];
+  if (CombatEquipment.hasDragonProtectionGear(player)) {
+    max = SHIELD_MAX_HIT;
+    messages.push(spam(SHIELD_MESSAGE));
+  } else if (options.prayerProtects !== false && PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC)) {
+    max = PRAYER_MAX_HIT;
+    messages.push(spam(PRAYER_MESSAGE));
+  } else {
+    accurate = AccuracyFormulasDpsCalc.rollAccuracy(attacker, player, CombatType.MAGIC);
+    max = accurate ? Math.min(RESISTED_MAX_HIT, maxHit) : maxHit;
+    messages.push(game(accurate ? RESIST_MESSAGE : FULL_BURN_MESSAGE));
   }
 
-  const accurate = AccuracyFormulasDpsCalc.rollAccuracy(attacker, player, CombatType.MAGIC);
-
+  let damage = Misc.randomInclusive(0, max);
   if (tier >= DragonfireProtectionTier.ANTIFIRE) {
-    return {
-      damage: Misc.getRandom(accurate ? 15 : 35),
-      accurate,
-      message: accurate ? PARTIAL_RESIST_MESSAGE : FULL_BURN_MESSAGE,
-    };
+    damage = Math.max(0, damage - ANTIFIRE_REDUCTION);
+    messages.push(spam(ANTIFIRE_MESSAGE));
   }
+  return { damage, accurate, messages };
+}
 
-  return {
-    damage: Misc.getRandom(accurate ? 30 : maxHit),
-    accurate,
-    message: accurate ? PARTIAL_RESIST_MESSAGE : FULL_BURN_MESSAGE,
-  };
+function game(text) {
+  return { text, spam: false };
+}
+
+function spam(text) {
+  return { text, spam: true };
+}
+
+/** Sends the messages from `resolveChromaticDragonfireDamage`: layer messages go to the spam filter. */
+function sendDragonfireMessages(player, messages) {
+  for (const { text, spam: filtered } of messages) {
+    if (filtered) {
+      player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
+    } else {
+      player.sendMessage(text);
+    }
+  }
 }
 
 module.exports = {
@@ -166,4 +194,5 @@ module.exports = {
   processDragonfireProtection,
   getDragonfireProtectionTier,
   resolveChromaticDragonfireDamage,
+  sendDragonfireMessages,
 };

@@ -18,6 +18,25 @@ class PvpValidateEngagementNode {
     this.resetSeekingState = options.resetSeekingState;
   }
 
+  retaliate(context) {
+    const { player, state, nowMs } = context ?? {};
+    const pvp = state?.pvp;
+    if (!player || !pvp || pvp.retreat) return;
+    // Bot attacks bypass the player-click reaction hook; defend against the actual attacker.
+    const combat = player.getCombat?.();
+    const attacker = combat?.getAttacker?.();
+    if (attacker?.isPlayer?.() === true &&
+        (attacker !== pvp.targetPlayer || combat.getTarget?.() !== attacker) &&
+        this.isValidTarget?.(player, attacker) &&
+        this.CombatFactory.canAttackPermission(player, attacker, false,
+          this.CombatFactory.getMethod(player)) === CanAttackResponse.CAN_ATTACK) {
+      pvp.targetPlayer = attacker;
+      pvp.targetUsername = attacker.getUsername();
+      pvp.endsAt = Math.max(pvp.endsAt ?? 0, nowMs + 30_000);
+      if (combat.getTarget?.() !== attacker) combat.attack(attacker);
+    }
+  }
+
   tick(context) {
     const { player, state, nowMs } = context ?? {};
     const pvp = state?.pvp;
@@ -25,16 +44,7 @@ class PvpValidateEngagementNode {
     if (!player || !state || !pvp) {
       return { handled: true, status: "failure", target: null };
     }
-    // Bot attacks bypass the player-click reaction hook; defend against the actual attacker.
-    const attacker = player.getCombat?.().getAttacker?.();
-    if (attacker?.isPlayer?.() === true && attacker !== pvp.targetPlayer &&
-        this.isValidTarget?.(player, attacker) &&
-        this.CombatFactory.canAttackPermission(player, attacker, false,
-          this.CombatFactory.getMethod(player)) === CanAttackResponse.CAN_ATTACK) {
-      pvp.targetPlayer = attacker;
-      pvp.targetUsername = attacker.getUsername();
-      pvp.endsAt = Math.max(pvp.endsAt ?? 0, nowMs + 30_000);
-    }
+    this.retaliate(context);
     if (!pvp.targetUsername) {
       this.setPhase?.(state, this.pvpPhase?.SEEKING ?? "seeking");
       if (pvpOnly) {

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const Progress = require("./Progress.Music");
+const QuestUnlocks = require("./QuestUnlocks.Music");
 
 const COINS = 995;
 const CAPE_PRICE = 99000;
@@ -13,6 +14,13 @@ const MUSIC_NOW_PLAYING_REFRESH_SCRIPT = 3936;
 const MUSIC_JUKEBOX_ROW_FLAGS = 62;
 const MUSIC_NOW_PLAYING_FLAGS = 60;
 const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
+/**
+ * chatbox_transparency: live colours an unlocked track's name by it, with no closing tag or
+ * full stop (rsprox 224/01437: "<col=ff3045>Everywhere" on a transparent chatbox; 234/03275
+ * sends "<col=e00a19>" until the player turns transparency on, then "<col=ff3045>").
+ */
+const CHATBOX_TRANSPARENCY_VARBIT = 4608;
+const UNLOCK_NAME_COLOUR = { opaque: "e00a19", transparent: "ff3045" };
 const HOLIDAY_TRACKS = new Set(JSON.parse(fs.readFileSync(path.join(__dirname, "data", "music-holiday-tracks.json"), "utf8")));
 let core;
 let pluginApi;
@@ -23,6 +31,8 @@ let nonHolidayTrackIds;
 let slotByTrackId;
 let canonicalTrackBySlot;
 let autoUnlockTrackIds;
+/** Quest-hinted tracks and the quest names they name (QuestUnlocks.Music). */
+let questUnlocks = { entries: [], questNames: [] };
 
 function enableMusicActions(player) {
   const rowCount = core.CacheDefinitions.getDbTableRows(44).length;
@@ -79,15 +89,54 @@ function removeInvalidEquippedCape(player) {
   player.getUpdateFlag().flag(core.Flag.APPEARANCE);
 }
 
-function unlockTrack({ player, trackId }) {
+function unlockNameColour(player) {
+  const transparent = player.getPacketSender().getVarbit(CHATBOX_TRANSPARENCY_VARBIT) === 1;
+  return UNLOCK_NAME_COLOUR[transparent ? "transparent" : "opaque"];
+}
+
+function unlockTrack({ player, trackId, silent = false }) {
   trackId = Number(trackId);
   const name = trackNames?.[trackId];
   const slot = slotByTrackId?.[trackId];
   if (!player || !name || !slot || !Progress.unlock(player, canonicalTrackBySlot[slot.key])) return;
+  // A login backstop: the varps and cape flag are sent whole right after it.
+  if (silent) return;
   const fullVarps = Progress.varpsFor(Progress.unlockedTracks(player), slotByTrackId);
   player.getPacketSender().sendConfig(slot.varp, fullVarps[slot.varp]);
-  player.sendMessage(`You have unlocked a new music track: ${name}.`);
+  player.sendMessage(`You have unlocked a new music track: <col=${unlockNameColour(player)}>${name}`);
   Progress.refreshCapeUnlock(player, nonHolidayTrackIds);
+}
+
+/** true, false, or undefined for a quest the server has not got (asked under each alias the hint may mean). */
+function questComplete(player, hintName) {
+  for (const name of QuestUnlocks.questNameAliases(hintName)) {
+    const request = { player, name };
+    pluginApi.emitCustomEvent("quest:is-complete", request);
+    if (request.complete !== undefined) return request.complete === true;
+  }
+  return undefined;
+}
+
+/**
+ * Unlocks the tracks whose cache hint names `questName`, once every quest the hint needs is
+ * complete ("after completing the While Guthix Sleeps and Dragon Slayer II quests.").
+ */
+function unlockQuestTracks(player, questName, { silent = false } = {}) {
+  const isComplete = (hintName) => QuestUnlocks.hintNamesQuest(hintName, questName) ? true : questComplete(player, hintName);
+  for (const { trackId, requires } of QuestUnlocks.entriesForQuest(questUnlocks.entries, questName)) {
+    if (QuestUnlocks.requirementMet(requires, isComplete)) unlockTrack({ player, trackId, silent });
+  }
+}
+
+function onQuestCompleted({ player, quest }) {
+  if (player && quest?.name) unlockQuestTracks(player, quest.name);
+}
+
+/** Saves from before quest unlocks existed: what their completed quests should have unlocked. */
+function unlockCompletedQuestTracks(player) {
+  for (const name of questUnlocks.questNames) {
+    if (questComplete(player, name) === true) unlockQuestTracks(player, name, { silent: true });
+  }
 }
 
 function allDiariesComplete(player) {
@@ -133,6 +182,10 @@ function buyMusicCape(player) {
 }
 
 function talkToOlaf({ player }) {
+  const trials = { player, key: "fremennik_trials", started: false, complete: false };
+  pluginApi.emitCustomEvent("quest:is-started", trials);
+  pluginApi.emitCustomEvent("quest:is-complete", trials);
+  if (trials.started && !trials.complete) return false;
   pluginApi.sendMultiChatboxPrompt(
     player,
     "Music cape",
@@ -207,6 +260,7 @@ function onTrackPlayed(event) {
 }
 
 function onMusicLogin({ player }) {
+  unlockCompletedQuestTracks(player);
   syncMusicVarps(player);
   queueMicrotask(() => enableMusicActions(player));
 }
@@ -219,6 +273,51 @@ function onMusicWelcomeAction({ player }) {
 function answerAirGuitarUnlock(request) {
   request.unlocked = core.WorldDefinition.isMembersWorld()
     && request.player?.getAttribute?.(Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE) === true;
+}
+
+const MUSIC_VOLUME_VARP = 168;
+const MUSIC_MODE_VARP = 18;
+/** Track 147: silence. */
+const SILENCE_TRACK = 147;
+const NO_FADES = { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed: 0 };
+
+/**
+ * As captured (rsprox revs 236-239, 17 sessions with a music volume change): when the music volume
+ * varp rises from 0 the server sends silence with zero fades on that tick and the area track with
+ * zero fades on the next, so the client starts the track over; dropping to 0 sends nothing.
+ */
+/** The latest restart queued for each player; an older one that fires later is stale. */
+const restartGeneration = new WeakMap();
+
+/** The track a restart may send now: still the session's current track, in auto mode, with volume. */
+function restartStillWanted(player, track) {
+  const settings = player.getAudioSettings?.() ?? {};
+  return player.isRegistered?.() !== false
+    && (settings[MUSIC_MODE_VARP] ?? 0) === 0
+    && (settings[MUSIC_VOLUME_VARP] ?? 0) > 0
+    && (player.getSession?.()?.getCurrentMusicTrack?.() ?? -1) === track;
+}
+
+function restartMusicAfterVolumeRaised({ player, varpId, previous, value }) {
+  if (varpId !== MUSIC_VOLUME_VARP || previous !== 0 || !(value > 0)) return;
+  if ((player.getAudioSettings?.()?.[MUSIC_MODE_VARP] ?? 0) !== 0) return;
+  const track = player.getSession?.()?.getCurrentMusicTrack?.() ?? -1;
+  if (track < 0) return;
+  const generation = (restartGeneration.get(player) ?? 0) + 1;
+  restartGeneration.set(player, generation);
+  player.getPacketSender().sendSong(SILENCE_TRACK, NO_FADES);
+  core.TaskManager.submit(new (class extends core.Task {
+    constructor() {
+      super(1, player, false);
+    }
+    execute() {
+      this.stop();
+      // A region change, a later rise, manual mode or volume 0 since then: the session already
+      // sent what is current, so this restart must not put an older track back.
+      if (restartGeneration.get(player) !== generation || !restartStillWanted(player, track)) return;
+      player.getPacketSender().sendSong(track, NO_FADES);
+    }
+  })());
 }
 
 module.exports = {
@@ -250,14 +349,21 @@ module.exports = {
     autoUnlockTrackIds = [...groups.values()]
       .filter((entries) => entries.some(({ autoUnlock }) => autoUnlock))
       .map((entries) => entries[0].id);
+    questUnlocks = QuestUnlocks.questTracks(tracks);
 
     api.persistAttribute(Progress.UNLOCKED_TRACKS_ATTRIBUTE);
     api.persistAttribute(Progress.CAPE_OWNED_ATTRIBUTE);
     api.persistAttribute(Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE, false);
     api.onPlayerLogin(onMusicLogin);
     api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, onMusicWelcomeAction);
+  // A tab mounted again later (Tutorial Island's unlocks) lost its flags too.
+  api.onCustomEvent("gameframe:tab-mounted", ({ player, group }) => {
+    if (group === MUSIC_GROUP_ID) queueMicrotask(() => enableMusicActions(player));
+  });
+  api.onCustomEvent("audio:setting-changed", restartMusicAfterVolumeRaised);
     api.onCustomEvent("audio:play-song", onTrackPlayed);
     api.onCustomEvent("music:unlock-track", unlockTrack);
+    api.onCustomEvent("quest:completed", onQuestCompleted);
     api.onCustomEvent("music:air-guitar-unlocked", answerAirGuitarUnlock);
     api.onNpcInteraction("Olaf the Bard", { "Talk-to": talkToOlaf });
     api.onItemAction(capeAction);
@@ -266,8 +372,8 @@ module.exports = {
   _test: {
     unlockTrack, syncMusicVarps, allDiariesComplete, canTrim, buyMusicCape, talkToOlaf, capeAction,
     enableMusicActions, removeInvalidEquippedCape,
-    getCatalog: () => ({ allTrackIds, nonHolidayTrackIds, slotByTrackId, canonicalTrackBySlot, autoUnlockTrackIds }),
+    getCatalog: () => ({ allTrackIds, nonHolidayTrackIds, slotByTrackId, canonicalTrackBySlot, autoUnlockTrackIds, questUnlocks }),
     canEquipMusicCape, onMusicLogin, onMusicWelcomeAction, answerAirGuitarUnlock,
-    onTrackPlayed,
+    onTrackPlayed, questComplete, unlockQuestTracks, onQuestCompleted, unlockCompletedQuestTracks,
   },
 };

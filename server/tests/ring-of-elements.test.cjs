@@ -100,3 +100,90 @@ test("a charge consumes one of each elemental rune and one law rune", () => {
   assert.equal(Ring._test.getCharges(player), 1, "no runes, no charge");
   assert.match(player.messages.at(-1), /one of each elemental rune/);
 });
+
+const { TeleportHandler } = require("../dist/game/model/teleportation/TeleportHandler");
+
+/** Teleports wait for `land()`; `allowed` decides checkReqs. */
+function stubTeleports(t, allowed = true) {
+  const arrivals = [];
+  t.mock.method(TeleportHandler, "checkReqs", () => allowed);
+  t.mock.method(TeleportHandler, "teleport", (player, target, type, warning, onArrival) => arrivals.push(onArrival));
+  return { arrivals, land: () => arrivals.shift()() };
+}
+
+/** A player whose rings sit in real-looking inventory and equipment slots. */
+function carrier() {
+  const player = createPlayer();
+  const inventory = new Array(28).fill(null);
+  const equipment = new Array(14).fill(null);
+  player.inventory = inventory;
+  player.equipment = equipment;
+  player.getInventory = () => ({ getItems: () => inventory, refreshItems() {} });
+  player.getEquipment = () => ({ getItems: () => equipment, refreshItems() {} });
+  return player;
+}
+
+test("a teleport spends its charge on arrival, and a refused one spends nothing", (t) => {
+  const player = carrier();
+  const ring = ringItem(ItemIdentifiers.RING_OF_THE_ELEMENTS_4);
+  player.inventory[0] = ring;
+  Ring._test.setCharges(player, 1);
+
+  const refused = stubTeleports(t, false);
+  assert.equal(Ring._test.teleport(player, ring, Ring._test.TELEPORTS[0].destination, "Air Altar"), false);
+  assert.equal(refused.arrivals.length, 0);
+  assert.equal(Ring._test.getCharges(player), 1);
+  t.mock.restoreAll();
+
+  const { land } = stubTeleports(t);
+  Ring._test.teleport(player, ring, Ring._test.TELEPORTS[0].destination, "Air Altar");
+  assert.equal(Ring._test.getCharges(player), 1, "nothing is spent before arrival");
+  assert.equal(ring.getId(), ItemIdentifiers.RING_OF_THE_ELEMENTS_4);
+
+  // The ring is equipped mid-teleport as a different object.
+  player.inventory[0] = null;
+  const worn = ringItem(ItemIdentifiers.RING_OF_THE_ELEMENTS_4);
+  player.equipment[12] = worn;
+  land();
+  assert.equal(Ring._test.getCharges(player), 0);
+  assert.equal(worn.getId(), ItemIdentifiers.RING_OF_THE_ELEMENTS, "the last charge leaves the uncharged ring");
+  assert.equal(player.attributes.get("ring-of-elements:last-destination"), "Air Altar");
+});
+
+test("destroying the charged ring keeps the player's charges for their next ring", (t) => {
+  const player = carrier();
+  Ring._test.setCharges(player, 5);
+  player.inventory[0] = ringItem(ItemIdentifiers.RING_OF_THE_ELEMENTS_4);
+  // Destroy (the charged ring is untradeable) removes the item, not the stored charges.
+  player.inventory[0] = null;
+  assert.equal(Ring._test.getCharges(player), 5);
+
+  const replacement = ringItem(ItemIdentifiers.RING_OF_THE_ELEMENTS);
+  player.inventory[3] = replacement;
+  const { land } = stubTeleports(t);
+  Ring._test.teleport(player, replacement, Ring._test.TELEPORTS[2].destination, "Earth Altar");
+  land();
+  assert.equal(Ring._test.getCharges(player), 4);
+  assert.equal(replacement.getId(), ItemIdentifiers.RING_OF_THE_ELEMENTS_4, "the new ring shows the stored charges");
+});
+
+test("two players' rings of the elements never share charges", (t) => {
+  const alice = carrier();
+  const bob = carrier();
+  Ring._test.setCharges(alice, 3);
+  Ring._test.setCharges(bob, 9);
+  const aliceRing = ringItem(ItemIdentifiers.RING_OF_THE_ELEMENTS_4);
+  const bobRing = ringItem(ItemIdentifiers.RING_OF_THE_ELEMENTS_4);
+  alice.inventory[0] = aliceRing;
+  bob.equipment[12] = bobRing;
+
+  const { land } = stubTeleports(t);
+  Ring._test.teleport(alice, aliceRing, Ring._test.TELEPORTS[1].destination, "Water Altar");
+  Ring._test.teleport(bob, bobRing, Ring._test.TELEPORTS[3].destination, "Fire Altar");
+  land();
+  land();
+  assert.equal(Ring._test.getCharges(alice), 2);
+  assert.equal(Ring._test.getCharges(bob), 8);
+  assert.equal(alice.attributes.get("ring-of-elements:last-destination"), "Water Altar");
+  assert.equal(bob.attributes.get("ring-of-elements:last-destination"), "Fire Altar");
+});

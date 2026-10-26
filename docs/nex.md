@@ -37,7 +37,7 @@ Changes outside the plugin:
 | What | Behaviour | Source |
 | --- | --- | --- |
 | Area | Part of the God Wars Dungeon: the essence overlay stays up. Multi-combat. The chamber is cut out of its boundary (an actor keeps an area while inside it). | Wiki, ours |
-| Followers | Spiritual warriors, rangers, mages and blood reavers attack anyone not wearing a Zarosian item (by name: "ancient ", "zaryte ", "torva ", "virtus ", "... of darkness", ring of endurance; not the ancient hilt). Each one killed in the prison is a point of ancient essence. | Wiki |
+| Followers | Spiritual warriors, rangers, mages and blood reavers attack anyone not wearing a Zarosian item (by name: "ancient ", "zaryte ", "torva ", "virtus ", "... of darkness", not the ancient hilt). Each one killed in the prison is a point of ancient essence. | Wiki |
 | Logging out | In the prison proper or a chamber: back in the entry room. | Wiki |
 | Frozen key | The four generals' pieces "Assemble" into the frozen key (26356). Using it on the Frozen Door (42840/42841) from the God Wars side unseals the door for good (`nex:frozen-door-unlocked`); without it, one of six laments. The two messages are ours. | Wiki, ours |
 | Frozen Door | Fade, the move two ticks later, fade back (the God Wars doors' fade). The prison side (42931/42932) leads back up. | ours |
@@ -47,6 +47,25 @@ Changes outside the plugin:
 | Plaque | Its verse (a message box). | ours |
 | Scoreboard | Your kills and deaths; the world's kills, deaths and best time over public and private fights, saved in `data/saves/nex-scoreboard.json` (plugins have no world store; as the Doom's). | ours |
 | Altar (42965) | Pray: not in combat ("You need to be out of combat to use this altar.", RSPS-only); Prayer restored, and with a Zarosian item worn also hitpoints, run and special attack energy ("Your affinity to the Empty Lord energizes you further."); once every ten minutes. Teleport: out to the safe room's door (from a private fight, out of the instance), "You are teleported to a place of relative safety." (RSPS-only). | Wiki, RSPS-only, ours |
+
+### Ring of endurance protection
+
+The [ring of endurance](https://oldschool.runescape.wiki/w/Ring_of_endurance) counts as
+Saradomin equipment. It does not grant [Zarosian protection](https://oldschool.runescape.wiki/w/Zaros#Affiliated_items)
+in the Ancient Prison. The prison's hand-maintained `itemKeywords` list therefore excludes it;
+a worn ancient item still protects the player when worn alongside the ring.
+The rsprox index has no recorded actions for the ring, so this correction relies on the Wiki.
+The cache identifies the charged, wearable ring as 24736; 24844 is the tradeable uncharged ring.
+
+Regression coverage in `server/tests/nex.test.cjs` exercises the registered prison Area's
+aggression rule with no equipment, the ring alone, ancient d'hide alone, and both items.
+An agent MCP check charged the ring using a stamina dose, equipped it, opened the prison door,
+and walked to (2866, 5214, 0). During a 12-tick observation the original server left HP at 99;
+after the correction followers attacked and HP fell from 99 to 14. Wearing ancient d'hide
+alongside the ring on a fresh account kept HP at 99 and poison varp 102 at zero throughout
+the control observation. A reused account's repeat was discarded because of residual poison.
+Setup used granted gear, maxed skills and a teleport to the entry room; this was not a
+Frozen Door quest playthrough.
 
 ## The barrier and the chamber
 

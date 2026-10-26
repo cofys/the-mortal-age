@@ -414,23 +414,22 @@ test("a full bank can't swallow the Coin Collector's real coins: they go to the 
   assert.ok(!player.messages.some((m) => /added to your bank/.test(m)));
 });
 
-test('in the room an alchemy takes 5 ticks: a cast before then is refused', () => {
+test('in the room an alchemy takes 5 ticks, Low Level Alchemy too; the core waits it out', () => {
   const [x, y, z] = playgroundTile();
   const player = fakePlayer(x, y, z);
   const { items } = Common.ids;
   Alchemists.playground.values = { boots: 30, kiteshield: 1, helm: 5, emerald: 8, longsword: 15 };
   Alchemists.playground.free = null;
-  const first = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  const first = { player, itemId: items.emerald, spellId: 1162, allowed: false, coins: 0, castTicks: 3 };
   Alchemists.alchemyPolicy(first);
   assert.equal(first.allowed, true);
+  assert.equal(first.castTicks, 5);
   Alchemists.alchemyCompleted({ player, itemId: items.emerald });
-  const second = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
+  // The next click isn't refused here: the core cast delay queues it until the 5 ticks are up.
+  const second = { player, itemId: items.emerald, spellId: 1162, allowed: false, coins: 0, castTicks: 3 };
   Alchemists.alchemyPolicy(second);
-  assert.equal(second.allowed, false);
-  player.__mtaNextAlch = -1;
-  const later = { player, itemId: items.emerald, spellId: 55, allowed: false, coins: 0 };
-  Alchemists.alchemyPolicy(later);
-  assert.equal(later.allowed, true);
+  assert.equal(second.allowed, true);
+  assert.equal(second.castTicks, 5);
 });
 
 // --- The Creature Graveyard

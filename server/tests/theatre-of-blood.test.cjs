@@ -32,7 +32,14 @@ function fakeApiBase() {
   return {
     core: PluginManager.getCoreApi(),
     getBonusManager: () => ({ update() {} }),
-    emitCustomEvent: (name, payload) => (hooks.custom ??= []).push({ name, payload }),
+    emitCustomEvent: (name, payload) => {
+      (hooks.custom ??= []).push({ name, payload });
+      for (const handler of hooks.customHandlers?.[name] ?? []) handler(payload);
+    },
+    onCustomEvent: (name, handler) => {
+      hooks.customHandlers ??= {};
+      hooks.customHandlers[name] = [...(hooks.customHandlers[name] ?? []), handler];
+    },
     persistAttribute() {},
     onObjectInteraction() {},
     onInterfaceActionButton() {},
@@ -170,10 +177,16 @@ before(() => {
   Lobby(api);
   RaidUnit(api);
   Retrieval(api);
+  require('../plugins/minigames/tob/Rewards.TheatreOfBlood')(api);
+  require('../plugins/minigames/tob/Verzik.TheatreOfBlood')(api);
+  require('../plugins/minigames/tob/Entry.TheatreOfBlood')(api);
+  require('../plugins/minigames/tob/InfoBoard.TheatreOfBlood')(api);
+  hooks.api = api;
 });
 
 beforeEach(() => {
   hooks.prompts.length = 0;
+  hooks.custom = [];
 });
 
 // ------------------------------------------------------------------ the map
@@ -499,6 +512,42 @@ test('rewards: a unique replaces the commons; no contribution gets the cabbage; 
   raid.dispose();
 });
 
+test('a normal-mode Verzik completion counts the raid, announces it and answers the completion query', () => {
+  const { raid, players: [solo] } = startRaid(['NormalClear']);
+  // The real Verzik room, won through the room's own completion path.
+  raid.buildRoom('VERZIK');
+  raid.room.complete();
+  assert.equal(solo.getAttribute('tob:completions'), 1, 'the completion is counted');
+  const announced = hooks.custom.filter(entry => entry.name === 'tob:completed');
+  assert.equal(announced.length, 1, 'one completion event');
+  assert.equal(announced[0].payload.player, solo);
+  assert.equal(announced[0].payload.mode, 'normal');
+  assert.equal(solo.getAttribute('tob:entry-completions'), undefined, 'the normal path leaves the entry count alone');
+
+  const request = { player: solo, complete: false };
+  hooks.api.emitCustomEvent('tob:has-completion', request);
+  assert.equal(request.complete, true, 'the query answers true for a normal completion');
+  const other = fakePlayer('NeverCleared');
+  const otherRequest = { player: other, complete: false };
+  hooks.api.emitCustomEvent('tob:has-completion', otherRequest);
+  assert.equal(otherRequest.complete, false, 'a player who never cleared has no completion');
+  raid.dispose();
+});
+
+test('Entry Mode still answers the completion query and never clears another provider\'s answer', () => {
+  const entry = fakePlayer('EntryRunner');
+  entry.setAttribute('tob:entry-completions', 1);
+  const request = { player: entry, complete: false };
+  hooks.api.emitCustomEvent('tob:has-completion', request);
+  assert.equal(request.complete, true, 'an Entry Mode clear answers the query');
+  // A normal-mode clear answered first must survive the Entry Mode provider.
+  const both = fakePlayer('BothModes');
+  both.setAttribute('tob:completions', 1);
+  const mixed = { player: both, complete: false };
+  hooks.api.emitCustomEvent('tob:has-completion', mixed);
+  assert.equal(mixed.complete, true, 'the normal-mode answer is not overwritten');
+});
+
 test('a death costs a fifth of a player\'s standing', () => {
   const Rewards = require('../plugins/minigames/tob/Rewards.TheatreOfBlood');
   assert.equal(Rewards.standing({ deaths: 0 }), 1);
@@ -590,4 +639,86 @@ test('no theatre NPC plays a player animation: no blocks but Verzik\'s first for
     assert.ok(!PLAYER_ANIMATIONS.has(definition.getAttackAnim()), `${id} attack ${definition.getAttackAnim()}`);
     assert.ok(!PLAYER_ANIMATIONS.has(definition.getDeathAnim()), `${id} death ${definition.getDeathAnim()}`);
   }
+});
+
+// ------------------------------------------------------------------ the strategy table
+
+/** A real Player with only the network stubbed; the strings and interface it is sent are recorded. */
+function realReader(t, name) {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const p = new Player(null);
+  p.setUsername(name);
+  t.mock.method(p, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+  const sender = p.getPacketSender();
+  p.sent = { interfaces: [], texts: new Map() };
+  const original = { sendInterface: sender.sendInterface, sendString: sender.sendString };
+  t.mock.method(sender, 'sendInterface', function (id) { p.sent.interfaces.push(id); return original.sendInterface.apply(this, arguments); });
+  t.mock.method(sender, 'sendString', function (text, uid) { p.sent.texts.set(uid, text); return original.sendString.apply(this, arguments); });
+  return p;
+}
+
+test("the strategy table in the vault: each wave's time, the MVP, challenge and overall times, deaths (rsprox 237/01163)", (t) => {
+  const InfoBoard = require('../plugins/minigames/tob/InfoBoard.TheatreOfBlood');
+  let now = 1000;
+  t.mock.method(Shared, 'cycle', () => now);
+  const advance = (count) => { now += count; ticks(count); };
+  const { raid, players: [ann, bob] } = startRaid(['Tia', 'Ulf']);
+  const reader = realReader(t, 'Vel');
+  raid.add(reader);
+  const fights = { MAIDEN: 149, BLOAT: 145, NYLOCAS: 395, SOTETSEG: 166, XARPUS: 200, VERZIK: 329 };
+  for (const [key, fightTicks] of Object.entries(fights)) {
+    // The plain room: each boss's own fight isn't what is being timed here.
+    raid.room?.destroy();
+    raid.room = new Raid.Room(raid, Shared.ROOMS[key]);
+    advance(10); // between waves: counted only in the overall time
+    raid.room.start();
+    raid.room.recordDamage(key === 'NYLOCAS' ? ann : bob, 100);
+    for (const player of [ann, bob]) Object.assign(raid.member(player), { roomKey: key, inFight: true });
+    if (key === 'BLOAT') raid.onPlayerDied(bob);
+    advance(fightTicks);
+    raid.room.complete();
+  }
+  const read = { player: reader, objectId: 33014, option: 'Read' };
+  assert.equal(InfoBoard.read(read), false, 'only in the vault');
+  raid.buildRoom('REWARDS');
+  advance(20); // after Verzik: not in the overall time
+  assert.equal(InfoBoard.read(read), true);
+  const text = (name) => reader.sent.texts.get(InfoBoard.uid(name));
+  assert.deepEqual(reader.sent.interfaces, [459]);
+  assert.equal(text('ch1_name'), 'The Maiden of Sugadinti');
+  assert.equal(text('ch1_time'), '1:29.40', '149 ticks');
+  assert.equal(text('ch3_time'), '3:57.00');
+  assert.equal(text('ch6_name'), 'The Final Challenge');
+  assert.equal(text('challenge_time_time'), '13:50.40', 'the fights only, as recorded (1,384 ticks)');
+  assert.equal(text('overall_time_time'), InfoBoard.formatTime(1384 + 50), 'from the Maiden fight to Verzik: the five gaps between waves count');
+  assert.equal(text('mvp_player'), 'Ulf', '500 damage and one death beats 100');
+  assert.equal(text('playername0'), 'Tia');
+  assert.equal(text('deaths1'), '1');
+  assert.equal(text('playername2'), 'Vel');
+  assert.equal(text('totaldeaths'), '1');
+  raid.remove(bob);
+  reader.sent.texts.clear();
+  InfoBoard.read(read);
+  assert.equal(text('playername1'), 'Ulf', 'a member who left the vault is still listed');
+  assert.equal(text('totaldeaths'), '1');
+  raid.dispose();
+});
+
+test("a member's deaths and damage survive a logout and rejoin", () => {
+  const { raid, players: [ann, bob] } = startRaid(['Xan', 'Yul']);
+  raid.room.start();
+  for (const player of [ann, bob]) Object.assign(raid.member(player), { roomKey: 'MAIDEN', inFight: true });
+  raid.room.recordDamage(bob, 300);
+  raid.onLogout(bob);
+  assert.equal(raid.rejoin(bob), true);
+  assert.equal(raid.member(bob).deaths, 1, 'the logout in the fight counts as a death (Wiki)');
+  assert.equal(raid.member(bob).roomStats('MAIDEN').damage, 300);
+  raid.dispose();
+});
+
+test('the strategy table outside a raid is left alone', (t) => {
+  const InfoBoard = require('../plugins/minigames/tob/InfoBoard.TheatreOfBlood');
+  const reader = realReader(t, 'Wanderer');
+  assert.equal(InfoBoard.read({ player: reader, objectId: 33014, option: 'Read' }), false);
+  assert.deepEqual(reader.sent.interfaces, []);
 });

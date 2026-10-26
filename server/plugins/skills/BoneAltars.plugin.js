@@ -7,6 +7,7 @@
  * come from the Prayer plugin ("prayer:bone").
  */
 const DATA = require("./data/bone-altars.json");
+const { pauseForLevelUp } = require("./SkillActions");
 
 let api = null;
 let core = null;
@@ -84,14 +85,12 @@ function offer(player, object, altar, boneId, bone) {
   return true;
 }
 
-/** Each player's repeating offering, so a level-up pop-up can stop it. */
+/** Each player's repeating offering, retained while the level-up dialogue is open. */
 const offerings = new WeakMap();
-/** Players whose level-up pop-up opened during their first offering, before the loop began. */
-const interrupted = new WeakSet();
 
 /**
  * Offers every `intervalTicks` from the next one, keyed to the player so a walk or click stops
- * it; a level-up pop-up stops it too, as it does other skilling (docs/settings.md).
+ * it; a level-up pop-up pauses it, as it does other skilling (docs/settings.md).
  */
 function keepOffering(player, object, altar, boneId, bone) {
   let tick = 0;
@@ -99,6 +98,7 @@ function keepOffering(player, object, altar, boneId, bone) {
     constructor() { super(1, player.getIndex(), false); }
     execute() {
       if (!player.isRegistered() || player.getHitpoints() <= 0) return this.stop();
+      if (this.levelUpPaused) return;
       if (++tick % DATA.intervalTicks !== 0) return;
       if (!offer(player, object, altar, boneId, bone)) this.stop();
     }
@@ -108,9 +108,12 @@ function keepOffering(player, object, altar, boneId, bone) {
 }
 
 function stopOffering({ player }) {
-  interrupted.add(player);
   offerings.get(player)?.stop();
   offerings.delete(player);
+}
+
+function pauseOffering(event) {
+  pauseForLevelUp(event, offerings, (player) => stopOffering({ player }));
 }
 
 function useBoneOnAltar(event) {
@@ -125,10 +128,9 @@ function useBoneOnAltar(event) {
     return;
   }
   stopOffering({ player });
-  interrupted.delete(player);
-  if (offer(player, object, altar, itemId, bone) && !interrupted.has(player)) {
-    keepOffering(player, object, altar, itemId, bone);
-  }
+  // Register the loop before the immediate offering so its first XP drop can pause it too.
+  keepOffering(player, object, altar, itemId, bone);
+  if (!offer(player, object, altar, itemId, bone)) stopOffering({ player });
 }
 
 module.exports = {
@@ -139,6 +141,6 @@ module.exports = {
     api = pluginApi;
     core = pluginApi.core;
     api.onItemOnObject(useBoneOnAltar, { noted: false });
-    api.onCustomEvent("level-up:popup-opened", stopOffering);
+    api.onCustomEvent("level-up:popup-opened", pauseOffering);
   },
 };

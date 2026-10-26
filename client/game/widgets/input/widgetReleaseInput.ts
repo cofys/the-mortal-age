@@ -1,7 +1,8 @@
 import { sendWidgetDrag } from "../../../network/ServerConnection";
 import type { ScriptEvent } from "../../../rs/cs2/Cs2Vm";
+import { jsListeners } from "../../../widgets/custom/dynamicWidgets";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
-import type { WidgetInteractionController } from "../WidgetInteractionController";
+import { WidgetInteractionController } from "../WidgetInteractionController";
 import { resolveDynamicWidgetParentId } from "../widgetActionPayload";
 import type { WidgetInputControllerDeps, WidgetInputFrame } from "./widgetInputTypes";
 
@@ -61,6 +62,7 @@ export function processWidgetReleaseInput(
         // Drag complete
         if (widgetInteraction.isDraggingWidget) {
             const w = widgetInteraction.clickedWidget;
+            for (const listener of WidgetInteractionController.dragListeners) listener({ released: true });
             // Use draggedOnWidget tracked during drag ()
             const dragTarget = widgetInteraction.draggedOnWidget;
             // Ensure clickedWidgetParent is resolved for final clamp/coords.
@@ -127,7 +129,19 @@ export function processWidgetReleaseInput(
             const sourceItemId = (w as any).itemId ?? -1;
             const targetItemId = (dragTarget as any)?.itemId ?? -1;
 
-            deps.getCs2Vm().invokeEventHandler(w, "onDragComplete", dragCompleteCtx);
+            // RuneLite's JavaScriptCallback drag-complete listener replaces the widget's script.
+            const jsDragComplete = jsListeners(w)?.onDragComplete;
+            if (jsDragComplete) {
+                try {
+                    jsDragComplete({ source: w, target: dragTarget ?? null });
+                } catch (error) {
+                    console.warn("[widgets] drag complete listener failed", error);
+                }
+            } else {
+                deps.getCs2Vm().invokeEventHandler(w, "onDragComplete", dragCompleteCtx);
+            }
+            // A listener may have cancelled the drop (RuneLite's setDraggedOnWidget(null)).
+            const dropTarget = widgetInteraction.draggedOnWidget;
 
             // Native drag-complete scripts read and swap the original widget
             // contents. Publish the predicted inventory only after they finish.
@@ -143,9 +157,9 @@ export function processWidgetReleaseInput(
             widgetInteraction.clickedWidget = null;
 
             const pluginHandled =
-                dragTarget != null && deps.handlePluginWidgetDrag?.(w, dragTarget) === true;
+                dropTarget != null && deps.handlePluginWidgetDrag?.(w, dropTarget) === true;
 
-            if (sourceGroupId !== 149 && dragTarget != null && !pluginHandled) {
+            if (sourceGroupId !== 149 && dropTarget != null && !pluginHandled) {
                 // Non-inventory drag-drop - send IF_BUTTOND packet
                 // For dynamically created children (fileId === -1),
                 // send the PARENT container's UID, not the child's own UID.

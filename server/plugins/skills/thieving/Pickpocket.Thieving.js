@@ -241,7 +241,7 @@ function succeed(player, target, name) {
   player.sendMessage(`You pick ${name}'s pocket.`);
   core.Sounds.sendSound(player, core.Sound.THIEVING_PICKPOCKET);
   player.getSkillManager().addExperiences(core.Skill.THIEVING, target.xp);
-  pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: target.petBase });
+  pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: target.petBase, method: "pickpocket", target: target.name });
 }
 
 /** Caught: the message and the NPC's line now (no pickpocket animation); the stun follows. */

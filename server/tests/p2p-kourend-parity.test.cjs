@@ -26,6 +26,7 @@ function harness(name) {
     getItemOnGroundManager: () => ({ registerLocation: (...args) => ground.push(args) }),
     onObjectClick: (ids, click, fn) => [].concat(ids).forEach(id => clicks.set(id, fn)),
     onNpcInteraction: (name, actions) => namedNpcs.set(name, actions),
+    onNpcsInteraction: (names, actions) => names.forEach(name => namedNpcs.set(name, actions)),
     onObjectInteraction: (name, actions) => { if (typeof name === 'function') (hooks.onObjectInteraction ??= []).push(name); else namedObjects.set(name, actions); },
     onObjectFirstClick: (ids, fn) => [].concat(ids).forEach(id => clicks.set(id, fn)),
     persistAttribute: noop,
@@ -75,7 +76,7 @@ function player() {
     sendConfig(id, value) { configs.set(id, value); return packet; }, sendVarbit(id, value) { varbits.set(id, value); return packet; },
     sendString(text, uid) { if ([6,3,2].some(child => [217,231,229,193].some(group => uid === (group << 16 | child)))) p.text = text; log.push(['text',uid,text]); return packet; },
     sendInterface(id) { p.interfaceId=id; log.push(['sendInterface',id]); return packet; },
-    sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
+    sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; p.removals = (p.removals ?? 0) + 1; return packet; },
   }, { get: (t, key) => t[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
   const p = { setEnteredSyntaxAction: action => { p.syntaxAction = action; }, setEnteredAmountAction: action => { p.amountAction = action; }, attrs, items, configs, varbits, log, xp, messages: [], animations: [], prompt: null, text: '', index: nextIndex++,
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value), getInventory: () => inv,
@@ -240,17 +241,33 @@ test('Mary unlocks tanning after the postquest thanks and opens native324 throug
 test('Native tanning All/5/1 charges exact fees without XP, rejects noted hides, and supports full inventories',()=>{
   const h=tanningHarness(),p=player();h.api.emitCustomEvent('tanning:open',{player:p});p.items.set(I.COWHIDE,5);p.items.set(I.COINS,20);p.full=true;
   tanClick(h,p,149);assert.equal(p.items.get(I.HARD_LEATHER),1);assert.equal(p.items.get(I.COINS),17);
-  tanClick(h,p,140);assert.equal(p.items.get(I.LEATHER),4);assert.equal(p.items.get(I.COWHIDE),0);assert.equal(p.items.get(I.COINS),13);assert.deepEqual(p.xp,[]);
-  p.items.set(I.GREEN_DRAGONHIDE,3);p.items.set(I.COINS,45);tanClick(h,p,128);assert.equal(p.items.get(I.GREEN_DRAGON_LEATHER),2);assert.equal(p.items.get(I.GREEN_DRAGONHIDE),1);assert.equal(p.items.get(I.COINS),5);
-  p.items.set(I.GREEN_DRAGONHIDE,0);p.items.set(I.GREEN_DRAGONHIDE_2,5);tanClick(h,p,128);assert.equal(p.items.get(I.GREEN_DRAGONHIDE_2),5);
+  h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,140);assert.equal(p.items.get(I.LEATHER),4);assert.equal(p.items.get(I.COWHIDE),0);assert.equal(p.items.get(I.COINS),13);assert.deepEqual(p.xp,[]);
+  p.items.set(I.GREEN_DRAGONHIDE,3);p.items.set(I.COINS,45);h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,128);assert.equal(p.items.get(I.GREEN_DRAGON_LEATHER),2);assert.equal(p.items.get(I.GREEN_DRAGONHIDE),1);assert.equal(p.items.get(I.COINS),5);
+  p.items.set(I.GREEN_DRAGONHIDE,0);p.items.set(I.GREEN_DRAGONHIDE_2,5);h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,128);assert.equal(p.items.get(I.GREEN_DRAGONHIDE_2),5);
 });
 
 test('Native tanning X validates its amount and becomes inert after close or moving away',()=>{
   const h=tanningHarness(),p=player();p.items.set(I.COWHIDE,10);p.items.set(I.COINS,100);h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,132);p.amountAction.execute(-1);p.amountAction.execute(NaN);assert.equal(p.items.get(I.COWHIDE),10);p.amountAction.execute(3);assert.equal(p.items.get(I.LEATHER),3);
-  tanClick(h,p,132);close(h,p,324);p.amountAction.execute(7);assert.equal(p.items.get(I.COWHIDE),7);tanClick(h,p,124);assert.equal(p.items.get(I.COWHIDE),7);
+  h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,132);close(h,p,324);p.amountAction.execute(7);assert.equal(p.items.get(I.COWHIDE),7);tanClick(h,p,124);assert.equal(p.items.get(I.COWHIDE),7);
   h.api.emitCustomEvent('tanning:open',{player:p});p.moveTo(new core.Location(3000,3000,0));tanClick(h,p,124);assert.equal(p.items.get(I.COWHIDE),7);
 });
 
+
+test('Ellis and the Crafting Guild tanner are free-to-play, so Tanning loads on free worlds',()=>{
+  const plugin=require('../plugins/npcs/Tanning.plugin');assert.notEqual(plugin.members,true);
+  const h=tanningHarness();for(const name of ['Ellis','Tanner']){const p=player();h.namedNpcs.get(name).Trade({player:p,npc:{isRegistered:()=>true},definition:{getName:()=>name}});assert.equal(p.interfaceId,324);assert.ok(p.log.some(row=>row[0]==='text'&&row[1]===(324<<16|116)&&row[2]==='1 coin'));}
+});
+
+test('A tan closes the tanner and says what was tanned, as live does; a refused tan keeps it open',()=>{
+  const h=tanningHarness(),p=player();p.items.set(I.COWHIDE,3);p.items.set(I.COINS,100);
+  h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,148);assert.deepEqual(p.messages,['The tanner tans your cowhide.']);assert.equal(p.removals,1);
+  tanClick(h,p,124);assert.equal(p.items.get(I.COWHIDE),2,'closed: a second click tans nothing');
+  h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,125);assert.equal(p.messages.at(-1),'The tanner tans 2 cowhides for you.');assert.equal(p.items.get(I.HARD_LEATHER),2);assert.equal(p.removals,2);
+  p.items.set(I.BLACK_DRAGONHIDE,4);h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,131);assert.equal(p.messages.at(-1),'The tanner tans 4 black dragonhides for you.');assert.equal(p.removals,3);
+  h.api.emitCustomEvent('tanning:open',{player:p});tanClick(h,p,124);assert.equal(p.messages.at(-1),"You don't have any suitable hides to tan.");assert.equal(p.removals,3);
+  p.items.set(I.COWHIDE,5);p.items.set(I.COINS,0);tanClick(h,p,124);assert.equal(p.messages.at(-1),"You don't have enough coins to pay for tanning.");assert.equal(p.removals,3);
+  p.items.set(I.COINS,2);tanClick(h,p,132);p.amountAction.execute(5);assert.equal(p.messages.at(-1),'The tanner tans 2 cowhides for you.');assert.equal(p.items.get(I.LEATHER),3);assert.equal(p.removals,4);
+});
 
 test('Garden optional notes, carvings, compass and labelled containers open native views without auto-learning',()=>{
   const h=harness('GardenOfDeath'),p=player();h.quest.setStage(p,54);p.items.set(I.WORD_TRANSLATIONS,1);

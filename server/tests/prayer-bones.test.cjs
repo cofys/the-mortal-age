@@ -247,7 +247,7 @@ function burialPlayer(ids, maxPrayer = 70) {
   const state = { location: new Location(3222, 3218, 0), registered: true, hp: 10, skill: null };
   const skills = who.getSkillManager();
   Object.assign(who, {
-    slots, state, animations: [],
+    slots, state, animations: [], sounds: [],
     getIndex: () => 8761,
     getLocation: () => state.location,
     isRegistered: () => state.registered,
@@ -268,7 +268,7 @@ function tickBurials(count) {
 }
 const clickBury = (who, slot = 0) => firstActions[0]({ player: who, itemId: who.slots[slot].getId(), slot });
 
-test("by default a Bury click buries only the clicked bone, as OSRS, and nothing but movement interrupts it", () => {
+test("by default a Bury click buries only the clicked bone on the click's tick, as live OSRS does", () => {
   // Unset, false or anything but the boolean true leaves burial as upstream: one bone per click.
   for (const value of [undefined, false, "true"]) {
     pluginConfig = value === undefined ? {} : { "Prayer:sequentialBurying": value };
@@ -276,29 +276,35 @@ test("by default a Bury click buries only the clicked bone, as OSRS, and nothing
     assert.equal(clickBury(who), true);
     assert.deepEqual(configReads.at(-1), ["Prayer:sequentialBurying", false]);
     assert.equal(who.state.skill, null, "a single burial is not a cancellable skilling action");
-    api.emitCustomEvent("can-use-item", { player: who, action: "action", itemId: Items.COINS });
-    tickBurials(1);
-    assert.equal(who.xp.get(Skill.PRAYER), undefined);
-    tickBurials(1);
+    // Rsprox captures 901, 3455, 3461: dig message, bone, experience, sequence and synth on the click.
     assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
+    assert.equal(who.slots.filter(item => item.getId() === Items.BONES).length, 2);
+    assert.deepEqual(who.messages, ["You dig a hole in the ground..."]);
+    assert.deepEqual(who.animations.map(animation => animation.id), [827]);
+    assert.deepEqual(who.sounds.map(sound => sound.getId()), [2738]);
+    tickBurials(1);
+    assert.deepEqual(who.messages, ["You dig a hole in the ground...", "You bury the bones."]);
     tickBurials(4);
     assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
     assert.equal(who.slots.filter(item => item.getId() === Items.BONES).length, 2);
     assert.equal(burialTasks.some(task => task.isRunning()), false);
-    assert.deepEqual(who.animations.map(animation => animation.id), [827, Animation.DEFAULT_RESET_ANIMATION.id]);
   }
 });
 
-test("by default walking away before the bone resolves keeps it, with the animation reset", () => {
-  const who = burialPlayer([Items.BONES]);
+test("every bone sends the same two burial messages, not its own name", () => {
+  const who = burialPlayer([Items.BIG_BONES]);
   clickBury(who);
   tickBurials(1);
+  assert.deepEqual(who.messages, ["You dig a hole in the ground...", "You bury the bones."]);
+});
+
+test("by default walking away after the click does not give the bone back", () => {
+  const who = burialPlayer([Items.BONES]);
+  clickBury(who);
   who.state.location = new Location(3223, 3218, 0);
   tickBurials(2);
-  assert.equal(who.xp.get(Skill.PRAYER), undefined);
-  assert.equal(who.slots[0].getId(), Items.BONES);
-  assert.equal(burialTasks.some(task => task.isRunning()), false);
-  assert.equal(who.animations.at(-1), Animation.DEFAULT_RESET_ANIMATION);
+  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.slots[0].getId(), -1);
 });
 
 test("one Bury click buries the remaining bones sequentially, one every two ticks", () => {
@@ -390,6 +396,29 @@ test("a level-up caused by resolving a bone stops before consuming the next bone
   assert.equal(who.xp.get(Skill.PRAYER), 5);
   assert.equal(who.slots[1].getId(), Items.BONES);
   assert.equal(who.state.skill, null);
+  assert.equal(burialTasks.some(task => task.isRunning()), false);
+});
+
+test("an acknowledged level-up resumes sequential burial at the next bone without repeating its XP", () => {
+  pluginConfig["Prayer:sequentialBurying"] = true;
+  const who = burialPlayer([Items.BONES, Items.BONES]);
+  const skills = who.getSkillManager(), resumes = [];
+  let levelled = false;
+  who.getSkillManager = () => ({ ...skills, addExperiences(skill, amount) {
+    skills.addExperiences(skill, amount);
+    if (!levelled) {
+      levelled = true;
+      api.emitCustomEvent("level-up:popup-opened", { player: who, pause: (_, resume) => resumes.push(resume) });
+    }
+  } });
+  clickBury(who);
+  tickBurials(8);
+  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.slots[1].getId(), Items.BONES, "the next bone remains while the popup is open");
+  assert.equal(resumes.length, 1);
+  resumes[0]();
+  tickBurials(6);
+  assert.equal(who.xp.get(Skill.PRAYER), 10);
   assert.equal(burialTasks.some(task => task.isRunning()), false);
 });
 

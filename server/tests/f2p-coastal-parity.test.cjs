@@ -79,7 +79,9 @@ function player() {
     refreshItems() {},
   };
   let packet;
-  packet = new Proxy({}, { get: (_, method) => (...args) => { packets.push([method, ...args]); return packet; } });
+  packet = new Proxy({
+    getVarbit: id => packets.findLast(([method, bit]) => method === 'sendVarbit' && bit === id)?.[2] ?? 0,
+  }, { get: (target, method) => target[method] ?? ((...args) => { packets.push([method, ...args]); return packet; }) });
   const p = { attributes, items, bank, equipment, packets, messages, xp,
     getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory, getBanks: () => [{ getAmount: (id) => bank.get(id) || 0 }],
@@ -363,6 +365,24 @@ test('as captured: Port Sarim and Karamja boats charge once, sail under ship_jou
   assert.equal(p.items.get(995), 0); assert.equal(p.getLocation().getX(), 3069); assert.equal(p.getLocation().getY(), 2987);
 });
 
+test('the customs officer lets worn Karamja gloves pass for half the fare, as the Pay-fare transcript says', () => {
+  const q = register('PiratesTreasure', 'pirates_treasure'), p = player();
+  p.equipment[9] = { getId: () => 11136, getDefinition: () => ({ getName: () => 'Karamja gloves 1' }) };
+  p.items.set(995, 14);
+  q.namedNpc.get('Customs officer:Travel')({ player: p });
+  assert.equal(p.items.get(995), 14);
+  assert.equal(p.messages.at(-1), 'You do not have enough coins to pay passage. You need 15 when wearing the Karamja gloves.');
+  p.items.set(995, 20);
+  q.namedNpc.get('Customs officer:Travel')({ player: p });
+  assert.equal(p.items.get(995), 5);
+  assert.equal(p.messages.at(-1), 'The officer smiles as she recognises your Karamja gloves and lets you pass for half price - 15 coins.');
+  const answer = (text) => q.hooks.get('onNpcDialogueCondition')[0]({ player: p, npcId: core.NpcIdentifiers.CUSTOMS_OFFICER, text });
+  p.items.set(995, 40);
+  assert.equal(answer('If the player is wearing Karamja gloves and has 15 coins:'), true);
+  assert.equal(answer('If the player has 30 coins:'), false, 'the gloves answer first');
+  q.tick(9);
+});
+
 test('Corsair vine ladder preserves the side used on its one-tick climb', () => {
   const q = register('CorsairCurse', 'the_corsair_curse'), p = player();
   for (const [outside, inside] of [[2862, 9006], [2860, 9004]]) {
@@ -392,6 +412,18 @@ test('X Marks preserves old saved stages, native clue/map interfaces, and captur
   const handin={player:p,npcId:8484,stepId:'HSuTNF'};q.emit('npc-dialogue:action',handin);assert.equal(p.items.get(23071),0);assert.equal(q.quest.varpValue(5,p),7);assert.deepEqual(handin.box.items,[23071]);
   q.emit('npc-dialogue:action',{player:p,npcId:8484,stepId:'03vD77'});assert.equal(q.quest.varpValue(6,p),8);assert.equal(p.items.get(995),200);assert.equal(p.items.get(23072),1);assert.equal(p.items.get(24361),1);
   q.emit('npc-dialogue:action',{player:p,npcId:8484,stepId:'03vD77'});assert.equal(p.items.get(995),200);
+});
+
+test('Port Sarim Veos leaves once Cabin Boy Herbert takes over in A Kingdom Divided, as captured at akd 150', () => {
+  const q = register('XMarksTheSpot', 'x_marks_the_spot'), akd = register('AKingdomDivided', 'a_kingdom_divided'), p = player();
+  const sarim = () => p.packets.filter(([m, id]) => m === 'sendVarbit' && id === 12148).at(-1)?.[2];
+  q.call('onPlayerLogin', { player: p }); assert.equal(sarim(), 3);
+  q.quest.setStage(p, 6); q.call('onPlayerLogin', { player: p }); assert.equal(sarim(), 1);
+  for (const [stage, visibility] of [[11, 1], [12, 0], [150, 0], [0, 1]]) {
+    akd.quest.setStage(p, stage); q.emit('quest:stage-changed', { player: p, key: 'a_kingdom_divided', stage });
+    assert.equal(sarim(), visibility, `akd ${stage}`);
+  }
+  akd.quest.setStage(p, 150); q.call('onPlayerLogin', { player: p }); assert.equal(sarim(), 0, 'login keeps him gone');
 });
 
 test('X Marks orb reproduces captured distances, temperatures, comparisons and helper packets', () => {

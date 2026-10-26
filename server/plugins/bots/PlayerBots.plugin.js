@@ -37,9 +37,6 @@ function parseEnvInt(name, fallback, min = 0) {
 
 const BOT_EAT_OPTIONS = Object.freeze({
   botEatLowHpRatio: 0.45,
-  botEatHealMin: 12,
-  botEatHealMax: 18,
-  botEatMaxCharges: 16,
 });
 
 const BOT_CONFIG = Object.freeze({

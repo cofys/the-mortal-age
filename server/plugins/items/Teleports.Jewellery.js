@@ -113,8 +113,13 @@ const JEWELLERY = [
       { label: "Emir's Arena", aliases: ["Duel Arena", "PvP Arena"], tile: [3315, 3235, 0] },
       { label: "Castle Wars", tile: [2440, 3090, 0] },
       { label: "Ferox Enclave", tile: [3151, 3636, 0] },
-      // OSRS unlocks it with the Colosseum's Hero title; tsps has no Colosseum yet, so it's open.
-      { label: "Fortis Colosseum", tile: [1793, 3107, 0] },
+      // Unlocked by the Colosseum's Hero title (Wiki); rsprox 723 shows the message box when locked.
+      {
+        label: "Fortis Colosseum",
+        tile: [1793, 3107, 0],
+        colosseumRank: "Hero",
+        lockedMessage: "This destination is unlocked by reaching <col=ff0000>Hero</col> status in the Fortis<br>Colosseum.",
+      },
     ],
   },
   {
@@ -130,8 +135,9 @@ const JEWELLERY = [
     ],
     spent: ItemIds.SKILLS_NECKLACE,
     rechargeable: true,
-    // Legends' Guild totem pole: 6 charges once Legends' Quest is complete (Wiki).
-    recharge: { totem: true, quest: "Legends' Quest" },
+    // Legends' Guild totem pole: 6 charges once Legends' Quest is complete (Wiki). Recharge
+    // Dragonstone needs the quest too, unlike for glories.
+    recharge: { totem: true, quest: "Legends' Quest", spellNeedsQuest: true },
     wildernessLevel: DRAGONSTONE_WILDERNESS_LEVEL,
     emptyMessage: "You will need to recharge your skills necklace before you can use it again.",
     lastChargeMessage: "You use your skills necklace's last charge.",
@@ -163,8 +169,8 @@ const JEWELLERY = [
     ],
     spent: ItemIds.COMBAT_BRACELET,
     rechargeable: true,
-    // Legends' Guild totem pole (Wiki).
-    recharge: { totem: true, quest: "Legends' Quest" },
+    // Legends' Guild totem pole (Wiki); Recharge Dragonstone needs the quest too.
+    recharge: { totem: true, quest: "Legends' Quest", spellNeedsQuest: true },
     wildernessLevel: DRAGONSTONE_WILDERNESS_LEVEL,
     rubMessage: "You rub the bracelet...",
     emptyMessage: "You will need to recharge your combat bracelet before you can use it again.",
@@ -288,7 +294,8 @@ const JEWELLERY = [
     spent: null,
     emptyMessage: "Your ring hasn't got any charges left.",
     lastChargeMessage: "Your ring of returning crumbles to dust.",
-    // A single destination: rubbing teleports straight to the respawn point.
+    // A single destination: rubbing teleports straight to the respawn point (Wiki). tsps has no
+    // selectable respawn points yet, so every player respawns at DEFAULT_LOCATION.
     destinations: [
       {
         label: "Respawn point",
@@ -309,7 +316,7 @@ for (const piece of JEWELLERY) {
 
 /** The ring of wealth's teleports; RingOfWealth.plugin.js handles the ring itself. */
 const RING_OF_WEALTH_DESTINATIONS = [
-  { label: "Grand Exchange", tile: [3163, 3485, 0] },
+  { label: "Grand Exchange", tile: [3163, 3478, 0] },
   { label: "Miscellania", tile: [2539, 3864, 0] },
   { label: "Falador Park", tile: [2994, 3377, 0] },
   { label: "Dondakan", tile: [2824, 10168, 0] },

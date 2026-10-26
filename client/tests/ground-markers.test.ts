@@ -93,6 +93,9 @@ async function main(): Promise<void> {
     ClientState.setKeybindState(81, true);
     let menu = world(54, 50);
     assert.deepEqual(menu.map((e) => `${e.option} ${e.target}`), ["Mark Tile", "Walk here ", "Cancel "], "just above Walk here");
+    ClientState.setKeybindState(82, true);
+    assert.deepEqual(world(54, 50).map((e) => e.option), ["Walk here", "Cancel"], "Ctrl+Shift keeps Walk here on top, for the staff teleport");
+    ClientState.setKeybindState(82, false);
     menu[0].onClick!();
     assert.equal(config.getConfiguration(GROUP, "region_12850"), '[{"regionId":12850,"regionX":22,"regionY":18,"z":0,"color":"#FFFFFF00"}]',
         "saved as RuneLite saves it, in the marker colour");

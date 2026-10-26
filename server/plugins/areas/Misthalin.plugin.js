@@ -4,7 +4,7 @@
  * Edgeville
  *  - Ladder at 3097,9867 (dungeon) > Climb-up: surface at 3096,3468.
  *  - Trapdoor at 3097,3468 > Open: dungeon at 3096,9867.
- *  - Lever at 3090,3475 > Pull: warn, then teleport to deep Wilderness (3153,3923).
+ *  - Lever at 3090,3475: the Levers plugin (docs/wilderness-levers.md).
  *
  * Varrock
  *  - Manhole at 3237,3458 > Open/Close: swap the closed (881) and open (882) locs.
@@ -15,9 +15,14 @@
  * link it): the ground-floor Ladder at 3104,3162 climbs down to the basement
  * landing at 3104,9576, and the basement Ladder at 3103,9576 climbs back up in
  * front of the ground-floor ladder at 3105,3162.
+ *
+ * Lumbridge Swamp Caves
+ *  - Dark hole at 3169,3172 > Use Rope: ties a rope and sets the SWAMP_CAVES_ROPED_ENTRANCE
+ *    varbit (279) for good (Wiki). The rope is used up.
+ *  - Dark hole > Climb-down: the tile below the side the player used, once roped.
  */
 let pluginApi;
-let Location, Animation, GameObject, CacheDefinitions, ObjectManager, Objects;
+let Location, Animation, GameObject, CacheDefinitions, ObjectManager, Objects, Items;
 let climbDownAnimation;
 
 // Edgeville
@@ -25,8 +30,6 @@ const EDGEVILLE_DUNGEON_LADDER = { x: 3097, y: 9867, z: 0 };
 const EDGEVILLE_SURFACE = { x: 3096, y: 3468, z: 0 };
 const EDGEVILLE_TRAPDOOR = { x: 3097, y: 3468, z: 0 };
 const EDGEVILLE_DUNGEON_LANDING = { x: 3096, y: 9867, z: 0 };
-const EDGEVILLE_LEVER = { x: 3090, y: 3475, z: 0 };
-const DEEP_WILDERNESS = { x: 3153, y: 3923, z: 0 };
 
 // Varrock
 const VARROCK_MANHOLE = { x: 3237, y: 3458, z: 0 };
@@ -38,9 +41,25 @@ const TOWER_BASEMENT_LADDER = { x: 3103, y: 9576, z: 0 };
 const TOWER_BASEMENT_LANDING = { x: 3104, y: 9576, z: 0 };
 const TOWER_SURFACE_LANDING = { x: 3105, y: 3162, z: 0 };
 
+// Lumbridge Swamp Caves: the surface dark hole and the rope tied through it.
+const SWAMP_CAVE_DARK_HOLE = { x: 3169, y: 3172, z: 0 };
+const SWAMP_CAVE_ROPED_ATTRIBUTE = "lumbridge-swamp-caves:roped";
+/** Cache: varbit 279 SWAMP_CAVES_ROPED_ENTRANCE (varp 425, bit 3). */
+const SWAMP_CAVE_ROPED_VARBIT = 279;
+/** Every walkable side of the dark hole, and the tile the game lands on below it. */
+const SWAMP_CAVE_LANDINGS = new Map([
+  ["3169,3171,0", { x: 3169, y: 9571, z: 0 }],
+  ["3168,3172,0", { x: 3168, y: 9572, z: 0 }],
+  ["3170,3172,0", { x: 3170, y: 9572, z: 0 }],
+  ["3169,3173,0", { x: 3167, y: 9573, z: 0 }],
+  ["3170,3173,0", { x: 3170, y: 9572, z: 0 }],
+]);
+const SWAMP_CAVE_NEEDS_ROPE = "There is a sheer drop below the hole. You'll need a rope to get down there.";
+const SWAMP_CAVE_TIED_ROPE = "You tie the rope to the top of the hole and throw it down.";
+
 function initialize(api) {
   pluginApi = api;
-  ({ Location, Animation, GameObject, CacheDefinitions, ObjectManager, ObjectIdentifiers: Objects } = api.core);
+  ({ Location, Animation, GameObject, CacheDefinitions, ObjectManager, ObjectIdentifiers: Objects, ItemIdentifiers: Items } = api.core);
   climbDownAnimation = new Animation(827);
 }
 
@@ -63,26 +82,6 @@ function edgevilleTrapdoorOpen(event) {
   const { player, location } = event;
   if (!isAt(location, EDGEVILLE_TRAPDOOR)) return false;
   pluginApi.emitCustomEvent("ladders:climbDown", { player, destination: toLocation(EDGEVILLE_DUNGEON_LANDING) });
-  event.handled = true;
-}
-
-// Edgeville: lever to the deep Wilderness, after the warning prompt.
-function edgevilleLeverPull(event) {
-  const { player, location } = event;
-  if (!isAt(location, EDGEVILLE_LEVER)) return false;
-  const start = player.getLocation().clone();
-  pluginApi.sendMultiChatboxPrompt(
-    player,
-    "Warning: deep Wilderness! Players can attack you.",
-    "Yes, teleport me into deep Wilderness.",
-    () => {
-      if (player.getLocation().equals(start)) {
-        pluginApi.emitCustomEvent("lever:teleport", { player, destination: toLocation(DEEP_WILDERNESS) });
-      }
-    },
-    "No, stay here.",
-    () => {},
-  );
   event.handled = true;
 }
 
@@ -166,6 +165,46 @@ function wizardsTowerClimbUp(event) {
   event.handled = true;
 }
 
+// Lumbridge Swamp Caves: the rope stays tied once used, as the varbit remembers.
+function swampCavesRoped(player) {
+  return player.getAttribute(SWAMP_CAVE_ROPED_ATTRIBUTE) === true;
+}
+
+function syncSwampCavesRope({ player }) {
+  if (swampCavesRoped(player)) player.getPacketSender().sendVarbit(SWAMP_CAVE_ROPED_VARBIT, 1);
+}
+
+function useRopeOnDarkHole(event) {
+  const { player, objectId, location, itemId } = event;
+  if (objectId !== Objects.DARK_HOLE || itemId !== Items.ROPE || !isAt(location, SWAMP_CAVE_DARK_HOLE)) return false;
+  event.handled = true;
+  if (swampCavesRoped(player)) return true;
+  player.getInventory().delete(Items.ROPE, 1);
+  player.setAttribute(SWAMP_CAVE_ROPED_ATTRIBUTE, true);
+  player.getPacketSender().sendVarbit(SWAMP_CAVE_ROPED_VARBIT, 1);
+  player.sendMessage(SWAMP_CAVE_TIED_ROPE);
+  return true;
+}
+
+/** The tile below the side of the hole the player used, as the game's pathing does. */
+function swampCavesLanding(location) {
+  return SWAMP_CAVE_LANDINGS.get(`${location.x},${location.y},${location.z ?? 0}`)
+    ?? SWAMP_CAVE_LANDINGS.get("3168,3172,0");
+}
+
+function climbDownDarkHole(event) {
+  const { player, objectId, location } = event;
+  if (objectId !== Objects.DARK_HOLE || !isAt(location, SWAMP_CAVE_DARK_HOLE)) return false;
+  event.handled = true;
+  if (!swampCavesRoped(player)) {
+    player.sendMessage(SWAMP_CAVE_NEEDS_ROPE);
+    return true;
+  }
+  const landing = swampCavesLanding(player.getLocation());
+  pluginApi.emitCustomEvent("ladders:climbDown", { player, destination: toLocation(landing) });
+  return true;
+}
+
 module.exports = {
   name: "Misthalin",
   register(api) {
@@ -173,7 +212,6 @@ module.exports = {
     // Edgeville
     api.onObjectInteraction("Ladder", { "Climb-up": edgevilleLadderUp });
     api.onObjectInteraction("Trapdoor", { Open: edgevilleTrapdoorOpen });
-    api.onObjectInteraction("Lever", { Pull: edgevilleLeverPull });
     // Varrock
     api.onObjectInteraction("Manhole", {
       Open: varrockManholeOpen,
@@ -186,5 +224,11 @@ module.exports = {
       "Climb-down": wizardsTowerClimbDown,
       "Climb-up": wizardsTowerClimbUp,
     });
+    // Lumbridge Swamp Caves
+    api.persistAttribute(SWAMP_CAVE_ROPED_ATTRIBUTE, false);
+    api.onObjectInteraction("Dark hole", { "Climb-down": climbDownDarkHole });
+    api.onItemOnObject("Rope", "Dark hole", useRopeOnDarkHole, { noted: false });
+    api.onPlayerLogin(syncSwampCavesRope);
   },
+  _test: { swampCavesLanding, SWAMP_CAVE_ROPED_ATTRIBUTE, SWAMP_CAVE_ROPED_VARBIT },
 };

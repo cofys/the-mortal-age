@@ -1,0 +1,209 @@
+/**
+ * The lobby under Darkmeyer: the stairs down (the Stranger's warning before his tutorial, the
+ * recorded entry box and its "don't ask again"), the Mysterious Stranger's tutorial with the five
+ * crystal shards, the crystal shards and the Hallowed token, and the obelisks at each floor's end.
+ */
+const Common = require("./Common.HallowedSepulchre");
+const Run = require("./Run.HallowedSepulchre");
+
+const STRANGER_IDS = [9806, 9639, 9640];
+const SHARDS_GIVEN = 5;
+/** Recorded: a shard's teleport lands 3 ticks after the cast. */
+const SHARD_TICKS = 3;
+
+function flag(player, name) {
+  return player.getAttribute(Common.data.attributes[name]) === true;
+}
+
+function setFlag(player, name, varbitName) {
+  player.setAttribute(Common.data.attributes[name], true);
+  Common.varbit(player, varbitName, 1);
+}
+
+/** The Wiki: no way in without Sins of the Father. */
+function questDone(player) {
+  const request = { player, key: Common.data.quest, complete: null };
+  Common.api.emitCustomEvent("quest:is-complete", request);
+  return request.complete === true;
+}
+
+/** Climb-down on the lobby stairs. */
+function climbDown({ player }) {
+  if (Run.runOf(player)) return true;
+  if (!questDone(player)) {
+    player.sendMessage(Common.message("needQuest"));
+    return true;
+  }
+  if (!flag(player, "tutorial")) {
+    // Recorded (1862 T18955): before his tutorial the Stranger stops you going down.
+    Common.npcChat(player, 9639, Common.message("strangerWait"));
+    return true;
+  }
+  const { agility } = Common.data.floors[0];
+  if (Common.level(player, "AGILITY") < agility) {
+    player.sendMessage(Common.message("agilityLevelEnter", { level: agility }));
+    return true;
+  }
+  if (flag(player, "entryCheck")) {
+    Run.start(player);
+    return true;
+  }
+  Common.box(player, Common.message("entryWarning"), () => {
+    Common.menu(player, Common.message("entryQuestion"), [
+      [Common.message("entryYes"), () => { Common.closeChat(player); Run.start(player, 0); }],
+      [Common.message("entryAlways"), () => {
+        Common.closeChat(player);
+        setFlag(player, "entryCheck", "hallowed_entry_check");
+        Run.start(player, 0);
+      }],
+      [Common.message("entryNo"), () => Common.closeChat(player)],
+    ]);
+  });
+  return true;
+}
+
+/** The Stranger's tutorial; the first time it ends with five crystal shards. */
+function talkTo({ player }) {
+  const npc = 9639;
+  const lines = Common.message("strangerTalk");
+  Common.npcChat(player, npc, lines, () => {
+    if (!flag(player, "tutorial")) setFlag(player, "tutorial", "hallowed_tutorial");
+    if (flag(player, "shards")) return;
+    setFlag(player, "shards", "hallowed_teleports_received");
+    player.getInventory().adds(Common.data.items.shard, SHARDS_GIVEN);
+    Common.itemBox(player, Common.data.items.shard, Common.message("strangerShards"));
+  });
+  return true;
+}
+
+/** Activate on a crystal shard: back to the lobby, ending a run; outside one the teleport rules apply. */
+function activateShard(event) {
+  const { player } = event;
+  const { Animation, TeleportHandler, TeleportType } = Common.core;
+  const run = Run.runOf(player);
+  if (!run && !questDone(player)) {
+    player.sendMessage(Common.message("needQuest"));
+    return true;
+  }
+  const destination = Common.toLocation(Common.data.lobby.shardTile);
+  if (!run && TeleportHandler?.checkReqs && !TeleportHandler.checkReqs(player, destination)) return true;
+  player.getInventory().delete(Common.data.items.shard, 1);
+  Common.animate(player, "castTeleport");
+  Common.graphic(player, "teleportCasting", 92);
+  player.getPacketSender().sendSound(Common.data.sounds.shardTeleport, 1, 0);
+  player.getMovementQueue().reset();
+  Common.later(SHARD_TICKS, () => {
+    if (!player.isRegistered?.()) return;
+    const current = Run.runOf(player);
+    if (current) current.toLobby(Common.data.lobby.shardTile);
+    else player.moveTo(destination);
+    player.performAnimation(new Animation(-1));
+    Common.song(player, "lobby");
+  });
+  return true;
+}
+
+/** Activate on a Hallowed token (Wiki): one more minute, inside and before the timer runs out. */
+function activateToken({ player }) {
+  const run = Run.runOf(player);
+  if (!run) {
+    player.sendMessage(Common.message("tokenOutside"));
+    return true;
+  }
+  if (run.expired || run.remaining <= 1) {
+    player.sendMessage(Common.message("tokenExpired"));
+    return true;
+  }
+  player.getInventory().delete(Common.data.items.token, 1);
+  run.addTime(Common.data.timer.token);
+  player.sendMessage(Common.message("tokenUsed"));
+  return true;
+}
+
+// ------------------------------------------------------------------ obelisks
+
+/** Wearing another god's item (the Wiki: only Saradomin's followers may use the obelisks). */
+function faithless(player) {
+  const others = /\b(zamorak|guthix|armadyl|bandos|ancient|zaros)/i;
+  for (const item of player.getEquipment().getItems?.() ?? []) {
+    const name = item?.getId?.() > 0 ? Common.core.CacheDefinitions.getItem(item.getId())?.name : null;
+    if (name && others.test(name)) return true;
+  }
+  return false;
+}
+
+/** Activate: recorded +1 pray, +3 the restore (or the refusal). */
+function activateObelisk({ player }) {
+  if (!Run.runOf(player)) return false;
+  Common.later(1, () => Common.animate(player, "pray"));
+  Common.later(3, () => {
+    if (faithless(player)) {
+      player.sendMessage(Common.message("obeliskFaithless"));
+      return;
+    }
+    Common.graphic(player, "obelisk", 92);
+    player.getPacketSender().sendSound(Common.data.sounds.obelisk, 1, 0);
+    player.setRunEnergy?.(100);
+    player.sendMessage(Common.message("obeliskLoyal"));
+  });
+  return true;
+}
+
+/** Exit: "Are you sure you wish to leave?", then the floor credited if it was finished. */
+function exit({ player }, credit = true) {
+  const run = Run.runOf(player);
+  if (!run) return false;
+  if (run.transitioning) return true;
+  Common.menu(player, Common.message("exitQuestion"), [
+    [Common.message("exitYes"), () => {
+      Common.closeChat(player);
+      if (Run.runOf(player) === run && !run.transitioning) run.leave(credit && run.paused);
+    }],
+    [Common.message("exitNo"), () => Common.closeChat(player)],
+  ]);
+  return true;
+}
+
+/** Quick-exit: recorded with no menu, a tick later than Exit's Yes. */
+function quickExit({ player }, credit = true) {
+  const run = Run.runOf(player);
+  if (!run) return false;
+  if (run.transitioning) return true;
+  run.transitioning = true;
+  Common.later(1, () => {
+    if (Run.runOf(player) !== run) return;
+    run.transitioning = false;
+    run.leave(credit && run.paused);
+  });
+  return true;
+}
+
+/** The lobby varbits the client needs from login: the Stranger's ops, the entry box, the PBs. */
+function restoreVarbits({ player }) {
+  if (flag(player, "tutorial")) Common.varbit(player, "hallowed_tutorial", 1);
+  if (flag(player, "entryCheck")) Common.varbit(player, "hallowed_entry_check", 1);
+  if (flag(player, "shards")) Common.varbit(player, "hallowed_teleports_received", 1);
+  const pbs = Common.record(player, "pbs");
+  for (const [floor, varbit] of Object.entries(Common.data.pbVarbits)) {
+    if (pbs[floor] != null) player.getPacketSender().sendVarbit(varbit, pbs[floor]);
+  }
+  const chests = player.getAttribute(Common.data.attributes.chests);
+  if (chests) Common.varbit(player, "hallowed_normal_chest_count", chests);
+}
+
+function attachLobby(api) {
+  api.onObjectClick(Common.data.lobby.stairs, 1, climbDown);
+  api.onNpcClick(STRANGER_IDS, 1, talkTo);
+  api.onItemAction("Hallowed crystal shard", { Activate: activateShard });
+  api.onItemAction("Hallowed token", { Activate: activateToken });
+  api.onObjectClick(Common.data.obelisk, 1, activateObelisk);
+  api.onObjectClick(Common.data.obelisk, 2, (event) => exit(event));
+  api.onObjectClick(Common.data.obelisk, 3, (event) => quickExit(event));
+  // The stairs back up at each floor's start (hallowed_stairs_return, not recorded): the same
+  // way out, crediting nothing.
+  api.onObjectClick(Common.data.returnStairs, 1, (event) => exit(event, false));
+  api.onObjectClick(Common.data.returnStairs, 2, (event) => quickExit(event, false));
+  api.onPlayerLogin(restoreVarbits);
+}
+
+module.exports = { attachLobby, faithless };

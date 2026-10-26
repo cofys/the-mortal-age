@@ -1,0 +1,36 @@
+{
+  "_source": "rsprox recording 3886 (rev 235): Set Destination and Teleport to Destination at the level 13 obelisk. OSRS Wiki: Wilderness_Obelisk. The obelisks' south-west corner stones and ids come from the cache map; `corner` is the south-west stone, the others are 4 tiles east, north and north-east, and the pad is the 3x3 between them.",
+  "obelisks": [
+    { "id": 14829, "level": "Level 13 Wilderness", "corner": [3154, 3618] },
+    { "id": 14830, "level": "Level 19 Wilderness", "corner": [3225, 3665] },
+    { "id": 14827, "level": "Level 27 Wilderness", "corner": [3033, 3730] },
+    { "id": 14828, "level": "Level 35 Wilderness", "corner": [3104, 3792] },
+    { "id": 14826, "level": "Level 44 Wilderness", "corner": [2978, 3864] },
+    { "id": 14831, "level": "Level 50 Wilderness", "corner": [3305, 3914] }
+  ],
+  "glowing": 14825,
+  "choiceVarbit": "wilderness_portal_choice",
+  "menu": {
+    "_recorded": "Menu 187 through script 217 with these args; the pause button's sub is the obelisk, and the varbit takes sub + 1.",
+    "interface": 187,
+    "script": 217,
+    "title": "Select Obelisk destination"
+  },
+  "_timeline": "Recorded, in ticks after the click: the stones glow and synth 204 plays four times (delay 10) at once; the smokepuff and area sound at 7; the stones back at 10; the portal on the pad's nine tiles at 11; the teleport at 13.",
+  "timeline": {
+    "glowSound": 204, "glowSounds": 4, "glowSoundDelay": 10,
+    "smokeAt": 7, "smokeGraphic": 86, "smokeHeight": 124, "areaSound": 1930, "areaSoundRadius": 7,
+    "revertAt": 10,
+    "portalAt": 11, "portalGraphic": 661, "portalHeight": 92,
+    "teleportAt": 13
+  },
+  "messages": {
+    "_recorded": "chosen: recorded (a set destination). random: the Wiki's arrival line.",
+    "chosen": "Ancient magic teleports you to a place within the wilderness!",
+    "random": "Ancient magic teleports you somewhere in the Wilderness!",
+    "_calibrated": "No source gives these: the teleblock line (the old engine's), and the refusals without the hard diary or a set destination.",
+    "teleblocked": "A magical spell is blocking you from teleporting.",
+    "needsDiary": "You need to complete the hard Wilderness Diary to choose an obelisk's destination.",
+    "noDestination": "You haven't set a destination yet."
+  }
+}

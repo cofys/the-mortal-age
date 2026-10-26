@@ -9,6 +9,14 @@ export type InlineImageResolver = (
 ) => { canvas: HTMLCanvasElement; width: number; height: number } | undefined;
 
 /** Parsed text segment with styling information */
+/** The area a text draw covered, in the same pixels as its x/y/w/h arguments. */
+export interface TextBounds {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
 export interface TextSegment {
     text: string;
     color: number; // RGB color
@@ -568,7 +576,7 @@ export function drawTextGL(
     inlineImageResolver?: InlineImageResolver,
     renderScaleX: number = 1,
     renderScaleY: number = 1,
-) {
+): TextBounds | undefined {
     text = resolveTextTemplates(text);
     // Early exit for empty text
     if (!text || w <= 0 || h <= 0) return;
@@ -809,6 +817,21 @@ export function drawWrappedTextGL(
             inlineImageResolver,
         );
     }
+
+    let left = Infinity;
+    let right = -Infinity;
+    for (let i = 0; i < lines.length; i++) {
+        left = Math.min(left, lineOffsetsRaw[i] | 0);
+        right = Math.max(right, (lineOffsetsRaw[i] | 0) + (lineWidths[i] ?? 0));
+    }
+    const top = baseY0 - ascent;
+    const bottom = baseY0 + resolvedLineHeight * (lines.length - 1) + descent;
+    return {
+        x: (x | 0) + left * safeScaleX,
+        y: (y | 0) + top * safeScaleY,
+        width: Math.max(0, right - left) * safeScaleX,
+        height: Math.max(0, bottom - top) * safeScaleY,
+    };
 }
 
 export function drawRichTextGL(

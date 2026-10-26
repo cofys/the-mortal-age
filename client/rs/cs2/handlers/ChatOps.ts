@@ -24,9 +24,11 @@
  * 5025 CHAT_GETTIMESTAMPS: pop 0, push 1 int
  * 5030 CHAT_GETHISTORYEX_BYTYPEANDLINE: pop 2 ints, push 4 ints + 4 strings
  * 5031 CHAT_GETHISTORYEX_BYUID: pop 1 int, push 4 ints + 4 strings
+ * The 7th value of the four history ops is the timestamp string proc 4742 affixes to a line
+ * when chat_gettimestamps != 0 (setting 119 "Chat timestamps"); the 8th is its epoch seconds.
  */
-import { sendChat, sendChatFilter, sendPrivateMessage } from "../../../network/ServerConnection";
-import { chatHistory } from "../ChatHistory";
+import { sendChat, sendChatFilter, sendPrivateMessage, sendReportAbuse } from "../../../network/ServerConnection";
+import { chatHistory, formatChatTimestamp } from "../ChatHistory";
 import { Opcodes } from "../Opcodes";
 import type { HandlerMap } from "./HandlerTypes";
 
@@ -53,14 +55,15 @@ export function registerChatOps(handlers: HandlerMap): void {
         ctx.setChatFilter?.(publicMode, privateMode, tradeMode);
     });
 
-    // CHAT_SENDABUSEREPORT (5002): Sends abuse report
-    // Pops: 1 string (reported name), 2 ints (reason, mute flag)
+    // CHAT_SENDABUSEREPORT (5002): the report form's submit (interface 875, script 5105).
+    // Pops: 1 string (reported name), 2 ints (rule, mute flag). The native op sends
+    // SEND_SNAPSHOT with the rule id one less than the script's value (RSProx SendSnapshot).
     handlers.set(Opcodes.CHAT_SENDABUSEREPORT, (ctx) => {
-        const _name = ctx.stringStack[--ctx.stringStackSize];
+        const name = ctx.stringStack[--ctx.stringStackSize];
         ctx.intStackSize -= 2;
-        const _reason = ctx.intStack[ctx.intStackSize];
-        const _muteFlag = ctx.intStack[ctx.intStackSize + 1];
-        // Server would handle the abuse report packet
+        const rule = ctx.intStack[ctx.intStackSize] | 0;
+        const muteFlag = ctx.intStack[ctx.intStackSize + 1] | 0;
+        sendReportAbuse(name ?? "", rule - 1, muteFlag === 1);
     });
 
     // CHAT_GETHISTORY_BYTYPEANDLINE (5003): Gets message by type and line
@@ -80,8 +83,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.friendStatus);
-            ctx.pushString(""); // timestamp string (used by affixtimestamp)
-            ctx.pushInt(0); // timestamp delta
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);
@@ -109,8 +112,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.isFromFriend ? 1 : msg.isFromIgnored ? 2 : 0);
-            ctx.pushString(""); // timestamp string (used by affixtimestamp)
-            ctx.pushInt(0); // timestamp delta
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);
@@ -131,6 +134,9 @@ export function registerChatOps(handlers: HandlerMap): void {
     // CHAT_SENDPUBLIC (5008): Sends public or legacy Chat-channel messages.
     // Revision 237's cached script uses chat type 2 and prepends "/" for the
     // legacy channel; CHAT_SENDCLAN is reserved for the newer Clan channels.
+    // Type 1 is autochat: the cache timer (proc 552) repeats the phrase in
+    // varcstring 358 every 150 client cycles, and the encoder flags it so
+    // listeners see message type 90/91 rather than ordinary public chat.
     // Pops: message (string), type (int)
     handlers.set(Opcodes.CHAT_SENDPUBLIC, (ctx) => {
         const message = ctx.stringStack[--ctx.stringStackSize];
@@ -279,8 +285,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.friendStatus);
-            ctx.pushString(""); // clan name (unused in this context)
-            ctx.pushInt(0); // timestamp delta (unused)
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);
@@ -307,8 +313,8 @@ export function registerChatOps(handlers: HandlerMap): void {
             ctx.pushString(msg.prefix);
             ctx.pushString(msg.text);
             ctx.pushInt(msg.isFromFriend ? 1 : msg.isFromIgnored ? 2 : 0);
-            ctx.pushString(""); // clan name
-            ctx.pushInt(0); // timestamp delta
+            ctx.pushString(formatChatTimestamp(msg.timestamp, ctx.chatTimestampMode)); // affixed by proc 4742
+            ctx.pushInt(Math.floor(msg.timestamp / 1000)); // arrival, seconds since the epoch
         } else {
             ctx.pushInt(-1);
             ctx.pushInt(0);

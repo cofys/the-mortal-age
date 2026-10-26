@@ -61,7 +61,7 @@ module.exports = function registerForgettableTaleQuest(api) {
   const COMMANDER_VELDABAN_2 = NpcIdentifiers.COMMANDER_VELDABAN_2; // 6045, the Keldagrim spawn
   const VELDABAN_IDS = new Set([COMMANDER_VELDABAN, COMMANDER_VELDABAN_2]);
   const GIANT_DWARF_STAGE_ATTRIBUTE = "quest.giant_dwarf.stage";
-  const GIANT_MEETING_STAGE = 40;
+  const GIANT_STARTED_STAGE = 5;
   const GIANT_COMPLETE_STAGE = 50;
 
   const DRUNKEN_DWARF = NpcIdentifiers.DRUNKEN_DWARF; // 322, random-event twin
@@ -672,10 +672,10 @@ module.exports = function registerForgettableTaleQuest(api) {
     return "starting-out-talking-to-commander-veldaban-again";
   }
 
-  /** Giant Dwarf owns Veldaban for its mandatory meeting at stage 40 until completion. */
-  function giantOwnsMeeting(player) {
+  /** Inactive Forgettable Tale yields to the prerequisite quest's Veldaban dialogue. */
+  function giantOwnsVeldaban(player) {
     const stage = Number(player.getAttribute(GIANT_DWARF_STAGE_ATTRIBUTE)) || 0;
-    return stage >= GIANT_MEETING_STAGE && stage < GIANT_COMPLETE_STAGE;
+    return stage >= GIANT_STARTED_STAGE && stage < GIANT_COMPLETE_STAGE;
   }
 
   function drunkDwarfVariant(player) {
@@ -773,7 +773,7 @@ module.exports = function registerForgettableTaleQuest(api) {
   function selectVariant(event) {
     const { npcId, player } = event;
     if (VELDABAN_IDS.has(npcId)) {
-      if (!questActive(player) && giantOwnsMeeting(player)) return null;
+      if (!questActive(player) && giantOwnsVeldaban(player)) return null;
       return veldabanVariant(player);
     }
     if (npcId === RIND) return rindVariant(player);

@@ -1416,11 +1416,10 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         const borderSize = 6;
 
         const isInstance = !!instanceInput;
-        // Partial loc updates apply to a map square already on screen. They
-        // only need one loc group, collision, and interaction data; instance
-        // scenes still use the full path because they have one combined mesh.
-        const shouldLoadDoorOnly = doorOnly && !isInstance;
-        const shouldLoadLocOnly = locOnly && !isInstance && !shouldLoadDoorOnly;
+        // Partial loc updates apply to a map square (or instance scene) already
+        // on screen. They only need one loc group, collision, and interaction data.
+        const shouldLoadDoorOnly = doorOnly;
+        const shouldLoadLocOnly = locOnly && !shouldLoadDoorOnly;
         const shouldLoadPartial = shouldLoadDoorOnly || shouldLoadLocOnly;
         const CHUNK_SIZE = 8;
         const INSTANCE_SIZE = 13 * CHUNK_SIZE; // 104

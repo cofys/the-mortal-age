@@ -17,6 +17,7 @@ let HOUSE_STAIRS = new Set();
 let FERRYMEN = new Map();
 const FERRY_FARE = 2;
 const FERRY_MESSAGE = "The dwarf ferries you across the river.";
+const NO_FARE_CONDITION = "If the player doesn't have 2 coins:";
 /** The transcript's [Charm] crossings, which are free. */
 const CHARM_CROSSINGS = new Set(["d9TbkS", "PJ6RxL"]);
 const CITY_ZONE = { minX: 2790, maxX: 2940, minY: 10100, maxY: 10215, levels: [0] };
@@ -107,8 +108,26 @@ function ferrymanCrosses({ player, npcId, text, stepId, kind }) {
   ferry(player, npcId, CHARM_CROSSINGS.has(stepId) ? 0 : undefined);
 }
 
-function travel({ player, npcId }) {
+/** The transcript's refusal when the player hasn't got a coin ("You don't even have 2 gold coins..."). */
+function refuseFare(player, npc, npcId) {
+  const request = {
+    player, npc, npcId, variant: FERRYMEN.get(npcId).variant, exact: true, handled: false,
+    select: (steps) => steps.flatMap(function find(step) {
+      if (step?.type === "condition" && step.text === NO_FARE_CONDITION) return [step];
+      return [...(step?.steps ?? []), ...(step?.options ?? []).flatMap((option) => option.steps ?? [])].flatMap(find);
+    })[0]?.steps ?? [],
+  };
+  pluginApi.emitCustomEvent("npc-dialogue:start", request);
+  return request.handled;
+}
+
+/** Travel: the fare, one coin as the transcript's exception, or with none the ferryman's refusal. */
+function travel({ player, npc, npcId }) {
   if (!FERRYMEN.has(npcId)) return false;
+  if (coins(player) < 1) {
+    refuseFare(player, npc, npcId);
+    return true;
+  }
   ferry(player, npcId);
   player.sendMessage(FERRY_MESSAGE);
 }
@@ -116,7 +135,7 @@ function travel({ player, npcId }) {
 module.exports = {
   name: "Keldagrim",
   members: true,
-  _test: { init, goThrough },
+  _test: { init, goThrough, travel },
   register(api) {
     init(api);
     api.onObjectInteraction("Tunnel", { Enter: goThrough });

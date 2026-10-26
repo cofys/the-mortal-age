@@ -1,13 +1,22 @@
 "use strict";
 
 const C = require("./Context.Hunter");
-const { H, ANIM, level, requireLevel, hasTool, nearby, available, roll, exchange, xp, begin, hide, chance } = C;
+const { H, ANIM, level, requireLevel, hasTool, nearby, active, available, roll, exchange, xp, begin, hide, chance } = C;
 const tables = require("../data/impling-loot.json");
 const falcons = new Map();
 const caught = new Map();
 // Players wearing a falconer's glove, so leaving the falconry grounds is checked for them only.
 const gloved = new Set();
 const pendingLoot = new WeakMap();
+const IMPLING_CATCH_SOUND = 2623;
+// The caught impling plays ii_impling_caught and is removed two ticks after the catch.
+const CAUGHT_TICKS = 2;
+// Outside Puro-Puro implings have no fixed spawns; the previous one-minute return is kept.
+const OUTSIDE_RESPAWN_TICKS = 100;
+const JAR_MESSAGE = "You manage to catch the impling and squeeze it into a jar.";
+const LOOT_MESSAGE = "You manage to catch the impling and acquire some loot.";
+const NO_JAR_MESSAGE = "You don't have an empty impling jar in which to keep an impling.";
+const NO_SPACE_MESSAGE = "You'll need to clear some space in your pack to catch this impling without a jar.";
 
 function gloves(player, id) {
   if (id > 0) gloved.add(player);
@@ -93,29 +102,21 @@ function catchNpc({ player, npc, npcId }) {
   const impling = H.data.implings.find(c => c.npcs.includes(npcId));
   const falcon = H.data.falconry.find(c => c.npc === npcId);
   if (falcon) { catchFalcon(player, npc, falcon); return true; }
-  if (!butterfly && !impling) return false;
+  if (impling) { catchImpling(player, npc, npcId, impling); return true; }
+  if (!butterfly) return false;
   if (!available(npc) || !nearby(player, npc)) return true;
   const I = H.core.ItemIdentifiers;
   const weapon = player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId();
   const net = [I.BUTTERFLY_NET, I.MAGIC_BUTTERFLY_NET].includes(weapon);
-  const def = butterfly ?? impling;
-  const jar = butterfly ? I.BUTTERFLY_JAR : I.IMPLING_JAR;
+  const def = butterfly;
+  const jar = I.BUTTERFLY_JAR;
   const jarred = player.getInventory().contains(jar);
-  const puro = player.getLocation().getX() >= 2560 && player.getLocation().getX() <= 2623
-    && player.getLocation().getY() >= 4288 && player.getLocation().getY() <= 4351;
-  if (impling && !jarred && (net || puro)) { player.sendMessage("You need an empty impling jar."); return true; }
   const required = net ? def.level : def.hands;
   if (!requireLevel(player, required)) return true;
   const inputs = jarred ? [[jar, 1]] : [];
-  // Unjarred implings are looted immediately, rather than silently discarding the catch.
-  const outputs = jarred ? [[def.jar, 1]] : impling ? rewards(player, def) : [];
-  if (!outputs) return true;
+  const outputs = jarred ? [[def.jar, 1]] : [];
   if (!exchange(player, inputs, outputs, false)) { player.getInventory().full(); return true; }
-  const token = { player };
-  if (!butterfly) H.reserved.set(npc, token);
-  const cancel = () => { if (H.reserved.get(npc) === token) H.reserved.delete(npc); };
-  if (!begin(player, 2, net ? weapon === I.MAGIC_BUTTERFLY_NET ? ANIM.NET : butterfly ? ANIM.BUTTERFLY : ANIM.OLD_NET : ANIM.HANDS, () => {
-    cancel();
+  begin(player, 2, net ? weapon === I.MAGIC_BUTTERFLY_NET ? ANIM.NET : ANIM.BUTTERFLY : ANIM.HANDS, () => {
     if (!available(npc) || !nearby(player, npc) || !requireLevel(player, required)
       || player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId() !== weapon) return;
     const improved = !net || weapon === I.MAGIC_BUTTERFLY_NET;
@@ -125,12 +126,60 @@ function catchNpc({ player, npc, npcId }) {
       player.sendMessage("The creature slips away."); return;
     }
     if (!exchange(player, inputs, outputs)) return;
-    xp(player, butterfly ? (net ? def.xp : def.handsXp) : (puro ? def.puroXp : def.xp), butterfly ? "butterfly" : "impling", npcId);
-    if (butterfly && !jarred) { bonus(player, def); if (def.boost === "restore") player.setRunEnergy(Math.min(100, player.getRunEnergy() + 5)); }
-    if (impling) hide(npc, 100);
+    xp(player, net ? def.xp : def.handsXp, "butterfly", npcId);
+    if (!jarred) { bonus(player, def); if (def.boost === "restore") player.setRunEnergy(Math.min(100, player.getRunEnergy() + 5)); }
     player.sendMessage(jarred ? "You catch the creature in a jar." : "You catch the creature barehanded and release it.");
-  }, cancel)) cancel();
+  });
   return true;
+}
+
+/**
+ * rsprox captures resolve a catch on the tick the player reaches the impling: the throw or
+ * barehanded grab (hunting_impling_catch), sound 2623, the message, the jar or loot, the XP and
+ * the impling's ii_impling_caught all land together (1342, 1389, 1510, 2520; Leagues 92, 95,
+ * 1757, 1858), and the impling is removed two ticks later. The refusal messages are from
+ * Leagues 95, 164, 1823 and 1858. The Wiki (Implings) sets the Puro-Puro jar rule and respawns.
+ */
+function catchImpling(player, npc, npcId, def) {
+  if (!available(npc) || !nearby(player, npc) || !active(player) || player.busy()) return;
+  const I = H.core.ItemIdentifiers;
+  const weapon = player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId();
+  const net = [I.BUTTERFLY_NET, I.MAGIC_BUTTERFLY_NET].includes(weapon);
+  const jarred = player.getInventory().contains(I.IMPLING_JAR);
+  const puro = inPuroPuro(player);
+  if (!jarred && (net || puro)) { player.sendMessage(NO_JAR_MESSAGE); return; }
+  const required = net ? def.level : def.hands;
+  if (level(player) < required) {
+    player.sendMessage(`You need a Hunter level of at least ${required} to catch this impling${net ? "" : " barehanded"}.`);
+    return;
+  }
+  const inputs = jarred ? [[I.IMPLING_JAR, 1]] : [];
+  // Unjarred implings are looted immediately, rather than silently discarding the catch.
+  const outputs = jarred ? [[def.jar, 1]] : rewards(player, def);
+  if (!outputs) return;
+  if (!exchange(player, inputs, outputs, false)) {
+    if (jarred) player.getInventory().full();
+    else player.sendMessage(NO_SPACE_MESSAGE);
+    return;
+  }
+  C.cancel(player);
+  player.getSkillManager().stopSkillable();
+  player.performAnimation(new H.core.Animation(net ? weapon === I.MAGIC_BUTTERFLY_NET ? ANIM.NET : ANIM.OLD_NET : ANIM.IMPLING_HANDS));
+  const improved = !net || weapon === I.MAGIC_BUTTERFLY_NET;
+  if (!chance(player, def, improved ? 20 / 256 : 0, required)) {
+    player.sendMessage("The creature slips away."); return;
+  }
+  if (!exchange(player, inputs, outputs)) return;
+  player.getPacketSender().sendSound(IMPLING_CATCH_SOUND, 1, 0);
+  player.sendMessage(jarred ? JAR_MESSAGE : LOOT_MESSAGE);
+  xp(player, puro ? def.puroXp : def.xp, "impling", npcId);
+  npc.performAnimation(new H.core.Animation(ANIM.IMPLING_CAUGHT));
+  hide(npc, CAUGHT_TICKS + (puro ? def.puroRespawn : OUTSIDE_RESPAWN_TICKS), CAUGHT_TICKS);
+}
+
+function inPuroPuro(player) {
+  const x = player.getLocation().getX(), y = player.getLocation().getY();
+  return x >= 2560 && x <= 2623 && y >= 4288 && y <= 4351;
 }
 
 function release({ player, itemId }) {

@@ -251,6 +251,17 @@ export function beginLocReloadBatch(host: WebGLOsrsRendererHost, maps: Array<{ m
     
 }
 
+/** A partial loc build that no longer fits the drawn square: build all of it instead. */
+function reloadWholeSquare(host: WebGLOsrsRendererHost, mapX: number, mapY: number): void {
+    // Instances rebuild their whole scene; map streaming is off while they are active.
+    if (host.instanceActive) {
+        host.scheduleInstanceLocRebuild();
+        return;
+    }
+    host.pendingLocUpdates.add(getMapSquareId(mapX, mapY));
+    void host.queueLoadMap(mapX, mapY);
+}
+
 export function loadMap(host: WebGLOsrsRendererHost, 
         mainProgram: Program,
         mainAlphaProgram: Program,
@@ -274,14 +285,12 @@ export function loadMap(host: WebGLOsrsRendererHost,
         // still resident and no broader loc update has superseded it.
         if (mapData.doorOnly && (!isDoorOnlyUpdate || !(existing instanceof WebGLMapSquare))) {
             host.pendingDoorLocUpdates.delete(mapId);
-            host.pendingLocUpdates.add(mapId);
-            void host.queueLoadMap(mapX, mapY);
+            reloadWholeSquare(host, mapX, mapY);
             return;
         }
         if (mapData.locOnly && (!isLocGeometryUpdate || !(existing instanceof WebGLMapSquare))) {
             host.pendingLocGeometryUpdates.delete(mapId);
-            host.pendingLocUpdates.add(mapId);
-            void host.queueLoadMap(mapX, mapY);
+            reloadWholeSquare(host, mapX, mapY);
             return;
         }
 

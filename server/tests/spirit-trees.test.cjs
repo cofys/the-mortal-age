@@ -185,6 +185,13 @@ test("a Magic Mushtree opens its interface with the four names, and crawls to th
   ]);
   choose(visit, 608, 8, 0);
   assert.deepEqual(visit.ticks[0].slice(-1), ["message You are already at that Magic Mushtree."], "Verdant Valley is this one");
+  assert.equal(choose(visit, 608, 16, 0), true);
+  assert.deepEqual(visit.ticks[0].slice(-1), ["message You haven't discovered that Magic Mushtree yet."], "not used yet");
+  // Used once (Wiki: "After attempting to use them, the location will be unlocked").
+  MagicMushtrees._test.useMushtree({ player: visit.player, object: tree(3674, 3871) });
+  assert.equal(MagicMushtrees._test.discovered(visit.player, 3), true);
+  assert.equal(visit.player.getAttribute(MagicMushtrees._test.DISCOVERED_ATTRIBUTE), 0b1010, "Verdant Valley and Mushroom Meadow");
+  MagicMushtrees._test.useMushtree({ player: visit.player, object: tree(3758, 3756) });
   visit.ticks.length = 0;
   visit.nextTick();
   assert.equal(choose(visit, 608, 16, 0), true, "Mushroom Meadow");

@@ -12,6 +12,8 @@
       "necropolis": "pharaohs_sceptre_necropolis"
     },
     "locs": { "obelisk": "necropolis_obelisk" },
+    "seqs": { "teleport": "ntk_human_tele" },
+    "spotanims": { "teleport": "ntk_tele" },
     "npcs": { "mummy": "ntk_mummy_guardian" }
   },
   "_capacity": "Charges held: 3 by default, more with each Desert Diary tier (Wiki).",
@@ -19,12 +21,14 @@
   "_cost": "Artefacts of one material for a full recharge, noted ones too (Wiki).",
   "cost": { "gold": 6, "stone": 12, "pottery": 24 },
   "wildernessLevel": 30,
-  "_destinations": "In the order of the sceptre's options; tiles are the Wiki's map pins (walkable). Jalsavrah is the default for Last-Teleport before any teleport (Wiki).",
+  "_destinations": "In the order of the sceptre's options. Jalsavrah, Jaldraocht and Jaltevas land on a tile from rsprox recordings 3015-3199 (live varies it by a tile or two: Jalsavrah 1935,4429 / 1937,4426; Jaldraocht 3232,2895-2897 / 3233,2895); Jaleustrophos, with no recording, is the Wiki's map pin. Jalsavrah is the default for Last-Teleport before any teleport (Wiki).",
+  "_teleport": "Recorded (rsprox 3015, 3017, 3170, 3199): ntk_human_tele and spotanim ntk_tele at once, no sound and no message; the move 3 ticks later with the end animation then and a tick after, and pharaohs_sceptre_last_teleport set to the destination's number.",
+  "teleportTicks": 3,
   "destinations": [
-    { "key": "jalsavrah", "name": "Jalsavrah", "tile": [1934, 4428, 3] },
+    { "key": "jalsavrah", "name": "Jalsavrah", "tile": [1935, 4429, 3] },
     { "key": "jaleustrophos", "name": "Jaleustrophos", "tile": [3341, 2827, 0] },
-    { "key": "jaldraocht", "name": "Jaldraocht", "tile": [3232, 2897, 0] },
-    { "key": "jaltevas", "name": "Jaltevas", "tile": [3313, 2718, 0], "needsNecropolis": true }
+    { "key": "jaldraocht", "name": "Jaldraocht", "tile": [3232, 2896, 0] },
+    { "key": "jaltevas", "name": "Jaltevas", "tile": [3314, 2720, 0], "needsNecropolis": true }
   ],
   "messages": {
     "prompt": "Where would you like to teleport to?",
@@ -37,6 +41,7 @@
     "unchargeConfirm": "Uncharge the sceptre? Its {charges} charge{s} will be lost.",
     "needNecropolis": "You must commune with the obelisk in the Necropolis before you can teleport there.",
     "communed": "The obelisk attunes itself to your sceptre.",
-    "_unverified": "every message here has no capture behind it; the Wiki gives none for the sceptre itself"
+    "_recorded": "check: rsprox 3015 (Check). A teleport sends no message.",
+    "_unverified": "the rest has no recording behind it; the Wiki gives none for the sceptre itself"
   }
 }

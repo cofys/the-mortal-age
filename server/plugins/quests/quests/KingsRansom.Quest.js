@@ -301,6 +301,12 @@ module.exports = function registerKingsRansomQuest(api) {
     return quest.getStage(player);
   }
 
+  function isQuestComplete(player, key) {
+    const request = { player, key, complete: false };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function hasItem(player, itemId, amount = 1) {
     return player.getInventory().getAmount(itemId) >= amount;
   }
@@ -861,6 +867,9 @@ module.exports = function registerKingsRansomQuest(api) {
       return;
     }
     if (npcId === MANSION_GUARD_ID) {
+      // Murder Mystery's start/finish dialogue runs on this guard; leave it
+      // unhandled until that quest is complete so its registered branch wins.
+      if (!isQuestComplete(player, "murder_mystery")) return;
       if (talkMansionGuard(player, npcId, stage)) event.handled = true;
       return;
     }

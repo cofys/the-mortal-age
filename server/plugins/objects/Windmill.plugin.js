@@ -137,6 +137,12 @@ function fillSweetcornHopper(event, api) {
   player.sendMessage("You put the sweetcorn in the hopper. You should now operate the controls nearby.");
 }
 
+function useGrainOnHopper(event) {
+  // Quest items also use the name "Grain"; only ordinary wheat is milled.
+  if (event.itemId !== ItemIdentifiers.GRAIN) return false;
+  fillHopper(event);
+}
+
 function operateHopperControls(event) {
   const { player } = event;
   const contents = hopperContents(player);
@@ -196,6 +202,7 @@ module.exports = {
     api.onObjectInteraction("Hopper", { Fill: fillHopper });
     api.onObjectInteraction("Hopper controls", { Operate: operateHopperControls });
     api.onObjectInteraction("Flour bin", { Empty: emptyFlourBin });
+    api.onItemOnObject("Grain", "Hopper", useGrainOnHopper, { noted: false });
     api.onItemOnObject((event) => fillSweetcornHopper(event, api), { noted: false });
   },
 };

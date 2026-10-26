@@ -39,6 +39,8 @@ function playerWith(entries = []) {
     deleteNumber: (id, n) => amounts.set(id, Math.max(0, (amounts.get(id) ?? 0) - n)),
     deletes: item => inventory.deleteNumber(item.id, item.getAmount()),
     addItem: item => amounts.set(item.id, (amounts.get(item.id) ?? 0) + item.getAmount()),
+    setItem: (slot, item) => { inventory.deleteNumber(inventory.getItems()[slot].id, 1); inventory.addItem(item); return inventory; },
+    refreshItems: () => inventory,
   };
   const sender = {
     sendSound(id) { log.push(['sound', id]); return sender; },
@@ -61,7 +63,7 @@ function playerWith(entries = []) {
     performGraphic: gfx => log.push(['graphic',gfx.getId()]),
     getInterfaceId: () => player.interfaceId, setInterfaceId: id => { player.interfaceId = id; },
     setEnteredAmountAction: action => { player.amountAction = action; },
-    getUsername: () => 'JewelleryTest', isPlayerBot: () => false,
+    getUsername: () => 'JewelleryTest', getIndex: () => 1, isPlayerBot: () => false,
     getLocation: () => player.location, isRegistered: () => true, getHitpoints: () => 99,
     getMovementQueue: () => ({ size: () => player.moving ? 1 : 0 }), getForceMovement: () => null,
   };
@@ -90,29 +92,121 @@ test('equipped elemental staffs bypass only the elemental runes they supply for 
     [ItemIdentifiers.AIR_RUNE, ItemIdentifiers.WRATH_RUNE],
   );
 });
+// Gold amulets play the spell's own sequence, graphic and sound; rings, necklaces and bracelets
+// play human_cast_enchantring 931 / enchant_ring 238 (rsprox 1135, 3342, 4119); silver amulets the
+// spell's sequence with graphic 238 (rsprox 4211).
+const RING_CAST = [931,238];
 const enchantRecipes = [
-  ['Lvl-1 Enchant', [[1637,2550],[1656,3853],[1694,1727]], [[564,1],[555,1]],17.5,719,114,136],
-  ['Lvl-2 Enchant', [[1639,2552],[1658,5521],[1696,1729]], [[564,1],[556,3]],37,720,115,141],
-  ['Lvl-3 Enchant', [[1641,2568],[1660,11194],[1698,1725]], [[564,1],[554,5]],59,721,116,145],
-  ['Lvl-4 Enchant', [[1643,2570],[1662,11090],[1700,1731]], [[564,1],[557,10]],67,719,153,137],
-  ['Lvl-5 Enchant', [[1645,2572],[1664,11113],[1702,1704]], [[564,1],[555,15],[557,15]],78,720,154,139],
-  ['Lvl-6 Enchant', [[6575,6583],[6577,11128],[6581,6585]], [[564,1],[554,20],[557,20]],97,721,452,143],
-  ['Lvl-7 Enchant', [[19538,19550],[19535,19547],[19541,19553]], [[564,1],[565,20],[566,20]],110,721,452,143],
+  ['Lvl-1 Enchant', [[1694,1727]], [[21108,21160]], [[1637,2550],[1656,3853],[11072,11074],[21081,21126],[21090,21143],[21117,21177]],
+    [[564,1],[555,1]],17.5,719,114,136,147],
+  ['Lvl-2 Enchant', [[1696,1729]], [[21111,21163]], [[1639,2552],[1658,5521],[11076,11079],[21084,21129],[21093,21146],[21120,21180]],
+    [[564,1],[556,3]],37,720,115,141,141],
+  ['Lvl-3 Enchant', [[1698,1725]], [[21114,21166]], [[1641,2568],[1660,11194],[11085,11088],[21087,21140],[21096,21157],[21123,21183]],
+    [[564,1],[554,5]],59,721,116,145,145],
+  ['Lvl-4 Enchant', [[1700,1731]], [], [[1643,2570],[1662,11090],[11092,11095]], [[564,1],[557,10]],67,719,153,137,137],
+  ['Lvl-5 Enchant', [[1702,1704]], [], [[1645,2572],[1664,11113],[11115,11126]], [[564,1],[555,15],[557,15]],78,720,154,139,140],
+  ['Lvl-6 Enchant', [[6581,6585]], [], [[6575,6583],[6577,11128],[11130,11133]], [[564,1],[554,20],[557,20]],97,721,452,143,144],
+  ['Lvl-7 Enchant', [[19541,19553]], [], [[19538,19550],[19535,19547],[19532,19544]], [[564,1],[565,20],[566,20]],110,721,452,143,144],
 ];
-test('all 21 enchant recipes use wearable cache jewellery and consume their runes', () => {
-  for (const [spell,recipes,runes,xp,anim,gfx,sound] of enchantRecipes) for (const [input,output] of recipes) {
-    const def = core.CacheDefinitions.getItem(input);
-    assert.equal(def.noteTemplate,-1); assert.equal(def.placeholderTemplate,-1);
-    assert.ok(def.inventoryActions.includes('Wear'), `${input} must be wearable`);
-    const player = playerWith([[input,1],...runes]);
-    assert.equal(cast(player,spell,input),true);
-    assert.equal(player.amounts.get(output),1, `${spell} on ${input}`);
-    assert.equal(player.amounts.get(input),0);
-    for (const [id] of runes) assert.equal(player.amounts.get(id),0);
-    for (const [kind,value] of [['xp',xp],['animation',anim],['graphic',gfx],['sound',sound]])
-      assert.ok(player.log.some(row => row[0] === kind && row.at(-1) === value), `${kind} ${value}`);
+test('all 40 enchant recipes use wearable cache jewellery, consume their runes and play their cast', () => {
+  let count = 0;
+  for (const [spell,amulets,silver,jewellery,runes,xp,anim,gfx,sound,jewellerySound] of enchantRecipes) {
+    const looks = [[amulets,[anim,gfx,sound]],[silver,[anim,238,sound]],[jewellery,[...RING_CAST,jewellerySound]]];
+    for (const [recipes,[animation,graphic,sfx]] of looks) for (const [input,output] of recipes) {
+      count++;
+      const def = core.CacheDefinitions.getItem(input);
+      assert.equal(def.noteTemplate,-1); assert.equal(def.placeholderTemplate,-1);
+      assert.ok(def.inventoryActions.includes('Wear'), `${input} must be wearable`);
+      assert.ok(core.CacheDefinitions.getItem(output).inventoryActions.includes('Wear'), `${output} must be wearable`);
+      const player = playerWith([[input,1],...runes]);
+      assert.equal(cast(player,spell,input),true);
+      assert.equal(player.amounts.get(output),1, `${spell} on ${input}`);
+      assert.equal(player.amounts.get(input),0);
+      for (const [id] of runes) assert.equal(player.amounts.get(id),0);
+      for (const [kind,value] of [['xp',xp],['animation',animation],['graphic',graphic],['sound',sfx]])
+        assert.ok(player.log.some(row => row[0] === kind && row.at(-1) === value), `${spell} on ${input}: ${kind} ${value}`);
+    }
   }
+  assert.equal(count,40);
 });
+/** A player whose inventory is a 28-slot array (null = empty), for slot-exact enchanting. */
+function slotPlayer(slots) {
+  const player = playerWith();
+  const items = Array.from({ length: 28 }, (_, slot) => slots[slot] == null ? null
+    : new core.Item(...(Array.isArray(slots[slot]) ? slots[slot] : [slots[slot], 1])));
+  const count = id => items.reduce((sum, item) => sum + (item?.getId() === id ? item.getAmount() : 0), 0);
+  const inventory = {
+    getItems: () => items, getAmount: count, contains: id => count(id) > 0, refreshItems: () => inventory,
+    deletes(item) {
+      const slot = items.findIndex(entry => entry?.getId() === item.id);
+      items[slot].setAmount(items[slot].getAmount() - item.getAmount());
+      if (items[slot].getAmount() <= 0) items[slot] = null;
+      return inventory;
+    },
+    setItem: (slot, item) => { items[slot] = item; return inventory; },
+  };
+  player.getInventory = () => inventory;
+  player.ids = () => items.map(item => item?.getId() ?? null);
+  return player;
+}
+/** One game tick of a repeating enchant; unit tests hold the cycle still, so the cast delay is spent here. */
+function tickEnchant(player, task, count = 1) {
+  for (let n = 0; n < count; n++) {
+    player.setAttribute('enchant-jewellery:next-cast-at',0); player.setAttribute('magic:next-cast-at',0);
+    task.execute();
+  }
+}
+/** Runs `body` with TaskManager.submit capturing the tasks it would start. */
+function withTasks(body) {
+  const submit = core.TaskManager.submit, started = [];
+  core.TaskManager.submit = task => { task.setRunning(true); started.push(task); };
+  try { body(started); } finally { core.TaskManager.submit = submit; }
+}
+test('an enchant converts the first piece of that jewellery in its own slot (Wiki, 12 February 2025)', () => withTasks(() => {
+  const player = slotPlayer([[564,10],[555,10],null,1637,2550,1637]);
+  cast(player,'Lvl-1 Enchant',1637,5);
+  assert.deepEqual(player.ids().slice(0,6),[564,555,null,2550,2550,1637]);
+}));
+test('one enchant repeats every 7 ticks on the same jewellery until none is left (Wiki, rsprox 4119)', () => withTasks(started => {
+  const player = slotPlayer([[564,10],[555,10],1637,1694,1637,1637]);
+  cast(player,'Lvl-1 Enchant',1637,2);
+  assert.equal(started.length,1);
+  const task = started[0];
+  assert.equal(task.key,player.getIndex(),'keyed to the player, so walking cancels it');
+  const rings = () => player.ids().filter(id => id === 2550).length;
+  assert.equal(rings(),1);
+  tickEnchant(player,task,6);
+  assert.equal(rings(),1,'nothing before the seventh tick');
+  tickEnchant(player,task); assert.deepEqual(player.ids().slice(2,6),[2550,1694,2550,1637]);
+  tickEnchant(player,task,7);
+  assert.deepEqual(player.ids().slice(2,6),[2550,1694,2550,2550],'the sapphire amulet is another type and stays');
+  assert.equal(task.isRunning(),true);
+  tickEnchant(player,task,7);
+  assert.equal(task.isRunning(),false,'stops once the rings run out');
+  assert.equal(player.log.filter(row => row[0] === 'xp').length,3);
+  assert.equal(player.log.filter(row => row[0] === 'message').length,0);
+}));
+test('an enchant clicked during the 3-tick delay waits for it, then repeats (Wiki, 21 August 2014)', () => withTasks(started => {
+  const player = slotPlayer([[564,10],[555,10],1637,1637]);
+  player.setAttribute('enchant-jewellery:next-cast-at',World.getProcessCycle()+2);
+  cast(player,'Lvl-1 Enchant',1637,2);
+  assert.deepEqual(player.ids().slice(2,4),[1637,1637]);
+  const task = started[0];
+  task.execute(); assert.deepEqual(player.ids().slice(2,4),[1637,1637],'still in the delay');
+  tickEnchant(player,task); assert.deepEqual(player.ids().slice(2,4),[2550,1637],'cast when the delay ends');
+  tickEnchant(player,task,7); assert.deepEqual(player.ids().slice(2,4),[2550,2550],'then repeats');
+}));
+test('a new enchant replaces the running one, and running out of runes stops it', () => withTasks(started => {
+  const player = slotPlayer([[564,2],[555,2],1637,1637,11072,11072]);
+  cast(player,'Lvl-1 Enchant',1637,2);
+  player.setAttribute('enchant-jewellery:next-cast-at',0); player.setAttribute('magic:next-cast-at',0);
+  cast(player,'Lvl-1 Enchant',11072,4);
+  assert.equal(started[0].isRunning(),false);
+  assert.deepEqual(player.ids().slice(2,6),[2550,1637,11074,11072]);
+  tickEnchant(player,started[1],7);
+  assert.deepEqual(player.ids().slice(2,6),[2550,1637,11074,11072],'no runes left for the second bracelet');
+  assert.equal(started[1].isRunning(),false);
+}));
 test('elemental staves and rune pouch shortfalls use the core rune pipeline', () => {
   const staff = playerWith([[1694,1],[564,1]]); staff.weapon = core.ItemIds.STAFF_OF_WATER;
   cast(staff,'Lvl-1 Enchant',1694); assert.equal(staff.amounts.get(1727),1);

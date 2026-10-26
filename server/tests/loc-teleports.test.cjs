@@ -559,6 +559,39 @@ test("a Climb that Ladders would ask about goes the captured way: the Arceuus li
   assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY()], [1608, 3819]);
 });
 
+test("the Hunter Guild stairs fade as captured and land where live OSRS does, both ways", () => {
+  // Captured (226/1695, 237/4002): the fade out two ticks after arriving, the minimap off a tick
+  // later, the move on tick 4, the fade back in a tick after it, the overlay closed two ticks on.
+  const down = locAt(51641, 1556, 3048, 0);
+  const visit = explorer([1557, 3047, 0]);
+  const request = { player: visit.player, object: down, objectId: down.getId(), clickType: 1, handled: false };
+  hooks["ladders:climb"](request);
+  assert.equal(request.handled, true);
+  // A second click while on the way changes nothing: the stairs are already being taken.
+  const again = { player: visit.player, object: down, objectId: down.getId(), clickType: 1, handled: false };
+  hooks["ladders:climb"](again);
+  runTicks(visit, 6);
+  assert.deepEqual(visit.ticks, [
+    [],
+    ["open 174"],
+    ["varbit 6719=2"],
+    ["move 1558,9451,0"],
+    ["varbit 6719=0", "open 174"],
+    [],
+    ["close overlay"],
+  ]);
+  assert.equal(visit.player.getMovementQueue().isMovementBlocked(), false);
+
+  const up = locAt(51642, 1557, 9448, 0);
+  const back = explorer([1557, 9451, 0]);
+  const climb = { player: back.player, object: up, objectId: up.getId(), clickType: 1, handled: false };
+  hooks["ladders:climb"](climb);
+  assert.equal(climb.handled, true);
+  runTicks(back, 6);
+  const at = back.player.getLocation();
+  assert.deepEqual([at.getX(), at.getY(), at.getZ()], [1558, 3047, 0]);
+});
+
 test("another tile or option isn't claimed: the click falls through to whoever handles it", () => {
   const object = locAt(57591, 1288, 3133, 0);
   const visit = explorer([1289, 3136, 0]);
@@ -686,6 +719,62 @@ test("the Elid crevice needs a rope tied first: too steep without, and the rope 
   runTicks(visit, 5);
   assert.deepEqual([said.at(-1), visit.player.getLocation().getY()], ["You climb down the rope.", 9305]);
   assert.deepEqual(visit.player.getAttribute("loc-teleports:tied"), ["elid_crevice_clickzone"], "tied for every later climb");
+});
+
+test("the Lumbridge Swamp Caves dark hole needs a rope tied once, as the game's entrance", () => {
+  const interactions = new Map();
+  const itemOnObject = new Map();
+  const listeners = new Map();
+  const logins = [];
+  const api = {
+    core,
+    persistAttribute() {},
+    onObjectInteraction: (name, actions) => interactions.set(name, { ...(interactions.get(name) ?? {}), ...actions }),
+    onItemOnObject: (item, object, handler) => itemOnObject.set(`${item}:${object}`, handler),
+    onCustomEvent: (name, handler) => listeners.set(name, [...(listeners.get(name) ?? []), handler]),
+    emitCustomEvent: (name, payload) => (listeners.get(name) ?? []).forEach((handler) => handler(payload)),
+    onPlayerLogin: (handler) => logins.push(handler),
+    getTaskManager: () => core.TaskManager,
+    sendMultiChatboxPrompt: () => true,
+  };
+  require("../plugins/objects/Ladders.plugin").register(api);
+  const Misthalin = require("../plugins/areas/Misthalin.plugin");
+  Misthalin.register(api);
+
+  const object = locAt(5947, 3169, 3172, 0);
+  assert.equal(CacheDefinitions.getObject(5947).actions[0], "Climb-down");
+  const landing = (x, y) => Misthalin._test.swampCavesLanding({ x, y, z: 0 });
+  assert.deepEqual([landing(3169, 3171), landing(3168, 3172), landing(3170, 3172), landing(3169, 3173)], [
+    { x: 3169, y: 9571, z: 0 }, { x: 3168, y: 9572, z: 0 }, { x: 3170, y: 9572, z: 0 }, { x: 3167, y: 9573, z: 0 },
+  ], "the tile below the side the player used (shortest-path transports)");
+  core.RegionManager.loadMapFiles(3168, 9572);
+  assert.equal(core.RegionManager.blocked(new core.Location(3168, 9572, 0), null), false, "the landing is walkable");
+
+  const visit = explorer([3168, 3172, 0]);
+  const click = () => {
+    const event = { player: visit.player, object, objectId: 5947, clickType: 1, location: { x: 3169, y: 3172, z: 0 }, handled: false };
+    interactions.get("Dark hole")["Climb-down"](event);
+    return event;
+  };
+  assert.equal(click().handled, true);
+  runTicks(visit, 2);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY()], [3168, 3172], "no rope: stays on the surface");
+  assert.ok(visit.player.getAttribute(Misthalin._test.SWAMP_CAVE_ROPED_ATTRIBUTE) !== true);
+
+  visit.player.getInventory().add(new core.Item(954, 1), false);
+  const rope = { player: visit.player, object, objectId: 5947, itemId: 954, location: { x: 3169, y: 3172, z: 0 }, handled: false };
+  assert.equal(itemOnObject.get("Rope:Dark hole")(rope), true);
+  assert.equal(rope.handled, true);
+  assert.equal(visit.player.getAttribute(Misthalin._test.SWAMP_CAVE_ROPED_ATTRIBUTE), true, "the rope stays tied");
+  assert.equal(visit.player.getInventory().getAmount(954), 0, "the rope is used up");
+  assert.ok(visit.ticks.flat().includes(`varbit ${Misthalin._test.SWAMP_CAVE_ROPED_VARBIT}=1`));
+
+  click();
+  runTicks(visit, 2);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], [3168, 9572, 0]);
+  visit.nextTick();
+  logins[0]({ player: visit.player });
+  assert.deepEqual(visit.ticks.at(-1), [`varbit ${Misthalin._test.SWAMP_CAVE_ROPED_VARBIT}=1`], "the varbit is restored on login");
 });
 
 test("a window that asks first: the game's question, then out on Yes, a tick after the climb", () => {

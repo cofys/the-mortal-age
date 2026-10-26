@@ -12,9 +12,9 @@
  * Deaths respawn as whirlpools via the engine (it clears the transformation first).
  *
  * Estimates (no capture yet): DISTURB/wake ranges, throw-adjacent timings, the exact
- * candy flight arc, and the challenge transform having no animation. Mimic-casket
- * acquisition (elite/master casket opening) needs the clue system and is a follow-up;
- * anyone holding item 23184 can enter for now. The 90k strange-casket death
+ * candy flight arc, and the challenge transform having no animation. Elite and master
+ * Treasure Trails caskets hand out the Mimic through Reward.Mimic's
+ * "treasure-trails:mimic-casket" answer. The 90k strange-casket death
  * retrieval and the boss timer are follow-ups (arena graves go outside instead).
  */
 

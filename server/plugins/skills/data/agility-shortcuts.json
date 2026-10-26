@@ -3348,20 +3348,24 @@
     {
       "name": "Crevice (Waterbirth Island Dungeon)",
       "object": 53258,
-      "at": [[1861,4406,1],[1853,4406,3]],
+      "at": [1853,4406,3],
       "level": 81,
       "xp": 10,
-      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
-      "between": {
-        "ends": [[1862,4406,1],[1852,4406,3]],
-        "cross": [
-          {"anim":"DARK_TUNNEL"},
-          {"wait":1},
-          {"msg":"You crawl through the narrow crevice."},
-          {"tele":"to"}
-        ]
-      },
+      "route": [1852,4406,3],
+      "steps": [
+        {"anim":"DARK_TUNNEL"},
+        {"wait":1},
+        {"msg":"You crawl through the narrow crevice."},
+        {"tele":[1862,4406,1]}
+      ],
       "note": "rsprox captures 1057, 1851, 3433"
+    },
+    {
+      "name": "Crevice (Waterbirth Island Dungeon, from below)",
+      "object": 53258,
+      "at": [1861,4406,1],
+      "refuse": {"mesbox":"You try to go up the crevice, but it's slippery and you slide back down. Looks like this is one way only."},
+      "note": "One way only (Wiki); the refusal is rsprox capture 2950"
     },
     {
       "name": "Stepping Stone (Mos Le'Harmless, level 82)",

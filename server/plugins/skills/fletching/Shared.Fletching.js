@@ -14,6 +14,7 @@
  * action after the first (Wiki, Fletching knife).
  */
 const DATA = require("../data/fletching.json");
+const SkillActions = require("../SkillActions");
 
 const CREATION_ALL_SENTINEL = 28;
 const DEFAULT_MENU = "make";
@@ -315,6 +316,10 @@ function stopFletching(player, resetAnimation = false) {
   if (resetAnimation) player.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
 }
 
+function pauseFletching(event) {
+  SkillActions.pauseForLevelUp(event, tasks, stopFletching, (task) => task.resumeAnimation());
+}
+
 function createTask(player, recipe, batches, via) {
   class FletchingTask extends core.Task {
     constructor() {
@@ -329,6 +334,10 @@ function createTask(player, recipe, batches, via) {
       if (tasks.get(player) === this) tasks.delete(player);
     }
 
+    resumeAnimation() {
+      player.performAnimation(animationOf(recipe));
+    }
+
     execute() {
       if (!player.isRegistered?.() || player.getHitpoints() <= 0) {
         this.stop();
@@ -338,6 +347,7 @@ function createTask(player, recipe, batches, via) {
         stopFletching(player, true);
         return;
       }
+      if (this.levelUpPaused) return;
       if (++this.ticks < this.nextTick) return;
       this.nextTick = this.ticks + interval(player, recipe);
       if (!makeBatch(player, recipe, via)) {
@@ -452,6 +462,7 @@ module.exports = {
   recipesFor,
   handlePair,
   stopFletching,
+  pauseFletching,
   makeBatch,
   batchesAvailable,
   registerVirtualMaterial,

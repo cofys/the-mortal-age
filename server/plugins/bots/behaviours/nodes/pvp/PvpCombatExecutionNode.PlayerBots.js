@@ -9,8 +9,6 @@ const {
 } = require("../../../../../src/main/typescript/elvarg/game/content/combat/CombatFactory");
 const { GameConstants } = require("../../../../../src/main/typescript/elvarg/game/GameConstants");
 const { ItemDefinition } = require("../../../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
-const { Inventory } = require("../../../../../src/main/typescript/elvarg/game/model/container/impl/Inventory");
-const { ItemActionPacketListener } = require("../../../../../src/main/typescript/elvarg/net/packet/impl/ItemActionPacketListener");
 const { TimerKey } = require("../../../../../src/main/typescript/elvarg/util/timers/TimerKey");
 const { getPotionName } = require("../../../../items/Potions.plugin");
 const { randomInRange } = require("../../navigation/Navigation.PlayerBots");
@@ -50,8 +48,8 @@ const MANAGED_OFFENSIVE_PRAYERS = Object.freeze([
 ]);
 const GAME_TICK_MS = Number(GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE ?? 600);
 
-/** GE value of the target's gear that makes Smite worth giving up the protective overhead. */
-const SMITE_MIN_TARGET_RISK = 3_000_000;
+/** Gear value that makes Smite or item protection worth considering. */
+const VALUABLE_GEAR_VALUE = 3_000_000;
 
 /** Grand Exchange wealth of what the target is wearing (issue #441: Smite only high risk). */
 function equipmentGrandExchangeValue(player) {
@@ -78,7 +76,7 @@ function deactivatePrayerSet(prayerHandler, player, prayerIds, exceptPrayerId = 
   }
 }
 
-function activateFirstAvailablePrayer(prayerHandler, player, prayerIds) {
+function activateFirstAvailablePrayer(prayerHandler, player, prayerIds, core) {
   if (!player || !Array.isArray(prayerIds)) {
     return null;
   }
@@ -86,6 +84,8 @@ function activateFirstAvailablePrayer(prayerHandler, player, prayerIds) {
     if (prayerHandler.isActivated(player, prayerId)) {
       return prayerId;
     }
+    if (player.getSkillManager().getCurrentLevel(core.Skill.PRAYER) <= 0 ||
+        !prayerHandler.canUse(player, core.PrayerData.prayerData.get(prayerId), false)) continue;
     prayerHandler.activatePrayerPrayerId(player, prayerId);
     if (prayerHandler.isActivated(player, prayerId)) {
       return prayerId;
@@ -144,6 +144,7 @@ function clearApproachForTarget(player, target) {
 
 class PvpCombatExecutionNode {
   constructor(options = {}) {
+    this.core = options.api.core;
     this.CombatFactory = options.api.getCombatFactory();
     this.PrayerHandler = options.api.getPrayerHandler();
     this.ServerPerf = options.api.getServerPerf();
@@ -287,9 +288,10 @@ class PvpCombatExecutionNode {
     const basePrayerReviewMinMs = Number(resolvedProfile?.prayerReviewMs?.min ?? 1200);
     const basePrayerReviewMaxMs = Number(resolvedProfile?.prayerReviewMs?.max ?? 2400);
 
+    this.reviewItemProtection(player, state, target);
     const confidenceTier = Number(resolvedProfile?.confidenceTier ?? 0);
-    // Novice bots fight prayerless; standard and above manage protection and
-    // offensive prayers. Tiers below veteran lean on targetStyleReactionTicks
+    // Novices only protect items; standard and above also manage combat prayers.
+    // Tiers below veteran lean on targetStyleReactionTicks
     // so they switch late rather than reading the style instantly.
     if (confidenceTier < 2) {
       pvp.nextPrayerReviewAt =
@@ -308,27 +310,9 @@ class PvpCombatExecutionNode {
       nowMs,
       resolvedProfile
     );
-    // Smite the opponent's item protection while they are risking enough for it to matter;
-    // it takes the overhead, so protection and offensive overheads are dropped.
-    if (this.shouldSmite(state, target, resolvedProfile, targetUsername)) {
-      activateFirstAvailablePrayer(this.PrayerHandler, player, [this.PrayerHandler.SMITE]);
-      deactivatePrayerSet(this.PrayerHandler, player, PrayerHandler.PROTECTION_PRAYERS);
-      deactivatePrayerSet(this.PrayerHandler, player, MANAGED_OFFENSIVE_PRAYERS);
-      pvp.cachedProtectionPrayerId = this.PrayerHandler.SMITE;
-      pvp.cachedOffensivePrayerId = null;
-      pvp.cachedPrayerTargetCombatType = targetCombatType;
-      pvp.cachedPrayerPlayerCombatType = playerCombatType;
-      pvp.cachedPrayerTargetUsername = targetUsername;
-      pvp.nextPrayerReviewAt = this.resolveNextPrayerReviewAt(
-        nowMs,
-        basePrayerReviewMinMs,
-        basePrayerReviewMaxMs,
-        true,
-        0
-      );
-      return true;
-    }
-    const desiredProtectionPrayer = this.resolveProtectionPrayer(
+    const smiting = this.shouldSmite(state, target, resolvedProfile, targetUsername) &&
+      this.PrayerHandler.canUse(player, this.core.PrayerData.prayerData.get(this.PrayerHandler.SMITE), false);
+    const desiredProtectionPrayer = smiting ? this.PrayerHandler.SMITE : this.resolveProtectionPrayer(
       player,
       target,
       confidenceTier,
@@ -341,17 +325,17 @@ class PvpCombatExecutionNode {
           pvp.cachedPrayerTargetCombatType === targetCombatType &&
           pvp.cachedPrayerTargetUsername === targetUsername &&
           isPrayerActive(player, desiredProtectionPrayer) &&
-          !hasOtherActivePrayer(player, PrayerHandler.PROTECTION_PRAYERS, desiredProtectionPrayer)
-        : !hasOtherActivePrayer(player, PrayerHandler.PROTECTION_PRAYERS);
+          !hasOtherActivePrayer(player, PrayerHandler.OVERHEAD_PRAYERS, desiredProtectionPrayer)
+        : !hasOtherActivePrayer(player, PrayerHandler.OVERHEAD_PRAYERS);
     const shouldRefreshProtectionPrayers = !protectionStable;
     if (desiredProtectionPrayer != null) {
       if (shouldRefreshProtectionPrayers) {
-        activateFirstAvailablePrayer(this.PrayerHandler, player, [desiredProtectionPrayer]);
-        deactivatePrayerSet(this.PrayerHandler, player, PrayerHandler.PROTECTION_PRAYERS, desiredProtectionPrayer);
+        activateFirstAvailablePrayer(this.PrayerHandler, player, [desiredProtectionPrayer], this.core);
+        deactivatePrayerSet(this.PrayerHandler, player, PrayerHandler.OVERHEAD_PRAYERS, desiredProtectionPrayer);
       }
     } else {
       if (shouldRefreshProtectionPrayers) {
-        deactivatePrayerSet(this.PrayerHandler, player, PrayerHandler.PROTECTION_PRAYERS);
+        deactivatePrayerSet(this.PrayerHandler, player, PrayerHandler.OVERHEAD_PRAYERS);
       }
     }
 
@@ -370,7 +354,7 @@ class PvpCombatExecutionNode {
     const shouldRefreshOffensivePrayers = !offensiveStable;
     let activatedOffensivePrayer = pvp.cachedOffensivePrayerId ?? null;
     if (shouldRefreshOffensivePrayers) {
-      activatedOffensivePrayer = activateFirstAvailablePrayer(this.PrayerHandler, player, offensivePrayerIds);
+      activatedOffensivePrayer = activateFirstAvailablePrayer(this.PrayerHandler, player, offensivePrayerIds, this.core);
       if (activatedOffensivePrayer != null) {
         deactivatePrayerSet(this.PrayerHandler, player, MANAGED_OFFENSIVE_PRAYERS, activatedOffensivePrayer);
       } else {
@@ -392,6 +376,24 @@ class PvpCombatExecutionNode {
     return true;
   }
 
+  reviewItemProtection(player, state, target) {
+    const pvp = state.pvp;
+    const targetUsername = target.getUsername?.();
+    if (pvp.protectItemTargetUsername !== targetUsername || pvp.protectItemWanted === undefined) {
+      const carriedItems = [...(player.getEquipment?.()?.getItems?.() ?? []),
+        ...(player.getInventory?.()?.getItems?.() ?? [])];
+      const valuableItem = carriedItems.some((item) =>
+        (ItemDefinition.forId(item?.getId?.() ?? -1)?.getGrandExchangeValue?.() ?? 0) >= VALUABLE_GEAR_VALUE);
+      pvp.protectItemWanted = Math.random() < (valuableItem ? 0.5 : 0.4);
+      pvp.protectItemTargetUsername = targetUsername;
+    }
+    if (pvp.protectItemWanted) {
+      activateFirstAvailablePrayer(this.PrayerHandler, player, [this.PrayerHandler.PROTECT_ITEM], this.core);
+    } else {
+      deactivatePrayerSet(this.PrayerHandler, player, [this.PrayerHandler.PROTECT_ITEM]);
+    }
+  }
+
   /**
    * Smite is worth the overhead only while the opponent is protecting an item and is
    * risking enough for the drain to matter (issue #441). The choice sticks for that
@@ -405,7 +407,7 @@ class PvpCombatExecutionNode {
     const protectsItem =
       target.getPrayerActive?.()?.[this.PrayerHandler.PROTECT_ITEM] === true;
     const smiteWanted =
-      protectsItem && equipmentGrandExchangeValue(target) >= SMITE_MIN_TARGET_RISK;
+      protectsItem && equipmentGrandExchangeValue(target) >= VALUABLE_GEAR_VALUE;
     if (!smiteWanted) {
       pvp.smiteTargetUsername = null;
       pvp.smiteActive = false;
@@ -492,12 +494,27 @@ class PvpCombatExecutionNode {
     return this.reviewPrayers(player, state, target, nowMs, profile);
   }
 
+  drinkPrayerPotion(player) {
+    const { Skill, TimerKey, ItemActionPacketListener, Inventory } = this.core;
+    const skills = player.getSkillManager();
+    if (skills.getCurrentLevel(Skill.PRAYER) > Math.max(1, Math.floor(skills.getMaxLevel(Skill.PRAYER) * 0.3)) ||
+        player.getTimers().has(TimerKey.POTION)) return false;
+    const inventory = player.getInventory();
+    const slot = inventory.getItems().findIndex((item) =>
+      ["Super restore", "Prayer potion", "Sanfew serum"].includes(getPotionName(item?.getId?.())));
+    if (slot < 0) return false;
+    const itemId = inventory.getItems()[slot].getId();
+    ItemActionPacketListener.handleAction(player, Inventory.INTERFACE_ID, itemId, slot, 1);
+    return inventory.getItems()[slot]?.getId() !== itemId;
+  }
+
   drinkStartCombatPotion(player, state) {
     const pvp = state?.pvp;
     if (!player || !pvp || pvp.startCombatPotionsReady === true) {
       return false;
     }
 
+    const { ItemActionPacketListener, Inventory } = this.core;
     const usedPotionNames = pvp.startCombatPotionNames ?? [];
     const inventory = player.getInventory?.();
     const potion = (inventory?.getItems?.() ?? [])
@@ -556,7 +573,8 @@ class PvpCombatExecutionNode {
 
     const profile = this.getProfile?.(state) ?? null;
     maybeChat(player, state, nowMs);
-    if (this.drinkStartCombatPotion(player, state)) {
+    this.reviewItemProtection(player, state, target);
+    if (this.drinkPrayerPotion(player) || this.drinkStartCombatPotion(player, state)) {
       this.setPhase?.(state, this.pvpPhase?.COMBAT ?? "combat");
       this.scheduleCombatAction?.(state, nowMs);
       return "running";

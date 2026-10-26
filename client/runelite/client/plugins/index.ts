@@ -2,7 +2,9 @@ import { AnimationSmoothingConfig } from "../../../game/plugins/animationsmoothi
 import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
+import { BankTagsPlugin } from "../../../game/plugins/banktags/BankTagsPlugin";
 import { CameraPlugin } from "../../../game/plugins/camera/CameraPlugin";
+import { QuestHelperPlugin } from "../../../game/plugins/questhelper/QuestHelperPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
 import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
@@ -40,6 +42,8 @@ import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/Venge
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
 import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
+import { GuidePlugin } from "../../../game/plugins/optimalquestguide/GuidePlugin";
+import { ShortestPathPlugin } from "../../../game/plugins/shortestpath/ShortestPathPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
 import { migrateGroundItemsConfig } from "../../../game/plugins/grounditems/migrateGroundItems";
 import { ConfigPlugin } from "./config/ConfigPlugin";
@@ -64,6 +68,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     StewardPlugin,
     // After Menu Swapper: its "Inventory tag" submenu joins the swapped menu.
     InventoryTagsPlugin,
+    BankTagsPlugin,
     NotesPlugin,
     NpcIndicatorsPlugin,
     ObjectIndicatorsPlugin,
@@ -82,8 +87,11 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     StretchedModePlugin,
     GpuPlugin,
     CameraPlugin,
+    QuestHelperPlugin,
     XpTrackerPlugin,
     XpGlobesPlugin,
+    GuidePlugin,
+    ShortestPathPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

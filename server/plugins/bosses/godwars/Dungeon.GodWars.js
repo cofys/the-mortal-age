@@ -194,6 +194,7 @@ function creditKill({ killer, npc }) {
   const faction = Common.factionForNpc(npc.getId());
   if (!faction) return;
   Common.setEssence(player, faction, Common.getEssence(player, faction) + 1);
+  Common.api.emitCustomEvent("godwars:kill", { player, npcId: npc.getId(), faction: faction.key, godItems: Common.godItemCount(player, faction) });
   if (npc.getId() === faction.general) {
     Common.addGeneralKill(player, faction, npc.getCurrentDefinition().getName());
   }

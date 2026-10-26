@@ -151,6 +151,13 @@ module.exports = function registerLunarDiplomacyQuest(api) {
   const STAGE_AWAKE = 175;
   const STAGE_COMPLETE = 190;
 
+  /** Hands an ordinary crossing to the Ferries plugin's captured trip; without it, the plain move. */
+  function ferry(player, route, fallback) {
+    const request = { player, route, handled: false };
+    api.emitCustomEvent("ferries:travel", request);
+    if (!request.handled) player.moveTo(fallback);
+  }
+
   // ==========================================================================
   // Ids
   // ==========================================================================
@@ -1560,22 +1567,24 @@ module.exports = function registerLunarDiplomacyQuest(api) {
       case "1iO5AM":
         if (!LOKAR_IDS.has(npcId) || stageOf(player) < STAGE_SAILED || !nearTile(npcLocation, RELLEKKA_DOCK, 12)) return;
         event.handled = true;
-        player.moveTo(PIRATES_COVE_DOCKS);
+        ferry(player, "pirates-cove", PIRATES_COVE_DOCKS);
         return;
       case "XRE4z2":
         if (!LOKAR_IDS.has(npcId) || stageOf(player) < STAGE_SAILED || !inShipBox(npcLocation) || !nearTile(npcLocation, PIRATES_COVE_DOCKS, 40)) return;
         event.handled = true;
-        player.moveTo(RELLEKKA_DOCK);
+        ferry(player, "rellekka-lokar", RELLEKKA_DOCK);
         return;
       case "szE3tO":
         if (!BENTLEY_IDS.has(npcId) || stageOf(player) < STAGE_LUNAR_ISLE || !inShipBox(npcLocation) || !nearTile(npcLocation, PIRATES_COVE_DOCKS, 40)) return;
         event.handled = true;
-        player.moveTo(LUNAR_ISLE_DOCKS);
+        ferry(player, "lunar-isle", LUNAR_ISLE_DOCKS);
+        ensureBabaYaga(player);
+        ensureJack(player);
         return;
       case "QIGQSG":
         if (!BENTLEY_IDS.has(npcId) || stageOf(player) < STAGE_LUNAR_ISLE || !nearTile(npcLocation, LUNAR_ISLE_DOCKS, 32)) return;
         event.handled = true;
-        player.moveTo(PIRATES_COVE_DOCKS);
+        ferry(player, "pirates-cove-bentley", PIRATES_COVE_DOCKS);
         return;
       case "jJ33Bh":
         event.handled = true;
@@ -1609,18 +1618,7 @@ module.exports = function registerLunarDiplomacyQuest(api) {
       case "ML3CY4":
         event.handled = true;
         setStage(player, STAGE_LUNAR_ISLE);
-        player.moveTo(LUNAR_ISLE_DOCKS);
-        ensureBabaYaga(player);
-        ensureJack(player);
-        return;
-      case "QIGQSG":
-        event.handled = true;
-        player.moveTo(PIRATES_COVE_DOCKS);
-        return;
-      case "szE3tO":
-        event.handled = true;
-        if (stageOf(player) < STAGE_LUNAR_ISLE) setStage(player, STAGE_LUNAR_ISLE);
-        player.moveTo(LUNAR_ISLE_DOCKS);
+        ferry(player, "lunar-isle", LUNAR_ISLE_DOCKS);
         ensureBabaYaga(player);
         ensureJack(player);
         return;

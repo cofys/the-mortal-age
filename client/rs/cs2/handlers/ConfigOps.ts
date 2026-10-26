@@ -108,18 +108,20 @@ export function registerConfigOps(handlers: HandlerMap): void {
         ctx.pushInt(stackable ? 1 : 0);
     });
 
+    // A note and its item link each other through `note`; `noteTemplate` marks the note. Anything
+    // that is not one of the pair comes back as it is, as in the real client.
     handlers.set(Opcodes.OC_CERT, (ctx) => {
         const itemId = ctx.intStack[--ctx.intStackSize];
         const obj = ctx.objTypeLoader?.load(itemId);
-        // note = the noted version of this item
-        ctx.pushInt(obj?.notedId ?? -1);
+        const certable = obj && obj.noteTemplate === -1 && obj.note >= 0;
+        ctx.pushInt(certable ? obj.note : itemId);
     });
 
     handlers.set(Opcodes.OC_UNCERT, (ctx) => {
         const itemId = ctx.intStack[--ctx.intStackSize];
         const obj = ctx.objTypeLoader?.load(itemId);
-        // unnotedId = the unnoted version of this item
-        ctx.pushInt(obj?.unnotedId ?? -1);
+        const noted = obj && obj.noteTemplate !== -1 && obj.note >= 0;
+        ctx.pushInt(noted ? obj.note : itemId);
     });
 
     handlers.set(Opcodes.OC_MEMBERS, (ctx) => {

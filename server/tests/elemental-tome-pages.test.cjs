@@ -20,7 +20,7 @@ function setup(id=20716,worn=false) {
   const player={getUsername:()=> 'tome-pages-test',sendMessage:m=>messages.push(m),
     getUpdateFlag:()=>new UpdateFlag(),getInventory:()=>inventory,getEquipment:()=>equipment,
     getPacketSender:()=>({sendItemContainer(){},sendEnterAmountPrompt(){},sendInterfaceRemoval(){}}),
-    setEnteredAmountAction(action){input=action;},getDialogueManager:()=>({startDialogues(chain){menu=chain;}})};
+    setEnteredAmountAction(action){input=action;},onEquipmentChanged(){},getDialogueManager:()=>({startDialogues(chain){menu=chain;}})};
   const inventory=new Inventory(player),equipment=new core.Equipment(player),item=new core.Item(id);
   (worn?equipment:inventory).getItems()[worn?core.Equipment.SHIELD_SLOT:0]=item;
   return {player,inventory,equipment,item,messages,enter(amount){input.execute(amount);},get input(){return input;},get menu(){return menu;}};

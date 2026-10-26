@@ -153,3 +153,20 @@ complete health-orb or poison/venom parity.
 `tests/health-orb-potion-selection.test.cjs` checks all pairwise supported tier
 comparisons for both afflictions, dose ties, mixes, partial tea, noted items,
 unrelated potions and the existing drink cooldown.
+
+## Beer drink feedback
+
+Ordinary Beer uses the potion handler's existing `drink.messages` field. It reports
+"You drink the beer. You feel slightly reinvigorated..." followed by
+"...and slightly dizzy too.", instead of the generic potion-completion message.
+
+Evidence: [rsprox captures](https://rsprox.net/database), recordings **428** and
+**3128** (revision 232), both send these two lines on the drink tick and replace
+`beer` with `beer_glass`. The [OSRS Wiki chat-message reference](https://oldschool.runescape.wiki/w/User:Skretzo/Chat_messages)
+also lists these lines for Drink Beer. This cache resolves those item gamevals to
+1917 and 1919; Beer has the inventory action Drink. Effects, cooldowns, animation
+and sound retain the existing drink path.
+
+Regression coverage in `server/tests/consumable-edge-cases.test.cjs` dispatches the
+registered drink handler, checks both messages and the returned glass, and checks
+that a second beer during the cooldown produces no success feedback or consumption.

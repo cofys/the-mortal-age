@@ -154,6 +154,8 @@ function travel(player, tree, to) {
   sender.sendString(TRAVEL_TEXT, OBJECTBOX_TEXT);
   player.performAnimation(new Animation(REACH_ANIMATION, REACH_DELAY));
   player.setAttribute(LAST_DESTINATION_ATTRIBUTE, tree.name);
+  // A grown tree is one of this player's own checked patches (Farming's "spirit-trees:grown").
+  pluginApi.emitCustomEvent("spirit-trees:travelled", { player, tree: tree.name, planted: Boolean(tree.grown) });
   const movement = player.getMovementQueue();
   movement.setBlockMovement(true).reset();
   TaskManager.submit(new (class extends Task {

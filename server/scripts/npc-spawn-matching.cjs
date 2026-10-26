@@ -11,14 +11,19 @@ function parsePoint(text) {
 
 /**
  * The `{{Map}}` templates in an NPC infobox: `|map = {{Map|2576,2253|r=3}}`, or one per version
- * (`|map2 = {{Map|x=2589|y=8614|plane=0}}`). Returns { version (1-based, null when shared),
- * points, plane, mapId (the Wiki map layer, null when not given) }. A polygon, rectangle or line outlines an area: it becomes one spawn at its
+ * (`|map2 = {{Map|x=2589|y=8614|plane=0}}`). Every `{{Map}}` on a map line counts, labelled or not
+ * (Cabin Boy Herbert: `|map = Port Sarim Docks {{Map|…}} Port Piscarilius {{Map|…}}`). Returns
+ * { version (1-based, null when shared), points, plane, mapId (the Wiki map layer, null when not given) }.
+ * A polygon, rectangle or line outlines an area: it becomes one spawn at its
  * centre. The map's `r` only sizes the marker, so it's ignored.
  */
 function parseInfoboxMaps(wikitext) {
   const maps = [];
-  const pattern = /\|\s*map(\d*)\s*=\s*\{\{\s*Map\s*\|([^{}]*)\}\}/gi;
-  for (const [, version, body] of String(wikitext).matchAll(pattern)) {
+  const bodies = [];
+  for (const [, version, line] of String(wikitext).matchAll(/\|\s*map(\d*)\s*=([^\n]*)/gi)) {
+    for (const [, body] of line.matchAll(/\{\{\s*Map\s*\|([^{}]*)\}\}/gi)) bodies.push([version, body]);
+  }
+  for (const [version, body] of bodies) {
     const named = {};
     const points = [];
     for (const part of body.split("|")) {

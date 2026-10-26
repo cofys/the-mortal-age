@@ -232,3 +232,23 @@ test("a saved member rejoins an offline owner's channel with saved settings and 
     World.getPlayers = oldGetPlayers;
   }
 });
+
+test("logging out restarts the special attack restore timer", (t) => {
+  const { CombatSpecial } = require("../dist/game/content/combat/CombatSpecial");
+  const { TaskManager } = require("../dist/game/task/TaskManager");
+  const tasks = [];
+  t.mock.method(TaskManager, "submit", (task) => tasks.push(task));
+  t.after(() => tasks.forEach((task) => task.stop()));
+
+  const player = new Player(null);
+  player.setSpecialPercentage(50);
+  player.getSpecialAttackRestore().start(6);
+  // Older saves carry the seconds that were left on the timer at logout.
+  const save = Object.assign(PlayerSave.fromPlayer(player), { specialAttackRestoreTimer: 6 });
+  const loaded = new Player(null);
+  save.applyToPlayer(loaded);
+
+  assert.equal(loaded.getSpecialPercentage(), 50);
+  assert.equal(CombatSpecial.ensureRestoreTask(loaded), true);
+  assert.equal(tasks.at(-1).getRemainingTicks(), 50);
+});

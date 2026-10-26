@@ -40,8 +40,9 @@ export type PluginSocialPacketEvent = {
     | { type: "friends_chat_action"; action: FriendsChatAction }
     | { type: "private_message"; recipient: string; text: string }
     | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
+    | { type: "report_abuse"; name: string; ruleId: number; mute: boolean }
     | { type: "chat"; text: string; messageType: "friends_chat" }
-    | { type: "public_chat"; text: string };
+    | { type: "public_chat"; text: string; autoChat: boolean };
 };
 
 export interface PluginServerLifecycleEvent {
@@ -136,6 +137,8 @@ export interface PluginNpcInteractionEvent {
 
 export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   range: number;
+  /** Inventory item used when the route was requested by item-on-NPC. */
+  itemId?: number;
   /** A plugin-owned interaction that ignores the normal projectile clip within `range`. */
   ignoreProjectileClip?: boolean;
 }
@@ -219,6 +222,12 @@ export interface PluginNpcHitModifyEvent {
   hit: any;
 }
 
+/** A hit about to land on a player; handlers may change `hit` (e.g. setTotalDamage) as for NPCs. */
+export interface PluginPlayerHitModifyEvent {
+  player: any;
+  hit: any;
+}
+
 /** Rectangular player zone for onZoneEnter/onZoneExit; omit `levels` for all planes. */
 export interface PluginZone {
   minX: number;
@@ -243,6 +252,11 @@ export interface PluginNpcSpawnDefinition {
   owner?: any;
   /** Hide the NPC from everyone except `owner` (quest instances). */
   ownerOnly?: boolean;
+  /**
+   * A key only one live NPC may hold (a shared or instanced boss): while one holding it is
+   * in the world, queued to join it or dying, spawning another returns null.
+   */
+  unique?: string;
 }
 
 export interface PluginCanAttackEvent {
@@ -635,6 +649,20 @@ export interface PluginSpellOnObjectEvent {
   handled: boolean;
 }
 
+/** A combat spell aimed at a non-attackable NPC for a scripted interaction. */
+export interface PluginSpellOnNpcEvent {
+  player: any;
+  npc: any;
+  npcId: number;
+  npcIndex: number;
+  spell: any;
+  spellId: number;
+  location: { x: number; y: number; z: number };
+  /** Consume validated runes/cooldown and play the accepted cast once. */
+  consumeRunes: () => boolean;
+  handled: boolean;
+}
+
 /** A spell cast from the spellbook on nothing: utility spells, self-casts, teleports. */
 export interface PluginSpellCastEvent {
   player: any;
@@ -834,6 +862,8 @@ export interface PluginRangedCombatModifier {
 }
 
 export interface PluginApi {
+  /** Attributes registered hook/area timings to this label while retaining plugin ownership. */
+  withProfileLabel(label: string): PluginApi;
   onPlayerLogin(handler: (event: PluginPlayerLoginEvent) => void): void;
   /** Fires per map square crossed, not per tile: content spread over the map (patches, bird
    * houses) syncs here instead of checking every player every tick. */
@@ -852,7 +882,8 @@ export interface PluginApi {
   onZoneExit(zone: PluginZone, handler: (event: PluginZoneEvent) => void): void;
   /**
    * Spawns an NPC from a plugin. `ownerOnly` keeps it visible (and aggressive)
-   * only for `owner`, for instanced/quest spawns. Returns the NPC or null.
+   * only for `owner`, for instanced/quest spawns; `unique` keeps a boss single. The NPC
+   * remembers the plugin that spawned it. Returns the NPC or null.
    */
   spawnNpc(definition: PluginNpcSpawnDefinition): any;
   removeNpc(npc: any): void;
@@ -922,6 +953,7 @@ export interface PluginApi {
   onNpcDeath(handler: (event: PluginNpcDeathEvent) => void): void;
   onNpcBeforeDeath(handler: (event: PluginNpcBeforeDeathEvent) => void): void;
   onNpcHitModify(handler: (event: PluginNpcHitModifyEvent) => void): void;
+  onPlayerHitModify(handler: (event: PluginPlayerHitModifyEvent) => void): void;
   onCanAttack(handler: (event: PluginCanAttackEvent) => void): void;
   onCanTeleport(handler: (event: PluginCanTeleportEvent) => void): void;
   onCanLogout(handler: (event: PluginCanLogoutEvent) => void): void;
@@ -1017,6 +1049,7 @@ export interface PluginApi {
   onItemOnNpc(handler: (event: PluginItemOnNpcEvent) => void, filter?: PluginItemUseFilter): void;
   onItemOnGroundItem(handler: (event: PluginItemOnGroundItemEvent) => void, filter?: PluginItemUseFilter): void;
   onSpellOnObject(handler: (event: PluginSpellOnObjectEvent) => void): void;
+  onSpellOnNpc(handler: (event: PluginSpellOnNpcEvent) => void): void;
   onSpellOnItem(handler: (event: PluginSpellOnItemEvent) => void): void;
   /** A spellbook spell cast on nothing, before the core spellbooks handle it. Set `handled` to own it. */
   onSpellCast(handler: (event: PluginSpellCastEvent) => void): void;
@@ -1320,6 +1353,8 @@ export interface PluginCoreApi {
   FightStyle: any;
   WeaponInterfaceManager: any;
   PrayerHandler: any;
+  PrayerData: any;
+  ItemActionPacketListener: any;
   ChatType: any;
   DuelRule: any;
   RegionManager: any;
@@ -1334,6 +1369,7 @@ export interface PluginCoreApi {
   Direction: any;
   Equipment: any;
   Bank: any;
+  Inventory: any;
   PlayerStatus: any;
   Task: any;
   CountdownTask: any;
@@ -1395,6 +1431,7 @@ export interface PluginCoreApi {
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
+  NpcSpawnDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
   Spell: any;

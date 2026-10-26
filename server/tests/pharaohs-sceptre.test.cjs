@@ -25,7 +25,7 @@ before(async () => {
       ...core,
       TeleportHandler: {
         checkReqs: (player, tile, level) => { casts.push({ checked: level }); return !refuse; },
-        teleport: (player, tile, type, warn, onArrival) => { casts.push({ tile: [tile.getX(), tile.getY(), tile.getZ()] }); player.moveTo(tile); onArrival?.(); },
+        teleport: (player, tile, type, warn, onArrival) => { casts.push({ tile: [tile.getX(), tile.getY(), tile.getZ()], type }); player.moveTo(tile); onArrival?.(); },
       },
       BonusManager: { update() {} },
     },
@@ -136,14 +136,20 @@ test('a sceptre found in Pyramid Plunder holds 3; a teleport spends one on arriv
   assert.deepEqual(prompts[0].options.filter((o) => typeof o === 'string'), ['Jalsavrah', 'Jaleustrophos', 'Jaldraocht'], 'Jaltevas only once communed');
   const jaldraocht = prompts[0].options[prompts[0].options.indexOf('Jaldraocht') + 1];
   jaldraocht();
-  assert.deepEqual(casts.find((c) => c.tile).tile, [3232, 2897, 0]);
+  const cast = casts.find((c) => c.tile);
+  assert.deepEqual(cast.tile, [3232, 2896, 0], 'a recorded landing');
+  // Recorded (rsprox 3015-3199): ntk_human_tele and ntk_tele, the move 3 ticks later, no sound.
+  assert.equal(cast.type.getStartAnimation().getId(), core.CacheDefinitions.getSeqId('ntk_human_tele'));
+  assert.equal(cast.type.getStartGraphic().getId(), core.CacheDefinitions.getSpotanimId('ntk_tele'));
+  assert.equal(cast.type.getStartTick(), 3);
+  assert.equal(cast.type.getOptions().sound, 0);
   assert.equal(casts[0].checked, 30, 'works up to level 30 Wilderness');
   assert.equal(Common.charges(player), 2);
-  assert.equal(player.messages.at(-1), 'Your sceptre has 2 charges left.');
+  assert.deepEqual(player.messages, [], 'recorded: no message while charges are left');
   assert.equal(player.attributes[Common.LAST_ATTRIBUTE], 3);
   assert.equal(player.varps[3420] & 0x3f, 3, "last teleport: Jaldraocht");
   action(player, 'Last-Teleport');
-  assert.deepEqual(casts.at(-1).tile, [3232, 2897, 0], 'Last-Teleport repeats it');
+  assert.deepEqual(casts.at(-1).tile, [3232, 2896, 0], 'Last-Teleport repeats it');
   action(player, 'Teleport', { subOpId: 2 });
   assert.deepEqual(casts.at(-1).tile, [3341, 2827, 0], "Teleport's sub-options go straight there");
   assert.equal(Common.charges(player), 0);
@@ -157,7 +163,7 @@ test('Last-Teleport goes to Jalsavrah before any teleport; worn, each pyramid is
   player.equipment.put(ids().objs.initial);
   const worn = (option) => action(player, option, { interfaceId: core.Equipment.INVENTORY_INTERFACE_ID });
   worn('Last-Teleport');
-  assert.deepEqual(casts.at(-1).tile, [1934, 4428, 3]);
+  assert.deepEqual(casts.at(-1).tile, [1935, 4429, 3]);
   worn('Jaleustrophos');
   assert.deepEqual(casts.at(-1).tile, [3341, 2827, 0]);
   worn('Jaltevas');

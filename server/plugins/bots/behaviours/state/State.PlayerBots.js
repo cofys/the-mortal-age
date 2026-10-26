@@ -40,6 +40,8 @@ function createPvpBehaviorState() {
     preferredCombatStyle: "melee",
     nextTargetReviewAt: 0,
     nextPrayerReviewAt: 0,
+    protectItemTargetUsername: null,
+    protectItemWanted: undefined,
     nextSpecReviewAt: 0,
     nextFreezeReviewAt: 0,
     retreat: null,
@@ -118,6 +120,8 @@ function clearPvpBehaviorState(state) {
   state.pvp.generatedSpecAmmoId = null;
   state.pvp.nextTargetReviewAt = 0;
   state.pvp.nextPrayerReviewAt = 0;
+  state.pvp.protectItemTargetUsername = null;
+  state.pvp.protectItemWanted = undefined;
   state.pvp.nextSpecReviewAt = 0;
   state.pvp.nextFreezeReviewAt = 0;
   state.pvp.retreat = null;

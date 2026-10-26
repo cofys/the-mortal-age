@@ -8,13 +8,18 @@
  * and the item-on-object/NPC actions (desk search, pickpocket, truth serum,
  * rose-tinted lens on the counter, orb activation).
  *
- * Stages (varp 1527, the reference varbit; Void hand_in_the_sand.varbits.toml):
+ * Stages (varbit 1527 handsand_quest in varp 635 bits 0-8; Void
+ * hand_in_the_sand.varbits.toml):
  * 10 investigate hand, 20 ask wizards, 30 Bert's hours, 40 visit Sandy, 50
  * confront Bert, 60 deliver scroll, 70 make serum, 80 distract Sandy, 90 drugged
  * coffee, 100 activate orb, 110 interrogate Sandy, 120 return orb, 130 gather
  * runes, 140 search Entrana, 150 return head, 160 complete.
  *
  * Source: https://github.com/GregHib/void/blob/2b8e267836a8469757c73694ea4d57f2f1c28458/game/src/main/kotlin/content/quest/member/hand_in_the_sand/HandInTheSand.kt
+ * Shared: Zogre Flesh Eaters owns the same Wizards' Guild bell and Zavistic.
+ * This quest claims the bell only on its Quest Helper bell steps and hands the
+ * shared entry point over to Zogre while Zogre still needs it (the bell for
+ * its evidence conversation, Zavistic for its evidence hand-in).
  * Gaps: the sandpit cutscene/camera/sand animation, Bert's post-quest daily
  * 84-bucket sand delivery and the Wizards' Guild shop unlock are not reproduced;
  * Bert's requirement check (17 Thieving/49 Crafting) only closes the transcript
@@ -44,7 +49,12 @@ module.exports = function registerHandInTheSandQuest(api) {
     MAZION_NPC_ID,
   ]);
 
-  const VARP_HAND_IN_THE_SAND = 1527; // reference quest varbit, unused as a varp in the repo
+  const VARBIT_HAND_IN_THE_SAND = 1527; // handsand_quest: varp 635 bits 0-8
+  const VARBIT_TELEPORTED = 1531; // handsand_tele: varp 635 bit 12
+  const VARBIT_SERUM = 1532; // handsand_serum: varp 635 bits 13-15
+  const VARBIT_COUNTER = 1537; // handsand_counter_multi: varp 636 bits 9-10
+  const WGS_SEED_COUNTER_FROM = 250; // Fellowship.WhileGuthixSleeps owns 1537 here.
+  const WGS_SEED_COUNTER_UNTIL = 280;
   const STAGE_INVESTIGATE_HAND = 10;
   const STAGE_ASK_WIZARDS = 20;
   const STAGE_BERT_HOURS = 30;
@@ -61,6 +71,30 @@ module.exports = function registerHandInTheSandQuest(api) {
   const STAGE_SEARCH_ENTRANA = 140;
   const STAGE_RETURN_HEAD = 150;
   const STAGE_COMPLETE = 160;
+
+  // Zogre Flesh Eaters also owns the same outdoor bell. Claim it only for the
+  // steps where The Hand in the Sand's Quest Helper route rings it (20, 60, 70,
+  // 120, 130, 150); stage 110 is the Sandy interrogation, so the bell is not
+  // part of that step. Outside that window, leave the bell to Zogre's handler.
+  const BELL_STAGES = new Set([
+    STAGE_ASK_WIZARDS,
+    STAGE_DELIVER_SCROLL,
+    STAGE_MAKE_SERUM,
+    STAGE_RETURN_ORB,
+    STAGE_GATHER_RUNES,
+    STAGE_RETURN_HEAD,
+  ]);
+
+  // Zogre Flesh Eaters shares the Wizards' Guild bell and Zavistic Rarve with
+  // this quest. Zogre's evidence conversation is only reachable through the
+  // bell and its evidence hand-in only through Zavistic, so Hand hands over the
+  // shared entry point that Zogre still needs (Zogre's handlers are registered
+  // after Hand's, so an unhandled event falls through to them).
+  const ZOGRE_STAGE_ATTRIBUTE = "quest.zogre_flesh_eaters.stage";
+  const ZOGRE_SEARCH_ATTRIBUTE = "quest.zogre_flesh_eaters.search";
+  const ZOGRE_STARTED_STAGE = 2;
+  const ZOGRE_EVIDENCE_STAGE = 4;
+  const ZOGRE_EVIDENCE_PROGRESS = 4;
 
   const START_HOOK = "quest:hand-in-the-sand:start";
 
@@ -89,6 +123,7 @@ module.exports = function registerHandInTheSandQuest(api) {
   const SANDYS_DESK = ObjectIdentifiers.SANDYS_DESK; // 10805
   const SANDYS_COFFEE_MUG = ObjectIdentifiers.SANDYS_COFFEE_MUG; // 10807
   const BETTYS_COUNTER = ObjectIdentifiers.COUNTER_15; // 10813, Betty's counter
+  const OUTDOOR_BELL = ObjectIdentifiers.BELL_2; // 6847, Wizards' Guild bell (shared with Zogre Flesh Eaters)
 
   const SERUM_UNSTARTED = 0;
   const SERUM_BOTTLE = 1;
@@ -120,8 +155,7 @@ module.exports = function registerHandInTheSandQuest(api) {
   const ORB_ACTIVATED_MESSAGE = "s5YSQy";
   const ORB_FULL_MESSAGE = "OU4xhJ";
   const ORB_HANDED_MESSAGE = "qH5Grc";
-  const SANDPIT_FILLED_MESSAGE = "LYif21";
-  const CUTSCENE_END_ACTION = "Fpv9k6";
+  const CUTSCENE_END_ACTION = "Fpv9k6"; // cutscene end; spends the 5 earth runes and the bucket of sand
   const MAZION_HEAD_MESSAGES = new Set(["cP49nl", "znrG1s"]);
   const SHOW_HEAD_MESSAGE = "98WmUL";
   const COMPLETE_ACTION_ID = "q_UjQ0";
@@ -131,6 +165,7 @@ module.exports = function registerHandInTheSandQuest(api) {
 
   const SERUM_ATTRIBUTE = "quest.hand_in_the_sand.serum";
   const COUNTER_ATTRIBUTE = "quest.hand_in_the_sand.counter";
+  const TELEPORTED_ATTRIBUTE = "hand-in-the-sand:teleported-to-betty";
   const QUESTION_ATTRIBUTES = [
     "quest.hand_in_the_sand.question1",
     "quest.hand_in_the_sand.question2",
@@ -161,6 +196,28 @@ module.exports = function registerHandInTheSandQuest(api) {
 
   function setSerum(player, value) {
     player.setAttribute(SERUM_ATTRIBUTE, value);
+    player.getPacketSender().sendVarbit(VARBIT_SERUM, value);
+  }
+
+  function syncCounter(player) {
+    // WGS's fellowship owns this same counter while enriching its seed.
+    const request = { player, key: "while_guthix_sleeps", stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    const stage = request.stage ?? Number(player.getAttribute("quest.while_guthix_sleeps.stage") ?? 0);
+    if (stage >= WGS_SEED_COUNTER_FROM && stage < WGS_SEED_COUNTER_UNTIL) return;
+    player.getPacketSender().sendVarbit(VARBIT_COUNTER, player.getAttribute(COUNTER_ATTRIBUTE) === true ? 1 : 0);
+  }
+
+  function setCounter(player, placed) {
+    player.setAttribute(COUNTER_ATTRIBUTE, placed);
+    syncCounter(player);
+  }
+
+  function syncAuxiliaries({ player }) {
+    const sender = player.getPacketSender();
+    sender.sendVarbit(VARBIT_SERUM, serumLevel(player));
+    sender.sendVarbit(VARBIT_TELEPORTED, Number(player.getAttribute(TELEPORTED_ATTRIBUTE)) === 1 ? 1 : 0);
+    syncCounter(player);
   }
 
   function allQuestionsAsked(player) {
@@ -169,6 +226,27 @@ module.exports = function registerHandInTheSandQuest(api) {
 
   function setQuestion(player, index, asked) {
     player.setAttribute(QUESTION_ATTRIBUTES[index], asked);
+  }
+
+  /** Zogre's own quest state, read the way Zogre reads this quest's stage. */
+  function zogreQuestState(player) {
+    const stage = Number(player.getAttribute(ZOGRE_STAGE_ATTRIBUTE)) || 0;
+    return {
+      progress: Number(player.getAttribute(ZOGRE_SEARCH_ATTRIBUTE)) || 0,
+      started: stage >= ZOGRE_STARTED_STAGE && stage < ZOGRE_EVIDENCE_STAGE,
+    };
+  }
+
+  /** Zogre still has to show its evidence to Zavistic: only the bell does that. */
+  function zogreNeedsTheBell(player) {
+    const zogre = zogreQuestState(player);
+    return zogre.started && zogre.progress < ZOGRE_EVIDENCE_PROGRESS;
+  }
+
+  /** Zogre has the evidence and still owes Zavistic the hand-in: only the guild talk does that. */
+  function zogreNeedsZavistic(player) {
+    const zogre = zogreQuestState(player);
+    return zogre.started && zogre.progress >= ZOGRE_EVIDENCE_PROGRESS;
   }
 
   function buildJournal(player, questHandle) {
@@ -357,7 +435,8 @@ module.exports = function registerHandInTheSandQuest(api) {
     return null;
   }
 
-  function zavisticVariant(player) {
+  /** This quest's Zavistic transcript for the player's stage. */
+  function handZavisticVariant(player) {
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) return null;
     if (stage >= STAGE_RETURN_HEAD) {
@@ -381,6 +460,12 @@ module.exports = function registerHandInTheSandQuest(api) {
     if (stage >= STAGE_BERT_HOURS) return "talking-to-zavistic-rarve-talking-to-zavistic-afterwards";
     if (stage >= STAGE_ASK_WIZARDS) return "talking-to-zavistic-rarve";
     return null;
+  }
+
+  /** Zavistic inside the guild; Zogre keeps the wizard while it owes him the evidence. */
+  function zavisticVariant(player) {
+    if (zogreNeedsZavistic(player)) return null;
+    return handZavisticVariant(player);
   }
 
   function bettyVariant(player) {
@@ -578,7 +663,7 @@ module.exports = function registerHandInTheSandQuest(api) {
         return;
       }
       if (stepId === BETTY_VIAL_MESSAGE) {
-        player.setAttribute(COUNTER_ATTRIBUTE, true);
+        setCounter(player, true);
         return;
       }
       if (stepId === LENS_COUNTER_MESSAGE) {
@@ -586,7 +671,7 @@ module.exports = function registerHandInTheSandQuest(api) {
           player.getInventory().deleteNumber(ROSE_TINTED_LENS, 1);
           if (!held(player, TRUTH_SERUM)) player.getInventory().adds(TRUTH_SERUM, 1);
           setSerum(player, SERUM_MADE);
-          player.setAttribute(COUNTER_ATTRIBUTE, false);
+          setCounter(player, false);
         }
         return;
       }
@@ -629,14 +714,6 @@ module.exports = function registerHandInTheSandQuest(api) {
         }
         if (quest.getStage(player) < STAGE_GATHER_RUNES) {
           quest.setStage(player, STAGE_GATHER_RUNES);
-        }
-        return;
-      }
-      if (stepId === SANDPIT_FILLED_MESSAGE) {
-        player.getInventory().deleteNumber(EARTH_RUNE, 5);
-        player.getInventory().deleteNumber(BUCKET_OF_SAND, 1);
-        if (quest.getStage(player) < STAGE_SEARCH_ENTRANA) {
-          quest.setStage(player, STAGE_SEARCH_ENTRANA);
         }
         return;
       }
@@ -696,10 +773,14 @@ module.exports = function registerHandInTheSandQuest(api) {
     if (event.action === "teleport" && stepId === BETTY_TELEPORT_ACTION) {
       if (held(player, VIAL)) player.getInventory().deleteNumber(VIAL, 1);
       player.moveTo(new api.core.Location(3014, 3259, 0));
+      player.setAttribute(TELEPORTED_ATTRIBUTE, 1);
+      player.getPacketSender().sendVarbit(VARBIT_TELEPORTED, 1);
       event.handled = true;
       return;
     }
 
+    // The sandpit enchantment spends the runes and the bucket once, here: the
+    // sandpit-filling message before it must not take a second set.
     if (stepId === CUTSCENE_END_ACTION) {
       player.getInventory().deleteNumber(EARTH_RUNE, 5);
       player.getInventory().deleteNumber(BUCKET_OF_SAND, 1);
@@ -932,25 +1013,48 @@ module.exports = function registerHandInTheSandQuest(api) {
     );
   }
 
+  function handleGuildBell(event) {
+    const { player, objectId } = event;
+    if (!player || objectId !== OUTDOOR_BELL) return;
+    const option = String(
+      event.option ?? event.definition?.getActions?.()?.[event.clickType - 1] ?? ""
+    ).toLowerCase();
+    if (option && option !== "ring") return;
+    if (!BELL_STAGES.has(quest.getStage(player))) return;
+    // Zogre's evidence conversation is only reachable through this bell.
+    if (zogreNeedsTheBell(player)) return;
+    const variant = handZavisticVariant(player);
+    if (!variant) return;
+    event.handled = true;
+    startTranscript(api, player, ZAVISTIC_NPC_ID, PAGE, variant);
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
-    if (!player || objectId !== SANDYS_DESK) return;
+    if (!player) return;
+    if (objectId === OUTDOOR_BELL) {
+      handleGuildBell(event);
+      return;
+    }
+    if (objectId !== SANDYS_DESK) return;
     event.handled = true;
     searchSandyDesk(player);
   }
 
   function handleLogin({ player }) {
+    syncAuxiliaries({ player });
     refreshQuestList(player);
   }
 
   api.persistAttribute(SERUM_ATTRIBUTE);
   api.persistAttribute(COUNTER_ATTRIBUTE);
+  api.persistAttribute(TELEPORTED_ATTRIBUTE, 0);
   for (const attribute of QUESTION_ATTRIBUTES) api.persistAttribute(attribute);
 
   quest = registerQuest(api, {
     key: "hand_in_the_sand",
     name: "The Hand in the Sand",
-    varpId: VARP_HAND_IN_THE_SAND,
+    varbitId: VARBIT_HAND_IN_THE_SAND,
     startedValue: STAGE_INVESTIGATE_HAND,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
@@ -981,4 +1085,5 @@ module.exports = function registerHandInTheSandQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemAction(handleItemAction);
   api.onPlayerLogin(handleLogin);
+  api.onCustomEvent("player:bootstrap-complete", syncAuxiliaries);
 };

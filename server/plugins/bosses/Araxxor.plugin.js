@@ -14,6 +14,7 @@ const Corpse = require("./araxxor/Corpse.Araxxor");
 const Hud = require("./araxxor/Hud.Araxxor");
 const Commands = require("./araxxor/Commands.Araxxor");
 const CombatAchievements = require("./araxxor/CombatAchievements.Araxxor");
+const Scoreboard = require("./araxxor/Scoreboard.Araxxor");
 
 module.exports = {
   name: "Araxxor",
@@ -26,6 +27,7 @@ module.exports = {
     Area.attach(api);
     Hud.attach(api);
     CombatAchievements.attach(api);
+    Scoreboard.attach(api);
     Commands(api);
   },
 };

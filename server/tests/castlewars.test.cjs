@@ -228,7 +228,7 @@ test('both waiting rooms release seeded bots on leave and honour the transition 
     core,
     registerArea: (area) => registered.push(area),
     onServerStartup: () => {}, onPlayerLogin: () => {}, onCanEquip: () => {}, onCanUnequip: () => {},
-    onPlayerDeath: () => {}, onPlayerDeathItemDrop: () => {}, onCustomEvent: () => {},
+    onPlayerDeath: () => {}, onShouldDropItemsOnDeath: () => {}, onCustomEvent: () => {},
   }, island);
 
   const waitingRooms = registered.filter((area) => area.getName().includes('waiting room'));
@@ -328,4 +328,60 @@ test('a carrier whose banner was stripped before the drop hook still drops the f
   assert.equal(game.flagStatus[TEAM.ZAMORAK], 2, 'the flag now lies where the carrier fell');
   assert.equal(game.getCarriedFlagTeam(carrier), null, 'nobody is holding it');
   game.restoreFlagToBase(TEAM.ZAMORAK);
+});
+
+test('Castle Wars deaths keep player and bot gear, drop the flag and remove only game supplies', (t) => {
+  const { PlayerDeathTask } = require('../dist/game/task/impl/PlayerDeath');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  let deathPolicy;
+  let respawn;
+  const calls = [];
+  const island = {
+    ...game,
+    getTeamId: () => TEAM.SARADOMIN,
+    dropCarriedFlag: () => calls.push('flag'),
+    clearCastleWarsItems: (_player, ids) => calls.push(ids),
+    resetIdleTicks: () => {},
+  };
+  Areas({
+    core, registerArea() {}, onServerStartup() {}, onPlayerLogin() {}, onCanEquip() {}, onCanUnequip() {}, onCustomEvent() {},
+    onShouldDropItemsOnDeath: (handler) => { deathPolicy = handler; },
+    onPlayerDeath: (handler) => { respawn = handler; },
+  }, island);
+  t.mock.method(PluginManager, 'emitShouldDropItemsOnDeath', (player) => {
+    const event = { player, shouldDrop: null };
+    deathPolicy(event);
+    return event.shouldDrop;
+  });
+  t.mock.method(PluginManager, 'emitPlayerDeath', (event) => { respawn(event); return event.handled; });
+  t.mock.method(PluginManager, 'emitPlayerDefeated', () => {});
+  t.mock.method(ItemOnGroundManager, 'registerLocation', () => {});
+  const drop = t.mock.method(PlayerDeathTask, 'dropItems', () => { throw new Error('A safe death must not process gear'); });
+  for (const bot of [false, true]) {
+    const gear = new core.Item(core.ItemIdentifiers.DRAGON_WARHAMMER, 1);
+    const player = {
+      isPlayerBot: () => bot,
+      getArea: () => island.gameArea,
+      getLocation: () => new core.Location(2420, 3075),
+      getCombat: () => ({ getRecentDamagerEntries: () => [], getKiller: () => null }),
+      getInventory: () => ({ getItems: () => [gear] }),
+      resetAttributes() {},
+      smartMoves: (bounds) => { assert.equal(bounds, data.TEAM_DATA[TEAM.SARADOMIN].respawnBounds); },
+    };
+    const task = new PlayerDeathTask(player);
+    task.ticks = 0;
+    task.execute();
+    assert.equal(task.loseItems, false);
+    assert.equal(player.getInventory().getItems()[0], gear);
+  }
+  assert.equal(drop.mock.callCount(), 0);
+  assert.deepEqual(calls, ['flag', data.DEATH_REMOVE_ITEM_IDS, 'flag', data.DEATH_REMOVE_ITEM_IDS]);
+  for (const area of Object.values(island.waitingAreas)) {
+    const event = { player: { getArea: () => area }, shouldDrop: null };
+    deathPolicy(event);
+    assert.equal(event.shouldDrop, false, 'waiting rooms also preserve gear');
+  }
+  const outside = { player: { getArea: () => ({}) }, shouldDrop: null };
+  deathPolicy(outside);
+  assert.equal(outside.shouldDrop, null, 'ordinary deaths keep their existing rules');
 });

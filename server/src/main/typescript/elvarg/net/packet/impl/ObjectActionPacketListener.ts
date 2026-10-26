@@ -44,6 +44,8 @@ export class ObjectActionPacketListener {
 
     const option = definition?.getInteractions()?.[clickType - 1]?.toLowerCase();
     const executeInteraction = () => {
+      // Another player may have opened, emptied or replaced it on the way: nothing happens.
+      if (!MapObjects.stillStands(player, id, objectLocation, object)) return;
       const interactionLocation = player.getLocation().clone();
       player.getMovementQueue().reset();
       player.getMovementQueue().walkToReset();

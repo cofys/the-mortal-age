@@ -55,6 +55,8 @@ async function cast(t, caster, name, targets = [], targeted = null, sameTick = f
 test('native Cure Me clears poison, consumes the Wiki runes and grants no protection', async t => {
   const f = actor(t); f.player.setPoisonDamage(30);
   await cast(t, f, 'Cure Me');
+  assert.equal(f.player.getAnimation().getId(), core.CacheDefinitions.getSeqId('quest_lunar_pushing_magic_animation'));
+  assert.equal(f.player.getGraphic().getId(), core.CacheDefinitions.getSpotanimId('quest_lunar_cure_me_spot'));
   assert.equal(f.player.getPoisonDamage(), 0);
   assert.equal(f.player.getCombat().getPoisonImmunityTimer().secondsRemaining(), 0);
   assert.deepEqual(f.xp, [69]);

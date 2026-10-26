@@ -375,7 +375,11 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   // Mansion crime scene (upstairs, z1) and kitchen/cellar.
   const CERIL_CORPSE = ObjectIdentifiers.CERIL_CARNILLEAN; // 46564
   const BROKEN_WINDOW = ObjectIdentifiers.BROKEN_WINDOW; // 46569
+  const HIDDEN_CHEST_PARENT = 46903;
+  const HIDDEN_CHEST_TILE = { x: 2571, y: 3269, z: 2 };
+  const ownedHiddenChests = new WeakMap();
   const HIDDEN_ROOM_CHEST = ObjectIdentifiers.CHEST_161; // 46572
+  const FALSE_WALL_PARENT = 46902; // cache mansion wall, type 0 face 1
   const FALSE_WALL = ObjectIdentifiers.WALL_169; // 46707, Knock-at
   const KITCHEN_WALL = ObjectIdentifiers.WALL_166; // 46590, sotn_hidden_door_op
   const KITCHEN_CHEST = ObjectIdentifiers.CHEST_162; // 46592, Picklock
@@ -518,6 +522,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
 
   const HAZEEL_KEYS = ["hazeel:cult", "hazeel:dungeon", "hazeel:lair"];
   const KHAZARD_KEYS = ["khazard:cult", "khazard:dungeon", "khazard:lair"];
+  const OWNED_NPC_FLAG = "secrets-of-the-north:spawned";
 
   function trackedFor(player) {
     let tracked = trackedNpcs.get(player);
@@ -529,13 +534,13 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   }
 
   /**
-   * Drops this player's own copies of an id (owner ref, or the same account name
-   * after a relog), optionally restricted to one tile.
+   * Drops this quest's copies for the player, including stale copies after relog.
    */
   function cullOwnedNpcs(player, npcId, x, y, z) {
     const name = player.getUsername?.();
     for (const other of api.getWorld?.()?.getNpcs?.() ?? []) {
       if (other?.getId?.() !== npcId) continue;
+      if (other.hasFlag?.(OWNED_NPC_FLAG) !== true) continue;
       const owner = other.getOwner?.();
       if (owner !== player && (!name || owner?.getUsername?.() !== name)) continue;
       if (x !== undefined) {
@@ -552,7 +557,10 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     if (existing?.isRegistered?.()) return existing;
     cullOwnedNpcs(player, npcId);
     const npc = api.spawnNpc({ id: npcId, x, y, z, wanderRadius, owner: player, ownerOnly: true });
-    if (npc) tracked.set(key, npc);
+    if (npc) {
+      npc.setFlag(OWNED_NPC_FLAG);
+      tracked.set(key, npc);
+    }
     return npc;
   }
 
@@ -574,6 +582,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
 
   function syncNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
+    syncHiddenChest(player);
     const stage = quest.getStage(player);
     // Hazeel cult hideout (the summoning). Hazeel first appears here once Evelot
     // is defeated (stage 6); that conversation spawns Khazard and opens the cult.
@@ -585,7 +594,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       : stage >= STAGE_CULT && stage < STAGE_NORTH;
     ensureNpc(player, "hazeel:cult", NpcIdentifiers.HAZEEL_2, 2609, 9673, 0, hazeelAtCult);
     ensureNpc(player, "khazard:cult", NpcIdentifiers.GENERAL_KHAZARD_2, 2611, 9670, 0, inCult);
-    ensureNpc(player, "alomone:cult", NpcIdentifiers.ALOMONE, 2609, 9670, 0, inCult);
+    ensureNpc(player, "alomone:cult", NpcIdentifiers.ALOMONE, 2609, 9670, 0, inCult && helpedCult(player));
     // The quest guard (the world 1200 spawn is a nameless parent with no Talk-to).
     ensureNpc(player, "guard", GUARD_NPC, 2571, 3275, 0, true);
     // Claus only has a world spawn in the cult cave; the kitchen question needs
@@ -620,6 +629,29 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   // Quest object installation (this cache's maps predate the 2023 revamp)
   // ==========================================================================
 
+  function clearHiddenChest(player) {
+    const owned = ownedHiddenChests.get(player);
+    if (!owned) return;
+    ObjectManager.deregister(owned, true);
+    ownedHiddenChests.delete(player);
+    const base = MapObjects.get(HIDDEN_CHEST_PARENT, owned.getLocation().clone(), null);
+    if (base) player.getPacketSender().sendObject(base);
+  }
+
+  function syncHiddenChest(player) {
+    if (quest.getStage(player) !== STAGE_MURDER) {
+      clearHiddenChest(player);
+      return;
+    }
+    if (ownedHiddenChests.has(player)) return;
+    const at = new Location(HIDDEN_CHEST_TILE.x, HIDDEN_CHEST_TILE.y, HIDDEN_CHEST_TILE.z);
+    const base = MapObjects.get(HIDDEN_CHEST_PARENT, at.clone(), null);
+    if (!base) return;
+    const owned = new GameObject(HIDDEN_ROOM_CHEST, at, base.getType(), base.getFace(), null).setOwner(player);
+    ObjectManager.register(owned, true);
+    ownedHiddenChests.set(player, owned);
+  }
+
   function placeObject(id, x, y, z, type = 10, rotation = 0) {
     const location = new Location(x, y, z);
     if (MapObjects.get(id, location.clone(), null)) return;
@@ -641,11 +673,8 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     // wall on the first floor, broken chest in the hidden room above).
     placeObject(CERIL_CORPSE, 2573, 3269, 1, 10, 1);
     placeObject(BROKEN_WINDOW, 2575, 3268, 1, 10, 0);
-    placeObject(FALSE_WALL, 2572, 3270, 1, 10, 0);
-    // The captured chest is at (2571,3269,2), but rev-241's z2 map clips that
-    // pocket; the walkable room tile one step east keeps the chest reachable
-    // from the ladder landing at (2572,3271,2).
-    placeObject(HIDDEN_ROOM_CHEST, 2572, 3270, 2, 10, 0);
+    // The cache already places parent 46902 here with its real wall-edge shape.
+    // The hidden chest uses an owner visual over its real cache parent below.
     // The cache's own SOTN hidden door/chest are multi-locs whose children have
     // no options in this revision; the interactive child ids replace them.
     placeObject(KITCHEN_WALL, 2544, 9698, 0, 0, 3);
@@ -1234,10 +1263,6 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
         return;
 
       // On the Trail.
-      case "8Nhp3b":
-        event.handled = true;
-        player.sendMessage("You give 100 coins to the barman.");
-        return;
       case "ijqT1z": {
         const evelot = trackedFor(player).get("evelot");
         if (evelot) evelot.getCombat?.().attack?.(player);
@@ -1534,6 +1559,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
         event.handled = true;
         startTranscript(api, player, GUARD_NPC, PAGE, "a-death-in-the-family-inspecting-the-broken-window");
         return;
+      case FALSE_WALL_PARENT:
       case FALSE_WALL:
         if (stage < STAGE_MURDER) return;
         event.handled = true;
@@ -2180,6 +2206,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
 
   function handleLogout({ player }) {
     if (!player) return;
+    clearHiddenChest(player);
     pendingFalseWall.delete(player);
     falseWallInteraction.delete(player);
     closeSolvedGate(player);

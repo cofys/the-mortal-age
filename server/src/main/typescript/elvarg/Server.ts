@@ -13,6 +13,7 @@ import { GameBuilder } from "./game/GameBuilder";
 import { GameConstants } from "./game/GameConstants";
 import { CachePipeline } from "./game/cache/CachePipeline";
 import { World } from "./game/World";
+import { ObjectManager } from "./game/entity/impl/object/ObjectManager";
 import { NetworkBuilder } from "./net/NetworkBuilder";
 import { NetworkConstants } from "./net/NetworkConstants";
 import { PluginManager } from "./plugins/PluginManager";
@@ -166,6 +167,18 @@ export class Server {
       console.error("[shutdown] Persistence failed; shutdown cancelled. Fix the error and retry the shutdown.", err);
       Server.shuttingDown = false;
       return;
+    }
+
+    try {
+      console.info(`[shutdown] Removed ${ObjectManager.removePluginObjects()} plugin objects.`);
+    } catch (err) {
+      console.error("[shutdown] Removing plugin objects failed", err);
+    }
+
+    try {
+      console.info(`[shutdown] Removed ${PluginManager.removeUnownedPluginNpcs()} plugin NPCs.`);
+    } catch (err) {
+      console.error("[shutdown] Removing plugin NPCs failed", err);
     }
 
     if (mode === "restart") {

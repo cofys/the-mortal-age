@@ -15,6 +15,8 @@ export function createBrowserSidebarPersistence(
                 return {
                     open: parsed.open === true,
                     selectedId: typeof parsed.selectedId === "string" ? parsed.selectedId : null,
+                    // Saves from before the sidebar could be hidden have no flag: shown.
+                    collapsed: parsed.collapsed === true,
                 };
             } catch {
                 return undefined;

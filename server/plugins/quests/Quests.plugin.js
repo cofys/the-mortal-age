@@ -32,7 +32,7 @@ const QUESTS = [
   "TheFremennikExiles", "FremennikTrials", "GardenOfDeath", "GardenOfTranquillity", "GertrudesCat",
   "GettingAhead", "GhostsAhoy", "GiantDwarf", "GoblinDiplomacy",
   "GrandTree", "GreatBrainRobbery", "GrimTales", "HandInTheSand",
-  "HammersInTheDark", "HauntedMine", "HazeelCult", "HeroesQuest", "HolyGrail",
+  "HammersInTheDark", "HauntedMine", "HazeelCult", "HeroesQuest", "HisFaithfulServants", "HolyGrail",
   "HorrorFromTheDeep", "IcthlarinsLittleHelper", "IdesOfMilk", "ImpCatcher",
   "InAidOfTheMyreque", "InSearchOfTheMyreque", "JunglePotion", "KingsRansom",
   "KnightsSword", "LandOfTheGoblins", "LearningTheRopes", "LegendsQuest", "LostCity",
@@ -87,10 +87,14 @@ function forPlayers(api) {
   return new Proxy(api, {
     get(target, property) {
       if (BOT_SKIPPED_HOOKS.has(property)) {
-        return (handler) => target[property]((event) => {
-          if (event?.player?.isPlayerBot?.() === true) return;
-          return handler(event);
-        });
+        return (handler) => {
+          const guarded = (event) => {
+            if (event?.player?.isPlayerBot?.() === true) return;
+            return handler(event);
+          };
+          Object.defineProperty(guarded, "name", { value: handler.name });
+          return target[property](guarded);
+        };
       }
       const value = target[property];
       return typeof value === "function" ? value.bind(target) : value;
@@ -106,7 +110,10 @@ module.exports = {
   name: "Quests",
   QUESTS,
   register(api) {
-    const questApi = forPlayers(api);
-    for (const quest of questsForWorld(api.core)) require(`./quests/${quest}.Quest`)(questApi);
+    require("./QuestRuntime").registerQuestWidgets(forPlayers(api));
+    for (const quest of questsForWorld(api.core)) {
+      const questApi = forPlayers(api.withProfileLabel?.(`Quests/${quest}`) ?? api);
+      require(`./quests/${quest}.Quest`)(questApi);
+    }
   },
 };

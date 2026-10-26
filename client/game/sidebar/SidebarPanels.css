@@ -1,10 +1,47 @@
 /* Shared styles for what sidebar panels draw: text, form fields, the generated settings
    (ConfigPanel). Colours and fonts are Sidebar.css's variables. */
+
+/* RuneLite draws every panel in FontManager's three RuneScape fonts, all at 16: plain for text,
+   small for secondary text, bold for titles. Browser defaults (heading sizes, synthesized bold,
+   smaller <small>) would mix in other sizes, so panel elements are reset to those. */
+.rl-sidebar-panel :is(h1, h2, h3, h4, h5, h6, summary, b, strong, th, legend) {
+    font-family: var(--rl-font-bold);
+    font-size: var(--rl-font-size);
+    font-weight: normal;
+}
+
+.rl-sidebar-panel :is(h1, h2, h3, h4, h5, h6) {
+    margin: 10px 0 6px;
+    color: var(--rl-text);
+}
+
+.rl-sidebar-panel :is(small, figcaption) {
+    font-family: var(--rl-font-small);
+    font-size: var(--rl-font-size);
+}
+
+.rl-sidebar-panel :is(p, ul, ol) {
+    margin: 0 0 6px;
+}
+
+.rl-sidebar-panel :is(button, input, select, textarea, label, li, td) {
+    font-size: var(--rl-font-size);
+    font-weight: normal;
+}
+
+.rl-sidebar-panel details {
+    margin-bottom: 6px;
+}
+
+.rl-sidebar-panel summary {
+    cursor: pointer;
+}
+/* RuneLite's panels: a 10px border, rows a few pixels apart. */
 .rl-sidebar-panel-content {
-    padding: 12px 14px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
     flex: 1 1 auto;
     min-height: 0;
     box-sizing: border-box;
@@ -35,7 +72,7 @@
     padding: 8px 10px;
     box-sizing: border-box;
     border: 1px solid var(--rl-medium-gray);
-    background: var(--rl-dark-gray);
+    background: var(--rl-darker-gray);
     color: var(--rl-text);
     outline: none;
 }
@@ -52,7 +89,7 @@
 .rl-sidebar-field textarea {
     padding: 6px 8px;
     border: 1px solid var(--rl-medium-gray);
-    background: var(--rl-dark-gray);
+    background: var(--rl-darker-gray);
     color: var(--rl-text);
     outline: none;
 }
@@ -95,7 +132,7 @@
     justify-content: space-between;
     gap: 10px;
     padding: 8px 10px;
-    background: var(--rl-dark-gray);
+    background: var(--rl-darker-gray);
 }
 
 .rl-sidebar-plugin-meta {
@@ -118,7 +155,7 @@
     flex: 0 0 auto;
     padding: 5px 10px;
     border: 1px solid var(--rl-medium-gray);
-    background: var(--rl-dark-gray);
+    background: var(--rl-darker-gray);
     color: var(--rl-text);
     cursor: pointer;
 }
@@ -200,7 +237,7 @@
     padding: 2px;
     box-sizing: border-box;
     border: 1px solid var(--rl-medium-gray);
-    background: var(--rl-dark-gray);
+    background: var(--rl-darker-gray);
     cursor: pointer;
 }
 
@@ -255,4 +292,397 @@
 
 .tma-expand-fullscreen:hover {
     background: var(--rl-medium-gray);
+}
+
+/* Optimal Quest Guide (GuidePanel), after its Swing layout: a heading, the search bar, then
+   one box per quest, 2 apart. */
+.rl-oqg-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px;
+    box-sizing: border-box;
+}
+
+/* ErrorPanel: a shadowed white title over a small gray line. */
+.rl-oqg-heading {
+    padding: 0 10px 10px;
+    text-align: center;
+    text-shadow: 1px 1px #000;
+}
+
+.rl-oqg-heading-title {
+    font-family: var(--rl-font);
+    color: var(--rl-text);
+}
+
+.rl-oqg-heading-copy {
+    font-family: var(--rl-font-small);
+    color: var(--rl-light-gray);
+}
+
+.rl-plugin-search.rl-oqg-search {
+    flex: 0 0 auto;
+    margin: 0 0 6px;
+}
+
+/* QuestPanel: the bold name centred, its requirements underneath. */
+.rl-oqg-quest {
+    flex: 0 0 auto;
+    background: var(--rl-dark-gray);
+}
+
+.rl-oqg-quest-name {
+    padding: 5px 4px;
+    font-family: var(--rl-font-bold);
+    color: var(--rl-text);
+    text-align: center;
+}
+
+/* Requirements: five to a row, an icon in a 25x25 cell beside its level in the small font. */
+.rl-oqg-reqs {
+    display: grid;
+    grid-template-columns: repeat(5, auto);
+    justify-content: center;
+    column-gap: 5px;
+    padding-bottom: 5px;
+}
+
+.rl-oqg-req {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.rl-oqg-req-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 25px;
+    height: 25px;
+}
+
+.rl-oqg-req-icon img {
+    image-rendering: pixelated;
+}
+
+.rl-oqg-req-level {
+    font-family: var(--rl-font-small);
+    color: var(--rl-text);
+}
+
+/* JPopupMenu */
+.rl-oqg-menu {
+    position: fixed;
+    z-index: 1000;
+    padding: 5px;
+    background: var(--rl-darker-gray);
+    border: 1px solid var(--rl-medium-gray);
+    pointer-events: auto;
+}
+
+.rl-oqg-menu-item {
+    padding: 4px 10px;
+    color: var(--rl-text);
+    cursor: default;
+    white-space: nowrap;
+}
+
+.rl-oqg-menu-item:hover {
+    background: var(--rl-hover);
+}
+
+/* ---------------------------------------------------------------- Quest Helper
+   QuestHelperPanel, QuestOverviewPanel and QuestStepPanel: DARK_GRAY panel, DARKER_GRAY rows,
+   section headers DARKER_GRAY darkened, or BRAND_ORANGE with black text while current. */
+.rl-qh-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px;
+    box-sizing: border-box;
+    font-family: var(--rl-font);
+    color: var(--rl-text);
+}
+
+.rl-qh-title,
+.rl-qh-quest-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-family: var(--rl-font-bold);
+}
+
+.rl-qh-quest-header h3 {
+    margin: 4px 0;
+}
+
+.rl-qh-status {
+    margin: 0;
+    font-family: var(--rl-font-small);
+    color: #e4c27a;
+}
+
+.rl-qh-icon-button {
+    display: flex;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.rl-qh-icon-button:hover,
+.rl-qh-icon-button[aria-pressed="true"] {
+    background: var(--rl-hover);
+}
+
+.rl-qh-button {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--rl-medium-gray);
+    background: var(--rl-darker-gray);
+    color: var(--rl-text);
+    font-family: var(--rl-font);
+    cursor: pointer;
+}
+
+.rl-qh-button:hover {
+    background: var(--rl-hover);
+}
+
+.rl-qh-button-active {
+    border-color: var(--rl-orange);
+    color: var(--rl-orange);
+}
+
+.rl-qh-search {
+    flex: 0 0 auto;
+}
+
+.rl-qh-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rl-qh-dropdown {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.rl-qh-dropdown select {
+    width: 140px;
+}
+
+.rl-qh-skills {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+}
+
+.rl-qh-skill {
+    display: flex;
+    justify-content: center;
+    padding: 3px 0;
+    border: none;
+    background: var(--rl-darker-gray);
+    cursor: pointer;
+}
+
+.rl-qh-skill img {
+    image-rendering: pixelated;
+}
+
+/* SkillIconButton: a filtered-out skill is dimmed. */
+.rl-qh-skill-off img {
+    opacity: 0.3;
+}
+
+.rl-qh-section-title {
+    margin: 6px 0 2px;
+    padding: 4px 6px;
+    background: var(--rl-darker-gray);
+    font-family: var(--rl-font-bold);
+}
+
+/* QuestSelectPanel: the name in its state colour beside the start button. */
+.rl-qh-quest {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0 6px;
+    width: 100%;
+    margin-bottom: 2px;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--rl-text);
+    font-family: var(--rl-font);
+    text-align: left;
+    cursor: pointer;
+}
+
+.rl-qh-quest:hover {
+    background: var(--rl-darker-gray);
+}
+
+.rl-qh-quest[aria-pressed="true"] {
+    border-color: var(--rl-orange);
+}
+
+.rl-qh-quest-detail {
+    grid-column: 1 / -1;
+    color: var(--rl-light-gray);
+}
+
+.rl-qh-warn {
+    color: #edb86d;
+}
+
+.rl-qh-accent {
+    color: #e4c27a;
+}
+
+.rl-qh-wrap {
+    overflow-wrap: anywhere;
+}
+
+.rl-qh-complete {
+    font-family: var(--rl-font-bold);
+    color: #8ade8a;
+}
+
+.rl-qh-direction {
+    padding: 8px;
+    border: 1px solid #6d704b;
+}
+
+.rl-qh-direction-arrow {
+    display: inline-block;
+    font-size: 24px;
+    color: #00ffff;
+}
+
+.rl-qh-current {
+    padding: 6px;
+    background: var(--rl-darker-gray);
+}
+
+.rl-qh-step-text {
+    white-space: pre-line;
+    line-height: 1.4;
+}
+
+.rl-qh-collapsible {
+    background: var(--rl-darker-gray);
+}
+
+.rl-qh-collapsible-header {
+    display: flex;
+    align-items: center;
+    background: #151515;
+}
+
+.rl-qh-collapsible-toggle {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px;
+    border: none;
+    background: transparent;
+    color: var(--rl-text);
+    font-family: var(--rl-font-bold);
+    text-align: left;
+    cursor: pointer;
+}
+
+.rl-qh-active > .rl-qh-collapsible-header {
+    background: var(--rl-orange);
+}
+
+.rl-qh-active > .rl-qh-collapsible-header .rl-qh-collapsible-toggle {
+    color: #000;
+}
+
+.rl-qh-lock {
+    margin: 0 8px;
+    accent-color: var(--rl-orange);
+}
+
+.rl-qh-collapsible-body {
+    padding: 6px 7px;
+}
+
+.rl-qh-collapsible-body h4 {
+    margin: 6px 0 2px;
+}
+
+.rl-qh-reqs,
+.rl-qh-plain {
+    margin: 0 0 6px;
+    padding-left: 0;
+    list-style: none;
+}
+
+.rl-qh-check {
+    display: inline-block;
+    width: 14px;
+}
+
+.rl-qh-none {
+    color: var(--rl-light-gray);
+}
+
+.rl-qh-note {
+    color: var(--rl-light-gray);
+}
+
+.rl-qh-link {
+    color: var(--rl-text);
+}
+
+.rl-qh-link:hover {
+    color: #00b3b3;
+    text-decoration: underline;
+}
+
+/* QuestStepPanel: steps LIGHT_GRAY, the current one BRAND_ORANGE, faded ones DARK_GRAY. */
+.rl-qh-steps {
+    margin: 0;
+    padding-left: 18px;
+    color: #c0c0c0;
+    white-space: pre-line;
+}
+
+.rl-qh-steps li {
+    margin-bottom: 6px;
+}
+
+.rl-qh-step-active {
+    color: var(--rl-orange);
+}
+
+.rl-qh-step-faded {
+    color: #404040;
+}
+
+.rl-qh-assist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px;
+    background: var(--rl-darker-gray);
+}
+
+/* The search field's magnifier, as RuneLite's IconTextField draws it. */
+.rl-qh-search img {
+    flex: 0 0 auto;
+    image-rendering: pixelated;
 }

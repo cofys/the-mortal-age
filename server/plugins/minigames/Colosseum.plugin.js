@@ -7,6 +7,7 @@
  */
 module.exports = {
   name: "Colosseum",
+  members: true,
   register(api) {
     require("./colosseum/Lobby.Colosseum")(api);
     require("./colosseum/Arena.Colosseum")(api);
@@ -14,6 +15,7 @@ module.exports = {
     require("./colosseum/ModifierEffects.Colosseum")(api);
     require("./colosseum/SolHeredit.Colosseum")(api);
     require("./colosseum/Rewards.Colosseum")(api);
+    require("./colosseum/Scoreboard.Colosseum")(api);
     require("./colosseum/Commands.Colosseum")(api);
     require("./colosseum/CombatAchievements.Colosseum")(api);
   },

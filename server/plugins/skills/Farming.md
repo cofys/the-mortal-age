@@ -51,7 +51,8 @@ This is **not a verified 1:1 implementation**. In particular:
   (120 seconds), including time offline. Woodcutting Guild redwoods retain
   Forestry's 440-tick depletion timer and 199-tick respawn.
 - Geomancy, storage, contracts, and Tithe rewards use existing dialogue menus;
-  the original dedicated interfaces and Tithe overlay are not reproduced.
+  their original dedicated interfaces are not reproduced. The native Tithe
+  status overlay is mounted during a run (details below).
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
   quest-specific crops/access restrictions, achievement completion, and the
   wider quest/diary progression systems are not implemented by this plugin.
@@ -68,6 +69,44 @@ This is **not a verified 1:1 implementation**. In particular:
   included in the patch coverage claim. No in-game or smoke tests were run.
 
 ## Verification
+
+Geomancy refuses casting while attacking or being attacked, before rune
+consumption, Magic XP, animation or patch updates. It retains the existing
+shared combat definition and ordinary casting checks once combat ends.
+RSProx recording 1221 (revision 238, click `magic_spellbook:geomancy` at
+tick 5769) supplies the exact refusal text. That recording is a Leagues world;
+no League rune-restoration, timing or reward rules are imported. The
+[Geomancy article](https://oldschool.runescape.wiki/w/Geomancy) documents
+the ordinary 65 Magic, 60 XP and 3 astral/3 nature/8 earth rune cost.
+The dedicated native interface remains a separate fidelity limit above.
+
+Ordinary tree stumps yield one to four roots at eight-level intervals above
+the crop's planting level: oak 15/23/31/39, willow 30/38/46/54, maple
+45/53/61/69, yew 60/68/76/84 and magic 75/83/91/99. The current Farming
+level when digging includes temporary boosts and drains. Inventory capacity
+is checked for the complete reward before clearing the stump.
+Source: [Tree roots (Farming)](https://oldschool.runescape.wiki/w/Tree_roots_(Farming)).
+Regression checks drive the object interaction with real inventories and
+cache definitions, including every threshold, boost/drain, repeat clicks,
+missing spades, full inventory and dead/fruit-tree exclusions.
+
+### Native Tithe status overlay
+
+The revision241 cache resolves `hosidius_strip_farming` to group241 and
+`toplevel_osrs_stretch:overlay_hud` to161:8. Entry/relogin mounts this existing
+overlay; its onLoad1193 and renderer1195 read `hosidius_tithe_type`4901,
+`hosidius_tithe_score`4900 and `hosidius_tithe_rewardpoints`4893. Existing
+inventory/varp transmit scripts refresh the fruit icon, batch count and points.
+Planting the final seed does not clear the selected crop. Leaving/logging out
+closes the interface only if the Tithe group is still mounted, preserving any
+replacement HUD. `zeah_tithe_minigame_unlocked`4909 stays unlocked on exit.
+
+Sources: local cache widget241 and scripts1193/1195, plus the
+[Tithe Farm](https://oldschool.runescape.wiki/w/Tithe_Farm) batch/point rules.
+The local RSProx index has no recording naming this overlay; exact packet timing
+is not claimed. Regression checks use real Player inventories and PacketSender
+mount tracking for all three crops, relog, last-seed planting, deposit and cleanup.
+The reward shop remains a separate interface gap.
 
 Coral yields use the post-19-August-2026 six harvest lives and the published
 low/high calculator endpoints: Elkhorn 85/182, Pillar 25/180 and Umbral -50/178.
@@ -168,3 +207,16 @@ Tests use real Player, inventory, equipment and cache definitions, driving the
 actual Tithe NPC/payment and reward callbacks. Menu rendering and persistence
 requests are mocked; live dialogue rendering and packet-capture verification
 are not claimed.
+
+## Storage Bank PIN protection
+
+The Seed Vault and Tool Leprechaun storage use the shared `bank-pin:guard`
+event before opening menus or moving stored items. Leprechaun Deposit-all and
+item-on-NPC tool deposits follow the same guard. Correct entry resumes the
+original action, rechecking proximity and the selected tool slot. Produce
+noting does not access stored tools and retains its existing behavior.
+
+Sources: [Bank PIN, situations requiring a PIN](https://oldschool.runescape.wiki/w/Bank_PIN#Situations_requiring_a_PIN)
+and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update:Hosidius_Rework_and_Deadman_Beta).
+The regression checks drive the actual shared keypad and storage handlers;
+menu rendering and scheduled ticks use the existing Bank PIN test fixture.

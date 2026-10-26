@@ -25,7 +25,7 @@ import { CachePipeline } from "../../server/src/main/typescript/elvarg/game/cach
 import { CacheMaps } from "../../server/src/main/typescript/elvarg/game/cache/CacheMaps";
 import { getMinimapMaps } from "../widgets/gl/MinimapRenderer";
 import { registerMinimapData } from "../render/render/minimap";
-import { clearInstance, doInstanceSceneBuild, loadInstanceScene, replaceSceneWithInstance } from "../render/render/instance";
+import { clearInstance, doInstanceSceneBuild, loadInstanceScene, replaceSceneWithInstance, scheduleInstanceLocUpdate } from "../render/render/instance";
 import { npcOwnerMapId } from "../render/npc/NpcRenderTemplate";
 import { npcLocalForMap } from "../render/render/draw";
 
@@ -439,6 +439,13 @@ function instanceFurnitureReplacesOnlyItsHotspot(): void {
     const placements: number[][] = [];
     builder.addLoc = (_scene, plane, x, y, id, shape, rotation) => { placements.push([plane, x, y, id, shape, rotation]); };
     const destinations = [[18, 27], [19, 29], [21, 28], [20, 26]];
+    // A renderer in an instance whose scene isn't drawn yet: loc changes rebuild the scene.
+    const instanceLocHost = () => ({
+        addedLocs: new Map(), locOverrides: new Map(), instanceActive: true, instanceSceneMap: null,
+        osrsClient: { locTypeLoader: { load: () => undefined } },
+        getLocIdsAtTileAllLevels: () => [],
+        scheduleInstanceLocUpdate(group: "loc" | "door" | "full") { scheduleInstanceLocUpdate(this as any, group); },
+    });
     for (let rotation = 0; rotation < 4; rotation++) {
         const [x, y] = destinations[rotation];
         const decode = () => {
@@ -452,8 +459,7 @@ function instanceFurnitureReplacesOnlyItsHotspot(): void {
         const neighbor = placements[1];
         // A floor decoration and chair can occupy the same tile. Both removals
         // must survive the renderer-to-scene override transfer independently.
-        const overlapping = { addedLocs: new Map(), locOverrides: new Map(), instanceActive: true,
-            scheduleInstanceLocRebuild() {} } as any;
+        const overlapping = { ...instanceLocHost(), scheduleInstanceLocRebuild() {} } as any;
         onLocDel(overlapping, { x, y }, 1, 22, 0);
         onLocDel(overlapping, { x, y }, 1, 10, (1 + rotation) & 3);
         onLocAddChange(overlapping, 6752, { x, y }, 1, 10, 0);
@@ -469,8 +475,7 @@ function instanceFurnitureReplacesOnlyItsHotspot(): void {
         assert.deepEqual(placements, [neighbor], "overlapping hotspot removals must not overwrite each other");
         builder.clearLocOverrides();
         let instanceRebuilds = 0;
-        const host = { addedLocs: new Map(), locOverrides: new Map(), instanceActive: true,
-            scheduleInstanceLocRebuild() { instanceRebuilds++; } } as any;
+        const host = { ...instanceLocHost(), scheduleInstanceLocRebuild() { instanceRebuilds++; } } as any;
         onLocAddChange(host, 6752, { x: 6400 + x, y: 6400 + y }, 1, 10, 0);
         const override = host.locOverrides.get(`${6400 + x},${6400 + y},1,-1`);
         builder.setLocOverride(x, y, 1, -1, override.newId, undefined, undefined, undefined, undefined, undefined, override.matchType);
@@ -493,6 +498,32 @@ function instanceFurnitureReplacesOnlyItsHotspot(): void {
         builder.setLocOverride(x, y, 1, -1, 0, undefined, undefined, undefined, undefined, undefined, 0);
         decode();
         assert.equal(placements.length, 2, "other planes and object shapes must remain independent");
+    }
+    {
+        // A house door in a drawn instance scene: only the scene's door geometry rebuilds, as a
+        // map square's would; a whole-scene rebuild opened it a second late.
+        const door = { id: 13016, isInteractive: true, actions: ["Open"], name: "Door", seqId: -1 };
+        const updates: string[] = [];
+        let rebuilds = 0;
+        const host = {
+            ...instanceLocHost(),
+            instanceSceneMap: { mapX: 100, mapY: 100 },
+            instanceLocRebuildTimer: null,
+            pendingInstanceScene: null,
+            instanceBuildsInFlight: 0,
+            mapManager: { getMap: (mapX: number, mapY: number) => (mapX === 100 && mapY === 100 ? {} : undefined) },
+            osrsClient: { locTypeLoader: { load: () => door } },
+            getLocIdsAtTileAllLevels: () => [{ id: 13016, level: 1, typeRot: (2 << 6) | 0 }],
+            scheduleLocGeometryUpdate(mapX: number, mapY: number, group: string) { updates.push(`${mapX},${mapY},${group}`); },
+            scheduleInstanceLocRebuild() { rebuilds++; },
+        } as any;
+        onLocDel(host, { x: 6439, y: 6443 }, 1, 0, 2);
+        onLocAddChange(host, 13018, { x: 6438, y: 6443 }, 1, 0, 3);
+        assert.deepEqual(updates, ["100,100,door", "100,100,door"], "an instance door rebuilds only the scene's doors");
+        assert.equal(rebuilds, 0);
+        host.instanceBuildsInFlight = 1;
+        onLocAddChange(host, 13016, { x: 6439, y: 6443 }, 1, 0, 2);
+        assert.equal(rebuilds, 1, "a change during a whole-scene build rebuilds the scene, which covers it");
     }
     builder.clearLocOverrides();
     builder.setLocOverride(2, 3, 0, -1, 0, undefined, undefined, undefined, undefined, undefined, 10);

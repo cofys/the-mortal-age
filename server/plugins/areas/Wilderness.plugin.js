@@ -10,7 +10,6 @@ const {
   hasGlobalWorldTag,
   WORLD_ZONE_BOUNDARIES,
 } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
-const { Obelisks } = require("../../src/main/typescript/elvarg/game/content/Obelisks");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
 const { World } = require("../../src/main/typescript/elvarg/game/World");
@@ -574,6 +573,20 @@ function registerWildernessArea(api, state) {
 }
 
 // https://oldschool.runescape.wiki/w/Web — use the item's bonus, not total equipment bonuses.
+// Live (docs/web.md): a slash lands on the arrival tick with its message and animation, the web
+// turns into the slashed one two ticks later and grows back 99 ticks after that.
+const WEB_OBJECT_ID = 733; // web
+const SLASHED_WEB_OBJECT_ID = 734; // slashed web
+const KNIFE_SLASH_ANIMATION = 911; // human_knife_chop
+const WEB_SLASH_SOUND = 2500; // played on a cut and on a failed one alike
+const WEB_SLASHED_DELAY_TICKS = 2;
+const WEB_REGROW_TICKS = 99;
+const WEB_SLASH_MESSAGE = "You slash the web apart.";
+const WEB_FAIL_MESSAGE = "You fail to cut through it.";
+const WEB_NO_BLADE_MESSAGE = "Only a sharp blade can cut through this sticky web.";
+/** Webs being cut, as "x,y,z", until they turn into the slashed web. */
+const websBeingSlashed = new Set();
+
 function webCutChance(item) {
   if (!item || item.getId() <= 0) return 0;
   const definition = item.getDefinition();
@@ -588,59 +601,82 @@ function webCutChance(item) {
   return Math.min(1, Math.max(floor, slash / 100));
 }
 
+/** The best cutting item the player has: the wielded weapon, else the inventory, as the Wiki says. */
+function webTool(player, usedItem) {
+  const candidates = usedItem
+    ? [usedItem]
+    : [player.getEquipment().getItems()[Equipment.WEAPON_SLOT], ...player.getInventory().getItems()];
+  let best = null;
+  let bestChance = 0;
+  for (const item of candidates) {
+    const chance = webCutChance(item);
+    if (chance > bestChance) {
+      best = item;
+      bestChance = chance;
+    }
+  }
+  return best ? { item: best, chance: bestChance } : null;
+}
+
+/** Live: a knife chops, a weapon swings its own slash animation. */
+function webSlashAnimation(item) {
+  const definition = item.getDefinition();
+  if (definition.getName() === "Knife") return KNIFE_SLASH_ANIMATION;
+  const own = definition.getAttackAnim("slash");
+  if (own > 0) return own;
+  const style = definition.getWeaponInterface()?.getFightType()
+    .find((type) => type.getBonusType() === BonusManager.ATTACK_SLASH);
+  return style?.getAnimation() ?? KNIFE_SLASH_ANIMATION;
+}
+
+function webKey(object) {
+  const at = object.getLocation();
+  return `${at.getX()},${at.getY()},${at.getZ()}`;
+}
+
+function turnWebSlashed(api, object, key) {
+  websBeingSlashed.delete(key);
+  const objects = api.getObjectManager();
+  const web = MapObjects.get(WEB_OBJECT_ID, object.getLocation(), object.getPrivateArea());
+  if (!web) return;
+  const slashed = new GameObject(SLASHED_WEB_OBJECT_ID, object.getLocation().clone(), object.getType(), object.getFace(), object.getPrivateArea());
+  objects.deregister(web, true);
+  objects.register(slashed, true);
+  api.getTaskManager().submit(new api.core.CountdownTask({}, WEB_REGROW_TICKS, () => regrowWeb(api, web, slashed)));
+}
+
+function regrowWeb(api, web, slashed) {
+  const objects = api.getObjectManager();
+  const current = MapObjects.get(SLASHED_WEB_OBJECT_ID, slashed.getLocation(), slashed.getPrivateArea());
+  if (current) objects.deregister(current, true);
+  objects.register(web, true);
+}
+
 function slashWeb(api, event, usedItem) {
-  if (event.objectId !== 733) return false;
+  if (event.objectId !== WEB_OBJECT_ID) return false;
   event.handled = true;
   const { player, object } = event;
-  if (player.busy() || !MapObjects.get(733, object.getLocation(), object.getPrivateArea())) return;
-  const chance = usedItem ? webCutChance(usedItem) : Math.max(
-    webCutChance(player.getEquipment().getItems()[Equipment.WEAPON_SLOT]),
-    ...player.getInventory().getItems().map(webCutChance),
-  );
-  if (!chance) {
-    player.sendMessage("You need a knife or a weapon with a slash bonus to cut this web.");
+  const key = webKey(object);
+  if (player.busy() || websBeingSlashed.has(key) || !MapObjects.get(WEB_OBJECT_ID, object.getLocation(), object.getPrivateArea())) return;
+  const tool = webTool(player, usedItem);
+  if (!tool) {
+    player.sendMessage(WEB_NO_BLADE_MESSAGE);
     return;
   }
-  player.performAnimation(new Animation(911));
-  if (Math.random() >= chance) {
-    player.sendMessage("You fail to cut through the web.");
+  player.performAnimation(new Animation(webSlashAnimation(tool.item)));
+  player.getPacketSender().sendSoundEffect(WEB_SLASH_SOUND, 1, 15);
+  if (Math.random() >= tool.chance) {
+    player.sendMessage(WEB_FAIL_MESSAGE);
     return;
   }
-  const slashed = new GameObject(734, object.getLocation().clone(), object.getType(), object.getFace(), object.getPrivateArea());
-  api.getObjectManager().deregister(object, true);
-  api.getObjectManager().register(slashed, true);
-  player.sendMessage("You slash through the web.");
-}
-
-function pullLever(api, event) {
-  const { player, location } = event;
-  if (location.z !== 0) return false;
-  let destination;
-  if (location.x === 3153 && location.y === 3923) {
-    destination = new Location(3090, 3475);
-  } else if (location.x === 3090 && location.y === 3956) {
-    destination = new Location(2539, 4712);
-  } else if (location.x === 2539 && location.y === 4712) {
-    destination = new Location(3090, 3956);
-  } else {
-    return false;
-  }
-  event.handled = true;
-  api.emitCustomEvent("lever:teleport", { player, destination });
-}
-
-function onObeliskClick(event) {
-  if (!tileFactsOf(event.player)?.inWilderness) {
-    return;
-  }
-  if (Obelisks.activate(event.objectId)) {
-    event.handled = true;
-  }
+  player.sendMessage(WEB_SLASH_MESSAGE);
+  websBeingSlashed.add(key);
+  api.getTaskManager().submit(new api.core.CountdownTask({}, WEB_SLASHED_DELAY_TICKS, () => turnWebSlashed(api, object, key)));
 }
 
 module.exports = {
   name: "Wilderness",
-  _test: { canAttack },
+  _test: { canAttack, webCutChance, webTool, webSlashAnimation, slashWeb, websBeingSlashed },
   register(api) {
     const state = createState();
 
@@ -648,8 +684,6 @@ module.exports = {
     api.onCustomEvent("wilderness:rules", (request) => answerRules(api, state, request));
     api.onPlayerLogin(({ player }) => onPlayerLogin(state, api, player));
     api.onPlayerDisconnect(({ player }) => onPlayerDisconnect(state, player));
-    api.onObjectFirstClick(Obelisks.OBELISK_IDS, onObeliskClick);
-    api.onObjectInteraction("Lever", { Pull: (event) => pullLever(api, event) });
     api.onObjectInteraction("Web", { Slash: (event) => slashWeb(api, event) });
     api.onItemOnObject("Knife", "Web", (event) => slashWeb(api, event, event.item), { noted: false });
     api.onItemOnObject((event) => {

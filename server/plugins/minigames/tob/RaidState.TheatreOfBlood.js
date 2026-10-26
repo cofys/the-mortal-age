@@ -246,6 +246,8 @@ class Room {
     if (this.stage !== STAGE.IDLE) return;
     this.stage = STAGE.STARTED;
     this.startCycle = Shared.cycle();
+    // The overall time runs from the Maiden's fight (rsprox 237/01163, 227/01758).
+    if (!this.raid.startCycle) this.raid.startCycle = this.startCycle;
     this.onStart();
   }
 
@@ -259,6 +261,12 @@ class Room {
     const raid = this.raid;
     const ticks = Shared.cycle() - (this.startCycle || Shared.cycle());
     raid.totalTicks += ticks;
+    raid.roomTicks[this.key] = ticks;
+    if (this.def.next === "REWARDS") {
+      raid.overallTicks = Shared.cycle() - (raid.startCycle || Shared.cycle());
+      // Who took part, kept for the strategy table even if they leave or log out in the vault.
+      raid.roster = [...raid.members].map(([player, member]) => ({ name: Shared.displayName(player), member }));
+    }
     const duration = `Duration: <col=ff0000>${Shared.formatTicks(ticks)}</col>`;
     const total = `Total: <col=ff0000>${Shared.formatTicks(raid.totalTicks)}</col>`;
     const message = `Wave '${this.def.name}' ${Shared.MODES[raid.mode].tag} complete!<br>${duration} ${total}`;
@@ -428,6 +436,14 @@ class Raid {
     this.area = new (areaClass())(this);
     this.room = null;
     this.totalTicks = 0;
+    /**
+     * For the strategy table: each room's fight time by key, the cycle the Maiden's fight began,
+     * the time from then to Verzik's defeat, and who took part ({ name, member }) at her defeat.
+     */
+    this.roomTicks = {};
+    this.startCycle = 0;
+    this.overallTicks = 0;
+    this.roster = null;
     this.lastCycle = -1;
     this.over = false;
     this.failed = false;
@@ -780,7 +796,8 @@ class Raid {
     const member = this.member(player);
     const fight = !!this.room?.isStarted() && member.inFight && !member.jailed;
     if (fight) member.deaths++;
-    this.away.set(player.getUsername(), { fight: fight || member.jailed });
+    // The member (deaths, damage, supply points) is kept for when they come back.
+    this.away.set(player.getUsername(), { fight: fight || member.jailed, member });
     player.setAttribute(ATTR_LOGOUT, { raid: this.id, fight: fight || member.jailed });
     this.players = this.players.filter((other) => other !== player);
     this.members.delete(player);
@@ -800,6 +817,7 @@ class Raid {
     if (!away || this.over) return false;
     this.away.delete(player.getUsername());
     player.setAttribute(ATTR_LOGOUT, null);
+    if (away.member) this.members.set(player, away.member);
     this.add(player);
     if (this.party.members.every((member) => member.getUsername() !== player.getUsername())) this.party.members.push(player);
     else this.party.members = this.party.members.map((member) => (member.getUsername() === player.getUsername() ? player : member));

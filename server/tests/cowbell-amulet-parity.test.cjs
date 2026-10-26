@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { Server } = require('../dist/Server'); Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const QuestRuntime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi(), I = core.ItemIdentifiers;
 const noop = () => {};
 
@@ -87,6 +88,60 @@ test('Uncharge refunds the selected worn amulet safely, including a full invento
   s.p.full = false; s.actions.Uncharge({ player: s.p, item });
   assert.equal(s.counts.get(I.AIR_RUNE), 7); assert.equal(item.getId(), I.COWBELL_AMULET);
   s.actions.Uncharge({ player: s.p, item }); assert.equal(s.counts.get(I.AIR_RUNE), 7);
+});
+
+test('Steal-cowbell is refused before Cold War starts, then keeps its success and full-inventory rules', () => {
+  const originalRandom = Math.random;
+  let started = false;
+  try {
+    const tasks = [], handlers = {};
+    require('../plugins/objects/DairyCow.plugin').register({ core, getTaskManager: () => ({ submit: task => tasks.push(task) }),
+      onObjectInteraction: (name, actions) => { handlers[name] = actions; }, onItemOnObject: noop,
+      emitCustomEvent: (name, request) => {
+        assert.equal(name, 'quest:is-started');
+        assert.equal(request.key, 'cold_war');
+        request.started = started;
+      },
+    });
+    assert.equal(handlers['Dairy Cow']['Steal-cowbell'], handlers['Dairy cow']['Steal-cowbell'],
+      'both cache name variants share the gated handler');
+    const counts = new Map(), messages = [], xp = [];
+    let animations = 0, clickResets = 0, full = false;
+    const p = {
+      getSkillManager: () => ({ getCurrentLevel: () => 99, addExperiences: (skill, amount) => xp.push([skill, amount]) }),
+      getClickDelay: () => ({ elapsedTime: () => true, reset: () => { clickResets++; } }),
+      getTimers: () => ({ has: () => false }),
+      getInventory: () => ({ isFull: () => full, full: () => messages.push('full'),
+        adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount) }),
+      getMovementQueue: () => ({ reset: noop }), setPositionToFace: noop,
+      performAnimation: () => { animations++; }, sendMessage: text => messages.push(text),
+      isRegistered: () => true,
+    };
+    const click = () => handlers['Dairy cow']['Steal-cowbell']({ player: p, location: new core.Location(3252, 3270, 0) });
+
+    click();
+    assert.deepEqual(messages, ['You need to have started Cold War to steal a cowbell.']);
+    assert.equal(counts.get(I.COWBELLS), undefined);
+    assert.equal(tasks.length, 0, 'a refused click schedules no steal');
+    assert.equal(animations, 0, 'a refused click does not play the thieving animation');
+    assert.equal(clickResets, 0);
+
+    started = true; full = true; click();
+    assert.equal(tasks.length, 0);
+    assert.equal(messages.at(-1), 'full', 'the existing full-inventory branch is preserved');
+
+    full = false; Math.random = () => 0; click();
+    assert.equal(messages.at(-1), 'You attempt to steal a cowbell...');
+    assert.equal(tasks.length, 1);
+    tasks[0].execute();
+    assert.equal(counts.get(I.COWBELLS), 1);
+    assert.deepEqual(xp, [[core.Skill.THIEVING, 16]]);
+
+    click(); tasks[1].execute();
+    assert.equal(counts.get(I.COWBELLS), 2, 'started and completed players can steal duplicates');
+  } finally {
+    Math.random = originalRandom;
+  }
 });
 
 test('milking takes seven ticks, six with either worn cowbell, and never consumes a cancelled bucket', () => {

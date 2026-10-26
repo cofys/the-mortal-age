@@ -154,7 +154,6 @@ export class PlayerSave {
     private poisonClock?: import("../../../../content/combat/PoisonClock").PoisonClockState;
     private fireImmunityTimer: number;
     private teleblockTimer: number;
-    private specialAttackRestoreTimer: number;
     private skullTimer: number;
     private skullType;
     private running: boolean;
@@ -300,14 +299,6 @@ export class PlayerSave {
 
     public setTeleblockTimer(teleblockTimer: number): void {
         this.teleblockTimer = teleblockTimer;
-    }
-
-    public getSpecialAttackRestoreTimer(): number {
-        return this.specialAttackRestoreTimer;
-    }
-
-    public setSpecialAttackRestoreTimer(specialAttackRestoreTimer: number): void {
-        this.specialAttackRestoreTimer = specialAttackRestoreTimer;
     }
 
     public getSkullTimer(): number {
@@ -599,7 +590,8 @@ export class PlayerSave {
         player.getCombat().getPoisonClock().restore(this.poisonClock, this.poisonImmunityTimer);
         player.getCombat().getFireImmunityTimer().start(this.fireImmunityTimer);
         player.getCombat().getTeleblockTimer().start(this.teleblockTimer);
-        player.getSpecialAttackRestore().start(this.specialAttackRestoreTimer);
+        // The special attack restore timer is not saved: logging out restarts it, so the
+        // first 10% after login takes the full 50 ticks.
 
         player.setSkullTimer(this.skullTimer);
         player.setSkullType(this.skullType);
@@ -706,7 +698,6 @@ export class PlayerSave {
         playerSave.fireImmunityTimer = player.getCombat().getFireImmunityTimer().secondsRemaining();
 
         playerSave.teleblockTimer = player.getCombat().getTeleblockTimer().secondsRemaining();
-        playerSave.specialAttackRestoreTimer = player.getSpecialAttackRestore().secondsRemaining();
 
         playerSave.skullTimer = player.getSkullTimer();
         playerSave.skullType = player.getSkullType();

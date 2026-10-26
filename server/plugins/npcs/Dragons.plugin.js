@@ -8,6 +8,7 @@ const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 const {
   resolveChromaticDragonfireDamage,
+  sendDragonfireMessages,
   initDragonfireProtectionCoreAccess,
 } = require("../combat/DragonfireProtection");
 
@@ -98,10 +99,10 @@ class DragonCombatMethod extends CombatMethod {
       const player = target.getAsPlayer();
       const dragonfire = resolveChromaticDragonfireDamage(character, player, {
         maxHit: 50,
-        closeRange: this.prayerProtects,
+        prayerProtects: this.prayerProtects,
       });
       hit.setTotalDamage(dragonfire.damage);
-      player.sendMessage(dragonfire.message);
+      sendDragonfireMessages(player, dragonfire.messages);
     } else {
       hit.setTotalDamage(0);
     }

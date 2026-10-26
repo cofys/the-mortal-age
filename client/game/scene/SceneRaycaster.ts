@@ -12,6 +12,7 @@ import { Ray, rayIntersectsBox } from "../math/Raycast";
 import { baseNpcTypeId } from "../../custom/npcs/NpcModelOverrideRegistry";
 import { InteractType } from "../../render/InteractType";
 import { WebGLMapSquare } from "../../render/WebGLMapSquare";
+import type { LocAnimated } from "../../render/loc/LocAnimated";
 import { interpolateActorHeight, sampleBridgeHeightForWorldTile } from "./BridgeHeightSampler";
 import {
     BridgePlaneStrategy,
@@ -74,6 +75,8 @@ export class SceneRaycaster {
     private interactLocModelLoader?: LocModelLoader;
     private resolvedLocTypeCache: Map<number, LocType> = new Map();
     private locModelMeshCache: Map<string, LocModelMesh> = new Map();
+    /** Each square's animated locs by `id|fineX|fineZ`, rebuilt when the square replaces its list. */
+    private animatedLocIndex: WeakMap<readonly LocAnimated[], Map<string, LocAnimated[]>> = new WeakMap();
     /** Projected vertices for one model test; grows to the largest model, reused per test. */
     private projected = new Float32Array(0);
     worldEntityTransformProvider?: (map: WebGLMapSquare) => Float32Array | undefined;
@@ -632,6 +635,13 @@ export class SceneRaycaster {
                             entityX,
                             entityZ,
                             groundY,
+                            this.animatedLocAt(
+                                map,
+                                locId,
+                                level,
+                                entityX - (baseX << 7),
+                                entityZ - (baseY << 7),
+                            ),
                         );
                         if (tHit === undefined) continue;
 
@@ -919,12 +929,48 @@ export class SceneRaycaster {
         return this.interactLocModelLoader;
     }
 
+    /** The square's animation of the loc at this fine position (relative to its render base). */
+    private animatedLocAt(
+        map: WebGLMapSquare,
+        locId: number,
+        level: number,
+        sceneX: number,
+        sceneZ: number,
+    ): LocAnimated | undefined {
+        const animated = map.locsAnimated;
+        if (!animated || animated.length === 0) return undefined;
+        let index = this.animatedLocIndex.get(animated);
+        if (!index) {
+            index = new Map();
+            for (const loc of animated) {
+                const key = `${loc.id | 0}|${loc.x | 0}|${loc.y | 0}`;
+                const list = index.get(key);
+                if (list) list.push(loc);
+                else index.set(key, [loc]);
+            }
+            this.animatedLocIndex.set(animated, index);
+        }
+        const matches = index.get(`${locId | 0}|${sceneX | 0}|${sceneZ | 0}`);
+        return matches?.find((entry) => (entry.level | 0) === (level | 0)) ?? matches?.[0];
+    }
+
+    /**
+     * OSRS click-tests a loc's model as it is drawn: the house portal's swirl is shrunk to a
+     * point in its first frame, then fills the arch. A loc the square animates uses its current
+     * frame (the first, for skeletal ones: their frames are ticks, hundreds per sequence, and
+     * each would be a mesh); one not animated yet uses its first frame.
+     */
     private getLocModelMesh(
         locType: LocType,
         modelType: LocModelType,
         modelRotation: number,
+        animated?: LocAnimated,
     ): LocModelMesh | undefined {
-        const key = `${locType.id | 0}|${modelType | 0}|${modelRotation | 0}`;
+        const seqType = animated?.seqType;
+        const seqId = seqType ? seqType.id : locType.seqId;
+        const seqFrame =
+            seqId === -1 ? -1 : seqType && !seqType.isSkeletalSeq() ? animated!.frame | 0 : 0;
+        const key = `${locType.id | 0}|${modelType | 0}|${modelRotation | 0}|${seqId}|${seqFrame}`;
         const cached = this.locModelMeshCache.get(key);
         if (cached) return cached;
 
@@ -934,14 +980,13 @@ export class SceneRaycaster {
         }
 
         // Animated locs can park parts of their base model far from where they draw
-        // (the Colosseum reward chest reaches 6 tiles out), so test the first frame.
-        const seqId = locType.seqId;
+        // (the Colosseum reward chest reaches 6 tiles out), so test a posed frame.
         const model = locModelLoader.getModelAnimated(
             locType,
             modelType,
             modelRotation,
             seqId,
-            seqId !== -1 ? 0 : -1,
+            seqFrame,
         );
         if (
             !model ||
@@ -1029,8 +1074,9 @@ export class SceneRaycaster {
         entityX: number,
         entityZ: number,
         groundY: number,
+        animated?: LocAnimated,
     ): number | undefined {
-        const mesh = this.getLocModelMesh(locType, modelType, modelRotation);
+        const mesh = this.getLocModelMesh(locType, modelType, modelRotation, animated);
         if (!mesh) {
             return undefined;
         }

@@ -135,6 +135,13 @@ export function sendPrivateMessage(recipient: string, text: string): void {
     send({ type: "private_message", payload: { recipient: cleanRecipient, text: cleanText } } as any);
 }
 
+/** The report form's submit (chat_sendabusereport): `ruleId` is already the wire value. */
+export function sendReportAbuse(name: string, ruleId: number, mute: boolean): void {
+    const cleanName = String(name ?? "").trim().slice(0, 12);
+    if (!cleanName) return;
+    send({ type: "report_abuse", payload: { name: cleanName, ruleId: ruleId | 0, mute: mute === true } } as any);
+}
+
 export function sendChatFilter(publicMode: number, privateMode: number, tradeMode: number): void {
     send({
         type: "chat_filter",

@@ -206,8 +206,10 @@ test('EAA charter crews and Artima follow the capture: favour flag, sails boxes,
 test("EAA Betty's notes open interface 291 and the Varrock storeroom runs pickpocket, pass-through door and crate as captured", () => {
   const { h, p } = eaa(); h.quest.setStage(p, 18);
   h.talk(p, N.BETTY); continueToMenu(h, p); h.choose(p, 'Have you seen a grey-haired man with a case?');
-  h.continueUntil(p, () => p.text.startsWith('I did take some notes')); assert.equal(h.quest.getStage(p), 20);
+  h.continueUntil(p, () => p.text.startsWith('I did take some notes')); assert.equal(h.quest.getStage(p), 18);
+  assert.equal(p.items.get(I.BETTYS_NOTES) ?? 0, 0, 'mentioning the notes does not hand them over');
   h.continueUntil(p, () => /Betty hands you the notes/.test(p.text)); assert.equal(p.items.get(I.BETTYS_NOTES), 1);
+  assert.equal(h.quest.getStage(p), 20, 'the inventory-checked handoff earns the read-notes stage');
   assert.equal(p.varbits.get(11206), 1); assert.notEqual(p.varbits.get(11202), 1, 'the capture never sets betty_told_about_note');
   p.manager.reset();
   h.itemActions.get("Betty's notes").Read({ player: p, itemId: I.BETTYS_NOTES });
@@ -1055,8 +1057,8 @@ test('DOTI starts at 2, gives the uniform instructions at 4, enters the window a
   finish(h, p); assert.equal(h.quest.getStage(p), 4);
   object(54701); assert.equal(h.quest.getStage(p), 6);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [1401, 2967]);
-  p.full = true; object(54723); assert.equal(p.items.get(29914), undefined);
-  p.full = false; object(54723); assert.equal(p.items.get(29914), 1); assert.equal(p.items.get(29915), 1);
+  p.full = true; object(54723); assert.equal(p.items.get(29916), undefined);
+  p.full = false; object(54723); assert.equal(p.items.get(29916), 1); assert.equal(p.items.get(29918), 1);
   finish(h, p); npc(13818);
   h.continueUntil(p, () => p.text.startsWith('Just good fortune.')); p.manager.advance();
   assert.equal(h.quest.getStage(p), 6); h.tick(3); assert.equal(h.quest.getStage(p), 8); h.tick(1);
@@ -1089,7 +1091,7 @@ test('DOTI holds and returns the original inventory and equipment with metadata,
   h.quest.setStage(p, 12); h.action(p, 13833, '9kVMFj'); h.tick(4);
   assert.equal(h.quest.getStage(p), 14); assert.equal(inventory.getAmount(995), 0);
   assert.ok(p.attrs.get('death-on-the-isle:held-gear'));
-  assert.equal(equipment.getItems()[core.Equipment.WEAPON_SLOT].getId(), I.BUTLERS_TRAY);
+  assert.equal(equipment.getItems()[core.Equipment.WEAPON_SLOT].getId(), I.BUTLERS_TRAY_3, 'villa entry equips the captured party tray');
   inventory.adds(29922, 1);
   h.hooks.onPlayerLogout.forEach(fn => fn({ player: p })); h.hooks.onPlayerLogin.forEach(fn => fn({ player: p }));
   h.action(p, 13833, 'GMJFxO'); h.tick(4);
@@ -1152,7 +1154,7 @@ test('Quetzals use cache destinations, reject closed or locked map clicks, and f
   h.emit('quetzal:unlock', { player: p });
   const sites = plugin._test.landingSites(), slot = sites.findIndex(site => site.id !== 1 && site.autoUnlocked);
   assert.ok(slot >= 0); const site = sites[slot];
-  const click = chosen => plugin._test.chooseSite({ player: p, groupId: 874, childId: 15, slot: chosen });
+  const click = chosen => plugin._test.chooseSite({ player: p, groupId: 874, childId: 12, slot: chosen });
   click(slot); assert.notEqual(p.blocked, true);
   p.setInterfaceId(874); click(sites.findIndex(site => !site.autoUnlocked)); assert.notEqual(p.blocked, true);
   click(slot); assert.equal(p.blocked, true); click(slot); assert.equal(h.tasks.length, 1);
@@ -1160,4 +1162,66 @@ test('Quetzals use cache destinations, reject closed or locked map clicks, and f
   h.tick(1); assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [site.x, site.y, site.z]);
   h.tick(3); assert.equal(p.blocked, false); assert.equal(p.varbits.get(6719), 0);
   assert.ok(p.log.some(row => row[0] === 'closeSubInterface' && row[1] === ((161 << 16) | 1)));
+});
+
+test('Primio opens the canonical first-trip menu and flies both ways only after Children of the Sun', () => {
+  const h = harness('ChildrenOfTheSun'), p = player();
+  // This large parity file intentionally registers many copies of each quest
+  // in one process; make the public completion query resolve against this
+  // test's current Children of the Sun player rather than an older fixture.
+  (h.events['quest:is-complete'] ??= []).push(request => {
+    if (request.key === 'children_of_the_sun') request.complete = h.quest.isComplete(request.player);
+  });
+  require('../plugins/world/Quetzals.plugin').register(h.api);
+  const starts = [];
+  h.events['npc-dialogue:start'] = [event => starts.push(event)];
+  const primio = h.namedNpcs.get('Primio').Travel;
+  const keeper = h.namedNpcs.get('Regulus Cento').Travel;
+
+  assert.equal(primio({ player: p, npcId: N.PRIMIO_2 }), true);
+  assert.equal(h.tasks.length, 0, 'an uncompleted quest cannot start the flight');
+  assert.match(p.messages.at(-1), /complete Children of the Sun/i);
+
+  h.quest.complete(p);
+  const baselineTasks = h.tasks.length;
+  primio({ player: p, npcId: N.PRIMIO_2 });
+  assert.equal(p.varbits.get(9652), 2, 'opening the first-journey conversation advances the captured menu state');
+  assert.equal(starts.at(-1).npcId, N.REGULUS_CENTO_2);
+  assert.equal(starts.at(-1).variant, 'talking-in-varrock-talking-to-take-the-first-trip');
+  assert.equal(p.getLocation().getX(), 3210, 'opening the menu does not move the player');
+
+  // Closing/reopening before accepting uses the source's shorter retry menu.
+  keeper({ player: p, npcId: N.REGULUS_CENTO_2 });
+  assert.equal(starts.at(-1).variant, 'talking-in-varrock-talking-again-before-taking-the-first-trip');
+  assert.equal(h.tasks.length, baselineTasks, 'the cancel/reopen path does not launch a flight');
+
+  // Exercise the real resolver on arrival using Fortis's cache ID and the
+  // selected tail of the canonical first-trip transcript.
+  require('../plugins/npcs/NpcDialogues.plugin').register(h.api);
+  h.action(p, N.REGULUS_CENTO_2, 'Kectpl');
+  assert.equal(h.tasks.length, baselineTasks + 1, 'the canonical accepted menu action starts the flight');
+  h.tick(4);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1697, 3140, 0]);
+  assert.equal(p.varbits.get(9650), 1, 'the first arrival records Varlamore visited');
+  assert.equal(p.varbits.get(9652), 3, 'the captured first-trip state advances on landing');
+  assert.equal(starts.at(-1).npcId, N.REGULUS_CENTO_3);
+  assert.equal(starts.at(-1).variant, 'talking-in-varrock-talking-to-take-the-first-trip');
+  assert.equal(typeof starts.at(-1).select, 'function', 'arrival resumes from the source transcript after Kectpl');
+  h.continueUntil(p, () => p.text.includes('Well, here we are!'), 20);
+  assert.match(p.text, /Well, here we are! Welcome to Fortis!/,
+    'the registered runner resolves the arrival to the canonical Varrock transcript tail');
+
+  h.tick(3);
+  h.continueUntil(p, () => p.varbits.get(9652) === 4, 30);
+  assert.equal(p.varbits.get(9652), 4, 'finishing the captured welcome reaches the final first-trip state');
+
+  h.namedNpcs.get('Primio').Travel({ player: p, npcId: N.PRIMIO_3 });
+  h.tick(4);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3281, 3413, 0]);
+  h.tick(3);
+  h.namedNpcs.get('Primio').Travel({ player: p, npcId: N.PRIMIO_2 });
+  h.tick(4);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1697, 3140, 0]);
+  assert.equal(p.varbits.get(9652), 4, 'later Fortis trips keep the completed first-trip state');
+  assert.equal(starts.length, 3, 'repeat flights do not replay the initial menu or arrival dialogue');
 });

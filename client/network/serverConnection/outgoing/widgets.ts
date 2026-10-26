@@ -1,6 +1,7 @@
 import type { WidgetActionClientPayload } from "../types";
 import { send } from "../connection/send";
 import { state } from "../state";
+import { MAX_WIDGET_OPS } from "../../../widgets/WidgetFlags";
 
 export function sendWidgetOpen(groupId: number, opts: { modal?: boolean } = {}): void {
     if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
@@ -64,12 +65,14 @@ const OP_TO_IF_BUTTON: Record<number, number> = {
 
 /**
  * Send widget action as binary IF_BUTTON packet.
- * Sends IF_BUTTON1-10 packets for widget ops.
+ * Sends IF_BUTTON1-10 packets for ops 1-10, and IF_BUTTONX, which carries the op index, for
+ * ops 11-32 (live OSRS sends a bank item's op 11 Examine as IF_BUTTONX op=11).
  *
- * Packet format (8 bytes):
+ * Packet format (8 bytes, IF_BUTTONX 9):
  * - widgetId: int (4 bytes)
  * - slot: short (2 bytes)
  * - itemId: short (2 bytes)
+ * - op: byte (IF_BUTTONX only)
  */
 export function sendWidgetAction(payload: WidgetActionClientPayload): void {
     const normalized = normalizeWidgetActionPayload(payload);
@@ -90,7 +93,7 @@ export function sendWidgetAction(payload: WidgetActionClientPayload): void {
     // Ops invoked from an op submenu carry the op index and 0-based submenu index
     // in a dedicated packet, mirroring the second widget op packet in the client.
     if (typeof normalized.subOpId === "number" && normalized.subOpId >= 1) {
-        if (opId < 1 || opId > 10) {
+        if (opId < 1 || opId > MAX_WIDGET_OPS) {
             return;
         }
         const pkt = createPacket(ClientPacketId.IF_BUTTON_SUB);
@@ -103,7 +106,8 @@ export function sendWidgetAction(payload: WidgetActionClientPayload): void {
         return;
     }
 
-    const packetId = OP_TO_IF_BUTTON[opId];
+    const packetId =
+        OP_TO_IF_BUTTON[opId] ?? (opId > 10 && opId <= MAX_WIDGET_OPS ? ClientPacketId.IF_BUTTONX : 0);
 
     if (!packetId) {
         return;
@@ -116,6 +120,7 @@ export function sendWidgetAction(payload: WidgetActionClientPayload): void {
     // from "slot index" (inventory/dynamic child index).
     pkt.packetBuffer.writeShort(normalized.slot ?? 0xffff);
     pkt.packetBuffer.writeShort(normalized.itemId ?? -1);
+    if (packetId === ClientPacketId.IF_BUTTONX) pkt.packetBuffer.writeByte(opId);
     queuePacket(pkt);
 }
 

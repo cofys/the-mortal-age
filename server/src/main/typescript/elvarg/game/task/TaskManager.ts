@@ -3,6 +3,7 @@ import { TaskType } from './TaskType';
 import { ServerPerf } from '../../util/ServerPerf';
 import { FreezeDiagnostics } from '../../util/FreezeDiagnostics';
 import { FastDeque } from '../../util/FastDeque';
+import { PluginContext } from '../../plugins/PluginContext';
  
 export class TaskManager {
     private static pendingTasks: FastDeque<Task> = new FastDeque<Task>();
@@ -42,7 +43,13 @@ export class TaskManager {
                 }
                 const taskName = t?.constructor?.name ?? "UnknownTask";
                 const startedAt = Date.now();
-                const keepRunning = t.tick();
+                const previousPlugin = PluginContext.enter(t.pluginName);
+                let keepRunning: boolean;
+                try {
+                    keepRunning = t.tick();
+                } finally {
+                    PluginContext.exit(previousPlugin);
+                }
                 const durationMs = Date.now() - startedAt;
                 ServerPerf.addPhaseDuration(`task.${taskName}`, durationMs);
                 TaskManager.logSlowTaskTick(taskName, durationMs);
@@ -71,6 +78,7 @@ export class TaskManager {
             if (t.type === TaskType.WALK_TO && t.key === key && !TaskManager.walkToTickedThisCycle.has(t)) {
                 TaskManager.walkToTickedThisCycle.add(t);
                 const startedAt = Date.now();
+                const previousPlugin = PluginContext.enter(t.pluginName);
                 try {
                     keepRunning = t.tick();
                 } catch (e) {
@@ -79,6 +87,8 @@ export class TaskManager {
                     console.error(e);
                     t.stop();
                     keepRunning = false;
+                } finally {
+                    PluginContext.exit(previousPlugin);
                 }
                 const durationMs = Date.now() - startedAt;
                 ServerPerf.addPhaseDuration(`task.${t?.constructor?.name ?? "WalkToTask"}`, durationMs);

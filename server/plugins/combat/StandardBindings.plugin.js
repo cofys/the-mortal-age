@@ -23,7 +23,7 @@ function disabled(event) {
     event.player.sendMessage('Your target is already held by a magical force.');
     event.disabled = true;
   } else if (timers.has(core.TimerKey.FREEZE_IMMUNITY)) {
-    event.player.sendMessage('The target is currently immune to that spell.');
+    event.player.sendMessage('Your target is currently immune to that spell.');
     event.disabled = true;
   }
 }
@@ -43,8 +43,9 @@ function impact(event) {
   event.handled = true;
   const saved = event.context?.spell === event.spell ? event.context.data.get(HOLD_TICKS_KEY) : null;
   const ticks = Number.isInteger(saved) && saved >= entry.ticks && saved <= entry.ticks+6 && (saved-entry.ticks)%2 === 0 ? saved : entry.ticks;
-  // The generic service owns NPC immunity, movement interruption and the five-tick grace period.
-  core.CombatFactory.freezeTicks(event.target,ticks);
+  // The generic service owns NPC immunity, movement interruption and the five-tick grace period;
+  // binds say nothing when they land (Freezes sends the fade warning).
+  core.CombatFactory.freezeTicks(event.target,ticks,null,event.attacker,'bind');
 }
 
 module.exports = {

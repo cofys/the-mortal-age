@@ -147,17 +147,20 @@ test('Sheep accepts smaller deliveries and recovers an interrupted final deliver
   assert.equal(h.quest.getStage(p), 21);
 });
 
-test('shearing makes a sheep bald for one minute and never yields wool twice', () => {
+test('shearing makes a sheep bald for 50 ticks and never yields wool twice', () => {
   const h = harness('SheepShearer'), p = player();
   p.items.set(I.SHEARS, 1);
-  const transforms = [];
-  const sheep = { getDefinition: () => ({ getId: () => N.SHEEP_18 }), setNpcTransformationId: id => transforms.push(id), isRegistered: () => true };
+  const transforms = [], chat = [];
+  const sheep = { getDefinition: () => ({ getId: () => N.SHEEP_18 }), setNpcTransformationId: id => transforms.push(id), forceChat: text => chat.push(text), isRegistered: () => true };
   const event = { player: p, npc: sheep, npcId: N.SHEEP_18, clickType: 1, definition: { getActions: () => ['Shear'] } };
   h.hooks.onNpcInteraction[0](event); h.hooks.onNpcInteraction[0](event);
+  assert.deepEqual(chat, ['Baa!'], 'a sheep being shorn is already shorn');
+  const shorn = h.tasks.at(-1); assert.equal(shorn.getDelay(), 2); shorn.execute();
   assert.equal(p.items.get(I.WOOL), 1);
   assert.deepEqual(transforms, [N.SHEEP_2]);
-  const regrow = h.tasks.at(-1); assert.equal(regrow.getDelay(), 100); regrow.execute();
+  const regrow = h.tasks.at(-1); assert.equal(regrow.getDelay(), 50); regrow.execute();
   h.hooks.onNpcInteraction[0](event);
+  h.tasks.at(-1).execute();
   assert.equal(p.items.get(I.WOOL), 2);
 });
 

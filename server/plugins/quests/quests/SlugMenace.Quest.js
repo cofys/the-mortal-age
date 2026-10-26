@@ -10,24 +10,32 @@
  * pages, the glue and rune-crafting chain, the Slug Prince fight and the
  * completion hand-in.
  *
- * Stages (varbit 2610 "slug2_main", bits 0-7 of varp 874 "quest_slug2";
- * confirmed with `ts-node scripts/lookup-gameval.ts varbit slug`):
+ * Durable stages (the plugin's own numbers, kept in a saved attribute):
  *   0 not started, 1 Sir Tiffy gave the Commorb v2 (see O'Niall),
  *   2 O'Niall briefed (talk to Hobb/Maledict/Holgart), 3 all three spoken
  *   (report back), 4 O'Niall points at the shrine, 5 door transcription
  *   obtained, 6 Jorral translated the glyphs, 7 Savant revealed Mother Mallum
- *   (tell O'Niall), 8 possessed Maledict asks for the three pages, 9 page 1,
- *   page 2 and the three fragments held, 10 Savant forbade swamp paste (get
+ *   (tell O'Niall), 8 possessed Maledict asks for the three pages, 9 the three
+ *   pages are being collected, 10 Savant forbade swamp paste (get
  *   slug glue), 11 Bailey made the sea slug glue, 12 the page is reassembled,
  *   13 the Slug Prince is dead (tell Sir Tiffy), 14 complete.
+ *
+ * The wire is varbit 2610 "slug2_main" (bits 0-7 of varp 874 "quest_slug2";
+ * confirmed with `ts-node scripts/lookup-gameval.ts varbit slug`), but the
+ * client reads the native SLUG2_MAIN numbering, not the plugin's own, so
+ * registerQuest maps the durable stage onto it (NATIVE_STAGE_VALUES below).
+ * Quest Helper keys its steps on the native value and the cache's NPC
+ * transform arrays are indexed by it: 0 Tiffy, 1 O'Niall, 2 the three
+ * townsfolk, 3 the dungeon, 4 the dead slug and Jorral, 5-6 O'Niall, 7-8
+ * Maledict, 9 the three pages, 10 the paste, 11 the glue and the runes,
+ * 12 the report to Sir Tiffy, 14 complete. The cache's NPC transforms
+ * (6242 O'Niall, 6243 Mayor Hobb, 6244 Brother Maledict, 6252 Jeb) change at
+ * the native values 1, 8, 9, 12 and 14, which the mapping below respects.
  *
  * The Wiki does not publish the varp's values, so the boundaries were read off
  * the cache: varbits 2611-2631 carry the sub-steps (fixed page, savant info,
  * scan, the three investigation tracks, door/torn pages, the five used runes,
- * the dead slug) and NPCs 6242/6243/6244/6252 (the Witchaven "Chair", Mayor
- * Hobb, Brother Maledict and Jeb spawns) transform on varbit 2610 at stages
- * 1, 5, 8, 9, 12, 13 and 14 - the milestones above line up with every one of
- * those thresholds.
+ * the dead slug).
  *
  * Requirements (OSRS Wiki): Wanted! and Sea Slug completed, 30 Crafting,
  * 30 Runecraft, 30 Slayer, 30 Thieving and the Commorb in the inventory.
@@ -37,25 +45,27 @@
  * Gaps / approximations:
  *   - The mayor's Commorb scan (a Savant prompt before the shrine) has no
  *     transcript in the dump; only the Wiki-flow-critical shrine scan is wired.
- *   - The page-reassembly puzzle interface is not in the cache dump: using the
- *     sea slug glue on a fragment with all three held consumes them and yields
- *     Page 3 with a plain message.
+ *   - Page reassembly uses the cache's group 460 display and 462 controls with
+ *     Quest Helper's solved-state rules. The initial piece offsets use the
+ *     positions documented in Quest Helper; no RSProx capture establishes the
+ *     exact initial orientation/layout.
  *   - The transcript has no water-rune enchanting variant; its success uses the
  *     same formulaic line as its siblings, and the shaping/enchanting success
  *     chance is Mod Ash's 43% at level 1 to 99% at 99 (Wiki).
- *   - The shared ClimbLinks pairs the "Old ruin entrance" with an unrelated
- *     Exit (2696,9682); this plugin claims the climb through the ladders:climb
- *     event and routes into the dungeon entry corridor instead, and back out.
- *   - The dungeon map's collision leaves the Exit object unreachable; leaving
- *     is best done through the claim's destination or a teleport.
+ *   - The ruin climb lands in the hobgoblin dungeon; the false wall (map loc
+ *     19124, resolved to 18359/18360 by varbit 2618) is the only route to the
+ *     sea-slug corridor, and the passage 18412 returns to the wall.
+ *   - The sea-slug side of the wall lands at 2323,5104; leaving mid-quest is
+ *     through the passage object 18412 or a teleport.
  *   - Multi-speaker cutscenes (Mayor Hobb / Mother Mallum / Savant) render with
  *     one chathead, as in the other transcript-driven quests.
  *   - The Slug Prince only prohibits non-melee damage (onNpcHitModify); its
  *     prayer drain is combat-core behaviour and is not simulated.
  *   - Trying to open the imposing door before the runes burns the player, but the
  *     5 damage the Wiki mentions is not dealt (a message-only transcript step).
- *   - The post-quest Sir Tiffy page's "lost Commorb v2" receive step is left to
- *     the runtime; the item is not handed back.
+ *   - Sir Tiffy's post-quest "lost Commorb v2" condition and receive action are
+ *     handled here; the pre-start lost Commorb is replaced with the original
+ *     Commorb and the started quest with the v2.
  *
  * Source: https://oldschool.runescape.wiki/w/The_Slug_Menace and
  * https://oldschool.runescape.wiki/w/Transcript:The_Slug_Menace
@@ -95,6 +105,20 @@ module.exports = function registerSlugMenaceQuest(api) {
   const VARBIT_USED_WATER = 2625; // "slug2_used_water_rune"
   const VARBIT_USED_MIND = 2626; // "slug2_used_mind_rune"
   const VARBIT_HAVESLUG = 2631; // "slug2_haveslug"
+  const PUZZLE_DISPLAY_INTERFACE = 460;
+  const PUZZLE_CONTROLS_INTERFACE = 462;
+  const PUZZLE_CONTROLS_TARGET = (PUZZLE_DISPLAY_INTERFACE << 16) | 8;
+  const PUZZLE_COMPLETE_VARP = 875;
+  const PUZZLE_STATE_ATTRIBUTE = "the-slug-menace:fragment-puzzle";
+  const PUZZLE_BUTTON_UIDS = Array.from({ length: 6 }, (_, index) =>
+    (PUZZLE_CONTROLS_INTERFACE << 16) | (index + 3));
+  const PUZZLE_SELECT_UIDS = [13, 14, 15].map((child) => (PUZZLE_CONTROLS_INTERFACE << 16) | child);
+  const PUZZLE_BUTTONS = new Set([...PUZZLE_BUTTON_UIDS, ...PUZZLE_SELECT_UIDS]);
+  const PUZZLE_PIECES = [
+    { x: 876, y: 877, flip: 878, rotate: 879, selected: 12155, shown: 12156 },
+    { x: 880, y: 881, flip: 882, rotate: 883, selected: 12157, shown: 12158 },
+    { x: 884, y: 885, flip: 886, rotate: 887, selected: 12159, shown: 12160 },
+  ];
 
   // Quest NPCs (transformed content ids on the spawned "Chair"/villager ids).
   const SIR_TIFFY_NPC_IDS = new Set([
@@ -185,8 +209,18 @@ module.exports = function registerSlugMenaceQuest(api) {
   // Shrine / dungeon objects (ids confirmed with `dump-loc`).
   const OLD_RUIN_ENTRANCE_OBJECT_ID = ObjectIdentifiers.OLD_RUIN_ENTRANCE; // 18270
   const DUNGEON_EXIT_OBJECT_ID = ObjectIdentifiers.EXIT_16; // 18354
+  // The map places the multi-loc 19124 at 2701,9688; varbit 2618 resolves it
+  // to 18359 (Wall, Push) or 18360 (Wall opening, Enter). The interaction
+  // packet keeps the map id, so accept the base and both resolved ids.
+  const HIDDEN_ENTRANCE_OBJECT_ID = 19124;
   const FALSE_WALL_OBJECT_ID = ObjectIdentifiers.WALL_100; // 18359, Push
+  const FALSE_WALL_OPEN_OBJECT_ID = 18360; // 18360, Enter
   const WALL_PASSAGE_OBJECT_ID = ObjectIdentifiers.PASSAGE_3; // 18412, Enter
+  const HIDDEN_ENTRANCE_OBJECT_IDS = new Set([
+    HIDDEN_ENTRANCE_OBJECT_ID,
+    FALSE_WALL_OBJECT_ID,
+    FALSE_WALL_OPEN_OBJECT_ID,
+  ]);
   const IMPOSING_DOOR_OBJECT_IDS = new Set([
     ObjectIdentifiers.IMPOSING_DOORS, // 18413
     ObjectIdentifiers.IMPOSING_DOORS_2, // 18414
@@ -207,7 +241,9 @@ module.exports = function registerSlugMenaceQuest(api) {
 
   const OLD_RUIN_ENTRANCE_TILE = { x: 2696, y: 3283, z: 0 };
   const DUNGEON_ENTRY_TILE = { x: 2323, y: 5104, z: 0 };
-  const DUNGEON_EXIT_TILE = { x: 2315, y: 5098, z: 0 };
+  const HIDDEN_ENTRANCE_TILE = { x: 2701, y: 9688, z: 0 };
+  const DUNGEON_LANDING_TILE = { x: 2696, y: 9683, z: 0 };
+  const DUNGEON_EXIT_TILE = { x: 2696, y: 9682, z: 0 };
   const SURFACE_LANDING_TILE = { x: 2697, y: 3283, z: 0 };
   const DEAD_SLUG_TILE = { x: 2334, y: 5093, z: 0 };
   const PRINCE_TILE = { x: 2336, y: 5093, z: 0 };
@@ -229,12 +265,38 @@ module.exports = function registerSlugMenaceQuest(api) {
   const STAGE_JORRAL_TRANSLATED = 6;
   const STAGE_SAVANT_INFO = 7;
   const STAGE_MALEDICT_PAGES = 8;
-  const STAGE_PAGES_GATHERED = 9;
+  const STAGE_PAGES_REQUESTED = 9;
   const STAGE_PASTE_REFUSED = 10;
   const STAGE_GLUE_OBTAINED = 11;
   const STAGE_FRAGMENTS_JOINED = 12;
   const STAGE_PRINCE_KILLED = 13;
   const STAGE_COMPLETE = 14;
+
+  /**
+   * Durable stage -> native SLUG2_MAIN value (varbit 2610). Quest Helper picks
+   * its step and the cache's NPC transforms from the native value, so the
+   * plugin's own numbering is translated on the wire: the durable stage 3
+   * (the three townsfolk spoken to) is still native 2 (Quest Helper sends the
+   * player back to O'Niall until the report), the report to O'Niall is
+   * native 3, and the reassembled page is still native 11 (the rune leg).
+   */
+  const NATIVE_STAGE_VALUES = {
+    [STAGE_NOT_STARTED]: 0,
+    [STAGE_STARTED]: 1,
+    [STAGE_BRIEFED]: 2,
+    [STAGE_INVESTIGATED]: 2,
+    [STAGE_REPORTED]: 3,
+    [STAGE_DOOR_SCANNED]: 4,
+    [STAGE_JORRAL_TRANSLATED]: 5,
+    [STAGE_SAVANT_INFO]: 6,
+    [STAGE_MALEDICT_PAGES]: 8,
+    [STAGE_PAGES_REQUESTED]: 9,
+    [STAGE_PASTE_REFUSED]: 10,
+    [STAGE_GLUE_OBTAINED]: 11,
+    [STAGE_FRAGMENTS_JOINED]: 11,
+    [STAGE_PRINCE_KILLED]: 12,
+    [STAGE_COMPLETE]: 14,
+  };
 
   // Transcript variants on the "The Slug Menace" page.
   const V_TIFFY_NO_REQS = "starting-off-talking-to-sir-tiffy-cashien-without-the-requirements";
@@ -314,12 +376,16 @@ module.exports = function registerSlugMenaceQuest(api) {
   const COND_NO_ESSENCE = "7GC2LN";
   const COND_SHAPE_FAIL = "3Dotry";
   const COND_SHAPE_SUCCESS = "ypS1Qi";
+  // Sir Tiffy's "after-slug-menace" page (post-quest replacement Commorb v2).
+  const COND_LOST_COMMORB_POST = "fOsyy-";
+  const COND_WHILE_GUTHIX_SLEEPS = "upb-U5";
 
   // Action / message step ids.
   const MSG_TRAVEL_PLATFORM = "dEwoRO"; // "You arrive at the fishing platform."
   const MSG_TRAVEL_SHORE = "j6g4Cr"; // "The boat arrives at Witchaven."
   const MSG_WALL_OPENED = "BlbTdL"; // "The wall creaks open to reveal a hidden entrance!"
   const ACTION_RECEIVE_TRANSCRIPTION = "3Tep8t"; // receive "Door transcription"
+  const ACTION_RECEIVE_COMMORB_POST = "usNZAT"; // receive "the commorb"
   const MSG_DESK_PAGE = "4vSdlY"; // "You open the locked  drawer..."
   const ACTION_SHAPE_FAIL = "IE1248"; // "...destroying the essence."
   const ACTION_SHAPE_SUCCESS = "0thYWr"; // "You managed to shape the rune essence..."
@@ -333,6 +399,8 @@ module.exports = function registerSlugMenaceQuest(api) {
   const MSG_BAILEY_GLUE = "That should do the trick.";
   const MSG_TIFFY_ORB = "Here, take another, but be careful of this one!";
   const MSG_ONIALL_ORB = "Here, take another, but be careful with this one!";
+  // The wording the transcript uses when Sir Tiffy has no room for the Commorb.
+  const MSG_NO_SPACE = "Free up some inventory space first, what?";
   const MSG_JORRAL_GOODBYE = "Uh, right. Goodbye.";
   const MSG_PRINCE_REVEAL = "Sadly for you, this will be the last thing you ever see.";
   const MSG_TELL_TIFFY = "I think you'd better talk to Sir Tiffy about this.";
@@ -353,6 +421,9 @@ module.exports = function registerSlugMenaceQuest(api) {
   const WANTED_QUEST_KEY = "wanted";
   const SEA_SLUG_QUEST_KEY = "sea_slug";
   const DEVIOUS_MINDS_QUEST_KEY = "devious_minds";
+  // Devious Minds hands in to Sir Tiffy at its own stage 9; its plugin claims
+  // him there and only there.
+  const DEVIOUS_MINDS_TIFFY_STAGE = 9;
   const CRAFTING_LEVEL = 30;
   const RUNECRAFT_LEVEL = 30;
   const SLAYER_LEVEL = 30;
@@ -361,6 +432,7 @@ module.exports = function registerSlugMenaceQuest(api) {
   let quest;
   let groundItems;
   const pendingShape = new WeakMap();
+  const puzzleSessions = new Set();
   const princeByPlayer = new Map();
   const promptedDoorScan = new Set();
 
@@ -466,6 +538,7 @@ module.exports = function registerSlugMenaceQuest(api) {
   function sendSlugVarps(player) {
     const sender = player.getPacketSender();
     const stage = quest.getStage(player);
+    sender.sendConfig(PUZZLE_COMPLETE_VARP, stage >= STAGE_FRAGMENTS_JOINED ? 1 : 0);
     sender.sendVarbit(VARBIT_FIXED_PAGE, stage >= STAGE_FRAGMENTS_JOINED ? 1 : 0);
     sender.sendVarbit(VARBIT_SAVANT_GOTINFO, stage >= STAGE_SAVANT_INFO ? 1 : 0);
     sender.sendVarbit(VARBIT_SAVANT_SCAN, stage >= STAGE_DOOR_SCANNED ? 1 : 0);
@@ -473,6 +546,7 @@ module.exports = function registerSlugMenaceQuest(api) {
     sender.sendVarbit(VARBIT_TORNPAGES, hasFragments(player) ? 1 : 0);
     sender.sendVarbit(VARBIT_DOORSCAN, stage >= STAGE_DOOR_SCANNED ? 1 : 0);
     sender.sendVarbit(VARBIT_HAVESLUG, held(player, DEAD_SEA_SLUG_ITEM_ID) ? 1 : 0);
+    sendPagePuzzleVarps(player);
     for (const [itemId, varbit] of RUNE_VARBIT_BY_ITEM) {
       const used = (getUsedRunes(player) & RUNE_BIT_BY_ITEM.get(itemId)) !== 0;
       sender.sendVarbit(varbit, used ? 1 : 0);
@@ -547,17 +621,46 @@ module.exports = function registerSlugMenaceQuest(api) {
     if (!existing) groundItems.registerLocation(player, new Item(DEAD_SEA_SLUG_ITEM_ID, 1), position);
   }
 
+  // The registered pickup event carries the picked item's id as `groundItemId`
+  // (PluginGroundItemInteractionEvent), not `itemId`.
+  function handleGroundItemPickup({ player, groundItemId }) {
+    if (!player || groundItemId !== DEAD_SEA_SLUG_ITEM_ID || quest.isComplete(player)) return;
+    // Pickup hooks run before the inventory add (which can still fail for capacity).
+    TaskManager.submit(new CountdownTask(player, 1, () => {
+      if (player.isRegistered?.() === false || quest.isComplete(player)) return;
+      player.getPacketSender().sendVarbit(VARBIT_HAVESLUG, held(player, DEAD_SEA_SLUG_ITEM_ID) ? 1 : 0);
+    }));
+  }
+
   // ==========================================================================
   // Variant selection
   // ==========================================================================
 
+  /**
+   * Sir Tiffy is shared with Devious Minds, whose plugin answers for him while
+   * its hand-in is due (its stage 9). The dialogue dispatch is first-answer-
+   * wins, so this quest yields him for that window and takes him back once
+   * Devious Minds is complete.
+   */
+  function deviousMindsOwnsTiffy(player) {
+    if (questComplete(player, DEVIOUS_MINDS_QUEST_KEY)) return false;
+    const request = { player, key: DEVIOUS_MINDS_QUEST_KEY, stage: undefined };
+    api.emitCustomEvent("quest:get-stage", request);
+    const stage = Number(request.stage);
+    return Number.isFinite(stage) && stage === DEVIOUS_MINDS_TIFFY_STAGE;
+  }
+
   function tiffyVariant(player) {
     const stage = quest.getStage(player);
+    if (deviousMindsOwnsTiffy(player)) return null;
     if (stage >= STAGE_COMPLETE) return { page: TIFFY_PAGE, variant: V_TIFFY_POST };
     if (stage === STAGE_NOT_STARTED) {
       if (questActive(player, DEVIOUS_MINDS_QUEST_KEY)) return null;
       if (!meetsQuestRequirements(player)) return null;
-      return canStart(player) ? V_TIFFY_START : V_TIFFY_NO_REQS;
+      if (!meetsSkillRequirements(player)) return V_TIFFY_NO_REQS;
+      // Wanted! is finished; a lost Commorb is reclaimed before the mission starts.
+      if (!hasAnyCommorb(player)) return V_TIFFY_LOST_ORB;
+      return V_TIFFY_START;
     }
     if (stage >= STAGE_PRINCE_KILLED) return V_TIFFY_COMPLETE;
     if (!hasAnyCommorb(player)) return V_TIFFY_LOST_ORB;
@@ -567,7 +670,15 @@ module.exports = function registerSlugMenaceQuest(api) {
   function oniallVariant(player) {
     const stage = quest.getStage(player);
     if (quest.isComplete(player) || !quest.isStarted(player)) return V_ONIALL_INTRO;
-    if (!hasAnyCommorb(player)) return V_ONIALL_LOST_ORB;
+    if (!hasAnyCommorb(player)) {
+      // This page has no space condition of its own, so the hand-back is
+      // refused here instead of promising a Commorb that cannot be given.
+      if (player.getInventory().getFreeSlots() < 1) {
+        player.sendMessage(MSG_NO_SPACE);
+        return null;
+      }
+      return V_ONIALL_LOST_ORB;
+    }
     if (stage === STAGE_STARTED) {
       quest.setStage(player, STAGE_BRIEFED);
       if (allTracks(player)) quest.setStage(player, STAGE_INVESTIGATED);
@@ -586,6 +697,9 @@ module.exports = function registerSlugMenaceQuest(api) {
       return V_ONIALL_MOTHER;
     }
     if (stage < STAGE_PRINCE_KILLED && !hasJoinedPage(player) && !hasFragments(player)) {
+      // Quest Helper only sends the player to O'Niall for the last page once
+      // the two stolen pages are held; asking earlier gets no page.
+      if (!held(player, PAGE_1_ITEM_ID) || !held(player, PAGE_2_ITEM_ID)) return V_ONIALL_AGAIN;
       return V_ONIALL_FINAL_PAGE;
     }
     return V_ONIALL_AGAIN;
@@ -605,6 +719,9 @@ module.exports = function registerSlugMenaceQuest(api) {
     if (stage >= STAGE_MALEDICT_PAGES) {
       if (!maledictAsked(player)) {
         player.setAttribute(MALEDICT_ASKED_ATTRIBUTE, 1);
+        // The three pages are now wanted: the native value moves on to the
+        // page leg (Quest Helper's "find the pages" step).
+        quest.setStage(player, STAGE_PAGES_REQUESTED);
         return V_MALEDICT_PAGES;
       }
       return V_MALEDICT_PAGES_AGAIN;
@@ -666,7 +783,11 @@ module.exports = function registerSlugMenaceQuest(api) {
     if (stepId === COND_NO_SPACE_SCAN) return inventory.isFull() && !held(player, DOOR_TRANSCRIPTION_ITEM_ID);
     if (stepId === COND_NO_SPACE_TRANSCRIPTION) return inventory.isFull();
     if (stepId === COND_NO_TRANSCRIPTION) return !held(player, DOOR_TRANSCRIPTION_ITEM_ID);
-    if (stepId === COND_NO_SPACE_DESK) return inventory.isFull();
+    if (stepId === COND_NO_SPACE_DESK) {
+      // The desk page grants the page before this condition runs, so a full
+      // bag is only a refusal while the page is not already held.
+      return inventory.isFull() && !held(player, PAGE_1_ITEM_ID);
+    }
     if (stepId === COND_NO_SPACE_EZEKIAL) return inventory.isFull();
     if (stepId === COND_NO_SPACE_FRAGMENTS) return inventory.getFreeSlots() < 3;
     if (stepId === COND_NO_SLUG) return !held(player, DEAD_SEA_SLUG_ITEM_ID);
@@ -680,6 +801,10 @@ module.exports = function registerSlugMenaceQuest(api) {
       const shape = pendingShape.get(player);
       return shape ? shape.success : false;
     }
+    if (stepId === COND_LOST_COMMORB_POST) return !hasAnyCommorb(player);
+    if (stepId === COND_WHILE_GUTHIX_SLEEPS) {
+      return questComplete(player, "while_guthix_sleeps");
+    }
     return null;
   }
 
@@ -692,6 +817,13 @@ module.exports = function registerSlugMenaceQuest(api) {
     if (!player || hook !== START_HOOK || !SIR_TIFFY_NPC_IDS.has(npcId)) return;
     if (quest.getStage(player) !== STAGE_NOT_STARTED) return;
     if (!canStart(player)) return;
+    // Update the Commorb now, not only when the later prose condition is reached:
+    // closing the conversation early must not leave a started quest with the
+    // original Commorb (which has no Scan/Contact options).
+    if (held(player, COMMORB_ITEM_ID) && !held(player, COMMORB_V2_ITEM_ID)) {
+      player.getInventory().deleteNumber(COMMORB_ITEM_ID, 1);
+      player.getInventory().adds(COMMORB_V2_ITEM_ID, 1);
+    }
     quest.setStage(player, STAGE_STARTED);
   }
 
@@ -705,7 +837,9 @@ module.exports = function registerSlugMenaceQuest(api) {
       return;
     }
     if (stepId === COND_SPACE_ORB && SIR_TIFFY_NPC_IDS.has(npcId) && !hasAnyCommorb(player)) {
-      player.getInventory().adds(COMMORB_V2_ITEM_ID, 1);
+      // Before the mission starts Tiffy replaces the original Commorb; a started
+      // (or finished) quest is given the Commorb v2.
+      grantReplacementCommorb(player);
     }
   }
 
@@ -731,6 +865,14 @@ module.exports = function registerSlugMenaceQuest(api) {
         player.getInventory().adds(DOOR_TRANSCRIPTION_ITEM_ID, 1);
       }
       if (quest.getStage(player) === STAGE_REPORTED) quest.setStage(player, STAGE_DOOR_SCANNED);
+      player.getPacketSender().sendVarbit(VARBIT_SAVANT_SCAN, 1);
+      return;
+    }
+    if (stepId === ACTION_RECEIVE_COMMORB_POST) {
+      event.handled = true;
+      if (!hasAnyCommorb(player) && !player.getInventory().isFull()) {
+        player.getInventory().adds(COMMORB_V2_ITEM_ID, 1);
+      }
       return;
     }
     if (stepId === MSG_DESK_PAGE) {
@@ -773,6 +915,7 @@ module.exports = function registerSlugMenaceQuest(api) {
         player.getInventory().adds(DOOR_TRANSCRIPTION_ITEM_ID, 1);
       }
       if (quest.getStage(player) === STAGE_REPORTED) quest.setStage(player, STAGE_DOOR_SCANNED);
+      player.getPacketSender().sendVarbit(VARBIT_SAVANT_SCAN, 1);
       return;
     }
     if (npcId === EZEKIAL_NPC_ID && text === MSG_EZEKIAL_PAGE) {
@@ -793,12 +936,15 @@ module.exports = function registerSlugMenaceQuest(api) {
         quest.getStage(player) < STAGE_FRAGMENTS_JOINED &&
         !hasFragments(player) &&
         !held(player, PAGE_3_ITEM_ID) &&
+        // The two stolen pages come first (Quest Helper's page order).
+        held(player, PAGE_1_ITEM_ID) &&
+        held(player, PAGE_2_ITEM_ID) &&
         player.getInventory().getFreeSlots() >= 3
       ) {
         player.getInventory().adds(FRAGMENT_1_ITEM_ID, 1);
         player.getInventory().adds(FRAGMENT_2_ITEM_ID, 1);
         player.getInventory().adds(FRAGMENT_3_ITEM_ID, 1);
-        quest.setStage(player, STAGE_PAGES_GATHERED);
+        quest.setStage(player, STAGE_PAGES_REQUESTED);
         player.getPacketSender().sendVarbit(VARBIT_TORNPAGES, 1);
       }
       return;
@@ -834,8 +980,16 @@ module.exports = function registerSlugMenaceQuest(api) {
   }
 
   function grantReplacementCommorb(player) {
-    if (quest.getStage(player) === STAGE_NOT_STARTED || quest.isComplete(player)) return;
-    if (!hasAnyCommorb(player)) player.getInventory().adds(COMMORB_V2_ITEM_ID, 1);
+    if (quest.isComplete(player) || hasAnyCommorb(player)) return;
+    if (player.getInventory().getFreeSlots() < 1) {
+      player.sendMessage(MSG_NO_SPACE);
+      return;
+    }
+    // Before the mission starts Tiffy replaces the original Commorb; once it
+    // has started (and post-quest) the replacement is the Commorb v2.
+    const itemId =
+      quest.getStage(player) === STAGE_NOT_STARTED ? COMMORB_ITEM_ID : COMMORB_V2_ITEM_ID;
+    player.getInventory().adds(itemId, 1);
   }
 
   // ==========================================================================
@@ -986,6 +1140,129 @@ module.exports = function registerSlugMenaceQuest(api) {
     startTranscript(api, player, MAYOR_HOBB_NPC_ID, PAGE, V_DOOR_OPEN);
   }
 
+  function pagePuzzleState(player) {
+    const value = player.getAttribute(PUZZLE_STATE_ATTRIBUTE);
+    if (!value || !Array.isArray(value.pieces) || value.pieces.length !== PUZZLE_PIECES.length) return null;
+    if (!value.pieces.every((piece) => [piece.x, piece.y, piece.flip, piece.rotate].every(Number.isInteger))) return null;
+    return value;
+  }
+
+  function sendPagePuzzleVarps(player) {
+    const state = pagePuzzleState(player);
+    if (!state) return;
+    const sender = player.getPacketSender();
+    state.pieces.forEach((values, index) => {
+      const vars = PUZZLE_PIECES[index];
+      sender.sendConfig(vars.x, values.x)
+        .sendConfig(vars.y, values.y)
+        .sendConfig(vars.flip, values.flip)
+        .sendConfig(vars.rotate, values.rotate);
+    });
+  }
+
+  function initializePagePuzzle(player) {
+    let state = pagePuzzleState(player);
+    if (!state) {
+      // These offsets are the three cache positions documented by the pinned helper.
+      // The capture archive did not include a first-open state for their orientation.
+      state = { pieces: [[40, 33], [40, 32], [40, 35]].map(([x, y]) => ({ x, y, flip: 0, rotate: 0 })) };
+      player.setAttribute(PUZZLE_STATE_ATTRIBUTE, state);
+    }
+    sendPagePuzzleVarps(player);
+    const sender = player.getPacketSender();
+    PUZZLE_PIECES.forEach((piece, index) => {
+      sender.sendVarbit(piece.selected, index === 0 ? 1 : 0);
+      sender.sendVarbit(piece.shown, 1);
+    });
+  }
+
+  function openPagePuzzle(player) {
+    initializePagePuzzle(player);
+    puzzleSessions.add(player);
+    player.getPacketSender()
+      .sendInterface(PUZZLE_DISPLAY_INTERFACE)
+      .sendSubInterface(PUZZLE_CONTROLS_TARGET, PUZZLE_CONTROLS_INTERFACE, 0);
+  }
+
+  function pagePuzzleSolved(player) {
+    const state = pagePuzzleState(player);
+    if (!state) return false;
+    const [anchor, second, third] = state.pieces;
+    return [anchor, second, third].every((piece) => piece.flip === 1 && piece.rotate === 1)
+      && [second, third].every((piece) => Math.abs(piece.x - anchor.x) <= 2 && Math.abs(piece.y - anchor.y) <= 2);
+  }
+
+  function completePagePuzzle(player) {
+    if (quest.getStage(player) !== STAGE_GLUE_OBTAINED
+      || !hasFragments(player)
+      || !held(player, SEA_SLUG_GLUE_ITEM_ID)) return false;
+    const inventory = player.getInventory();
+    inventory.deleteNumber(FRAGMENT_1_ITEM_ID, 1);
+    inventory.deleteNumber(FRAGMENT_2_ITEM_ID, 1);
+    inventory.deleteNumber(FRAGMENT_3_ITEM_ID, 1);
+    inventory.deleteNumber(SEA_SLUG_GLUE_ITEM_ID, 1);
+    inventory.adds(PAGE_3_ITEM_ID, 1);
+    if (!held(player, PAGE_3_ITEM_ID)) {
+      player.sendMessage("I need a free inventory slot to keep the repaired page.");
+      return false;
+    }
+    player.getPacketSender()
+      .sendConfig(PUZZLE_COMPLETE_VARP, 1)
+      .sendVarbit(VARBIT_FIXED_PAGE, 1)
+      .sendVarbit(VARBIT_TORNPAGES, 0)
+      .sendInterfaceRemoval();
+    puzzleSessions.delete(player);
+    player.sendMessage(GLUE_JOINED_MESSAGE);
+    quest.setStage(player, STAGE_FRAGMENTS_JOINED);
+    return true;
+  }
+
+  function handlePagePuzzleButton(event) {
+    const { player, buttonId } = event;
+    if (!player || !PUZZLE_BUTTONS.has(buttonId) || !puzzleSessions.has(player)
+      || player.getInterfaceId?.() !== PUZZLE_DISPLAY_INTERFACE
+      || quest.getStage(player) !== STAGE_GLUE_OBTAINED) return;
+    const sender = player.getPacketSender();
+    const child = buttonId & 0xffff;
+    const selectIndex = PUZZLE_SELECT_UIDS.indexOf(buttonId);
+    if (selectIndex >= 0) {
+      const piece = PUZZLE_PIECES[selectIndex];
+      sender.sendVarbit(piece.selected, sender.getVarbit(piece.selected) === 1 ? 0 : 1);
+    } else {
+      const state = pagePuzzleState(player);
+      if (!state) return;
+      PUZZLE_PIECES.forEach((vars, index) => {
+        if (sender.getVarbit(vars.selected) !== 1) return;
+        const piece = state.pieces[index];
+        const updates = {
+          3: ["rotate", (piece.rotate + 1) % 4],
+          4: ["y", piece.y - 1],
+          5: ["x", piece.x + 1],
+          6: ["x", piece.x - 1],
+          7: ["y", piece.y + 1],
+          8: ["flip", piece.flip === 1 ? 0 : 1],
+        };
+        const update = updates[child];
+        if (update) {
+          piece[update[0]] = update[1];
+          sender.sendConfig(vars.x, piece.x)
+            .sendConfig(vars.y, piece.y)
+            .sendConfig(vars.flip, piece.flip)
+            .sendConfig(vars.rotate, piece.rotate);
+        }
+      });
+      player.setAttribute(PUZZLE_STATE_ATTRIBUTE, state);
+    }
+    event.handled = true;
+    if (pagePuzzleSolved(player)) completePagePuzzle(player);
+  }
+
+  function handlePagePuzzleClosed({ player, interfaceId }) {
+    if (interfaceId === PUZZLE_DISPLAY_INTERFACE || interfaceId === PUZZLE_CONTROLS_INTERFACE) {
+      puzzleSessions.delete(player);
+    }
+  }
+
   function handleItemOnItem(event) {
     const { player, usedItemId, usedWithItemId } = event;
     if (!player) return;
@@ -996,7 +1273,7 @@ module.exports = function registerSlugMenaceQuest(api) {
     for (const [itemId, otherId] of pairs) {
       if (itemId === SWAMP_PASTE_ITEM_ID && FRAGMENT_ITEM_IDS.has(otherId)) {
         const stage = quest.getStage(player);
-        if (stage < STAGE_PAGES_GATHERED || stage >= STAGE_FRAGMENTS_JOINED) return;
+        if (stage < STAGE_PAGES_REQUESTED || stage >= STAGE_FRAGMENTS_JOINED) return;
         event.handled = true;
         quest.setStage(player, STAGE_PASTE_REFUSED);
         startTranscript(api, player, SAVANT_NPC_ID, PAGE, V_PASTE);
@@ -1004,17 +1281,9 @@ module.exports = function registerSlugMenaceQuest(api) {
       }
       if (itemId === SEA_SLUG_GLUE_ITEM_ID && FRAGMENT_ITEM_IDS.has(otherId)) {
         if (quest.getStage(player) !== STAGE_GLUE_OBTAINED) return;
-        event.handled = true;
         if (!hasFragments(player) || !held(player, SEA_SLUG_GLUE_ITEM_ID)) return;
-        player.getInventory().deleteNumber(FRAGMENT_1_ITEM_ID, 1);
-        player.getInventory().deleteNumber(FRAGMENT_2_ITEM_ID, 1);
-        player.getInventory().deleteNumber(FRAGMENT_3_ITEM_ID, 1);
-        player.getInventory().deleteNumber(SEA_SLUG_GLUE_ITEM_ID, 1);
-        player.getInventory().adds(PAGE_3_ITEM_ID, 1);
-        player.getPacketSender().sendVarbit(VARBIT_FIXED_PAGE, 1);
-        player.getPacketSender().sendVarbit(VARBIT_TORNPAGES, 0);
-        player.sendMessage(GLUE_JOINED_MESSAGE);
-        quest.setStage(player, STAGE_FRAGMENTS_JOINED);
+        event.handled = true;
+        openPagePuzzle(player);
         return;
       }
     }
@@ -1044,23 +1313,30 @@ module.exports = function registerSlugMenaceQuest(api) {
     player.sendMessage("The wall creaks open to reveal a hidden entrance!");
   }
 
+  function enterShrineWall(player) {
+    if (!wallOpen(player)) {
+      pushShrineWall(player);
+      return;
+    }
+    if (!hasAnyCommorb(player)) {
+      startTranscript(api, player, SAVANT_NPC_ID, PAGE, V_PASSAGE_NO_ORB);
+      return;
+    }
+    teleport(player, DUNGEON_ENTRY_TILE);
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId, location } = event;
     if (!player) return;
-    if (objectId === FALSE_WALL_OBJECT_ID) {
+    if (HIDDEN_ENTRANCE_OBJECT_IDS.has(objectId)) {
       event.handled = true;
-      pushShrineWall(player);
+      if (String(event.option ?? "").toLowerCase() === "enter") enterShrineWall(player);
+      else pushShrineWall(player);
       return;
     }
     if (objectId === WALL_PASSAGE_OBJECT_ID) {
       event.handled = true;
-      if (!wallOpen(player)) {
-        pushShrineWall(player);
-        return;
-      }
-      if (!hasAnyCommorb(player)) {
-        startTranscript(api, player, SAVANT_NPC_ID, PAGE, V_PASSAGE_NO_ORB);
-      }
+      teleport(player, HIDDEN_ENTRANCE_TILE);
       return;
     }
     if (IMPOSING_DOOR_OBJECT_IDS.has(objectId)) {
@@ -1083,7 +1359,11 @@ module.exports = function registerSlugMenaceQuest(api) {
     }
   }
 
-  /** ClimbLinks mispairs the Old ruin entrance; claim both ends of the shrine. */
+  /**
+   * Claim both ends of the Witchaven entrance. The ruin lands in the hobgoblin
+   * dungeon (the false wall is the only route onward); the sea-slug side is
+   * joined by the wall/passage objects, not by this climb.
+   */
   function handleLadderClaim(event) {
     const location = event.object?.getLocation?.();
     if (!location) return;
@@ -1095,7 +1375,11 @@ module.exports = function registerSlugMenaceQuest(api) {
       api.emitCustomEvent("ladders:climbDown", {
         player: event.player,
         object: event.object,
-        destination: new Location(DUNGEON_ENTRY_TILE.x, DUNGEON_ENTRY_TILE.y, DUNGEON_ENTRY_TILE.z),
+        destination: new Location(
+          DUNGEON_LANDING_TILE.x,
+          DUNGEON_LANDING_TILE.y,
+          DUNGEON_LANDING_TILE.z
+        ),
       });
       return;
     }
@@ -1246,6 +1530,7 @@ module.exports = function registerSlugMenaceQuest(api) {
     clearPrince(player);
     promptedDoorScan.delete(player);
     pendingShape.delete(player);
+    puzzleSessions.delete(player);
   }
 
   function handlePlayerDeath({ player }) {
@@ -1299,7 +1584,15 @@ module.exports = function registerSlugMenaceQuest(api) {
         "<col=800000>Bailey</col> on the <col=800000>Fishing Platform</col>.",
       ];
     }
-    if (stage >= STAGE_PAGES_GATHERED) {
+    if (stage >= STAGE_PAGES_REQUESTED) {
+      if (!hasFragments(player)) {
+        return [
+          "Maledict is possessed and wants the three stolen pages of his holy book.",
+          "",
+          "One is in the Mayor's study desk, one Ezekial Lovecraft has, and the",
+          "third Col. O'Niall keeps torn into three pieces.",
+        ];
+      }
       return [
         "I have the stolen pages and the final page torn into three pieces.",
         held(player, SWAMP_PASTE_ITEM_ID)
@@ -1394,6 +1687,7 @@ module.exports = function registerSlugMenaceQuest(api) {
   }
 
   api.persistAttribute(TRACKS_ATTRIBUTE);
+  api.persistAttribute(PUZZLE_STATE_ATTRIBUTE, { pieces: [] });
   api.persistAttribute(USED_RUNES_ATTRIBUTE);
   api.persistAttribute(WALL_OPEN_ATTRIBUTE);
   api.persistAttribute(DOOR_REVEALED_ATTRIBUTE);
@@ -1406,6 +1700,7 @@ module.exports = function registerSlugMenaceQuest(api) {
     name: "The Slug Menace",
     varpId: VARP_SLUG_MENACE,
     varbitId: VARBIT_SLUG_MAIN,
+    varbitValue: (stage) => NATIVE_STAGE_VALUES[stage] ?? stage,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
@@ -1432,6 +1727,9 @@ module.exports = function registerSlugMenaceQuest(api) {
   api.onItemAction(handleItemAction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem, { noted: false });
+  api.onInterfaceActionButton([...PUZZLE_BUTTONS], handlePagePuzzleButton);
+  api.onCustomEvent("interface:closed", handlePagePuzzleClosed);
+  api.onGroundItemPickup(handleGroundItemPickup);
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);
   api.onNpcHitModify(handleNpcHitModify);

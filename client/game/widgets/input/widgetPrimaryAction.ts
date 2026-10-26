@@ -32,6 +32,7 @@ export function createPrimaryWidgetActionResolver(
     widgetInteraction: WidgetInteractionController,
 ): PrimaryWidgetActionResolver {
     const getWidgetFlags = (w: any): number => widgetManager.getWidgetFlags(w);
+    const getWidgetOpMask = (w: any): number => widgetManager.getWidgetOpMask(w);
     const getPrimaryWidgetAction = (
         w: any,
     ): { option: string; target: string; slot?: number; itemId?: number; opIndex?: number } => {
@@ -81,6 +82,7 @@ export function createPrimaryWidgetActionResolver(
                 false,
                 getWidgetFlags,
                 getWidgetByUidLocal,
+                getWidgetOpMask,
             ) as any[];
 
             // Fallback: pick the first actionable entry from the derived list (matches hover label).
@@ -193,7 +195,7 @@ export function createPrimaryWidgetActionResolver(
             getWidgetTargetLabelForMenu(menuWidget) ??
             "";
         const slot = typeof w?.childIndex === "number" ? w.childIndex | 0 : undefined;
-        const itemId = typeof w?.itemId === "number" && w.itemId > 0 ? w.itemId | 0 : undefined;
+        const itemId = typeof w?.itemId === "number" && w.itemId >= 0 ? w.itemId | 0 : undefined;
         return { option, target, slot, itemId, opIndex: entryOpIndex };
     };
     return getPrimaryWidgetAction;

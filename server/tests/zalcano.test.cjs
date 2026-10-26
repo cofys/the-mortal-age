@@ -29,6 +29,9 @@ before(async () => {
   const api = new Proxy({
     core: { ...core, TaskManager: { submit: (task) => tasks.push(task) } },
     persistAttribute: () => {},
+    sendMultiChatboxPrompt: (player, title, ...pairs) => {
+      player.prompt = { title, options: pairs.filter((_, i) => i % 2 === 0), pick: (text) => pairs[pairs.indexOf(text) + 1]() };
+    },
     emitCustomEvent(name, event) {
       events.push([name, event]);
       if (name === 'quest:is-complete') event.complete = questDone;
@@ -104,7 +107,10 @@ function fakePlayer(x = 3028, y = 6050) {
     setRunEnergy: (v) => { player.run = v; },
     getAttribute: (k) => player.attributes[k],
     setAttribute: (k, v) => { player.attributes[k] = v; },
-    getPacketSender: () => ({ sendGraphic() {}, sendConfig: (id, v) => { player.varps[id] = v; } }),
+    getPacketSender: () => ({ sendGraphic() {}, sendConfig: (id, v) => { player.varps[id] = v; }, sendTypedMessage: (type, m) => player.messages.push(m) }),
+    getDialogueManager: () => ({ startDialogues: (chain) => { player.boxes = [...(player.boxes ?? []), chain]; player.messages.push(chain.getDialogues().get(0)?.getText?.()); } }),
+    performAnimation: (a) => { player.anim = a?.getId?.(); },
+    performGraphic: (g) => { player.graphic = g?.getId?.(); },
     getInventory: () => ({
       getAmount: (id) => items.get(id) ?? 0,
       contains: (id) => (items.get(id) ?? 0) > 0,
@@ -221,6 +227,9 @@ test('when she rises her armour is whole, all tephra crumbles and those beside h
   assert.equal(fight.health, 700);
   assert.equal(fight.npc.getHitpoints(), 300);
   assert.equal(fight.npc.getId(), Common.ids.npcs.armoured);
+  // Recorded: the shockwave 6 ticks after she stands.
+  assert.equal(beside.items.get(Common.ids.items.tephra), 4, 'not yet');
+  for (let i = 0; i < Common.data.zalcano.shockwave.delay; i++) { fight.nextAttack = Infinity; fight.tick(); }
   for (const p of [beside, away]) for (const id of [Common.ids.items.tephra, Common.ids.items.refined, Common.ids.items.imbued]) assert.equal(p.items.get(id), 0);
   assert.ok(beside.damage.includes(Common.data.zalcano.shockwave.damage));
   assert.ok(beside.getLocation().getX() < 3030, 'pushed west, away from her');
@@ -265,7 +274,7 @@ test('an orange symbol is safe for 3 ticks, then hurts more each tick; blue empo
   for (let i = 0; i < 5; i++) { fight.tickCount = i; fight.tickSymbols([player]); }
   const { step } = Common.data.attacks.symbols;
   assert.deepEqual(player.damage, [step, step * 2]);
-  assert.deepEqual(player.chat, [Common.message('agh')]);
+  assert.deepEqual(player.messages, Array(2).fill(Common.message('burning')), 'recorded: the line with each burn');
   assert.ok(player.run < 100);
   fight.symbols = [{ tile: loc(3023, 6038), empower: true, until: fight.tickCount + 20, object, standing: new Map() }];
   assert.equal(fight.empowered(player), true);
@@ -432,12 +441,31 @@ test("her world spawn is kept out of the prison; elsewhere spawns are untouched"
   assert.equal(outside.allow, true);
 });
 
-test('the barrier crosses either way; another barrier is not hers', () => {
-  const player = fakePlayer(3034, 6063);
+const at = (player) => [player.getLocation().getX(), player.getLocation().getY()];
+const continueBox = (player) => player.boxes.at(-1).getDialogues().get(1).action.execute();
+
+// Recorded (rsprox 4056/4057): going in, the warning box, then "Are you sure you wish to enter?".
+test("the barrier crosses either way, warning on the way in; 'don't ask again' is kept; another barrier is not hers", () => {
+  // The prison is south of the barrier.
+  const player = fakePlayer(3034, 6061);
   Prison.pass({ player, objectId: Common.ids.locs.barrier });
-  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], Common.data.prison.barrierSouth);
+  assert.deepEqual(at(player), Common.data.prison.barrierNorth, 'out: straight through');
   Prison.pass({ player, objectId: Common.ids.locs.barrier });
-  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], Common.data.prison.barrierNorth);
+  assert.equal(player.messages.at(-1), Common.message('entryWarning'));
+  assert.deepEqual(at(player), Common.data.prison.barrierNorth, 'not yet');
+  continueBox(player);
+  assert.deepEqual(player.prompt.options, ['Yes.', "Yes, and don't ask again.", 'No.']);
+  player.prompt.pick('No.');
+  assert.deepEqual(at(player), Common.data.prison.barrierNorth);
+  Prison.pass({ player, objectId: Common.ids.locs.barrier });
+  continueBox(player);
+  player.prompt.pick("Yes, and don't ask again.");
+  assert.deepEqual(at(player), Common.data.prison.barrierSouth, 'in');
+  Prison.pass({ player, objectId: Common.ids.locs.barrier });
+  const boxes = player.boxes.length;
+  Prison.pass({ player, objectId: Common.ids.locs.barrier });
+  assert.equal(player.boxes.length, boxes, 'not asked again');
+  assert.deepEqual(at(player), Common.data.prison.barrierSouth);
   assert.equal(Prison.pass({ player, objectId: 1 }), false);
 });
 
@@ -631,4 +659,66 @@ test('real Zalcano death order preserves Ironman shares and pet delivery, then c
       assert.deepEqual(request.drops, [], 'unearned or unrelated group loot remains filtered');
     }
   } finally { Object.assign(Prison.prison, savedPrison); Common.init(originalApi); }
+});
+
+// Recorded (rsprox 4057, 1073-1075): the tephra loop's lines and the Zalcano mining animation.
+test('the recorded lines: the swing and each tephra mined, the full pack, refining and imbuing', () => {
+  const [x, y] = Common.data.prison.rocks[0];
+  const player = fakePlayer(x - 1, y);
+  player.getSkillManager = () => ({ addExperiences() {}, getCurrentLevel: () => 99 });
+  const prisonState = { tickCount: 0, fight: { glowing: 0, phase: 'armoured' } };
+  Tephra.mineRock(prisonState, { player, objectId: Common.ids.locs.rockGlowing });
+  assert.equal(player.messages.at(-1), 'You swing your pick at the rock.');
+  prisonState.tickCount += 1;
+  Tephra.tickActions(prisonState, [player], () => 0);
+  assert.equal(player.anim, core.CacheDefinitions.getSeqId('human_mining_zalcano_rune_pickaxe'), "the rune pickaxe's Zalcano swing");
+  assert.ok(player.messages.includes('You manage to mine some tephra.'));
+  player.getInventory = ((original) => () => ({ ...original(), getFreeSlots: () => 0 }))(player.getInventory);
+  prisonState.tickCount += 5;
+  Tephra.tickActions(prisonState, [player], () => 0);
+  assert.equal(player.messages.at(-1), 'Your inventory is too full to hold any more tephra.');
+
+  const smith = fakePlayer();
+  smith.getSkillManager = () => ({ addExperiences() {}, getCurrentLevel: () => 99 });
+  smith.items.set(Common.ids.items.tephra, 1);
+  const state = { tickCount: 0, fight: null };
+  Tephra.refine(state, { player: smith, objectId: Common.ids.locs.furnace });
+  state.tickCount += 1;
+  Tephra.tickActions(state, [smith]);
+  assert.equal(smith.messages.at(-1), 'You heat the tephra in the furnace and smelt it down into a refined lump.');
+  Tephra.imbue(state, { player: smith, objectId: Common.ids.locs.altar });
+  state.tickCount += 1;
+  Tephra.tickActions(state, [smith]);
+  assert.equal(smith.messages.at(-1), "You bind the altar's power into some refined tephra.");
+  Tephra.imbue(state, { player: smith, objectId: Common.ids.locs.altar });
+  assert.equal(smith.messages.at(-1), 'You do not have anything suitable for imbuing.');
+});
+
+test('she falls and stands with the recorded red lines', () => {
+  const player = fakePlayer();
+  const { fight } = newFight([player]);
+  fight.fall();
+  assert.equal(player.messages.at(-1), '<col=ff0000>Zalcano falls to the ground, hurt and vulnerable.</col>');
+  player.items.set(Common.ids.items.tephra, 1);
+  fight.rise();
+  assert.equal(player.messages.at(-1), '<col=ff0000>Zalcano stands from the floor, ready to fight back.</col>');
+  assert.equal(fight.shockwaveAt, fight.tickCount + 6, 'recorded: 6 ticks later');
+  fight.shockwave();
+  assert.equal(player.messages.at(-1), '<col=ff0000>A shockwave from Zalcano destroys your tephra.</col>');
+});
+
+test("a blue symbol's power pulses every 5 ticks while stood on; a burn says Agh! with its line", () => {
+  const player = fakePlayer(3024, 6039);
+  const { fight, world } = newFight([player]);
+  const object = world.placeObject(Common.ids.locs.symbolEmpower, [3023, 6038]);
+  fight.symbols = [{ tile: loc(3023, 6038), empower: true, spawnedAt: 0, until: 100, object, standing: new Map() }];
+  for (let i = 0; i < 11; i++) { fight.tickCount = i; fight.tickSymbols([player]); }
+  assert.equal(player.messages.filter((m) => m === Common.message('empowered')).length, 3, 'on stepping on, then at 5 and 10');
+  assert.equal(player.graphic, Common.ids.spotanims.empower);
+  const burnt = fakePlayer(3024, 6039);
+  const red = world.placeObject(Common.ids.locs.symbolDamage, [3023, 6038]);
+  fight.symbols = [{ tile: loc(3023, 6038), empower: false, spawnedAt: 0, until: 100, object: red, standing: new Map() }];
+  fight.tickCount = 10;
+  fight.tickSymbols([burnt]);
+  assert.deepEqual([burnt.messages, burnt.chat, burnt.graphic], [[Common.message('burning')], ['Agh!'], Common.ids.spotanims.burning]);
 });

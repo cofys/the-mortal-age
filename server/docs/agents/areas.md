@@ -39,10 +39,12 @@ register(api) {
 
 - Register with `api.registerArea`, not `AreaManager.areas.push`: it attributes the area's
   time to your plugin in `::pluginperf` and isolates a throw from the player's tick.
-- Core asks the attacker's area, then the target's, before the global hooks; `null` falls
-  through. Keep a global hook only for rules that genuinely span areas.
+- Core asks the attacker's area, then the target's distinct area, before the global hooks;
+  either area's `false` denies the attack. `null` falls through. Keep a global hook only
+  for rules that genuinely span areas.
 - An actor holds one area and the first registered match wins. A broad area (one that can
   cover the whole map) registers in `onServerStartup` so specific areas take priority.
+  Moving actors recheck this priority; directly entered, unregistered instances retain ownership.
 - Entering another area directly (`area.enter(player)`, as instances do) leaves the previous
   one first, so `postLeave` always fires. Judge the exit by having left, not by the tile: an
   instance can claim a player before moving them.

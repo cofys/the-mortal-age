@@ -65,6 +65,7 @@ import { scaleLogicalPixels } from "./scaleLogicalPixels";
 import { ps } from "./profilingState";
 import { FONT_VERDANA_11, FONT_VERDANA_13, FONT_VERDANA_15 } from "../../../ui/fonts";
 import type { WorldMapLabelDraw, WorldMapLabelMetrics } from "./worldMapLabels";
+import { hasSpriteOverride } from "../spriteOverrides";
 
 export type { WidgetNode };
 type Widget = WidgetNode;
@@ -343,6 +344,10 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 typeof osrsClientRef.widgetManager.getWidgetFlags === "function"
                     ? (w: any) => getCachedWidgetFlags(w)
                     : undefined;
+            // Transmit bits for ops 11-32 (IF_SETEVENTS_V2), such as a bank item's Examine.
+            const getWidgetOpMask = osrsClientRef?.widgetManager
+                ? (w: any) => osrsClientRef.widgetManager.getWidgetOpMask(w)
+                : undefined;
             const openWorldMapIconMenu = (entries: any[]) => {
                 const menuState = new MenuState();
                 for (const entry of entries) {
@@ -424,6 +429,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                         hasCustom,
                                         getWidgetFlags,
                                         getByUid,
+                                        getWidgetOpMask,
                                     ) || [];
                                 // Widget menu entries are already in OSRS display order (top-to-bottom).
                                 // Do not apply normalizeMenuEntries here; it expects OSRS insertion order and
@@ -505,6 +511,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                             hasCustom,
                             getWidgetFlags,
                             getByUid,
+                            getWidgetOpMask,
                         ) || [];
                     // Widget menu entries are already in OSRS display order (top-to-bottom).
                     // Do not apply normalizeMenuEntries here; it expects OSRS insertion order and
@@ -712,7 +719,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (!icon) return undefined;
             return { canvas: icon, width: icon.width, height: icon.height };
         };
-        UI_drawWrappedTextGL(
+        return UI_drawWrappedTextGL(
             glr,
             opts.fontLoader,
             text,
@@ -1382,9 +1389,12 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 // Use widgetManager.getWidgetFlags for IF_SETEVENTS override lookup.
                 // Without this, equipment slots won't show "Remove" if flags are only set via IF_SETEVENTS.
                 const getWidgetFlagsLocal = widgetManager ? getCachedWidgetFlags : undefined;
+                const getWidgetOpMaskLocal = widgetManager
+                    ? (x: any) => widgetManager.getWidgetOpMask(x)
+                    : undefined;
                 const clickDeriveStartMs = profileWidgetRender ? performance.now() : 0;
                 const entries = interaction.shouldDeriveEntries
-                    ? deriveMenuEntriesForWidgetCached(w as any, getWidgetFlagsLocal)
+                    ? deriveMenuEntriesForWidgetCached(w as any, getWidgetFlagsLocal, getWidgetOpMaskLocal)
                     : [];
                 if (profileWidgetRender) {
                     clickDeriveMs += performance.now() - clickDeriveStartMs;
@@ -2182,6 +2192,39 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         isBot ? [1, 1, 1, 1] : [1, 1, 0, 1]);
                 }
                 osrsClient?.setRenderedCitizenDots?.(citizenDots);
+                // Plugin WorldMapPoints (e.g. Quest Helper's step location), edge-snapped when asked.
+                const pluginPoints: any[] = worldMapRenderHost?.pluginWorldMapPoints ?? [];
+                const pointSize = 16 * renderScale;
+                for (const point of pluginPoints) {
+                    const displayPos = currentArea.position(point.plane, point.x, point.y);
+                    if (!displayPos) continue;
+                    const at = projectDisplayToScreen(displayPos.x + 0.5, displayPos.y + 0.5);
+                    const inside = at.x >= x && at.y >= y && at.x <= x + width && at.y <= y + height;
+                    if (!inside && !point.snapToEdge) continue;
+                    const half = pointSize / 2;
+                    const px = Math.min(Math.max(at.x, x + half), x + width - half);
+                    const py = Math.min(Math.max(at.y, y + half), y + height - half);
+                    const texture = point.texture ? glr.getTexture(point.texture) : undefined;
+                    if (texture) glr.drawTexture(texture, px - half, py - half, pointSize, pointSize);
+                    else {
+                        const c = point.color >>> 0;
+                        glr.drawRect(px - half / 2, py - half / 2, half, half,
+                            [((c >>> 16) & 0xff) / 255, ((c >>> 8) & 0xff) / 255, (c & 0xff) / 255, 1]);
+                    }
+                }
+                osrsClient?.setWorldMapViewport?.({
+                    x, y, width, height, displayX, displayY, pixelsPerTileX, pixelsPerTileY,
+                });
+                osrsClient?.clientPlugins?.drawWorldMap?.({
+                    renderer: glr,
+                    bounds: { x, y, w: width, h: height },
+                    pixelsPerTileX,
+                    pixelsPerTileY,
+                    worldToScreen: (worldX: number, worldY: number, plane: number) => {
+                        const displayPos = currentArea.position(plane, worldX, worldY);
+                        return displayPos ? projectDisplayToScreen(displayPos.x, displayPos.y) : undefined;
+                    },
+                });
                 for (const labelDraw of worldMapLabelDraws) {
                     if (labelDraw.font && !/<(?!br\s*\/?\s*>)/i.test(labelDraw.text)) {
                         drawWorldMapLabelGL(
@@ -3057,7 +3100,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             }
 
             const effectiveSpriteId = isIf3
-                ? typeof w.spriteId === "number" && w.spriteId >= 0
+                ? typeof w.spriteId === "number" && (w.spriteId >= 0 || hasSpriteOverride(w.spriteId))
                     ? w.spriteId | 0
                     : -1
                 : cs1Result
@@ -3089,7 +3132,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             const itemId = typeof w.itemId === "number" ? (w.itemId as number) | 0 : -1;
             const renderItemSprite = isIf3 && itemId >= 0;
 
-            if (!renderItemSprite && effectiveSpriteId >= 0) {
+            if (!renderItemSprite && (effectiveSpriteId >= 0 || hasSpriteOverride(effectiveSpriteId))) {
                 const tex = tc.getWidgetSpriteById(effectiveSpriteId, {
                     borderType,
                     shadowColor: spriteShadow,
@@ -3632,6 +3675,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 effectiveText = "Please wait...";
             }
 
+            // Where the text landed, so wheel input can tell text from the empty box around it.
+            w._textBounds = undefined;
             if (effectiveText.length) {
                 const normalized = effectiveText.replace(/<br\s*\/?\s*>/gi, "\n");
                 // OSRS type-4 widgets use drawLines(), but short widgets disable automatic
@@ -3643,7 +3688,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     ((resolvedFont as any)?.lineHeight as number) ||
                     ((resolvedFont as any)?.ascent as number) ||
                     12;
-                drawWrappedTextGL(
+                w._textBounds = drawWrappedTextGL(
                     normalized,
                     x,
                     y,

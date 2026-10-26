@@ -23,7 +23,7 @@ const LAVA_BATTLESTAFF_PLACEHOLDER = 90053;
 const DEFINITIONS = {
   995: { name: "Coins", stackable: true },
   13204: { name: "Platinum token", stackable: true },
-  [TRIDENT]: { name: "Trident of the seas" },
+  [TRIDENT]: { name: "Trident of the seas", examine: "This trident has a charge." },
   [LAVA_BATTLESTAFF]: { name: "Lava battlestaff", placeholder: LAVA_BATTLESTAFF_PLACEHOLDER },
   [MYSTIC_LAVA_STAFF]: { name: "Mystic lava staff" },
   [LAVA_BATTLESTAFF_NOTE]: { name: "Lava battlestaff", stackable: true, noteOf: LAVA_BATTLESTAFF },
@@ -33,6 +33,7 @@ ItemDefinition.forId = (id) => {
   return {
     getId: () => id,
     getName: () => def.name,
+    getExamine: () => def.examine ?? "",
     isStackable: () => def.stackable === true,
     isNoted: () => def.noteOf != null,
     unNote: () => def.noteOf ?? id,
@@ -227,6 +228,38 @@ test("search withdrawals cannot clone one metadata stack using the aggregate ite
   assert.deepEqual(metas(player.getBank(0)), [[1, { charges: 1200 }]]);
 });
 
+test("as captured: withdrawing into a full inventory says there is no space", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 3), false);
+  for (let i = 0; i < 28; i++) player.getInventory().add(new Item(LAVA_BATTLESTAFF, 1), false);
+
+  Bank.withdraw(player, TRIDENT, 0, 1, 0);
+
+  assert.deepEqual(player.messages, ["You don't have enough inventory space."]);
+  assert.equal(player.getBank(0).getAmount(TRIDENT), 3);
+});
+
+test("as captured: withdrawing more than the free slots takes what fits and says so", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 5), false);
+  for (let i = 0; i < 26; i++) player.getInventory().add(new Item(LAVA_BATTLESTAFF, 1), false);
+
+  Bank.withdraw(player, TRIDENT, 0, 5, 0);
+
+  assert.deepEqual(player.messages, ["You don't have enough inventory space to withdraw that many."]);
+  assert.equal(player.getInventory().getAmount(TRIDENT), 2);
+  assert.equal(player.getBank(0).getAmount(TRIDENT), 3);
+});
+
+test("withdrawing what fits sends no message", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 2), false);
+
+  Bank.withdraw(player, TRIDENT, 0, 2, 0);
+
+  assert.deepEqual(player.messages, []);
+});
+
 test("the client layout lists tabs 1-9 before the main tab", () => {
   const player = createPlayer();
   player.getBank(0).add(new Item(LAVA_BATTLESTAFF, 1), false);
@@ -276,6 +309,19 @@ test("clicking Release on a placeholder removes it; other options leave it", () 
   assert.deepEqual(Bank.layout(player), []);
 });
 
+test("a bank item's op 11 examines it without withdrawing", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(TRIDENT, 1), false);
+
+  Bank.handleWidgetAction(player, {
+    groupId: Bank.MAIN_INTERFACE_ID, childId: 12, buttonNum: Bank.EXAMINE_OP, slot: 0, itemId: TRIDENT,
+  });
+
+  assert.deepEqual(player.messages, ["This trident has a charge."]);
+  assert.equal(player.getBank(0).getAmount(TRIDENT), 1);
+  assert.equal(player.getInventory().getAmount(TRIDENT), 0);
+});
+
 function clickTab(player, tab, buttonNum, option) {
   Bank.handleWidgetAction(player, {
     groupId: Bank.MAIN_INTERFACE_ID, childId: Bank.TABS_CHILD, buttonNum, option, slot: Bank.TAB_BUTTON_SLOT_OFFSET + tab,
@@ -295,7 +341,7 @@ test("clicking a tab views it; clicking the empty slot after the last tab explai
 
   clickTab(player, 2, 1, "View tab");
   assert.equal(player.getCurrentBankTab(), 1);
-  assert.ok(player.messages.includes("To create a new tab, drag an item here."));
+  assert.ok(player.messages.includes("To create a new tab, drag items from your bank onto this tab."));
 });
 
 test("collapsing a tab moves its items and placeholders into the main tab and shifts later tabs down", () => {

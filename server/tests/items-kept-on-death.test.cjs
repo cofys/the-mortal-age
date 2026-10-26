@@ -98,6 +98,82 @@ test('untradeable items compete for the kept slots by value (Wiki: Items Kept on
     ['Light ballista', 'Volatile Nightmare staff']);
 });
 
+test('the kept items are the most valuable by Grand Exchange price, not store value (Wiki: Items Kept on Death)', () => {
+  // Store values: rune platebody 65,000, platelegs 64,000, kiteshield 54,400; dragon boots 20,000,
+  // berserker ring 10,000, ranger boots 200. The Grand Exchange prices run the other way.
+  const items = [I.RUNE_PLATEBODY, I.RUNE_PLATELEGS, I.RUNE_KITESHIELD, I.DRAGON_BOOTS, I.BERSERKER_RING, I.RANGER_BOOTS]
+    .map((id) => new Item(id, 1));
+  assert.deepEqual(names(PlayerDeathTask.getItemsToKeep(fakePlayer({ items }))), ['Ranger boots', 'Berserker ring', 'Dragon boots']);
+  assert.deepEqual(names(PlayerDeathTask.getItemsToKeep(fakePlayer({ items, skulled: true, protectItem: true }))), ['Ranger boots']);
+});
+
+test('an item with no Grand Exchange price is ranked by its high alchemy value (Wiki: Items Kept on Death)', () => {
+  // Dragon defender: high alch 40,804, store value 68,007. A dragon scimitar trades for more than the
+  // alch value but less than the store value, so only the alch value lets the scimitar win.
+  const defender = new Item(I.DRAGON_DEFENDER, 1);
+  const scimitar = new Item(I.DRAGON_SCIMITAR, 1);
+  assert.equal(defender.getDefinition().hasGrandExchangeValue(), false);
+  assert.equal(PlayerDeathTask.keepValue(defender), defender.getDefinition().getHighAlchValue());
+  const scimitarPrice = PlayerDeathTask.keepValue(scimitar);
+  assert.ok(scimitarPrice > defender.getDefinition().getHighAlchValue() && scimitarPrice < defender.getDefinition().getValue(),
+    `dragon scimitar price ${scimitarPrice} sits between the defender's alch and store values`);
+  const player = fakePlayer({ items: [defender, scimitar], skulled: true, protectItem: true });
+  assert.deepEqual(names(PlayerDeathTask.getItemsToKeep(player)), ['Dragon scimitar']);
+});
+
+test('the Items Kept on Death interface shows what a death keeps, and prices the risk at Grand Exchange value', () => {
+  // rsprox recording 430: the kept list holds an untradeable max cape, and turning Protect Item on
+  // moved a sanfew serum (store value 300) to the kept side, lowering the guide risk value by 18,569.
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const handlers = new Map();
+  require('../plugins/interface/ItemsKeptOnDeath.plugin').register({
+    core: PluginManager.getCoreApi(),
+    getPrayerHandler: () => ({ isActivated: () => false, PROTECT_ITEM: 0 }),
+    onInterfaceActionButton: (uid, handler) => handlers.set(uid, handler),
+  });
+  const items = [I.RUNE_PLATEBODY, I.RUNE_PLATELEGS, I.RUNE_KITESHIELD, I.MAX_CAPE, I.BERSERKER_RING, I.RANGER_BOOTS]
+    .map((id) => new Item(id, 1));
+  const sent = { scripts: [], strings: [] };
+  const sender = {
+    sendSubInterface() { return sender; },
+    sendInterfaceScript(id, args) { sent.scripts.push({ id, args }); return sender; },
+    sendInterfaceFlagsRange() { return sender; },
+    sendString(text) { sent.strings.push(text); return sender; },
+    sendInterfaceRemoval() { return sender; },
+  };
+  const player = {
+    ...fakePlayer({ items }),
+    busy: () => false,
+    setInterfaceId() {},
+    getInterfaceId: () => 4,
+    getPacketSender: () => sender,
+  };
+  handlers.get((387 << 16) | 5)({ player });
+  const [{ args }] = sent.scripts;
+  assert.equal(args[5], 3);
+  const kept = args.slice(6, 9).map((id) => new Item(id, 1).getDefinition().getName()).sort();
+  assert.deepEqual(kept, ['Berserker ring', 'Max cape', 'Ranger boots']);
+  const risk = [I.RUNE_PLATEBODY, I.RUNE_PLATELEGS, I.RUNE_KITESHIELD]
+    .reduce((sum, id) => sum + new Item(id, 1).getDefinition().getGrandExchangeValue(), 0);
+  assert.equal(sent.strings[0], `Guide risk value:<br><col=ffffff>${risk.toLocaleString()}</col>`);
+});
+
+test('the Bounty Hunter risk skull counts what a death drops, by Grand Exchange price', () => {
+  // Store order (rune platebody 65,000 > platelegs 64,000 > sq shield 38,400 > ranger boots 200)
+  // crosses the Grand Exchange order, where the ranger boots come first: an unskulled death keeps
+  // the boots, body and legs and drops the sq shield, and the risk skull must price that shield.
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const RiskSkulls = require('../plugins/minigames/bountyhunter/RiskSkulls.BountyHunter');
+  RiskSkulls({ core: PluginManager.getCoreApi(), onPlayerLogout() {}, onServerStartup() {}, onCustomEvent() {} }, {});
+  const items = [I.RUNE_PLATEBODY, I.RUNE_PLATELEGS, I.RUNE_SQ_SHIELD, I.RANGER_BOOTS].map((id) => new Item(id, 1));
+  const player = fakePlayer({ items });
+  const shield = items[2];
+  assert.ok(shield.getDefinition().getValue() > items[3].getDefinition().getValue(), 'store value puts the shield above the boots');
+  const kept = PlayerDeathTask.getItemsToKeep(player);
+  assert.deepEqual(names(kept).sort(), ['Ranger boots', 'Rune platebody', 'Rune platelegs']);
+  assert.equal(RiskSkulls._test.riskOf(player), PlayerDeathTask.keepValue(shield));
+});
+
 test('preset items are never protected', () => {
   const staff = new Item(I.VOLATILE_NIGHTMARE_STAFF, 1);
   staff.setMetaValue(Item.UNTRADEABLE_META, true);

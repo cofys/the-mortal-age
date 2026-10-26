@@ -8,6 +8,7 @@ const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
 const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 const { Skill } = require('../dist/game/model/Skill');
+const { CombatType } = require('../dist/game/content/combat/CombatType');
 const { BonusManager } = require('../dist/game/model/equipment/BonusManager');
 const EquipmentEffects = require('../plugins/combat/EquipmentEffects.plugin');
 const SlayerHelmet = require('../plugins/items/SlayerHelmet.plugin');
@@ -23,12 +24,12 @@ function item(name) {
 ItemDefinition.forId = (id) => ({ getName: () => NAMES.get(id) ?? '' });
 
 /** A fake plugin api that keeps every modifier and passes custom events between plugins. */
-function buildApi({ onTask = false } = {}) {
+function buildApi({ onTask = false, fullDharoks = () => false } = {}) {
     const modifiers = {};
     const listeners = new Map();
     const register = (kind) => (modifier) => (modifiers[kind] ??= []).push(modifier);
     const api = {
-        core: { ItemIdentifiers, Skill, Equipment, ItemDefinition },
+        core: { ItemIdentifiers, Skill, Equipment, ItemDefinition, CombatType },
         registerMeleeHitModifier: register('meleeHit'),
         registerRangedHitModifier: register('rangedHit'),
         registerMagicHitModifier: register('magicHit'),
@@ -47,13 +48,15 @@ function buildApi({ onTask = false } = {}) {
         onItemOnItem: () => {},
         onItemAction: () => {},
         onCombatHitResolved: () => {},
-        getCombatFactory: () => ({ fullDharoks: () => false }),
+        onCombatHitDamage: register('hitDamage'),
+        getCombatFactory: () => ({ fullDharoks }),
     };
     api.onCustomEvent('slayer:on-task', (request) => { request.onTask = onTask; });
     EquipmentEffects.register(api);
     SlayerHelmet.register(api);
     const apply = (kind, entity, value) => (modifiers[kind] ?? []).reduce((v, modifier) => modifier(entity, v), value);
-    return { apply };
+    const hitDamage = (event) => (modifiers.hitDamage ?? []).forEach((hook) => hook(event));
+    return { apply, hitDamage };
 }
 
 function npc(attributes) {
@@ -213,4 +216,33 @@ test("Justiciar's set reduction is registered once through EquipmentEffects", ()
     const hit = { damage: 100, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } };
     apply('incomingDamage', wearer, hit);
     assert.equal(hit.damage, 85, '450/3000 once: 100 -> 85, not 73');
+});
+
+test("Dharok's set scales the rolled hit, not the max hit", () => {
+    const { HitDamage } = require('../dist/game/content/combat/hit/HitDamage');
+    const { HitMask } = require('../dist/game/content/combat/hit/HitMask');
+    const { apply, hitDamage } = buildApi({ fullDharoks: (entity) => entity.dharoks === true });
+    const wearer = player({}, npc([]));
+    wearer.dharoks = true;
+    wearer.hitpoints = 1;
+    wearer.getHitpoints = () => wearer.hitpoints;
+    wearer.getSkillManager = () => ({ getMaxLevel: () => 99 });
+    const swing = (rolled, combatType = CombatType.MELEE) => {
+        const damage = new HitDamage(rolled, HitMask.RED);
+        hitDamage({ attacker: wearer, target: npc([]), combatType, hit: {}, damage, accurate: true });
+        return damage.getDamage();
+    };
+
+    assert.equal(apply('meleeHit', wearer, 40), 40, 'the damage roll uses the ordinary max hit');
+    // 1 + (99 - 1) / 100 x 99 / 100 = 1.9702: "close to double damage (97.02% higher)".
+    assert.equal(swing(40), 78);
+    assert.equal(swing(1), 1, 'a low roll stays low');
+    assert.equal(swing(40, CombatType.RANGED), 40, 'melee only');
+    wearer.hitpoints = 99;
+    assert.equal(swing(40), 40, 'no bonus at full Hitpoints');
+    wearer.hitpoints = 50;
+    assert.equal(swing(40), 59, '1 + 49/100 x 99/100 = 1.4851');
+    wearer.dharoks = false;
+    wearer.hitpoints = 1;
+    assert.equal(swing(40), 40, 'the set must be complete');
 });

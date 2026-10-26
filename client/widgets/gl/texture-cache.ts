@@ -3,6 +3,7 @@ import { IndexedSprite } from "../../rs/sprite/IndexedSprite";
 import { SpriteLoader } from "../../rs/sprite/SpriteLoader";
 import { SpritePixels } from "../../rs/sprite/SpritePixels";
 import type { GLRenderer } from "./renderer";
+import { getSpriteOverride, hasSpriteOverride } from "./spriteOverrides";
 
 type Texture = { tex: WebGLTexture; w: number; h: number };
 
@@ -245,6 +246,11 @@ export class TextureCache {
     }
 
     getSpriteById(id: number) {
+        const override = getSpriteOverride(id);
+        if (override) {
+            const key = `spro:${id}:${override.version}`;
+            return this.glr.getTexture(key) ?? this.glr.createTextureFromCanvas(key, override.canvas);
+        }
         const key = `spr:${id}`;
         const cached = this.glr.getTexture(key);
         if (cached) return cached;
@@ -271,7 +277,8 @@ export class TextureCache {
         const shadowColor = options?.shadowColor ?? 0;
         const flipH = options?.flipH === true;
         const flipV = options?.flipV === true;
-        if (borderType === 0 && shadowColor === 0 && !flipH && !flipV) {
+        // A plugin's image is drawn as it is.
+        if ((borderType === 0 && shadowColor === 0 && !flipH && !flipV) || hasSpriteOverride(id)) {
             return this.getSpriteById(id);
         }
 

@@ -1,0 +1,109 @@
+{
+  "$comment": "Quetzal Transport System data by cache gameval. Landing-site materials: Wiki Landing_Site (10 quetzal feed, 3 limestone bricks, 4 soft clay, unnoted, 6 ticks). Whistle charges: Wiki Basic/Enhanced/Perfected quetzal whistle (5/20/50, the (i) unlimited) and their charge-per-meat table. Crafting: the blueprints' Wiki pages (a knife and one set of logs; the upgrades take the previous whistle).",
+  "landingSite": {
+    "materials": {
+      "hg_seedsack": 10,
+      "limestonebrick": 3,
+      "softclay": 4
+    },
+    "ticks": 6
+  },
+  "whistles": [
+    {
+      "obj": "hg_quetzalwhistle_basic",
+      "name": "Basic quetzal whistle",
+      "tier": "basic",
+      "charges": 5
+    },
+    {
+      "obj": "hg_quetzalwhistle_enhanced",
+      "name": "Enhanced quetzal whistle",
+      "tier": "enhanced",
+      "charges": 20
+    },
+    {
+      "obj": "hg_quetzalwhistle_perfected",
+      "name": "Perfected quetzal whistle",
+      "tier": "perfected",
+      "charges": 50
+    },
+    {
+      "obj": "hg_quetzalwhistle_perfected_infinite",
+      "name": "Perfected quetzal whistle(i)",
+      "tier": "imbued",
+      "charges": null
+    }
+  ],
+  "meatCharges": {
+    "hg_seedsack": 1,
+    "huntingbeast_wild_meat": 1,
+    "hunting_larupia_meat": 1,
+    "huntingbeast_barbed_meat": 1,
+    "hunting_graahk_meat": 2,
+    "hunting_kyatt_meat": 2,
+    "hunting_fennecfox_meat": 2,
+    "hunting_antelopesun_meat": 3,
+    "huntingbeast_speedy2_meat": 3,
+    "hunting_antelopemoon_meat": 3
+  },
+  "blueprints": [
+    {
+      "obj": "hg_whistle_blueprint_1",
+      "name": "Basic quetzal whistle blueprint",
+      "logs": "willow_logs",
+      "from": null,
+      "makes": "hg_quetzalwhistle_basic",
+      "check": "This whistle requires a knife and one set of willow logs.",
+      "made": "You craft yourself a basic quetzal whistle."
+    },
+    {
+      "obj": "hg_whistle_blueprint_2",
+      "name": "Enhanced quetzal whistle blueprint",
+      "logs": "yew_logs",
+      "from": "hg_quetzalwhistle_basic",
+      "makes": "hg_quetzalwhistle_enhanced",
+      "check": "This whistle requires a knife and one set of yew logs.",
+      "made": "You craft yourself an enhanced quetzal whistle."
+    },
+    {
+      "obj": "hg_whistle_blueprint_2_torn",
+      "name": "Torn enhanced quetzal whistle blueprint",
+      "logs": "yew_logs",
+      "from": "hg_quetzalwhistle_basic",
+      "makes": "hg_quetzalwhistle_enhanced",
+      "check": "This whistle requires a knife and one set of yew logs.",
+      "made": "You craft yourself an enhanced quetzal whistle."
+    },
+    {
+      "obj": "hg_whistle_blueprint_3",
+      "name": "Perfected quetzal whistle blueprint",
+      "logs": "redwood_logs",
+      "from": "hg_quetzalwhistle_enhanced",
+      "makes": "hg_quetzalwhistle_perfected",
+      "check": "This whistle requires a knife and one set of redwood logs.",
+      "made": "You craft yourself a perfected quetzal whistle."
+    },
+    {
+      "obj": "hg_whistle_blueprint_3_torn",
+      "name": "Torn perfected quetzal whistle blueprint",
+      "logs": "redwood_logs",
+      "from": "hg_quetzalwhistle_enhanced",
+      "makes": "hg_quetzalwhistle_perfected",
+      "check": "This whistle requires a knife and one set of redwood logs.",
+      "made": "You craft yourself a perfected quetzal whistle."
+    }
+  ],
+  "blueprintCost": 500,
+  "freeBlueprintRumours": 10,
+  "messages": {
+    "childrenOfTheSun": "You need to complete Children of the Sun before travelling to Varlamore.",
+    "buildNotReady": "You're not sure how to do that.",
+    "buildNeeds": "You need ten quetzal feed sacks, three limestone bricks and four soft clay to build this landing site.",
+    "built": "You build a quetzal landing site.",
+    "charges": "Your quetzal whistle has {charges} charges remaining.",
+    "wildernessFar": "Unfortunately, large birds can't just fly you to Varlamore from here.",
+    "wildernessLevel": "You'll need to be below level 20 wilderness.",
+    "needsWhistle": "You need {article} {whistle} to craft this whistle.",
+    "blueprintCoins": "You need 500 coins to buy a blueprint."
+  }
+}

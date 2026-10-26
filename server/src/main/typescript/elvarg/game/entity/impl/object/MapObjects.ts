@@ -76,14 +76,22 @@ export class MapObjects {
         return object;
     }
 
+    /**
+     * Whether the loc a player clicked, or one just like it, still stands where they clicked:
+     * nobody removed or changed it while they walked there (a door another player opened).
+     */
+    public static stillStands(player: Player, id: number, location: Location, object: GameObject): boolean {
+        const current = this.getPrivateArea(player, id, location);
+        return current === object || (current != null && current.getId() === object.getId()
+            && current.getType() === object.getType() && current.getFace() === object.getFace());
+    }
+
     public static get(id: number, location: Location, privateArea: PrivateArea): GameObject {
         // Check instanced objects..
         if (privateArea != null) {
-            for (let object of privateArea.getObjects()) {
-                if (object.getId() == id && object.getLocation().equals(location)) {
-                    return object;
-                }
-            }
+            const instanced = MapObjects.preferReachable(privateArea.getObjects()
+                .filter((object) => object.getId() == id && object.getLocation().equals(location)));
+            if (instanced) return instanced;
         }
 
         // Load region..
@@ -103,13 +111,20 @@ export class MapObjects {
         // Go through the objects in the list..
         let list = this.mapObjects.get(hash);
         if (list != null) {
-            for (let o of list) {
-                if (o.getId() == id && o.getLocation().equals(location)) {
-                    return o;
-                }
-            }
+            return MapObjects.preferReachable(list.filter((o) => o.getId() == id && o.getLocation().equals(location)));
         }
         return null;
+    }
+
+    /**
+     * One loc id placed twice on a tile, as a straight wall decoration (shapes 4-5) and as
+     * something else (the scoreboard outside Araxxor's lair: shape 10 and shape 4). A click
+     * names only the id and the tile, and a straight wall decoration is only reached by
+     * standing on its tile, under the other copy, so the other copy is the one used.
+     */
+    private static preferReachable(matches: GameObject[]): GameObject {
+        if (matches.length <= 1) return matches[0] ?? null;
+        return matches.find((o) => o.getType() !== 4 && o.getType() !== 5) ?? matches[0];
     }
 
     public static getType(location: Location, type: number, privateArea: PrivateArea): GameObject {

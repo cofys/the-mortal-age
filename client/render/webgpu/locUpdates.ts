@@ -90,7 +90,8 @@ export class LocUpdates {
 
     /** LOC_DEL carries no id: find it in the square's per-tile loc index (locs2.ts onLocDel). */
     private idAt(tile: Tile, level: number, shape: number, rotation: number): number {
-        const square = this.r.mapManager.getMap(tile.x >> 6, tile.y >> 6);
+        // By bounds: an instance scene is one square that spans several.
+        const square = this.r.mapManager.getMapForWorldTile(tile.x, tile.y);
         if (!square) return -1;
         const lx = tile.x - square.getRenderBaseWorldX();
         const ly = tile.y - square.getRenderBaseWorldY();
@@ -264,10 +265,21 @@ export class LocUpdates {
         if (payload.allowReload) this.scheduleReload(regionId >> 8, regionId & 0xff);
     }
 
-    /** Instances rebuild their whole scene; elsewhere the tile's map square reloads. */
+    /**
+     * The tile's map square reloads. In an instance the drawn scene is one square: a change that
+     * only touches doors, or only other locs, rebuilds that geometry of it (a house door opened a
+     * second late when the whole scene rebuilt); anything else, or a change while a whole-scene
+     * build is still on its way, rebuilds the scene.
+     */
     private reloadTile(tile: Tile, group: LocReloadGroup): void {
         if (this.r.instanceActive) {
-            this.r.scheduleInstanceLocRebuild();
+            const scene = this.r.instanceSceneMap;
+            if (group === "full" || !scene || !this.r.mapManager.getMap(scene.mapX, scene.mapY) ||
+                this.r.instances.hasPendingWork()) {
+                this.r.scheduleInstanceLocRebuild();
+            } else {
+                this.scheduleReload(scene.mapX, scene.mapY, group);
+            }
             return;
         }
         this.scheduleReload(Math.floor(tile.x / 64), Math.floor(tile.y / 64), group);

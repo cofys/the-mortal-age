@@ -189,20 +189,48 @@ function platform({ player, objectId }) {
   return false;
 }
 
+/** "Yes, and don't ask again." (recorded): the entry warning is skipped from then on. */
+const SKIP_WARNING_ATTRIBUTE = "zalcano:skip-warning";
+
+/**
+ * Pass: going in, the recorded warning box and "Are you sure you wish to enter?" (Yes. / Yes, and
+ * don't ask again. / No.) unless the player chose not to be asked; coming out, straight through.
+ */
 function pass({ player, objectId }) {
   if (objectId !== Common.ids.locs.barrier) return false;
   const { barrierNorth, barrierSouth } = Common.data.prison;
   const south = player.getLocation().getY() <= barrierSouth[1];
-  player.moveTo(Common.toLocation(south ? barrierNorth : barrierSouth));
+  const go = () => player.moveTo(Common.toLocation(south ? barrierNorth : barrierSouth));
+  // The prison is south of the barrier: from the south is leaving (recorded facing north, no warning).
+  if (south || player.getAttribute?.(SKIP_WARNING_ATTRIBUTE) === true) {
+    go();
+    return true;
+  }
+  Common.box(player, Common.message("entryWarning"), () => {
+    Common.api.sendMultiChatboxPrompt(player, Common.message("entryQuestion"),
+      Common.message("entryYes"), go,
+      Common.message("entryAlways"), () => {
+        player.setAttribute(SKIP_WARNING_ATTRIBUTE, true);
+        go();
+      },
+      Common.message("entryNo"), () => {});
+  });
   return true;
 }
 
 function peek({ player, objectId }) {
   if (objectId !== Common.ids.locs.barrier) return false;
   const count = (prison.area?.getPlayers?.() ?? []).length;
-  player.sendMessage(Common.message("peek", { verb: count === 1 ? "is" : "are", players: count === 1 ? "1 player" : `${count} players` }));
   const fight = prison.fight;
-  if (fight && (fight.phase === DOWN || fight.npc?.getHitpoints?.() < Common.data.zalcano.shield)) player.sendMessage(Common.message("peekDamaged"));
+  const { hitpoints, shield } = Common.data.zalcano;
+  const health = fight ? (fight.phase === DOWN ? fight.hp : fight.health) : hitpoints;
+  const damaged = fight && (health < hitpoints || (fight.phase !== DOWN && fight.hp < shield));
+  const players = count === 0 ? "no adventurers" : count === 1 ? "1 adventurer" : `${count} adventurers`;
+  Common.box(player, Common.message("peek", {
+    verb: count === 1 ? "is" : "are",
+    players,
+    health: Common.message(damaged ? "peekDamaged" : "peekFullHealth"),
+  }));
   return true;
 }
 
@@ -304,6 +332,7 @@ function onLogin({ player }) {
 
 function attach(api) {
   api.persistAttribute(Common.KILLS_ATTRIBUTE, 0);
+  api.persistAttribute(SKIP_WARNING_ATTRIBUTE, false);
   prison.area = new (defineArea())();
   api.registerArea(prison.area);
   api.onObjectInteraction("Teleport Platform", { Channel: platform });

@@ -215,11 +215,6 @@ export function onLocDel(host: WebGLOsrsRendererHost, tile: { x: number; y: numb
                 });
             }
 
-            if (host.instanceActive) {
-                host.scheduleInstanceLocRebuild();
-                return;
-            }
-
             const mapX = Math.floor(tile.x / 64);
             const mapY = Math.floor(tile.y / 64);
             // LOC_DEL does not carry an object id. Resolve it from the current
@@ -237,11 +232,9 @@ export function onLocDel(host: WebGLOsrsRendererHost, tile: { x: number; y: numb
                 deletedLoc && (deletedLoc.id | 0) > 0
                     ? host.osrsClient.locTypeLoader.load(deletedLoc.id | 0)
                     : undefined;
-            host.scheduleLocGeometryUpdate(
-                mapX,
-                mapY,
-                locType ? (isDoorLocType(locType) ? "door" : "loc") : "full",
-            );
+            const group = locType ? (isDoorLocType(locType) ? "door" : "loc") : "full";
+            if (host.instanceActive) host.scheduleInstanceLocUpdate(group);
+            else host.scheduleLocGeometryUpdate(mapX, mapY, group);
         } catch (err) {
             console.warn("onLocDel error", err);
         }

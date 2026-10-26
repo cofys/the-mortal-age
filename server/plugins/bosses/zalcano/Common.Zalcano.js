@@ -98,6 +98,19 @@ function message(key, values = {}) {
   return data.messages[key].replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
 }
 
+/** A recorded spam line (filterable). */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
+}
+
+/** A recorded message box. */
+function box(player, text, then = null) {
+  const { DialogueChainBuilder, StatementDialogue, ActionDialogue } = core;
+  const chain = new DialogueChainBuilder().add(new StatementDialogue(0, text));
+  if (then) chain.add(new ActionDialogue(1, { execute: then }));
+  player.getDialogueManager().startDialogues(chain);
+}
+
 function questComplete(player) {
   const request = { player, key: SONG_OF_THE_ELVES, complete: false };
   api.emitCustomEvent("quest:is-complete", request);
@@ -114,7 +127,7 @@ function removeAll(player, itemId) {
 
 module.exports = {
   init, later, toLocation, randomInt, pick, chebyshev, distanceToNpc, inBox, inPrison, onFloor,
-  tileGraphic, hurtPlayer, message, questComplete, removeAll,
+  tileGraphic, hurtPlayer, message, spam, box, questComplete, removeAll,
   KILLS_ATTRIBUTE,
   get api() { return api; },
   get core() { return core; },

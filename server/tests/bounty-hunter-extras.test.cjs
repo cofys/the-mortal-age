@@ -234,22 +234,23 @@ test("risk skulls step bronze, iron, green, blue, red, golden-eyed when skulled"
   assert.equal(skullIcon(0, true), 28);
 });
 
-test("risk is what would be lost: unskulled keeps the three most valuable units, untradeables don't count", () => {
+test("risk is what a death would drop: kept items and untradeables don't count", (t) => {
   const item = (id, value, amount, tradeable = true) => ({
-    getId: () => id, getAmount: () => amount, isTradeable: () => tradeable, getDefinition: () => ({ getValue: () => value }),
+    getId: () => id, getAmount: () => amount, isTradeable: () => tradeable, value,
   });
+  const [stack, cheap, untradeable, worn] = [item(1, 1_000_000, 2), item(2, 50, 100), item(3, 9_999_999, 1, false), item(4, 300_000, 1)];
   const p = {
-    isSkulled: () => false,
-    getSkullType: () => null,
-    getInventory: () => ({ getItems: () => [item(1, 1_000_000, 2), item(2, 50, 100), item(3, 9_999_999, 1, false), null] }),
-    getEquipment: () => ({ getItems: () => [item(4, 300_000, 1)] }),
+    kept: [stack, untradeable, worn],
+    getInventory: () => ({ getItems: () => [stack, cheap, untradeable, null] }),
+    getEquipment: () => ({ getItems: () => [worn] }),
   };
-  // Kept: both 1M items and the 300k one; lost: 100 x 50.
+  core.PlayerDeathTask = { getItemsToKeep: (player) => player.kept, keepValue: (it) => it.value };
+  t.after(() => delete core.PlayerDeathTask);
   assert.equal(RiskSkulls._test.riskOf(p), 5_000);
-  p.isSkulled = () => true;
+  p.kept = [];
   assert.equal(RiskSkulls._test.riskOf(p), 2_305_000);
-  p.prayers = new Set(["protect"]);
-  assert.equal(RiskSkulls._test.riskOf(p), 1_305_000);
+  p.kept = [stack];
+  assert.equal(RiskSkulls._test.riskOf(p), 305_000);
 });
 
 test("only the crater's Pool of Refreshment restores special attack", () => {

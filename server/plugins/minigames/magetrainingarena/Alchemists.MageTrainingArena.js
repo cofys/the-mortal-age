@@ -136,12 +136,10 @@ function alchemyPolicy(policy) {
   const key = keyOf(itemId);
   if (!key || !inPlayground(player.getLocation())) return;
   const cycle = Common.core.World.getProcessCycle();
-  if ((player.__mtaNextAlch ?? -1) > cycle) {
-    policy.allowed = false;
-    return;
-  }
   policy.allowed = true;
   policy.coins = 0;
+  policy.castTicks = Common.data.alchemists.alchemyTicks;
+  policy.confirm = false;
   player.__mtaAlch = { itemId, coins: playground.values[key] ?? 0, free: key === playground.free, spellId: policy.spellId, cycle };
 }
 
@@ -156,7 +154,6 @@ function alchemyCompleted({ player, itemId }) {
   const pending = player.__mtaAlch;
   player.__mtaAlch = null;
   if (!pending || pending.itemId !== itemId) return;
-  player.__mtaNextAlch = Common.core.World.getProcessCycle() + Common.data.alchemists.alchemyTicks;
   if (pending.coins > 0) player.getInventory().adds(Common.ids.items.arenaCoins, pending.coins);
   updateOverlay(player);
 }

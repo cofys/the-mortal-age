@@ -67,6 +67,8 @@ function build(core) {
     ["NINJA", 74, 84, 240, 50, 10, 151], ["DRAGON", 83, 93, 300, 65, 5, 125],
     ["CRYSTAL", 80, 90, 280, 280, 8, 141], ["LUCKY", 89, 99, 380, 80, 3, 100],
   ].map(([key, level, hands, xp, puroXp, low, high]) => ({ key, level, hands, xp, puroXp, low, high, jar: I[`${key}_IMPLING_JAR`],
+    // Wiki (Implings, Puro-Puro): fixed spawns return 50 ticks after a catch for earth and essence implings, 7 for the rest.
+    puroRespawn: key === "EARTH" || key === "ESSENCE" ? 50 : 7,
     npcs: Object.entries(N).filter(([name]) => new RegExp(`^${key}_IMPLING(?:_\\d+)?$`).test(name)).map(([, id]) => id) }));
   const falconry = [
     [N.SPOTTED_KEBBIT, 43, 104, I.SPOTTED_KEBBIT_FUR, N.GYR_FALCON],

@@ -1,0 +1,202 @@
+{
+  "_source": "rsprox 1858 (three solo games, Leagues V, rev 227) and 1854 (Pete's dialogue and the payment), unless a key says _wiki or _calibrated. The recordings' XP is Leagues x16 and their shop points x8; both are divided out. Tiles are template (source map) tiles.",
+
+  "instance": { "source": [3776, 10112], "widthChunks": 8, "heightChunks": 16 },
+  "tiles": {
+    "start": [3808, 10193, 3],
+    "out": [3816, 3808, 0],
+    "entrance": [3813, 3807, 0]
+  },
+  "locs": {
+    "entrance": 31031, "exit": 31032, "stairsTop": 31029, "stairsBottom": 31030,
+    "chamberOpen": 31043, "chamberBlocked": 31044, "rock": 31045, "rockDepleted": 31046, "vent": 31040,
+    "lava": 30997, "crust": [30998, 30999, 31000],
+    "boulders": [31034, 31035, 31036, 31037, 31038], "whirlpool": 31039
+  },
+  "npcs": { "pete": 7776 },
+  "shop": 1457,
+  "items": {
+    "numulite": 21555, "vessel": 21539, "rock": 21540,
+    "fragments": { "iron": 21532, "silver": 21533, "coal": 21534, "gold": 21535, "mithril": 21536, "adamantite": 21537, "runite": 21538 },
+    "calcite": 21543, "pyrophosphite": 21545,
+    "fossils": { "small": 21562, "medium": 21564, "large": 21566, "rare": 21568 }
+  },
+  "varbits": {
+    "points": 5934, "chambers": 5936, "players": 5937, "stability": 5938,
+    "ventA": 5939, "ventB": 5940, "ventC": 5942, "progress": 5941, "time": 5944, "visited": 6248
+  },
+  "interfaces": { "hud": 611 },
+  "songs": { "mine": 507, "outside": 513 },
+
+  "_timing": "Ticks. The lobby is 51 ticks (the timer shows 50 and falls by 6); the game 1000; the warning at 50 left forces stability to 5 (recorded); time is sent every 6 ticks, the vents every 10, stability every 25 from the start.",
+  "timing": { "lobby": 51, "game": 1000, "warning": 50, "timeEvery": 6, "ventEvery": 10, "stabilityEvery": 25, "rockRespawn": 24, "shift": 500, "collapseDeath": 5 },
+
+  "entry": {
+    "mining": 50, "fee": 30, "permanentFee": 3000,
+    "_wiki": "50 Mining; 30 Numulites a trip or 3,000 for good (Wiki, Volcanic Mine)."
+  },
+
+  "chambers": {
+    "A": { "tile": [3785, 10156, 1], "rock": [3784, 10158, 1], "bit": 1 },
+    "B": { "tile": [3813, 10172, 1], "rock": [3815, 10170, 1], "bit": 2 },
+    "C": { "tile": [3828, 10155, 1], "rock": [3831, 10161, 1], "bit": 4 }
+  },
+  "_vents": "The cache's nine vents belong to the chamber with the nearest x (this gives the recorded B (3816,10202) and C (3828,10194)).",
+  "unknownGas": 127,
+
+  "_gas": "Calibrated: every 10 ticks a vent's gas rises 1-2 while its chamber is blocked and falls 1-2 while open (recorded drifts were +-1 and +-2); it starts and re-randomises at 5 minutes (Wiki) within 30-70.",
+  "gas": { "start": [30, 70], "blockedRise": [1, 2], "openFall": [1, 2] },
+  "_stability": "Calibrated: every 25 ticks, +20/3 for each vent within 40-60% gas (all three: +20), nothing within 25-75%, else -1 for each 5% beyond (at most 8), the total rounded, capped 0-100. With the vents near 50 this gives the recorded 50 -> 70 -> 90 -> 100; vents at 20-48% left it at 100 (G2), one vent at 0-11% brought it down (G1).",
+  "stability": { "start": 50, "band": [40, 60], "inBand": 6.6667, "safe": [25, 75], "perStep": 5, "maxFall": 8 },
+
+  "points": {
+    "block": 50, "clear": 50, "inspect": 50, "throw": 1, "chip": 1, "vortex": 100,
+    "_cap": "Wiki: blocking and unblocking pay 50 each, up to 300 a player per game.",
+    "capCap": 300,
+    "fragments": { "iron": 15, "silver": 20, "coal": 25, "gold": 34, "mithril": 44, "adamantite": 55, "runite": 70 }
+  },
+  "xp": {
+    "_xp": "Mining XP: recorded / 16 (chip 5, mithril 60, adamantite 100, runite 150; Wiki: iron 10, silver 20, coal 30, gold 40). Clearing a chamber 25 (recorded 400 / 16).",
+    "chip": 5, "clear": 25,
+    "fragments": { "iron": 10, "silver": 20, "coal": 30, "gold": 40, "mithril": 60, "adamantite": 100, "runite": 150 },
+    "_reward": "Calibrated: the end reward is points x level / 24.2 (recorded 3.8 XP a point at Mining 92, after the x16). Shop points are the game's points 1:1 (Wiki prices; the recordings' x8 is Leagues).",
+    "rewardDivisor": 24.2
+  },
+
+  "_boulder": "Stages from the Wiki (40 HP a player each, the small 60; fragment chance per chip); tiles of the first three as recorded (the SW tile; the floating npc moves a tile a tick). The medium and small stops are calibrated, further up the channel to the whirlpool.",
+  "boulder": {
+    "stages": [
+      { "loc": 31034, "tile": [3804, 10124, 1], "face": 1, "hp": 40, "fragment": 20, "breaking": 7807, "breakSeq": "vmi_mining_boulder_giant_breakoff" },
+      { "loc": 31035, "tile": [3804, 10133, 1], "face": 0, "hp": 40, "fragment": 12, "floating": 7808, "from": [3804, 10125, 1], "breaking": 7809, "breakSeq": "vmi_mining_boulder_giant_destroy" },
+      { "loc": 31036, "tile": [3805, 10148, 1], "face": 0, "hp": 40, "fragment": 8, "floating": 7810, "from": [3805, 10134, 1], "breaking": 7811, "breakSeq": "vmi_mining_boulder_large_destroy" },
+      { "loc": 31037, "tile": [3806, 10166, 1], "face": 0, "hp": 40, "fragment": 5, "floating": 7812, "from": [3806, 10150, 1], "breaking": 7813, "breakSeq": "vmi_mining_boulder_medium_destroy" },
+      { "loc": 31038, "tile": [3807, 10186, 1], "face": 0, "hp": 60, "fragment": 3, "floating": 7814, "from": [3807, 10168, 1], "breaking": 7815, "breakSeq": "vmi_mining_boulder_small_destroy" }
+    ],
+    "tiny": { "npc": 7816, "from": [3808, 10188, 1], "to": [3808, 10210, 1] },
+    "attachedLava": [[3804, 10124], [3805, 10124], [3804, 10125], [3805, 10125], [3804, 10126], [3805, 10126], [3804, 10127], [3805, 10127]],
+    "chipTicks": 3,
+    "_channel": "Water may not harden lava on the boulder channel (recorded refusal there).",
+    "channel": [3802, 10118, 3812, 10215, 1]
+  },
+  "_fragmentTypes": "Wiki, Boulder (Volcanic Mine): chance (%) of each ore given a fragment, by Mining level; the nearest lower level row applies.",
+  "fragmentTypes": [
+    [50, { "iron": 33.89, "silver": 19.67, "coal": 22.61, "gold": 23.83 }],
+    [55, { "iron": 23.08, "silver": 15.54, "coal": 19.54, "gold": 22.32, "mithril": 19.53 }],
+    [70, { "iron": 9.26, "silver": 9.7, "coal": 15.46, "gold": 22.8, "mithril": 27.94, "adamantite": 14.84 }],
+    [85, { "iron": 2.33, "silver": 3.88, "coal": 7.99, "gold": 15.12, "mithril": 25.47, "adamantite": 18.65, "runite": 26.56 }],
+    [99, { "iron": 0.61, "silver": 1.62, "coal": 4.48, "gold": 11.37, "mithril": 25.99, "adamantite": 24.3, "runite": 31.64 }]
+  ],
+  "_sideDrops": "Wiki: with a fragment, 1/10 calcite or pyrophosphite (1-4); else the fossil table: Numulite 5-8 (45/194.44), unidentified fossils small 5/388.89, medium 5/777.78, large 5/972.22, rare 5/3888.89.",
+  "sideDrops": { "mineral": 10, "mineralAmount": [1, 4], "numulite": [45, 194.44], "numuliteAmount": [5, 8],
+    "fossils": [["small", 5, 388.89], ["medium", 5, 777.78], ["large", 5, 972.22], ["rare", 5, 3888.89]] },
+
+  "_gasHoles": "Recorded land tiles; the two west holes (not recorded) land beside the other hole like the recorded ones.",
+  "gasHoles": {
+    "31047": [3795, 10174, 1], "31048": [3788, 10174, 1],
+    "31049": [3812, 10169, 1], "31050": [3803, 10169, 1], "31051": [3827, 10170, 1], "31052": [3817, 10170, 1]
+  },
+  "gasHoleDamage": [3, 6],
+
+  "_water": "36 throws a vessel; the crust stages last 74, 65 and 10 ticks, then lava again (recorded).",
+  "water": { "throws": 36, "stages": [74, 65, 10] },
+
+  "stairs": {
+    "3802,10159,3": [3803, 10158, 1], "3813,10159,3": [3813, 10158, 1],
+    "3813,10159,1": [3813, 10161, 3], "3802,10159,1": [3803, 10161, 3]
+  },
+
+  "seqs": {
+    "pickupFloor": "human_pickupfloor", "ladder": "human_reachforladder", "pickupTable": "human_pickuptable",
+    "fling": "human_fling_water", "launch": "quest_lunar_ejector_thrown", "land": "human_fossil_volcano_land"
+  },
+  "graphics": { "gasJump": 1407, "explosion": 346 },
+  "sounds": { "awaken": 1678, "jump": 2412, "land": 1695, "pick": 3600 },
+
+  "messages": {
+    "vessel": "Pete quickly hands you a heat-proof vessel filled with some water.",
+    "dormant": "The mine is currently dormant, and will awaken within the next 30 seconds.",
+    "dormantStairs": "The mine will be ready within the next 30 seconds.",
+    "awakens": "The volcano awakens! You can now access the area below...",
+    "eruptSoon": "The volcano is going to erupt soon!",
+    "collapse": "The mine has become too unstable! It's collapsing in!",
+    "takeRock": "You take the large rock.",
+    "block": "You block the chamber with the large rock. The gas starts to build up.",
+    "noRock": "You haven't got anything to block that with.",
+    "swing": "You swing your pick at the rock.",
+    "cleared": "You manage to clear the blockage.",
+    "vent": "You peer into the vent, and judging by the consistency, Vent {vent} is <col=ff0000>{gas}%</col> filled with gas. 50% would be the most stable for the mine.",
+    "ouch": "Ouch! Hot hot!",
+    "throwsLeft": "Your vessel has enough water for {n} more throws.",
+    "channel": "It would be unwise to block the channel by hardening the lava there.",
+    "chip": "You chip off a part of the boulder.",
+    "fragment": "You mine out one {ore} ore fragment.",
+    "fossil": "You mine out a fossil alongside the fragment.",
+    "numulite": "You mine out some Numulite alongside the fragment.",
+    "midSession": "Sorry {name} I can't let people head in mid way through a mine out session. It's not safe and will cause mine collapse!",
+    "paidLine": "You can now enter the Volcanic mine. Should you leave, Pete would expect payment again.",
+    "paidBox": "You hand over 30 Numulites to Pete.",
+    "paidThanks": "Thanks {name}. That will grant you access to the mine, for one trip. You're a crazy one.",
+    "tooPoor": "It doesn't look like you have enough Numulites with you. I'll need 30 Numulites for one visit or 3,000 for unlimited trips.",
+    "reward": "I'll give you a bit of minin' trainin' and I'll remember the contribution you've made.",
+    "nothingStored": "Sorry, I've got nothing for you. If I had some of your stuff earlier, but you died before collecting it, it'd be lost.",
+    "payMenuOne": "Pay 30 Numulites for one visit.",
+    "payMenuPermanent": "Pay 3,000 Numulites for permanent access.",
+    "payMenuKeep": "Keep your Numulites.",
+
+    "earthquake": "A sudden earthquake strikes the cavern!",
+    "retrieved": "Petrified Pete has retrieved some of your items. You can collect them from him on Fossil Island.",
+    "retrieveTooPoor": "You need 150 x Numulite to retrieve your items.",
+    "retrieveCharged": "Death charges you 150 x Numulite.",
+
+    "_calibrated": "Not in any recording.",
+    "mustPay": "You'll need to pay Pete before heading in.",
+    "level": "You need a Mining level of 50 to enter the Volcanic Mine.",
+    "shift": "A small earthquake below causes the gas levels to shift.",
+    "vesselEmpty": "Your vessel is out of water.",
+    "permanentThanks": "Thanks {name}. You can head in as often as you like from now on.",
+    "mineral": "You mine out some {mineral} alongside the fragment.",
+    "vortex": "The boulder falls into the lava vortex!",
+    "erupted": "The volcano erupts!"
+  },
+
+  "dialogue": {
+    "_recorded": "1854 T4152-T4311: the opener, the menu and each branch, as said.",
+    "opener": [["player", "Hi there Pete."], ["npc", "Argh! Who be there?"], ["npc", "Oh, it's just the adventurer, phew! Things can be scary around here, I've seen some weeeeeiiiird stuff in that cavern."]],
+    "menu": ["What is in the cavern?", "Can I go inside?", "Have you anything to trade?", "Have you picked up anything I left in the mine?", "I'll leave you be."],
+    "cavern": [["npc", "<col=0000ff>Oh no, now I'm thinking about it again! *screams*</col>"], ["player", "Okay okay, calm down! Why are you guarding it? What is the purpose of this cavern?"], ["npc", "It's a mine. It's special but dangerous, things move around and the mine could collapse at any moment!."], ["npc", "I'd say you'll need at least level 50 Mining to be capable."], ["player", "Well sounds like I am capable then!"], ["npc", "The main idea is to chip down the big boulders, in order to find the fragments inside. Deliver them to me and I'll show you some minin' tips to help you get better at it."]],
+    "cavernMenu": ["How do I traverse the mine?", "How do I keep the mine stable?", "Explain the dangers for me.", "Can I go inside?", "I'll leave you be."],
+    "traverse": [["player", "...Isn't it full of lava?"], ["npc", "I have a handy supply of heat-proof water containers. I'll give them out to anyone going in with bit of water inside. They only hold so much though."], ["npc", "I reckon you could harden the lava with it! Just throw a bit of water on it. Make yourself a path, but be careful, they won't last forever."], ["player", "Anything else?"], ["npc", "Uh oh, there is one more thing, but it hurts. My backside has never felt the same since, one of the reasons I don't dare go in there anymore. There are some gas holes around, just feel 'em."]],
+    "stable": [["npc", "Don't let it collapse!! It's petrifying, it will stick with you forever. The rumbles create a flashback in my mind, arghhh."], ["npc", "There are some vents and chambers in there. Do better than I did with them, you want around a 50% gas level in each chamber."], ["npc", "There are 3 in total, we spent awhile coming up with names, such as 'Vent west of the pillar near the entrance on the left hand side', but decided A, B and C would be easier."], ["player", "Presumably, a western chamber, central chamber and eastern chamber?"], ["npc", "Yep! That's right. Block the chamber to let gas build up, unblock 'em to let gas out. Any creatures in there will cause instability too."], ["npc", "Oh, also, if you have more than one rock to mine, keep them going at roughly the same pace too. Everything gets a bit wobbly if you proceed too quickly down one channel."]],
+    "dangers": [["npc", "It is bad, very bad in there. If you're not prepared, you will be done for. Wouldn't catch me in there."], ["player", "Okay, so how do I prepare?"], ["npc", "Look out for the Lava beasts, they'll throw projectiles at anyone they see. You'll have stalacmites falling on you, fire jumping out the lava towards you. Seriously, you're insane."], ["player", "Thanks, I'll keep that in mind."]],
+    "inside": [["npc", "Well luckily for you, or rather, unlucky for you, I'll let you go inside as you've definitely got the mining skills."], ["npc", "I'll have to charge you though - upkeep of this place ain't cheap and cheerful. I'll need 30 Numulites for one visit or 3,000 for unlimited trips."]],
+    "insidePaid": [["npc", "Well luckily for you, or rather, unlucky for you, I'll let you go inside as you've definitely got the mining skills."], ["npc", "You've already paid the entrance fee too, so you can head right on in."]],
+    "insideTooPoor": [["player", "I don't have 30 Numulites with me unfortunately."]]
+  },
+
+  "_hazards": "rsprox 1858 (research section 2.7): lava beasts (65 HP, the attack seq, projectile 1403 and the hit 5 ticks after, 0-12 seen; Wiki max 18), one at a time solo, the next 0-20 ticks after one dies, at the recorded tiles; earthquakes at multiples of 5 ticks, a stalactite (1406) 2-15 ticks later on a player's tile and the hit a tick after (13-22 seen; Wiki up to 25); meteors (projectile 660, the blast 659 8 ticks later, 15-17 seen, a 3x3 splash per the Wiki). Calibrated: a beast per 5 players, the chances rising as stability falls.",
+  "hazards": {
+    "beast": {
+      "npc": 7817, "hp": 65, "maxHit": 18, "attackTicks": 6, "distance": 10, "hitDelay": 5,
+      "projectile": { "id": 1403, "delay": 35, "speed": 130, "startHeight": 43, "endHeight": 31 },
+      "_projectile": "Recorded: start 35, end 122-142 cycles, the hit 5 ticks after.",
+      "seqs": { "spawn": "fossil_npc_lavabeast_spawn", "attack": 7678 },
+      "respawn": [0, 20], "perPlayers": 5, "killPoints": 3, "pointsPer": 10, "instability": 0,
+      "_instability": "Pete says creatures cause instability, but recorded G1 rose 50 -> 100 with beasts out, so none is charged.",
+      "tiles": [[3807, 10173], [3821, 10177], [3821, 10183], [3806, 10163], [3824, 10163], [3807, 10161], [3821, 10161], [3823, 10173], [3805, 10169], [3808, 10162], [3811, 10200], [3821, 10180], [3822, 10168], [3827, 10158], [3805, 10161], [3808, 10157], [3813, 10197], [3825, 10200], [3822, 10187], [3809, 10171], [3807, 10156], [3792, 10141]],
+      "plane": 1
+    },
+    "earthquake": { "every": 5, "chance": 0.06, "lowStabilityChance": 0.12, "stalactiteDelay": [2, 15], "graphic": 1406, "damage": [13, 25] },
+    "meteor": { "every": 7, "chance": 0.5, "lowStabilityChance": 0.4, "graphic": 659, "projectile": 660, "blastTicks": 8, "damage": [15, 17], "reach": 6, "spread": 4,
+      "_spread": "Calibrated: the blast lands within 4 tiles of the player (364 blasts in the recordings, 3 hits)." }
+  },
+  "retrieval": { "fee": 150 },
+
+  "attributes": {
+    "paid": "volcanic-mine:paid",
+    "stored": "volcanic-mine:stored",
+    "permanent": "volcanic-mine:permanent",
+    "visited": "volcanic-mine:visited",
+    "shopPoints": "shop-currency:Volcanic Mine points",
+    "return": "volcanic-mine:return"
+  }
+}

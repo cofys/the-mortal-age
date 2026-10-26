@@ -18,6 +18,8 @@ const Locations = require("./Locations.RandomEvents");
 const Gift = require("./GiftRewards.RandomEvents");
 const Certer = require("./Certer.RandomEvents");
 const Teleports = require("./Teleports.RandomEvents");
+const Rewards = require("./Rewards.RandomEvents");
+const Flow = require("./DialogueFlow.RandomEvents");
 const players = new Map();
 const eventsByNpc = new Map();
 let api;
@@ -33,20 +35,23 @@ function initialize(pluginApi) {
     for (const area of Teleports.createAreas()) api.registerArea(area);
   }
   const { NpcIdentifiers: N, ItemIdentifiers: I } = api.core;
+  // [item, tray title name, offer dialogue name]
   foods = [
-    [I.BAGUETTE, "baguette"], [I.TRIANGLE_SANDWICH, "triangle sandwich"],
-    [I.SQUARE_SANDWICH, "square sandwich"], [I.ROLL, "roll"],
-    [I.MEAT_PIE, "meat pie"], [I.KEBAB, "kebab"], [I.CHOCOLATE_BAR, "chocolate bar"],
+    [I.BAGUETTE, "baguette", "baguette"], [I.TRIANGLE_SANDWICH, "triangle sandwich", "triangle sandwich"],
+    [I.SQUARE_SANDWICH, "square sandwich", "square sandwich"], [I.ROLL, "roll", "bread roll"],
+    [I.MEAT_PIE, "meat pie", "pie"], [I.KEBAB, "kebab", "kebab"], [I.CHOCOLATE_BAR, "chocolate bar", "chocolate bar"],
   ];
   events = [
-    { id: N.GENIE, kind: "genie", rewards: [I.LAMP], greeting: "Greetings" },
-    { id: N.SANDWICH_LADY, kind: "sandwich", greeting: "Sandwich delivery for" },
-    { id: N.DRUNKEN_DWARF, kind: "dwarf", rewards: [I.KEBAB, I.BEER], greeting: "'Ello der" },
+    { id: N.GENIE, kind: "genie", rewards: [I.LAMP], greeting: "Greetings",
+      rewardLine: name => `Ah, so you are there, Master ${name}. I'm so glad you summoned me. Please take this lamp and make your wish.` },
+    { id: N.SANDWICH_LADY, kind: "sandwich", greeting: "Sandwich delivery for", rewardLine: () => "Hope that fills you up!" },
+    { id: N.DRUNKEN_DWARF, kind: "dwarf", rewards: [I.BEER, I.KEBAB], greeting: "'Ello der",
+      rewardLine: () => "I 'new it were you matey! I remember your kebab stories! 'Ere, have some ob the good stuff!" },
     { id: N.RICK_TURPENTINE, kind: "gift", greeting: "A gift for",
       rewardMessage: "Rick Turpentine gives you a gift to make amends." },
     { ids: [N.NILES, N.MILES, N.GILES], kind: "certer", greeting: "A question for" },
     { id: N.MYSTERIOUS_OLD_MAN_2, kind: "gift", greeting: "Greetings",
-      rewardMessage: "The mysterious old man gives you a gift." },
+      rewardLine: () => "Ah, so you are there. I hoped you would talk to me, I get so lonely. Here, have a present! I must be going now though." },
   ];
   // Members plugins contribute definitions only when loaded by PluginManager.
   api.emitCustomEvent(DEFINITIONS_EVENT, { definitions: events });
@@ -218,23 +223,22 @@ function processPlayer({ player }) {
   spawn(player, state, now, available[Math.floor(Math.random() * available.length)]);
 }
 
-function serve(active, rewards, exchange = null) {
+/** Ends the event and hands over its rewards; what doesn't fit is placed on the ground. */
+function serve(active, rewards, exchange = null, options = {}) {
   const player = active.player;
   if (!valid(active, player)) return false;
   const inventory = player.getInventory();
   if (exchange && (inventory.get(exchange.slot) !== exchange.item || exchange.item.getAmount() !== 1)) return false;
-  const items = rewards.map(reward => new api.core.Item(typeof reward === "number" ? reward : reward.id,
-    typeof reward === "number" ? 1 : reward.amount));
-  const slots = items.filter(item => !item.getDefinition().isStackable() || !inventory.containsNumber(item.getId())).length;
-  if (inventory.getFreeSlots() + (exchange ? 1 : 0) < slots) {
-    player.sendMessage(`You'll need ${slots} free inventory space${slots === 1 ? "" : "s"}.`);
-    return false;
-  }
   // Void clears state before serving: repeated interactions cannot claim twice.
   finish(active);
   if (exchange) inventory.deleteAtSlot(exchange.slot, 1);
-  for (const item of items) inventory.addItem(item);
+  Rewards.give(api, player, rewards, options);
   return true;
+}
+
+function rewardDialogue(active) {
+  const line = active.definition.rewardLine?.(active.player.getUsername());
+  if (line) Flow.chat(api, { player: active.player, npcId: active.npc.getId(), lines: [line] });
 }
 
 function talk({ player, npc }) {
@@ -251,17 +255,25 @@ function talk({ player, npc }) {
   if (active.definition.kind === "certer") { Certer.open(api, active); return true; }
   if (active.definition.kind === "gift") {
     active.gift ??= Gift.roll(api);
-    if (serve(active, [active.gift])) player.sendMessage(active.definition.rewardMessage);
+    if (!serve(active, [active.gift])) return true;
+    if (active.definition.rewardMessage) player.sendMessage(active.definition.rewardMessage);
+    rewardDialogue(active);
     return true;
   }
   if (active.definition.kind !== "sandwich") {
-    if (serve(active, active.definition.rewards)) {
-      player.sendMessage(active.definition.kind === "genie"
-        ? "The genie gives you a lamp. Rub it to make your wish!"
-        : "The drunken dwarf gives you a kebab and a beer.");
-    }
+    if (serve(active, active.definition.rewards)) rewardDialogue(active);
     return true;
   }
+  Flow.chat(api, {
+    player, npcId: npc.getId(),
+    lines: [`You look hungry to me. I tell you what - have a ${foods[active.foodIndex][2]} on me.`],
+    onEnd: () => valid(active, player) && openTray(active),
+  });
+  return true;
+}
+
+function openTray(active) {
+  const player = active.player;
   active.trayOpen = true;
   active.interfaceId = TRAY_GROUP;
   const sender = player.getPacketSender();
@@ -272,7 +284,6 @@ function talk({ player, npc }) {
     sender.sendItemOnInterfaces(uid, id, 1);
     sender.sendInterfaceFlagsRange(uid, -1, -1, 1 << TRAY_SELECT_ACTION);
   });
-  return true;
 }
 
 function chooseSandwich(event) {
@@ -290,7 +301,7 @@ function chooseSandwich(event) {
   }
   let id = foods[index][0];
   if (id === api.core.ItemIdentifiers.BAGUETTE && Math.floor(Math.random() * 64) === 0) id = api.core.ItemIdentifiers.STALE_BAGUETTE;
-  if (serve(active, [id])) player.sendMessage("The sandwich lady gives you your refreshment.");
+  if (serve(active, [id])) rewardDialogue(active);
 }
 
 function dismiss({ player, npc }) {

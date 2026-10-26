@@ -28,7 +28,7 @@ function attach(api) {
   api.onItemOnItem(itemOnItem, { noted: false });
   api.onItemAction("Celastrus bark", { Fletch: fletchBark });
   api.onPlayerDisconnect(stop);
-  api.onCustomEvent("level-up:popup-opened", stop);
+  api.onCustomEvent("level-up:popup-opened", Shared.pauseFletching);
 };
 
 module.exports = { init, attach };

@@ -83,12 +83,20 @@ const { Item: GroundItem } = require('../dist/game/model/Item');
 const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 
-// The real Ava's plugin, with core standing in for the plugin API.
+// The real Ava's plugin, with core standing in for the plugin API. It resolves the
+// interfering torsos by cache gameval, so the cache comes up first.
+require('../dist/game/cache/CachePipeline').CachePipeline.initialize();
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 let avaRecovery = null;
 require('../plugins/items/AvasAccumulator.plugin').register({
-  core: { Equipment: Slots, ItemIdentifiers: Items },
+  core: { Equipment: Slots, ItemIdentifiers: Items, CacheDefinitions },
   registerRangedAmmoRecovery(resolver) { avaRecovery = resolver; },
-  emitCustomEvent() {},
+  // The Skillcapes plugin answers this; a worn Ranging cape recovers as an accumulator.
+  emitCustomEvent(name, request) {
+    if (name === 'skillcape:ammo-recovery' && request.player.getEquipment().get(Slots.CAPE_SLOT).getId() === Items.RANGING_CAPE) {
+      request.recovery = 72;
+    }
+  },
 });
 PluginManager.rangedAmmoRecovery = (player) => avaRecovery.recovery(player) ?? 0;
 
@@ -97,11 +105,12 @@ ItemOnGroundManager.registerLocation = (player, item, position) => drops.push({ 
 
 const POS = { x: 3000, y: 3000, z: 0 };
 
-function ammoHarness({ itemId = Items.BRONZE_ARROW, amount = 5, capeId = -1, rangedWeapon = RangedWeapon.SHORTBOW } = {}) {
+function ammoHarness({ itemId = Items.BRONZE_ARROW, amount = 5, capeId = -1, bodyId = -1, rangedWeapon = RangedWeapon.SHORTBOW } = {}) {
   let ammo = new GroundItem(itemId, amount);
   const equipment = {
     get: (slot) => slot === Slots.AMMUNITION_SLOT ? ammo
-      : slot === Slots.CAPE_SLOT ? new GroundItem(capeId, 1) : new GroundItem(-1, 0),
+      : slot === Slots.CAPE_SLOT ? new GroundItem(capeId, 1)
+      : slot === Slots.BODY_SLOT ? new GroundItem(bodyId, 1) : new GroundItem(-1, 0),
     set: (_slot, item) => { ammo = item; },
     refreshItems() {},
   };
@@ -170,6 +179,29 @@ test("Ava's attractor recovers 60% and Ava's accumulator 72%", () => {
   shot(other, 0.50);
   assert.equal(other.ammo().getAmount(), 4);
   assert.equal(drops.length, 1);
+});
+
+test("a metal torso stops Ava's devices and the Ranging cape recovering ammo (Wiki: Metallic interference)", () => {
+  const obj = (name) => CacheDefinitions.getObjId(name);
+  for (const capeId of [Items.AVAS_ATTRACTOR, Items.AVAS_ACCUMULATOR, Items.AVAS_ASSEMBLER, Items.RANGING_CAPE]) {
+    for (const body of ['rune_platebody', 'barrows_ahrim_body', 'barrows_verac_body_75', 'dragon_chainbody', 'castlewars_armour_body_3']) {
+      assert.equal(avaRecovery.recovery(ammoHarness({ capeId, bodyId: obj(body) }).player), 0, `${body} interferes with cape ${capeId}`);
+    }
+    // Torsos that look metal but the table marks compatible keep recovering.
+    for (const body of ['rune_platebody_h1', 'bronze_platebody', 'dragon_platebody_gold', 'bandos_chestplate', 'barrows_karil_body']) {
+      assert.ok(avaRecovery.recovery(ammoHarness({ capeId, bodyId: obj(body) }).player) > 0, `${body} is compatible with cape ${capeId}`);
+    }
+  }
+
+  // With the device blocked a shot lands or breaks like one with no device at all.
+  drops.length = 0;
+  const blocked = ammoHarness({ capeId: Items.AVAS_ACCUMULATOR, bodyId: obj('rune_platebody') });
+  shot(blocked, 0.99);
+  assert.equal(blocked.ammo().getAmount(), 4, 'not recovered');
+  assert.deepEqual(drops, [{ id: Items.BRONZE_ARROW, amount: 1, position: POS }], 'it lands where the target stood');
+
+  // A cape slot with no recovering cape still leaves the answer to other plugins (Dizana's quiver).
+  assert.equal(avaRecovery.recovery(ammoHarness({ capeId: Items.AVAS_DEVICE, bodyId: obj('rune_platebody') }).player), null);
 });
 
 test('javelins drop and are recoverable like other ammunition', () => {

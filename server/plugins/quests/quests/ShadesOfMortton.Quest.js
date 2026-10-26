@@ -5,7 +5,9 @@
  * selects the variants for Ulsquire Shauncy (1287 afflicted / 1288 cured) and
  * Razmire Keelgan (1289/1290), answers the two olive-oil prose conditions and
  * wires the diary start hook, the shade kills, the remains hand-ins, the temple
- * repair, sacred oil, pyre logs and the cremation Ulsquire completes.
+ * repair, sacred oil and pyre logs; the funeral pyres themselves are the minigame's
+ * (minigames/ShadesOfMortton.plugin.js), which tells the quest of the logs placed and the
+ * cremation for its stages 75 and 80.
  *
  * Stages (varp 339, LostCity "morttonquest"): 5 read the diary, 10 made serum
  * 207, 15 accepted Razmire's shade hunt, 20/25/30/35/40 one..five shades
@@ -30,9 +32,7 @@
  * Gaps: the afflicted/cured transformations are modelled with per-player flags
  * rather than NPC changes (the fire altar is a real spawned object and its lit
  * state is world-wide); the diary book interface, the Flamtaer resource-pool
- * percentages, the shade lair/chests and the full cremation reward table are not
- * reproduced; pyre-log sacred-oil dose counts and the cremation coin reward are
- * approximates.
+ * percentages are not reproduced; pyre-log sacred-oil dose counts are approximates.
  */
 module.exports = function registerShadesOfMorttonQuest(api) {
   const {
@@ -140,7 +140,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
 
   const SHELF_OBJECT_ID = ObjectIdentifiers.SHELF_9;
   const SMASHED_TABLE_OBJECT_ID = ObjectIdentifiers.SMASHED_TABLE_2;
-  const FUNERAL_PYRE_OBJECT_ID = ObjectIdentifiers.FUNERAL_PYRE;
   const ALTAR_OBJECT_IDS = new Set([
     ObjectIdentifiers.FLAMING_FIRE_ALTAR,
     ObjectIdentifiers.FIRE_ALTAR,
@@ -220,9 +219,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     [ItemIdentifiers.YEW_LOGS, { product: ItemIdentifiers.YEW_PYRE_LOGS, doses: 4 }],
     [ItemIdentifiers.MAGIC_LOGS, { product: ItemIdentifiers.MAGIC_PYRE_LOGS, doses: 5 }],
   ]);
-  const PYRE_LOG_ITEMS = new Set(
-    [...PYRE_LOG_RECIPES.values()].map((recipe) => recipe.product)
-  );
 
   const KILLS_ATTRIBUTE = "quest.shades_of_mortton.shade_kills";
   const MET_ULSQUIRE_ATTRIBUTE = "quest.shades_of_mortton.met_ulsquire";
@@ -233,8 +229,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   const TEMPLE_SANCTITY_ATTRIBUTE = "shades-of-mortton:temple-sanctity";
   // Older saves stored a 0..5 wall-repair count under this key.
   const LEGACY_TEMPLE_BUILD_ATTRIBUTE = "quest.shades_of_mortton.temple_build";
-  const PYRE_LOGS_ATTRIBUTE = "quest.shades_of_mortton.pyre_logs";
-  const PYRE_REMAINS_ATTRIBUTE = "quest.shades_of_mortton.pyre_remains";
   const PERM_ULSQUIRE_ATTRIBUTE = "shades-of-mortton:perm-ulsquire";
   const PERM_RAZMIRE_ATTRIBUTE = "shades-of-mortton:perm-razmire";
   const MULTI_ATTRIBUTE = "shades-of-mortton:multi";
@@ -780,24 +774,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       sanctifyOil(player);
       return;
     }
-    if (objectId === FUNERAL_PYRE_OBJECT_ID) {
-      if (PYRE_LOG_ITEMS.has(itemId)) {
-        event.handled = true;
-        placePyreLogs(player, itemId);
-        return;
-      }
-      if (REMAINS_ITEM_IDS.includes(itemId)) {
-        event.handled = true;
-        placePyreRemains(player, itemId);
-        return;
-      }
-      if (itemId === ItemIdentifiers.TINDERBOX) {
-        event.handled = true;
-        lightPyre(player);
-        return;
-      }
-      return;
-    }
     if (ALTAR_OBJECT_IDS.has(objectId) && itemId === ItemIdentifiers.TINDERBOX) {
       event.handled = true;
       lightAltar(player);
@@ -976,54 +952,15 @@ module.exports = function registerShadesOfMorttonQuest(api) {
     player.sendMessage("You light the temple fire.");
   }
 
-  function placePyreLogs(player, itemId) {
-    if (quest.getStage(player) < STAGE_CREATED_PYRE_LOGS) {
-      player.sendMessage("You can't do that until you have made your own funeral pyre logs.");
-      return;
-    }
-    if (player.getAttribute(PYRE_LOGS_ATTRIBUTE)) {
-      player.sendMessage("You have already started a funeral.");
-      return;
-    }
-    player.getInventory().deleteNumber(itemId, 1);
-    player.setAttribute(PYRE_LOGS_ATTRIBUTE, true);
-    player.sendMessage("You put some logs on the pyre.");
-    if (quest.getStage(player) < STAGE_LOGS_ON_PYRE) {
-      quest.setStage(player, STAGE_LOGS_ON_PYRE);
-    }
+  /** The minigame's funeral pyres (minigames/ShadesOfMortton.plugin.js) bring the quest's two steps. */
+  function pyreLogsPlaced({ player }) {
+    const stage = player ? quest.getStage(player) : 0;
+    if (stage >= STAGE_CREATED_PYRE_LOGS && stage < STAGE_LOGS_ON_PYRE) quest.setStage(player, STAGE_LOGS_ON_PYRE);
   }
 
-  function placePyreRemains(player, itemId) {
-    if (!player.getAttribute(PYRE_LOGS_ATTRIBUTE)) {
-      player.sendMessage("You need to put wood on the pyre before adding the remains.");
-      return;
-    }
-    if (player.getAttribute(PYRE_REMAINS_ATTRIBUTE)) {
-      player.sendMessage("You've already placed a shade's remains on the pyre.");
-      return;
-    }
-    if (player.getInventory().getAmount(itemId) <= 0) return;
-    player.getInventory().deleteNumber(itemId, 1);
-    player.setAttribute(PYRE_REMAINS_ATTRIBUTE, true);
-    player.sendMessage("You place the shade's remains on the logs.");
-  }
-
-  function lightPyre(player) {
-    if (!player.getAttribute(PYRE_REMAINS_ATTRIBUTE)) {
-      player.sendMessage("You should add some pyre logs and some suitable remains before you light the pyre.");
-      return;
-    }
-    player.setAttribute(PYRE_LOGS_ATTRIBUTE, false);
-    player.setAttribute(PYRE_REMAINS_ATTRIBUTE, false);
-    player.getSkillManager().addExperiences(Skill.PRAYER, 25);
-    player.sendMessage("A reward appears on the stand.");
-    player.getInventory().adds(
-      ItemIdentifiers.COINS,
-      100 + Math.floor(Math.random() * 1901)
-    );
-    if (quest.getStage(player) < STAGE_LIT_PYRE) {
-      quest.setStage(player, STAGE_LIT_PYRE);
-    }
+  function cremated({ player }) {
+    const stage = player ? quest.getStage(player) : 0;
+    if (stage >= STAGE_CREATED_PYRE_LOGS && stage < STAGE_LIT_PYRE) quest.setStage(player, STAGE_LIT_PYRE);
   }
 
   /** The diary shelf and the smashed table of Herbi Flax's house. */
@@ -1087,8 +1024,6 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   api.persistAttribute(TABLE_SEARCHED_ATTRIBUTE);
   api.persistAttribute(TEMPLE_REPAIRED_ATTRIBUTE, 0);
   api.persistAttribute(TEMPLE_SANCTITY_ATTRIBUTE, 0);
-  api.persistAttribute(PYRE_LOGS_ATTRIBUTE);
-  api.persistAttribute(PYRE_REMAINS_ATTRIBUTE);
   api.persistAttribute(PERM_ULSQUIRE_ATTRIBUTE, false);
   api.persistAttribute(PERM_RAZMIRE_ATTRIBUTE, false);
   api.persistAttribute(MULTI_ATTRIBUTE);
@@ -1123,6 +1058,8 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);
+  api.onCustomEvent("shades-of-mortton:pyre-logs", pyreLogsPlaced);
+  api.onCustomEvent("shades-of-mortton:cremated", cremated);
   api.onRegionLoaded(installAltar);
   api.onPlayerLogin(handleLogin);
 };

@@ -22,6 +22,9 @@ export class ItemOnGroundManager {
     // with a 300-tick total lifetime for revealable items.
     public static readonly PUBLIC_REVEAL_DELAY: number = 100
     public static readonly DESPAWN_DELAY: number = 300
+    // World cycle whose ground-item pass has finished. Until then, an item that has
+    // not aged this cycle (e.g. an NPC drop made by a task) still ages once more.
+    private static finishedCycle = -1;
 
     public static onRegionChange(player: Player): void {
         player.getPacketSender().sendGroundItems(
@@ -30,7 +33,8 @@ export class ItemOnGroundManager {
     }
 
     public static process(): void {
-        for (let item of World.getItems()) {
+        // Iterate a copy: removing from the live list mid-loop skips the next item's tick.
+        for (let item of [...World.getItems()]) {
             item.process();
             if (item.isPendingRemoval()) {
                 if (item.respawns()) {
@@ -40,8 +44,25 @@ export class ItemOnGroundManager {
                 World.getItems().splice(index, 1);
             }
         }
+        this.finishedCycle = World.getProcessCycle();
     }
     
+
+    /** World cycles (the client's tick numbers) at which this stack was created,
+     * goes public (0 if never) and despawns (0 if never), per {@link ItemOnGround.process}. */
+    public static getTiming(item: ItemOnGround): { createdTick: number; privateUntilTick: number; expiresTick: number } {
+        const cycle = World.getProcessCycle();
+        const agesThisCycle = item.getAgedCycle() !== cycle && this.finishedCycle !== cycle;
+        const createdTick = cycle - item.getTick() - (agesThisCycle ? 1 : 0);
+        // The protocol carries int32s; 0 means unknown, so drop a tick past the wrap.
+        const tick = (value: number) => value <= 0x7fffffff ? value : 0;
+        return {
+            createdTick,
+            privateUntilTick: item.getState() === State.SEEN_BY_PLAYER && item.getgoesGlobal()
+                ? tick(createdTick + this.PUBLIC_REVEAL_DELAY) : 0,
+            expiresTick: item.respawns() || item.isStaticSpawn() ? 0 : tick(createdTick + item.getDespawnDelay()),
+        };
+    }
 
     public static perform(item: ItemOnGround, type: OperationType): void {
         switch (item.getState()) {
@@ -117,6 +138,10 @@ export class ItemOnGroundManager {
             if (item_.getPrivateArea() !== item.getPrivateArea()) {
                 continue;
             }
+            // A stack with its own lifetime keeps it rather than joining a shorter-lived one.
+            if (item_.getDespawnDelay() !== item.getDespawnDelay()) {
+                continue;
+            }
 
             // Check if the ground item is private...
             // If we aren't the owner, we shouldn't modify it.
@@ -188,7 +213,7 @@ export class ItemOnGroundManager {
     public static inventoryCapacity(player: Player, item: Item): number {
         const inventory = player.getInventory();
         const definition = ItemDefinition.forId(item.getId());
-        if (item.getId() <= 0 || definition === ItemDefinition.DEFAULT || definition.getId() !== item.getId()) return 0;
+        if (item.getId() < 0 || definition === ItemDefinition.DEFAULT || definition.getId() !== item.getId()) return 0;
         const stackable = definition.isStackable();
         const metadata = JSON.stringify(item.getMeta() ?? null);
         const matchingStack = stackable ? inventory.getItems().find(item =>
@@ -267,9 +292,12 @@ export class ItemOnGroundManager {
         return this.registerLocation(player, item, player.getLocation().clone());
     }
 
-    public static registerLocation(player: Player, item: Item, position: Location, privateArea = player.getPrivateArea()): ItemOnGround {
-        let i = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, true,
+    /** `goesGlobal: false` keeps the stack owner-only; `despawnDelay` replaces {@link DESPAWN_DELAY}. */
+    public static registerLocation(player: Player, item: Item, position: Location, privateArea = player.getPrivateArea(),
+        options: { goesGlobal?: boolean; despawnDelay?: number } = {}): ItemOnGround {
+        let i = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, options.goesGlobal ?? true,
             -1, privateArea);
+        if (options.despawnDelay != null) i.setDespawnDelay(options.despawnDelay);
         this.register(i);
         return i;
     }

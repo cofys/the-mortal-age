@@ -79,8 +79,18 @@ export class Player extends Mobile {
     getSize(): number {
         return 1;
     }
-    public increaseStats = new SecondsTimer();
-    public decreaseStats = new SecondsTimer();
+    /** Wiki (Temporary skill boost, Hitpoints): natural restoration runs on one-minute (100-tick) cycles. */
+    public static readonly STAT_RESTORE_TICKS = 100;
+    /** Wiki (Rapid Heal): Rapid Heal or a Hitpoints cape heal a point every 30 seconds. */
+    public static readonly FAST_HITPOINTS_REGEN_TICKS = 50;
+    /** Cycle the next drained-stat restore is due on (-1: not started). */
+    private statRestoreDue = -1;
+    /** Cycle Rapid Restore's own restore is due on; it starts when the prayer is switched on. */
+    private rapidRestoreDue = -1;
+    /** Cycle the Hitpoints countdown started on; switching Rapid Heal on or off restarts it. */
+    private hitpointsTimerStart = -1;
+    private rapidHealWasActive = false;
+    private hitpointsRegen: { player: Player; fast: boolean; amount: number } | null = null;
     private localPlayers: Player[] = [];
     private localNpcs: NPC[] = [];
     public packetSender = new PacketSender(this);
@@ -467,63 +477,75 @@ export class Player extends Mobile {
             timed("prayer_drain", () => PrayerHandler.processDrain(this));
         }
 
-        // PlayerBot-specific processing skipped in this runtime.
-        // Decrease boosted stats Increase lowered stats
+        // Restore lowered stats and regenerate Hitpoints. Boosts other than Hitpoints decay on
+        // the Potions plugin's continuous cycle.
         if (this.getHitpoints() > 0) {
-            if (this.increaseStats.finished() || this.decreaseStats.secondsElapsed() >= (PrayerHandler.isActivated(this, PrayerHandler.PRESERVE) ? 90 : 60)) {
-                timed("stats", () => {
-                    for (let skill of Skill.values()) {
-                        let current = this.getSkillManager().getCurrentLevel(skill);
-                        let max = this.getSkillManager().getMaxLevel(skill);
+            timed("stats", () => this.processStatRestoration(World.getProcessCycle()));
+        }
+    }
 
-                        // Should lowered stats be increased?
-                        if (current < max) {
-                            if (this.increaseStats.finished()) {
-                                let restoreRate = 1;
+    /**
+     * Natural restoration on cycle deadlines (bots take turns on a stride, so they catch up):
+     * - lowered stats other than Hitpoints and Prayer gain a point every minute, and Rapid Restore
+     *   adds a point every minute on its own timer from when it is switched on (Wiki: Rapid Restore);
+     * - Hitpoints heal a point every minute, every 30 seconds with Rapid Heal or a Hitpoints cape
+     *   ("stats:hitpoints-regen", which also lets a regen bracelet double the amount), and Hitpoints
+     *   above base drop a point a minute; switching Rapid Heal on or off restarts that countdown
+     *   (Wiki: Hitpoints, Rapid Heal). Player bots keep their boosts.
+     */
+    public processStatRestoration(cycle: number): void {
+        const skills = this.getSkillManager();
+        if (this.statRestoreDue < 0) this.statRestoreDue = cycle + Player.STAT_RESTORE_TICKS;
+        const restoreDue = cycle >= this.statRestoreDue;
+        if (restoreDue) this.statRestoreDue = cycle + Player.STAT_RESTORE_TICKS;
 
-                                // Rapid restore effect - 2x restore rate for all stats except hp/prayer
-                                // Rapid heal - 2x restore rate for hitpoints
-                                if (skill != Skill.HITPOINTS && skill != Skill.PRAYER) {
-                                    if (PrayerHandler.isActivated(this, PrayerHandler.RAPID_RESTORE)) {
-                                        restoreRate = 2;
-                                    }
-                                } else if (skill == Skill.HITPOINTS) {
-                                    if (PrayerHandler.isActivated(this, PrayerHandler.RAPID_HEAL)) {
-                                        restoreRate = 2;
-                                    }
-                                }
+        const rapidRestore = PrayerHandler.isActivated(this, PrayerHandler.RAPID_RESTORE);
+        if (!rapidRestore) this.rapidRestoreDue = -1;
+        else if (this.rapidRestoreDue < 0) this.rapidRestoreDue = cycle + Player.STAT_RESTORE_TICKS;
+        const rapidRestoreDue = rapidRestore && cycle >= this.rapidRestoreDue;
+        if (rapidRestoreDue) this.rapidRestoreDue = cycle + Player.STAT_RESTORE_TICKS;
 
-                                // "stats:restore-rate": gear may raise how fast a stat restores (the Hitpoints cape).
-                                const restore = { player: this, skill, rate: restoreRate };
-                                PluginManager.emitCustomEvent("stats:restore-rate", restore);
-                                restoreRate = restore.rate;
-
-                                this.getSkillManager().increaseCurrentLevel(skill, restoreRate, max);
-                            }
-                        } else if (current > max) {
-
-                            // Should boosted stats be decreased?
-                            if (this.decreaseStats.secondsElapsed() >= (PrayerHandler.isActivated(this, PrayerHandler.PRESERVE) ? 90 : 60)) {
-
-                                // Never decrease Hitpoints / Prayer, and keep player-bot boosts static.
-                                if (!isBot && skill != Skill.HITPOINTS && skill != Skill.PRAYER) {
-                                    this.getSkillManager().decreaseCurrentLevel(skill, 1, 1);
-                                }
-
-                            }
-                        }
-                    }
-                    // Reset timers
-                    if (this.increaseStats.finished()) {
-                        this.increaseStats.start(60);
-                    }
-                    if (this.decreaseStats
-                        .secondsElapsed() >= (PrayerHandler.isActivated(this, PrayerHandler.PRESERVE) ? 90 : 60)) {
-                        this.decreaseStats.start((PrayerHandler.isActivated(this, PrayerHandler.PRESERVE) ? 90 : 60));
-                    }
-                });
+        if (restoreDue || rapidRestoreDue) {
+            const points = (restoreDue ? 1 : 0) + (rapidRestoreDue ? 1 : 0);
+            for (const skill of Skill.values()) {
+                if (skill === Skill.HITPOINTS || skill === Skill.PRAYER) continue;
+                const max = skills.getMaxLevel(skill);
+                if (skills.getCurrentLevel(skill) < max) skills.increaseCurrentLevel(skill, points, max);
             }
         }
+
+        const rapidHeal = PrayerHandler.isActivated(this, PrayerHandler.RAPID_HEAL);
+        if (this.hitpointsTimerStart < 0 || rapidHeal !== this.rapidHealWasActive) this.restartHitpointsTimer(cycle);
+        this.rapidHealWasActive = rapidHeal;
+        const elapsed = cycle - this.hitpointsTimerStart;
+        if (elapsed < Player.FAST_HITPOINTS_REGEN_TICKS) return;
+        const current = skills.getCurrentLevel(Skill.HITPOINTS);
+        const max = skills.getMaxLevel(Skill.HITPOINTS);
+        if (current < max) {
+            // Gear answers once per countdown, again after an equipment change: { fast } halves it,
+            // { amount } is what one regen heals.
+            if (this.hitpointsRegen === null) {
+                this.hitpointsRegen = { player: this, fast: rapidHeal, amount: 1 };
+                PluginManager.emitCustomEvent("stats:hitpoints-regen", this.hitpointsRegen);
+            }
+            if (!this.hitpointsRegen.fast && elapsed < Player.STAT_RESTORE_TICKS) return;
+            skills.increaseCurrentLevel(Skill.HITPOINTS, this.hitpointsRegen.amount, max);
+        } else if (elapsed < Player.STAT_RESTORE_TICKS) {
+            return;
+        } else if (current > max && !this.isPlayerBot()) {
+            skills.decreaseCurrentLevel(Skill.HITPOINTS, 1, max);
+        }
+        this.restartHitpointsTimer(cycle);
+    }
+
+    /** Worn items changed: the next Hitpoints regen asks gear again, keeping the countdown. */
+    public onEquipmentChanged(): void {
+        this.hitpointsRegen = null;
+    }
+
+    private restartHitpointsTimer(cycle: number): void {
+        this.hitpointsTimerStart = cycle;
+        this.hitpointsRegen = null;
     }
 
     /** Ticks after the last hit taken before the logout button works: "10 seconds" (rsprox captures). */
@@ -731,6 +753,21 @@ export class Player extends Mobile {
         if (!(varpId in DEFAULT_AUDIO_SETTINGS) || !Number.isFinite(value)) return false;
         const maximum = varpId === 18 ? 2 : 100;
         this.audioSettings[varpId] = Math.max(0, Math.min(maximum, Math.trunc(value)));
+        return true;
+    }
+
+    /**
+     * An audio varp the client transmitted. A change is announced as the "audio:setting-changed"
+     * custom event ({ player, varpId, previous, value }) so plugins can answer it, as the Music
+     * plugin does when the music volume rises from 0.
+     */
+    public applyAudioSettingFromClient(varpId: number, value: number): boolean {
+        const previous = this.audioSettings[varpId];
+        if (!this.setAudioSetting(varpId, value)) return false;
+        const next = this.audioSettings[varpId];
+        if (next !== previous) {
+            PluginManager.emitCustomEvent("audio:setting-changed", { player: this, varpId, previous, value: next });
+        }
         return true;
     }
 
@@ -1284,7 +1321,7 @@ export class Player extends Mobile {
     }
 
     public manipulateHit(hit: PendingHit): PendingHit {
-        return hit;
+        return PluginManager.emitPlayerHitModify(this, hit);
     }
 
     public getEnteredAmountAction(): EnteredAmountAction {

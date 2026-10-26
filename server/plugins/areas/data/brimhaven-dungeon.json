@@ -1,0 +1,12 @@
+{
+  "$comment": "Brimhaven Dungeon vines (plugins/areas/brimhavendungeon/Vines.BrimhavenDungeon.js). Levels and the cut chance per axe tier are the OSRS Wiki's (Vines (Brimhaven Dungeon)); the chart is the normal tree's (the same numbers as Woodcutting's CUT_CHANCE.normal, which isn't shared), and crystal axes cut like dragon as in Woodcutting. `outer` is the side nearer the entrance (found by walking the map from the entrance landing, vine by vine; vines 1, 2, 4 and 5 were also recorded being cut from that side, rsprox 227/90, 91 and 234/3275; vine 3 has no recording): from there an axe and the level are needed, from `inner` neither. The blessed axe doesn't cut them (Wiki, Brimhaven Dungeon).",
+  "vines": [
+    { "loc": "karam_dungeon_vineblocking1", "at": [2690, 9564, 0], "outer": [2691, 9564, 0], "inner": [2689, 9564, 0], "level": 10 },
+    { "loc": "karam_dungeon_vineblocking2", "at": [2683, 9569, 0], "outer": [2683, 9568, 0], "inner": [2683, 9570, 0], "level": 27 },
+    { "loc": "karam_dungeon_vineblocking3", "at": [2673, 9499, 0], "outer": [2672, 9499, 0], "inner": [2674, 9499, 0], "level": 22 },
+    { "loc": "karam_dungeon_vineblocking4", "at": [2675, 9479, 0], "outer": [2674, 9479, 0], "inner": [2676, 9479, 0], "level": 34 },
+    { "loc": "karam_dungeon_vineblocking5", "at": [2694, 9482, 0], "outer": [2693, 9482, 0], "inner": [2695, 9482, 0], "level": 34 }
+  ],
+  "cutChance": [[64, 200], [96, 300], [128, 400], [144, 450], [160, 500], [192, 600], [224, 700], [240, 750]],
+  "excludedAxes": ["blessed_axe"]
+}

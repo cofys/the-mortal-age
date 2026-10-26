@@ -11,14 +11,18 @@
  *   tick after that (the overlay closed two ticks later).
  * - The mushtree they're at: "You are already at that Magic Mushtree."
  *
- * Not modelled: discovering the trees by walking to them first (the captures only have players
- * who had all four).
+ * Discovery (Wiki: "they must be discovered by walking to their locations. After attempting to
+ * use them, the location will be unlocked."): using a mushtree unlocks it, saved per player; one
+ * not yet used can't be travelled to. The captures only have players who had all four, so the
+ * menu still lists all four names, and the refusal's wording is calibrated.
  */
 const fs = require("fs");
 const path = require("path");
 
 const INTERFACE = 608;
 const MENU_ATTRIBUTE = "magic-mushtrees:from";
+/** The mushtrees the player has used, one bit per tree in data order. */
+const DISCOVERED_ATTRIBUTE = "magic-mushtrees:discovered";
 /** The name components and buttons, one per tree in data order. */
 const NAME_COMPONENTS = [5, 9, 13, 17];
 const BUTTONS = [4, 8, 12, 16];
@@ -36,6 +40,8 @@ const MOVE_TICKS = 3;
 const FADE_IN_TICKS = 4;
 const CLOSE_OVERLAY_TICKS = 6;
 const ALREADY_THERE = "You are already at that Magic Mushtree.";
+/** Calibrated: no source gives the line. */
+const UNDISCOVERED = "You haven't discovered that Magic Mushtree yet.";
 const TREE_REACH = 3;
 
 let core = null;
@@ -57,10 +63,21 @@ function fade(player, out) {
   player.getPacketSender().sendSubInterface(OVERLAY_ATMOSPHERE_UID, FADE_OVERLAY, 1, { postScripts: [{ scriptId: FADE_SCRIPT, args }] });
 }
 
+function discovered(player, index) {
+  return ((Number(player.getAttribute(DISCOVERED_ATTRIBUTE)) || 0) & (1 << index)) !== 0;
+}
+
+function discover(player, index) {
+  if (index < 0) return;
+  player.setAttribute(DISCOVERED_ATTRIBUTE, (Number(player.getAttribute(DISCOVERED_ATTRIBUTE)) || 0) | (1 << index));
+}
+
 function useMushtree(event) {
   const { player, object } = event;
   const sender = player.getPacketSender();
-  player.setAttribute(MENU_ATTRIBUTE, mushtreeAt(object.getLocation()));
+  const here = mushtreeAt(object.getLocation());
+  discover(player, here);
+  player.setAttribute(MENU_ATTRIBUTE, here);
   sender.sendInterfaceScript(SCRIPT_MAINMODAL_OPEN, [-1, -1]);
   player.setInterfaceId(INTERFACE);
   sender.sendSubInterface(MAIN_MODAL, INTERFACE, 0);
@@ -114,6 +131,10 @@ function chooseMushtree(event) {
     player.sendMessage(ALREADY_THERE);
     return;
   }
+  if (!discovered(player, index)) {
+    player.sendMessage(UNDISCOVERED);
+    return;
+  }
   player.setAttribute(MENU_ATTRIBUTE, null);
   crawlTo(player, mushtrees[index].landing);
   // As captured: the interface closes once the fade has started.
@@ -131,10 +152,11 @@ function menuClosed({ player, interfaceId }) {
 module.exports = {
   name: "MagicMushtrees",
   members: true,
-  _test: { mushtreeAt, useMushtree, chooseMushtree, get mushtrees() { return mushtrees; } },
+  _test: { mushtreeAt, useMushtree, chooseMushtree, discovered, DISCOVERED_ATTRIBUTE, get mushtrees() { return mushtrees; } },
   register(api) {
     core = api.core;
     mushtrees = loadMushtrees();
+    api.persistAttribute(DISCOVERED_ATTRIBUTE, 0);
     api.onObjectInteraction("Magic Mushtree", { Use: useMushtree });
     api.onInterfaceActionClick(chooseMushtree);
     api.onCustomEvent("interface:closed", menuClosed);

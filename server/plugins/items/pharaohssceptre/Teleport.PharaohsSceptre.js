@@ -15,6 +15,30 @@ const FIRST_WORN_OPTION_CLICK = 2;
 
 const normalise = (text) => String(text ?? "").toLowerCase().trim();
 
+let sceptreTeleport = null;
+
+/**
+ * The recorded teleport: ntk_human_tele and ntk_tele, no sound (`sound: 0` skips the spell
+ * sound), the move `teleportTicks` later, the end animation then and again a tick after.
+ */
+function teleportType() {
+  if (sceptreTeleport) return sceptreTeleport;
+  const { core, data } = Common;
+  const seq = core.CacheDefinitions.getSeqId(data.names.seqs.teleport);
+  const spotanim = core.CacheDefinitions.getSpotanimId(data.names.spotanims.teleport);
+  sceptreTeleport = new core.TeleportType(
+    data.teleportTicks,
+    new core.Animation(seq, core.Priority.HIGH),
+    null,
+    core.Animation.DEFAULT_RESET_ANIMATION,
+    new core.Graphic(spotanim, core.Priority.HIGH),
+    null,
+    null,
+    { sound: 0, repeatEndAnimation: true },
+  );
+  return sceptreTeleport;
+}
+
 function destinations(player) {
   return Common.data.destinations.filter((destination) => !destination.needsNecropolis || Common.necropolisUnlocked(player));
 }
@@ -45,7 +69,7 @@ function teleport(player, destination) {
   const [x, y, z] = destination.tile;
   const target = new core.Location(x, y, z);
   if (!core.TeleportHandler.checkReqs(player, target, Common.data.wildernessLevel)) return false;
-  core.TeleportHandler.teleport(player, target, core.TeleportType.NORMAL, false, () => spendCharge(player, destination));
+  core.TeleportHandler.teleport(player, target, teleportType(), false, () => spendCharge(player, destination));
   return true;
 }
 
@@ -53,10 +77,8 @@ function spendCharge(player, destination) {
   const left = Math.max(0, Common.charges(player) - 1);
   player.setAttribute(Common.LAST_ATTRIBUTE, Common.data.destinations.indexOf(destination) + 1);
   Common.setCharges(player, left);
-  if (left > 0) {
-    player.sendMessage(Common.message("charges", Common.chargeWords(left)));
-    return;
-  }
+  // Recorded: a teleport says nothing while charges are left.
+  if (left > 0) return;
   const found = Common.findSceptre(player, Common.chargedIds());
   if (found) Common.swapSceptre(player, found, Common.ids.objs.uncharged);
   player.sendMessage(Common.message("empty"));

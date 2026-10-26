@@ -211,3 +211,226 @@ test('pluginConfig commands:permissions sets the rank a command needs, either wa
     else PluginManager.commandRights.set('items', registered);
   }
 });
+
+function isolatedProfiler(t) {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const fields = ['customEventHooks', 'npcInteractionHooks', 'npcAnyInteractionHooks',
+    'beforeNpcInteractionHooks', 'objectInteractionHooks', 'beforeObjectInteractionHooks',
+    'objectHooksById', 'objectHooksByName', 'nextObjectHookOrder', 'pluginPerfStats', 'pluginPerfEnabled'];
+  const saved = Object.fromEntries(fields.map((field) => [field, PluginManager[field]]));
+  t.after(() => Object.assign(PluginManager, saved));
+  for (const field of fields) {
+    PluginManager[field] = saved[field] instanceof Map ? new Map()
+      : Array.isArray(saved[field]) ? [] : field === 'pluginPerfEnabled' ? true : 0;
+  }
+  return PluginManager;
+}
+
+test('scoped profiling identifies the slowest callback separately from the busiest event', (t) => {
+  const manager = isolatedProfiler(t);
+  let now = 0n;
+  t.mock.method(process.hrtime, 'bigint', () => now);
+  const errors = t.mock.method(console, 'error', () => {});
+  const api = manager.createApi('Quests');
+  const first = api.withProfileLabel('Quests/First');
+  const second = api.withProfileLabel('Quests/Second');
+  first.onCustomEvent('test:frequent', function frequent() { now += 2_000_000n; });
+  first.onCustomEvent('test:slow', function slow() { now += 5_000_000n; });
+  second.onCustomEvent('test:slow', function otherQuest() { now += 1_000_000n; });
+  for (let i = 0; i < 3; i++) manager.emitCustomEvent('test:frequent', {});
+  manager.emitCustomEvent('test:slow', {});
+  const rows = manager.getPluginPerformanceSnapshot();
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((row) => row.pluginName), ['Quests/First', 'Quests/Second']);
+  assert.equal(rows[0].totalMs, 11);
+  assert.equal(rows[0].topEventName, 'custom_event:test:frequent');
+  assert.equal(rows[0].maxMs, 5);
+  assert.equal(rows[0].maxEventName, 'custom_event:test:slow');
+  assert.equal(rows[0].maxHandlerName, 'slow');
+  assert.equal(rows[1].maxHandlerName, 'otherQuest');
+
+  first.onCustomEvent('test:failure', function failedCallback() { now += 7_000_000n; throw new Error('expected'); });
+  let continued = false;
+  second.onCustomEvent('test:failure', function afterFailure() { continued = true; });
+  manager.emitCustomEvent('test:failure', {});
+  const failed = manager.getPluginPerformanceSnapshot()[0];
+  assert.equal(failed.errors, 1);
+  assert.equal(failed.maxMs, 7);
+  assert.equal(failed.maxEventName, 'custom_event:test:failure');
+  assert.equal(failed.maxHandlerName, 'failedCallback');
+  assert.equal(errors.mock.callCount(), 1);
+  assert.equal(continued, true, 'one failing callback does not prevent later hooks');
+
+  manager.resetPluginPerformanceStats();
+  manager.setPluginPerformanceProfilingEnabled(false);
+  continued = false;
+  manager.emitCustomEvent('test:failure', {});
+  assert.equal(continued, true, 'callbacks still execute with profiling disabled');
+  assert.deepEqual(manager.getPluginPerformanceSnapshot(), [], 'reset and disabled profiling retain no samples');
+});
+
+test('scoped hooks retain NPC editor methods, spawn owners and shared definition sources', (t) => {
+  const manager = isolatedProfiler(t);
+  const { NpcInteractionManager } = require('../dist/game/entity/impl/npc/NpcInteractionManager');
+  const { DefinitionLoader } = require('../dist/game/definition/loader/DefinitionLoader');
+  const methods = NpcInteractionManager.pluginMethods;
+  const bindings = NpcInteractionManager.pluginBindings;
+  NpcInteractionManager.pluginMethods = new Map();
+  NpcInteractionManager.pluginBindings = new Map();
+  t.after(() => {
+    NpcInteractionManager.pluginMethods = methods;
+    NpcInteractionManager.pluginBindings = bindings;
+  });
+  const source = t.mock.method(DefinitionLoader, 'registerSource', () => {});
+  const spawn = t.mock.method(manager, 'spawnNpc', () => null);
+  const api = manager.createApi('Quests');
+  const first = api.withProfileLabel('Quests/First');
+  const second = api.withProfileLabel('Quests/Second');
+  let now = 0n;
+  t.mock.method(process.hrtime, 'bigint', () => now);
+  first.onNpcClick(1, 1, function talkToGuide() { now += 3_000_000n; return true; });
+  assert.equal(manager.emitNpcInteraction({ player: {}, npc: {}, npcId: 1, clickType: 1, handled: false }), true);
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxHandlerName, 'talkToGuide', 'core guard keeps original name');
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxEventName, 'npc_interaction');
+  assert.deepEqual(NpcInteractionManager.all().find((entry) => entry.npcId === 1).firstClick,
+    { method: 'quests.talkToGuide', source: 'Quests' });
+  first.registerNpcInteraction(1, { firstClick: { shopId: 1 } });
+  second.registerNpcInteraction(2, { firstClick: { shopId: 2 } });
+  assert.equal(source.mock.callCount(), 1, 'scopes share the owner source instead of overwriting it');
+  const [, owner, definitionSource] = source.mock.calls[0].arguments;
+  assert.equal(owner, 'Quests');
+  assert.deepEqual(definitionSource.load().map((entry) => entry.npcId), [1, 2]);
+  const definition = { id: 1, x: 3222, y: 3219 };
+  first.spawnNpc(definition);
+  assert.deepEqual(spawn.mock.calls[0].arguments, [definition, 'Quests']);
+});
+
+test('scoped area methods and action dictionaries identify the original callback', (t) => {
+  const manager = isolatedProfiler(t);
+  const { AreaManager } = require('../dist/game/model/areas/AreaManager');
+  const areas = AreaManager.areas;
+  AreaManager.areas = [];
+  t.after(() => { AreaManager.areas = areas; });
+  let now = 0n;
+  t.mock.method(process.hrtime, 'bigint', () => now);
+  const api = manager.createApi('Quests').withProfileLabel('Quests/First');
+  class QuestArea {
+    getName() { return 'Quest area'; }
+    process() { now += 4_000_000n; return 'processed'; }
+  }
+  const area = new QuestArea();
+  api.registerArea(area);
+  assert.equal(area.pluginName, 'Quests');
+  assert.equal(manager.callArea(area, 'process'), 'processed');
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxHandlerName, 'QuestArea.process');
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxEventName, 'area:process');
+
+  api.onObjectInteraction('Door', { Open: function openDoor() { now += 6_000_000n; } });
+  const definition = { getName: () => 'Door', getInteractions: () => ['Open'] };
+  assert.equal(manager.emitObjectInteraction({ player: {}, object: {}, definition, objectId: 1, clickType: 1, handled: false }), true);
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxHandlerName, 'openDoor');
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxEventName, 'object_interaction');
+  api.onNpcInteraction('Guide', { 'Talk-to': function startQuest() { now += 8_000_000n; } });
+  assert.equal(manager.emitNpcInteraction({ player: {}, npc: {}, npcId: 1, clickType: 1,
+    definition: { getName: () => 'Guide', getActions: () => ['Talk-to'] }, handled: false }), true);
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxHandlerName, 'startQuest');
+  assert.equal(manager.getPluginPerformanceSnapshot()[0].maxEventName, 'npc_interaction');
+});
+
+test('combat policy respects either distinct area denial and retains global denials', (t) => {
+  const { CombatFactory, CanAttackResponse } = require('../dist/game/content/combat/CombatFactory');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { Location } = require('../dist/game/model/Location');
+  const global = t.mock.method(PluginManager, 'emitCanAttack', () => null);
+  const calls = [];
+  const area = (name, verdict) => ({
+    getName: () => name,
+    canAttack: () => { calls.push(name); return verdict; },
+  });
+  const actor = (area) => ({
+    getArea: () => area, getPrivateArea: () => null,
+    isPlayer: () => true, getLocation: () => new Location(3222, 3219, 0),
+  });
+  const allow = area('allow', true), deny = area('deny', false), neutral = area('neutral', null);
+  const response = (a, b) => CombatFactory.canAttackByPolicy(actor(a), actor(b));
+  assert.equal(response(allow, deny), CanAttackResponse.CANT_ATTACK_IN_AREA);
+  assert.deepEqual(calls.splice(0), ['allow', 'deny'], 'the target is consulted after an attacker-side allow');
+  assert.equal(response(deny, allow), CanAttackResponse.CANT_ATTACK_IN_AREA);
+  assert.deepEqual(calls.splice(0), ['deny'], 'an attacker-side denial still short-circuits');
+  assert.equal(response(allow, neutral), CanAttackResponse.CAN_ATTACK);
+  assert.equal(response(neutral, allow), CanAttackResponse.CAN_ATTACK);
+  calls.length = 0;
+  assert.equal(response(allow, allow), CanAttackResponse.CAN_ATTACK);
+  assert.deepEqual(calls, ['allow'], 'a shared area runs once');
+  global.mock.mockImplementation(() => false);
+  assert.equal(response(allow, neutral), CanAttackResponse.CANT_ATTACK_IN_AREA);
+});
+
+function areaPriorityWorld(t) {
+  const { AreaManager } = require('../dist/game/model/areas/AreaManager');
+  const { Area } = require('../dist/game/model/areas/Area');
+  const { Boundary } = require('../dist/game/model/Boundary');
+  const { Location } = require('../dist/game/model/Location');
+  const saved = { areas: AreaManager.areas, areaSearchIndex: AreaManager.areaSearchIndex };
+  t.after(() => Object.assign(AreaManager, saved));
+  const events = [];
+  class TrackedArea extends Area {
+    constructor(name, min, max) { super([new Boundary(min, max, min, max, 0)]); this.label = name; }
+    postEnter() { events.push(`${this.label}:enter`); }
+    postLeave() { events.push(`${this.label}:leave`); }
+    process() { events.push(`${this.label}:process`); }
+  }
+  const broad = new TrackedArea('broad', 0, 30), specific = new TrackedArea('specific', 10, 20);
+  AreaManager.areas = [specific, broad];
+  AreaManager.areaSearchIndex = null;
+  let currentArea = null, location = new Location(5, 5, 0);
+  const mobile = {
+    getLocation: () => location, moveTo: (at) => { location = at; },
+    getArea: () => currentArea, setArea: (area) => { currentArea = area; },
+    isPlayer: () => false, isNpc: () => true, getAsNpc: () => mobile, getIndex: () => 1,
+  };
+  return { AreaManager, Location, TrackedArea, broad, specific, events, mobile };
+}
+
+test('moving through overlapping areas respects priority without looking up stationary actors', (t) => {
+  const { AreaManager, Location, TrackedArea, broad, specific, events, mobile } = areaPriorityWorld(t);
+  const lookup = t.mock.method(AreaManager, 'getWithBoundaryIndex');
+  broad.enter(mobile);
+  mobile.setArea(broad);
+  AreaManager.process(mobile);
+  assert.equal(mobile.getArea(), broad);
+  assert.equal(lookup.mock.callCount(), 1);
+  AreaManager.process(mobile);
+  assert.equal(lookup.mock.callCount(), 1, 'stationary actors use their current boundary');
+  events.length = 0;
+  mobile.moveTo(new Location(15, 15, 0));
+  AreaManager.process(mobile);
+  assert.equal(mobile.getArea(), specific);
+  assert.deepEqual(events, ['broad:leave', 'specific:enter', 'specific:process']);
+  assert.equal(lookup.mock.callCount(), 2);
+  AreaManager.process(mobile);
+  assert.equal(lookup.mock.callCount(), 2);
+  events.length = 0;
+  mobile.moveTo(new Location(5, 5, 0));
+  AreaManager.process(mobile);
+  assert.equal(mobile.getArea(), broad);
+  assert.deepEqual(events, ['specific:leave', 'broad:enter', 'broad:process']);
+  assert.equal(lookup.mock.callCount(), 3);
+
+  const instance = new TrackedArea('instance', 0, 30);
+  instance.enter(mobile);
+  mobile.setArea(instance);
+  mobile.moveTo(new Location(15, 15, 0));
+  AreaManager.process(mobile);
+  assert.equal(mobile.getArea(), instance, 'an explicitly entered instance keeps ownership');
+  assert.equal(lookup.mock.callCount(), 3, 'unregistered instances skip global priority lookups');
+});
+
+test('a same-area process teleport rechecks overlapping priority on the next tick', (t) => {
+  const { AreaManager, Location, broad, specific, mobile } = areaPriorityWorld(t);
+  broad.process = () => mobile.moveTo(new Location(15, 15, 0));
+  AreaManager.process(mobile);
+  assert.equal(mobile.getArea(), broad, 'the current callback completes in its original area');
+  AreaManager.process(mobile);
+  assert.equal(mobile.getArea(), specific, 'the teleport is not hidden by the location hint');
+});

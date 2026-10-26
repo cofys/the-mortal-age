@@ -1,14 +1,101 @@
+/**
+ * Lvl-1 to Lvl-7 Enchant on jewellery (docs/jewellery.md). One cast enchants the first
+ * piece of that jewellery in the inventory, in its own slot, then repeats every 7 ticks while
+ * more of it is carried (Wiki); a cast clicked during the 3-tick delay waits for it.
+ */
+const { pauseForLevelUp } = require("./SkillActions");
+
 let core;
 let pluginApi;
 const spells = new Map();
+
+/** Wiki Enchant_jewellery: "if uninterrupted it will automatically cast it again every 7 ticks". */
+const REPEAT_TICKS = 7;
+const COOLDOWN_ATTRIBUTE = "enchant-jewellery:next-cast-at";
+const SHARED_CAST_ATTRIBUTE = "magic:next-cast-at";
+/** Rings, necklaces, bracelets and silver amulets: human_cast_enchantring, enchant_ring (rsprox). */
+const JEWELLERY_ANIMATION = 931;
+const JEWELLERY_GRAPHIC = 238;
+
+/** Each player's repeating enchant, retained while the level-up dialogue is open. */
+const repeats = new WeakMap();
+
+/** The product of `itemId` under this spell, with the quest hooks' say ("magic:enchant-item-recipe"). */
+function resolveRecipe(player, spell, itemId) {
+  const recipe = { player, spellName: spell.data.name, itemId, resultId: spell.results.get(itemId) };
+  pluginApi.emitCustomEvent("magic:enchant-item-recipe", recipe);
+  return recipe;
+}
+
+/** One cast on the first `itemId` in the inventory; false when nothing was enchanted. */
+function enchant(player, spell, itemId) {
+  const recipe = resolveRecipe(player, spell, itemId);
+  if (recipe.declined) {
+    if (recipe.message) player.sendMessage(recipe.message);
+    return false;
+  }
+  if (recipe.resultId === undefined) return false;
+  const inventory = player.getInventory();
+  const slot = inventory.getItems().findIndex((item) => item?.getId() === itemId);
+  if (slot < 0 || !spell.canCast(player, true)) return false;
+  const look = spell.looks.get(itemId) ?? spell.data;
+  player.performAnimation(new core.Animation(look.animation));
+  player.performGraphic(new core.Graphic(look.graphic, 0, core.GraphicHeight.HIGH));
+  player.getPacketSender().sendSound(look.sound);
+  inventory.setItem(slot, new core.Item(recipe.resultId, 1)).refreshItems();
+  player.getSkillManager().addExperiences(core.Skill.MAGIC, spell.baseExperience());
+  pluginApi.emitCustomEvent("magic:enchanted", { player, spellName: spell.data.name, itemId, productId: recipe.resultId });
+  pluginApi.emitCustomEvent("magic:enchant-item-cast", recipe);
+  if (recipe.message) player.sendMessage(recipe.message);
+  return true;
+}
+
+/** Ticks until the spell's cast delay lets the next enchant go off. */
+function ticksUntilCast(player) {
+  const now = core.World.getProcessCycle();
+  const next = Math.max(Number(player.getAttribute(COOLDOWN_ATTRIBUTE) ?? 0), Number(player.getAttribute(SHARED_CAST_ATTRIBUTE) ?? 0));
+  return Math.max(0, next - now);
+}
+
+/**
+ * Casts again after `wait` ticks, then every REPEAT_TICKS, while the jewellery lasts. Keyed to the
+ * player so a walk stops it; a level-up pop-up pauses it, as it does other skilling.
+ */
+function keepEnchanting(player, spell, itemId, wait) {
+  let remaining = wait;
+  const task = new (class extends core.Task {
+    constructor() { super(1, player.getIndex(), false); }
+    execute() {
+      if (!player.isRegistered() || player.getHitpoints() <= 0) return this.stop();
+      if (this.levelUpPaused || --remaining > 0) return;
+      remaining = REPEAT_TICKS;
+      if (!enchant(player, spell, itemId)) this.stop();
+    }
+  })();
+  repeats.set(player, task);
+  core.TaskManager.submit(task);
+}
+
+function stopEnchanting(player) {
+  repeats.get(player)?.stop();
+  repeats.delete(player);
+}
+
+function pauseEnchanting(event) {
+  pauseForLevelUp(event, repeats, stopEnchanting);
+}
 
 function handleSpellOnItem(event) {
   const spell = spells.get(event.spellName?.trim().toLowerCase());
   if (!spell) return;
   event.handled = true;
   const { player, itemId, slot } = event;
-  const resultId = spell.results.get(itemId);
-  if (resultId === undefined) {
+  const recipe = resolveRecipe(player, spell, itemId);
+  if (recipe.declined) {
+    if (recipe.message) player.sendMessage(recipe.message);
+    return;
+  }
+  if (recipe.resultId === undefined) {
     // "magic:enchant-item": something else this spell works on (the Mage Training Arena's
     // shapes), cast with this spell's own runes, level and XP.
     const other = { player, spell, spellName: spell.data.name, itemId, slot, handled: false };
@@ -16,84 +103,110 @@ function handleSpellOnItem(event) {
     if (!other.handled) player.sendMessage("This spell cannot be cast on that item.");
     return;
   }
-  const inventory = player.getInventory();
-  if (inventory.getItems()[slot]?.getId() !== itemId || !spell.canCast(player, true)) return;
-  player.performAnimation(new core.Animation(spell.data.animation));
-  player.performGraphic(new core.Graphic(spell.data.graphic, 0, core.GraphicHeight.HIGH));
-  player.getPacketSender().sendSound(spell.data.sound);
-  inventory.deleteNumber(itemId, 1);
-  inventory.addItem(new core.Item(resultId, 1));
-  player.getSkillManager().addExperiences(core.Skill.MAGIC, spell.baseExperience());
+  if (player.getInventory().getItems()[slot]?.getId() !== itemId) return;
+  stopEnchanting(player);
+  // Wiki: enchant spells "queue up one spell if you cast them too quickly".
+  const wait = ticksUntilCast(player);
+  if (wait > 0) {
+    if (spell.canCast(player, false)) keepEnchanting(player, spell, itemId, wait);
+    return;
+  }
+  // Register the loop before the cast so its first XP drop can pause it too.
+  keepEnchanting(player, spell, itemId, REPEAT_TICKS);
+  if (!enchant(player, spell, itemId)) stopEnchanting(player);
 }
 
 module.exports = function attach(api) {
   pluginApi = api;
   core = api.core;
   const { ItemIds } = core;
-  // Wiki Lvl-1–7 Enchant GIFs/sound files; sequences and graphics verified in cache 241.
-  // shortcut: manual gold-gem rings, necklaces and amulets only; add other recipes/autocasting when requested.
+  // Wiki Lvl-1–7 Enchant and Enchant_jewellery. Gold amulets play the spell's own sequence,
+  // graphic and sound (Wiki GIFs/sound files, rsprox); every other piece plays the ring cast
+  // with `jewellerySound` where a capture has it. Sequences and graphics verified in cache 241.
+  // Silver amulets play the spell's sequence with the ring graphic (rsprox, jade amulet).
   const ENCHANT_SPELLS = [
     {
-      name: "Lvl-1 Enchant", animation: 719, graphic: 114, sound: 136, level: 7, xp: 17.5,
+      name: "Lvl-1 Enchant", animation: 719, graphic: 114, sound: 136, jewellerySound: 147, level: 7, xp: 17.5,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.WATER_RUNE, 1]],
-      items: [
+      amulets: [[ItemIds.SAPPHIRE_AMULET, ItemIds.AMULET_OF_MAGIC]],
+      silverAmulets: [[ItemIds.OPAL_AMULET, ItemIds.AMULET_OF_BOUNTY]],
+      jewellery: [
         [ItemIds.SAPPHIRE_RING, ItemIds.RING_OF_RECOIL],
         [ItemIds.SAPPHIRE_NECKLACE, ItemIds.GAMES_NECKLACE_8_],
-        [ItemIds.SAPPHIRE_AMULET, ItemIds.AMULET_OF_MAGIC],
+        // jewl_sapphire_bracelet (11072, rsprox); SAPPHIRE_BRACELET (11071) is another item of that name.
+        [ItemIds.SAPPHIRE_BRACELET_2, ItemIds.BRACELET_OF_CLAY],
+        [ItemIds.OPAL_RING, ItemIds.RING_OF_PURSUIT],
+        [ItemIds.OPAL_NECKLACE, ItemIds.DODGY_NECKLACE],
+        [ItemIds.OPAL_BRACELET, ItemIds.EXPEDITIOUS_BRACELET],
       ],
     },
     {
       name: "Lvl-2 Enchant", animation: 720, graphic: 115, sound: 141, level: 27, xp: 37,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.AIR_RUNE, 3]],
-      items: [
+      amulets: [[ItemIds.EMERALD_AMULET, ItemIds.AMULET_OF_DEFENCE]],
+      silverAmulets: [[ItemIds.JADE_AMULET, ItemIds.AMULET_OF_CHEMISTRY]],
+      jewellery: [
         [ItemIds.EMERALD_RING, ItemIds.RING_OF_DUELING_8_],
         [ItemIds.EMERALD_NECKLACE, ItemIds.BINDING_NECKLACE],
-        [ItemIds.EMERALD_AMULET, ItemIds.AMULET_OF_DEFENCE],
+        [ItemIds.EMERALD_BRACELET, ItemIds.CASTLE_WARS_BRACELET_3_],
+        [ItemIds.JADE_RING, ItemIds.RING_OF_RETURNING_5_],
+        [ItemIds.JADE_NECKLACE, ItemIds.NECKLACE_OF_PASSAGE_5_],
+        [ItemIds.JADE_BRACELET, ItemIds.FLAMTAER_BRACELET],
       ],
     },
     {
       name: "Lvl-3 Enchant", animation: 721, graphic: 116, sound: 145, level: 49, xp: 59,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.FIRE_RUNE, 5]],
-      items: [
+      amulets: [[ItemIds.RUBY_AMULET, ItemIds.AMULET_OF_STRENGTH]],
+      silverAmulets: [[ItemIds.TOPAZ_AMULET, ItemIds.BURNING_AMULET_5_]],
+      jewellery: [
         [ItemIds.RUBY_RING, ItemIds.RING_OF_FORGING],
         [ItemIds.RUBY_NECKLACE, ItemIds.DIGSITE_PENDANT_5_],
-        [ItemIds.RUBY_AMULET, ItemIds.AMULET_OF_STRENGTH],
+        [ItemIds.RUBY_BRACELET, ItemIds.INOCULATION_BRACELET],
+        [ItemIds.TOPAZ_RING, ItemIds.EFARITAYS_AID],
+        [ItemIds.TOPAZ_NECKLACE, ItemIds.NECKLACE_OF_FAITH],
+        [ItemIds.TOPAZ_BRACELET, ItemIds.BRACELET_OF_SLAUGHTER],
       ],
     },
     {
       name: "Lvl-4 Enchant", animation: 719, graphic: 153, sound: 137, level: 57, xp: 67,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.EARTH_RUNE, 10]],
-      items: [
+      amulets: [[ItemIds.DIAMOND_AMULET, ItemIds.AMULET_OF_POWER]],
+      jewellery: [
         [ItemIds.DIAMOND_RING, ItemIds.RING_OF_LIFE],
         [ItemIds.DIAMOND_NECKLACE, ItemIds.PHOENIX_NECKLACE],
-        [ItemIds.DIAMOND_AMULET, ItemIds.AMULET_OF_POWER],
+        [ItemIds.DIAMOND_BRACELET, ItemIds.ABYSSAL_BRACELET_5_],
       ],
     },
     {
-      name: "Lvl-5 Enchant", animation: 720, graphic: 154, sound: 139, level: 68, xp: 78,
+      name: "Lvl-5 Enchant", animation: 720, graphic: 154, sound: 139, jewellerySound: 140, level: 68, xp: 78,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.WATER_RUNE, 15], [ItemIds.EARTH_RUNE, 15]],
-      items: [
+      amulets: [[ItemIds.DRAGONSTONE_AMULET, ItemIds.AMULET_OF_GLORY]],
+      jewellery: [
         [ItemIds.DRAGONSTONE_RING, ItemIds.RING_OF_WEALTH],
         [ItemIds.DRAGON_NECKLACE, ItemIds.SKILLS_NECKLACE],
-        [ItemIds.DRAGONSTONE_AMULET, ItemIds.AMULET_OF_GLORY],
+        [ItemIds.DRAGONSTONE_BRACELET, ItemIds.COMBAT_BRACELET],
       ],
     },
     {
-      name: "Lvl-6 Enchant", animation: 721, graphic: 452, sound: 143, level: 87, xp: 97,
+      name: "Lvl-6 Enchant", animation: 721, graphic: 452, sound: 143, jewellerySound: 144, level: 87, xp: 97,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.FIRE_RUNE, 20], [ItemIds.EARTH_RUNE, 20]],
-      items: [
+      amulets: [[ItemIds.ONYX_AMULET, ItemIds.AMULET_OF_FURY]],
+      jewellery: [
         [ItemIds.ONYX_RING, ItemIds.RING_OF_STONE],
         [ItemIds.ONYX_NECKLACE, ItemIds.BERSERKER_NECKLACE],
-        [ItemIds.ONYX_AMULET, ItemIds.AMULET_OF_FURY],
+        [ItemIds.ONYX_BRACELET, ItemIds.REGEN_BRACELET],
       ],
     },
     {
-      name: "Lvl-7 Enchant", animation: 721, graphic: 452, sound: 143, level: 93, xp: 110,
+      name: "Lvl-7 Enchant", animation: 721, graphic: 452, sound: 143, jewellerySound: 144, level: 93, xp: 110,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.BLOOD_RUNE, 20], [ItemIds.SOUL_RUNE, 20]],
-      items: [
+      amulets: [[ItemIds.ZENYTE_AMULET, ItemIds.AMULET_OF_TORTURE]],
+      jewellery: [
         [ItemIds.ZENYTE_RING, ItemIds.RING_OF_SUFFERING],
         [ItemIds.ZENYTE_NECKLACE, ItemIds.NECKLACE_OF_ANGUISH],
-        [ItemIds.ZENYTE_AMULET, ItemIds.AMULET_OF_TORTURE],
+        // zenyte_bracelet (19532, rsprox); ZENYTE_BRACELET (19492) is another item of that name.
+        [ItemIds.ZENYTE_BRACELET_2, ItemIds.TORMENTED_BRACELET],
       ],
     },
   ];
@@ -102,7 +215,11 @@ module.exports = function attach(api) {
     constructor(data) {
       super();
       this.data = data;
-      this.results = new Map(data.items);
+      const silverAmulets = data.silverAmulets ?? [];
+      this.results = new Map([...data.amulets, ...silverAmulets, ...data.jewellery]);
+      const ring = { animation: JEWELLERY_ANIMATION, graphic: JEWELLERY_GRAPHIC, sound: data.jewellerySound ?? data.sound };
+      const silver = { animation: data.animation, graphic: JEWELLERY_GRAPHIC, sound: data.sound };
+      this.looks = new Map([...data.jewellery.map(([id]) => [id, ring]), ...silverAmulets.map(([id]) => [id, silver])]);
       this.members = data.level >= 68;
       const widget = core.CacheDefinitions.getSpellByName(data.name);
       if (!widget) throw new Error(`Missing cache spell: ${data.name}`);
@@ -115,8 +232,9 @@ module.exports = function attach(api) {
     equipmentRequired() { return []; }
     startCast() {}
     usesSharedCastDelay() { return true; }
-    getCastCooldown() { return { attribute: "enchant-jewellery:next-cast-at", duration: 1800 }; }
+    getCastCooldown() { return { attribute: COOLDOWN_ATTRIBUTE, duration: 1800 }; }
   }
   for (const data of ENCHANT_SPELLS) spells.set(data.name.toLowerCase(), new JewellerySpell(data));
   api.onSpellOnItem(handleSpellOnItem);
+  api.onCustomEvent("level-up:popup-opened", pauseEnchanting);
 };

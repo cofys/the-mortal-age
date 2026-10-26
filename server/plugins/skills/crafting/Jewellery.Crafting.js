@@ -94,6 +94,7 @@ function craftFurnaceProduct(player, product) {
   for (const id of product.extra) inventory.deleteNumber(id, 1);
   inventory.addItem(new Item(product.itemId, product.amount));
   Shared.addCraftingXp(player, product.xp);
+  Shared.getApi().emitCustomEvent("crafting:made", { player, itemId: product.itemId, furnace: true });
   return true;
 }
 

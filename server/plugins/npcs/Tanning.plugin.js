@@ -1,7 +1,9 @@
 /**
  * Native tanner324. The tanners' own option opens it (Ellis, Tanner, Sbott, Eodan); other content
  * requests it through tanning:open after checking access. tanning.json "prices" lists tanners who
- * charge more than the default, per hide row.
+ * charge more than the default, per hide row. Ellis and the Crafting Guild tanner are
+ * free-to-play (https://oldschool.runescape.wiki/w/Tanning), so the plugin is not members-only;
+ * the members tanners stand in members areas. A tan closes the interface (docs/tanning.md).
  */
 const data = require('./data/tanning.json');
 const GROUP = 324;
@@ -47,6 +49,9 @@ function tan(player, index, requested, context) {
   inventory.deleteNumber(data.coins, count * price);
   inventory.deleteNumber(hide.raw, count);
   inventory.adds(hide.product, count);
+  if (hide.hide) player.sendMessage(count === 1 ? `The tanner tans your ${hide.hide}.` : `The tanner tans ${count} ${hide.hide}s for you.`);
+  opened.delete(player);
+  player.getPacketSender().sendInterfaceRemoval();
   return count;
 }
 
@@ -72,7 +77,6 @@ function logout({ player }) { opened.delete(player); }
 
 module.exports = {
   name: 'Tanning',
-  members: true,
   register(api) {
     api.onCustomEvent('tanning:open', openTanning);
     api.onNpcsInteraction(['Ellis', 'Tanner', 'Sbott'], { Trade: tradeWithTanner });

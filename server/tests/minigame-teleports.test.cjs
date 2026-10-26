@@ -32,6 +32,7 @@ function recordingPlayer(at = new Location(3222, 3218, 0)) {
         sendConfig: (id, value) => (log(`varp ${id}=${value}`), sender),
         sendInterface: (id) => (log(`interface ${id}`), sender),
         sendInterfaceRemoval: () => (log('close'), sender),
+        sendClientScript: (id) => (log(`script ${id}`), sender),
     };
     const player = {
         getLocation: () => location,
@@ -226,10 +227,28 @@ test('cooldowns: the captured messages, and the varps set on landing', async (t)
     // Off cooldown: the home teleport lands and records the minute in varp 892.
     const fresh = recordingPlayer();
     HomeTeleports._test.castHomeTeleport({
-        player: fresh.player, buttonId: lumbridge.widgetId, itemId: lumbridge.itemId, handled: false,
+        player: fresh.player, buttonId: lumbridge.widgetId, itemId: lumbridge.itemId, opId: 1, handled: false,
     });
     run(fresh.ticks, fresh.nextTick, 26);
     assert.ok(fresh.ticks.flat().includes(`varp 892=${Sequence.dateMinutes()}`));
+});
+
+test('Animation opens the native picker for every home spell without casting or checking its cooldown', async (t) => {
+    stubWorld(t)(() => { throw new Error('Animation must not start a teleport'); });
+    await CachePipeline.initialize(path.resolve(__dirname, '..'));
+    attachPlugins([]);
+    for (const name of ['Lumbridge Home Teleport', 'Edgeville Home Teleport', 'Lunar Home Teleport', 'Arceuus Home Teleport']) {
+        const f = recordingPlayer();
+        const spell = CacheDefinitions.getSpellByName(name);
+        assert.ok(spell, name);
+        const minute = Sequence.dateMinutes();
+        f.player.setAttribute(HomeTeleports._test.LAST_HOME_TELEPORT_ATTRIBUTE, minute);
+        const event = { player: f.player, buttonId: spell.widgetId, itemId: spell.itemId, opId: 10, handled: false };
+        HomeTeleports._test.castHomeTeleport(event);
+        assert.equal(event.handled, true, name);
+        assert.deepEqual(f.ticks.flat(), ['varp 4559=4093', 'varp 4560=1', 'interface 525', 'script 7707'], name);
+        assert.equal(f.player.getAttribute(HomeTeleports._test.LAST_HOME_TELEPORT_ATTRIBUTE), minute);
+    }
 });
 
 test('the spell opens the minigame list with busy set; Rat Pits asks which pit', async (t) => {

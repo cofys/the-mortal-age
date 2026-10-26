@@ -19,6 +19,7 @@ const Hud = require("./Hud.Araxxor");
 const Minions = require("./Minions.Araxxor");
 const Specials = require("./Specials.Araxxor");
 const CombatAchievements = require("./CombatAchievements.Araxxor");
+const Scoreboard = require("./Scoreboard.Araxxor");
 
 /** Cache varp total_araxxor_kills: the kill count the boss log reads. Combat Achievements sends
  * it (its count is the one the boss page shows); this plugin only does when that is not running. */
@@ -96,6 +97,7 @@ function recordKill(player, ticks) {
   const total = CombatAchievements.killed(player, own, (kills) => announceKill(player, kills, ticks));
   player.setAttribute(Shared.ATTR_KILLS, Math.max(own, total ?? 0));
   if (total == null) player.getPacketSender().sendConfig(TOTAL_KILLS_VARP, own);
+  Scoreboard.won(ticks);
 }
 
 /** The kill count and the fight's length against the personal best (captured messages). */

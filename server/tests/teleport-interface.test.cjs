@@ -92,6 +92,14 @@ const click = (p, buttonId, extra = {}) => buttons.get(buttonId)({ player: p, bu
 const rowFor = (p, key) => catalog(p).find((row) => row.id === Destinations.byKey(key).id);
 const clickRow = (p, key, opId) => click(p, ROW_UIDS[0], { slot: Destinations.byKey(key).id, opId });
 
+test('Grand Exchange teleport list agrees with the ring of wealth landing on the southern approach', () => {
+  const p = player();
+  run(p);
+  clickRow(p, 'wealth-grand-exchange', OP.TELEPORT);
+  const tile = teleports.at(-1).location;
+  assert.deepEqual([tile.getX(), tile.getY(), tile.getZ()], [3163, 3478, 0]);
+});
+
 test("every destination lands on a free tile, with a known icon, type and tab", () => {
   const { DESTINATIONS, TAB_ORDER } = Destinations;
   const keys = new Set();

@@ -88,6 +88,18 @@ export type WidgetOverlayDrawContext = {
     place(overlay: WidgetOverlay, width: number, height: number): OverlayPlacement | undefined;
 };
 
+/**
+ * The world map as it is being drawn (RuneLite's WORLD_MAP overlay layer): the map's device rect,
+ * and where a world tile's south-west corner lands on screen (undefined off this map area).
+ */
+export type WorldMapOverlayContext = {
+    renderer: GLRenderer;
+    bounds: { x: number; y: number; w: number; h: number };
+    pixelsPerTileX: number;
+    pixelsPerTileY: number;
+    worldToScreen(x: number, y: number, plane: number): { x: number; y: number } | undefined;
+};
+
 /** A right-click entry on an overlay: "<option> <target>". */
 export type OverlayMenuEntry = { option: string; target: string; onClick(): void };
 
@@ -237,6 +249,10 @@ export interface ClientPlugin {
     handleClientCommand?(command: string): boolean;
     /** Handle a widget action locally; return true to consume it before CS2 or network dispatch. */
     handleWidgetAction?(event: WidgetActionEvent): boolean;
+    /** Entries for a right-click on the world map tile at `point`, shown above Cancel. */
+    worldMapMenuEntries?(point: { x: number; y: number; plane: number }): SimpleMenuEntry[];
+    /** Draws on the world map, above its icons (RuneLite's WorldMapOverlay / drawAfterLayer). */
+    drawWorldMap?(context: WorldMapOverlayContext): void;
     /** Reorders or extends a menu (top first); its first eligible entry is the left-click. */
     transformMenuEntries?(
         entries: SimpleMenuEntry[],
@@ -330,6 +346,22 @@ export class ClientPluginManager {
             entries = plugin.transformMenuEntries?.(entries, context) ?? entries;
         }
         return entries;
+    }
+
+    worldMapMenuEntries(point: { x: number; y: number; plane: number }): SimpleMenuEntry[] {
+        const entries: SimpleMenuEntry[] = [];
+        for (const plugin of this.implementing("worldMapMenuEntries")) entries.push(...plugin.worldMapMenuEntries!(point));
+        return entries;
+    }
+
+    drawWorldMap(context: WorldMapOverlayContext): void {
+        for (const plugin of this.implementing("drawWorldMap")) {
+            try {
+                plugin.drawWorldMap!(context);
+            } catch (error) {
+                console.error("[plugins] world map overlay failed", error);
+            }
+        }
     }
 
     sceneProgramsReady(renderer: WebGLOsrsRenderer, programs: Program[]): void {

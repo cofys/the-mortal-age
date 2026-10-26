@@ -15,6 +15,54 @@ rune sourcing, spellbook and plugin restrictions. Core validates the inventory
 slot and `emitCanUseItem` before dispatching the spell-on-item hook. Manual casts
 share the core 600 ms gate and enforce the Wiki's three-tick enchant interval.
 
+## Enchanting jewellery
+
+`plugins/skills/Spells.EnchantJewellery.js` enchants every gold and silver piece the Wiki
+lists: rings, necklaces, bracelets and amulets, sapphire to zenyte plus opal (Lvl-1), jade
+(Lvl-2) and topaz (Lvl-3).
+
+- **One click enchants them all.** The cast converts the first piece of that item in the
+  inventory, in its own slot, then casts again every 7 ticks while more of the same item is
+  carried. It stops when none is left, the runes run out, the player walks, or another
+  enchant is clicked. A level-up pop-up pauses it, as it does other
+  skilling.
+- **A cast clicked during the 3-tick delay waits for it** and then goes off (and repeats).
+- **Look.** Gold amulets play the spell's own sequence, graphic and sound. Rings, necklaces
+  and bracelets play `human_cast_enchantring` (931) with `enchant_ring` (238) at height 92.
+  Their sound is 147 for Lvl-1, 140 for Lvl-5 and 144 for Lvl-6 and Lvl-7; Lvl-2 to Lvl-4 keep
+  the spell's sound, as no capture has them. Silver amulets play the spell's sequence with
+  `enchant_ring`.
+- **Ids.** The sapphire bracelet is `jewl_sapphire_bracelet` (11072) and the zenyte bracelet
+  `zenyte_bracelet` (19532), as recorded; `ItemIds.SAPPHIRE_BRACELET` (11071) and
+  `ItemIds.ZENYTE_BRACELET` (19492) are other items with the same names.
+
+Evidence:
+
+- [Enchant jewellery](https://oldschool.runescape.wiki/w/Enchant_jewellery): the full recipe
+  table; "You can manually cast the spells every 3 game ticks, or if uninterrupted it will
+  automatically cast it again every 7 ticks"; the updates of 21 August 2014 (one queued cast),
+  21 February 2019 (the next items of the same type enchant automatically) and 12 February
+  2025 (the first jewellery in the inventory is converted, not the one the spell was cast on).
+- [Lvl-1 Enchant](https://oldschool.runescape.wiki/w/Lvl-1_Enchant): opal jewellery and the
+  sapphire bracelet's Bracelet of clay.
+- rsprox 4119 (rev 237, a Leagues VI world): one Lvl-1 Enchant on a sapphire ring enchants all
+  25 in the inventory, slot by slot, a cast every 7 ticks, each with sequence 931, graphic 238
+  and sound 147.
+- rsprox 3342 (rev 235): Lvl-7 Enchant on a zenyte bracelet, sequence 931, graphic 238,
+  sound 144. rsprox 1135 (rev 237, Leagues VI): Lvl-6 Enchant on an onyx bracelet and an onyx
+  necklace (931, 238, sound 144) and on an onyx amulet (721, 452, sound 143). rsprox 1104
+  (rev 237, Leagues VI): Lvl-5 Enchant on a dragonstone bracelet (931, 238, sound 140).
+- rsprox 3276 (rev 234) and 1102 (rev 237, Leagues VI): ruby, onyx and dragonstone amulets play
+  the spell's own sequence, graphic and sound (721/116/145, 721/452/143, 720/154/139).
+  rsprox 4211 (rev 238, Leagues VI): a jade amulet plays 720 with graphic 238 and sound 141.
+
+Not done:
+
+- Free-to-play worlds: the Wiki says free-to-play players can only enchant the sapphire
+  amulet among the Lvl-1 recipes, but no capture or page gives what a free world says when
+  refused, and the members gating lives in `plugins/modes/FreeToPlay.plugin.js`.
+- Opal and topaz amulets are assumed to look like the captured jade amulet.
+
 ## Evidence
 
 - [PR #548](https://github.com/RSPSApp/tsps/pull/548), merged on 12 October 2026,
@@ -29,8 +77,8 @@ share the core 600 ms gate and enforce the Wiki's three-tick enchant interval.
   necklaces produce Phoenix necklaces; Dragon necklaces produce uncharged Skills
   necklaces. The level 6 and 7 GIFs share the amulet effect.
 - Cache 241: `dump:widget 446`, scripts 429/2928, sequences 719–721/899,
-  spot animations 114–116/153–154/452, and item definitions. The per-level effects
-  follow the Wiki spell GIFs; jewellery casts have no rsprox captures yet.
+  spot animations 114–116/153–154/452, and item definitions. The per-level amulet effects
+  follow the Wiki spell GIFs; the other casts are under "Enchanting jewellery".
 - Furnace timing, interface and message absence follow the PR review's cited live
   rsprox recordings 3150, 724 and 4119; those recordings were not independently replayed.
 
@@ -46,5 +94,4 @@ craft Diamond amulet (u), string it, cast Lvl-4 Enchant, and verify Amulet of po
 67 Magic XP and consumed runes. The headless visual capture timed out, so the
 furnace layout and enchant effects still need a manual visual check.
 
-Silver recipes, bracelet enchanting, opal/jade/topaz enchanting and automatic
-repeat enchanting remain outside this PR's scope.
+Silver jewellery crafting recipes remain outside this page's scope.

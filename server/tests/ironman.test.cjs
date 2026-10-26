@@ -151,6 +151,16 @@ test("an Ultimate Ironman can't bank and keeps nothing on death; a standard Iron
   assert.equal(im.allow, null);
 });
 
+test('only Ultimate Ironmen are refused item-set packing', () => {
+  for (const mode of [null, 'ironman', 'hardcore', 'ultimate']) {
+    const p = account('set-trader', mode);
+    const request = { player: p, allow: true };
+    custom['item-sets:can-pack'](request);
+    assert.equal(request.allow, mode !== 'ultimate');
+    assert.deepEqual(p.messages, mode === 'ultimate' ? ['Ultimate Ironmen cannot pack item sets.'] : []);
+  }
+});
+
 test("a Hardcore Ironman's dangerous death makes them a standard Ironman; a safe death doesn't", () => {
   const safe = account("safe", "hardcore");
   hooks.onPlayerDeath({ player: safe, killer: null, itemsLost: false, handled: false });

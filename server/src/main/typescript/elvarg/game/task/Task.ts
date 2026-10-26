@@ -1,4 +1,5 @@
 import { TaskType } from "./TaskType";
+import { PluginContext } from "../../plugins/PluginContext";
 export abstract class Task {
     public static DEFAULT_KEY = new Object();
     private immediate: boolean;
@@ -7,6 +8,8 @@ export abstract class Task {
     public type: TaskType;
     private running = false;
     public key: object;
+    /** The plugin whose code created this task; the task runs as that plugin (PluginContext). */
+    public readonly pluginName: string | null = PluginContext.current();
 
     constructor();
     constructor(immediate: boolean);

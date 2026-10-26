@@ -89,6 +89,8 @@ export class WidgetManager {
      * Key: (widget.id << 32) | (widget.childIndex & 0xffffffff)
      */
     private widgetFlagsOverrides: Map<bigint, number> = new Map();
+    /** Op transmit masks from IF_SETEVENTS_V2 (bit N for op N+1), same keys as the flags. */
+    private widgetOpMaskOverrides: Map<bigint, number> = new Map();
     private widgetFlagsVersion: number = 1;
 
     /**
@@ -1406,6 +1408,7 @@ export class WidgetManager {
 
         // Clear widget flags overrides
         this.widgetFlagsOverrides.clear();
+        this.widgetOpMaskOverrides.clear();
         this.widgetFlagsVersion++;
 
         // Clear sub-interface tracking state
@@ -1563,6 +1566,7 @@ export class WidgetManager {
             typeof (w as any).childIndex === "number" ? (w as any).childIndex | 0 : -1;
         const key = this.makeWidgetFlagsKey(id, childIndex);
         this.widgetFlagsOverrides.set(key, flags | 0);
+        this.widgetOpMaskOverrides.delete(key);
         this.widgetFlagsVersion++;
     }
 
@@ -1572,10 +1576,27 @@ export class WidgetManager {
      * without needing the actual widget objects to exist yet.
      * Reference: IF_SETEVENTS stores flags in Client.widgetFlags with key (id << 32) | childIndex
      */
-    setWidgetFlagsByKey(id: number, childIndex: number, flags: number): void {
+    setWidgetFlagsByKey(id: number, childIndex: number, flags: number, opMask?: number): void {
         const key = this.makeWidgetFlagsKey(id | 0, childIndex | 0);
-        this.widgetFlagsOverrides.set(key, flags | 0);
+        if (opMask === undefined) {
+            this.widgetFlagsOverrides.set(key, flags | 0);
+            this.widgetOpMaskOverrides.delete(key);
+        } else {
+            // IF_SETEVENTS_V2: the op mask carries every op's transmit bit; ops 1-10 also go
+            // into flag bits 1-10, where the rest of the client reads them.
+            this.widgetFlagsOverrides.set(key, (flags & ~0x7fe) | ((opMask & 0x3ff) << 1));
+            this.widgetOpMaskOverrides.set(key, opMask | 0);
+        }
         this.widgetFlagsVersion++;
+    }
+
+    /** The op transmit mask IF_SETEVENTS_V2 set for a widget (bit N for op N+1), or 0. */
+    getWidgetOpMask(w: WidgetNode | null | undefined): number {
+        if (!w) return 0;
+        const id = ((w as any).id ?? w.uid) | 0;
+        const childIndex =
+            typeof (w as any).childIndex === "number" ? (w as any).childIndex | 0 : -1;
+        return (this.widgetOpMaskOverrides.get(this.makeWidgetFlagsKey(id, childIndex)) ?? 0) | 0;
     }
 
     /**
@@ -1612,7 +1633,10 @@ export class WidgetManager {
             const keyGroup = (key >> 48n) & 0xffffn;
             if (keyGroup === g) toDelete.push(key);
         }
-        for (const key of toDelete) this.widgetFlagsOverrides.delete(key);
+        for (const key of toDelete) {
+            this.widgetFlagsOverrides.delete(key);
+            this.widgetOpMaskOverrides.delete(key);
+        }
         if (toDelete.length > 0) this.widgetFlagsVersion++;
     }
 
@@ -1746,6 +1770,7 @@ export class WidgetManager {
         // Clear runtime widget flags overrides on major interface changes.
         // Reinitialize widgetFlags when interface parents are refreshed.
         this.widgetFlagsOverrides.clear();
+        this.widgetOpMaskOverrides.clear();
         this.widgetFlagsVersion++;
 
         // Mark all widgets dirty - major interface change requires full redraw

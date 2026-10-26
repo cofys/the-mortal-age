@@ -193,9 +193,13 @@ export class GroundMarkerPlugin extends Plugin {
 
     // ------------------------------------------------------------------ menu
 
-    /** onMenuEntryAdded: with Shift held, Mark/Unmark, Label and Color for the tile under "Walk here". */
+    /**
+     * onMenuEntryAdded: with Shift held, Mark/Unmark, Label and Color for the tile under "Walk here".
+     * Not with Ctrl too: Ctrl+Shift+click is the staff teleport, which needs "Walk here" on top.
+     */
     transformMenuEntries(entries: SimpleMenuEntry[], context: MenuTransformContext): SimpleMenuEntry[] {
         if (context.surface !== "world" || !this.isStarted() || !ClientState.isShiftPressed()) return entries;
+        if (ClientState.isCtrlPressed()) return entries;
         const walkIndex = entries.findIndex((e) => e.option === "Walk here");
         if (walkIndex < 0) return entries;
         const walk = entries[walkIndex];

@@ -127,6 +127,7 @@ module.exports = {
     api.persistAttribute(Aerial.ATTRIBUTE);
     api.persistAttribute("hunter.herbiboars");
     api.onCustomEvent("hunter:success", Rumours.success);
+    api.onCustomEvent("hunter:rumours-completed", Rumours.completedCount);
     api.onPlayerLogin(Runtime.login);
     api.onCustomEvent("agent:advance-time", Birdhouses.advanceTime);
     api.onPlayerLogout(Runtime.cleanup);
@@ -160,7 +161,7 @@ module.exports = {
       api.onObjectInteraction(name, { Inspect: Runtime.inspect, Search: Runtime.inspect, Attack: Runtime.attack });
     api.onObjectInteraction("Space", { Build: Birdhouses.build });
     for (const name of ["Birdhouse", "Oak birdhouse", "Willow birdhouse", "Teak birdhouse", "Maple birdhouse", "Mahogany birdhouse", "Yew birdhouse", "Magic birdhouse", "Redwood birdhouse", "Birdhouse (empty)", "Oak birdhouse (empty)", "Willow birdhouse (empty)", "Teak birdhouse (empty)", "Maple birdhouse (empty)", "Mahogany birdhouse (empty)", "Yew birdhouse (empty)", "Magic birdhouse (empty)", "Redwood birdhouse (empty)"])
-      api.onObjectInteraction(name, { Interact: Birdhouses.empty, Empty: Birdhouses.empty, Reset: Birdhouses.reset, Seeds: Birdhouses.seeds, Dismantle: Birdhouses.dismantle });
+      api.onObjectInteraction(name, { Interact: Birdhouses.interact, Empty: Birdhouses.empty, Reset: Birdhouses.reset, Seeds: Birdhouses.seeds, Dismantle: Birdhouses.dismantle });
     for (const name of ["Ruby harvest", "Sapphire glacialis", "Snowy knight", "Black warlock", "Sunlight moth", "Moonlight moth"])
       api.onItemAction(name, { Release: Catching.release });
     for (const name of ["Baby impling jar", "Young impling jar", "Gourmet impling jar", "Earth impling jar", "Essence impling jar", "Eclectic impling jar", "Nature impling jar", "Magpie impling jar", "Ninja impling jar", "Dragon impling jar", "Crystal impling jar", "Lucky impling jar"])

@@ -27,6 +27,7 @@ const Sol = require("./SolHeredit.Colosseum");
 const Rewards = require("./Rewards.Colosseum");
 const { ModifierSet, byKey } = require("./Modifiers.Colosseum");
 const CombatAchievements = require("./CombatAchievements.Colosseum");
+const Scoreboard = require("./Scoreboard.Colosseum");
 
 const ATTR_RUN = "colosseum:run";
 const WAVE_START_DELAY = 5;
@@ -341,6 +342,7 @@ class ColosseumRun {
     this.wave++;
     this.totalTicks += this.waveTicks;
     CombatAchievements.waveCompleted(this, this.wave);
+    Scoreboard.waveCompleted(this);
     this.stage = "intermission";
     Rewards.waveCompleted(this);
     Hazards.waveEnded(this);
@@ -360,6 +362,7 @@ class ColosseumRun {
   defeatedSol() {
     Sol.defeated(this);
     CombatAchievements.solDefeated(this);
+    Scoreboard.solDefeated(this);
     this.stage = "won";
     Shared.later(this, SOL_DEATH_TICKS, () => this.finish());
   }
@@ -409,6 +412,7 @@ class ColosseumRun {
     player.setAttribute(ATTR_RUN, null);
     if (reason === "death") {
       Sol.playerDied(this);
+      Scoreboard.died(this);
       Rewards.keepGlory(this);
     }
     if (reason !== "left") Rewards.lost(this);

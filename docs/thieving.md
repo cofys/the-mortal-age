@@ -7,14 +7,15 @@ Pickpocketing is built from the OSRS Wiki: the [Thieving](https://oldschool.rune
 | File | What it owns |
 | --- | --- |
 | `server/plugins/skills/data/pickpocketing.json` | Every target: its NPCs, level, experience, success chart, stun damage, coin pouch, quest, pet rate and loot. |
-| `server/plugins/skills/Thieving.plugin.js` | Stalls and module registration. |
+| `server/plugins/skills/Thieving.plugin.js` | Module registration. |
+| `server/plugins/skills/thieving/Stalls.Thieving.js` | Stall attempts, rewards, depletion and merchant memory. |
 | `server/plugins/skills/thieving/Blackjacking.Thieving.js` | Pollnivnian bandit/thug lure, knockout and the shared pickpocket target event. |
 | `server/plugins/skills/thieving/Pickpocket.Thieving.js` | The pickpocket itself: checks, timing, success, loot, failure and the equipment effects. |
 | `server/plugins/skills/thieving/CoinPouch.Thieving.js` | Opening coin pouches ("Open-all" and "Open"). |
 
 ## Stalls
 
-`server/plugins/skills/Thieving.plugin.js` owns stall theft, alongside the pickpocket modules.
+`server/plugins/skills/thieving/Stalls.Thieving.js` owns stall theft, alongside the pickpocket modules.
 
 ### Sources
 
@@ -27,13 +28,30 @@ Pickpocketing is built from the OSRS Wiki: the [Thieving](https://oldschool.rune
 
 IDs and actions were checked in cache `osrs-241_2026-10-20` with `dump:loc`, `CacheDefinitions` and the cache's LOC gamevals. Ardougne silver/spice are 11734/11733. Draynor wine is 14011 (`Market stall`, `Steal-From`); its empty 14012 retains the same action, so it must not grant loot. Other empty models are 634 (ordinary), 6944 (Hosidius bakery), 6984 (Keldagrim), 36568 (Prifddinas) and 51932 (Fortis).
 
+### Captured attempt and outcome
+
+Rsprox recording **3220** shows the tea attempt message, `human_pickuptable` and sound 2581 together, followed one tick later by the success message, one cup of tea, the empty stall and `marketthief_tea = 1`. Recording **1554** shows the same one-tick separation for bread, silver ore and an uncut sapphire, setting `marketthief_cake`, `marketthief_silver` and `marketthief_gem` respectively. Caught silver and gem attempts in 1554 show the attempt message and an owner warning, without a success animation, reward or an extra caught-stealing chat message. Silver attempts repeat on consecutive ticks before succeeding; failed attempts therefore do not start the success cooldown. The gem owner also catches a thief sharing his tile; the documented bakery safe spot is not a general owner exemption. The captures' XP deltas are not used to set reward amounts; the Wiki supplies those amounts.
+
+The attempt now faces the stall and checks its lookouts. On success it plays cache animation `human_pickuptable` (**832**, rather than pickpocket animation 881), with sound 2581. Loot, XP, the recorded success message, theft state and depletion follow on the next tick. Restocking counts from depletion. Attempts begun together can both complete; later clicks cannot steal from the empty stall. A full inventory at completion prevents both loot and XP.
+
+### Merchant memory
+
+The [Thieving stalls section](https://oldschool.runescape.wiki/w/Thieving#Stalls) says successful theft prevents interaction with owners of that stall type for ten consecutive in-game minutes. [Silk merchant](https://oldschool.runescape.wiki/w/Silk_merchant) confirms the ten-minute wait restarts after logging back in. Specific NPC pages give different waits: [Baker](https://oldschool.runescape.wiki/w/Baker) says fifteen minutes, and [Spice seller](https://oldschool.runescape.wiki/w/Spice_seller) says six. The implementation follows those specific durations for bakery and spice, with ten minutes for the other supported types. No recording measured expiration; the disagreement between the general and specific Wiki pages remains an evidence limitation.
+
+Successful theft now sets a saved, namespaced merchant-memory attribute and the corresponding cache theft varbit, including the separate Keldagrim, Fremennik and Prifddinas keys. A new theft resets that type's timer. Logout cancels its timer; login starts a full consecutive wait again. Expiry clears the memory and varbit. Idle players with no recent theft have no theft timer.
+
+Named Talk-to/Trade hooks stop recent thieves reaching ordinary dialogue or a shop. Refusal speech is shown in [Transcript:Tea Seller](https://oldschool.runescape.wiki/w/Transcript:Tea_Seller), [Transcript:Baker](https://oldschool.runescape.wiki/w/Transcript:Baker), [Transcript:Silk merchant](https://oldschool.runescape.wiki/w/Transcript:Silk_merchant), [Transcript:Spice seller](https://oldschool.runescape.wiki/w/Transcript:Spice_seller), [Transcript:Olivia](https://oldschool.runescape.wiki/w/Transcript:Olivia) and [Transcript:Fortunato](https://oldschool.runescape.wiki/w/Transcript:Fortunato). They identify the thief and call guards; Fortunato uses a different first line. The Baker, Tea Seller, Spice seller, Olivia and Fortunato transcripts also give the owner's warning when catching an attempt. Recording **1554** also confirms both Talk-to and Trade refusal by the gem merchant and Trade refusal by the silver merchant: the guard call follows the initial overhead line by **two ticks**. A nearby idle guard responds to a remembered thief's interaction.
+
 ### Validation and limits
 
-After `yarn build`, run `node --test tests/thieving-stalls.test.cjs tests/thieving-pickpocket.test.cjs` from `server/`. The tests cover registration, requirements, loot/XP, shared depletion, simultaneous thieves, stale clicks, restock, collision-visibility decisions, dead/busy/out-of-range guards, unrelated owners, empty wine stalls and private-area destruction.
+Earlier validation of the previous stall implementation recorded an Ardougne knight catching silver theft without loot/XP; unseen Kourend silver gave 205 XP and restocked after 32 ticks; Fortis spice and Draynor wine dispatched their cache options and could be caught. Those are historical checks, separate from the current checks below.
 
-Live worktree MCP checks confirmed an Ardougne knight catches silver theft and enters combat without loot/XP; an unseen Kourend silver theft gives +205 XP, changes 11734 to 634, rejects a stale 11734 click, then restores 11734 after 32 ticks. Fortis spice and Draynor wine both dispatch their real cache options and can be caught by guards.
 
-No live-OSRS packet capture was available. Five tiles is a provisional lookout radius, not a measured OSRS hunt range. Visibility uses the existing projectile collision ray, with no invented facing cone. Guards already targeting another actor are not diverted from their fight; this exclusion and the exact catch messages/timing have not been calibrated against a capture. Merchant trading restrictions after theft are outside this change.
+The stall regressions cover attempt/outcome separation, cache animation and sound, reward/XP, captured varbits, merchant refusal and expiration, consecutive caught attempts, the non-bakery same-tile catch, repeated theft, logout/login, simultaneous thieves, stale clicks, restock, inventory changes during an attempt and private-area destruction. The original handler fails the new timing, state, refusal and caught-attempt assertions. The adjacent pickpocket tests retain their existing gameplay coverage; their registration fixture includes the new lifecycle hooks.
+
+Live checks confirmed a level-one player cannot steal tea. With the skill requirement supplied, an unseen Varrock theft grants one cup of tea and **16 XP**, sets varbit **170**, empties/restocks the stall, and prevents trading with the Tea Seller, who calls guards. Logout/login preserved the item, theft flag and refusal on Talk-to. Timer boundary checks use deterministic regressions rather than a captured expiration measurement.
+
+Five tiles remains a provisional lookout radius. The available stall captures do not establish exact guard detection range or facing. Merchant overhead-line timing is calibrated against the gem and silver refusals in 1554. The existing visibility ray and busy-guard exclusion are retained. Port Roberts' automatic stealing/jail activity belongs to a separate mechanic and remains unimplemented. Other uncaptured reward messages retain their existing wording. No generated data changes are required.
 
 ## Targets
 

@@ -6,15 +6,21 @@
  * - a trip to an opened station costs one log of its type ("You need 1 [type] logs to make this
  *   trip.") and needs its Firemaking level; to Entrana the player is searched first, and no
  *   weapons or armour may be worn;
- * - from Entrana a station not yet opened is opened by flying there with 10 of its logs (3
- *   magic), for 2,000 Firemaking XP - the Wiki's flight minigame for it is not played (as the
- *   quest's own flight); from anywhere else it is refused;
+ * - from Entrana a station not yet opened is opened by flying the balloon controls there with
+ *   10 of its logs (3 magic), for 2,000 Firemaking XP (Controls.BalloonTransport.js; rsprox
+ *   226/01702 boards with "You board the balloon."); from anywhere else it is refused;
  * - no more than 40kg carried, the log aside, and no pet out (the quest's lines);
- * - the flight is a fade to the destination's basket, the player held still; one at a time; a
- *   logout mid-flight lands them, a death ends it where they are.
+ * - the flight as recorded (rsprox 3225, rev 232; balloon-transport.json `flight`): the jingle,
+ *   the map again with the balloon flying the route, the teleport to the recorded landing tile
+ *   with "You board the balloon and fly to [place].", then the fade; the player held still; one
+ *   at a time; a logout mid-flight lands them, a death ends it where they are. The same station
+ *   is "You're already there!".
  * Opened routes are saved, and their baskets and assistants shown from the zep_multi_* varbits.
+ * A trip's logs may come from the log storage (Storage.BalloonTransport.js) instead.
  */
 const Common = require("./Common.BalloonTransport");
+const Storage = require("./Storage.BalloonTransport");
+const Controls = require("./Controls.BalloonTransport");
 
 const OPEN_MAP_TARGET = "Balloon transport system";
 const BALLOONISTS = ["Auguste", "Assistant Stan", "Assistant Brock", "Assistant Serf", "Assistant Marrow", "Assistant Le Smith", "Assistant Lori"];
@@ -31,7 +37,7 @@ const openMaps = new WeakMap();
 const flights = new WeakMap();
 
 function flying(player) {
-  return flights.has(player);
+  return flights.has(player) || Controls.inFlight(player);
 }
 
 function say(player, npcId, text, then = null) {
@@ -44,10 +50,6 @@ function say(player, npcId, text, then = null) {
 
 function fill(text, values) {
   return text.replace(/\[(\w+)\]/g, (whole, key) => (values[key] !== undefined ? String(values[key]) : whole));
-}
-
-function logsHeld(player, station) {
-  return player.getInventory().getAmount(Common.ids.objs[station.log]);
 }
 
 function firemaking(player) {
@@ -124,8 +126,12 @@ function chooseDestination(event) {
 
 /** The checks for a trip, then the flight (opening the route first from Entrana). */
 function travel(player, from, to, npcId = null) {
-  if (flying(player) || !from || from.key === to.key) return false;
+  if (flying(player) || !from) return false;
   const { messages, unlockXp } = Common.data;
+  if (from.key === to.key) {
+    say(player, null, messages.alreadyThere);
+    return false;
+  }
   const opening = !Common.opened(player, to);
   if (opening && from.key !== ENTRANA) {
     say(player, npcId, messages.locked);
@@ -136,13 +142,13 @@ function travel(player, from, to, npcId = null) {
     return false;
   }
   const cost = opening ? to.unlockLogs : 1;
-  if (logsHeld(player, to) < cost) {
+  if (!Storage.canPay(player, to, cost)) {
     const type = to.logName ?? "normal";
     say(player, npcId, opening ? fill(messages.unlockLogs, { count: cost, type }) : fill(messages.needLog, { type }));
     return false;
   }
   const refusal = () => {
-    if (logsHeld(player, to) < cost) return opening ? fill(messages.unlockLogs, { count: cost, type: to.logName ?? "normal" }) : fill(messages.needLog, { type: to.logName ?? "normal" });
+    if (!Storage.canPay(player, to, cost)) return opening ? fill(messages.unlockLogs, { count: cost, type: to.logName ?? "normal" }) : fill(messages.needLog, { type: to.logName ?? "normal" });
     if (hasPet(player)) return messages.pet;
     if (weightKg(player, to) > Common.data.maxWeightKg) return messages.weight;
     return null;
@@ -152,15 +158,28 @@ function travel(player, from, to, npcId = null) {
     say(player, npcId, before);
     return false;
   }
-  const go = () => fly(player, to, cost, opening ? () => {
+  const arrived = opening ? () => {
     Common.openRoute(player, to);
     player.getSkillManager().addExperience(Common.core.Skill.FIREMAKING, unlockXp, false);
     player.sendMessage(fill(messages.unlocked, { place: to.label }));
-  } : null);
+  } : null;
+  // The logs' source may be asked for: the trip is checked again once it's chosen, and the
+  // player must still be at the station they started from.
+  const startedAt = Common.stationAt(player.getLocation());
+  // Opening a route flies the balloon controls where its screens are known.
+  const controls = opening && Controls.hasRoute(to);
+  const go = () => Storage.chooseSource(player, to, cost, (source) => {
+    if (Common.stationAt(player.getLocation()) !== startedAt) return;
+    const after = refusal();
+    if (after) return say(player, npcId, after);
+    const started = controls ? Controls.takeOff(player, to, cost, source) : fly(player, to, cost, arrived, source, from);
+    if (!started && !flying(player)) say(player, npcId, refusal() ?? fill(messages.needLog, { type: to.logName ?? "normal" }));
+  });
+  if (controls) return say(player, null, messages.boardControls, go);
   if (to.key !== ENTRANA) return go();
   // Entrana: searched first (the assistants' transcript); the trip is checked again after it.
   say(player, npcId, messages.entranaSearch, () => {
-    player.sendMessage(messages.searched);
+    player.getPacketSender().sendTypedMessage(Common.core.ChatType.SPAM, messages.searched);
     if (wearsContraband(player)) return say(player, npcId, messages.entranaRefused);
     const after = refusal();
     if (after) return say(player, npcId, after);
@@ -169,24 +188,39 @@ function travel(player, from, to, npcId = null) {
   return true;
 }
 
+/** The map again, flying the route: markers hidden, the balloon playing its journey (recorded). */
+function showJourney(player, from, to) {
+  const { flight } = Common.data;
+  const { ids } = Common;
+  const sender = player.getPacketSender();
+  sender.sendInterface(ids.map);
+  sender.sendInterfaceDisplayState(ids.closeButton, true);
+  for (const marker of ids.markers) sender.sendInterfaceRawModel(marker, flight.markerModel);
+  sender.sendInterfaceRawModel(ids.balloon, flight.balloonModel);
+  const journey = from ? ids.journeys.get(`${from.key}>${to.key}`) : undefined;
+  if (journey !== undefined) sender.sendInterfaceAnimation(ids.balloon, journey);
+  sender.sendSong(flight.song);
+}
+
 /**
- * The flight: the logs taken as the screen fades, the player at the destination's basket
- * `flightTicks` later. `arrived` runs as they land (a route opened).
+ * The flight (balloon-transport.json `flight`): the logs taken from the inventory or the log
+ * storage, the jingle, the fade overlay and the map flying the route at once; the teleport at
+ * `teleportAt`; the map closed and the fade run at `closeAt`; the overlay gone at
+ * `overlayCloseAt`. `arrived` runs as they land (a route opened).
  */
-function fly(player, to, logs, arrived = null) {
+function fly(player, to, logs, arrived = null, source = Storage.INVENTORY, fromStation = null) {
   if (flying(player)) return false;
-  const { flightTicks, closeTicks } = Common.data;
+  const { flight: timing, messages } = Common.data;
   const movement = player.getMovementQueue?.();
-  const inventory = player.getInventory();
-  const logId = Common.ids.objs[to.log];
-  if (inventory.getAmount(logId) < logs) return false;
-  inventory.delete(logId, logs);
-  inventory.refreshItems?.();
+  if (!Storage.pay(player, to, logs, source)) return false;
   const from = player.getLocation();
   const departed = { x: from.getX(), y: from.getY(), z: from.getZ() };
   movement?.setBlockMovement?.(true);
   movement?.reset?.();
-  Common.fade(player, true);
+  player.getPacketSender().sendJingle(timing.jingle, timing.jingleLength);
+  Storage.tellPaid(player, to, source);
+  Common.fade(player, timing.fadeStart);
+  showJourney(player, fromStation ?? Common.stationAt(from), to);
   const flight = { done: false };
   flights.set(player, flight);
   const finish = () => {
@@ -198,18 +232,19 @@ function fly(player, to, logs, arrived = null) {
   flight.land = () => {
     if (flight.done) return;
     player.moveTo(Common.tile(to.land));
+    player.sendMessage(fill(messages.boarded, { place: to.place }));
     arrived?.();
     finish();
   };
   /** No flight after all: the logs back, the player where they are. */
   flight.abort = () => {
     if (flight.done) return;
-    inventory.adds?.(logId, logs) ?? inventory.add?.(new Common.core.Item(logId, logs));
-    inventory.refreshItems?.();
+    Storage.refund(player, to, logs, source);
+    player.getPacketSender().sendInterfaceRemoval();
     Common.closeFade(player);
     finish();
   };
-  Common.later(flightTicks, () => {
+  Common.later(timing.teleportAt, () => {
     if (flight.done) return;
     const at = player.getLocation();
     const moved = at.getX() !== departed.x || at.getY() !== departed.y || at.getZ() !== departed.z;
@@ -217,8 +252,16 @@ function fly(player, to, logs, arrived = null) {
     if (player.isDyingReturn?.() === true || player.getHitpoints?.() <= 0 || moved
       || (to.key === ENTRANA && wearsContraband(player))) return flight.abort();
     flight.land();
-    Common.fade(player, false);
-    Common.later(closeTicks, () => Common.closeFade(player));
+    // The map and fade belong to this flight: a newer one, or something the player opened since
+    // landing, is left alone.
+    Common.later(timing.closeAt - timing.teleportAt, () => {
+      if (flying(player) || !player.isRegistered?.()) return;
+      if (player.getInterfaceId?.() === Common.ids.map) player.getPacketSender().sendInterfaceRemoval();
+      Common.fade(player, timing.fadeEnd);
+      Common.later(timing.overlayCloseAt - timing.closeAt, () => {
+        if (!flying(player)) Common.closeFade(player);
+      });
+    });
   });
   return true;
 }

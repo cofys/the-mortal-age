@@ -39,11 +39,26 @@ class FakeGameObject {
   getPrivateArea() { return this.privateArea; }
 }
 
+const ITEM_NAMES = { [I.LAMP]: 'Lamp', [I.BEER]: 'Beer', [I.KEBAB]: 'Kebab', [I.COINS]: 'Coins',
+  [I.MEAT_PIE]: 'Meat pie', [I.STRANGE_FRUIT]: 'Strange fruit', [I.CAMO_TOP]: 'Camo top' };
+const UNTRADEABLE = new Set([I.CAMO_TOP]);
+// Coins plus the runes, feathers and arrows the Maze pays: rewards that stack live.
+const STACKABLE = new Set([I.COINS, I.FEATHER, I.IRON_ARROW, I.STEEL_ARROW, I.DEATH_RUNE,
+  I.CHAOS_RUNE, I.NATURE_RUNE, I.AIR_RUNE, I.WATER_RUNE, I.EARTH_RUNE, I.FIRE_RUNE, I.BRONZE_DART_TIP, I.BRONZE_BOLTS]);
+
+const REWARD = (amount, name) => `Your reward is: <col=ff0000>${amount}</col> x <col=ff0000>${name}</col>.`;
+const PLACED = (amount, name) =>
+  `Your reward is: <col=ff0000>${amount}</col> x <col=ff0000>${name}</col> - it has been placed <col=ff0000>on the ground</col>.`;
+const npcLines = p => [...(p.dialogue?.getDialogues?.().values() ?? [])].map(entry => entry.getText?.()).filter(Boolean);
+
 function harness(t, members = true) {
   let now = 1_000, random = 0.5;
   t.mock.method(Date, 'now', () => now);
   t.mock.method(Math, 'random', () => random);
-  t.mock.method(Item.prototype, 'getDefinition', function () { return { isStackable: () => this.getId() === I.COINS }; });
+  t.mock.method(Item.prototype, 'getDefinition', function () {
+    return { isStackable: () => STACKABLE.has(this.getId()), getName: () => ITEM_NAMES[this.getId()] ?? `Item ${this.getId()}`,
+      isTradeable: () => !UNTRADEABLE.has(this.getId()) };
+  });
   const hooks = {}, npcs = [], prompts = [], drops = [], objects = [], interfaces = [];
   const custom = new Map();
   let enabled = true, blocked = () => false, movable = () => true, roof = () => false;
@@ -69,8 +84,9 @@ function harness(t, members = true) {
     emitCustomEvent(name, event) { custom.get(name)?.forEach(cb => cb(event)); },
     getPluginConfig: () => enabled,
     persistAttribute(key, defaultValue) { persistedAttributes.set(key, defaultValue); },
-    getItemOnGroundManager: () => ({ DESPAWN_DELAY: 300, registerLocation(player, item, position) {
-      const drop = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, true, -1, null);
+    getItemOnGroundManager: () => ({ DESPAWN_DELAY: 300, registerLocation(player, item, position, privateArea, options = {}) {
+      const drop = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, options.goesGlobal ?? true, -1, null);
+      if (options.despawnDelay != null) drop.setDespawnDelay(options.despawnDelay);
       drops.push(drop); return drop;
     } }),
     getRegionManager: () => ({ blocked: (...args) => blocked(...args), canMovestart: (...args) => movable(...args),
@@ -158,7 +174,16 @@ function harness(t, members = true) {
       }),
       getInventory: () => ({ get: slot => slots[slot], getItems: () => slots, getFreeSlots: () => p.free,
         containsNumber: id => slots.some(item => item?.getId() === id && item.getAmount() > 0),
-        addItem(item) { rewards.push(item.getId()); rewardItems.push(item); },
+        getAddableAmount(item) {
+          if (!item.getDefinition().isStackable()) return Math.min(item.getAmount(), p.free);
+          const stack = slots.find(slot => slot?.getId() === item.getId());
+          if (stack) return Math.min(item.getAmount(), Math.max(0, 2_147_483_647 - stack.getAmount()));
+          return p.free > 0 ? item.getAmount() : 0;
+        },
+        addItem(item) {
+          rewards.push(item.getId()); rewardItems.push(item);
+          if (!item.getDefinition().isStackable() || !slots.some(slot => slot?.getId() === item.getId())) p.free--;
+        },
         delete(id, amount = 1) { const index = slots.findIndex(item => item?.getId() === id);
           if (index < 0) return; const item = slots[index]; if (item.getAmount() > amount) item.amount -= amount;
           else { slots[index] = undefined; p.free++; } },
@@ -555,17 +580,29 @@ test('randevt rejects malformed/unavailable indices and ineligible players witho
   h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 2, 'failed test retains the cooldown');
 });
 
-test('Genie and dwarf deny other players, retain full-inventory events and grant only once', t => {
+test('Genie and dwarf deny other players, put what does not fit on the ground and grant only once', t => {
   const h = harness(t);
-  for (const [kind, name, expected] of [[0, 'Genie', [I.LAMP]], [2, 'Drunken Dwarf', [I.KEBAB, I.BEER]]]) {
+  // Live, the dwarf with one free slot: the beer goes in, the kebab is placed on the ground.
+  for (const [kind, name, expected, line] of [
+    [0, 'Genie', [I.LAMP], "Ah, so you are there, Master Player. I'm so glad you summoned me. Please take this lamp and make your wish."],
+    [2, 'Drunken Dwarf', [I.BEER, I.KEBAB], "I 'new it were you matey! I remember your kebab stories! 'Ere, have some ob the good stuff!"]]) {
     const p = h.player(), other = h.player(), npc = h.spawn(p, kind);
     assert.equal(npc.definition.id, kind === 0 ? N.GENIE : N.DRUNKEN_DWARF);
     h.hooks[name]['Talk-to']({ player: other, npc }); h.hooks[name].Dismiss({ player: other, npc });
     assert.deepEqual(other.rewards, []); assert.equal(npc.removed, undefined);
     npc.owner = other; h.hooks[name]['Talk-to']({ player: p, npc }); assert.deepEqual(p.rewards, []); npc.owner = p;
-    p.free = expected.length - 1; h.hooks[name]['Talk-to']({ player: p, npc }); assert.equal(npc.removed, undefined);
-    p.free = 28; h.hooks[name]['Talk-to']({ player: p, npc });
-    h.hooks[name]['Talk-to']({ player: p, npc }); assert.deepEqual(p.rewards, expected); assert.equal(npc.removed, true);
+    const dropsBefore = h.drops.length; p.messages.length = 0;
+    p.free = expected.length - 1; h.hooks[name]['Talk-to']({ player: p, npc });
+    h.hooks[name]['Talk-to']({ player: p, npc });
+    assert.equal(npc.removed, true);
+    assert.deepEqual(p.rewards, expected.slice(0, -1));
+    assert.equal(h.drops.length, dropsBefore + 1, 'only the item that did not fit is dropped');
+    const drop = h.drops.at(-1), last = ITEM_NAMES[expected.at(-1)];
+    assert.equal(drop.getItem().getId(), expected.at(-1)); assert.equal(drop.getOwner(), p.getUsername());
+    assert.equal(drop.getDespawnDelay(), 18_000); assert.equal(drop.getgoesGlobal(), true);
+    assert.ok(drop.getPosition().equals(p.location));
+    assert.deepEqual(p.messages, [...expected.slice(0, -1).map(id => REWARD(1, ITEM_NAMES[id])), PLACED(1, last)]);
+    assert.deepEqual(npcLines(p), [line]);
   }
 });
 
@@ -575,7 +612,7 @@ test('every event delivers real inventory items and refreshes the container exac
   const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
   t.mock.method(ItemDefinition, 'forId', id => ({ isStackable: () => id === I.COINS }));
   for (const [index, name, expected] of [[0, 'Genie', [[I.LAMP, 1]]],
-    [1, 'Sandwich lady', [[I.BAGUETTE, 1]]], [2, 'Drunken Dwarf', [[I.KEBAB, 1], [I.BEER, 1]]],
+    [1, 'Sandwich lady', [[I.BAGUETTE, 1]]], [2, 'Drunken Dwarf', [[I.BEER, 1], [I.KEBAB, 1]]],
     [3, 'Rick Turpentine', [[I.COINS, 80]]], [4, 'Niles', [[I.COINS, 80]]],
     [5, 'Mysterious Old Man', [[I.COINS, 80]]], [6, 'Dr Jekyll', [[I.STRENGTH_POTION_2_, 1]]],
     [23, 'Strange plant', [[I.STRANGE_FRUIT, 1]]]]) {
@@ -589,6 +626,7 @@ test('every event delivers real inventory items and refreshes the container exac
     if (index === 23) h.advance(27_000);
     const interact = () => h.hooks[name][index === 23 ? 'Pick' : 'Talk-to']({ player: p, npc });
     interact();
+    if (index === 1) openOptions(h, p);
     if (index === 1) h.emit('InterfaceActionClick', { player: p, buttonId: (297 << 16) | 6, action: 1 });
     if (index === 4) certerChoice(h, p, 'Fish');
     interact();
@@ -619,16 +657,27 @@ test('Sandwich tray validates owner, selection and open interface, with harmless
   const click = (player, index, action = 1) => h.emit('InterfaceActionClick', { player, buttonId: (297 << 16) | (6 + index), action });
   click(p, 0); assert.deepEqual(p.rewards, []);
   h.hooks['Sandwich lady']['Talk-to']({ player: p, npc });
+  // Live offers the food in a dialogue first; the tray opens when it is continued.
+  assert.equal(p.tray, undefined);
+  assert.deepEqual(npcLines(p), ['You look hungry to me. I tell you what - have a baguette on me.']);
+  openOptions(h, p);
   assert.equal(p.tray.length, 7); assert.match(p.trayTitle, /baguette/);
   assert.deepEqual(p.flags, Array.from({ length: 7 }, (_, index) => [(297 << 16) | (6 + index), -1, -1, 2]));
   click(p, 0, 2); assert.deepEqual(p.rewards, []);
   other.interfaceId = 297; click(other, 0); click(p, 1); assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-  p.free = 0; click(p, 0); assert.equal(npc.removed, undefined);
-  p.free = 1; h.random(0); click(p, 0); click(p, 0);
+  h.random(0); click(p, 0); click(p, 0);
   assert.deepEqual(p.rewards, [I.STALE_BAGUETTE]); assert.equal(p.interfaceId, -1);
+  assert.deepEqual(npcLines(p), ['Hope that fills you up!']);
   const normal = h.player(), npc2 = h.spawn(normal, 1, 0);
-  h.hooks['Sandwich lady']['Talk-to']({ player: normal, npc: npc2 }); h.random(1 / 64); click(normal, 0);
+  h.hooks['Sandwich lady']['Talk-to']({ player: normal, npc: npc2 }); openOptions(h, normal);
+  h.random(1 / 64); click(normal, 0);
   assert.deepEqual(normal.rewards, [I.BAGUETTE]);
+  // Live: a pie that doesn't fit is placed on the ground for three hours.
+  const full = h.player(), npc3 = h.spawn(full, 1, 4); full.free = 0;
+  h.hooks['Sandwich lady']['Talk-to']({ player: full, npc: npc3 }); openOptions(h, full); click(full, 4);
+  assert.deepEqual(full.rewards, []); assert.equal(npc3.removed, true);
+  assert.equal(h.drops.at(-1).getItem().getId(), I.MEAT_PIE); assert.equal(h.drops.at(-1).getDespawnDelay(), 18_000);
+  assert.deepEqual(full.messages, [PLACED(1, 'Meat pie')]);
 });
 
 test('dismissal, expiry, distance, plane, instances, logout, death and shutdown clean owned NPCs', t => {
@@ -687,15 +736,14 @@ test('lamp keeps blocked/maxed XP and rejects changed slot, replay, replacement 
   assert.equal(maxed.xp.get(skill), 200_000_000); assert.equal(maxed.slots[3], lamp);
 });
 
-test('Rick retains the first gift when full, denies strangers and cannot reward twice', t => {
+test('Rick places a gift that does not fit on the ground, denies strangers and cannot reward twice', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 3);
   assert.equal(npc.definition.id, N.RICK_TURPENTINE);
   h.hooks['Rick Turpentine']['Talk-to']({ player: h.player(), npc });
   p.free = 0; h.random(0.6); h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-  p.free = 1; h.random(0.99); h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
-  h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, [I.UNCUT_SAPPHIRE]); assert.equal(npc.removed, true);
+  h.random(0.99); h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
+  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true);
+  assert.deepEqual(h.drops.map(drop => drop.getItem().getId()), [I.UNCUT_SAPPHIRE]);
 });
 
 test('gift amounts and key halves follow the 150-entry table and F2P replacement', t => {
@@ -751,9 +799,9 @@ test('all Certer brothers use cache models, distinct answers, owner/op/interface
     assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
     h.hooks[name]['Talk-to']({ player: p, npc });
     p.free = 0; h.random(0.6); certerChoice(h, p, 'Fish');
-    assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-    p.free = 1; h.random(0.99); certerChoice(h, p, 'Fish'); certerChoice(h, p, 'Fish');
-    assert.deepEqual(p.rewards, [I.UNCUT_SAPPHIRE]); assert.equal(npc.removed, true); assert.equal(p.interfaceId, -1);
+    h.random(0.99); certerChoice(h, p, 'Fish');
+    assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true); assert.equal(p.interfaceId, -1);
+    assert.equal(h.drops.at(-1).getItem().getId(), I.UNCUT_SAPPHIRE);
   }
 });
 
@@ -787,9 +835,10 @@ test('Jekyll ignores noted/grimy/huasca, offers a fallback and preserves refused
   const h = harness(t), p = h.player(), npc = h.spawn(p, 6);
   p.slots[0] = new Item(I.GRIMY_TORSTOL, 1); p.slots[1] = new Item(I.TORSTOL_2, 1);
   p.slots[2] = new Item(I.HUASCA, 1); p.free = 0;
-  h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc }); assert.deepEqual(p.rewards, []);
-  p.free = 1; h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, [I.STRENGTH_POTION_2_]); assert.equal(p.slots.filter(Boolean).length, 3);
+  h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc }); h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc });
+  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true);
+  assert.deepEqual(h.drops.map(drop => drop.getItem().getId()), [I.STRENGTH_POTION_2_]);
+  assert.equal(p.slots.filter(Boolean).length, 3);
   const q = h.player(), refused = h.spawn(q, 6), herb = new Item(I.TORSTOL, 1); q.slots[2] = herb;
   h.hooks['Dr Jekyll']['Talk-to']({ player: q, npc: refused }); h.prompts.at(-1).options[1].cb();
   assert.equal(q.slots[2], herb); assert.deepEqual(q.rewards, [I.STRENGTH_POTION_2_]);
@@ -817,18 +866,36 @@ test('Jekyll rejects strangers, moved/replaced herbs, stale prompts and replies 
   assert.deepEqual(p.rewards, [I.STAMINA_POTION_4_]);
 });
 
-test('Mysterious Old Man gives a single owned gift, retains it when full and can be dismissed', t => {
+test('Mysterious Old Man gives a single owned gift, places it on the ground when full and can be dismissed', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 5);
   assert.equal(npc.definition.id, N.MYSTERIOUS_OLD_MAN_2);
   h.hooks['Mysterious Old Man']['Talk-to']({ player: h.player(), npc });
   p.free = 0; h.random(0.6); h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-  p.free = 1; h.random(0); h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
   h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, [I.UNCUT_SAPPHIRE]); assert.equal(npc.removed, true);
+  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true);
+  assert.deepEqual(h.drops.map(drop => drop.getItem().getId()), [I.UNCUT_SAPPHIRE]);
+  const coins = h.player(), giver = h.spawn(coins, 5); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: coins, npc: giver });
+  assert.deepEqual(coins.rewards, [I.COINS]);
+  assert.deepEqual(coins.messages, [REWARD(80, 'Coins')]);
+  assert.deepEqual(npcLines(coins),
+    ['Ah, so you are there. I hoped you would talk to me, I get so lonely. Here, have a present! I must be going now though.']);
   const q = h.player(), dismissed = h.spawn(q, 5);
   h.hooks['Mysterious Old Man'].Dismiss({ player: q, npc: dismissed });
   assert.equal(dismissed.removed, true); assert.deepEqual(q.rewards, []);
+});
+
+test('a reward too big for a nearly full stack goes to the ground whole instead of being clamped', t => {
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 5);
+  p.free = 0; p.slots[0] = new Item(I.COINS, 2_147_483_646); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
+  assert.deepEqual(p.rewards, []);
+  assert.deepEqual(h.drops.map(drop => [drop.getItem().getId(), drop.getItem().getAmount()]), [[I.COINS, 80]]);
+  assert.deepEqual(p.messages, [PLACED(80, 'Coins')]);
+  const q = h.player(), giver = h.spawn(q, 5);
+  q.free = 0; q.slots[0] = new Item(I.COINS, 2_147_483_647 - 80); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: q, npc: giver });
+  assert.deepEqual(q.rewards, [I.COINS]); assert.deepEqual(q.messages, [REWARD(80, 'Coins')]);
 });
 
 test('Strange Plant stays planted, grows before picking, denies strangers and rewards only once', t => {
@@ -852,6 +919,8 @@ test('full-inventory fruit remains private on the ground for exactly three hours
   assert.equal(drop.getItem().getId(), I.STRANGE_FRUIT); assert.equal(drop.getOwner(), p.getUsername());
   assert.equal(drop.getgoesGlobal(), false); assert.equal(drop.getState(), State.SEEN_BY_PLAYER);
   assert.ok(drop.getPosition().equals(p.location)); assert.notEqual(drop.getPosition(), p.location);
+  assert.equal(drop.getDespawnDelay(), 18_000);
+  assert.deepEqual(p.messages.slice(-2), [PLACED(1, 'Strange fruit'), 'You pick the fruit from the plant.']);
   const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
   let removed = 0; t.mock.method(ItemOnGroundManager, 'deregister', item => { assert.equal(item, drop); removed++; });
   for (let tick = 1; tick < 18_000; tick++) drop.process();
@@ -1273,20 +1342,23 @@ test('Prison Pete pays out after three correct balloon keys', t => {
   assert.equal(Teleports.sessionOf(p), undefined);
 });
 
-test('rewards that no longer fit drop at the return tile, not inside the event', t => {
+test('rewards go one at a time at the return tile: what fits is kept, the rest is placed there', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 10);
   h.hooks['Bee keeper']['Talk-to']({ player: p, npc, handled: false });
   choose(h, p, 0);
   const session = Teleports.sessionOf(p);
   for (let slot = 0; slot < 27; slot++) p.slots[slot] = new Item(I.SHARK, 1);
-  p.free = 1;
-  Teleports.finish(session, { reward: [{ id: I.LAMP, amount: 1 }, { id: 25129, amount: 1 }] });
+  p.free = 1; p.messages.length = 0;
+  Teleports.finish(session, { reward: [{ id: I.LAMP, amount: 1 }, { id: I.CAMO_TOP, amount: 1 }] });
   assert.equal(p.location.getX(), 3222, 'home again');
-  assert.equal(h.drops.length, 2);
-  for (const drop of h.drops) {
-    assert.ok(drop.getPosition().equals(p.location), 'dropped beside the return tile');
-  }
-  assert.deepEqual(p.rewards, [], 'nothing squeezed into the inventory');
+  assert.deepEqual(p.rewards, [I.LAMP]);
+  assert.equal(h.drops.length, 1);
+  const [drop] = h.drops;
+  assert.ok(drop.getPosition().equals(p.location), 'dropped beside the return tile');
+  assert.equal(drop.getItem().getId(), I.CAMO_TOP);
+  // Live: an untradeable reward stays owner-only for its three hours.
+  assert.equal(drop.getgoesGlobal(), false); assert.equal(drop.getDespawnDelay(), 18_000);
+  assert.deepEqual(p.messages, [REWARD(1, 'Lamp'), PLACED(1, 'Camo top')]);
 });
 
 test('Evil twin catches the matching suspect within two grabs and pays gems', t => {

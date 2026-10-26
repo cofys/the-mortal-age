@@ -16,6 +16,11 @@ import { Sounds } from "../../../Sounds";
 const getPluginManager = () =>
     require("../../../../plugins/PluginManager").PluginManager as typeof import("../../../../plugins/PluginManager").PluginManager;
 
+/** Live OSRS's wording (rsprox recordings 454, 3066, 4151, 3467, 1059). */
+const INVENTORY_FULL_MESSAGE = "You don't have enough inventory space.";
+const WITHDRAW_PARTIAL_MESSAGE = "You don't have enough inventory space to withdraw that many.";
+const NEW_TAB_MESSAGE = "To create a new tab, drag items from your bank onto this tab.";
+
 export class Bank extends ItemContainer {
     full(): ItemContainer {
         this.getPlayer().sendMessage("Not enough space in bank.");
@@ -81,6 +86,9 @@ export class Bank extends ItemContainer {
      * DRAGTARGET and TARGET. No pause button (bit 0): with it, an empty slot offered "Continue".
      */
     public static readonly ITEM_SLOT_FLAGS = 0x7fe | (2 << 17) | (1 << 20) | (1 << 21);
+    /** The same slots' ops, as IF_SETEVENTS_V2 sends them: OP1-OP11, op 11 being Examine. */
+    public static readonly ITEM_SLOT_OPS = 0x7ff;
+    public static readonly EXAMINE_OP = 11;
 
     constructor(public player: Player) {
         super(player);
@@ -325,7 +333,7 @@ export class Bank extends ItemContainer {
         const entries: Array<{ tab: number; slot: number; item: Item }> = [];
         for (const tab of [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]) {
             player.getBank(tab).getItems().forEach((item, slot) => {
-                if (item != null && item.getId() > 0 && item.getAmount() >= 0) {
+                if (item != null && item.getId() >= 0 && item.getAmount() >= 0) {
                     entries.push({ tab, slot, item });
                 }
             });
@@ -343,7 +351,7 @@ export class Bank extends ItemContainer {
     /** Removes the placeholder in `slot` of `tab`. */
     public static releasePlaceholder(player: Player, tab: number, slot: number): void {
         const item = player.getBank(tab).getItems()[slot];
-        if (!item || item.getId() <= 0 || item.getAmount() !== 0) return;
+        if (!item || item.getId() < 0 || item.getAmount() !== 0) return;
         item.setId(-1);
         item.setMeta(null);
         player.getBank(tab).refreshItems();
@@ -351,7 +359,7 @@ export class Bank extends ItemContainer {
 
     public static viewTab(player: Player, tab: number): void {
         if (tab > Bank.getTabCount(player)) {
-            player.sendMessage("To create a new tab, drag an item here.");
+            player.sendMessage(NEW_TAB_MESSAGE);
             return;
         }
         player.setCurrentBankTab(tab);
@@ -386,7 +394,7 @@ export class Bank extends ItemContainer {
         const tabs = tab === 0 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : [tab];
         for (const index of tabs) {
             for (const item of player.getBank(index).getItems()) {
-                if (item != null && item.getId() > 0 && item.getAmount() === 0) {
+                if (item != null && item.getId() >= 0 && item.getAmount() === 0) {
                     item.setId(-1);
                     item.setMeta(null);
                 }
@@ -437,7 +445,7 @@ export class Bank extends ItemContainer {
         const items = bank.getItems();
         let last = -1;
         items.forEach((item, slot) => {
-            if (item != null && item.getId() > 0) last = slot;
+            if (item != null && item.getId() >= 0) last = slot;
         });
         return last + 1 < bank.capacity() ? last + 1 : bank.getEmptySlot();
     }
@@ -454,7 +462,7 @@ export class Bank extends ItemContainer {
      */
     private static depositDragged(player: Player, slot: number, itemId: number, tab: number | undefined) {
         const item = player.getInventory().getItems()[slot];
-        if (!item || item.getId() <= 0 || item.getId() !== itemId) return;
+        if (!item || item.getId() < 0 || item.getId() !== itemId) return;
         if (getPluginManager().emitCanBankItem(player, item) === false) return;
         const unnoted = item.getDefinition().unNote();
         let target = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].find((index) => player.getBank(index).contains(unnoted));
@@ -574,6 +582,11 @@ export class Bank extends ItemContainer {
         if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === Bank.ITEMS_CHILD && packet.slot != null) {
             const entry = Bank.resolveDisplaySlot(player, packet.slot);
             if (!entry || (packet.itemId != null && packet.itemId !== Bank.displayItemId(entry.item))) return true;
+            if (packet.buttonNum === Bank.EXAMINE_OP) {
+                const definition = ItemDefinition.forId(entry.item.getId());
+                player.sendMessage(definition.getExamine() || definition.getName());
+                return true;
+            }
             if (entry.item.getAmount() === 0) {
                 if (packet.buttonNum === 8 || packet.option?.trim().toLowerCase() === "release") {
                     Bank.releasePlaceholder(player, entry.tab, entry.slot);
@@ -759,7 +772,7 @@ export class Bank extends ItemContainer {
                                 player.setCurrentBankTab(bankId);
                                 player.getBank(bankId).open();
                             } else {
-                                player.sendMessage("To create a new tab, simply drag an item here.");
+                                player.sendMessage(NEW_TAB_MESSAGE);
                                 if (searching) {
                                     player.getBank(player.getCurrentBankTab()).open();
                                 }
@@ -978,7 +991,7 @@ export class Bank extends ItemContainer {
         sender.sendInterfaceScript(917, [-1, -2])
             .sendSubInterface((161 << 16) | 16, Bank.MAIN_INTERFACE_ID, 0, { varps, varbits })
             .sendSubInterface((161 << 16) | 74, Bank.SIDE_INTERFACE_ID, 3, { varps, varbits })
-            .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD, 0, 1409, Bank.ITEM_SLOT_FLAGS)
+            .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD, 0, 1409, Bank.ITEM_SLOT_FLAGS, Bank.ITEM_SLOT_OPS)
             // The empty space after each tab's items is a drop target (one per tab).
             .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD,
                 Bank.TAB_DROP_SLOT_OFFSET, Bank.TAB_DROP_SLOT_OFFSET + 9, 1 << 20)
@@ -1034,21 +1047,28 @@ export class Bank extends ItemContainer {
         // Make sure we have enough space in the other container
         if (to.getFreeSlots() <= 0 && (!(to.contains(item.getId()) && item.getDefinition().isStackable()))
                 && !(this.getPlayer().withdrawAsNote() && canWithdrawAsNote && to.contains(noteId))) {
-            to.full();
+            if (to instanceof Inventory) this.getPlayer().sendMessage(INVENTORY_FULL_MESSAGE);
+            else to.full();
             return this;
         }
 
         // If bank > inventory and item.amount > inventory.freeslots,
         // change the item amount to the free slots we have in inventory.
+        let shortened = false;
         if (item.getAmount() > to.getFreeSlots() && !item.getDefinition().isStackable()) {
             if (to instanceof Inventory) {
                 if (this.getPlayer().withdrawAsNote()) {
-                    if (!canWithdrawAsNote)
+                    if (!canWithdrawAsNote) {
                         item.setAmount(to.getFreeSlots());
-                } else
+                        shortened = true;
+                    }
+                } else {
                     item.setAmount(to.getFreeSlots());
+                    shortened = true;
+                }
             }
         }
+        if (shortened) this.getPlayer().sendMessage(WITHDRAW_PARTIAL_MESSAGE);
 
         // Make sure we aren't taking more than we have.
         if (item.getAmount() > this.getAmount(item.getId())) {

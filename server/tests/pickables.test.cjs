@@ -110,3 +110,40 @@ test('cabbage respawns after 40 to 80 ticks (Wiki)', () => {
     assert.equal(Pickable._test.respawnTicks(cabbage, () => 0), 40);
     assert.equal(Pickable._test.respawnTicks(cabbage, () => 0.9999), 80);
 });
+
+// Wild banana trees have their own depletion handler, but use the same pick sound.
+const BananaTree = require('../plugins/objects/BananaTree.plugin');
+const { Sound } = require('../dist/game/Sound');
+const bananaActions = {};
+BananaTree.register({
+    core: { Sound, Sounds },
+    getObjectManager: () => ObjectManager,
+    getTaskManager: () => ({ submit: (task) => tasks.push(task) }),
+    onObjectInteraction: (name, actions) => Object.assign(bananaActions, actions),
+});
+
+test('wild bananas: every successful stage gives one banana and one pick sound (rsprox 4287)', () => {
+    for (let id = 2073; id <= 2077; id++) {
+        log.length = 0;
+        tasks.length = 0;
+        bananaActions.Pick({ player: player(), object: plant(id, 'Banana tree', 3700) });
+        assert.deepEqual(log.filter(line => line.startsWith('item ')), ['item 1963 x1']);
+        assert.deepEqual(log.filter(line => line.startsWith('sound ')), ['sound 2581']);
+        assert.ok(log.includes(`add ${id + 1}`));
+        assert.ok(log.includes('You pick a banana.'));
+        assert.equal(tasks.length, 1);
+    }
+});
+
+test('wild bananas: full inventory and searching an empty tree give no reward or pick sound', () => {
+    log.length = 0;
+    tasks.length = 0;
+    const full = player();
+    full.getInventory = () => ({ getFreeSlots: () => 0 });
+    bananaActions.Pick({ player: full, object: plant(2073, 'Banana tree', 3800) });
+    assert.deepEqual(log, ["You don't have enough room in your inventory."]);
+    assert.equal(tasks.length, 0);
+    log.length = 0;
+    bananaActions.Search({ player: player(), object: plant(2078, 'Banana tree', 3800) });
+    assert.deepEqual(log, ['There are no bananas left on the tree.']);
+});

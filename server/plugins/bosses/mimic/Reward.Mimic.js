@@ -16,19 +16,26 @@
  * (NpcDrops' `npc-drops:generated` event, handled); opening the chest outside
  * the arena generates the original clue rewards plus one bonus outcome and
  * consumes the chest. The open-world Mimic's drops are untouched.
- * - Obtaining the Mimic prints "The chest turned out to be the Mimic!", but no
- *   obtain path exists yet (elite/master caskets don't open in TSPS — no clue
- *   system), so that line waits on it.
+ * - Obtaining it: Treasure Trails rolls an elite or master casket's Mimic chance and
+ *   asks here ("treasure-trails:mimic-casket"); this plugin owns the opt-in, the one
+ *   Mimic at a time and the dry protection, and answers with the item. Treasure Trails
+ *   prints "The chest turned out to be the Mimic!".
  */
 
 const Shared = require("./Shared.Mimic");
 const Lair = require("./Lair.Mimic");
 const State = require("./State.Mimic");
 const Pool = require("./Pool.Mimic");
+const { OPTED_IN_ATTRIBUTE } = require("./Dialogue.Mimic");
 const BONUS_TABLES = require("../data/reward-tables.json").tables;
 const opening = new WeakSet();
 
 const DEFEATED_ATTRIBUTE = State.LEGACY_DEFEATED_ATTRIBUTE;
+/** Set by the player's first Mimic; until then the dry protection applies. */
+const ENCOUNTERED_ATTRIBUTE = "mimic:encountered";
+// Wiki (Mimic): "There is a dry protection that guarantees your first Mimic encounter on either
+// the 10th master reward casket or 25th elite reward casket, if you have Mimic encounters enabled."
+const GUARANTEED_CASKET = Object.freeze({ elite: 25, master: 10 });
 /** Clue casket loot window (group 73, item grid on child 3; verified in cache). */
 const LOOT_INTERFACE = 73;
 const LOOT_GRID_UID = (73 << 16) | 3;
@@ -151,6 +158,22 @@ function onDropsGenerated(event) {
   Shared.markDefeated(player, session.casketId);
 }
 
+/**
+ * A clue casket turning into the Mimic: only for an opted-in player without one already (Wiki:
+ * "You already have a Mimic, and cannot be given another one."), on the casket's own roll or the
+ * dry protection. The Mimic keeps the casket's clue rolls.
+ */
+function fromCasket(request) {
+  const { player, tier } = request ?? {};
+  if (!player || request.item || player.getAttribute(OPTED_IN_ATTRIBUTE) !== true || Shared.mimicSlot(player) >= 0) return;
+  const guaranteed = player.getAttribute(ENCOUNTERED_ATTRIBUTE) !== true && request.opened === GUARANTEED_CASKET[tier];
+  if (request.rolled !== true && !guaranteed) return;
+  const item = new (Shared.core().Item)(Shared.ids().CASKET_ITEM, 1);
+  Shared.initializeCasket(item, tier, request.rolls);
+  player.setAttribute(ENCOUNTERED_ATTRIBUTE, true);
+  request.item = item;
+}
+
 /** Dying is observed through postLeave (the respawn leaves the arena), which
  * spends the roll there; no hook here, so a death can never cost twice. */
 function attach(api) {
@@ -158,8 +181,10 @@ function attach(api) {
   api.persistAttribute(DEFEATED_ATTRIBUTE, false);
   api.persistAttribute(State.LEDGER_ATTRIBUTE, {});
   api.persistAttribute(Shared.ROLLS_ATTRIBUTE, Shared.FRESH_ROLLS);
+  api.persistAttribute(ENCOUNTERED_ATTRIBUTE, false);
   api.onItemAction("Mimic", { Open: openMimic });
+  api.onCustomEvent("treasure-trails:mimic-casket", fromCasket);
   api.onCustomEvent("npc-drops:generated", onDropsGenerated);
 }
 
-module.exports = { attach, openMimic, onDropsGenerated, DEFEATED_ATTRIBUTE };
+module.exports = { attach, openMimic, onDropsGenerated, fromCasket, DEFEATED_ATTRIBUTE, ENCOUNTERED_ATTRIBUTE, GUARANTEED_CASKET };

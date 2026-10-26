@@ -16,7 +16,15 @@ import { PluginListPanel } from "@runelite/client/ui/plugin/PluginListPanel";
 import { GroundItemsPlugin } from "../game/plugins/grounditems/GroundItemsPlugin";
 import { MenuSwapperPlugin } from "../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesPlugin } from "../game/plugins/notes/NotesPlugin";
+import { SidebarPanel } from "../game/sidebar/SidebarPanel";
+import { sidebarShortcut, togglePanel } from "../game/sidebar/sidebarShortcuts";
 import { SidebarStore } from "../game/sidebar/SidebarStore";
+import {
+    comparePlugins,
+    getPinnedPlugins,
+    setPluginPinned,
+} from "@runelite/client/ui/plugin/pinnedPlugins";
+import { imageIcon } from "@runelite/client/ui/runeliteImages";
 import type { SidebarPersistedState } from "../game/sidebar/types";
 
 class MemoryStorage implements ConfigStorage {
@@ -110,18 +118,70 @@ async function main(): Promise<void> {
     assert.ok(!hub.includes('aria-label="Menu Entry Swapper settings"'), "no cog without settings");
     assert.ok(hub.includes('aria-checked="false" aria-label="Enable Menu Entry Swapper"'));
     assert.ok(hub.includes('aria-checked="true" aria-label="Disable Notes"'));
+    // RuneLite's rows: the description only in the tooltip, a pin star, image cog and switch.
+    assert.ok(!hub.includes("rl-plugin-item-desc"), "no inline description");
+    assert.ok(hub.includes('title="Ground Items:\n'), "the description is in the name's tooltip");
+    assert.ok(hub.includes('aria-label="Pin Ground Items"'), "every plugin row has a pin star");
+    assert.ok(!hub.includes('aria-label="Pin RSPS.app"'), "the client row isn't pinnable");
+    assert.ok(hub.includes("/runelite/switcher_on.png") && hub.includes("/runelite/search.png"));
 
-    // Reset puts a group back to its defaults; the sidebar mode defaults to overlay.
+    // Pins: saved in runelite.pinnedPlugins, pinned plugins listed first.
+    assert.deepEqual([...getPinnedPlugins(configManager)], []);
+    setPluginPinned(configManager, "Notes", true);
+    setPluginPinned(configManager, "Ground Items", true);
+    setPluginPinned(configManager, "Ground Items", false);
+    assert.equal(configManager.getConfiguration("runelite", "pinnedPlugins"), "Notes");
+    const pinnedHub = renderToStaticMarkup(
+        createElement(PluginListPanel, { pluginManager, configManager }),
+    );
+    assert.ok(pinnedHub.indexOf(">Notes<") < pinnedHub.indexOf(">Ground Items<"), "pinned first");
+    assert.ok(pinnedHub.includes('aria-pressed="true" aria-label="Unpin Notes"'));
+    const order = (needle: string, pinned: string[], names: string[]): string[] =>
+        names
+            .map((name) => ({ name, pinned: pinned.includes(name) }))
+            .sort((a, b) => comparePlugins(a, b, needle))
+            .map((plugin) => plugin.name);
+    assert.deepEqual(order("", [], ["XP Tracker", "Camera", "Notes"]), [
+        "Camera",
+        "Notes",
+        "XP Tracker",
+    ]);
+    assert.deepEqual(order("", ["XP Tracker"], ["Camera", "XP Tracker"]), ["XP Tracker", "Camera"]);
+    assert.deepEqual(
+        order("item", [], ["Inventory Tags", "Ground Items", "Item Prices"]),
+        ["Ground Items", "Item Prices", "Inventory Tags"],
+        "name words starting with the search, then other matches",
+    );
+
+    // Reset puts a group back to its defaults; panels dock beside the game, as RuneLite's.
     const runeLiteConfig = configManager.getConfig(RuneLiteConfig);
-    assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Overlay);
-    configManager.setConfigValue(RuneLiteConfig, "sidebarMode", SidebarMode.Docked);
-    assert.equal(configManager.getConfiguration("runelite", "sidebarMode"), "Docked");
     assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Docked);
-    configManager.setDefaultConfiguration(RuneLiteConfig, true);
+    configManager.setConfigValue(RuneLiteConfig, "sidebarMode", SidebarMode.Overlay);
+    assert.equal(configManager.getConfiguration("runelite", "sidebarMode"), "Overlay");
     assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Overlay);
+    configManager.setDefaultConfiguration(RuneLiteConfig, true);
+    assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Docked);
+
+    // A panel is the plugin's content only: no header or close button.
+    const panelButton = NavigationButton.builder()
+        .tooltip("Notes")
+        .icon(imageIcon("/runelite/notes_icon.png"))
+        .panel(() => createElement("p", null, "body"))
+        .build();
+    const panel = renderToStaticMarkup(createElement(SidebarPanel, { button: panelButton }));
+    assert.ok(panel.includes('aria-label="Notes"') && panel.includes("<p>body</p>"));
+    assert.ok(!panel.includes("header") && !panel.includes("Close"), "no header or close button");
+    const Icon = panelButton.icon!;
+    const icon = renderToStaticMarkup(createElement(Icon, { label: "Notes" }));
+    assert.ok(icon.includes("<img") && !icon.includes("<svg"), "an image, not line art");
+    assert.ok(icon.includes('width="16"') && icon.includes('alt="Notes"'));
 
     // SidebarStore: a rail click opens, a second click closes, and the open panel is remembered.
-    let saved: SidebarPersistedState | undefined = { open: true, selectedId: "plugin_hub" };
+    let saved: SidebarPersistedState | undefined = {
+        open: true,
+        selectedId: "plugin_hub",
+        collapsed: false,
+    };
     const persistence = {
         load: () => saved,
         save: (state: SidebarPersistedState) => (saved = state),
@@ -129,16 +189,57 @@ async function main(): Promise<void> {
     const store = new SidebarStore(persistence);
     assert.equal(store.getState().selected, "plugin_hub", "an old saved id just matches no button");
     store.toggle("Notes");
-    assert.deepEqual(saved, { open: true, selectedId: "Notes" });
+    assert.deepEqual(saved, { open: true, selectedId: "Notes", collapsed: false });
     store.toggle("Notes");
     assert.equal(store.getState().selected, null);
-    assert.deepEqual(saved, { open: false, selectedId: null });
-    assert.equal(
-        new SidebarStore({
-            load: () => ({ open: false, selectedId: "Notes" }),
-            save() {},
-        }).getState().selected,
-        null,
+    assert.deepEqual(
+        saved,
+        { open: false, selectedId: "Notes", collapsed: false },
+        "a closed panel is remembered for Ctrl+F12",
+    );
+    const reloaded = new SidebarStore({
+        load: () => ({ open: false, selectedId: "Notes", collapsed: false }),
+        save() {},
+    });
+    assert.equal(reloaded.getState().selected, null);
+    assert.equal(reloaded.getLastSelected(), "Notes");
+
+    // Hiding the whole sidebar (Ctrl+F11): saved, and the open panel comes back with it.
+    store.select("Notes");
+    store.toggleCollapsed();
+    assert.deepEqual(store.getState(), { selected: "Notes", collapsed: true });
+    assert.deepEqual(saved, { open: true, selectedId: "Notes", collapsed: true });
+    store.toggleCollapsed();
+    assert.deepEqual(store.getState(), { selected: "Notes", collapsed: false });
+    // Saves from before the sidebar could be hidden have no flag: shown.
+    const legacy = { open: true, selectedId: "Notes" } as unknown as SidebarPersistedState;
+    assert.equal(new SidebarStore({ load: () => legacy, save() {} }).getState().collapsed, false);
+
+    // Ctrl+F12: close the open panel; reopen the last one, or the first panel if it's gone.
+    const keys = { ctrlKey: true, altKey: false, shiftKey: false, metaKey: false };
+    assert.equal(sidebarShortcut({ ...keys, key: "F11" }), "toggleSidebar");
+    assert.equal(sidebarShortcut({ ...keys, key: "F12" }), "togglePanel");
+    assert.equal(sidebarShortcut({ ...keys, key: "F12", shiftKey: true }), null);
+    assert.equal(sidebarShortcut({ ...keys, key: "F11", ctrlKey: false }), null);
+    const withPanel = (tooltip: string): NavigationButton =>
+        NavigationButton.builder()
+            .tooltip(tooltip)
+            .panel(() => null)
+            .build();
+    const panels = [withPanel("Configuration"), withPanel("Notes")];
+    togglePanel(store, panels);
+    assert.equal(store.getState().selected, null);
+    togglePanel(store, panels);
+    assert.equal(store.getState().selected, "Notes");
+    store.select(null);
+    togglePanel(store, [withPanel("Configuration")]);
+    assert.equal(store.getState().selected, "Configuration", "the last panel's plugin is off");
+    store.toggleCollapsed();
+    togglePanel(store, panels);
+    assert.deepEqual(
+        store.getState(),
+        { selected: "Configuration", collapsed: false },
+        "on a hidden sidebar, Ctrl+F12 shows it with its panel",
     );
 
     console.log("runelite-client-toolbar.test.ts: all tests passed");

@@ -9,6 +9,7 @@ type WidgetMenuDeriveCacheEntry = {
     revision: number;
     flagsVersion: number;
     flags: number;
+    opMask: number;
     itemId: number;
     targetVerb: string;
     spellActionName: string;
@@ -249,15 +250,17 @@ export function getWidgetInteractionSnapshot(
 export function deriveMenuEntriesForWidgetCached(
     w: any,
     getWidgetFlags?: (w: any) => number,
+    getWidgetOpMask?: (w: any) => number,
 ): Array<{ option: string; target?: string }> {
     const selectionEntries = getSelectionTargetEntries(w);
     if (selectionEntries) return selectionEntries;
     const uid = typeof w?.uid === "number" ? w.uid | 0 : 0;
     if (uid === 0) {
-        return UI_deriveMenuEntriesForWidget(w as any, false, getWidgetFlags) || [];
+        return UI_deriveMenuEntriesForWidget(w as any, false, getWidgetFlags, undefined, getWidgetOpMask) || [];
     }
 
     const flags = (getWidgetFlags ? getWidgetFlags(w) : ((w?.flags ?? 0) as number)) | 0;
+    const opMask = (getWidgetOpMask ? getWidgetOpMask(w) : 0) | 0;
     const revision = (((w?.__interactionRevision ?? 0) as number) | 0) as number;
     const flagsVersion =
         typeof w?.__widgetFlagsVersion === "number" ? (w.__widgetFlagsVersion as number) | 0 : 0;
@@ -277,6 +280,7 @@ export function deriveMenuEntriesForWidgetCached(
         cached.revision === revision &&
         cached.flagsVersion === flagsVersion &&
         cached.flags === flags &&
+        cached.opMask === opMask &&
         cached.itemId === itemId &&
         cached.targetVerb === targetVerb &&
         cached.spellActionName === spellActionName &&
@@ -292,11 +296,13 @@ export function deriveMenuEntriesForWidgetCached(
     }
 
     // The cache keeps the menu as the widget defines it; plugins reorder it on every use.
-    const entries = deriveRawMenuEntriesForWidget(w as any, false, getWidgetFlags) || [];
+    const entries =
+        deriveRawMenuEntriesForWidget(w as any, false, getWidgetFlags, undefined, getWidgetOpMask) || [];
     const next: WidgetMenuDeriveCacheEntry = {
         revision,
         flagsVersion,
         flags,
+        opMask,
         itemId,
         targetVerb,
         spellActionName,

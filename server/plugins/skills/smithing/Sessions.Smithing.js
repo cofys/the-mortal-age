@@ -7,6 +7,7 @@
  * session, as do `remaining` running out and the player moving, dying or logging out.
  */
 const Core = require("./Core.Smithing");
+const { pauseForLevelUp } = require("../SkillActions");
 
 const SESSIONS = new Map();
 /** Other per-tick work (closing menus a player walked away from). */
@@ -58,6 +59,10 @@ function typeOf(player) {
   return SESSIONS.get(player)?.type ?? null;
 }
 
+function pause(event) {
+  pauseForLevelUp(event, SESSIONS, (player) => stop(player, false));
+}
+
 function everyTick(fn) {
   EVERY_TICK.push(fn);
 }
@@ -91,6 +96,7 @@ function process() {
       stop(player);
       continue;
     }
+    if (session.levelUpPaused) continue;
     if (!advance(player, session)) stop(player);
   }
 }
@@ -116,4 +122,4 @@ module.exports = function attach(api) {
   api.onServerStartup(startTask);
 };
 
-Object.assign(module.exports, { start, stop, typeOf, everyTick, timeline });
+Object.assign(module.exports, { start, stop, pause, typeOf, everyTick, timeline });

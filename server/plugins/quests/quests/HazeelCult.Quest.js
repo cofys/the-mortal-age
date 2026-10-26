@@ -5,18 +5,14 @@
  * variant selector for Ceril, Clivet, Alomone, Butler Jones, the mansion guard,
  * Henryeta and the cultists; the start hook; the side choice; the prose-condition
  * answers; the poison-on-range, evidence cupboard and Alomone death; the sewer
- * valves / raft; and the two completion actions.
+ * valves / raft; the Hazeel-side crate key, secret wall, hidden ladder and scroll
+ * chest; and the two completion actions.
  *
  * Stages (varp 223): 2 started, 3 spoke to Clivet, 4 chose a side, 5 poisoned the
  * food, 6 finished the side task, 7 returned the armour / found the scroll,
- * 9 complete. The chosen side is kept in a player attribute (0 Carnillean,
- * 1 Hazeel); the wiki's 225 varp is not read by this runtime.
- *
- * Gaps (no dump/index support): the secret wall (2854/2855) has no ObjectIdentifier,
- * and the scroll chest ids 2856/2857 are unnamed, so the Hazeel-side scroll cannot
- * be obtained here (only the 46710-46712 chest ids are named); the Alomone death
- * does not drop the Carnillean armour on the ground; the crate (2858) and cave
- * entrance/stairs travel are not wired.
+ * 9 complete (the cache DB row's completion threshold). The chosen side is kept
+ * in a player attribute (0 Carnillean, 1 Hazeel); the wiki's 225 varp is not read
+ * by this runtime.
  */
 module.exports = function registerHazeelCultQuest(api) {
   const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, CountdownTask, TaskManager } = api.core;
@@ -62,13 +58,26 @@ module.exports = function registerHazeelCultQuest(api) {
   const HIDEOUT_CHEST_ID = ObjectIdentifiers.CHEST_178; // 46713
   const MANSION_STAIRS_UP_ID = ObjectIdentifiers.STAIRCASE_203; // 46704
   const MANSION_STAIRS_DOWN_ID = ObjectIdentifiers.STAIRCASE_204; // 46705
+  const CRATE_ID = ObjectIdentifiers.CRATE_21; // 2858
+  // These four ids have no ObjectIdentifier constants in this cache dump. The
+  // transform parents are what the map actually places; 46902 resolves to the
+  // Knock-at wall 46707 and 46903 resolves to the Search chest 46710.
+  const SECRET_WALL_IDS = new Set([46707, 46902]);
+  const SCROLL_CHEST_IDS = new Set([46710, 46712, 46903]);
+  const HIDDEN_LADDER_UP_ID = 16683;
+  const HIDDEN_LADDER_DOWN_ID = 16679;
+  const HIDDEN_LADDER_TILE = { x: 2573, y: 3271, z: 1 };
+  const HIDDEN_ROOM_TILE = { x: 2572, y: 3271, z: 1 };
+  const HIDDEN_ROOM_EXIT_TILE = { x: 2571, y: 3270, z: 1 };
+  const HIDDEN_LADDER_TOP_TILE = { x: 2573, y: 3271, z: 2 };
   const HIDEOUT_TILE = { x: 2606, y: 9692, z: 0 };
   const HIDEOUT_RAFT_TILE = { x: 2606, y: 9693, z: 0 };
   const RAFT_RETURN_TILE = { x: 2568, y: 9681, z: 0 };
   // Capture 1694 tick [6564]: cave 2852 lands beside the raft at (2570,9682),
   // not the disconnected Clock Tower landing (2584,9633).
   const SEWER_LANDING = { x: 2570, y: 9682, z: 0 };
-  const SEWER_STAIRS_SURFACE = { x: 2570, y: 3283, z: 0 };
+  // Standable north edge of cave 2852's active-cache 4x4 footprint.
+  const SEWER_STAIRS_SURFACE = { x: 2587, y: 3237, z: 0 };
   const MANSION_BASEMENT = { x: 2544, y: 9695, z: 0 };
   const MANSION_FROM_BASEMENT = { x: 2570, y: 3268, z: 0 };
 
@@ -82,9 +91,9 @@ module.exports = function registerHazeelCultQuest(api) {
   const STAIRS_DOWN_FROM = { x: 2570, y: 3268, z: 1 };
   const STAIRS_DOWN_TO = { x: 2568, y: 3271, z: 0 };
 
-  // The world's npc-spawns.json still points the mansion/cave tiles at ids that
-  // the cache now resolves to nameless or wrong NPCs; these correct-id spawns
-  // are owner-only, so they replace those for the questing player.
+  // The placed old ids resolve to Fight Arena actors (1198/1203/1204/1206).
+  // Current HC transform parents 11972/11974/11976 are not placed in npc-spawns.json.
+  // These owner-only actors therefore supply the actual HC conversations.
   const CERIL_TILE = { x: 2565, y: 3271, z: 0 };
   const JONES_TILE = { x: 2569, y: 3272, z: 0 };
   const CLIVET_TILE = { x: 2566, y: 9683, z: 0 };
@@ -124,7 +133,17 @@ module.exports = function registerHazeelCultQuest(api) {
   const POISON = ItemIdentifiers.POISON;
   const ARMOUR = ItemIdentifiers.CARNILLEAN_ARMOUR;
   const HAZEEL_SCROLL = ItemIdentifiers.HAZEEL_SCROLL;
+  const CHEST_KEY = ItemIdentifiers.CHEST_KEY_3;
+  const HAZEEL_MARK = ItemIdentifiers.HAZEELS_MARK;
   const COINS = ItemIdentifiers.COINS;
+
+  // Transcript message ids whose canonical effect is handing the player an item.
+  const MESSAGE_ITEMS = new Map([
+    ["dWE8Mb", POISON], ["PNetGb", POISON], ["wpWRaW", POISON],
+    ["6FjnaM", HAZEEL_MARK], ["OreiUm", HAZEEL_MARK], ["DHANak", HAZEEL_MARK], ["H1owA_", HAZEEL_MARK],
+    ["k4IIqS", CHEST_KEY],
+    ["4avyol", HAZEEL_SCROLL],
+  ]);
 
   const START_HOOK = "quest:hazeel-cult:start";
   const CARNILLEAN_COMPLETE_ACTION = "LtuQhV";
@@ -135,6 +154,9 @@ module.exports = function registerHazeelCultQuest(api) {
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
   const setAttr = (player, key, value) => player.setAttribute(key, value);
   const side = (player) => attr(player, SIDE_ATTR);
+  function answerPublicSideQuery(request) {
+    if (request?.player) request.side = side(request.player);
+  }
   const has = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const take = (player, itemId, amount = 1) => player.getInventory().deleteNumber(itemId, amount);
   const give = (player, itemId, amount = 1) => player.getInventory().adds(itemId, amount);
@@ -188,11 +210,43 @@ module.exports = function registerHazeelCultQuest(api) {
     give(player, COINS, 2000);
   }
 
+  // Semantic Gameval IDs in the active cache; QH's old numeric comments differ.
+  const VARBIT_CLIVET_LOCATION = 14769;
+  const VARBIT_ALOMONE_VIS = 14770;
+  const VARBIT_GIVEN_ARMOUR = 14772;
+  const VARBIT_JONES_CUTSCENE = 14773;
+  const VARBIT_POISON_SUCCESS = 14775;
+  const VARBIT_GIVEN_AMULET = 14776;
+  const VARBIT_GIVEN_SCROLL = 14780;
+  const MARK_GIVEN_ATTRIBUTE = "hazeel-cult:mark-given";
+  const ALOMONE_HOSTILE_ATTRIBUTE = "hazeel-cult:alomone-hostile";
+
+  function syncAuxiliaryState(player) {
+    const stage = quest.getStage(player);
+    const carnillean = side(player) === SIDE_CARNILLEAN;
+    const sender = player.getPacketSender();
+    sender.sendVarbit(VARBIT_CLIVET_LOCATION, carnillean && stage >= STAGE_CHOSEN_SIDE ? 1 : 0);
+    sender.sendVarbit(VARBIT_ALOMONE_VIS, carnillean && stage >= STAGE_FINISHED_SIDE_TASK ? 2
+      : carnillean && player.getAttribute(ALOMONE_HOSTILE_ATTRIBUTE) === true ? 1 : 0);
+    sender.sendVarbit(VARBIT_GIVEN_ARMOUR, carnillean && stage >= STAGE_RETURNED_ARMOUR ? 1 : 0);
+    sender.sendVarbit(VARBIT_JONES_CUTSCENE, carnillean && stage >= STAGE_COMPLETE ? 1 : 0);
+    sender.sendVarbit(VARBIT_POISON_SUCCESS, !carnillean && stage >= STAGE_POISONED_FOOD ? 1 : 0);
+    sender.sendVarbit(VARBIT_GIVEN_AMULET, player.getAttribute(MARK_GIVEN_ATTRIBUTE) === true || has(player, HAZEEL_MARK) ? 1 : 0);
+    sender.sendVarbit(VARBIT_GIVEN_SCROLL, !carnillean && stage >= STAGE_COMPLETE ? 1 : 0);
+  }
+
+  function setStage(player, stage) {
+    quest.setStage(player, stage);
+    syncAuxiliaryState(player);
+  }
+
   function cerilVariant(player) {
     const stage = quest.getStage(player);
     if (stage === STAGE_NOT_STARTED) return "starting-off";
     if (side(player) === SIDE_HAZEEL) {
-      if (stage >= STAGE_COMPLETE) return null;
+      if (stage >= STAGE_COMPLETE) {
+        return { page: "Ceril Carnillean", variant: "after-hazeel-cult-sided-with-hazeel" };
+      }
       if (stage >= STAGE_RETURNED_ARMOUR) return "the-scroll-talking-to-ceril";
       if (stage >= STAGE_POISONED_FOOD) return "joining-the-hazeel-side-talking-to-ceril-after-the-poisoning";
       return "joining-the-hazeel-side-talking-to-ceril";
@@ -201,7 +255,7 @@ module.exports = function registerHazeelCultQuest(api) {
     if (stage === STAGE_FINISHED_SIDE_TASK && has(player, ARMOUR)) {
       take(player, ARMOUR);
       give(player, COINS, 5);
-      quest.setStage(player, STAGE_RETURNED_ARMOUR);
+      setStage(player, STAGE_RETURNED_ARMOUR);
       return "joining-the-carnillean-side-returning-the-armour";
     }
     if (stage >= STAGE_FINISHED_SIDE_TASK) {
@@ -214,14 +268,16 @@ module.exports = function registerHazeelCultQuest(api) {
     const stage = quest.getStage(player);
     if (stage < STAGE_STARTED) return null;
     if (stage === STAGE_STARTED) {
-      quest.setStage(player, STAGE_SPOKEN_TO_CLIVET);
+      setStage(player, STAGE_SPOKEN_TO_CLIVET);
       return "confronting-the-hazeel-cult";
     }
     if (stage === STAGE_SPOKEN_TO_CLIVET) {
       return "confronting-the-hazeel-cult-talking-to-clivet-again-before-joining";
     }
     if (side(player) === SIDE_HAZEEL) {
-      if (stage >= STAGE_COMPLETE) return "the-scroll-talking-to-clivet-again-2";
+      if (stage >= STAGE_COMPLETE) {
+        return { page: "Clivet", variant: "after-hazeel-cult-sided-with-hazeel" };
+      }
       if (stage >= STAGE_RETURNED_ARMOUR) return "the-scroll-talking-to-clivet-again";
       if (stage >= STAGE_POISONED_FOOD) return "the-scroll-talking-to-clivet";
       return "joining-the-hazeel-side-talking-to-clivet-again";
@@ -232,11 +288,11 @@ module.exports = function registerHazeelCultQuest(api) {
   function alomoneVariant(player) {
     const stage = quest.getStage(player);
     if (side(player) === SIDE_HAZEEL) {
-      if (stage >= STAGE_COMPLETE) return null;
+      if (stage >= STAGE_COMPLETE) return { page: "Alomone", variant: "after-hazeel-cult" };
       if (stage >= STAGE_RETURNED_ARMOUR) return "the-scroll-talking-to-alomone-after-obtaining-the-scroll";
       if (stage >= STAGE_FINISHED_SIDE_TASK) return "the-scroll-talking-to-alomone-again";
-      if (stage >= STAGE_CHOSEN_SIDE) {
-        quest.setStage(player, STAGE_FINISHED_SIDE_TASK);
+      if (stage >= STAGE_POISONED_FOOD) {
+        setStage(player, STAGE_FINISHED_SIDE_TASK);
         return "the-scroll-talking-to-alomone";
       }
       return null;
@@ -251,7 +307,7 @@ module.exports = function registerHazeelCultQuest(api) {
     if (stage < STAGE_STARTED) return null;
     if (stage === STAGE_STARTED) return "starting-off-talking-to-butler-jones";
     if (side(player) === SIDE_HAZEEL) {
-      if (stage >= STAGE_COMPLETE) return null;
+      if (stage >= STAGE_COMPLETE) return { page: "Butler Jones", variant: "after-hazeel-cult" };
       if (stage >= STAGE_RETURNED_ARMOUR) {
         return has(player, HAZEEL_SCROLL)
           ? "the-scroll-talking-to-jones-after-obtaining-the-scroll"
@@ -275,7 +331,11 @@ module.exports = function registerHazeelCultQuest(api) {
     const stage = quest.getStage(player);
     if (GUARD_IDS.has(npcId)) {
       if (stage < STAGE_STARTED) return "starting-off-talking-to-the-guard";
-      if (stage >= STAGE_COMPLETE) return "after-quest-completion-talking-to-guard";
+      if (stage >= STAGE_COMPLETE) {
+        return side(player) === SIDE_HAZEEL
+          ? { page: "Guard (Carnillean)", variant: "after-hazeel-cult-sided-with-hazeel" }
+          : "after-quest-completion-talking-to-guard";
+      }
       if (side(player) === SIDE_HAZEEL) return "joining-the-hazeel-side-talking-to-the-guard";
       return "starting-off-talking-to-the-guard";
     }
@@ -283,7 +343,7 @@ module.exports = function registerHazeelCultQuest(api) {
       if (stage < STAGE_STARTED) return "starting-off-talking-to-henryeta";
       if (stage >= STAGE_COMPLETE) {
         return side(player) === SIDE_HAZEEL
-          ? "joining-the-hazeel-side-talking-to-henryeta"
+          ? { page: "Henryeta Carnillean", variant: "after-hazeel-cult-sided-with-hazeel" }
           : "after-quest-completion-talking-to-henryeta";
       }
       if (side(player) === SIDE_HAZEEL) return "joining-the-hazeel-side-talking-to-henryeta";
@@ -301,23 +361,33 @@ module.exports = function registerHazeelCultQuest(api) {
   function answerCondition({ player, npcId, text }) {
     if (![CERIL_IDS, CLIVET_IDS, ALOMONE_IDS, JONES_IDS, GUARD_IDS, HENRYETA_IDS, CULTIST_IDS].some(ids => ids.has(npcId))) return null;
     const value = String(text).toLowerCase();
-    if (value.includes("below level 10 combat")) return null;
-    if (value.includes("full inventory")) return player.getInventory().isFull?.() === true;
+    const full = player.getInventory().isFull?.() === true;
+    if (value.includes("below level 10 combat")) {
+      return (player.getSkillManager?.().getCombatLevel?.() ?? 0) < 10;
+    }
+    if (value.includes("full inventory")) return full;
+    if (value.includes("inventory space") || value.includes("enough space") || value.includes("enough room")) return !full;
+    if (value.includes("does not have the scroll") || value.includes("without the scroll")) return !has(player, HAZEEL_SCROLL);
+    if (value.includes("has the scroll")) return has(player, HAZEEL_SCROLL);
+    if (value.includes("does not have the amulet") || value.includes("lost that amulet") || value.includes("does not have hazeel's mark")) {
+      return !has(player, HAZEEL_MARK);
+    }
+    if (value.includes("has poison")) return has(player, POISON);
+    if (value.includes("no poison")) return !has(player, POISON);
     return null;
   }
 
-  /** The Hazeel-side choice carries no hook; set the side/poison from the words. */
+  /** The Hazeel-side choice carries no hook; set the side from the words. */
   function handleChoice({ player, npcId, option }) {
     if (!CLIVET_IDS.has(npcId)) return;
     if (quest.getStage(player) > STAGE_CHOSEN_SIDE) return;
     const text = String(option ?? "").toLowerCase();
     if (text.includes("i'll help you") || text.includes("i will help") || text.includes("i'll help the cult")) {
       setAttr(player, SIDE_ATTR, SIDE_HAZEEL);
-      quest.setStage(player, STAGE_CHOSEN_SIDE);
-      if (!has(player, POISON)) give(player, POISON);
+      setStage(player, STAGE_CHOSEN_SIDE);
     } else if (text.includes("won't help you") || text.includes("i will stop you") || text.includes("i won't help")) {
       setAttr(player, SIDE_ATTR, SIDE_CARNILLEAN);
-      quest.setStage(player, STAGE_CHOSEN_SIDE);
+      setStage(player, STAGE_CHOSEN_SIDE);
     }
   }
 
@@ -325,22 +395,45 @@ module.exports = function registerHazeelCultQuest(api) {
     if (!CERIL_IDS.has(npcId) || hook !== START_HOOK) return;
     if (quest.getStage(player) < STAGE_STARTED) {
       setAttr(player, SIDE_ATTR, SIDE_CARNILLEAN);
-      quest.setStage(player, STAGE_STARTED);
+      setStage(player, STAGE_STARTED);
     }
   }
 
   function handleAction({ player, npcId, stepId, kind }) {
+    if (kind === "message" && MESSAGE_ITEMS.has(stepId)) {
+      const itemId = MESSAGE_ITEMS.get(stepId);
+      if (!has(player, itemId) && player.getInventory().isFull?.() !== true) {
+        give(player, itemId);
+        if (itemId === HAZEEL_MARK && has(player, HAZEEL_MARK)) {
+          setAttr(player, MARK_GIVEN_ATTRIBUTE, true);
+          syncAuxiliaryState(player);
+        }
+        if (itemId === HAZEEL_SCROLL && side(player) === SIDE_HAZEEL
+          && !quest.isComplete(player) && quest.getStage(player) < STAGE_RETURNED_ARMOUR) {
+          setStage(player, STAGE_RETURNED_ARMOUR);
+        }
+      }
+      return;
+    }
+    if (stepId === "w_5wEv") {
+      if (side(player) === SIDE_HAZEEL && quest.getStage(player) >= STAGE_FINISHED_SIDE_TASK) {
+        player.moveTo(new Location(HIDDEN_ROOM_TILE.x, HIDDEN_ROOM_TILE.y, HIDDEN_ROOM_TILE.z));
+        player.sendMessage("You push against the wall and slip into the hidden room.");
+      }
+      return;
+    }
     if (quest.isComplete(player)) return;
     if (stepId === PARTIAL_SCROLL_MESSAGE_ID && kind === "message" && CERIL_IDS.has(npcId)) {
       showPartialCompletionScroll(player);
       return;
     }
-    if (stepId === CARNILLEAN_COMPLETE_ACTION && CERIL_IDS.has(npcId)) {
+    if (stepId === CARNILLEAN_COMPLETE_ACTION && CERIL_IDS.has(npcId) && side(player) === SIDE_CARNILLEAN) {
       completeQuest(player);
       return;
     }
-    if (stepId === HAZEEL_COMPLETE_ACTION && ALOMONE_IDS.has(npcId)) {
-      if (has(player, HAZEEL_SCROLL)) take(player, HAZEEL_SCROLL);
+    if (stepId === HAZEEL_COMPLETE_ACTION && ALOMONE_IDS.has(npcId)
+      && side(player) === SIDE_HAZEEL && has(player, HAZEEL_SCROLL)) {
+      take(player, HAZEEL_SCROLL);
       completeQuest(player);
     }
   }
@@ -355,7 +448,7 @@ module.exports = function registerHazeelCultQuest(api) {
       return;
     }
     take(player, POISON);
-    quest.setStage(player, STAGE_POISONED_FOOD);
+    setStage(player, STAGE_POISONED_FOOD);
     player.sendMessage("You pour the poison into the bubbling food.");
     event.handled = true;
   }
@@ -364,24 +457,99 @@ module.exports = function registerHazeelCultQuest(api) {
   function handleEvidenceCupboard(event) {
     if (!EVIDENCE_CUPBOARD_IDS.includes(event.objectId)) return;
     const { player } = event;
+    event.handled = true;
     if (side(player) === SIDE_HAZEEL || quest.getStage(player) !== STAGE_RETURNED_ARMOUR) {
       player.sendMessage("You search the cupboard but find nothing of interest.");
-      event.handled = true;
       return;
     }
-    player.sendMessage("You find poison and a cult amulet, proving Butler Jones's treachery.");
-    completeQuest(player);
+    const { startTranscript } = require("../QuestRuntime");
+    startTranscript(api, player, NpcIdentifiers.CERIL_CARNILLEAN, "Hazeel Cult",
+      "joining-the-carnillean-side-accusing-the-butler");
+  }
+
+  /** Crate in the mansion kitchen: the Hazeel-side chest key. */
+  function handleCrate(event) {
+    if (event.objectId !== CRATE_ID) return;
+    if (!actionOf(event).includes("search")) return;
     event.handled = true;
+    const { player } = event;
+    if (side(player) !== SIDE_HAZEEL || quest.getStage(player) < STAGE_FINISHED_SIDE_TASK
+      || quest.isComplete(player) || has(player, CHEST_KEY)) {
+      player.sendMessage("You search the crate but find nothing of interest.");
+      return;
+    }
+    if (player.getInventory().isFull?.() === true) {
+      player.sendMessage("You search the crate and find an old key hidden at the bottom, but you don't have enough room to take it.");
+      return;
+    }
+    give(player, CHEST_KEY);
+    player.sendMessage("You search the crate and find an old key hidden at the bottom.");
+  }
+
+  /** Hidden wall on the first floor; knocking opens the ladder room. */
+  function handleSecretWall(event) {
+    if (!SECRET_WALL_IDS.has(event.objectId)) return;
+    if (!actionOf(event).includes("knock")) return;
+    const { player } = event;
+    if (quest.isComplete(player)) return;
+    event.handled = true;
+    if (side(player) !== SIDE_HAZEEL || quest.getStage(player) < STAGE_FINISHED_SIDE_TASK) {
+      player.sendMessage("You knock on the wall but hear nothing unusual.");
+      return;
+    }
+    const location = player.getLocation();
+    const inHiddenRoom = location.getZ() === 1
+      && Math.abs(location.getX() - HIDDEN_ROOM_TILE.x) <= 1
+      && location.getY() === HIDDEN_ROOM_TILE.y;
+    if (inHiddenRoom) {
+      player.moveTo(new Location(HIDDEN_ROOM_EXIT_TILE.x, HIDDEN_ROOM_EXIT_TILE.y, HIDDEN_ROOM_EXIT_TILE.z));
+      player.sendMessage("You push the wall aside and step back into the corridor.");
+      return;
+    }
+    const { startTranscript } = require("../QuestRuntime");
+    startTranscript(api, player, NpcIdentifiers.CERIL_CARNILLEAN, "Hazeel Cult",
+      "the-scroll-using-the-knock-at-wall");
+  }
+
+  /** Chest in the hidden room: the Hazeel scroll, opened with the crate key. */
+  function handleScrollChest(event) {
+    if (!SCROLL_CHEST_IDS.has(event.objectId)) return;
+    if (event.itemId !== undefined && event.itemId !== CHEST_KEY) return;
+    const option = actionOf(event);
+    if (event.itemId === undefined && !option.includes("search") && !option.includes("open")) return;
+    event.handled = true;
+    const { player } = event;
+    if (side(player) !== SIDE_HAZEEL || quest.getStage(player) < STAGE_FINISHED_SIDE_TASK
+      || quest.isComplete(player)) {
+      player.sendMessage("You search the chest but find nothing.");
+      return;
+    }
+    if (has(player, HAZEEL_SCROLL)) {
+      player.sendMessage("You already have the scroll from this chest.");
+      return;
+    }
+    if (!has(player, CHEST_KEY)) {
+      player.sendMessage("The chest is locked. It looks like it needs a key.");
+      return;
+    }
+    if (player.getInventory().isFull?.() === true) {
+      player.sendMessage("You unlock the chest and find a scroll inside, but you don't have enough room to take it.");
+      return;
+    }
+    give(player, HAZEEL_SCROLL);
+    setStage(player, STAGE_RETURNED_ARMOUR);
+    player.sendMessage("You unlock the chest and find a scroll inside.");
   }
 
   /** Defeating Alomone on the Carnillean side recovers the family armour. */
   function handleNpcDeath(event) {
     const player = event.killer ?? event.player;
     const { npcId } = event;
-    if (!player || !ALOMONE_IDS.has(npcId)) return;
+    if (!player || !ALOMONE_IDS.has(npcId) || !event.npc
+      || event.npc !== npcsByPlayer.get(player)?.alomone) return;
     const stage = quest.getStage(player);
     if (side(player) !== SIDE_CARNILLEAN || stage < STAGE_CHOSEN_SIDE || stage >= STAGE_FINISHED_SIDE_TASK) return;
-    quest.setStage(player, STAGE_FINISHED_SIDE_TASK);
+    setStage(player, STAGE_FINISHED_SIDE_TASK);
     player.sendMessage("Alomone falls. The Carnillean armour is now unguarded.");
   }
 
@@ -390,16 +558,33 @@ module.exports = function registerHazeelCultQuest(api) {
    * no transcript action to hang this off, so watch the line itself.
    */
   function handleAlomoneLine(request) {
-    const { npc, npcId, text } = request;
+    const { npc, npcId, text, player } = request;
     if (npcId !== NpcIdentifiers.ALOMONE || !npc?.setNpcTransformationId) return;
     if (!String(text ?? "").toLowerCase().includes("live long enough")) return;
     npc.setNpcTransformationId(NpcIdentifiers.ALOMONE_2);
+    if (player) {
+      setAttr(player, ALOMONE_HOSTILE_ATTRIBUTE, true);
+      syncAuxiliaryState(player);
+    }
   }
 
   /** Cave entrance, sewer stairs and the mansion basement ladder travel. */
   function handleTravel(event) {
     const option = actionOf(event);
     const { player } = event;
+    const objectPoint = event.object?.getLocation?.() ?? event.location;
+    const objectTile = objectPoint
+      ? (typeof objectPoint.getX === "function"
+        ? { x: objectPoint.getX(), y: objectPoint.getY(), z: objectPoint.getZ() }
+        : objectPoint)
+      : null;
+    const atHiddenLadder = objectTile
+      && objectTile.x === HIDDEN_LADDER_TILE.x
+      && objectTile.y === HIDDEN_LADDER_TILE.y;
+    const atHiddenLadderBottom = atHiddenLadder && (objectTile.z ?? 0) === HIDDEN_LADDER_TILE.z;
+    const atHiddenLadderTop = atHiddenLadder && (objectTile.z ?? 0) === HIDDEN_LADDER_TOP_TILE.z;
+    const hazeelHiddenRoom = side(player) === SIDE_HAZEEL
+      && quest.getStage(player) >= STAGE_FINISHED_SIDE_TASK;
     if (event.objectId === CAVE_ENTRANCE_ID && option.includes("enter")) {
       player.moveTo(new Location(SEWER_LANDING.x, SEWER_LANDING.y, SEWER_LANDING.z));
       player.sendMessage("You climb down into the Ardougne sewers.");
@@ -418,6 +603,14 @@ module.exports = function registerHazeelCultQuest(api) {
     } else if (event.objectId === MANSION_STAIRS_DOWN_ID && option.includes("climb-down")) {
       player.moveTo(new Location(STAIRS_DOWN_TO.x, STAIRS_DOWN_TO.y, STAIRS_DOWN_TO.z));
       player.sendMessage("You climb down the stairs.");
+    } else if (event.objectId === HIDDEN_LADDER_UP_ID && option.includes("climb-up")
+      && atHiddenLadderBottom && hazeelHiddenRoom) {
+      player.moveTo(new Location(HIDDEN_LADDER_TOP_TILE.x, HIDDEN_LADDER_TOP_TILE.y, HIDDEN_LADDER_TOP_TILE.z));
+      player.sendMessage("You climb up into the hidden room.");
+    } else if (event.objectId === HIDDEN_LADDER_DOWN_ID && option.includes("climb-down")
+      && atHiddenLadderTop && hazeelHiddenRoom) {
+      player.moveTo(new Location(HIDDEN_LADDER_TILE.x, HIDDEN_LADDER_TILE.y, HIDDEN_LADDER_TILE.z));
+      player.sendMessage("You climb down the ladder.");
     } else {
       return;
     }
@@ -482,9 +675,14 @@ module.exports = function registerHazeelCultQuest(api) {
     if (
       side(player) !== SIDE_CARNILLEAN ||
       quest.getStage(player) < STAGE_FINISHED_SIDE_TASK ||
+      quest.isComplete(player) ||
       has(player, ARMOUR)
     ) {
       player.sendMessage("You search the chest but find nothing.");
+      return;
+    }
+    if (player.getInventory().isFull?.() === true) {
+      player.sendMessage("You search the chest and find some armour, but you don't have enough room to take it.");
       return;
     }
     give(player, ARMOUR);
@@ -531,7 +729,7 @@ module.exports = function registerHazeelCultQuest(api) {
 
   /**
    * Spawns one owner-only NPC per key for the player, if that key is not already tracked.
-   * The world's own stale-id spawns stay put; these are what the player interacts with.
+   * Only actors tracked by this plugin are removed; SOTN's marked copies belong to it.
    */
   function spawnTracked(player, key, id, tile) {
     const entry = npcsByPlayer.get(player) ?? {};
@@ -542,16 +740,32 @@ module.exports = function registerHazeelCultQuest(api) {
     npcsByPlayer.set(player, entry);
   }
 
-  /** Correct-id quest NPCs for this player. Alomone is gone once killed/completed. */
+  /** SOTN supplies its own Alomone only during its cult investigation. */
+  function northOwnsAlomone(player) {
+    const request = { player, key: "secrets_of_the_north", stage: 0 };
+    api.emitCustomEvent("quest:get-stage", request);
+    return request.stage >= 7 && request.stage < 13;
+  }
+
+  /** Hazeel allies retain their living contacts; killed Alomone and arrested Jones do not return. */
   function ensureQuestNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     spawnTracked(player, "ceril", NpcIdentifiers.CERIL_CARNILLEAN, CERIL_TILE);
     spawnTracked(player, "clivet", NpcIdentifiers.CLIVET, CLIVET_TILE);
-    if (quest.isComplete(player)) return;
+    if (quest.isComplete(player) && side(player) === SIDE_CARNILLEAN) return;
     spawnTracked(player, "jones", NpcIdentifiers.BUTLER_JONES, JONES_TILE);
-    const alomoneDead =
-      side(player) === SIDE_CARNILLEAN && quest.getStage(player) >= STAGE_FINISHED_SIDE_TASK;
-    if (!alomoneDead) spawnTracked(player, "alomone", NpcIdentifiers.ALOMONE, ALOMONE_TILE);
+    const alomoneDead = side(player) === SIDE_CARNILLEAN && quest.getStage(player) >= STAGE_FINISHED_SIDE_TASK;
+    if (!alomoneDead && !northOwnsAlomone(player)) {
+      spawnTracked(player, "alomone", NpcIdentifiers.ALOMONE, ALOMONE_TILE);
+    } else {
+      const entry = npcsByPlayer.get(player);
+      if (entry?.alomone) api.removeNpc(entry.alomone);
+      if (entry) delete entry.alomone;
+    }
+  }
+
+  function handleSharedStageChanged({ player, key }) {
+    if (key === "secrets_of_the_north") ensureQuestNpcs(player);
   }
 
   function clearNpcs(player) {
@@ -561,9 +775,10 @@ module.exports = function registerHazeelCultQuest(api) {
     npcsByPlayer.delete(player);
   }
 
-  /** Completion drops the quest-state spawns (Jones, Alomone); Ceril and Clivet persist. */
+  /** Completion rebuilds only the contacts who remain alive on the chosen branch. */
   function completeQuest(player) {
     if (!quest.complete(player)) return;
+    syncAuxiliaryState(player);
     clearNpcs(player);
     ensureQuestNpcs(player);
   }
@@ -613,7 +828,13 @@ module.exports = function registerHazeelCultQuest(api) {
     );
   }
 
+  function handleBootstrapComplete({ player }) {
+    syncAuxiliaryState(player);
+  }
+
   function handleLogin({ player }) {
+    if (has(player, HAZEEL_MARK)) setAttr(player, MARK_GIVEN_ATTRIBUTE, true);
+    syncAuxiliaryState(player);
     ensureQuestNpcs(player);
     refreshQuestList(player);
   }
@@ -634,13 +855,17 @@ module.exports = function registerHazeelCultQuest(api) {
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
     xpRewards: [{ skillId: Skill.THIEVING.getIndex(), amount: 1500, label: "Thieving" }],
-    rewardItemId: COINS,
+    scrollItemId: COINS,
     rewardItemLabel: "2,000 coins",
     otherRewards: ["A permanent choice between the Carnillean family and the Cult of Hazeel"],
     buildJournal,
     onReward: grantReward,
   });
 
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrapComplete);
+  api.onCustomEvent("quest:stage-changed", handleSharedStageChanged);
+  api.persistAttribute(MARK_GIVEN_ATTRIBUTE, false);
+  api.persistAttribute(ALOMONE_HOSTILE_ATTRIBUTE, false);
   api.persistAttribute(SIDE_ATTR);
   api.persistAttribute(VALVES_ATTR);
 
@@ -651,11 +876,16 @@ module.exports = function registerHazeelCultQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleAlomoneLine);
   api.onCustomEvent("npc-dialogue:line", fillPlayerName);
+  api.onCustomEvent("hazeel-cult:get-side", answerPublicSideQuery);
   api.onCustomEvent("ladders:climb", claimMansionStairs);
   api.onCustomEvent("ladders:climb", claimMansionBasementLadder);
   api.onItemOnObject(handlePoisonRange, { noted: false });
+  api.onItemOnObject(handleScrollChest, { noted: false });
   api.onObjectRoute(routeMansionStairs);
   api.onObjectInteraction(handleEvidenceCupboard);
+  api.onObjectInteraction(handleCrate);
+  api.onObjectInteraction(handleSecretWall);
+  api.onObjectInteraction(handleScrollChest);
   api.onObjectInteraction(handleValve);
   api.onObjectInteraction(handleRaft);
   api.onObjectInteraction(handleTravel);

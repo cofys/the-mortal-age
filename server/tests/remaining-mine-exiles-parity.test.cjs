@@ -14,7 +14,7 @@ before(async () => {
 function setup(pluginPath, questKey, options = {}) {
   const waterbirth = options.waterbirth === true;
   const realDoors = options.realDoors === true;
-  const hooks = { custom: new Map(), variants: [], conditions: [], namedNpcs: new Map(), objects: [], itemOnObject: [], itemOnItem: [], itemActions: new Map(), deaths: [], hits: [], logins: [], logouts: [], teleports: [], interfaceButtons: new Map(), npcRoutes: [] };
+  const hooks = { custom: new Map(), variants: [], conditions: [], namedNpcs: new Map(), npcs: [], beforeObjects: [], objects: [], itemOnObject: [], itemOnItem: [], itemActions: new Map(), deaths: [], hits: [], logins: [], logouts: [], teleports: [], interfaceButtons: new Map(), npcRoutes: [] };
   const tasks = [], spawned = [], removed = [], messages = [], xp = [], menus = [];
   const objects = [], registrations = [], groundItems = new Map();
   let npcsNear = [], players = [], weaponId = -1, special = 100;
@@ -70,11 +70,21 @@ function setup(pluginPath, questKey, options = {}) {
     persistAttribute() {},
     onNpcDialogueVariant(fn) { hooks.variants.push(fn); },
     onNpcDialogueCondition(fn) { hooks.conditions.push(fn); },
-    onNpcInteraction(target, actions) { if (typeof target === 'string') hooks.namedNpcs.set(target, actions); },
-    onObjectInteraction(fn) { hooks.objects.push(fn); },
-    onItemOnObject(fn) { hooks.itemOnObject.push(fn); },
+    onNpcInteraction(target, actions) { if (typeof target === 'string') hooks.namedNpcs.set(target, actions); else hooks.npcs.push(target); },
+    onBeforeObjectInteraction(handler) { hooks.beforeObjects.push(handler); },
+    onObjectInteraction(target, actions) {
+      hooks.objects.push(typeof target === 'function' ? target : (event) => {
+        const definition = core.ObjectDefinition.forId(event.objectId);
+        if (definition?.getName() === target) actions[definition.getInteractions()?.[event.clickType - 1]]?.(event);
+      });
+    },
+    onItemOnObject(target, objectName, handler) {
+      hooks.itemOnObject.push(typeof target === 'function' ? target : (event) => {
+        if (core.ItemDefinition.forId(event.itemId).getName() === target && core.ObjectDefinition.forId(event.objectId).getName() === objectName) handler(event);
+      });
+    },
     onItemOnItem(fn) { hooks.itemOnItem.push(fn); },
-    onItemAction(name, actions) { hooks.itemActions.set(name, actions); },
+    onItemAction(name, actions) { hooks.itemActions.set(typeof name === 'function' ? undefined : name, typeof name === 'function' ? name : actions); },
     onNpcDeath(fn) { hooks.deaths.push(fn); },
     onNpcHitModify(fn) { hooks.hits.push(fn); },
     onInterfaceActionButton(ids, fn) { for (const id of Array.isArray(ids) ? ids : [ids]) hooks.interfaceButtons.set(id, fn); },
@@ -124,6 +134,7 @@ function setup(pluginPath, questKey, options = {}) {
     sendMessage(message) { messages.push(message); },
     getInventory: () => ({
       getAmount: (id) => inventory.get(id) ?? 0,
+      getValidItems: () => [...inventory].filter(([, amount]) => amount > 0).map(([id, amount]) => new core.Item(id, amount)),
       add(id, count = 1) { inventory.set(id, (inventory.get(id) ?? 0) + count); },
       adds(id, count = 1) { inventory.set(id, (inventory.get(id) ?? 0) + count); },
       deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
@@ -131,8 +142,8 @@ function setup(pluginPath, questKey, options = {}) {
       forceAdd(_player, item) { inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()); },
     }),
     getEquipment: waterbirth
-      ? () => ({ get: (slot) => ({ getId: () => slot === 3 ? weaponId : -1 }), contains: () => false })
-      : () => ({ get: () => ({ getId: () => -1 }) }),
+      ? () => ({ get: (slot) => ({ getId: () => slot === 3 ? weaponId : -1 }), contains: () => false, getValidItems: () => weaponId > 0 ? [new core.Item(weaponId)] : [] })
+      : () => ({ get: () => ({ getId: () => -1 }), getValidItems: () => [] }),
     getBank: () => ({ contains: () => false }),
     ...(waterbirth ? {
       getPrivateArea: () => null,
@@ -148,6 +159,7 @@ function setup(pluginPath, questKey, options = {}) {
     getLocation: () => location, moveTo(value) { location = value; },
     getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }), setUntargetable() {},
     getUsername: () => 'tester', getAppearance: () => ({ isMale: () => true }), getPositionToFace: () => null,
+    setEnteredSyntaxAction(action) { player.syntaxAction = action; },
     getDialogueManager: () => ({ startDialogues(chain) { current = chain; }, getCurrent: () => current, reset() { current = null; }, isActive: () => Boolean(current), advance() {} }),
     isPlayer: () => true, isNpc: () => false, isRegistered: () => true, isPlayerBot: () => false,
   };
@@ -158,10 +170,10 @@ function setup(pluginPath, questKey, options = {}) {
     player, setLocation: (value) => { location = value; }, setSkill(skill, level) { skillLevels.set(skill, level); },
     setWeapon(id) { weaponId = id; }, setSpecial(value) { special = value; }, setNpcsNear(value) { npcsNear = value; },
     setPlayers(value) { players = value; },
-    object(objectId, extra = {}) { const e = event('object', { objectId, location, ...extra }); for (const fn of hooks.objects) fn(e); return e; },
+    object(objectId, extra = {}) { const e = event('object', { objectId, location, clickType: 1, ...extra }); e.object ??= new core.GameObject(objectId, e.location, 10, 0); for (const fn of [...hooks.beforeObjects, ...hooks.objects]) { if (e.handled) break; fn(e); } return e; },
     itemOnObject(itemId, objectId, extra = {}) {
       const e = event('item-on-object', { itemId, objectId, ...extra });
-      for (const fn of hooks.itemOnObject) fn(e);
+      for (const fn of hooks.itemOnObject) { if (e.handled) break; fn(e); }
       return e;
     },
     action(npcId, stepId, text, kind = 'action') {
@@ -175,6 +187,7 @@ function setup(pluginPath, questKey, options = {}) {
       return e;
     },
     choice(npcId, option) { api.emitCustomEvent('npc-dialogue:choice', event('choice', { npcId, option })); },
+    talk(npcId) { for (const fn of hooks.npcs) fn(event('npc', { npcId, clickType: 1 })); },
     death(npcId, npc) { for (const fn of hooks.deaths) fn(event('death', { npcId, npc, killer: player })); },
     npcRoute(event) { for (const fn of hooks.npcRoutes) fn(event); return event; },
     hit(npcId, npc) { for (const fn of hooks.hits) fn({ npc: npc ?? { getId: () => npcId, getContentId: () => npcId }, hit: { getAttacker: () => player } }); },
@@ -1246,6 +1259,12 @@ test('Fremennik Exiles celebration plays through real NpcDialogues/DialogueManag
   const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
   h.quest.setStage(h.player, 125);
   h.player.setAttribute('quest.points', 0);
+  const singer = h.spawned.find((npc) => npc.getId() === 9274);
+  assert.ok(singer, 'stage 125 restores the owner-local Olaf actor');
+  singer.getCurrentDefinition = () => h.core.NpcDefinition.forId(singer.getId());
+  singer.isVisible = () => true;
+  h.setLocation(singer.getLocation());
+  h.player.getLocalNpcs = () => [singer];
   const manager = new DialogueManager(h.player);
   h.player.getDialogueManager = () => manager;
   const definition = { getId: () => 9263, getName: () => 'Brundt the Chieftain' };
@@ -1256,7 +1275,14 @@ test('Fremennik Exiles celebration plays through real NpcDialogues/DialogueManag
   });
   const beforeXp = h.xp.length;
   let guard = 0;
-  while (manager.getCurrent() && guard++ < 80) manager.advance();
+  while (manager.getCurrent() && h.quest.getStage(h.player) < 130 && guard++ < 80) {
+    // Overhead transcript lines continue from their real scheduled task, not a
+    // chatbox click. Let the test scheduler advance those two ticks before the
+    // next player-controlled dialogue entry.
+    if (manager.getCurrent()?.constructor?.name === 'ActionDialogue') h.tick(2);
+    else manager.advance();
+  }
+  assert.ok(guard < 80, 'celebration transcript finishes without exhausting the playback guard');
   assert.equal(h.quest.getStage(h.player), 130, 'normal playback reaches completion');
   assert.ok(h.xp.length > beforeXp, 'completion grants rewards');
   const xpCount = h.xp.length;
@@ -1266,4 +1292,184 @@ test('Fremennik Exiles celebration plays through real NpcDialogues/DialogueManag
   assert.equal(h.player.getAttribute('quest.points'), points);
   h.hooks.logins[0]({ player: h.player });
   assert.equal(h.quest.getStage(h.player), 130, 'completion persists across relog');
+});
+
+const TRIALS = 'quest.fremennik_trials.trials';
+const trial = (h, index) => (h.attrs.get(TRIALS) >>> (index * 3)) & 7;
+const fremennik = () => setup('../plugins/quests/quests/FremennikTrials.Quest', 'fremennik_trials', { waterbirth: true });
+
+test('Fremennik Trials: Olaf can offer his own trial during the merchant errand', () => {
+  const h = fremennik(), N = NPCS(h);
+  h.quest.setStage(h.player, 1);
+  h.attrs.set('quest.fremennik_trials.merchant', 1);
+  const variant = h.hooks.variants[0]({ player: h.player, npcId: N.OLAF_THE_BARD_2 });
+  assert.match(variant, /finding-the-unique-flower/);
+  h.choice(N.OLAF_THE_BARD_2, 'Ask about becoming a Fremennik');
+  assert.equal(h.tasks.length, 1, 'the merchant menu must link to Olaf’s own trial');
+  h.tick(1);
+  assert.ok(h.player.getDialogueManager().getCurrent(), 'the trial transcript opens');
+  h.choice(N.OLAF_THE_BARD_2, 'Yes');
+  assert.equal(trial(h, 1), 1);
+  h.choice(N.OLAF_THE_BARD_2, 'Ask about becoming a Fremennik');
+  h.tick(1);
+  assert.match(h.player.getDialogueManager().getCurrent().getDialogues().values().next().value.getText(), /writing this epic/);
+});
+
+test('Fremennik Trials: Swensen requires the real maze, including failure and exit ladders', () => {
+  const h = fremennik(), O = OBJECTS(h), N = NPCS(h);
+  h.quest.setStage(h.player, 1);
+  h.setLocation(new h.core.Location(2644, 3658, 0));
+  h.object(O.LADDER_32);
+  assert.equal(h.player.getLocation().getY(), 3658, 'no entry before accepting');
+  h.choice(N.SWENSEN_THE_NAVIGATOR, 'Yes');
+  h.talk(N.SWENSEN_THE_NAVIGATOR);
+  h.talk(N.SWENSEN_THE_NAVIGATOR);
+  assert.equal(trial(h, 3), 1, 'repeated conversations cannot award the vote');
+  h.object(O.LADDER_32);
+  assert.equal(h.player.getLocation().getY(), 10006);
+  h.object(O.PORTAL_7);
+  assert.equal(h.player.getLocation().getY(), 10016, 'wrong portal enters a dead end');
+  h.object(O.ESCAPE_ROPE);
+  assert.equal(h.player.getLocation().getY(), 3658);
+  h.object(O.LADDER_32);
+  const route = [
+    [O.PORTAL, 2642, 10016], [O.PORTAL_29, 2653, 10005], [O.PORTAL_2, 2665, 10016],
+    [O.PORTAL_3, 2630, 10027], [O.PORTAL_4, 2653, 10038], [O.PORTAL_5, 2666, 10027],
+    [O.PORTAL_6, 2665, 10038],
+  ];
+  for (const [id, x, y] of route) {
+    assert.equal(h.object(id).handled, true);
+    assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [x, y]);
+  }
+  h.object(O.LADDER_34);
+  h.talk(N.SWENSEN_THE_NAVIGATOR);
+  assert.equal(trial(h, 3), 2);
+  const stage = h.quest.getStage(h.player);
+  h.talk(N.SWENSEN_THE_NAVIGATOR);
+  assert.equal(h.quest.getStage(h.player), stage, 'vote cannot be earned twice');
+  h.choice(N.SWENSEN_THE_NAVIGATOR, 'Ask about becoming a Fremennik');
+  h.tick(1);
+  assert.match(h.player.getDialogueManager().getCurrent().getDialogues().values().next().value.getText(), /still\s+impressed/);
+});
+
+test('Fremennik Trials: Peer accepts the Wiki water, disks, mural, sealed vase and exit route', () => {
+  const h = fremennik(), O = OBJECTS(h), N = NPCS(h), I = ITEMS(h);
+  const at = (x, y, z = 2) => h.setLocation(new h.core.Location(x, y, z));
+  h.quest.setStage(h.player, 1);
+  h.choice(N.PEER_THE_SEER, 'Yes');
+  at(2631, 3668, 0);
+  h.inventory.set(I.COINS, 1);
+  h.object(O.DOOR_119);
+  assert.equal(h.player.syntaxAction, undefined, 'inventory must be banked');
+  h.inventory.clear();
+  h.setWeapon(I.BRONZE_SWORD);
+  h.object(O.DOOR_119);
+  assert.equal(h.player.syntaxAction, undefined, 'equipment must be banked');
+  h.setWeapon(-1);
+  h.object(O.DOOR_119);
+  h.player.syntaxAction.execute('time');
+  assert.equal(h.player.getLocation().getY(), 3668, 'wrong answer keeps the door locked');
+  h.object(O.DOOR_119);
+  h.player.syntaxAction.execute('life');
+  assert.equal(h.player.getLocation().getY(), 3666);
+  at(2631, 3663, 0);
+  h.object(O.LADDER_35);
+  assert.equal(h.player.getLocation().getZ(), 2, 'cache puzzle floor is plane two');
+  h.object(O.CHEST_33);
+  assert.equal(h.inventory.get(I.EMPTY_JUG), undefined, 'scale chest does not hand out the jug');
+  at(2638, 3662);
+  h.object(O.CHEST_31);
+  h.object(O.CUPBOARD_27);
+  h.object(O.BOOKCASE_14);
+  h.object(O.UNICORNS_HEAD_2);
+  h.object(O.BULLS_HEAD_2);
+  for (const item of [I.EMPTY_JUG, I.EMPTY_BUCKET, I.RED_HERRING, I.OLD_RED_DISK, I.WOODEN_DISK]) assert.equal(h.inventory.get(item), 1);
+  h.itemOnObject(I.EMPTY_BUCKET, O.TAP);
+  const pour = (usedItemId, usedWithItemId) => h.hooks.itemOnItem[0]({ player: h.player, usedItemId, usedWithItemId });
+  pour(I.FULL_BUCKET, I.EMPTY_JUG);
+  h.itemOnObject(I.FULL_JUG, O.DRAIN);
+  pour(I._2_5THS_FULL_BUCKET, I.EMPTY_JUG);
+  h.itemOnObject(I.EMPTY_BUCKET, O.TAP);
+  pour(I.FULL_BUCKET, I._2_3RDS_FULL_JUG);
+  assert.equal(h.inventory.get(I._4_5THS_FULL_BUCKET), 1);
+  h.itemOnObject(I._4_5THS_FULL_BUCKET, O.CHEST_33);
+  assert.equal(h.inventory.get(I.VASE_2), 1);
+  assert.equal(h.inventory.get(I._4_5THS_FULL_BUCKET), 1, 'counterweight remains available');
+  h.itemOnObject(I.RED_HERRING, O.COOKING_RANGE_2);
+  assert.equal(h.inventory.get(I.HERRING), 1);
+  pour(I.STICKY_RED_GOOP, I.WOODEN_DISK);
+  assert.equal(h.inventory.get(I.RED_DISK_3), 1);
+  at(2636, 3663);
+  h.object(O.TRAPDOOR_15);
+  h.object(O.TRAPDOOR_14);
+  assert.equal(h.player.getLocation().getZ(), 0);
+  h.itemOnObject(I.OLD_RED_DISK, O.ABSTRACT_MURAL);
+  assert.equal(h.inventory.get(I.VASE_LID), undefined, 'both disks are needed');
+  h.itemOnObject(I.RED_DISK_3, O.ABSTRACT_MURAL);
+  assert.equal(h.inventory.get(I.VASE_LID), 1);
+  pour(I.FULL_JUG, I.VASE_2);
+  pour(I.VASE_LID, I.VASE_OF_WATER);
+  assert.equal(h.inventory.get(I.SEALED_VASE_3), 1, 'gameval identifies 3740 as the water-filled sealed vase');
+  h.object(O.LADDER_36);
+  h.itemOnObject(I.SEALED_VASE_3, O.FROZEN_TABLE);
+  assert.equal(h.inventory.get(I.SEALED_VASE_3), 0);
+  assert.equal(h.inventory.get(I.FROZEN_KEY), 1);
+  h.itemOnObject(I.FROZEN_KEY, O.COOKING_RANGE_2);
+  assert.equal(h.inventory.get(I.SEERS_KEY), 1);
+  h.object(O.TRAPDOOR_14);
+  at(2636, 3666, 0);
+  h.object(O.DOOR_120);
+  assert.equal(trial(h, 4), 2);
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [2636, 3668]);
+});
+
+test('Fremennik Trials: an unsealed vase freezes without yielding a key and the west exit resets the puzzle', () => {
+  const h = fremennik(), O = OBJECTS(h), I = ITEMS(h);
+  h.quest.setStage(h.player, 1);
+  h.attrs.set(TRIALS, 1 << 12);
+  h.setLocation(new h.core.Location(2631, 3663, 2));
+  h.inventory.set(I.VASE_OF_WATER, 1);
+  h.itemOnObject(I.VASE_OF_WATER, O.FROZEN_TABLE);
+  assert.equal(h.inventory.get(I.FROZEN_KEY), undefined);
+  assert.equal(h.inventory.get(I.FROZEN_VASE), 1);
+  h.itemOnObject(I.FROZEN_VASE, O.COOKING_RANGE_2);
+  assert.equal(h.inventory.get(I.VASE_2), 1, 'an unsealed freeze can be recovered');
+  h.inventory.set(I.VASE_LID, 1);
+  h.hooks.itemOnItem[0]({ player: h.player, usedItemId: I.VASE_LID, usedWithItemId: I.VASE_2 });
+  assert.equal(h.inventory.get(I.SEALED_VASE), 1);
+  h.hooks.itemActions.get(undefined)({ player: h.player, itemId: I.SEALED_VASE, option: 'Remove-lid' });
+  assert.equal(h.inventory.get(I.VASE_2), 1, 'an empty sealed vase can be unsealed and filled');
+  assert.equal(h.inventory.get(I.VASE_LID), 1);
+  assert.equal(h.inventory.get(I.SEALED_VASE), 0);
+  h.setLocation(new h.core.Location(2631, 3666, 0));
+  h.object(O.DOOR_119);
+  h.menu('Leave');
+  assert.equal(h.inventory.get(I.VASE_2), 0);
+  assert.equal(trial(h, 4), 1, 'leaving the wrong way does not award the vote');
+  assert.equal(h.player.getLocation().getY(), 3668);
+});
+
+test('Fremennik Trials: Peer doors outrank the generic opener and other click handlers keep their scope', () => {
+  const h = fremennik(), O = OBJECTS(h), I = ITEMS(h);
+  h.quest.setStage(h.player, 1);
+  h.attrs.set(TRIALS, 1 << 12);
+  h.setLocation(new h.core.Location(2631, 3668, 0));
+  let genericOpens = 0;
+  h.hooks.objects.unshift((event) => {
+    if ([O.DOOR_119, O.DOOR_120].includes(event.objectId)) { genericOpens++; event.handled = true; }
+  });
+  h.object(O.DOOR_119);
+  assert.ok(h.player.syntaxAction, 'the riddle handles entry before the wall-door opener');
+  assert.equal(genericOpens, 0);
+  h.setLocation(new h.core.Location(2636, 3666, 0));
+  h.inventory.set(I.SEERS_KEY, 1);
+  h.object(O.DOOR_120);
+  assert.equal(trial(h, 4), 2);
+  assert.equal(genericOpens, 0);
+  h.quest.setStage(h.player, 1);
+  h.object(O.FISH_STALL, { clickType: 2 });
+  assert.match(h.messages.at(-1), /cannot steal/);
+  h.setLocation(new h.core.Location(3200, 3200, 0));
+  const foreign = h.object(O.UNICORNS_HEAD_2);
+  assert.equal(foreign.handled, false, 'head study outside the puzzle is left to its normal handler');
 });

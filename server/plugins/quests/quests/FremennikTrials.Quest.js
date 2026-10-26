@@ -14,13 +14,10 @@
  * the small flags in "quest.fremennik_trials.flags".
  *
  * Source: LostCityRS/Content scripts/quests/quest_viking (pinned in issue #196).
+ * Maze and Seer puzzle: https://oldschool.runescape.wiki/w/The_Fremennik_Trials
  *
- * Gaps: the Koschei fight is a plain owner-only spawn and the Swensen maze is
- * two conversations; the Peer puzzle room implements the water/scale/vase/key
- * route only (herring, disks, magnet, picks and the mural are props); the
- * strange object has no explosion timer; the party potion uses the transcript's
- * 250 gp branch. Object/zone coordinates for Peer's house and the longhall are
- * approximated - cache object names drive the hooks.
+ * Gaps: the Koschei fight is a plain owner-only spawn; the strange object has no
+ * explosion timer; the party potion uses the transcript's 250 gp branch.
  */
 module.exports = function registerFremennikTrialsQuest(api) {
   const {
@@ -33,6 +30,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
     ObjectIdentifiers,
     CountdownTask,
     TaskManager,
+    Bank,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
@@ -73,6 +71,8 @@ module.exports = function registerFremennikTrialsQuest(api) {
   const FLAG_NAVIGATOR = 7;
   const FLAG_LOW_ALCOHOL_BOUGHT = 8;
   const FLAG_SEER_RIDDLE = 9;
+  const FLAG_MURAL_OLD_DISK = 10;
+  const FLAG_MURAL_RED_DISK = 11;
 
   const M_NONE = 0;
   const M_STARTED = 1;
@@ -118,7 +118,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
     NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_11,
     NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_12,
   ]);
-  const OLAF_IDS = new Set([NpcIdentifiers.OLAF_THE_BARD, 9274]); // 9274 = Olaf the Bard (rework)
+  const OLAF_IDS = new Set([NpcIdentifiers.OLAF_THE_BARD, NpcIdentifiers.OLAF_THE_BARD_2]);
   const LALLI_IDS = new Set([NpcIdentifiers.LALLI]);
   const MANNI_IDS = new Set([NpcIdentifiers.MANNI_THE_REVELLER, 9275]); // 9275 = Manni the Reveller (rework)
   const SIGLI_IDS = new Set([NpcIdentifiers.SIGLI_THE_HUNTSMAN]);
@@ -164,6 +164,17 @@ module.exports = function registerFremennikTrialsQuest(api) {
   const PEER_LADDER_IDS = new Set([ObjectIdentifiers.LADDER_35, ObjectIdentifiers.LADDER_36]);
   const PEER_TRAPDOOR_IDS = new Set([ObjectIdentifiers.TRAPDOOR_14, ObjectIdentifiers.TRAPDOOR_15]);
   const PEER_PUZZLE_FLOOR = 2;
+  // The seven cache portal variants follow S-W-E-N-S-E-N; the eighth is a dead end.
+  const MAZE_PORTALS = new Map([
+    [ObjectIdentifiers.PORTAL, [2642, 10016]],
+    [ObjectIdentifiers.PORTAL_29, [2653, 10005]],
+    [ObjectIdentifiers.PORTAL_2, [2665, 10016]],
+    [ObjectIdentifiers.PORTAL_3, [2630, 10027]],
+    [ObjectIdentifiers.PORTAL_4, [2653, 10038]],
+    [ObjectIdentifiers.PORTAL_5, [2666, 10027]],
+    [ObjectIdentifiers.PORTAL_6, [2665, 10038]],
+    [ObjectIdentifiers.PORTAL_7, [2631, 10016]],
+  ]);
 
   /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
   const DIALOGUE_NPC_IDS = new Set([
@@ -229,9 +240,18 @@ module.exports = function registerFremennikTrialsQuest(api) {
     ONION,
     VASE_2,
     VASE_OF_WATER,
+    FROZEN_VASE,
+    VASE_LID,
+    SEALED_VASE,
+    SEALED_VASE_3,
     FROZEN_KEY,
     SEERS_KEY,
     RED_HERRING,
+    HERRING,
+    OLD_RED_DISK,
+    RED_DISK_3,
+    WOODEN_DISK,
+    STICKY_RED_GOOP,
     MAGNET_2,
     BLUE_THREAD,
     SMALL_PICK,
@@ -902,9 +922,10 @@ module.exports = function registerFremennikTrialsQuest(api) {
    * the wiki jump targets for the "Ask about becoming a Fremennik" option, so the
    * option is replayed through the member's own trial variant instead.
    */
-  function trialOfferVariant(npcId) {
-    if (PEER_IDS.has(npcId)) return V.peerTrial;
-    if (SWENSEN_IDS.has(npcId)) return V.swensenOffer;
+  function trialOfferVariant(player, npcId) {
+    if (OLAF_IDS.has(npcId)) return trialState(player, BARD) === 2 ? V.olafDone : trialState(player, BARD) === 1 ? V.olafAgain : V.olafOffer;
+    if (PEER_IDS.has(npcId)) return trialState(player, SEER) === 2 ? V.peerDone : trialState(player, SEER) === 1 ? V.peerTrialAgain : V.peerTrial;
+    if (SWENSEN_IDS.has(npcId)) return trialState(player, NAVIGATOR) === 2 ? V.swensenDone : trialState(player, NAVIGATOR) === 1 ? V.swensenAgain : V.swensenOffer;
     if (THORVALD_IDS.has(npcId)) return V.thorvaldOffer;
     if (SIGLI_IDS.has(npcId)) return V.sigliOffer;
     if (MANNI_IDS.has(npcId)) return V.revellerOffer;
@@ -914,7 +935,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   function handleChoice({ player, npcId, option }) {
     const text = String(option ?? "").trim().toLowerCase();
     if (text.startsWith("ask about becoming a fremennik")) {
-      const offer = trialOfferVariant(npcId);
+      const offer = trialOfferVariant(player, npcId);
       if (offer && quest.getStage(player) >= STAGE_STARTED) {
         // Let the option's dead branch close the chatbox first, then replay.
         TaskManager.submit(
@@ -984,6 +1005,12 @@ module.exports = function registerFremennikTrialsQuest(api) {
     const { player, stepId } = event;
     if (!player) return;
     switch (stepId) {
+      case "-sJh9n":
+      case "-rbFGl":
+        if (!PEER_IDS.has(event.npcId)) return;
+        Bank.depositItems(player, player.getInventory(), true);
+        Bank.depositItems(player, player.getEquipment(), true);
+        return;
       case "Y--9Gn":
         if (!held(player, STRANGE_OBJECT) && !held(player, LIT_STRANGE_OBJECT)) {
           give(player, STRANGE_OBJECT, 1);
@@ -1146,6 +1173,34 @@ module.exports = function registerFremennikTrialsQuest(api) {
     const used = event.usedItemId;
     const withItem = event.usedWithItemId;
     const pair = new Set([used, withItem]);
+
+    if (trialState(player, SEER) === 1 && inPeerHouse(player)) {
+      if (pair.has(STICKY_RED_GOOP) && pair.has(WOODEN_DISK)) {
+        event.handled = true;
+        take(player, STICKY_RED_GOOP);
+        take(player, WOODEN_DISK);
+        give(player, RED_DISK_3);
+        player.sendMessage("You coat the wooden disk with the sticky red goop.");
+        return;
+      }
+      if (pair.has(FULL_JUG) && pair.has(VASE_2)) {
+        event.handled = true;
+        take(player, FULL_JUG);
+        take(player, VASE_2);
+        give(player, EMPTY_JUG);
+        give(player, VASE_OF_WATER);
+        return;
+      }
+      const vase = pair.has(VASE_OF_WATER) ? VASE_OF_WATER : pair.has(VASE_2) ? VASE_2 : null;
+      if (pair.has(VASE_LID) && vase !== null) {
+        event.handled = true;
+        take(player, VASE_LID);
+        take(player, vase);
+        give(player, vase === VASE_OF_WATER ? SEALED_VASE_3 : SEALED_VASE);
+        player.sendMessage("You screw the lid on tightly.");
+        return;
+      }
+    }
 
     if (pair.has(BRANCH) && pair.has(KNIFE)) {
       event.handled = true;
@@ -1333,7 +1388,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
       take(player, itemId, 1);
       give(player, EMPTY_JUG, 1);
     } else if (itemId === VASE_OF_WATER) {
-      take(player, VASE_OF_WATER, 1);
+      take(player, itemId, 1);
       give(player, VASE_2, 1);
     } else {
       return;
@@ -1345,11 +1400,15 @@ module.exports = function registerFremennikTrialsQuest(api) {
     event.handled = true;
     const { player, itemId } = event;
     if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
-    if (itemId === VASE_OF_WATER) {
-      take(player, VASE_OF_WATER, 1);
+    if (itemId === SEALED_VASE_3) {
+      take(player, itemId, 1);
       give(player, FROZEN_KEY, 1);
       player.sendMessage("The water expands as it freezes, and shatters the vase.");
       player.sendMessage("You are left with a key encased in ice.");
+    } else if (itemId === VASE_OF_WATER) {
+      take(player, VASE_OF_WATER);
+      give(player, FROZEN_VASE);
+      player.sendMessage("The icy table immediately freezes the water in your vase.");
     } else if (itemId === FULL_BUCKET) {
       take(player, FULL_BUCKET, 1);
       give(player, FROZEN_BUCKET, 1);
@@ -1366,6 +1425,23 @@ module.exports = function registerFremennikTrialsQuest(api) {
   function meltOnRange(event) {
     event.handled = true;
     const { player, itemId } = event;
+    if (trialState(player, SEER) !== 1 || !inPeerHouse(player)) return;
+    if (itemId === RED_HERRING) {
+      if (freeSlots(player) < 1) {
+        player.sendMessage("You need another free inventory space.");
+        return;
+      }
+      take(player, RED_HERRING);
+      give(player, STICKY_RED_GOOP);
+      give(player, HERRING);
+      player.sendMessage("The colouring on the herring peels off as sticky red goop.");
+      return;
+    }
+    if (itemId === FROZEN_VASE) {
+      take(player, FROZEN_VASE);
+      give(player, VASE_2);
+      return;
+    }
     if (itemId === FROZEN_KEY) {
       take(player, FROZEN_KEY, 1);
       give(player, SEERS_KEY, 1);
@@ -1388,11 +1464,11 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function openScaleChest(event) {
-    if (event.itemId !== _4_5THS_FULL_BUCKET) return;
+    if (event.itemId !== _4_5THS_FULL_BUCKET || event.objectId !== ObjectIdentifiers.CHEST_33) return;
     event.handled = true;
     const { player } = event;
     if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
-    take(player, _4_5THS_FULL_BUCKET, 1);
+    if ([VASE_2, VASE_OF_WATER, FROZEN_VASE, SEALED_VASE, SEALED_VASE_3, FROZEN_KEY, SEERS_KEY].some((id) => held(player, id))) return;
     give(player, VASE_2, 1);
     player.sendMessage("You place the bucket on the scale.");
     player.sendMessage("It is a perfect counterweight and balances precisely.");
@@ -1400,7 +1476,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function unlockSeerDoor(event) {
-    if (event.itemId !== SEERS_KEY) return;
+    if (event.itemId !== SEERS_KEY || event.objectId !== ObjectIdentifiers.DOOR_120) return;
     event.handled = true;
     const { player } = event;
     if (trialState(player, SEER) !== 1 || !inPeerHouse(player)) return;
@@ -1408,12 +1484,17 @@ module.exports = function registerFremennikTrialsQuest(api) {
     player.sendMessage("You unlock the door with your key.");
     player.sendMessage("You have successfully completed the Seer's Trial.");
     completeTrial(player, SEER);
+    player.moveTo(new Location(2636, 3668, 0));
   }
 
   function searchSeerChest(event) {
     const { player } = event;
     if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
+    if (event.objectId === ObjectIdentifiers.CHEST_33) {
+      player.sendMessage("This chest is locked. Its balance is marked with the number four.");
+      return;
+    }
     if (!held(player, EMPTY_JUG) && !heldKind(player, JUG_UNITS)) {
       give(player, EMPTY_JUG, 1);
       player.sendMessage("You search the chest...");
@@ -1497,6 +1578,35 @@ module.exports = function registerFremennikTrialsQuest(api) {
     }
     player.sendMessage("You search the boxes...");
     player.sendMessage("You find nothing of interest.");
+  }
+
+  function studySeerHead(event) {
+    const { player, objectId } = event;
+    if (trialState(player, SEER) !== 1 || !inPeerHouse(player)) return false;
+    event.handled = true;
+    const oldDisk = objectId === ObjectIdentifiers.UNICORNS_HEAD_2;
+    const itemId = oldDisk ? OLD_RED_DISK : WOODEN_DISK;
+    const alreadyTaken = oldDisk
+      ? held(player, OLD_RED_DISK) || flag(player, FLAG_MURAL_OLD_DISK)
+      : held(player, WOODEN_DISK) || held(player, RED_DISK_3) || flag(player, FLAG_MURAL_RED_DISK);
+    if (alreadyTaken) return;
+    give(player, itemId);
+    player.sendMessage("You take a disk from the head's eye.");
+  }
+
+  function addSeerDisk(event) {
+    const { player, itemId } = event;
+    if (trialState(player, SEER) !== 1 || !inPeerHouse(player) || (itemId !== OLD_RED_DISK && itemId !== RED_DISK_3)) return false;
+    const bit = itemId === OLD_RED_DISK ? FLAG_MURAL_OLD_DISK : FLAG_MURAL_RED_DISK;
+    event.handled = true;
+    if (flag(player, bit)) return;
+    take(player, itemId);
+    setFlag(player, bit);
+    player.sendMessage("You put the red disk into the empty hole on the mural. It is a perfect fit!");
+    if (flag(player, FLAG_MURAL_OLD_DISK) && flag(player, FLAG_MURAL_RED_DISK)) {
+      give(player, VASE_LID);
+      player.sendMessage("The centre of the mural falls out, revealing a vase lid.");
+    }
   }
 
   function merchantTrade(player, inputId, outputId, nextStep) {
@@ -1639,6 +1749,18 @@ module.exports = function registerFremennikTrialsQuest(api) {
   function handleItemAction(event) {
     const { player, itemId } = event;
     const option = String(event.option ?? "").toLowerCase();
+    if ((itemId === SEALED_VASE || itemId === SEALED_VASE_3) && option === "remove-lid") {
+      if (trialState(player, SEER) !== 1 || !inPeerHouse(player)) return;
+      event.handled = true;
+      if (freeSlots(player) < 1) {
+        player.sendMessage("You need another free inventory space.");
+        return;
+      }
+      take(player, itemId);
+      give(player, itemId === SEALED_VASE ? VASE_2 : VASE_OF_WATER);
+      give(player, VASE_LID);
+      return;
+    }
     if (itemId === HUNTERS_TALISMAN_2 && option.includes("locate")) {
       event.handled = true;
       locateDraugen(player);
@@ -1693,11 +1815,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
       startTranscript(api, player, npcId, PAGE, V.fossegrimen);
       return;
     }
-    if (SWENSEN_IDS.has(npcId) && trialState(player, NAVIGATOR) === 1) {
-      if (!flag(player, FLAG_NAVIGATOR)) {
-        setFlag(player, FLAG_NAVIGATOR);
-        return;
-      }
+    if (SWENSEN_IDS.has(npcId) && trialState(player, NAVIGATOR) === 1 && flag(player, FLAG_NAVIGATOR)) {
       completeTrial(player, NAVIGATOR);
       return;
     }
@@ -1725,6 +1843,73 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
+    if (objectId === ObjectIdentifiers.LADDER_32 && event.clickType === 1) {
+      event.handled = true;
+      if (trialState(player, NAVIGATOR) === 0) {
+        player.sendMessage("You must accept Swensen's challenge before entering his maze.");
+      } else if (trialState(player, NAVIGATOR) === 2) {
+        player.sendMessage("No way am I doing that maze again!");
+      } else {
+        player.moveTo(new Location(2631, 10006, 0));
+      }
+      return;
+    }
+    if (inBox(player, 2625, 2671, 9999, 10044) && player.getLocation().getZ() === 0 && event.clickType === 1) {
+      const destination = MAZE_PORTALS.get(objectId);
+      if (destination) {
+        event.handled = true;
+        player.moveTo(new Location(destination[0], destination[1], 0));
+        return;
+      }
+      if (objectId === ObjectIdentifiers.LADDER_33 || objectId === ObjectIdentifiers.LADDER_34 || objectId === ObjectIdentifiers.ESCAPE_ROPE) {
+        event.handled = true;
+        if (objectId === ObjectIdentifiers.LADDER_34 && trialState(player, NAVIGATOR) === 1) {
+          setFlag(player, FLAG_NAVIGATOR);
+          player.sendMessage("You have finished Swensen's maze. Tell him of your success.");
+        }
+        player.moveTo(new Location(2644, 3658, 0));
+        return;
+      }
+    }
+    if ((objectId === ObjectIdentifiers.DOOR_119 || objectId === ObjectIdentifiers.DOOR_120) && event.clickType === 1) {
+      event.handled = true;
+      const location = player.getLocation();
+      if (location.getY() < 3667) {
+        if (objectId === ObjectIdentifiers.DOOR_120) {
+          if (held(player, SEERS_KEY)) unlockSeerDoor({ ...event, itemId: SEERS_KEY });
+          else player.sendMessage("This door is locked tightly shut.");
+        } else {
+          api.sendMultiChatboxPrompt(player, "Leaving this way fails the trial. Leave?",
+            "Leave", () => leaveSeerHouse(player), "Stay", () => {});
+        }
+        return;
+      }
+      if (trialState(player, SEER) !== 1 || objectId === ObjectIdentifiers.DOOR_120) {
+        player.sendMessage("This door is locked tightly shut.");
+        return;
+      }
+      if (player.getInventory().getValidItems().length || player.getEquipment().getValidItems().length) {
+        player.sendMessage("You must bank all your items and equipment before entering Peer's house.");
+        return;
+      }
+      // shortcut: the entrance uses the life riddle; add selection if varied riddles are needed.
+      player.sendMessage("My first is in the well, but not at sea. My second in 'I', but not in 'me'.");
+      player.sendMessage("My third is in flies, but insects not found. My last is in earth, but not in the ground.");
+      player.sendMessage("My whole when stolen from you, causes you death. What am I?");
+      player.setEnteredSyntaxAction({ execute: (answer) => {
+        if (trialState(player, SEER) !== 1 || !player.getLocation().equals(location)) return;
+        if (String(answer).trim().toLowerCase() !== "life") {
+          player.sendMessage("You have failed to solve the riddle.");
+          return;
+        }
+        if (player.getInventory().getValidItems().length || player.getEquipment().getValidItems().length) return;
+        setFlag(player, FLAG_SEER_RIDDLE);
+        player.sendMessage("You have solved the riddle!");
+        player.moveTo(new Location(2631, 3666, 0));
+      } });
+      player.getPacketSender().sendEnterInputPrompt("What is the four-letter answer?");
+      return;
+    }
     if (inPeerHouse(player) && event.clickType === 1) {
       const location = player.getLocation();
       if (PEER_LADDER_IDS.has(objectId) && location.getZ() === 0) {
@@ -1766,6 +1951,29 @@ module.exports = function registerFremennikTrialsQuest(api) {
         "The fishmonger is staring at you suspiciously. You cannot steal from his stall while he distrusts you."
       );
     }
+  }
+
+  function handlePeerDoor(event) {
+    // These two puzzle doors must run before the generic wall-door opener.
+    if (event.objectId === ObjectIdentifiers.DOOR_119 || event.objectId === ObjectIdentifiers.DOOR_120) {
+      handleObjectInteraction(event);
+    }
+  }
+
+  function leaveSeerHouse(player) {
+    if (!inPeerHouse(player) || player.getLocation().getZ() !== 0) return;
+    for (const itemId of [
+      ...BUCKET_UNITS.keys(), ...JUG_UNITS.keys(), VASE_2, VASE_OF_WATER, FROZEN_VASE,
+      VASE_LID, SEALED_VASE, SEALED_VASE_3, FROZEN_KEY, SEERS_KEY, RED_HERRING,
+      STICKY_RED_GOOP, OLD_RED_DISK, WOODEN_DISK, RED_DISK_3, MAGNET_2, BLUE_THREAD, SMALL_PICK, TOY_SHIP,
+    ]) {
+      const amount = player.getInventory().getAmount(itemId);
+      if (amount > 0) take(player, itemId, amount);
+    }
+    setFlag(player, FLAG_SEER_RIDDLE, false);
+    setFlag(player, FLAG_MURAL_OLD_DISK, false);
+    setFlag(player, FLAG_MURAL_RED_DISK, false);
+    player.moveTo(new Location(2631, 3668, 0));
   }
 
   function handleLogin({ player }) {
@@ -1847,17 +2055,25 @@ module.exports = function registerFremennikTrialsQuest(api) {
   api.onItemOnObject("Vase of water", "Drain", drainSeerVessel);
   api.onItemOnObject("4/5ths full bucket", "Chest", openScaleChest);
   api.onItemOnObject("Vase of water", "Frozen table", freezeOnTable);
+  api.onItemOnObject("Sealed vase", "Frozen table", freezeOnTable);
   api.onItemOnObject("Full bucket", "Frozen table", freezeOnTable);
   api.onItemOnObject("Full jug", "Frozen table", freezeOnTable);
   api.onItemOnObject("Frozen key", "Cooking range", meltOnRange);
   api.onItemOnObject("Frozen bucket", "Cooking range", meltOnRange);
   api.onItemOnObject("Frozen jug", "Cooking range", meltOnRange);
+  api.onItemOnObject("Frozen vase", "Cooking range", meltOnRange);
+  api.onItemOnObject("Red herring", "Cooking range", meltOnRange);
+  api.onItemOnObject("Old red disk", "Abstract mural", addSeerDisk);
+  api.onItemOnObject("Red disk", "Abstract mural", addSeerDisk);
   api.onItemOnObject("Seer's key", "Door", unlockSeerDoor);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onBeforeObjectInteraction(handlePeerDoor);
   api.onObjectInteraction("Chest", { Open: searchSeerChest, Search: searchSeerChest });
   api.onObjectInteraction("Cupboard", { Open: searchSeerCupboard, Search: searchSeerCupboard });
   api.onObjectInteraction("Bookcase", { Search: searchSeerBookcase });
   api.onObjectInteraction("Boxes", { Search: searchSeerBoxes });
   api.onObjectInteraction("Crate", { Search: searchSeerCrate });
+  api.onObjectInteraction("Unicorn's head", { Study: studySeerHead });
+  api.onObjectInteraction("Bull's head", { Study: studySeerHead });
   api.onPlayerLogin(handleLogin);
 };

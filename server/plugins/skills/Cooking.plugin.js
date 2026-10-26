@@ -8,6 +8,7 @@ const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
+const { pauseForLevelUp } = require("./SkillActions");
 
 const FIRE_COOK_ANIMATION = new Animation(896);
 const RANGE_COOK_ANIMATION = new Animation(897);
@@ -244,6 +245,7 @@ class CookingTask extends Task {
         stopCooking(this.activeSessions, player);
         continue;
       }
+      if (session.levelUpPaused) continue;
 
       if (!player.getInventory().contains(session.cookable.raw)) {
         stopCooking(this.activeSessions, player);
@@ -289,17 +291,7 @@ class CookingTask extends Task {
           skill: Skill.COOKING,
           itemId: cookable.cooked,
         });
-        const levelBefore = player
-          .getSkillManager()
-          .getMaxLevel(Skill.COOKING);
         player.getSkillManager().addExperiences(Skill.COOKING, cookable.xp);
-        const levelAfter = player
-          .getSkillManager()
-          .getMaxLevel(Skill.COOKING);
-        if (levelAfter > levelBefore) {
-          stopCooking(this.activeSessions, player);
-          continue;
-        }
       } else {
         player.getInventory().addItem(new Item(session.cookable.burnt, 1));
         const rawName =
@@ -365,6 +357,10 @@ function answerRawXp(request) {
   }
 }
 
+function pauseCooking(event) {
+  pauseForLevelUp(event, ACTIVE_COOKING_SESSIONS, (player) => stopCooking(ACTIVE_COOKING_SESSIONS, player, false));
+}
+
 module.exports = {
   name: "Cooking",
   // Data-driven recipes for bots: derived from the COOKABLES table so the
@@ -390,9 +386,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopCooking(ACTIVE_COOKING_SESSIONS, player, false);
     });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopCooking(ACTIVE_COOKING_SESSIONS, player, false);
-    });
+    api.onCustomEvent("level-up:popup-opened", pauseCooking);
 
     api.onItemOnObject(handleCook.bind(null, ACTIVE_COOKING_SESSIONS), { noted: false });
     api.onObjectInteraction("Range", { Cook: handleRangeCook.bind(null, ACTIVE_COOKING_SESSIONS) });

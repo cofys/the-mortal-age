@@ -1,7 +1,10 @@
 // TODO: ported from xrsps-typescript; untested.
-function buildSpecial(core) {
-  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Priority, Skill, Sounds } = core;
+// A Warstrike that drains nothing asks "combat-special:missed-drain" whether the target still
+// loses some levels (Tekton: 10, https://oldschool.runescape.wiki/w/Bandos_godsword).
+function buildSpecial(api) {
+  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Priority, Skill, Sounds } = api.core;
 
+  const ID = "bandos_godsword";
   const DRAIN = 50;
   const SLASH_DEFENCE_BONUS_INDEX = 1;
   const ANIMATION = new Animation(7642);
@@ -47,12 +50,19 @@ function buildSpecial(core) {
     }
 
     handleAfterHitEffects(hit) {
-      warstrike(hit.getTarget(), hit.getTotalDamage());
+      const damage = hit.isAccurate() ? Math.floor(hit.getTotalDamage()) : 0;
+      if (damage > 0) {
+        warstrike(hit.getTarget(), damage);
+        return;
+      }
+      const missed = { hit, specialId: ID, fraction: 0, levels: 0 };
+      api.emitCustomEvent("combat-special:missed-drain", missed);
+      warstrike(hit.getTarget(), missed.levels);
     }
   }
 
   return {
-    id: "bandos_godsword",
+    id: ID,
     itemIds: [ItemIdentifiers.BANDOS_GODSWORD],
     drainAmount: DRAIN,
     strengthMultiplier: 1.21,
@@ -68,5 +78,5 @@ function buildSpecial(core) {
 }
 
 module.exports = function registerBandosGodswordSpecialAttack(api) {
-  api.registerCombatSpecial(buildSpecial(api.core));
+  api.registerCombatSpecial(buildSpecial(api));
 };

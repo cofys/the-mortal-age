@@ -137,6 +137,15 @@ class Fight {
     this.npc.setNpcTransformationId(ids.npcs.armoured);
     this.setHp(data.zalcano.shield);
     this.npc.performAnimation(new Common.core.Animation(ids.seqs.standUp));
+    for (const player of this.players()) player.sendMessage(Common.message("stands"));
+    this.shockwaveAt = this.tickCount + data.zalcano.shockwave.delay;
+    this.nextAttack = this.tickCount + this.attackDelay();
+  }
+
+  /** Recorded: the shockwave a few ticks after she stands, destroying tephra and pushing back those beside her. */
+  shockwave() {
+    const { ids, data } = Common;
+    this.shockwaveAt = null;
     const { shockwave } = data.zalcano;
     for (const player of this.players()) {
       const destroyed = [ids.items.tephra, ids.items.refined, ids.items.imbued].reduce((sum, id) => sum + Common.removeAll(player, id), 0)
@@ -147,7 +156,6 @@ class Fight {
       this.pushAway(player, shockwave.push);
       bind(player, shockwave.stunTicks);
     }
-    this.nextAttack = this.tickCount + this.attackDelay();
   }
 
   pushAway(player, tiles) {
@@ -200,6 +208,7 @@ class Fight {
     if (this.finished()) return;
     if (this.npc.getHitpoints() !== this.hp) this.npc.setHitpoints(this.hp);
     const players = this.players();
+    if (this.shockwaveAt != null && this.tickCount >= this.shockwaveAt) this.shockwave();
     if (this.phase === ARMOURED) {
       if (this.tickCount >= this.nextRockMove) this.blastRock();
       if (this.tickCount >= this.nextAttack) {
@@ -332,17 +341,37 @@ class Fight {
     for (const symbol of this.symbols.filter((s) => s.until <= this.tickCount)) this.world.removeObject(symbol.object);
     this.symbols = this.symbols.filter((s) => s.until > this.tickCount);
     for (const symbol of this.symbols) {
-      if (symbol.empower) continue;
+      if (symbol.empower) {
+        this.tickEmpower(symbol, players);
+        continue;
+      }
       for (const player of players) {
         const on = this.symbolAt(player.getLocation()) === symbol;
         if (!on) { symbol.standing.delete(player); continue; }
-        if (!symbol.standing.has(player)) player.forceChat?.(Common.message("agh"));
         const active = this.tickCount - symbol.spawnedAt >= symbols.graceTicks;
         const ticks = active ? (symbol.standing.get(player) ?? 0) + 1 : 0;
         symbol.standing.set(player, ticks);
         player.setRunEnergy?.(Math.max(0, (player.getRunEnergy?.() ?? 0) - symbols.runDrain));
-        if (active) Common.hurtPlayer(player, Math.min(symbols.max, ticks * symbols.step));
+        if (active) {
+          Common.hurtPlayer(player, Math.min(symbols.max, ticks * symbols.step));
+          Common.spam(player, Common.message("burning"));
+          player.forceChat?.(Common.message("agh"));
+          player.performGraphic?.(new Common.core.Graphic(Common.ids.spotanims.burning));
+        }
       }
+    }
+  }
+
+  /** A blue symbol (recorded): its line and spotanim on stepping on, then every `empowerPulse` ticks. */
+  tickEmpower(symbol, players) {
+    const { empowerPulse } = Common.data.attacks.symbols;
+    for (const player of players) {
+      if (this.symbolAt(player.getLocation()) !== symbol) { symbol.standing.delete(player); continue; }
+      const since = symbol.standing.get(player);
+      if (since !== undefined && this.tickCount - since < empowerPulse) continue;
+      symbol.standing.set(player, this.tickCount);
+      player.performGraphic?.(new Common.core.Graphic(Common.ids.spotanims.empower));
+      Common.spam(player, Common.message("empowered"));
     }
   }
 

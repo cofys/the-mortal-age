@@ -84,6 +84,10 @@ function isFoodItem(itemId) {
   return Number.isInteger(itemId) && itemId > 0 && foodBite(itemId) !== undefined;
 }
 
+function isComboFoodItem(itemId) {
+  return foodBite(itemId)?.food.combo === true;
+}
+
 /** Every item id that is food. */
 function foodItemIds() {
   return [...FOODS_BY_NAME.keys()].flatMap(idsFor);
@@ -338,6 +342,7 @@ module.exports = {
   ATTACK_DELAY,
   COMBO_ATTACK_DELAY,
   isFoodItem,
+  isComboFoodItem,
   foodItemIds,
   _test: {
     getAnglerfishHeal, canAnglerfishOverheal, healAmount, rollOutcome, foodBite, leftover, eatDelay, applyFood,

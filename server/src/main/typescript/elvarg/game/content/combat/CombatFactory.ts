@@ -617,9 +617,12 @@ export class CombatFactory {
         }
         const attackerArea = attacker.getArea();
         const targetArea = target.getArea();
-        const areaCanAttack = (attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null)
-            ?? (targetArea && targetArea !== attackerArea ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null);
-        if (areaCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const attackerCanAttack = attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null;
+        if (attackerCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const targetCanAttack = targetArea && targetArea !== attackerArea
+            ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null;
+        if (targetCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const areaCanAttack = attackerCanAttack ?? targetCanAttack;
         const globalCanAttack = PluginManager.emitCanAttack(attacker, target, method);
         if (globalCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
         const pluginCanAttack = areaCanAttack ?? globalCanAttack;
@@ -1252,11 +1255,16 @@ export class CombatFactory {
     }
 
     /** `message` is what a frozen player is told (some bosses send their own, coloured). */
-    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!") {
-        CombatFactory.freezeTicks(character, Misc.getTicks(seconds), message);
+    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!", source: Mobile | null = null) {
+        CombatFactory.freezeTicks(character, Misc.getTicks(seconds), message, source);
     }
 
-    static freezeTicks(character: Mobile, ticks: number, message: string = "You have been frozen!") {
+    /**
+     * `source` is who froze them and `kind` names the freeze ("ice", "bind") for the
+     * `combat:frozen` listeners, which own the rules that depend on either. A null `message`
+     * sends nothing here.
+     */
+    static freezeTicks(character: Mobile, ticks: number, message: string | null = "You have been frozen!", source: Mobile | null = null, kind: string | null = null) {
         if (character.getTimers().has(TimerKey.FREEZE) || character.getTimers().has(TimerKey.FREEZE_IMMUNITY)) {
             return;
         }
@@ -1271,9 +1279,12 @@ export class CombatFactory {
         character.getMovementQueue().reset();
 
         if (character.isPlayer()) {
-            character.getAsPlayer().sendMessage(message);
+            if (message != null) {
+                character.getAsPlayer().sendMessage(message);
+            }
             character.getAsPlayer().getPacketSender().sendEffectTimer(Misc.getSeconds(ticks), EffectTimer.FREEZE);
         }
+        PluginManager.emitCustomEvent("combat:frozen", { target: character, source, ticks, kind });
     }
 
     /**

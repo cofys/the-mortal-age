@@ -12,7 +12,8 @@ const ROUTES_ATTRIBUTE = "balloon-transport:routes";
 const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
 const FADE_OVERLAY = 174;
 const FADE_SCRIPT = 948;
-const FADE_CYCLES = 50;
+/** The map's components the flight changes (rsprox 3225). */
+const MAP_MARKERS = ["mod_ent", "mod_tav", "mod_craft", "mod_varr", "mod_cast", "mod_gno"];
 
 let api = null;
 let core = null;
@@ -51,7 +52,26 @@ function init(pluginApi) {
     if (uid === null) throw new Error(`[BalloonTransport] unknown component ${station.button}`);
     buttons.set(uid & 0xffff, station);
   });
-  ids = { map, buttons, objs: resolve(data.names.objs, (name) => cache.getObjId(name), "obj") };
+  const component = (name) => {
+    const uid = cache.getComponentId(`${data.names.interface}:${name}`);
+    if (uid === null || uid === undefined) throw new Error(`[BalloonTransport] unknown component ${name}`);
+    return uid;
+  };
+  const journeys = new Map();
+  for (const from of data.stations) {
+    for (const to of data.stations) {
+      if (from === to) continue;
+      const seq = cache.getSeqId(`zep_balloon_journey_${from.journey}_${to.journey}`);
+      if (seq !== null && seq !== undefined) journeys.set(`${from.key}>${to.key}`, seq);
+    }
+  }
+  ids = {
+    map, buttons, journeys,
+    objs: resolve(data.names.objs, (name) => cache.getObjId(name), "obj"),
+    closeButton: component("close_button"),
+    markers: MAP_MARKERS.map(component),
+    balloon: component("zep_interface_balloon"),
+  };
 }
 
 /** Runs `action` once, `ticks` game ticks from now. */
@@ -68,8 +88,8 @@ function later(ticks, action) {
   })());
 }
 
-function fade(player, out) {
-  const args = out ? [0, 255, 0, 0, FADE_CYCLES] : [0, 0, 0, 255, FADE_CYCLES];
+/** The fade overlay with the recorded script arguments (flight.fadeStart / fadeEnd). */
+function fade(player, args) {
   player.getPacketSender().sendSubInterface(OVERLAY_ATMOSPHERE_UID, FADE_OVERLAY, 1, { postScripts: [{ scriptId: FADE_SCRIPT, args }] });
 }
 

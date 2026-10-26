@@ -24,7 +24,7 @@ function npc(levels = [100, 100, 100, 100, 100], demon = false) {
 }
 function method(name) {
   let registered;
-  require(`../plugins/combat/specials/${name}.SpecialAttack`)({ core: PluginManager.getCoreApi(), registerCombatSpecial: (value) => { registered = value; } });
+  require(`../plugins/combat/specials/${name}.SpecialAttack`)({ core: PluginManager.getCoreApi(), registerCombatSpecial: (value) => { registered = value; }, emitCustomEvent: () => {} });
   return registered.combatMethod;
 }
 function hit(target, damage, accurate = true) {

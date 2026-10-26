@@ -145,6 +145,7 @@ test('refresh sends changed inventory and worn item variants and marks appearanc
     } }),
     getInventory: () => inventory,
     getEquipment: () => equipment,
+    onEquipmentChanged() {},
   };
   const inventory = new Inventory(player);
   const equipment = new Equipment(player);

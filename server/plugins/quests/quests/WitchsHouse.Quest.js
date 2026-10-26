@@ -11,12 +11,15 @@
  * Stages (varp 226): 1 started, 2 magnet found, 3 back door unlocked, 5 diary
  * read, 6 experiment defeated, 7 complete.
  *
- * Gaps (no dump/index support): Nora T. Hagg's garden catch/teleport is not
- * implemented; the wiki "level 10 combat" gate is assumed satisfied; the cache
- * item is named SHED_KEY (4186) but the quest's shed key is 2411, exposed here as
- * ItemIdentifiers.KEY_9; the diary (2408) has no spawn supplied by this plugin,
- * so reading it depends on another source placing it; the cupboard open state
- * is not swapped in the world.
+ * The low-combat start warning follows the player's combat level. The diary
+ * (2408) and ball (2407) are world ground spawns from the data definitions; this
+ * plugin only consumes/reads them. The basement boxes supply in-quest leather
+ * gloves; the east-room boxes are reachable straight after the ladder, so the
+ * pair can be found before the electric gate. Nora garden detection remains
+ * unimplemented until canonical hedge/visibility rules are established. The
+ * cache item is named SHED_KEY
+ * (4186) but the quest's shed key is 2411, exposed here as
+ * ItemIdentifiers.KEY_9; the cupboard open state is not swapped in the world.
  */
 module.exports = function registerWitchsHouseQuest(api) {
   const { crossingFor } = require("../../objects/WallDoor.Doors");
@@ -71,6 +74,19 @@ module.exports = function registerWitchsHouseQuest(api) {
   const MOUSE_HOLE_LOC_IDS = new Set([2870, ObjectIdentifiers.MOUSE_HOLE, ObjectIdentifiers.MOUSE_HOLE_2]);
   const LADDER_DOWN_LOC_ID = ObjectIdentifiers.LADDER_322;
   const LADDER_UP_LOC_ID = ObjectIdentifiers.LADDER_321;
+  const BOXES_LOC_ID = 24692; // Boxes; no ObjectIdentifiers entry.
+  const FULL_INVENTORY_MESSAGE = "You couldn't hold all those items.";
+  /** Cache Boxes (24692) placements in the witch's house basement. */
+  const BASEMENT_BOXES = [
+    { x: 2899, y: 9871 }, // west room, behind the electric gate
+    { x: 2899, y: 9872 },
+    { x: 2900, y: 9872 },
+    { x: 2905, y: 9872 }, // east room, the ladder drops into it
+    { x: 2906, y: 9872 },
+    { x: 2908, y: 9873 },
+  ];
+  /** The gate column splits the basement; the west room holds the cupboard. */
+  const basementRoom = (x) => (x <= 2902 ? "west" : "east");
 
   const MOUSE_TILE = { x: 2903, y: 3466, z: 0 };
   const EXPERIMENT_TILE = { x: 2935, y: 3462, z: 0 };
@@ -87,6 +103,8 @@ module.exports = function registerWitchsHouseQuest(api) {
   const mouseByPlayer = new Map();
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
+  const wearingGloves = (player) =>
+    player.getEquipment().get(api.core.Equipment.HANDS_SLOT)?.getId?.() === GLOVES_ITEM_ID;
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -146,9 +164,11 @@ module.exports = function registerWitchsHouseQuest(api) {
     return "getting-started";
   }
 
-  function answerCondition({ text }) {
+  function answerCondition({ player, text }) {
     const value = String(text).toLowerCase();
-    if (value.includes("below level 10 combat")) return false;
+    if (value.includes("below level 10 combat")) {
+      return (player?.getSkillManager?.().getCombatLevel?.() ?? 10) < 10;
+    }
     return null;
   }
 
@@ -198,8 +218,45 @@ module.exports = function registerWitchsHouseQuest(api) {
       startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-searching-the-plant-pot-for-the-key-searching-the-plant-pot-with-a-key-already");
       return;
     }
+    if (player.getInventory().getFreeSlots() <= 0) {
+      player.sendMessage(FULL_INVENTORY_MESSAGE);
+      return;
+    }
     player.getInventory().adds(DOOR_KEY_ITEM_ID, 1);
+    if (!held(player, DOOR_KEY_ITEM_ID)) return;
     startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-searching-the-plant-pot-for-the-key");
+  }
+
+  /**
+   * QH: "If you don't have gloves, search the nearby boxes until you get a pair."
+   * Cache Boxes (24692) placements in the basement: 2899,9871 / 2899,9872 / 2900,9872
+   * sit in the west room behind the electric gate, while 2905,9872 / 2906,9872 /
+   * 2908,9873 sit in the east room the ladder drops into, so the pair can be found
+   * before the gate. Both rooms serve the handout; only the room the player is
+   * standing in can be searched.
+   */
+  function searchBoxes(event) {
+    if (event.objectId !== BOXES_LOC_ID) return;
+    const { player, location } = event;
+    if (location.z !== 0) return;
+    if (!BASEMENT_BOXES.some((box) => box.x === location.x && box.y === location.y)) return;
+    const at = player.getLocation();
+    if (at.getZ() !== 0 || at.getX() < 2897 || at.getX() > 2909 || at.getY() < 9870 || at.getY() > 9878) return;
+    if (basementRoom(at.getX()) !== basementRoom(location.x)) return;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return;
+
+    event.handled = true;
+    if (held(player, GLOVES_ITEM_ID) || wearingGloves(player)) {
+      player.sendMessage("You already have a pair of leather gloves.");
+      return;
+    }
+    if (player.getInventory().getFreeSlots() <= 0) {
+      player.sendMessage(FULL_INVENTORY_MESSAGE);
+      return;
+    }
+    player.getInventory().adds(GLOVES_ITEM_ID, 1);
+    player.sendMessage("You find a pair of leather gloves in the boxes.");
   }
 
   function searchCupboard(event) {
@@ -208,7 +265,17 @@ module.exports = function registerWitchsHouseQuest(api) {
       startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-searching-the-cupboard-for-the-magnet-searching-the-cupboard-again-with-a-magnet-already");
       return;
     }
+    // A full bag must not advance the durable stage: the magnet is only found
+    // once it is actually in the inventory, so the player can retry later.
+    if (player.getInventory().getFreeSlots() <= 0) {
+      player.sendMessage(FULL_INVENTORY_MESSAGE);
+      return;
+    }
     player.getInventory().adds(MAGNET_ITEM_ID, 1);
+    if (!held(player, MAGNET_ITEM_ID)) {
+      player.sendMessage(FULL_INVENTORY_MESSAGE);
+      return;
+    }
     if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_FOUND_MAGNET);
     startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-searching-the-cupboard-for-the-magnet");
   }
@@ -219,7 +286,12 @@ module.exports = function registerWitchsHouseQuest(api) {
       startTranscript(api, player, BOY_NPC_ID, PAGE, "getting-past-the-witch-searching-the-fountain-in-the-garden-searching-the-fountain-again-whilst-holding-the-key");
       return;
     }
+    if (player.getInventory().getFreeSlots() <= 0) {
+      player.sendMessage(FULL_INVENTORY_MESSAGE);
+      return;
+    }
     player.getInventory().adds(SHED_KEY_ITEM_ID, 1);
+    if (!held(player, SHED_KEY_ITEM_ID)) return;
     startTranscript(api, player, BOY_NPC_ID, PAGE, "getting-past-the-witch-searching-the-fountain-in-the-garden");
   }
 
@@ -261,13 +333,18 @@ module.exports = function registerWitchsHouseQuest(api) {
     });
   }
 
-  /** Wiki: taking the shed's ball before the experiment dies leaves the player weakened. */
+  /**
+   * Wiki: taking the shed's ball before the experiment dies leaves the player weakened.
+   * Quest Helper's grabBall step also uses the attempt to bring out an experiment that
+   * is missing (for example after a relog inside the shed), so spawn one if none is tracked.
+   */
   function handleBallPickup(event) {
     if (event.groundItemId !== BALL_ITEM_ID) return;
     const { x, y, z } = event.location ?? {};
     if (Math.abs(x - BALL_SPAWN_TILE.x) > 2 || Math.abs(y - BALL_SPAWN_TILE.y) > 2 || z !== BALL_SPAWN_TILE.z) return;
     if (quest.getStage(event.player) >= STAGE_DEFEATED_EXPERIMENT) return;
     event.handled = true;
+    ensureExperiment(event.player);
     event.player.sendMessage("The shapeshifter glares at you. You feel slightly weakened.");
   }
 
@@ -327,7 +404,7 @@ module.exports = function registerWitchsHouseQuest(api) {
   function handleElectricGate(event) {
     const { player } = event;
     event.handled = true;
-    if (player.getEquipment().get(api.core.Equipment.HANDS_SLOT)?.getId?.() !== GLOVES_ITEM_ID) {
+    if (!wearingGloves(player)) {
       startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-attempting-to-open-the-gate-without-correct-gloves");
       return;
     }
@@ -341,6 +418,10 @@ module.exports = function registerWitchsHouseQuest(api) {
   /** All the object interactions in and around the house. */
   function handleObjectInteraction(event) {
     const { objectId, player } = event;
+    if (objectId === BOXES_LOC_ID) {
+      searchBoxes(event);
+      return;
+    }
     if (objectId === POTTED_PLANT_LOC_ID) {
       event.handled = true;
       searchPottedPlant(event);
@@ -401,7 +482,12 @@ module.exports = function registerWitchsHouseQuest(api) {
   }
 
   /** Cheese on a mouse hole lures out the (owner-only) mouse. */
-  function handleItemOnMouseHole(event) {
+  function handleItemOnObject(event) {
+    if (event.itemId === SHED_KEY_ITEM_ID && event.objectId === SHED_DOOR_LOC_ID) {
+      event.handled = true;
+      openShedDoor(event);
+      return;
+    }
     if (event.itemId !== CHEESE_ITEM_ID || !MOUSE_HOLE_LOC_IDS.has(event.objectId)) return;
     const { player } = event;
     event.handled = true;
@@ -425,7 +511,7 @@ module.exports = function registerWitchsHouseQuest(api) {
     if (event.itemId !== MAGNET_ITEM_ID) return;
     const { player } = event;
     const tracked = mouseByPlayer.get(player);
-    if (!tracked || tracked.getId?.() !== (event.npcId ?? event.target?.getId?.())) return;
+    if (!tracked || event.target !== tracked) return;
     event.handled = true;
     const stage = quest.getStage(player);
     if (stage >= STAGE_UNLOCKED_BACK_DOOR) {
@@ -458,7 +544,11 @@ module.exports = function registerWitchsHouseQuest(api) {
 
   function handleLogout({ player }) {
     if (!player) return;
-    if (experimentByPlayer.has(player)) experimentByPlayer.delete(player);
+    const experiment = experimentByPlayer.get(player);
+    if (experiment) api.removeNpc(experiment);
+    const mouse = mouseByPlayer.get(player);
+    if (mouse) api.removeNpc(mouse);
+    experimentByPlayer.delete(player);
     mouseByPlayer.delete(player);
   }
 
@@ -487,7 +577,7 @@ module.exports = function registerWitchsHouseQuest(api) {
   api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcBeforeDeath(handleExperimentBeforeDeath);
-  api.onItemOnObject(handleItemOnMouseHole, { noted: false });
+  api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemAction(handleItemAction);
   api.onGroundItemPickup(handleBallPickup);

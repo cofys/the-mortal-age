@@ -309,6 +309,14 @@ function destroyed({ player, itemId }) {
   if (family && !owns(player, family)) setContents(player, family, []);
 }
 
+/** Read-only contents of the requested container, including gear not usable in place. */
+function answerContents(event) {
+  const family = familyOf(event.item);
+  if (!family) return;
+  event.contents.push(...contents(event.player, family).map(({ id, amount }) => ({ id, amount })));
+  event.handled = true;
+}
+
 module.exports = {
   ROOM_EVENT,
   GATHER_EVENT,
@@ -350,6 +358,7 @@ module.exports = {
   refreshBank,
   describe,
   showBox,
+  answerContents,
   answerRoom,
   answerGather,
   answerAmount,

@@ -67,6 +67,7 @@ test("a dialogue box opened again resends its texts: the client turns 'Click her
   const updater = new FrameUpdater();
   const fake = {
     chatboxGroupId: -1,
+    emitInterfaceClosed() {},
     player: {
       getSession: () => ({ sendClientPacket: (frame) => { frames.push(Buffer.from(frame)); return true; } }),
       getFrameUpdater: () => updater,
@@ -82,6 +83,33 @@ test("a dialogue box opened again resends its texts: the client turns 'Click her
   // Without reopening, an unchanged text is still skipped.
   PacketSender.prototype.sendString.call(fake, 'Click here to continue', CONTINUE);
   assert.equal(sent(), 2);
+});
+
+test('chatbox replacement, explicit close and interface removal notify their previous group', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const original = PluginManager.emitCustomEvent;
+  const closed = [];
+  const fake = Object.assign(Object.create(PacketSender.prototype), {
+    chatboxGroupId: -1,
+    subInterfaceTargets: new Map(),
+    player: {
+      getSession: () => ({ sendClientPacket: () => true }),
+      getFrameUpdater: () => ({ clearGroup() {} }),
+      getInterfaceId: () => -1,
+    },
+  });
+  PluginManager.emitCustomEvent = (name, event) => {
+    if (name === 'interface:closed') closed.push([event.interfaceId, fake.getChatboxGroupId()]);
+  };
+  try {
+    fake.sendChatboxInterface(233);
+    fake.sendChatboxInterface(231);
+    fake.sendChatboxInterface(231);
+    fake.closeInterface(231);
+    fake.sendChatboxInterface(233);
+    fake.closeTrackedInterfaces();
+    assert.deepEqual(closed, [[233, 231], [231, -1], [233, -1]]);
+  } finally { PluginManager.emitCustomEvent = original; }
 });
 
 

@@ -5,8 +5,19 @@ const { test } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const core = PluginManager.getCoreApi();
+function emptyApi() {
+  return { core, getTaskManager: () => ({ submit() {} }), getObjectManager: () => ({}),
+    getItemOnGroundManager: () => ({}), getWorld: () => ({ getObjects: () => [] }),
+    onCustomEvent() {}, onPlayerDisconnect() {}, onItemOnItem() {}, onItemOnGroundItem() {},
+    onGroundItemClick() {}, onItemOnObject() {}, onObjectInteraction() {}, log() {} };
+}
 
-test("firemaking logs, success chance, pyromancer bonus and campfire timers follow OSRS", () => {
+test("firemaking logs, success chance, pyromancer bonus and campfire timers follow OSRS", async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  require('../plugins/skills/Firemaking.plugin').register(emptyApi());
   const { Equipment } = require("../dist/game/model/container/impl/Equipment");
   const { ItemIdentifiers: I } = require("../dist/util/ItemIdentifiers");
   const Firemaking = require("../plugins/skills/Firemaking.plugin");
@@ -115,6 +126,7 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
   const hooks = {};
   let task = null;
   const api = {
+    core,
     getTaskManager: () => ({ submit: (submitted) => { task = submitted; } }),
     getObjectManager: () => ObjectManager,
     getItemOnGroundManager: () => ItemOnGroundManager,
@@ -126,7 +138,7 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
     onItemOnItem: (handler) => { hooks.itemOnItem = handler; },
     onItemOnGroundItem: (handler) => { hooks.itemOnGroundItem = handler; },
     onGroundItemClick: (ids, clickType, handler) => { hooks.groundItemClick = { ids, clickType, handler }; },
-    onItemOnObject: (handler) => { hooks.itemOnObject = handler; },
+    onItemOnObject: (item, _object, handler) => { hooks.itemOnObject = handler ?? item; },
     onObjectInteraction: (name, actions) => { hooks.objectInteraction = { name, actions }; },
     log: () => {},
   };
@@ -153,11 +165,13 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
       getItems: () => [],
     }),
     getEquipment: () => ({ getItems: () => [] }),
+    getDialogueManager: () => ({ startDialogues: () => {} }),
     getLocation: () => location,
     getPrivateArea: () => null,
     getForceMovement: () => null,
     getMovementQueue: () => ({ size: () => 0, canWalk: () => false, walkStep: () => {}, reset: () => {} }),
     performAnimation: () => {},
+    getPacketSender: () => ({ sendGlobalGraphic() {} }),
     sendMessage: (message) => messages.push(message),
     isRegistered: () => true,
     getHitpoints: () => 99,
@@ -170,7 +184,7 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
   try {
     Firemaking.startBotInventoryFiremaking(player, I.LOGS);
     for (let i = 0; i < 4; i++) task.execute();
-    const fire = World.getObjects().find((object) => object.getId() === O.FIRE_5);
+    const fire = World.getObjects().find((object) => object.getId() === O.FIRE_23);
     assert.ok(fire, "fire spawned");
     assert.equal(xp, 40, "one log of XP");
     assert.equal(inventory.get(I.LOGS), 4, "log consumed on success");
@@ -183,11 +197,10 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
     assert.equal(inventory.get(I.LOGS), 3, "tended log consumed");
 
     hooks.objectInteraction.actions.Check({ player, object: campfire, handled: false });
-    assert.ok(messages.some((message) => message.endsWith(".") && message.startsWith("The ")), "Check reports the burn state");
 
     for (let i = 0; i < 400; i++) task.execute();
     assert.ok(
-      !World.getObjects().some((object) => object.getId() === O.FIRE_5 || object.getId() === O.FORESTERS_CAMPFIRE),
+      !World.getObjects().some((object) => object.getId() === O.FIRE_23 || object.getId() === O.FORESTERS_CAMPFIRE),
       "campfire expired"
     );
     assert.ok(
@@ -197,4 +210,189 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
   } finally {
     Math.random = realRandom;
   }
+});
+
+async function campfireHarness(t) {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  const { ItemIdentifiers: I, ObjectIdentifiers: O, Location } = core;
+  const hooks = {};
+  const tasks = [];
+  const objects = new Set();
+  const ashes = [];
+  const api = {
+    core,
+    getTaskManager: () => ({ submit: t => tasks.push(t) }),
+    getObjectManager: () => ({
+      register: o => objects.add(o), deregister: o => objects.delete(o),
+      objectsAt: () => [],
+    }),
+    getItemOnGroundManager: () => ({
+      getGroundItem: () => null,
+      registerLocation: (p, item, loc) => ashes.push({ item, loc }),
+    }),
+    getWorld: () => ({ getObjects: () => [...objects] }),
+    onCustomEvent() {}, emitCustomEvent() {}, emitFiremakingBlocked: () => false,
+    onPlayerDisconnect: h => hooks.disconnect = h, onItemOnGroundItem() {}, onGroundItemClick() {},
+    onItemOnItem: h => hooks.combine = h,
+    onItemOnObject: (item, _object, h) => hooks.use = h ?? item,
+    onObjectInteraction: (name, actions) => { hooks[name] = actions; },
+    log() {},
+  };
+  const Firemaking = require('../plugins/skills/Firemaking.plugin');
+  Firemaking.register(api);
+  const inventory = new Map([[I.LOGS, 3], [I.TINDERBOX, 1]]);
+  let menu, xp = 0, chain;
+  const messages = [];
+  const graphics = [];
+  const animations = [];
+  const loc = new Location(3200, 3200);
+  const player = {
+    getSkillManager: () => ({ getCurrentLevel: () => 99, stopSkillable() {}, addExperiences: (_, n) => xp += n }),
+    getInventory: () => ({
+      contains: id => (inventory.get(id) ?? 0) > 0,
+      getAmount: id => inventory.get(id) ?? 0,
+      deleteNumber: (id, n) => inventory.set(id, inventory.get(id) - n),
+    }),
+    getEquipment: () => ({ getItems: () => [] }),
+    getDialogueManager: () => ({ startDialogues: c => chain = c }),
+    getLocation: () => loc, getPrivateArea: () => null, getForceMovement: () => null,
+    getMovementQueue: () => ({ size: () => 0, canWalk: () => false }),
+    performAnimation: a => animations.push(a.getId()), sendMessage: text => messages.push(text),
+    getPacketSender: () => ({ sendCreationMenu: m => menu = m, sendInterfaceRemoval() {}, sendGlobalGraphic: (graphic, tile) => graphics.push({ graphic, tile }) }),
+    isRegistered: () => true, isPlayerBot: () => true, getHitpoints: () => 99, getUsername: () => 'campfiretest',
+  };
+  const tick = n => { for (let i=0; i<n; i++) tasks[0].execute(); };
+  const useLog = (object, itemId = I.LOGS) => {
+    const e = { player, object, objectId: object.getId(), itemId, handled: false };
+    hooks.use(e); return e;
+  };
+  const oldExists = core.MapObjects.exists;
+  const oldRandom = Math.random;
+  const oldMapObjects = core.MapObjects.mapObjects;
+  core.MapObjects.exists = o => objects.has(o);
+  core.MapObjects.mapObjects = new Map();
+  Math.random = () => 0.999;
+  t.after(() => {
+    core.MapObjects.exists = oldExists;
+    core.MapObjects.mapObjects = oldMapObjects;
+    Math.random = oldRandom;
+  });
+  return { core, I, O, inventory, loc, player, hooks, objects, ashes, animations, messages, graphics,
+    tick, useLog, menu: () => menu, xp: () => xp, chain: () => chain,
+    light() {
+      hooks.combine({ player, usedItemId: I.TINDERBOX, usedWithItemId: I.LOGS });
+      tick(4);
+      const fire = [...objects][0];
+      assert.ok(fire, 'normal fire was lit');
+      return fire;
+    },
+  };
+}
+
+test("first campfire log sets its duration independently of the original fire", async t => {
+  const h = await campfireHarness(t);
+  h.useLog(h.light()); h.tick(9);
+  const campfire = [...h.objects][0];
+  assert.equal(campfire.getId(), h.O.FORESTERS_CAMPFIRE);
+  h.hooks.disconnect({ player: h.player });
+  h.tick(101);
+  assert.ok(h.objects.has(campfire), 'fire lasts until the full 102 ticks elapse');
+  h.tick(1);
+  assert.ok(!h.objects.has(campfire), 'a long-lived original fire does not extend the timer');
+  assert.equal(h.ashes.length, 1);
+});
+
+test("permanent normal and coloured fires convert, restore, and leave ashes", async t => {
+  const pairs = [
+    [core.ObjectIdentifiers.FIRE_23, core.ObjectIdentifiers.FORESTERS_CAMPFIRE],
+    [core.ObjectIdentifiers.FIRE_24, core.ObjectIdentifiers.FORESTERS_CAMPFIRE_2],
+    [core.ObjectIdentifiers.FIRE_25, core.ObjectIdentifiers.FORESTERS_CAMPFIRE_3],
+    [core.ObjectIdentifiers.FIRE_26, core.ObjectIdentifiers.FORESTERS_CAMPFIRE_4],
+    [core.ObjectIdentifiers.FIRE_16, core.ObjectIdentifiers.FORESTERS_CAMPFIRE_5],
+    [core.ObjectIdentifiers.FIRE_17, core.ObjectIdentifiers.FORESTERS_CAMPFIRE_6],
+  ];
+  for (const [fireId, campfireId] of pairs) await t.test(`fire ${fireId}`, async t => {
+    const h = await campfireHarness(t);
+    const permanent = new core.GameObject(fireId, h.loc, 10, 0);
+    h.objects.add(permanent);
+    assert.equal(h.useLog(permanent).handled, true);
+    h.tick(9);
+    assert.ok(!h.objects.has(permanent));
+    const campfire = [...h.objects][0];
+    assert.equal(campfire.getId(), campfireId);
+    h.hooks.disconnect({ player: h.player });
+    h.tick(102);
+    assert.ok(h.objects.has(permanent), 'permanent fire returns');
+    assert.equal(h.ashes.length, 1, 'expiry also leaves ashes');
+    assert.equal(h.ashes[0].item.getId(), h.I.ASHES);
+    assert.ok(h.ashes[0].loc.equals(h.loc));
+  });
+});
+
+test("mixed logs offer a choice, make-one stops, and the selected log controls XP and timer", async t => {
+  const h = await campfireHarness(t);
+  const fire = h.light();
+  h.inventory.set(h.I.OAK_LOGS, 2);
+  h.useLog(fire);
+  assert.ok(h.menu(), 'multiple log types offer a selection');
+  assert.equal(h.menu().getTitle(), 'What would you like to burn?');
+  assert.equal(h.menu().getOptions().mode, 27);
+  assert.deepEqual(h.menu().getItems(), [h.I.LOGS, h.I.OAK_LOGS]);
+  h.menu().execute(h.I.OAK_LOGS, 1);
+  h.tick(8);
+  assert.equal(h.inventory.get(h.I.OAK_LOGS), 2, 'no reward before nine ticks');
+  h.tick(1);
+  assert.equal(h.inventory.get(h.I.OAK_LOGS), 1);
+  assert.equal(h.inventory.get(h.I.LOGS), 2);
+  assert.equal(h.xp(), 100, '40 for lighting plus 60 for oak tending');
+  h.tick(18);
+  assert.equal(h.xp(), 100, 'selected amount is honoured');
+  assert.equal(h.animations.at(-1), core.Animation.DEFAULT_RESET_ANIMATION.getId());
+});
+
+test("tending uses the captured willow animation and tile graphic without extra chat", async t => {
+  const h = await campfireHarness(t);
+  const fire = h.light();
+  h.inventory.delete(h.I.LOGS);
+  h.inventory.set(h.I.WILLOW_LOGS, 1);
+  h.messages.length = 0;
+  h.useLog(fire, h.I.WILLOW_LOGS);
+  assert.equal(h.menu(), undefined, 'a single type starts directly');
+  assert.equal(h.animations.at(-1), 10572, 'forestry_campfire_burning_willow_logs');
+  h.tick(9);
+  assert.ok(h.animations.includes(10572));
+  assert.equal(h.animations.at(-1), core.Animation.DEFAULT_RESET_ANIMATION.getId());
+  assert.equal(h.graphics.length, 1);
+  assert.equal(h.graphics[0].graphic.id, 2582);
+  assert.ok(h.graphics[0].tile.equals(fire.getLocation()));
+  assert.deepEqual(h.messages, []);
+  assert.equal(h.xp(), 130, 'full willow XP is granted');
+});
+
+test("Check reports remaining burn time through the captured message box", async t => {
+  const h = await campfireHarness(t);
+  h.useLog(h.light()); h.tick(9);
+  const campfire = [...h.objects][0];
+  h.messages.length = 0;
+  h.hooks["Forester's Campfire"].Check({ player: h.player, object: campfire });
+  assert.ok(h.chain(), 'a dialogue is opened');
+  assert.equal(h.chain().getDialogues().get(0).getText(), 'The flames flicker gently.');
+  assert.deepEqual(h.messages, [], 'no replacement chat message');
+  assert.equal(require('../plugins/skills/Firemaking.plugin').isFiremakingActive(h.player), false);
+});
+
+test("tending rejects unrelated Cook fires and low levels without consuming logs", async t => {
+  const h = await campfireHarness(t);
+  const cookFire = new core.GameObject(core.ObjectIdentifiers.FIRE_44, h.loc, 10, 0);
+  assert.equal(h.useLog(cookFire).handled, false);
+  assert.equal(h.inventory.get(h.I.LOGS), 3);
+  const fire = h.light();
+  h.player.getSkillManager = () => ({ getCurrentLevel: () => 1 });
+  h.inventory.delete(h.I.LOGS);
+  h.inventory.set(h.I.OAK_LOGS, 1);
+  h.useLog(fire, h.I.OAK_LOGS);
+  h.tick(9);
+  assert.equal(h.inventory.get(h.I.OAK_LOGS), 1);
+  assert.ok(h.messages.includes('You need a Firemaking level of at least 15 to light those logs.'));
 });

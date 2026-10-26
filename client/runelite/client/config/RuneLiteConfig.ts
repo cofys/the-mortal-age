@@ -12,9 +12,16 @@ export const RuneLiteConfig = ConfigGroup("runelite", {
         keyName: "sidebarMode",
         name: "Sidebar panels",
         description:
-            "Docked: panels open beside the game, which narrows to make room. Overlay: panels open over the game.",
+            "Docked: panels open beside the game, which narrows to make room, as in RuneLite. Overlay: panels open over the game.",
         enum: SidebarMode,
-        default: SidebarMode.Overlay,
+        default: SidebarMode.Docked,
         position: 0,
+    }),
+    /** The plugin hub's starred plugins, by name, comma-separated (RuneLite's `pinnedPlugins`). */
+    pinnedPlugins: ConfigItem<string>({
+        keyName: "pinnedPlugins",
+        name: "Pinned plugins",
+        hidden: true,
+        default: "",
     }),
 });

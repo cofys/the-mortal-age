@@ -1,0 +1,2061 @@
+[
+  {
+    "questKey": "recipe_for_disaster",
+    "sourceKey": "RecipeForDisaster",
+    "variants": [
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_START",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDStart"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_DWARF",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDDwarf"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_WARTFACE_AND_BENTNOZE",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDGoblins"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_PIRATE_PETE",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDPiratePete"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_LUMBRIDGE_GUIDE",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDLumbridgeGuide"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_EVIL_DAVE",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDEvilDave"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_MONKEY_AMBASSADOR",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDAwowogei"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_SIR_AMIK_VARZE",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDSirAmikVarze"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_SKRACH_UGLOGWEE",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDSkrachUglogwee"
+      },
+      {
+        "helperVariant": "RECIPE_FOR_DISASTER_FINALE",
+        "helperClass": "com.questhelper.helpers.quests.recipefordisaster.RFDFinal"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "while_guthix_sleeps",
+    "sourceKey": "WhileGuthixSleeps",
+    "variants": [
+      {
+        "helperVariant": "WHILE_GUTHIX_SLEEPS",
+        "helperClass": "com.questhelper.helpers.quests.whileguthixsleeps.WhileGuthixSleeps"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "a_night_at_the_theatre",
+    "sourceKey": "ANightAtTheTheatre",
+    "variants": [
+      {
+        "helperVariant": "A_NIGHT_AT_THE_THEATRE",
+        "helperClass": "com.questhelper.helpers.quests.anightatthetheatre.ANightAtTheTheatre"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "sins_of_the_father",
+    "sourceKey": "SinsOfTheFather",
+    "variants": [
+      {
+        "helperVariant": "SINS_OF_THE_FATHER",
+        "helperClass": "com.questhelper.helpers.quests.sinsofthefather.SinsOfTheFather"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_blood_moon_rises",
+    "sourceKey": "TheBloodMoonRises",
+    "variants": [
+      {
+        "helperVariant": "THE_BLOOD_MOON_RISES",
+        "helperClass": "com.questhelper.helpers.quests.thebloodmoonrises.TheBloodMoonRises"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "a_kingdom_divided",
+    "sourceKey": "AKingdomDivided",
+    "variants": [
+      {
+        "helperVariant": "A_KINGDOM_DIVIDED",
+        "helperClass": "com.questhelper.helpers.quests.akingdomdivided.AKingdomDivided"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "animal_magnetism",
+    "sourceKey": "AnimalMagnetism",
+    "variants": [
+      {
+        "helperVariant": "ANIMAL_MAGNETISM",
+        "helperClass": "com.questhelper.helpers.quests.animalmagnetism.AnimalMagnetism"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "another_slice_of_ham",
+    "sourceKey": "AnotherSliceOfHAM",
+    "variants": [
+      {
+        "helperVariant": "ANOTHER_SLICE_OF_HAM",
+        "helperClass": "com.questhelper.helpers.quests.anothersliceofham.AnotherSliceOfHam"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "a_ruff_situation",
+    "sourceKey": "ARuffSituation",
+    "variants": [
+      {
+        "helperVariant": "A_RUFF_SITUATION",
+        "helperClass": "com.questhelper.helpers.quests.aruffsituation.ARuffSituation"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_ascent_of_arceuus",
+    "sourceKey": "AscentOfArceuus",
+    "variants": [
+      {
+        "helperVariant": "THE_ASCENT_OF_ARCEUUS",
+        "helperClass": "com.questhelper.helpers.quests.theascentofarceuus.TheAscentOfArceuus"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "at_first_light",
+    "sourceKey": "AtFirstLight",
+    "variants": [
+      {
+        "helperVariant": "AT_FIRST_LIGHT",
+        "helperClass": "com.questhelper.helpers.quests.atfirstlight.AtFirstLight"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "below_ice_mountain",
+    "sourceKey": "BelowIceMountain",
+    "variants": [
+      {
+        "helperVariant": "BELOW_ICE_MOUNTAIN",
+        "helperClass": "com.questhelper.helpers.quests.belowicemountain.BelowIceMountain"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "beneath_cursed_sands",
+    "sourceKey": "BeneathCursedSands",
+    "variants": [
+      {
+        "helperVariant": "BENEATH_CURSED_SANDS",
+        "helperClass": "com.questhelper.helpers.quests.beneathcursedsands.BeneathCursedSands"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "between_a_rock",
+    "sourceKey": "BetweenARock",
+    "variants": [
+      {
+        "helperVariant": "BETWEEN_A_ROCK",
+        "helperClass": "com.questhelper.helpers.quests.betweenarock.BetweenARock"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "big_chompy_bird_hunting",
+    "sourceKey": "BigChompyBirdHunting",
+    "variants": [
+      {
+        "helperVariant": "BIG_CHOMPY_BIRD_HUNTING",
+        "helperClass": "com.questhelper.helpers.quests.bigchompybirdhunting.BigChompyBirdHunting"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "biohazard",
+    "sourceKey": "Biohazard",
+    "variants": [
+      {
+        "helperVariant": "BIOHAZARD",
+        "helperClass": "com.questhelper.helpers.quests.biohazard.Biohazard"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "black_knights_fortress",
+    "sourceKey": "BlackKnightsFortress",
+    "variants": [
+      {
+        "helperVariant": "BLACK_KNIGHTS_FORTRESS",
+        "helperClass": "com.questhelper.helpers.quests.blackknightfortress.BlackKnightFortress"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "bone_voyage",
+    "sourceKey": "BoneVoyage",
+    "variants": [
+      {
+        "helperVariant": "BONE_VOYAGE",
+        "helperClass": "com.questhelper.helpers.quests.bonevoyage.BoneVoyage"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "cabin_fever",
+    "sourceKey": "CabinFever",
+    "variants": [
+      {
+        "helperVariant": "CABIN_FEVER",
+        "helperClass": "com.questhelper.helpers.quests.cabinfever.CabinFever"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "children_of_the_sun",
+    "sourceKey": "ChildrenOfTheSun",
+    "variants": [
+      {
+        "helperVariant": "CHILDREN_OF_THE_SUN",
+        "helperClass": "com.questhelper.helpers.quests.childrenofthesun.ChildrenOfTheSun"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "client_of_kourend",
+    "sourceKey": "ClientOfKourend",
+    "variants": [
+      {
+        "helperVariant": "CLIENT_OF_KOUREND",
+        "helperClass": "com.questhelper.helpers.quests.clientofkourend.ClientOfKourend"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "clock_tower",
+    "sourceKey": "ClockTower",
+    "variants": [
+      {
+        "helperVariant": "CLOCK_TOWER",
+        "helperClass": "com.questhelper.helpers.quests.clocktower.ClockTower"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "cold_war",
+    "sourceKey": "ColdWar",
+    "variants": [
+      {
+        "helperVariant": "COLD_WAR",
+        "helperClass": "com.questhelper.helpers.quests.coldwar.ColdWar"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "contact",
+    "sourceKey": "Contact",
+    "variants": [
+      {
+        "helperVariant": "CONTACT",
+        "helperClass": "com.questhelper.helpers.quests.contact.Contact"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "cooks_assistant",
+    "sourceKey": "CooksAssistant",
+    "variants": [
+      {
+        "helperVariant": "COOKS_ASSISTANT",
+        "helperClass": "com.questhelper.helpers.quests.cooksassistant.CooksAssistant"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_corsair_curse",
+    "sourceKey": "CorsairCurse",
+    "variants": [
+      {
+        "helperVariant": "THE_CORSAIR_CURSE",
+        "helperClass": "com.questhelper.helpers.quests.thecorsaircurse.TheCorsairCurse"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "crab_quest",
+    "sourceKey": "CrabQuest",
+    "variants": [
+      {
+        "helperVariant": "CRAB_QUEST",
+        "helperClass": "com.questhelper.helpers.quests.crabquest.CrabQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "creature_of_fenkenstrain",
+    "sourceKey": "CreatureOfFenkenstrain",
+    "variants": [
+      {
+        "helperVariant": "CREATURE_OF_FENKENSTRAIN",
+        "helperClass": "com.questhelper.helpers.quests.creatureoffenkenstrain.CreatureOfFenkenstrain"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "current_affairs",
+    "sourceKey": "CurrentAffairs",
+    "variants": [
+      {
+        "helperVariant": "CURRENT_AFFAIRS",
+        "helperClass": "com.questhelper.helpers.quests.currentaffairs.CurrentAffairs"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "curse_of_arrav",
+    "sourceKey": "CurseOfArrav",
+    "variants": [
+      {
+        "helperVariant": "THE_CURSE_OF_ARRAV",
+        "helperClass": "com.questhelper.helpers.quests.thecurseofarrav.TheCurseOfArrav"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "darkness_of_hallowvale",
+    "sourceKey": "DarknessOfHallowvale",
+    "variants": [
+      {
+        "helperVariant": "DARKNESS_OF_HALLOWVALE",
+        "helperClass": "com.questhelper.helpers.quests.darknessofhallowvale.DarknessOfHallowvale"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "death_on_the_isle",
+    "sourceKey": "DeathOnTheIsle",
+    "variants": [
+      {
+        "helperVariant": "DEATH_ON_THE_ISLE",
+        "helperClass": "com.questhelper.helpers.quests.deathontheisle.DeathOnTheIsle"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "death_plateau",
+    "sourceKey": "DeathPlateau",
+    "variants": [
+      {
+        "helperVariant": "DEATH_PLATEAU",
+        "helperClass": "com.questhelper.helpers.quests.deathplateau.DeathPlateau"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "death_to_the_dorgeshuun",
+    "sourceKey": "DeathToTheDorgeshuun",
+    "variants": [
+      {
+        "helperVariant": "DEATH_TO_THE_DORGESHUUN",
+        "helperClass": "com.questhelper.helpers.quests.deathtothedorgeshuun.DeathToTheDorgeshuun"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "defender_of_varrock",
+    "sourceKey": "DefenderOfVarrock",
+    "variants": [
+      {
+        "helperVariant": "DEFENDER_OF_VARROCK",
+        "helperClass": "com.questhelper.helpers.quests.defenderofvarrock.DefenderOfVarrock"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "demon_slayer",
+    "sourceKey": "DemonSlayer",
+    "variants": [
+      {
+        "helperVariant": "DEMON_SLAYER",
+        "helperClass": "com.questhelper.helpers.quests.demonslayer.DemonSlayer"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_depths_of_despair",
+    "sourceKey": "DepthsOfDespair",
+    "variants": [
+      {
+        "helperVariant": "THE_DEPTHS_OF_DESPAIR",
+        "helperClass": "com.questhelper.helpers.quests.thedepthsofdespair.TheDepthsOfDespair"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "desert_treasure_i",
+    "sourceKey": "DesertTreasureI",
+    "variants": [
+      {
+        "helperVariant": "DESERT_TREASURE",
+        "helperClass": "com.questhelper.helpers.quests.deserttreasure.DesertTreasure"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "desert_treasure_ii",
+    "sourceKey": "DesertTreasureII",
+    "variants": [
+      {
+        "helperVariant": "DESERT_TREASURE_II",
+        "helperClass": "com.questhelper.helpers.quests.deserttreasureii.DesertTreasureII"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "devious_minds",
+    "sourceKey": "DeviousMinds",
+    "variants": [
+      {
+        "helperVariant": "DEVIOUS_MINDS",
+        "helperClass": "com.questhelper.helpers.quests.deviousminds.DeviousMinds"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_dig_site",
+    "sourceKey": "DigSite",
+    "variants": [
+      {
+        "helperVariant": "THE_DIG_SITE",
+        "helperClass": "com.questhelper.helpers.quests.thedigsite.TheDigSite"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "dorics_quest",
+    "sourceKey": "DoricsQuest",
+    "variants": [
+      {
+        "helperVariant": "DORICS_QUEST",
+        "helperClass": "com.questhelper.helpers.quests.doricsquest.DoricsQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "dragon_slayer_i",
+    "sourceKey": "DragonSlayer",
+    "variants": [
+      {
+        "helperVariant": "DRAGON_SLAYER_I",
+        "helperClass": "com.questhelper.helpers.quests.dragonslayer.DragonSlayer"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "dragon_slayer_ii",
+    "sourceKey": "DragonSlayerII",
+    "variants": [
+      {
+        "helperVariant": "DRAGON_SLAYER_II",
+        "helperClass": "com.questhelper.helpers.quests.dragonslayerii.DragonSlayerII"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "dream_mentor",
+    "sourceKey": "DreamMentor",
+    "variants": [
+      {
+        "helperVariant": "DREAM_MENTOR",
+        "helperClass": "com.questhelper.helpers.quests.dreammentor.DreamMentor"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "druidic_ritual",
+    "sourceKey": "DruidicRitual",
+    "variants": [
+      {
+        "helperVariant": "DRUIDIC_RITUAL",
+        "helperClass": "com.questhelper.helpers.quests.druidicritual.DruidicRitual"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "dwarf_cannon",
+    "sourceKey": "DwarfCannon",
+    "variants": [
+      {
+        "helperVariant": "DWARF_CANNON",
+        "helperClass": "com.questhelper.helpers.quests.dwarfcannon.DwarfCannon"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "eadgars_ruse",
+    "sourceKey": "EadgarsRuse",
+    "variants": [
+      {
+        "helperVariant": "EADGARS_RUSE",
+        "helperClass": "com.questhelper.helpers.quests.eadgarsruse.EadgarsRuse"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "eagles_peak",
+    "sourceKey": "EaglesPeak",
+    "variants": [
+      {
+        "helperVariant": "EAGLES_PEAK",
+        "helperClass": "com.questhelper.helpers.quests.eaglespeak.EaglesPeak"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "elemental_workshop_i",
+    "sourceKey": "ElementalWorkshopI",
+    "variants": [
+      {
+        "helperVariant": "ELEMENTAL_WORKSHOP_I",
+        "helperClass": "com.questhelper.helpers.quests.elementalworkshopi.ElementalWorkshopI"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "elemental_workshop_ii",
+    "sourceKey": "ElementalWorkshopII",
+    "variants": [
+      {
+        "helperVariant": "ELEMENTAL_WORKSHOP_II",
+        "helperClass": "com.questhelper.helpers.quests.elementalworkshopii.ElementalWorkshopII"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "enakhras_lament",
+    "sourceKey": "EnakhrasLament",
+    "variants": [
+      {
+        "helperVariant": "ENAKHRAS_LAMENT",
+        "helperClass": "com.questhelper.helpers.quests.enakhraslament.EnakhrasLament"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "enlightened_journey",
+    "sourceKey": "EnlightenedJourney",
+    "variants": [
+      {
+        "helperVariant": "ENLIGHTENED_JOURNEY",
+        "helperClass": "com.questhelper.helpers.quests.enlightenedjourney.EnlightenedJourney"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "ernest_the_chicken",
+    "sourceKey": "ErnestTheChicken",
+    "variants": [
+      {
+        "helperVariant": "ERNEST_THE_CHICKEN",
+        "helperClass": "com.questhelper.helpers.quests.ernestthechicken.ErnestTheChicken"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "ethically_acquired_antiquities",
+    "sourceKey": "EthicallyAcquiredAntiquities",
+    "variants": [
+      {
+        "helperVariant": "ETHICALLY_ACQUIRED_ANTIQUITIES",
+        "helperClass": "com.questhelper.helpers.quests.ethicallyacquiredantiquities.EthicallyAcquiredAntiquities"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_eyes_of_glouphrie",
+    "sourceKey": "EyesOfGlouphrie",
+    "variants": [
+      {
+        "helperVariant": "THE_EYES_OF_GLOUPHRIE",
+        "helperClass": "com.questhelper.helpers.quests.theeyesofglouphrie.TheEyesOfGlouphrie"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "fairytale_i_growing_pains",
+    "sourceKey": "FairytaleIGrowingPains",
+    "variants": [
+      {
+        "helperVariant": "FAIRYTALE_I__GROWING_PAINS",
+        "helperClass": "com.questhelper.helpers.quests.fairytalei.FairytaleI"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "fairytale_ii_cure_a_queen",
+    "sourceKey": "FairytaleIICureAQueen",
+    "variants": [
+      {
+        "helperVariant": "FAIRYTALE_II__CURE_A_QUEEN",
+        "helperClass": "com.questhelper.helpers.quests.fairytaleii.FairytaleII"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "fallen_from_grace",
+    "sourceKey": "FallenFromGrace",
+    "variants": [
+      {
+        "helperVariant": "FALLEN_FROM_GRACE",
+        "helperClass": "com.questhelper.helpers.quests.fallenfromgrace.FallenFromGrace"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "family_crest",
+    "sourceKey": "FamilyCrest",
+    "variants": [
+      {
+        "helperVariant": "FAMILY_CREST",
+        "helperClass": "com.questhelper.helpers.quests.familycrest.FamilyCrest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "fight_arena",
+    "sourceKey": "FightArena",
+    "variants": [
+      {
+        "helperVariant": "FIGHT_ARENA",
+        "helperClass": "com.questhelper.helpers.quests.fightarena.FightArena"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "fishing_contest",
+    "sourceKey": "FishingContest",
+    "variants": [
+      {
+        "helperVariant": "FISHING_CONTEST",
+        "helperClass": "com.questhelper.helpers.quests.fishingcontest.FishingContest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "forgettable_tale",
+    "sourceKey": "ForgettableTale",
+    "variants": [
+      {
+        "helperVariant": "FORGETTABLE_TALE",
+        "helperClass": "com.questhelper.helpers.quests.forgettabletale.ForgettableTale"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_forsaken_tower",
+    "sourceKey": "ForsakenTower",
+    "variants": [
+      {
+        "helperVariant": "THE_FORSAKEN_TOWER",
+        "helperClass": "com.questhelper.helpers.quests.theforsakentower.TheForsakenTower"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_fremennik_exiles",
+    "sourceKey": "TheFremennikExiles",
+    "variants": [
+      {
+        "helperVariant": "THE_FREMENNIK_EXILES",
+        "helperClass": "com.questhelper.helpers.quests.thefremennikexiles.TheFremennikExiles"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "fremennik_trials",
+    "sourceKey": "FremennikTrials",
+    "variants": [
+      {
+        "helperVariant": "THE_FREMENNIK_TRIALS",
+        "helperClass": "com.questhelper.helpers.quests.thefremenniktrials.TheFremennikTrials"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_garden_of_death",
+    "sourceKey": "GardenOfDeath",
+    "variants": [
+      {
+        "helperVariant": "THE_GARDEN_OF_DEATH",
+        "helperClass": "com.questhelper.helpers.quests.thegardenofdeath.TheGardenOfDeath"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "garden_of_tranquillity",
+    "sourceKey": "GardenOfTranquillity",
+    "variants": [
+      {
+        "helperVariant": "GARDEN_OF_TRANQUILLITY",
+        "helperClass": "com.questhelper.helpers.quests.gardenoftranquility.GardenOfTranquillity"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "gertrudes_cat",
+    "sourceKey": "GertrudesCat",
+    "variants": [
+      {
+        "helperVariant": "GERTRUDES_CAT",
+        "helperClass": "com.questhelper.helpers.quests.gertrudescat.GertrudesCat"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "getting_ahead",
+    "sourceKey": "GettingAhead",
+    "variants": [
+      {
+        "helperVariant": "GETTING_AHEAD",
+        "helperClass": "com.questhelper.helpers.quests.gettingahead.GettingAhead"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "ghosts_ahoy",
+    "sourceKey": "GhostsAhoy",
+    "variants": [
+      {
+        "helperVariant": "GHOSTS_AHOY",
+        "helperClass": "com.questhelper.helpers.quests.ghostsahoy.GhostsAhoy"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "giant_dwarf",
+    "sourceKey": "GiantDwarf",
+    "variants": [
+      {
+        "helperVariant": "THE_GIANT_DWARF",
+        "helperClass": "com.questhelper.helpers.quests.thegiantdwarf.TheGiantDwarf"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "goblin_diplomacy",
+    "sourceKey": "GoblinDiplomacy",
+    "variants": [
+      {
+        "helperVariant": "GOBLIN_DIPLOMACY",
+        "helperClass": "com.questhelper.helpers.quests.goblindiplomacy.GoblinDiplomacy"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "grand_tree",
+    "sourceKey": "GrandTree",
+    "variants": [
+      {
+        "helperVariant": "THE_GRAND_TREE",
+        "helperClass": "com.questhelper.helpers.quests.thegrandtree.TheGrandTree"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "great_brain_robbery",
+    "sourceKey": "GreatBrainRobbery",
+    "variants": [
+      {
+        "helperVariant": "THE_GREAT_BRAIN_ROBBERY",
+        "helperClass": "com.questhelper.helpers.quests.thegreatbrainrobbery.TheGreatBrainRobbery"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "grim_tales",
+    "sourceKey": "GrimTales",
+    "variants": [
+      {
+        "helperVariant": "GRIM_TALES",
+        "helperClass": "com.questhelper.helpers.quests.grimtales.GrimTales"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "hand_in_the_sand",
+    "sourceKey": "HandInTheSand",
+    "variants": [
+      {
+        "helperVariant": "THE_HAND_IN_THE_SAND",
+        "helperClass": "com.questhelper.helpers.quests.thehandinthesand.TheHandInTheSand"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "haunted_mine",
+    "sourceKey": "HauntedMine",
+    "variants": [
+      {
+        "helperVariant": "HAUNTED_MINE",
+        "helperClass": "com.questhelper.helpers.quests.hauntedmine.HauntedMine"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "hazeel_cult",
+    "sourceKey": "HazeelCult",
+    "variants": [
+      {
+        "helperVariant": "HAZEEL_CULT",
+        "helperClass": "com.questhelper.helpers.quests.hazeelcult.HazeelCult"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "heroes_quest",
+    "sourceKey": "HeroesQuest",
+    "variants": [
+      {
+        "helperVariant": "HEROES_QUEST",
+        "helperClass": "com.questhelper.helpers.quests.heroesquest.HeroesQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "holy_grail",
+    "sourceKey": "HolyGrail",
+    "variants": [
+      {
+        "helperVariant": "HOLY_GRAIL",
+        "helperClass": "com.questhelper.helpers.quests.holygrail.HolyGrail"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "horror_from_the_deep",
+    "sourceKey": "HorrorFromTheDeep",
+    "variants": [
+      {
+        "helperVariant": "HORROR_FROM_THE_DEEP",
+        "helperClass": "com.questhelper.helpers.quests.horrorfromthedeep.HorrorFromTheDeep"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "ictlharins_little_helper",
+    "sourceKey": "IcthlarinsLittleHelper",
+    "variants": [
+      {
+        "helperVariant": "ICTHLARINS_LITTLE_HELPER",
+        "helperClass": "com.questhelper.helpers.quests.icthlarinslittlehelper.IcthlarinsLittleHelper"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_ides_of_milk",
+    "sourceKey": "IdesOfMilk",
+    "variants": [
+      {
+        "helperVariant": "THE_IDES_OF_MILK",
+        "helperClass": "com.questhelper.helpers.quests.theidesofmilk.TheIdesOfMilk"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "imp_catcher",
+    "sourceKey": "ImpCatcher",
+    "variants": [
+      {
+        "helperVariant": "IMP_CATCHER",
+        "helperClass": "com.questhelper.helpers.quests.impcatcher.ImpCatcher"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "in_aid_of_the_myreque",
+    "sourceKey": "InAidOfTheMyreque",
+    "variants": [
+      {
+        "helperVariant": "IN_AID_OF_THE_MYREQUE",
+        "helperClass": "com.questhelper.helpers.quests.inaidofthemyreque.InAidOfTheMyreque"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "in_search_of_the_myreque",
+    "sourceKey": "InSearchOfTheMyreque",
+    "variants": [
+      {
+        "helperVariant": "IN_SEARCH_OF_THE_MYREQUE",
+        "helperClass": "com.questhelper.helpers.quests.insearchofthemyreque.InSearchOfTheMyreque"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "jungle_potion",
+    "sourceKey": "JunglePotion",
+    "variants": [
+      {
+        "helperVariant": "JUNGLE_POTION",
+        "helperClass": "com.questhelper.helpers.quests.junglepotion.JunglePotion"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "kings_ransom",
+    "sourceKey": "KingsRansom",
+    "variants": [
+      {
+        "helperVariant": "KINGS_RANSOM",
+        "helperClass": "com.questhelper.helpers.quests.kingsransom.KingsRansom"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_knights_sword",
+    "sourceKey": "KnightsSword",
+    "variants": [
+      {
+        "helperVariant": "THE_KNIGHTS_SWORD",
+        "helperClass": "com.questhelper.helpers.quests.theknightssword.TheKnightsSword"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "land_of_the_goblins",
+    "sourceKey": "LandOfTheGoblins",
+    "variants": [
+      {
+        "helperVariant": "LAND_OF_THE_GOBLINS",
+        "helperClass": "com.questhelper.helpers.quests.landofthegoblins.LandOfTheGoblins"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "learning_the_ropes",
+    "sourceKey": "LearningTheRopes",
+    "variants": [],
+    "native": true
+  },
+  {
+    "questKey": "legends_quest",
+    "sourceKey": "LegendsQuest",
+    "variants": [
+      {
+        "helperVariant": "LEGENDS_QUEST",
+        "helperClass": "com.questhelper.helpers.quests.legendsquest.LegendsQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "lost_city",
+    "sourceKey": "LostCity",
+    "variants": [
+      {
+        "helperVariant": "LOST_CITY",
+        "helperClass": "com.questhelper.helpers.quests.lostcity.LostCity"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_lost_tribe",
+    "sourceKey": "LostTribe",
+    "variants": [
+      {
+        "helperVariant": "THE_LOST_TRIBE",
+        "helperClass": "com.questhelper.helpers.quests.thelosttribe.TheLostTribe"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "lunar_diplomacy",
+    "sourceKey": "LunarDiplomacy",
+    "variants": [
+      {
+        "helperVariant": "LUNAR_DIPLOMACY",
+        "helperClass": "com.questhelper.helpers.quests.lunardiplomacy.LunarDiplomacy"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "making_friends_with_my_arm",
+    "sourceKey": "MakingFriendsWithMyArm",
+    "variants": [
+      {
+        "helperVariant": "MAKING_FRIENDS_WITH_MY_ARM",
+        "helperClass": "com.questhelper.helpers.quests.makingfriendswithmyarm.MakingFriendsWithMyArm"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "making_history",
+    "sourceKey": "MakingHistory",
+    "variants": [
+      {
+        "helperVariant": "MAKING_HISTORY",
+        "helperClass": "com.questhelper.helpers.quests.makinghistory.MakingHistory"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "meat_and_greet",
+    "sourceKey": "MeatAndGreet",
+    "variants": [
+      {
+        "helperVariant": "MEAT_AND_GREET",
+        "helperClass": "com.questhelper.helpers.quests.meatandgreet.MeatAndGreet"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "merlins_crystal",
+    "sourceKey": "MerlinsCrystal",
+    "variants": [
+      {
+        "helperVariant": "MERLINS_CRYSTAL",
+        "helperClass": "com.questhelper.helpers.quests.merlinscrystal.MerlinsCrystal"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "misthalin_mystery",
+    "sourceKey": "MisthalinMystery",
+    "variants": [
+      {
+        "helperVariant": "MISTHALIN_MYSTERY",
+        "helperClass": "com.questhelper.helpers.quests.misthalinmystery.MisthalinMystery"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "monkey_madness_i",
+    "sourceKey": "MonkeyMadnessI",
+    "variants": [
+      {
+        "helperVariant": "MONKEY_MADNESS_I",
+        "helperClass": "com.questhelper.helpers.quests.monkeymadnessi.MonkeyMadnessI"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "monkey_madness_ii",
+    "sourceKey": "MonkeyMadnessII",
+    "variants": [
+      {
+        "helperVariant": "MONKEY_MADNESS_II",
+        "helperClass": "com.questhelper.helpers.quests.monkeymadnessii.MonkeyMadnessII"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "monks_friend",
+    "sourceKey": "MonksFriend",
+    "variants": [
+      {
+        "helperVariant": "MONKS_FRIEND",
+        "helperClass": "com.questhelper.helpers.quests.monksfriend.MonksFriend"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "mountain_daughter",
+    "sourceKey": "MountainDaughter",
+    "variants": [
+      {
+        "helperVariant": "MOUNTAIN_DAUGHTER",
+        "helperClass": "com.questhelper.helpers.quests.mountaindaughter.MountainDaughter"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "mournings_end_part_i",
+    "sourceKey": "MourningsEndPartI",
+    "variants": [
+      {
+        "helperVariant": "MOURNINGS_END_PART_I",
+        "helperClass": "com.questhelper.helpers.quests.mourningsendparti.MourningsEndPartI"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "mournings_end_part_ii",
+    "sourceKey": "MourningsEndPartII",
+    "variants": [
+      {
+        "helperVariant": "MOURNINGS_END_PART_II",
+        "helperClass": "com.questhelper.helpers.quests.mourningsendpartii.MourningsEndPartII"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "murder_mystery",
+    "sourceKey": "MurderMystery",
+    "variants": [
+      {
+        "helperVariant": "MURDER_MYSTERY",
+        "helperClass": "com.questhelper.helpers.quests.murdermystery.MurderMystery"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "my_arms_big_adventure",
+    "sourceKey": "MyArmsBigAdventure",
+    "variants": [
+      {
+        "helperVariant": "MY_ARMS_BIG_ADVENTURE",
+        "helperClass": "com.questhelper.helpers.quests.myarmsbigadventure.MyArmsBigAdventure"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "nature_spirit",
+    "sourceKey": "NatureSpirit",
+    "variants": [
+      {
+        "helperVariant": "NATURE_SPIRIT",
+        "helperClass": "com.questhelper.helpers.quests.naturespirit.NatureSpirit"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "observatory_quest",
+    "sourceKey": "ObservatoryQuest",
+    "variants": [
+      {
+        "helperVariant": "OBSERVATORY_QUEST",
+        "helperClass": "com.questhelper.helpers.quests.observatoryquest.ObservatoryQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "olafs_quest",
+    "sourceKey": "OlafsQuest",
+    "variants": [
+      {
+        "helperVariant": "OLAFS_QUEST",
+        "helperClass": "com.questhelper.helpers.quests.olafsquest.OlafsQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "one_small_favour",
+    "sourceKey": "OneSmallFavour",
+    "variants": [
+      {
+        "helperVariant": "ONE_SMALL_FAVOUR",
+        "helperClass": "com.questhelper.helpers.quests.onesmallfavour.OneSmallFavour"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "prying_times",
+    "sourceKey": "PryingTimes",
+    "variants": [
+      {
+        "helperVariant": "PRYING_TIMES",
+        "helperClass": "com.questhelper.helpers.quests.pryingtimes.PryingTimes"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "pandemonium",
+    "sourceKey": "Pandemonium",
+    "variants": [
+      {
+        "helperVariant": "PANDEMONIUM",
+        "helperClass": "com.questhelper.helpers.quests.pandemonium.Pandemonium"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_path_of_glouphrie",
+    "sourceKey": "PathOfGlouphrie",
+    "variants": [
+      {
+        "helperVariant": "THE_PATH_OF_GLOUPHRIE",
+        "helperClass": "com.questhelper.helpers.quests.thepathofglouphrie.ThePathOfGlouphrie"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "perilous_moons",
+    "sourceKey": "PerilousMoons",
+    "variants": [
+      {
+        "helperVariant": "PERILOUS_MOON",
+        "helperClass": "com.questhelper.helpers.quests.perilousmoon.PerilousMoon"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "pirates_treasure",
+    "sourceKey": "PiratesTreasure",
+    "variants": [
+      {
+        "helperVariant": "PIRATES_TREASURE",
+        "helperClass": "com.questhelper.helpers.quests.piratestreasure.PiratesTreasure"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "plague_city",
+    "sourceKey": "PlagueCity",
+    "variants": [
+      {
+        "helperVariant": "PLAGUE_CITY",
+        "helperClass": "com.questhelper.helpers.quests.plaguecity.PlagueCity"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "a_porcine_of_interest",
+    "sourceKey": "PorcineOfInterest",
+    "variants": [
+      {
+        "helperVariant": "A_PORCINE_OF_INTEREST",
+        "helperClass": "com.questhelper.helpers.quests.aporcineofinterest.APorcineOfInterest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "priest_in_peril",
+    "sourceKey": "PriestInPeril",
+    "variants": [
+      {
+        "helperVariant": "PRIEST_IN_PERIL",
+        "helperClass": "com.questhelper.helpers.quests.priestinperil.PriestInPeril"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "prince_ali_rescue",
+    "sourceKey": "PrinceAliRescue",
+    "variants": [
+      {
+        "helperVariant": "PRINCE_ALI_RESCUE",
+        "helperClass": "com.questhelper.helpers.quests.princealirescue.PrinceAliRescue"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_queen_of_thieves",
+    "sourceKey": "QueenOfThieves",
+    "variants": [
+      {
+        "helperVariant": "THE_QUEEN_OF_THIEVES",
+        "helperClass": "com.questhelper.helpers.quests.thequeenofthieves.TheQueenOfThieves"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "rag_and_bone_man_i",
+    "sourceKey": "RagAndBoneManI",
+    "variants": [
+      {
+        "helperVariant": "RAG_AND_BONE_MAN_I",
+        "helperClass": "com.questhelper.helpers.quests.ragandboneman.RagAndBoneManI"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "rag_and_bone_man_ii",
+    "sourceKey": "RagAndBoneManII",
+    "variants": [
+      {
+        "helperVariant": "RAG_AND_BONE_MAN_II",
+        "helperClass": "com.questhelper.helpers.quests.ragandboneman.RagAndBoneManII"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "ratcatchers",
+    "sourceKey": "Ratcatchers",
+    "variants": [
+      {
+        "helperVariant": "RATCATCHERS",
+        "helperClass": "com.questhelper.helpers.quests.ratcatchers.RatCatchers"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "recruitment_drive",
+    "sourceKey": "RecruitmentDrive",
+    "variants": [
+      {
+        "helperVariant": "RECRUITMENT_DRIVE",
+        "helperClass": "com.questhelper.helpers.quests.recruitmentdrive.RecruitmentDrive"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_red_reef",
+    "sourceKey": "RedReef",
+    "variants": [
+      {
+        "helperVariant": "THE_RED_REEF",
+        "helperClass": "com.questhelper.helpers.quests.theredreef.TheRedReef"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "regicide",
+    "sourceKey": "Regicide",
+    "variants": [
+      {
+        "helperVariant": "REGICIDE",
+        "helperClass": "com.questhelper.helpers.quests.regicide.Regicide"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_restless_ghost",
+    "sourceKey": "RestlessGhost",
+    "variants": [
+      {
+        "helperVariant": "THE_RESTLESS_GHOST",
+        "helperClass": "com.questhelper.helpers.quests.therestlessghost.TheRestlessGhost"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_ribbiting_tale_of_a_lily_pad_labour_dispute",
+    "sourceKey": "RibbitingTale",
+    "variants": [
+      {
+        "helperVariant": "THE_RIBBITING_TALE_OF_A_LILY_PAD_LABOUR_DISPUTE",
+        "helperClass": "com.questhelper.helpers.quests.theribbitingtaleofalilypadlabourdispute.TheRibbitingTaleOfALilyPadLabourDispute"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "romeo_and_juliet",
+    "sourceKey": "RomeoAndJuliet",
+    "variants": [
+      {
+        "helperVariant": "ROMEO__JULIET",
+        "helperClass": "com.questhelper.helpers.quests.romeoandjuliet.RomeoAndJuliet"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "roving_elves",
+    "sourceKey": "RovingElves",
+    "variants": [
+      {
+        "helperVariant": "ROVING_ELVES",
+        "helperClass": "com.questhelper.helpers.quests.rovingelves.RovingElves"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "royal_trouble",
+    "sourceKey": "RoyalTrouble",
+    "variants": [
+      {
+        "helperVariant": "ROYAL_TROUBLE",
+        "helperClass": "com.questhelper.helpers.quests.royaltrouble.RoyalTrouble"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "rum_deal",
+    "sourceKey": "RumDeal",
+    "variants": [
+      {
+        "helperVariant": "RUM_DEAL",
+        "helperClass": "com.questhelper.helpers.quests.rumdeal.RumDeal"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "rune_mysteries",
+    "sourceKey": "RuneMysteries",
+    "variants": [
+      {
+        "helperVariant": "RUNE_MYSTERIES",
+        "helperClass": "com.questhelper.helpers.quests.runemysteries.RuneMysteries"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "scorpion_catcher",
+    "sourceKey": "ScorpionCatcher",
+    "variants": [
+      {
+        "helperVariant": "SCORPION_CATCHER",
+        "helperClass": "com.questhelper.helpers.quests.scorpioncatcher.ScorpionCatcher"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "scrambled",
+    "sourceKey": "Scrambled",
+    "variants": [
+      {
+        "helperVariant": "SCRAMBLED",
+        "helperClass": "com.questhelper.helpers.quests.scrambled.Scrambled"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "sea_slug",
+    "sourceKey": "SeaSlug",
+    "variants": [
+      {
+        "helperVariant": "SEA_SLUG",
+        "helperClass": "com.questhelper.helpers.quests.seaslug.SeaSlug"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "secrets_of_the_north",
+    "sourceKey": "SecretsOfTheNorth",
+    "variants": [
+      {
+        "helperVariant": "SECRETS_OF_THE_NORTH",
+        "helperClass": "com.questhelper.helpers.quests.secretsofthenorth.SecretsOfTheNorth"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "shades_of_mortton",
+    "sourceKey": "ShadesOfMortton",
+    "variants": [
+      {
+        "helperVariant": "SHADES_OF_MORTTON",
+        "helperClass": "com.questhelper.helpers.quests.shadesofmortton.ShadesOfMortton"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "shadow_of_the_storm",
+    "sourceKey": "ShadowOfTheStorm",
+    "variants": [
+      {
+        "helperVariant": "SHADOW_OF_THE_STORM",
+        "helperClass": "com.questhelper.helpers.quests.shadowofthestorm.ShadowOfTheStorm"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "shadows_of_custodia",
+    "sourceKey": "ShadowsOfCustodia",
+    "variants": [
+      {
+        "helperVariant": "SHADOWS_OF_CUSTODIA",
+        "helperClass": "com.questhelper.helpers.quests.shadowsofcustodia.ShadowsOfCustodia"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "sheep_herder",
+    "sourceKey": "SheepHerder",
+    "variants": [
+      {
+        "helperVariant": "SHEEP_HERDER",
+        "helperClass": "com.questhelper.helpers.quests.sheepherder.SheepHerder"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "sheep_shearer",
+    "sourceKey": "SheepShearer",
+    "variants": [
+      {
+        "helperVariant": "SHEEP_SHEARER",
+        "helperClass": "com.questhelper.helpers.quests.sheepshearer.SheepShearer"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "shield_of_arrav",
+    "sourceKey": "ShieldOfArrav",
+    "variants": [
+      {
+        "helperVariant": "SHIELD_OF_ARRAV_PHOENIX_GANG",
+        "helperClass": "com.questhelper.helpers.quests.shieldofarrav.ShieldOfArravPhoenixGang"
+      },
+      {
+        "helperVariant": "SHIELD_OF_ARRAV_BLACK_ARM_GANG",
+        "helperClass": "com.questhelper.helpers.quests.shieldofarrav.ShieldOfArravBlackArmGang"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "song_of_the_elves",
+    "sourceKey": "SongOfTheElves",
+    "variants": [
+      {
+        "helperVariant": "SONG_OF_THE_ELVES",
+        "helperClass": "com.questhelper.helpers.quests.songoftheelves.SongOfTheElves"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "shilo_village",
+    "sourceKey": "ShiloVillage",
+    "variants": [
+      {
+        "helperVariant": "SHILO_VILLAGE",
+        "helperClass": "com.questhelper.helpers.quests.shilovillage.ShiloVillage"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "sleeping_giants",
+    "sourceKey": "SleepingGiants",
+    "variants": [
+      {
+        "helperVariant": "SLEEPING_GIANTS",
+        "helperClass": "com.questhelper.helpers.quests.sleepinggiants.SleepingGiants"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_slug_menace",
+    "sourceKey": "SlugMenace",
+    "variants": [
+      {
+        "helperVariant": "THE_SLUG_MENACE",
+        "helperClass": "com.questhelper.helpers.quests.theslugmenace.TheSlugMenace"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "a_souls_bane",
+    "sourceKey": "SoulsBane",
+    "variants": [
+      {
+        "helperVariant": "A_SOULS_BANE",
+        "helperClass": "com.questhelper.helpers.quests.asoulsbane.ASoulsBane"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "spirits_of_the_elid",
+    "sourceKey": "SpiritsOfTheElid",
+    "variants": [
+      {
+        "helperVariant": "SPIRITS_OF_THE_ELID",
+        "helperClass": "com.questhelper.helpers.quests.spiritsoftheelid.SpiritsOfTheElid"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "swan_song",
+    "sourceKey": "SwanSong",
+    "variants": [
+      {
+        "helperVariant": "SWAN_SONG",
+        "helperClass": "com.questhelper.helpers.quests.swansong.SwanSong"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "tai_bwo_wannai_trio",
+    "sourceKey": "TaiBwoWannaiTrio",
+    "variants": [
+      {
+        "helperVariant": "TAI_BWO_WANNAI_TRIO",
+        "helperClass": "com.questhelper.helpers.quests.taibwowannaitrio.TaiBwoWannaiTrio"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "a_tail_of_two_cats",
+    "sourceKey": "TailOfTwoCats",
+    "variants": [
+      {
+        "helperVariant": "A_TAIL_OF_TWO_CATS",
+        "helperClass": "com.questhelper.helpers.quests.atailoftwocats.ATailOfTwoCats"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "tale_of_the_righteous",
+    "sourceKey": "TaleOfTheRighteous",
+    "variants": [
+      {
+        "helperVariant": "TALE_OF_THE_RIGHTEOUS",
+        "helperClass": "com.questhelper.helpers.quests.taleoftherighteous.TaleOfTheRighteous"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "taste_of_hope",
+    "sourceKey": "TasteOfHope",
+    "variants": [
+      {
+        "helperVariant": "A_TASTE_OF_HOPE",
+        "helperClass": "com.questhelper.helpers.quests.atasteofhope.ATasteOfHope"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "tears_of_guthix",
+    "sourceKey": "TearsOfGuthix",
+    "variants": [
+      {
+        "helperVariant": "TEARS_OF_GUTHIX",
+        "helperClass": "com.questhelper.helpers.quests.tearsofguthix.TearsOfGuthix"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "temple_of_ikov",
+    "sourceKey": "TempleOfIkov",
+    "variants": [
+      {
+        "helperVariant": "TEMPLE_OF_IKOV",
+        "helperClass": "com.questhelper.helpers.quests.templeofikov.TempleOfIkov"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "temple_of_the_eye",
+    "sourceKey": "TempleOfTheEye",
+    "variants": [
+      {
+        "helperVariant": "TEMPLE_OF_THE_EYE",
+        "helperClass": "com.questhelper.helpers.quests.templeoftheeye.TempleOfTheEye"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_feud",
+    "sourceKey": "TheFeud",
+    "variants": [
+      {
+        "helperVariant": "THE_FEUD",
+        "helperClass": "com.questhelper.helpers.quests.thefeud.TheFeud"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_final_dawn",
+    "sourceKey": "TheFinalDawn",
+    "variants": [
+      {
+        "helperVariant": "THE_FINAL_DAWN",
+        "helperClass": "com.questhelper.helpers.quests.thefinaldawn.TheFinalDawn"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_fremennik_isles",
+    "sourceKey": "TheFremennikIsles",
+    "variants": [
+      {
+        "helperVariant": "THE_FREMENNIK_ISLES",
+        "helperClass": "com.questhelper.helpers.quests.thefremennikisles.TheFremennikIsles"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_golem",
+    "sourceKey": "TheGolem",
+    "variants": [
+      {
+        "helperVariant": "THE_GOLEM",
+        "helperClass": "com.questhelper.helpers.quests.thegolem.TheGolem"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_heart_of_darkness",
+    "sourceKey": "TheHeartOfDarkness",
+    "variants": [
+      {
+        "helperVariant": "THE_HEART_OF_DARKNESS",
+        "helperClass": "com.questhelper.helpers.quests.theheartofdarkness.TheHeartOfDarkness"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "throne_of_miscellania",
+    "sourceKey": "ThroneOfMiscellania",
+    "variants": [
+      {
+        "helperVariant": "THRONE_OF_MISCELLANIA",
+        "helperClass": "com.questhelper.helpers.quests.throneofmiscellania.ThroneOfMiscellania"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "the_tourist_trap",
+    "sourceKey": "TouristTrap",
+    "variants": [
+      {
+        "helperVariant": "THE_TOURIST_TRAP",
+        "helperClass": "com.questhelper.helpers.quests.thetouristtrap.TheTouristTrap"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "tower_of_life",
+    "sourceKey": "TowerOfLife",
+    "variants": [
+      {
+        "helperVariant": "TOWER_OF_LIFE",
+        "helperClass": "com.questhelper.helpers.quests.toweroflife.TowerOfLife"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "tree_gnome_village",
+    "sourceKey": "TreeGnomeVillage",
+    "variants": [
+      {
+        "helperVariant": "TREE_GNOME_VILLAGE",
+        "helperClass": "com.questhelper.helpers.quests.treegnomevillage.TreeGnomeVillage"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "tribal_totem",
+    "sourceKey": "TribalTotem",
+    "variants": [
+      {
+        "helperVariant": "TRIBAL_TOTEM",
+        "helperClass": "com.questhelper.helpers.quests.tribaltotem.TribalTotem"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "troll_romance",
+    "sourceKey": "TrollRomance",
+    "variants": [
+      {
+        "helperVariant": "TROLL_ROMANCE",
+        "helperClass": "com.questhelper.helpers.quests.trollromance.TrollRomance"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "troll_stronghold",
+    "sourceKey": "TrollStronghold",
+    "variants": [
+      {
+        "helperVariant": "TROLL_STRONGHOLD",
+        "helperClass": "com.questhelper.helpers.quests.trollstronghold.TrollStronghold"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "troubled_tortugans",
+    "sourceKey": "TroubledTortugans",
+    "variants": [
+      {
+        "helperVariant": "TROUBLED_TORTUGANS",
+        "helperClass": "com.questhelper.helpers.quests.troubledtortugans.TroubledTortugans"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "twilights_promise",
+    "sourceKey": "TwilightPromise",
+    "variants": [
+      {
+        "helperVariant": "TWILIGHTS_PROMISE",
+        "helperClass": "com.questhelper.helpers.quests.twilightspromise.TwilightsPromise"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "underground_pass",
+    "sourceKey": "UndergroundPass",
+    "variants": [
+      {
+        "helperVariant": "UNDERGROUND_PASS",
+        "helperClass": "com.questhelper.helpers.quests.undergroundpass.UndergroundPass"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "vampyre_slayer",
+    "sourceKey": "VampyreSlayer",
+    "variants": [
+      {
+        "helperVariant": "VAMPYRE_SLAYER",
+        "helperClass": "com.questhelper.helpers.quests.vampyreslayer.VampyreSlayer"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "wanted",
+    "sourceKey": "Wanted",
+    "variants": [
+      {
+        "helperVariant": "WANTED",
+        "helperClass": "com.questhelper.helpers.quests.wanted.Wanted"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "watchtower",
+    "sourceKey": "Watchtower",
+    "variants": [
+      {
+        "helperVariant": "WATCHTOWER",
+        "helperClass": "com.questhelper.helpers.quests.watchtower.Watchtower"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "waterfall_quest",
+    "sourceKey": "WaterfallQuest",
+    "variants": [
+      {
+        "helperVariant": "WATERFALL_QUEST",
+        "helperClass": "com.questhelper.helpers.quests.waterfallquest.WaterfallQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "what_lies_below",
+    "sourceKey": "WhatLiesBelow",
+    "variants": [
+      {
+        "helperVariant": "WHAT_LIES_BELOW",
+        "helperClass": "com.questhelper.helpers.quests.whatliesbelow.WhatLiesBelow"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "witchs_house",
+    "sourceKey": "WitchsHouse",
+    "variants": [
+      {
+        "helperVariant": "WITCHS_HOUSE",
+        "helperClass": "com.questhelper.helpers.quests.witchshouse.WitchsHouse"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "witchs_potion",
+    "sourceKey": "WitchsPotion",
+    "variants": [
+      {
+        "helperVariant": "WITCHS_POTION",
+        "helperClass": "com.questhelper.helpers.quests.witchspotion.WitchsPotion"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "x_marks_the_spot",
+    "sourceKey": "XMarksTheSpot",
+    "variants": [
+      {
+        "helperVariant": "X_MARKS_THE_SPOT",
+        "helperClass": "com.questhelper.helpers.quests.xmarksthespot.XMarksTheSpot"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "zogre_flesh_eaters",
+    "sourceKey": "ZogreFleshEaters",
+    "variants": [
+      {
+        "helperVariant": "ZOGRE_FLESH_EATERS",
+        "helperClass": "com.questhelper.helpers.quests.zogreflesheaters.ZogreFleshEaters"
+      }
+    ],
+    "native": false
+  }
+]

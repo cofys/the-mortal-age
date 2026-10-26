@@ -1,11 +1,6 @@
-const { ForceMovementTask } = require("../../src/main/typescript/elvarg/game/task/impl/ForceMovementTask");
-const { ForceMovement } = require("../../src/main/typescript/elvarg/game/model/ForceMovement");
-const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
-const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
-const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-
-
-let TaskManager;
+const JUMP_ANIMATION = 6132; // wild_ditch_jump, cache rev 241
+// rsprox recording 345: synth 2462 accompanies the jump with delay 25.
+const JUMP_SOUND_DELAY = 25;
 
 /**
  * The jump across a ditch piece: the ditch is 1x2, so a piece facing 0/2 runs east-west
@@ -25,7 +20,7 @@ function resolveJump(player, ditch, source, face) {
   return fromY < threshold ? { dx: 0, dy: 3, direction: 0 } : { dx: 0, dy: -3, direction: 2 };
 }
 
-function tryCrossWildernessDitch(player, ditch, source, face = 0) {
+function tryCrossWildernessDitch(api, player, ditch, source, face = 0) {
   if (!player || player.getForceMovement() != null) {
     return { crossed: false, reason: "force_movement_active" };
   }
@@ -36,6 +31,7 @@ function tryCrossWildernessDitch(player, ditch, source, face = 0) {
     return { crossed: false, reason: "click_delay", elapsed };
   }
 
+  const { ForceMovement, ForceMovementTask, Location, Sound, Sounds } = api.core;
   const jump = resolveJump(player, ditch, source, face);
   const forceMovement = new ForceMovement(
     player.getLocation().clone(),
@@ -43,24 +39,23 @@ function tryCrossWildernessDitch(player, ditch, source, face = 0) {
     0,
     70,
     jump.direction,
-    6132
+    JUMP_ANIMATION
   );
 
-  TaskManager.submit(new ForceMovementTask(player, 3, forceMovement));
-  Sounds.sendSound(player, Sound.WILDERNESS_DITCH_JUMP);
+  api.getTaskManager().submit(new ForceMovementTask(player, 3, forceMovement));
+  Sounds.sendSound(player, new Sound(Sound.WILDERNESS_DITCH_JUMP.getId(), 1, JUMP_SOUND_DELAY, 0));
   clickDelay.reset();
   return { crossed: true, reason: "ok", elapsed };
 }
 
-function crossDitch({ player, object, location, sourceLocation }) {
-  tryCrossWildernessDitch(player, location, sourceLocation, object?.getFace?.() ?? 0);
+function crossDitch(api, { player, object, location, sourceLocation }) {
+  tryCrossWildernessDitch(api, player, location, sourceLocation, object?.getFace?.() ?? 0);
 }
 
 module.exports = {
   name: "WildernessDitch",
   resolveJump,
   register: (api) => {
-    TaskManager = api.getTaskManager();
-    api.onObjectInteraction("Wilderness Ditch", { Cross: crossDitch });
+    api.onObjectInteraction("Wilderness Ditch", { Cross: crossDitch.bind(null, api) });
   },
 };

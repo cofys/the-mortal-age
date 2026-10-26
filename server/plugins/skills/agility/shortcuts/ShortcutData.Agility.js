@@ -187,6 +187,19 @@ function requirementsOf(spec, where) {
   });
 }
 
+/**
+ * A `refuse` entry's precondition: a game message, or `{ "mesbox": text }` for a refusal the
+ * game also shows in a message box.
+ */
+function refusalOf(spec, where) {
+  if (typeof spec === "string") return () => spec;
+  if (typeof spec?.mesbox !== "string") throw new Error(`agility-shortcuts.json: "${where}" refuse needs a message or a mesbox`);
+  return ({ player, core }) => {
+    player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.StatementDialogue(0, spec.mesbox)));
+    return spec.mesbox;
+  };
+}
+
 function build(raw, index) {
   const where = raw.name ?? `entry ${index}`;
   for (const key of Object.keys(raw)) {
@@ -219,7 +232,7 @@ function build(raw, index) {
     if (stile.anim != null) stile.anim = animation(stile.anim, where);
     built = builders.stile({ ...entry, ...stile });
   } else if (raw.refuse) {
-    built = { ...entry, precondition: () => raw.refuse, steps: [] };
+    built = { ...entry, precondition: refusalOf(raw.refuse, where), steps: [] };
   } else {
     built = { ...entry };
     if (raw.steps) built.steps = template(raw.steps, where);

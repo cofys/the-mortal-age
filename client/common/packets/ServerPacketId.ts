@@ -79,6 +79,8 @@ export const enum ServerPacketId {
     WIDGET_SET_FLAGS_RANGE = 109,
     WIDGET_RUN_SCRIPT = 110,
     WIDGET_SET_FLAGS = 111,
+    WIDGET_SET_FLAGS_RANGE_V2 = 112, // IF_SETEVENTS_V2: the flags plus a transmit mask for ops 1-32
+    WIDGET_SET_ANGLE = 113, // IF_SETANGLE: model angle and zoom (112 went to IF_SETEVENTS_V2 on main)
     WIDGET_SET_ANIMATION = 114,
     WIDGET_SET_PLAYER_HEAD = 115,
     WIDGET_SET_QUEST_LIST = 116,
@@ -220,11 +222,13 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.WIDGET_SET_TEXT]: -2,
     [ServerPacketId.WIDGET_SET_MODEL]: 8, // uid(4) + raw modelId(4)
     [ServerPacketId.WIDGET_SET_POSITION]: 8, // uid(4) + x(2) + y(2)
+    [ServerPacketId.WIDGET_SET_ANGLE]: 10, // uid(4) + angleX(2) + angleY(2) + zoom(2)
     [ServerPacketId.WIDGET_SET_COLOUR]: 6, // uid(4) + 15-bit rgb colour(2)
     [ServerPacketId.WIDGET_SET_HIDDEN]: 5, // uid(4) + hidden(1)
     [ServerPacketId.WIDGET_SET_ITEM]: 10, // uid(4) + itemId(2) + quantity(4)
     [ServerPacketId.WIDGET_SET_NPC_HEAD]: 6, // uid(4) + npcId(2)
     [ServerPacketId.WIDGET_SET_FLAGS_RANGE]: 12, // uid(4) + fromSlot(2) + toSlot(2) + flags(4)
+    [ServerPacketId.WIDGET_SET_FLAGS_RANGE_V2]: 16, // uid(4) + fromSlot(2) + toSlot(2) + flags(4) + ops(4)
     [ServerPacketId.WIDGET_RUN_SCRIPT]: -2, // scriptId(4) + args (variable)
     [ServerPacketId.WIDGET_SET_FLAGS]: 8, // uid(4) + flags(4)
     [ServerPacketId.WIDGET_SET_ANIMATION]: 6, // uid(4) + animId(2)

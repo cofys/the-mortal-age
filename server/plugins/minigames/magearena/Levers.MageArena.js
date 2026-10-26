@@ -2,8 +2,8 @@
 
 /**
  * The Mage Arena levers and sparkling pools. The bank pair (5959 outside, 5960 inside) is
- * already handled by plugins/areas/Wilderness.plugin.js, so only the arena pair and the pools
- * live here (https://oldschool.runescape.wiki/w/Lever_(Mage_Arena), /w/Sparkling_pool).
+ * handled with the other Wilderness levers by plugins/objects/Levers.plugin.js, so only the
+ * arena pair and the pools live here (https://oldschool.runescape.wiki/w/Lever_(Mage_Arena), /w/Sparkling_pool).
  * Every step, tile and id below is from rsprox captures (rev 235-238):
  *
  * - 9706, the broken-down house's lever, teleports into the arena corridor (3105, 3951);

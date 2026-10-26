@@ -27,7 +27,12 @@ export type WidgetInteractionControllerDeps = {
  * Widget drag, click-state, and UI click-probe helpers extracted from OsrsClient.
  */
 export class WidgetInteractionController {
-    static readonly dragListeners = new Set<() => void>();
+    /**
+     * RuneLite's WidgetDrag event: once per client cycle while a widget is dragged, after the
+     * widget under the cursor (draggedOnWidget) is found, and once more on release before the
+     * drop is handled (`released`). A listener may set draggedOnWidget to null to cancel the drop.
+     */
+    static readonly dragListeners = new Set<(event: { released: boolean }) => void>();
 
     dragSourceWidget: any = null;
     clickedWidget: any = null;

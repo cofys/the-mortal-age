@@ -15,6 +15,7 @@
  */
 const DATA = require("./data/bones.json");
 const ASHES = require("./data/ashes.json");
+const { pauseForLevelUp } = require("./SkillActions");
 
 // --- Fork addition: offering bones on a generic altar ---------------------
 // Upstream's rewritten Prayer (this file) handles burying and serves the
@@ -92,6 +93,9 @@ function offerBone(event) {
 
 const BURY_DELAY_MS = 1200; // Two OSRS game ticks.
 const BURY_ANIMATION = 827; // human_pickupfloor
+// Every bone sends these two, whatever its name (rsprox captures, docs/prayer-bones.md).
+const DIG_MESSAGE = "You dig a hole in the ground...";
+const BURY_MESSAGE = "You bury the bones.";
 // Scattering as live OSRS sends it (rsprox captures, docs/prayer-bones.md): no spotanim.
 const SCATTER_ANIMATION = 2295; // farming_ingredient_sprinkle
 const SCATTER_SOUND = 2444; // farming_sprinkle
@@ -170,6 +174,10 @@ function stopBurial({ player }) {
   burials.get(player)?.stop();
 }
 
+function pauseBurial(event) {
+  pauseForLevelUp(event, burials, (player) => stopBurial({ player }), (task) => task.resumeAnimation());
+}
+
 function interruptBurialForItem(event) {
   // Merely calculating worn-item bonuses is not a player action.
   if (event.action !== "bonus") stopBurial(event);
@@ -198,37 +206,37 @@ function stillBurying(player, location) {
     player.getForceMovement() == null;
 }
 
-/** Consumes the bone at `slot` with its messages and experience; false when it is no longer there. */
-function resolveBurial(player, itemId, slot, bone) {
+/** Takes the bone at `slot` with the dig message and its experience; false when it is no longer there. */
+function consumeBone(player, itemId, slot, bone) {
   const inventory = player.getInventory();
   if (inventory.get(slot)?.getId() !== itemId) return false;
   inventory.deleteAtSlot(slot, 1);
-  player.sendMessage("You dig a hole in the ground..");
-  player.sendMessage(`..and bury the ${api.core.ItemDefinition.forId(itemId).getName()}.`);
+  player.sendMessage(DIG_MESSAGE);
   award(player, itemId, bone, 1);
   return true;
 }
 
-/** One bone per Bury click, as OSRS (the default). */
+/** Sequential burial: the bone with both messages, on the resolving tick. */
+function resolveBurial(player, itemId, slot, bone) {
+  if (!consumeBone(player, itemId, slot, bone)) return false;
+  player.sendMessage(BURY_MESSAGE);
+  return true;
+}
+
+/**
+ * One bone per Bury click, as OSRS (the default): the animation, sound, dig message, bone and
+ * experience come on the click's tick, "You bury the bones." on the next (rsprox captures).
+ */
 function buryOnce(player, itemId, slot, bone) {
   const core = api.core;
   player.getSkillManager().stopSkillable();
   player.getPacketSender().sendInterfaceRemoval();
+  if (!consumeBone(player, itemId, slot, bone)) return;
   player.performAnimation(new core.Animation(BURY_ANIMATION));
   core.Sounds.sendSound(player, core.Sound.BURY_BONES);
-  const location = player.getLocation().clone();
-  // Consume and award XP together on the resolving tick. An interrupted burial
-  // keeps its bone, including on logout before the account is saved.
-  const task = new core.CountdownTask(player, 2, () => {
-    if (stillBurying(player, location)) resolveBurial(player, itemId, slot, bone);
-  });
-  task.onTick = () => { if (!stillBurying(player, location)) task.stop(); };
-  const stop = task.stop.bind(task);
-  task.stop = () => {
-    stop();
-    if (player.isRegistered()) player.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
-  };
-  api.getTaskManager().submit(task);
+  api.getTaskManager().submit(new core.CountdownTask(player, 1, () => {
+    if (player.isRegistered()) player.sendMessage(BURY_MESSAGE);
+  }));
   player.getClickDelay().reset();
 }
 
@@ -248,8 +256,9 @@ function burySequence(player, itemId, slot, bone) {
   const task = new (class extends core.Task {
     constructor() { super(2, player, false); }
     execute() {
+      if (this.levelUpPaused) return;
       if (!canComplete() || !resolveBurial(player, itemId, slot, bone)) return this.stop();
-      // Awarding XP can open a level-up popup and cancel this sequence.
+      // XP can open the popup; retain the next bone while its acknowledgement is pending.
       if (!this.isRunning() || !canComplete()) return this.stop();
       const next = inventory.getItems().findIndex(item => {
         if (!item || item.getAmount() <= 0) return false;
@@ -261,8 +270,9 @@ function burySequence(player, itemId, slot, bone) {
       slot = next;
       itemId = inventory.get(slot).getId();
       bone = boneFor(itemId);
-      animate();
+      if (!this.levelUpPaused) animate();
     }
+    resumeAnimation() { animate(); }
     onTick() { if (!canComplete()) this.stop(); }
     stop() {
       super.stop();
@@ -331,6 +341,6 @@ module.exports = {
     api.onPlayerLogout(stopBurial);
     api.onPlayerDisconnect(stopBurial);
     api.onPlayerDeath(stopBurial);
-    api.onCustomEvent("level-up:popup-opened", stopBurial);
+    api.onCustomEvent("level-up:popup-opened", pauseBurial);
   },
 };

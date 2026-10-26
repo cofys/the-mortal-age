@@ -1,6 +1,5 @@
-let pluginApi;
 let PrayerHandler;
-const { SkullType } = require("../../src/main/typescript/elvarg/game/model/SkullType");
+let core;
 
 // OpenRune cache names: component.wornitems:deathkeep and interface.deathkeep.
 const OPEN_ITEMS_KEPT_ON_DEATH_BUTTON = (387 << 16) | 5;
@@ -31,41 +30,15 @@ function getSettings(player) {
 }
 
 function getAmountToKeep(player, settings) {
-  if (settings.skullActive && player.getSkullType() === SkullType.RED_SKULL) {
+  if (settings.skullActive && player.getSkullType() === core.SkullType.RED_SKULL) {
     return 0;
   }
   return (settings.skullActive ? 0 : 3) + (settings.protectItemPrayer ? 1 : 0);
 }
 
+/** The death's own choice (PlayerDeathTask.getItemsToKeep), for the count the toggles give. */
 function getItemsToKeep(player, settings) {
-  const items = [];
-  const alwaysKept = [];
-  for (const item of [
-    ...player.getInventory().getItems(),
-    ...player.getEquipment().getItems(),
-  ]) {
-    if (
-      !item ||
-      item.getId() <= 0 ||
-      item.getAmount() <= 0 ||
-      !item.isTradeable()
-    ) {
-      continue;
-    }
-    const keep = pluginApi.emitShouldKeepItemOnDeath(player, item);
-    if (keep === false) {
-      continue;
-    }
-    if (keep === true) {
-      alwaysKept.push(item);
-      continue;
-    }
-    items.push(item);
-  }
-
-  items.sort((a, b) => b.getDefinition().getValue() - a.getDefinition().getValue());
-  const amountToKeep = getAmountToKeep(player, settings);
-  return [...items.slice(0, amountToKeep), ...alwaysKept];
+  return core.PlayerDeathTask.getItemsToKeep(player, getAmountToKeep(player, settings));
 }
 
 function getDeathItems(player, toKeep) {
@@ -96,7 +69,7 @@ function getDeathItems(player, toKeep) {
     });
 
     if (tradeable) {
-      const value = Math.max(0, Number(item.getDefinition().getValue()) || 0);
+      const value = Math.max(0, Number(core.PlayerDeathTask.keepValue(item)) || 0);
       risk = Math.min(
         Number.MAX_SAFE_INTEGER,
         risk + value * item.getAmount()
@@ -147,30 +120,33 @@ function open(player, settings = getSettings(player)) {
     );
 }
 
+function openFromWornItems({ player }) {
+  if (player.busy?.()) {
+    player.getPacketSender().sendInterfaceRemoval();
+  }
+  previewSettings.delete(player);
+  open(player);
+  return true;
+}
+
+function toggleSetting({ player, action }) {
+  if (player.getInterfaceId?.() !== ITEMS_KEPT_ON_DEATH_INTERFACE_ID) return false;
+  const settings = getSettings(player);
+  if (action === 0) settings.protectItemPrayer = !settings.protectItemPrayer;
+  else if (action === 1) settings.skullActive = !settings.skullActive;
+  else if (action === 2) settings.playerKill = !settings.playerKill;
+  else if (action === 3) settings.wildernessLevel = settings.wildernessLevel === 0 ? 21 : 0;
+  else return false;
+  open(player, settings);
+  return true;
+}
+
 module.exports = {
   name: "ItemsKeptOnDeath",
   register(api) {
-    pluginApi = api;
+    core = api.core;
     PrayerHandler = api.getPrayerHandler();
-    api.onInterfaceActionButton(OPEN_ITEMS_KEPT_ON_DEATH_BUTTON, ({ player }) => {
-      if (player.busy?.()) {
-        player.getPacketSender().sendInterfaceRemoval();
-      }
-      previewSettings.delete(player);
-      open(player);
-      return true;
-    });
-
-    api.onInterfaceActionButton(ITEMS_KEPT_SETTINGS_COMPONENT, ({ player, action }) => {
-      if (player.getInterfaceId?.() !== ITEMS_KEPT_ON_DEATH_INTERFACE_ID) return false;
-      const settings = getSettings(player);
-      if (action === 0) settings.protectItemPrayer = !settings.protectItemPrayer;
-      else if (action === 1) settings.skullActive = !settings.skullActive;
-      else if (action === 2) settings.playerKill = !settings.playerKill;
-      else if (action === 3) settings.wildernessLevel = settings.wildernessLevel === 0 ? 21 : 0;
-      else return false;
-      open(player, settings);
-      return true;
-    });
+    api.onInterfaceActionButton(OPEN_ITEMS_KEPT_ON_DEATH_BUTTON, openFromWornItems);
+    api.onInterfaceActionButton(ITEMS_KEPT_SETTINGS_COMPONENT, toggleSetting);
   },
 };

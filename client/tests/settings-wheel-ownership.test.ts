@@ -12,7 +12,7 @@ const scroll = (hits: any[]) => {
     invoked = [];
     const input = new InputManager();
     input.wheelDeltaY = 120;
-    const frame: any = { input, mx: 20, hits };
+    const frame: any = { input, mx: 20, my: 20, hits };
     processWidgetScrollWheelInput(deps, frame, manager, { isDraggingWidget: false } as any);
     grantedWheel = frame.input.viewportWheelDeltaY;
     return frame.input.wheelDeltaY;
@@ -31,6 +31,20 @@ assert.equal(grantedWheel, 120, "viewport zoom grants the original wheel delta t
 assert.equal(scroll([viewport, { uid: 6, type: 3, transparency: 0 }]), 0);
 assert.deepEqual(invoked, [], "a visible foreground surface blocks the viewport zoom listener");
 assert.equal(grantedWheel, 0);
+// A buff timer's text widget spans the whole screen but only draws "11m" in a corner.
+const buffTimer = { uid: 7, type: 4, text: "11m", _textBounds: { x: 600, y: 10, width: 20, height: 12 } };
+assert.equal(scroll([viewport, buffTimer]), 0);
+assert.deepEqual(invoked, [1], "the empty part of a text widget's box does not block viewport zoom");
+const overTimer = (hits: any[]) => {
+    invoked = [];
+    const input = new InputManager();
+    input.wheelDeltaY = 120;
+    processWidgetScrollWheelInput(deps, { input, mx: 605, my: 15, hits } as any, manager, { isDraggingWidget: false } as any);
+};
+overTimer([viewport, buffTimer]);
+assert.deepEqual(invoked, [], "the drawn text itself still blocks viewport zoom");
+assert.equal(scroll([viewport, { uid: 8, type: 4, text: "28m" }]), 0);
+assert.deepEqual(invoked, [1], "text the renderer never drew does not block viewport zoom");
 assert.equal(scroll([{ uid: 5, type: 0, isIf3: true, noScrollThrough: true, onScroll: [36, 10, 5] }]), 0);
 assert.deepEqual(invoked, [5], "raw cache listener also runs on its owning blocker");
 

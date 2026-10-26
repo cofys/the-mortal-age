@@ -51,6 +51,7 @@ function player(items = [], attrs = [], skillLevel = 99) {
     xp: [],
     sendMessage(message) { p.messages.push(message); },
     performAnimation: noop,
+    isRegistered: () => true,
     items: inventory,
     attrs: attributes,
   };
@@ -59,8 +60,15 @@ function player(items = [], attrs = [], skillLevel = 99) {
 
 function questHarness(name) {
   const hooks = {};
+  const tasks = [];
+  // Submitted tasks run when the test calls tick(), one game tick per call.
+  const tick = (count = 1) => {
+    for (let i = 0; i < count; i++) {
+      for (const task of tasks.splice(0)) if (task.tick()) tasks.push(task);
+    }
+  };
   const api = new Proxy({
-    core: { ...core, TaskManager: { submit: noop, cancelTasks: noop } },
+    core: { ...core, TaskManager: { submit: task => { task.setRunning(true); tasks.push(task); }, cancelTasks: noop } },
     persistAttribute: noop,
     onCustomEvent: (key, fn) => (hooks[key] ??= []).push(fn),
     emitCustomEvent: (key, event) => (hooks[key] ?? []).forEach(fn => fn(event)),
@@ -77,7 +85,7 @@ function questHarness(name) {
   }) });
   require(root + '/plugins/quests/quests/' + name + '.Quest')(api);
   const { getRegisteredQuests } = require(root + '/plugins/quests/QuestRuntime');
-  return { api, hooks, quest: getRegisteredQuests().at(-1) };
+  return { api, hooks, tick, quest: getRegisteredQuests().at(-1) };
 }
 
 function dialoguePlayer(items, attrs) {
@@ -158,7 +166,7 @@ test('shearing changes each sheep into the same-colour sheared gameval npc', () 
     ['SHEEPUNSHEERED3W', 'SHEEPSHEERED3W'], ['SHEEPUNSHEEREDSHAGGY', 'SHEEPSHEEREDSHAGGY'],
     ['SHEEPUNSHEEREDSHAGGY2', 'SHEEPSHEEREDSHAGGY2']];
 
-  const { hooks } = questHarness('SheepShearer');
+  const { hooks, tick } = questHarness('SheepShearer');
   const shear = hooks.onNpcInteraction[0];
   const I = core.ItemIdentifiers;
   for (const [unshearedName, shearedName] of pairs) {
@@ -173,9 +181,129 @@ test('shearing changes each sheep into the same-colour sheared gameval npc', () 
     const event = { player: p, npc, npcId: unshearedId, clickType: 1, definition: { getActions: () => ['Shear'] } };
     shear(event);
     assert.equal(event.handled, true);
+    tick(2);
     assert.equal(p.items.get(I.WOOL), 1);
     assert.deepEqual(transforms, [shearedId], unshearedName + ' -> ' + shearedName);
   }
+});
+
+function sheep(id) {
+  const npc = {
+    id, transforms: [], chat: [], animations: [],
+    getDefinition: () => ({ getId: () => id }),
+    setNpcTransformationId: next => npc.transforms.push(next),
+    forceChat: text => npc.chat.push(text),
+    performAnimation: animation => npc.animations.push(animation.getId()),
+    isRegistered: () => true,
+  };
+  return npc;
+}
+
+function shearOption(npc) {
+  return { npc, npcId: npc.id, clickType: 1, definition: { getActions: () => ['Shear'] } };
+}
+
+function shearsOn(npc, npcId = npc.id) {
+  return { npc, npcId, itemId: core.ItemIdentifiers.SHEARS };
+}
+
+test('shearing gives the wool two ticks after the animation and the wool regrows after 50 ticks', () => {
+  const { hooks, tick } = questHarness('SheepShearer');
+  const I = core.ItemIdentifiers, N = core.NpcIdentifiers;
+  const p = player([[I.SHEARS, 1]]);
+  const animations = [];
+  p.performAnimation = animation => animations.push(animation.getId());
+  const npc = sheep(N.SHEEP_18);
+
+  hooks.onNpcInteraction[0]({ player: p, ...shearOption(npc) });
+  assert.deepEqual(animations, [893]);
+  tick();
+  assert.equal(p.items.get(I.WOOL), undefined, 'no wool on the next tick');
+  assert.deepEqual(npc.transforms, []);
+  tick();
+  assert.equal(p.items.get(I.WOOL), 1);
+  assert.deepEqual(p.messages, ['You get some wool.']);
+  assert.deepEqual(npc.transforms, [N.SHEEP_2]);
+
+  // A shorn sheep answers shears with the live message until its wool is back.
+  hooks.onItemOnNpc[0]({ player: p, ...shearsOn(npc) });
+  assert.equal(p.messages.at(-1), 'This sheep has already been shorn.');
+  assert.deepEqual(npc.chat, ['Baa!']);
+
+  tick(49);
+  assert.deepEqual(npc.transforms, [N.SHEEP_2], 'still shorn after 49 ticks');
+  tick();
+  assert.deepEqual(npc.transforms, [N.SHEEP_2, -1], 'wool back after 50 ticks');
+  hooks.onNpcInteraction[0]({ player: p, ...shearOption(npc) });
+  tick(2);
+  assert.equal(p.items.get(I.WOOL), 2);
+});
+
+test('shears used on a sheared sheep say it has already been shorn', () => {
+  const { hooks } = questHarness('SheepShearer');
+  const I = core.ItemIdentifiers, N = core.NpcIdentifiers;
+  for (const shearedId of [N.SHEEP_2, N.SHEEP_14, N.SHEEP_27]) {
+    const p = player([[I.SHEARS, 1]]);
+    const npc = sheep(shearedId);
+    const event = { player: p, ...shearsOn(npc) };
+    hooks.onItemOnNpc[0](event);
+    assert.equal(event.handled, true, String(shearedId));
+    assert.deepEqual(p.messages, ['This sheep has already been shorn.']);
+    assert.deepEqual(npc.chat, ['Baa!']);
+    assert.equal(p.items.get(I.WOOL), undefined);
+  }
+});
+
+test('Zanaris sheep take shears, fail a quarter of the time and regrow after 100 ticks', (t) => {
+  const { hooks, tick } = questHarness('SheepShearer');
+  const I = core.ItemIdentifiers, N = core.NpcIdentifiers;
+  const roll = { value: 0 };
+  t.mock.method(Math, 'random', () => roll.value);
+
+  for (const id of [N.SHEEP_25, N.SHEEP_26]) {
+    const p = player([[I.SHEARS, 1]]);
+    const npc = sheep(id);
+    roll.value = 0.24;
+    const failed = { player: p, ...shearsOn(npc) };
+    hooks.onItemOnNpc[0](failed);
+    assert.equal(failed.handled, true);
+    tick(2);
+    assert.deepEqual(p.messages, ['The sheep manages to get away from you!']);
+    assert.equal(p.items.get(I.WOOL), undefined);
+    assert.deepEqual(npc.transforms, []);
+
+    roll.value = 0.25;
+    hooks.onItemOnNpc[0]({ player: p, ...shearsOn(npc) });
+    tick(2);
+    assert.equal(p.messages.at(-1), 'You get some wool.');
+    assert.equal(p.items.get(I.WOOL), 1);
+    assert.deepEqual(npc.transforms, [N.SHEEP_27], 'both colours become fairy_sheepsheered');
+    tick(99);
+    assert.deepEqual(npc.transforms, [N.SHEEP_27]);
+    tick();
+    assert.deepEqual(npc.transforms, [N.SHEEP_27, -1]);
+  }
+});
+
+test('The Thing rears up a tick after the shear and gets away on the third', () => {
+  const { hooks, tick, quest } = questHarness('SheepShearer');
+  const I = core.ItemIdentifiers;
+  const p = player([[I.SHEARS, 1]]);
+  quest.setStage(p, 1);
+  const thing = sheep(core.NpcIdentifiers.SHEEP);
+  const event = { player: p, ...shearOption(thing) };
+  hooks.onNpcInteraction[0](event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(p.messages, []);
+  tick();
+  assert.deepEqual(thing.animations, [3570]);
+  tick();
+  assert.deepEqual(p.messages, []);
+  assert.notEqual(p.getAttribute('sheep-shearer:saw-thing'), true);
+  tick();
+  assert.deepEqual(p.messages, ['The... whatever it is... manages to get away from you!']);
+  assert.equal(p.getAttribute('sheep-shearer:saw-thing'), true);
+  assert.equal(p.items.get(I.WOOL), undefined);
 });
 
 test('Sheep Shearer fills the remaining-wool blanks through the real partial hand-in dialogue', () => {

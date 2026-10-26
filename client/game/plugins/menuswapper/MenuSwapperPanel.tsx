@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore, type JSX } from "react";
 
 import { NavigationButton } from "@runelite/client/ui/NavigationButton";
+import { imageIcon, runeliteImage } from "@runelite/client/ui/runeliteImages";
 import type { MenuSwapperPlugin } from "./MenuSwapperPlugin";
 import type { MenuSwap, MenuSwapKind, MenuSwapperPresets } from "./types";
 
@@ -80,20 +81,11 @@ export function MenuSwapperPanel({ plugin }: { plugin: MenuSwapperPlugin }): JSX
     );
 }
 
-function MenuSwapperIcon({ label }: { label: string }): JSX.Element {
-    return (
-        <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
-            <path d="M4 7h12M13 4l3 3-3 3" />
-            <path d="M20 17H8M11 14l-3 3 3 3" />
-        </svg>
-    );
-}
-
 /** The Menu Entry Swapper's sidebar button. */
 export function createMenuSwapperNavigationButton(plugin: MenuSwapperPlugin): NavigationButton {
     return NavigationButton.builder()
         .tooltip("Menu Entry Swapper")
-        .icon(MenuSwapperIcon)
+        .icon(imageIcon(runeliteImage("menu_swapper_icon.png")))
         .priority(5)
         .panel(() => <MenuSwapperPanel plugin={plugin} />)
         .build();

@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/ring-of-suffering.test.cjs
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { test, before } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
@@ -11,13 +11,19 @@ const { CombatFactory } = require("../dist/game/content/combat/CombatFactory");
 
 const RingOfSuffering = require("../plugins/items/RingOfSuffering.plugin");
 
-let hitResolved;
-RingOfSuffering.register({
-  core: { ItemIdentifiers: ItemIds, CombatFactory },
-  onCombatHitResolved: (handler) => { hitResolved = handler; },
-  onItemAction() {},
-  onItemOnItem() {},
-  persistAttribute() {},
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { Player } = require("../dist/game/entity/impl/player/Player");
+let hitResolved, core;
+before(async () => {
+  await CachePipeline.initialize(require("node:path").resolve(__dirname, ".."));
+  const api = PluginManager.createApi("RingOfSufferingRegression");
+  core = api.core;
+  const registerHit = api.onCombatHitResolved;
+  RingOfSuffering.register({ ...api, onCombatHitResolved(handler) {
+    hitResolved = handler;
+    registerHit(handler);
+  } });
 });
 
 function item(id, meta = {}) {
@@ -118,4 +124,128 @@ test("recoil immunity prevents suffering damage without spending its last charge
   assert.deepEqual(enemy.pending, []);
   assert.equal(RingOfSuffering._test.charges(ring), 3);
   assert.equal(ring.getId(), ItemIds.RING_OF_SUFFERING_R_);
+});
+
+// Exercise real name/noted hook filtering and real inventory deletion, in both orders.
+function chargingFixture(ringId, recoilNoted, remaining = 0) {
+  const player = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.sendMessage = () => {};
+  const ring = new core.Item(ringId);
+  if (remaining) ring.setMetaValue("ring-of-suffering", remaining);
+  const recoilId = recoilNoted
+    ? core.ItemDefinition.forId(ItemIds.RING_OF_RECOIL).getNoteId()
+    : ItemIds.RING_OF_RECOIL;
+  player.getInventory().setItem(0, ring);
+  player.getInventory().setItem(1, new core.Item(recoilId, recoilNoted ? 3 : 1));
+  player.setAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE, 17);
+  return { player, ring, recoilId };
+}
+
+function useRecoil(fixture, reverse = false) {
+  const { player } = fixture;
+  const usedItemSlot = reverse ? 0 : 1, usedWithItemSlot = reverse ? 1 : 0;
+  const usedItem = player.getInventory().get(usedItemSlot);
+  const usedWithItem = player.getInventory().get(usedWithItemSlot);
+  return PluginManager.emitItemOnItem({ player, usedItem, usedWithItem,
+    usedItemId: usedItem.getId(), usedWithItemId: usedWithItem.getId(),
+    usedItemSlot, usedWithItemSlot, handled: false });
+}
+
+for (const noted of [false, true]) {
+  for (const reverse of [false, true]) {
+    test(`charging with ${noted ? "noted" : "unnoted"} recoil, reverse=${reverse}, resets shared recoil damage`, () => {
+      const f = chargingFixture(ItemIds.RING_OF_SUFFERING, noted);
+      assert.equal(useRecoil(f, reverse), true);
+      assert.equal(f.ring.getId(), ItemIds.RING_OF_SUFFERING_R_);
+      assert.equal(RingOfSuffering._test.charges(f.ring), 40);
+      assert.equal(f.player.getInventory().getAmount(f.recoilId), noted ? 2 : 0);
+      assert.equal(f.player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 0);
+    });
+  }
+}
+
+for (const [base, charged] of [
+  [ItemIds.RING_OF_SUFFERING, ItemIds.RING_OF_SUFFERING_R_],
+  [ItemIds.RING_OF_SUFFERING_I_, ItemIds.RING_OF_SUFFERING_RI_],
+  [ItemIds.RING_OF_SUFFERING_I__3, ItemIds.RING_OF_SUFFERING_RI__3],
+  [ItemIds.RING_OF_SUFFERING_I__5, ItemIds.RING_OF_SUFFERING_RI__5],
+]) {
+  test(`charging and topping up cache variant ${base} preserves its imbue variant`, () => {
+    const f = chargingFixture(base, true);
+    assert.equal(useRecoil(f), true);
+    assert.equal(f.ring.getId(), charged);
+    assert.equal(useRecoil(f, true), true);
+    assert.equal(RingOfSuffering._test.charges(f.ring), 80);
+    assert.equal(f.player.getInventory().getAmount(f.recoilId), 1);
+  });
+}
+
+test("a full ring consumes nothing and does not reset ordinary recoil damage", () => {
+  const f = chargingFixture(ItemIds.RING_OF_SUFFERING_R_, true, 100000);
+  assert.equal(useRecoil(f), true);
+  assert.equal(f.player.getInventory().getAmount(f.recoilId), 3);
+  assert.equal(RingOfSuffering._test.charges(f.ring), 100000);
+  assert.equal(f.player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 17);
+});
+
+test("the last complete recoil fills the charge cap exactly", () => {
+  const f = chargingFixture(ItemIds.RING_OF_SUFFERING_RI_, true, 99960);
+  assert.equal(useRecoil(f), true);
+  assert.equal(RingOfSuffering._test.charges(f.ring), 100000);
+  assert.equal(f.player.getInventory().getAmount(f.recoilId), 2);
+});
+
+test("noted suffering rings and unrelated sapphire rings cannot be charged", () => {
+  const notedId = core.ItemDefinition.forId(ItemIds.RING_OF_SUFFERING).getNoteId();
+  for (const ringId of [notedId, ItemIds.SAPPHIRE_RING]) {
+    const f = chargingFixture(ringId, true);
+    assert.equal(useRecoil(f), false);
+    assert.equal(f.player.getInventory().getAmount(f.recoilId), 3);
+    assert.equal(f.player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 17);
+  }
+});
+
+
+test("legacy saved charges migrate on top-up without losing the stored balance", () => {
+  const f = chargingFixture(ItemIds.RING_OF_SUFFERING_R_, false, 123);
+  assert.equal(useRecoil(f), true);
+  assert.equal(f.ring.getMetaValue("ring-of-suffering:charges"), 163);
+  assert.equal(f.ring.getMetaValue("ring-of-suffering"), undefined);
+  assert.equal(RingOfSuffering._test.charges(f.ring.clone()), 163);
+});
+
+test("spending or discarding old saved charges clears the legacy key", () => {
+  const ring = item(ItemIds.RING_OF_SUFFERING_R_, { "ring-of-suffering": 3 });
+  const player = createPlayer({ ring });
+  land(player, 1);
+  assert.equal(ring.getMetaValue("ring-of-suffering:charges"), 2);
+  assert.equal(ring.getMetaValue("ring-of-suffering"), undefined);
+  RingOfSuffering._test.discharge({ player, item: ring });
+  assert.equal(RingOfSuffering._test.charges(ring), 0);
+  assert.equal(ring.getMetaValue("ring-of-suffering:charges"), undefined);
+  assert.equal(ring.getId(), ItemIds.RING_OF_SUFFERING);
+});
+
+
+test("named inventory and worn hooks retain Check and recoil toggles", () => {
+  const f = chargingFixture(ItemIds.RING_OF_SUFFERING_R_, false, 80);
+  const messages = [];
+  f.player.sendMessage = message => messages.push(message);
+  function click(interfaceId, clickType, option) {
+    const event = { player: f.player, item: f.ring, itemId: f.ring.getId(), slot: 0,
+      interfaceId, clickType, option, handled: false };
+    PluginManager.emitItemAction(event);
+    assert.equal(event.handled, true);
+  }
+  click(3214, 4, "check");
+  assert.match(messages.pop(), /80 charges left/);
+  click(3214, 5, "recoil settings");
+  assert.equal(f.player.getAttribute("ring-of-suffering:recoil-disabled"), true);
+  click(core.Equipment.INVENTORY_INTERFACE_ID, 2, "Check");
+  assert.match(messages.pop(), /80 charges left/);
+  click(core.Equipment.INVENTORY_INTERFACE_ID, 3, "Recoil Settings");
+  assert.equal(f.player.getAttribute("ring-of-suffering:recoil-disabled"), false);
+  assert.equal(RingOfSuffering._test.charges(f.ring), 80);
 });

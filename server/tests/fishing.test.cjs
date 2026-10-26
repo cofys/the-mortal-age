@@ -45,7 +45,10 @@ test("fishing spots, catch chances and the catch cascade follow OSRS", async () 
   assert.equal(tool(N.ROD_FISHING_SPOT_20, "Bait"), TOOLS.INFERNAL_EEL_ROD);
   assert.equal(tool(N.FISHING_SPOT_35, "Cage"), TOOLS.DARK_CRAB_POT);
   assert.equal(tool(N.FISHING_SPOT_37, "Use-rod"), TOOLS.BARBARIAN_ROD);
-  assert.equal(tool(N.FISHING_SPOT_58, "Net"), undefined, "karambwanji belongs to Tai Bwo Wannai Trio");
+  assert.equal(tool(N.FISHING_SPOT_58, "Net"), TOOLS.KARAMBWANJI_NET, "Holy Lake karambwanji");
+  for (const id of [N.FISHING_SPOT_60, N.FISHING_SPOT_61, N.FISHING_SPOT_62]) {
+    assert.equal(tool(id, "Fish"), TOOLS.KARAMBWAN_VESSEL, `karambwan spot ${id}`);
+  }
   assert.equal(tool(N.FISHING_SPOT_12, "Catch"), undefined, "aerial fishing is Hunter's");
 
   // Wiki skilling success chart: shark 12.5% at 76 and 41/256 at 99, shrimp certain at 99.
@@ -543,4 +546,200 @@ test("minnow fishing: Wiki catch rates, rotating spots, flying fish and Kylie's 
   trader.prompt.execute("5");
   assert.equal(trader.getInventory().getAmount(I.MINNOW), 10);
   assert.equal(trader.getInventory().getAmount(ItemDefinition.forId(I.RAW_SHARK).getNoteId()), 3);
+});
+
+/** The real fishing loop against stub players, spots and a hand-driven task. */
+async function fishingLoop() {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  const core = PluginManager.getCoreApi();
+  const { NpcDefinition, Skill, Item, Location } = core;
+  const Fishing = require("../plugins/skills/Fishing.plugin");
+
+  const npcs = new Map();
+  const tasks = [];
+  const handlers = new Map();
+  const api = new Proxy({
+    core,
+    getTaskManager: () => ({ submit: (task) => tasks.push(task) }),
+    getWorld: () => ({ getNpcs: () => npcs }),
+    onNpcInteraction: (name, actions) => handlers.set(name, actions),
+  }, { get: (target, name) => target[name] ?? (() => {}) });
+  Fishing.register(api);
+  const task = tasks.find((submitted) => submitted.constructor.name === "FishingTask");
+
+  function fisher({ level = 99, items = [] } = {}) {
+    const slots = items.map(([id, amount = 1]) => new Item(id, amount));
+    const stackable = (id) => core.ItemDefinition.forId(id).isStackable();
+    const p = {
+      slots, messages: [], statements: [], xp: 0, at: new Location(2900, 3119, 0),
+      isRegistered: () => true,
+      getHitpoints: () => 10,
+      getMovementQueue: () => ({ size: () => 0 }),
+      getForceMovement: () => null,
+      getLocation: () => p.at,
+      performAnimation() {},
+      sendMessage: (message) => p.messages.push(message),
+      getDialogueManager: () => ({ startDialogues: (chain) => p.statements.push(chain) }),
+      getEquipment: () => ({ contains: () => false, getItems: () => new Array(14).fill(null) }),
+      getSkillManager: () => ({
+        getCurrentLevel: () => level,
+        getMaxLevel: () => level,
+        addExperiences: (skill, amount) => { if (skill === Skill.FISHING) p.xp += amount; },
+      }),
+      getInventory: () => ({
+        contains: (id) => slots.some((item) => item.getId() === id && item.getAmount() > 0),
+        getAmount: (id) => slots.filter((item) => item.getId() === id).reduce((sum, item) => sum + item.getAmount(), 0),
+        getFreeSlots: () => 28 - slots.length,
+        isFull: () => slots.length >= 28,
+        full() {},
+        refreshItems() {},
+        getSlotForItemId: (id) => slots.findIndex((item) => item.getId() === id),
+        setItem: (slot, item) => { slots[slot] = item; },
+        addItem: (item) => {
+          const stack = stackable(item.getId()) && slots.find((held) => held.getId() === item.getId());
+          if (stack) stack.setAmount(stack.getAmount() + item.getAmount());
+          else if (slots.length < 28) slots.push(item);
+        },
+        deleteNumber: (id, amount) => {
+          const index = slots.findIndex((held) => held.getId() === id);
+          const left = slots[index].getAmount() - amount;
+          if (left > 0 && stackable(id)) slots[index].setAmount(left); else slots.splice(index, 1);
+        },
+      }),
+    };
+    return p;
+  }
+  const amount = (p, id) => p.getInventory().getAmount(id);
+  function spot(id, index) {
+    const npc = { getId: () => id, getIndex: () => index, getLocation: () => new Location(2900, 3120, 0) };
+    npcs.set(index, npc);
+    return npc;
+  }
+  function start(p, npc, option) {
+    const definition = NpcDefinition.forId(npc.getId());
+    const event = { player: p, npc, npcId: npc.getId(), definition, clickType: definition.getActions().indexOf(option) + 1 };
+    return handlers.get("Fishing spot")[option]?.(event);
+  }
+  const ticks = (count) => { for (let i = 0; i < count; i++) task.execute(); };
+  ticks(1);
+  return { core, Fishing, fisher, amount, spot, start, ticks };
+}
+
+/** Runs `body` with Math.random fixed, restoring it after. */
+async function withRandom(value, body) {
+  const random = Math.random;
+  Math.random = typeof value === "function" ? value : () => value;
+  try {
+    await body((next) => { Math.random = typeof next === "function" ? next : () => next; });
+  } finally {
+    Math.random = random;
+  }
+}
+
+test("fishing spots roll on the Wiki's tick lengths: 6 for nets, cages and harpoons, 5 for rods", async () => {
+  const { core, Fishing, fisher, amount, spot, start, ticks } = await fishingLoop();
+  const { ItemIdentifiers: I, NpcIdentifiers: N } = core;
+  const { TOOLS } = Fishing;
+  // Every roll lands, and 0.02 keeps clear of the 1-in-91 random stop of moving spots.
+  await withRandom(0.02, async () => {
+    // Wiki (Game tick/Action lengths): a lobster pot rolls every 6 ticks, a fly rod every 5.
+    const lobster = fisher({ items: [[I.LOBSTER_POT]] });
+    start(lobster, spot(N.FISHING_SPOT_10, 3), "Cage");
+    ticks(5);
+    assert.equal(amount(lobster, I.RAW_LOBSTER), 0, "no lobster on the fifth tick");
+    ticks(1);
+    assert.equal(amount(lobster, I.RAW_LOBSTER), 1);
+    ticks(6);
+    assert.equal(amount(lobster, I.RAW_LOBSTER), 2);
+    const fly = fisher({ items: [[I.FLY_FISHING_ROD], [I.FEATHER, 10]] });
+    start(fly, spot(N.ROD_FISHING_SPOT_10, 4), "Lure");
+    ticks(5);
+    assert.equal(amount(fly, I.RAW_TROUT) + amount(fly, I.RAW_SALMON), 1);
+  });
+  for (const name of ["NET", "LOBSTER_POT", "HARPOON", "SHARK_HARPOON", "BIG_NET", "KARAMBWANJI_NET"]) {
+    assert.equal(Fishing.rollInterval(TOOLS[name]), 6, name);
+  }
+  for (const name of ["FISHING_ROD", "FLY_FISHING_ROD", "BARBARIAN_ROD", "ANGLERFISH_ROD"]) {
+    assert.equal(Fishing.rollInterval(TOOLS[name]), 5, name);
+  }
+  assert.equal(Fishing.pikeInterval(() => 0.1), 6, "pike: 6 ticks one time in 5");
+  assert.equal(Fishing.pikeInterval(() => 0.5), 5);
+});
+
+test("karambwan vessels fish every 4 ticks and every attempt uses the karambwanji", async () => {
+  const { core, Fishing, fisher, amount, spot, start, ticks } = await fishingLoop();
+  const { ItemIdentifiers: I, NpcIdentifiers: N } = core;
+  const { FISH } = Fishing;
+  await withRandom(0.99, async (setRandom) => {
+    // An empty vessel loads itself on the click.
+    const vessel = spot(N.FISHING_SPOT_60, 1);
+    const p = fisher({ level: 70, items: [[I.KARAMBWAN_VESSEL], [I.RAW_KARAMBWANJI, 3]] });
+    assert.equal(start(p, vessel, "Fish"), true, "the fishing loop takes karambwan spots");
+    assert.deepEqual(p.messages, ["You lower the Karambwan vessel."]);
+    assert.equal(amount(p, I.KARAMBWAN_VESSEL_3), 1);
+    assert.equal(amount(p, I.KARAMBWAN_VESSEL), 0);
+    assert.equal(amount(p, I.RAW_KARAMBWANJI), 2);
+    ticks(3);
+    assert.equal(p.messages.length, 1, "no attempt before the fourth tick");
+    ticks(1);
+    assert.equal(p.messages.at(-1), "A Karambwan deftly snatches the Karambwanji from your vessel!");
+    assert.equal(amount(p, I.RAW_KARAMBWANJI), 1, "a miss still eats the bait; the vessel reloads");
+    assert.equal(amount(p, I.KARAMBWAN_VESSEL_3), 1);
+    // The spots never move, so no random stop either.
+    setRandom(0);
+    ticks(4);
+    assert.equal(p.messages.at(-1), "You catch a Karambwan!");
+    assert.equal(amount(p, I.RAW_KARAMBWAN), 1);
+    assert.equal(p.xp, 50);
+    assert.equal(amount(p, I.RAW_KARAMBWANJI), 0);
+    assert.equal(amount(p, I.KARAMBWAN_VESSEL_3), 1, "reloaded with the last karambwanji");
+    ticks(4);
+    assert.equal(amount(p, I.RAW_KARAMBWAN), 2);
+    assert.equal(amount(p, I.KARAMBWAN_VESSEL), 1, "out of bait: the vessel stays empty");
+    ticks(8);
+    assert.equal(amount(p, I.RAW_KARAMBWAN), 2, "and fishing stops");
+
+    // No vessel: the message box live OSRS shows.
+    const empty = fisher({ level: 70, items: [[I.RAW_KARAMBWANJI, 5]] });
+    start(empty, vessel, "Fish");
+    assert.equal(empty.statements.length, 1);
+    assert.equal(empty.statements[0].getDialogues().get(0).getText(), "You need a Karambwan vessel to fish here.");
+  });
+  // Wiki skilling chart: 5/160 out of 256.
+  assert.equal(Fishing.rollInterval(Fishing.TOOLS.KARAMBWAN_VESSEL), 4);
+  assert.equal(Fishing.catchChance(99, FISH.KARAMBWAN), 161 / 256);
+  assert.equal(Fishing.catchChance(65, FISH.KARAMBWAN), 107 / 256);
+});
+
+test("Holy Lake karambwanji: floor(level / 5) + 1 a catch, shrimps only with room", async () => {
+  const { core, Fishing, fisher, amount, spot, start, ticks } = await fishingLoop();
+  const { ItemIdentifiers: I, NpcIdentifiers: N } = core;
+  const { TOOLS, FISH, rollCatch } = Fishing;
+  await withRandom(0.02, async () => {
+    const netter = fisher({ level: 65, items: [[I.SMALL_FISHING_NET]] });
+    assert.equal(start(netter, spot(N.FISHING_SPOT_58, 2), "Net"), true, "the fishing loop takes the Holy Lake spot");
+    assert.deepEqual(netter.messages, ["You cast out your net..."]);
+    ticks(5);
+    assert.equal(amount(netter, I.RAW_KARAMBWANJI), 0);
+    ticks(1);
+    assert.equal(amount(netter, I.RAW_KARAMBWANJI), 14);
+    assert.equal(netter.messages.at(-1), "You catch 14 Karambwanji.");
+    assert.equal(netter.xp, 5, "XP per catch, not per fish");
+  });
+  assert.equal(Fishing.catchChance(1, FISH.KARAMBWANJI), 101 / 256);
+
+  // A full inventory keeps stacking karambwanji but has no room for the lake's shrimps.
+  const crowded = fisher({ items: [[I.SMALL_FISHING_NET], [I.RAW_KARAMBWANJI, 1], ...new Array(26).fill([I.LOGS])] });
+  const rolls = [0.99, 0];
+  const missedShrimp = rollCatch(crowded, TOOLS.KARAMBWANJI_NET, () => rolls.shift());
+  assert.deepEqual(missedShrimp, [FISH.SHRIMP], "shrimps when the karambwanji roll fails");
+  await withRandom(0.99, async () => {
+    Fishing.landCatch(crowded, TOOLS.KARAMBWANJI_NET, Fishing.findTool(crowded, TOOLS.KARAMBWANJI_NET), missedShrimp);
+    assert.equal(amount(crowded, I.RAW_SHRIMPS), 0, "no room for shrimps");
+    assert.equal(crowded.xp, 0);
+    Fishing.landCatch(crowded, TOOLS.KARAMBWANJI_NET, Fishing.findTool(crowded, TOOLS.KARAMBWANJI_NET), [FISH.KARAMBWANJI]);
+    assert.equal(amount(crowded, I.RAW_KARAMBWANJI), 21);
+  });
 });

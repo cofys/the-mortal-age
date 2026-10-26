@@ -5,7 +5,7 @@
  * into 32x32-tile cells, so a bot can find the nearest group of training
  * opponents or fishing spots
  * without hand-drawn areas or scanning every NPC. Built once per world from the
- * live NPC list (spawn tiles, so wandering does not move a cluster).
+ * spawn records and plugin NPCs (spawn tiles, so wandering does not move a cluster).
  */
 
 const CELL_SHIFT = 5;
@@ -85,7 +85,7 @@ function nearestClusters(index, keys, from) {
 const INDEX_BY_WORLD = new WeakMap();
 
 /**
- * The world's cluster index for one grouping, built from its live NPCs on first
+ * The world's cluster index for one grouping, built from its spawns on first
  * use. `keyOf(definition)` returns the group key, or several (a fishing spot with both a
  * cage and a harpoon); null skips the NPC. `cacheKey`
  * names that grouping so each caller's index is built once.
@@ -99,10 +99,18 @@ function npcClustersFor(world, cacheKey, keyOf) {
   if (cached) {
     return cached;
   }
-  const { World, WorldDefinition } = world.core;
+  const { World, WorldDefinition, NpcSpawnDefinition, NpcDefinition } = world.core;
   const entries = [];
+  const spawns = NpcSpawnDefinition?.all() ?? [];
+  for (const spawn of spawns) {
+    const at = spawn.getPosition();
+    const keys = keyOf(NpcDefinition.forId(spawn.getId()));
+    for (const key of Array.isArray(keys) ? keys : [keys]) {
+      entries.push({ key, x: at.getX(), y: at.getY(), z: at.getZ() });
+    }
+  }
   for (const npc of World.getNpcs()) {
-    if (!npc || npc.getPrivateArea?.()) {
+    if (!npc || npc.getPrivateArea?.() || (spawns.length && npc.getSpawnLineage?.()?.owner === "npc-spawns")) {
       continue;
     }
     const spawn = npc.getSpawnPosition?.() ?? npc.getLocation();

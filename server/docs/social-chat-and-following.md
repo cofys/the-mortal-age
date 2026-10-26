@@ -5,3 +5,38 @@ The [OSRS chat-channel page](https://oldschool.runescape.wiki/w/Chat-channel) do
 The [player page](https://oldschool.runescape.wiki/w/New_character) lists Follow among a player's right-click options. It does not describe follow movement or teleport/logout cleanup. In this server, follow is a transient `Mobile` reference: ordinary movement interactions clear it through `MovementQueue.walkToReset`, known player actions clear it as they dispatch, logout clears the departing player's reference, and `Mobile` clears follow-owned interaction/facing state before a player relocation. These cleanup paths are implementation behavior covered by local tests; they are not independently verified against live OSRS. The movement tick also drops a follow when its target is no longer registered or is in another private area.
 
 Presence is single-world: friend snapshots resolve currently registered players in this server's `World` and send world 1 for visible online friends. Cross-world presence and the live OSRS behavior of the right-click Follow action's edge cases remain outside this implementation.
+
+## Public chat and autochat
+
+Public chat arrives as the CHAT packet (kind byte 0 public, 1 game, 2 friends chat, 3 public autochat) and
+goes out as a CHAT_MESSAGE of type 2 to every local player whose public filter admits the speaker
+(`PlayerRelations.canReceivePublicChatFrom`; the Public stone's modes 0 Show standard, 1 Show friends,
+2 Show none, 3 Hide, 4 Show autochat), plus the overhead line.
+
+Autochat is the [Chat Interface](https://oldschool.runescape.wiki/w/Chat_Interface) "Setup your autochat"
+option and lives in the cache scripts: the phrase sits in varcstring 358, "Pause/Resume autochat" flips
+varcint 62, and the chatbox timer (proc 552) forces the public filter to mode 4 and calls
+`chat_sendpublic(text, 1)` every 150 client cycles (3 seconds). The client sends kind 3 for type 1, the
+server flags the social packet `public_chat` with `autoChat` and delivers it as type 90 (AUTOTYPER, or 91
+MODAUTOTYPER with a mod crown) so the chatbox colours it as "Auto chat". The cache chatbox shows those lines
+only in mode 4 "Show autochat" (beside standard chat), so the server sends autochat only to listeners on
+mode 4. The overhead text is still the plain forced chat; the public filter does not hide it.
+
+## Reporting a player
+
+As captured (rsprox 2375 rev 229, 3719 rev 235), every player has "Report" in player option slot 8.
+That option, or the chatbox Report button (`chatbox:reportabuse` 162:31, op 2 "Report abuse"), makes
+the server send varbit `chatoverlay_unclamp` (10689) = 1, open interface 875 `reportabuse` as an overlay
+on `chatbox:chatoverlay` (162:567 in the rev 241 cache; 162:565 in the captures) and run `reportabuse_init`
+(5084) with [enabled, hasName, name]; the
+form's Close (875:23) sends the varbit back to 0, closes the overlay and runs `reportabuse_close` (5085).
+A busy player is told "Please finish what you're doing first." (the message a capture shows for the
+button's bug-report op). `ReportAbuse.plugin.js` does all of this.
+
+The form's submit is `chat_sendabusereport(name, rule, mute)`, which the client sends as REPORT_ABUSE
+(client packet 199, OSRS SEND_SNAPSHOT: name, rule id one less than the script's value, mute flag). The
+server appends `{ time, reporter, reported, ruleId, rule, mute }` to `data/saves/abuse-reports.jsonl`
+(`TSPS_ABUSE_REPORTS_FILE` overrides the path), emits the `report:abuse` custom event, and sends nothing
+back: the form shows its own confirmation. `mute` is recorded only when a staff member asked for it, and
+is not applied. No capture holds a submitted report, so the lack of a reply is an assumption.
+

@@ -26,9 +26,10 @@
  * 4 asked Gertrude (ask Reldo), 5 asked Reldo (return to Bob), 6 told Bob (see the
  * Sphinx), 10 Sphinx cutscene done, chores list (Bob away), 20 chores done, 30 Unferth
  * ill, 40 Apothecary told (disguise), 50 Unferth cured, 60 Bob's holiday cutscene
- * (back in Burthorpe), 70 complete. The intermediate values are this plugin's; the
- * cache only pins the completion threshold (70, DB row 142 col 19) and the chore
- * varbits above.
+ * (back in Burthorpe), 70 complete. The durable values are this plugin's and are
+ * preserved for existing saves; `WIRE_STAGE` maps them to the Quest Helper keys
+ * (0, 5, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70) actually written to
+ * varbit 1028. The cache pins the completion threshold (70, DB row 142 col 19).
  *
  * Rewards per the OSRS Wiki: 2 Quest points, a Doctor's hat or Nurse hat, and a
  * present containing two antique lamps (2,500 XP each in skills over 30) and a mouse
@@ -48,7 +49,7 @@
  *  - The Apothecary's Doctor/Nurse hat choice is two sibling conditions in the dump
  *    with no menu; the first request gives a Doctor's hat, and losing it and asking
  *    again alternates to the other hat (the wiki's switch-by-destroying).
- *  - The patch grows after 20 minutes (wiki: 15-35); MCP advance_time skips it. The
+ *  - The patch grows after 20 minutes (wiki: 15-35); MCP advance_time advances it.
  *    potatoes' "milk placed first" table state (feedhuman 2) has no wiki message.
  *  - Object prompts the transcript lacks (needing 4 seeds/a dibber, no logs in the
  *    fireplace, not holding a vial) use plain game messages.
@@ -93,6 +94,26 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   const STAGE_CURED = 50;
   const STAGE_BOB_BACK = 60;
   const STAGE_COMPLETE = 70;
+
+  // Durable stage -> Quest Helper/OSRS varbit 1028 value. The durable values stay
+  // as they are so existing saves keep their meaning; only the transmitted wire
+  // value uses the helper's stage keys.
+  const WIRE_STAGE = new Map([
+    [STAGE_STARTED, 5], // talkToHild
+    [STAGE_AMULET_ENCHANTED, 15], // findBob/talkToBob
+    [STAGE_FOUND_BOB, 20], // talkToGertrude
+    [STAGE_ASKED_GERTRUDE, 25], // talkToReldo
+    [STAGE_ASKED_RELDO, 30], // findBobAgain/talkToBobAgain
+    [STAGE_TOLD_BOB, 35], // talkToSphinx
+    [STAGE_CHORES, 40], // doChores
+    [STAGE_CHORES_DONE, 45], // reportToUnferth
+    [STAGE_MEDICAL, 50], // talkToApoth
+    [STAGE_APOTHECARY, 55], // talkToUnferthAsDoctor
+    [STAGE_CURED, 60], // findBobToFinish/talkToBobToFinish
+    [STAGE_BOB_BACK, 65], // talkToUnferthToFinish
+    [STAGE_COMPLETE, 70], // cache completion threshold
+  ]);
+  const wireStage = (stage) => WIRE_STAGE.get(stage) ?? stage;
 
   // ------------------------------------------------------------------ NPCs
 
@@ -282,15 +303,25 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   let quest;
   let transcriptData = null;
   const lampPending = new WeakMap();
+  const HILD_RECLAIM_VARIANT = "standard-dialogue-after-completing-a-tale-of-two-cats-and-losing-the-catspeak-amulet-e";
+  const BOB_RECLAIM_VARIANT = "reclaiming-mouse-toy";
 
   // ------------------------------------------------------------------ helpers
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
 
+  function ownsItem(player, itemId) {
+    return held(player, itemId)
+      || player.getEquipment().getItems().some((item) => item?.getId?.() === itemId)
+      || player.getBanks().some((bank) => bank?.getAmount(itemId) > 0);
+  }
+
   function giveItem(player, itemId) {
-    if (player.getInventory().getFreeSlots() <= 0) return false;
-    player.getInventory().adds(itemId, 1);
-    return true;
+    const inventory = player.getInventory();
+    if (inventory.getFreeSlots() <= 0) return false;
+    const previous = inventory.getAmount(itemId);
+    inventory.adds(itemId, 1);
+    return inventory.getAmount(itemId) === previous + 1;
   }
 
   function isQuestComplete(player, key) {
@@ -444,14 +475,17 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   }
 
   function growPotatoes(player) {
-    if (quest.getStage(player) !== STAGE_CHORES || tidyGarden(player) >= 8) return false;
+    const growAt = Number(player.getAttribute(PATCH_ATTRIBUTE)) || 0;
+    if (quest.getStage(player) !== STAGE_CHORES || tidyGarden(player) >= 8 || growAt <= 0 || Date.now() < growAt) return false;
     setTidyGarden(player, 8);
     player.setAttribute(PATCH_ATTRIBUTE, 0);
     return true;
   }
 
   function finishPotatoes(player) {
-    if (!growPotatoes(player)) return;
+    if (quest.getStage(player) !== STAGE_CHORES || tidyGarden(player) >= 8) return;
+    setTidyGarden(player, 8);
+    player.setAttribute(PATCH_ATTRIBUTE, 0);
     if (choresDone(player)) {
       // The cat's "all the chores finished" transcript carries the news.
       finishChore(player);
@@ -486,6 +520,7 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   }
 
   function selectBobVariant(player, stage) {
+    if (canReclaimMouseToy(player)) return { page: "Bob (cat)", variant: BOB_RECLAIM_VARIANT };
     if (stage === STAGE_AMULET_ENCHANTED) {
       quest.setStage(player, STAGE_FOUND_BOB);
       return "finding-bob";
@@ -509,6 +544,9 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   }
 
   function selectHildVariant(player, stage) {
+    if (stage >= STAGE_AMULET_ENCHANTED && !ownsItem(player, CATSPEAK_AMULET_E_ITEM_ID)) {
+      return { page: "Hild", variant: HILD_RECLAIM_VARIANT };
+    }
     if (stage !== STAGE_STARTED) return null; // Hild's own page after the enchantment
     if (hasFlag(player, BIT_HILD_MET)) {
       return "starting-out-talking-to-hild-again-before-enchanting-the-amulet";
@@ -601,6 +639,14 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
       case "Bl6-CX":
         return wearingCatspeak(player);
       // Hild's enchantment.
+      case "RL5b-i":
+        return !held(player, DEATH_RUNE_ITEM_ID, 5);
+      case "ocyd9v":
+        return held(player, DEATH_RUNE_ITEM_ID, 5) && !hasCatspeakAmulet(player);
+      case "WFnYdQ":
+        return held(player, DEATH_RUNE_ITEM_ID, 5) && hasCatspeakAmulet(player);
+      case "JrXnu4":
+        return player.getInventory().isFull();
       case "jJvdhF":
       case "lFgOmg":
         return !held(player, DEATH_RUNE_ITEM_ID, 5);
@@ -697,22 +743,35 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
     }
   }
 
+  function canReceiveEnchantedAmuletAfterOffer(player) {
+    const inventory = player.getInventory();
+    if (inventory.getFreeSlots() > 0) return true;
+    return inventory.getAmount(CATSPEAK_AMULET_ITEM_ID) >= 1
+      || inventory.getAmount(DEATH_RUNE_ITEM_ID) === 5;
+  }
+
   function consumeAmuletOffer(player) {
-    if (held(player, DEATH_RUNE_ITEM_ID, 5)) {
-      player.getInventory().deleteNumber(DEATH_RUNE_ITEM_ID, 5);
-    }
+    if (!held(player, DEATH_RUNE_ITEM_ID, 5) || !hasCatspeakAmulet(player)
+      || !canReceiveEnchantedAmuletAfterOffer(player)) return false;
+    player.getInventory().deleteNumber(DEATH_RUNE_ITEM_ID, 5);
     if (held(player, CATSPEAK_AMULET_ITEM_ID)) {
       player.getInventory().deleteNumber(CATSPEAK_AMULET_ITEM_ID, 1);
     } else {
       player.getEquipment().deleteNumber(CATSPEAK_AMULET_ITEM_ID, 1);
     }
+    return true;
   }
 
   function grantEnchantedAmulet(player) {
-    if (!held(player, CATSPEAK_AMULET_E_ITEM_ID)) giveItem(player, CATSPEAK_AMULET_E_ITEM_ID);
+    if (ownsItem(player, CATSPEAK_AMULET_E_ITEM_ID) || !consumeAmuletOffer(player)) return false;
+    if (!held(player, CATSPEAK_AMULET_E_ITEM_ID)) {
+      player.getInventory().forceAdd(player, new api.core.Item(CATSPEAK_AMULET_E_ITEM_ID, 1));
+    }
+    if (!held(player, CATSPEAK_AMULET_E_ITEM_ID)) return false;
     if (quest.getStage(player) < STAGE_AMULET_ENCHANTED) {
       quest.setStage(player, STAGE_AMULET_ENCHANTED);
     }
+    return true;
   }
 
   function startChores(player) {
@@ -763,10 +822,15 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
         }
         return;
       case "4OiD70":
-        consumeAmuletOffer(player);
+        if (!held(player, DEATH_RUNE_ITEM_ID, 5) || !hasCatspeakAmulet(player)
+          || !canReceiveEnchantedAmuletAfterOffer(player)) {
+          event.handled = true;
+          player.sendMessage("I need an open inventory slot before Hild can enchant the amulet.");
+          return;
+        }
         return;
       case "XfUKZ6":
-        grantEnchantedAmulet(player);
+        if (!grantEnchantedAmulet(player)) event.handled = true;
         return;
       case "5-sEgA":
       case "_Fpj9r":
@@ -793,6 +857,11 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
 
   function handleAction(event) {
     const { player, stepId, kind, text } = event;
+    if (stepId === "GPZQex" && event.npcId === HILD_NPC_ID && quest.getStage(player) >= STAGE_AMULET_ENCHANTED) {
+      event.handled = true;
+      if (!grantEnchantedAmulet(player)) player.sendMessage("You need the amulet, five death runes and room for the enchanted amulet.");
+      return;
+    }
     if (kind === "message") {
       handleMessage(event);
       return;
@@ -875,6 +944,25 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   // ==========================================================================
   // Talk-to interceptions (NPCs another plugin or the page fallback claims)
   // ==========================================================================
+
+  function canReclaimMouseToy(player) {
+    if (!quest.isComplete(player) || !wearingCatspeak(player)
+      || ownsItem(player, MOUSE_TOY_ITEM_ID) || ownsItem(player, PRESENT_ITEM_ID)) return false;
+    const request = { player, key: "dragon_slayer_ii", complete: false };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete !== true;
+  }
+
+  function handleReclaimLine(event) {
+    const { player, npcId, text } = event;
+    if (!BOB_NPC_IDS.has(npcId) || text !== "You're welcome!"
+      || !event.pages?.some((page) => page.page === "Bob (cat)" && page.variants?.includes(BOB_RECLAIM_VARIANT))) return;
+    event.after = () => {
+      if (canReclaimMouseToy(player) && !giveItem(player, MOUSE_TOY_ITEM_ID)) {
+        player.sendMessage("You need an open inventory slot before Bob can give you a mouse toy.");
+      }
+    };
+  }
 
   function talkToGertrude(event) {
     const { player } = event;
@@ -1102,7 +1190,7 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
     if (growAt <= 0) return;
     const next = growAt - ms;
     player.setAttribute(PATCH_ATTRIBUTE, Math.max(0, next));
-    if (next <= 0) finishPotatoes(player);
+    if (next <= Date.now()) finishPotatoes(player);
     if (Array.isArray(event.handledBy)) event.handledBy.push("TailOfTwoCats");
   }
 
@@ -1271,6 +1359,7 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
     name: "A Tail of Two Cats",
     varpId: VARP_TWOCATS,
     varbitId: VARBIT_TWOCATS_QUEST,
+    varbitValue: wireStage,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 2,
@@ -1286,6 +1375,7 @@ module.exports = function registerTailOfTwoCatsQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", handleReclaimLine);
   api.onCustomEvent("agent:advance-time", handleAdvanceTime);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   api.onPlayerLogin(handleLogin);

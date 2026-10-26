@@ -30,7 +30,7 @@ Firemaking cape's light, the Slayer cape's repeat chance).
 | Farming: herb lives | `skills/farming/Patches.Farming.js` |
 | Firemaking: light source | `world/Darkness.plugin.js`, `world/FairyRings.plugin.js`; Wintertodt warmth is its Wiki name list |
 | Herblore: grimy herbs into unfinished potions with cleaning XP; Zahur | `skills/Herblore.plugin.js`, `npcs/Zahur.plugin.js` |
-| Hitpoints: double regeneration | core `stats:restore-rate` (Player.ts), answered in `Passive.SkillCapes.js` |
+| Hitpoints: regeneration every 30 seconds (not with Rapid Heal) | core `stats:hitpoints-regen` (Player.ts), answered in `Passive.SkillCapes.js` |
 | Mining: 5% extra ore up to adamantite | `mining:extra-ore`, answered in `Passive.SkillCapes.js` |
 | Prayer: holy wrench, worn or carried | `items/Potions.plugin.js` |
 | Ranged: accumulator (72%), assembler/upgraded max capes (80%), metal gathering | `items/AvasAccumulator.plugin.js` via `skillcape:ammo-recovery`; `skillcapes/MetalAttraction.SkillCapes.js` |

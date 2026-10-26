@@ -94,8 +94,10 @@
  */
 module.exports = function registerTempleOfTheEyeQuest(api) {
   const {
+    Animation,
     Equipment,
     GameObject,
+    Graphic,
     Item,
     ItemIdentifiers,
     Location,
@@ -278,7 +280,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const ALTAR_EXIT_MIND_OBJECT_ID = ObjectIdentifiers.PORTAL_40; // 34749
   const ALTAR_EXIT_WATER_OBJECT_ID = ObjectIdentifiers.PORTAL_41; // 34750
   const TEMPLE_EXIT_OBJECT_ID = ObjectIdentifiers.PORTAL_101; // 43692
-  const BLUE_PORTAL_OBJECT_ID = ObjectIdentifiers.PORTAL_105; // 43765
+  const BLUE_PORTAL_OBJECT_ID = ObjectIdentifiers.PORTAL_106; // 43767, captured after the incantation
   const GUARDIAN_OF_WATER_OBJECT_ID = ObjectIdentifiers.GUARDIAN_OF_WATER; // 43702
   const GUARDIAN_OF_MIND_OBJECT_ID = ObjectIdentifiers.GUARDIAN_OF_MIND; // 43705
   const GUARDIAN_PARTS_OBJECT_IDS = new Set([
@@ -318,7 +320,17 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const MAGE_OF_ZAMORAK_TILE = { x: 3259, y: 3383, z: 0 };
   const BASEMENT_PERSTEN_TILE = { x: 3101, y: 9572, z: 0 };
   const BASEMENT_PORTAL_TILE = { x: 3104, y: 9574, z: 0 };
+  const INCANTATION_ANIMATION_ID = 1818;
+  const INCANTATION_GRAPHIC_ID = 2067;
   const BASEMENT_LANDING_TILE = { x: 3106, y: 9571, z: 0 };
+  const INCANTATION_SCENE = [
+    { key: "incantation-tamara", id: TAMARA_CUTSCENE_NPC_ID, x: 3103, y: 9572, z: 0 },
+    { key: "incantation-felix", id: FELIX_CUTSCENE_NPC_ID, x: 3104, y: 9572, z: 0 },
+    { key: "incantation-cordelia", id: CORDELIA_CUTSCENE_NPC_ID, x: 3105, y: 9572, z: 0 },
+    { key: "incantation-traiborn", id: TRAIBORN_CUTSCENE_NPC_ID, x: 3106, y: 9570, z: 0 },
+    { key: "incantation-sedridor", id: NpcIdentifiers.ARCHMAGE_SEDRIDOR_3, x: 3104, y: 9570, z: 0 },
+    { key: "incantation-persten", id: PERSTEN_CUTSCENE_NPC_ID, x: 3106, y: 9573, z: 0 },
+  ];
   const TOWER_ENTRANCE_TILE = { x: 3104, y: 3163, z: 0 };
   // Capture 1693 addnpc coords (not Quest Helper's interaction WorldPoints).
   const CORDELIA_TOWER_TILE = { x: 3110, y: 3161, z: 1 };
@@ -340,6 +352,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const DECLINED_ATTRIBUTE = "temple-of-the-eye:declined";
   const AMULET_GIVEN_ATTRIBUTE = "quest.temple_of_the_eye.amulet-given";
   const INCANTATION_GIVEN_ATTRIBUTE = "quest.temple_of_the_eye.incantation-given";
+  const BASEMENT_PORTAL_OPEN_ATTRIBUTE = "temple-of-the-eye:basement-portal-open";
   const TEA_ATTRIBUTE = "quest.temple_of_the_eye.tea"; // 0 none, 1 seller gave, 2 mage drank
   const TELEPORT_ATTRIBUTE = "quest.temple_of_the_eye.teleports"; // bit 1 Abyss, bit 2 tower
   const DARK_MAGE_ATTRIBUTE = "quest.temple_of_the_eye.dark-mage"; // 0 none, 1 puzzle, 2 solved
@@ -363,7 +376,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
 
   // Per-player quest spawns (owner-only), keyed by player.
   const spawns = new Map();
-  let worldInstalled = false;
+  const basementPortalByPlayer = new WeakMap();
 
   let quest = null;
   let transcripts = null;
@@ -559,19 +572,46 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   // World setup and per-player spawns
   // ---------------------------------------------------------------------------
 
-  /** The blue portal the incantation cut-scene opens in the Wizards' Tower basement.
-   * It is permanent world scenery; its "Enter" is quest-gated below. */
-  function installWorld() {
-    if (worldInstalled) return;
-    worldInstalled = true;
+  function syncBasementPortal(player) {
+    const existing = basementPortalByPlayer.get(player);
+    const shouldExist = flag(player, BASEMENT_PORTAL_OPEN_ATTRIBUTE);
+    if (!shouldExist) {
+      if (existing) ObjectManager.deregister(existing, true);
+      basementPortalByPlayer.delete(player);
+      return;
+    }
+    if (existing) return;
     const portal = new GameObject(
       BLUE_PORTAL_OBJECT_ID,
       new Location(BASEMENT_PORTAL_TILE.x, BASEMENT_PORTAL_TILE.y, BASEMENT_PORTAL_TILE.z),
       10,
-      0,
+      2,
       null
-    );
+    ).setOwner(player);
     ObjectManager.register(portal, true);
+    basementPortalByPlayer.set(player, portal);
+  }
+
+  function faceIncantationScene(player) {
+    const owned = spawns.get(player);
+    if (!owned) return;
+    const portal = new Location(BASEMENT_PORTAL_TILE.x, BASEMENT_PORTAL_TILE.y, BASEMENT_PORTAL_TILE.z);
+    for (const actor of INCANTATION_SCENE) owned.get(actor.key)?.faceTile?.(portal);
+  }
+
+  function hasIncantationCast(player) {
+    const owned = spawns.get(player);
+    const location = player.getLocation?.();
+    if (!owned || !location) return false;
+    return INCANTATION_SCENE.every(({ key }) => {
+      const actor = owned.get(key);
+      return actor?.isRegistered?.() === true
+        && actor.isVisible?.() === true
+        && actor.isOwnerOnly?.() === true
+        && actor.getOwner?.() === player
+        && actor.getPrivateArea?.() === (player.getPrivateArea?.() ?? null)
+        && actor.getLocation?.()?.getZ?.() === location.getZ();
+    });
   }
 
   function setSpawn(player, key, definition, active) {
@@ -623,6 +663,16 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       { id: PERSTEN_TOWER_NPC_ID, x: BASEMENT_PERSTEN_TILE.x, y: BASEMENT_PERSTEN_TILE.y, z: BASEMENT_PERSTEN_TILE.z, wanderRadius: 0 },
       stage >= STAGE_TOWER && stage < STAGE_INCANTATION_READY
     );
+    for (const actor of INCANTATION_SCENE) {
+      setSpawn(
+        player,
+        actor.key,
+        { id: actor.id, x: actor.x, y: actor.y, z: actor.z, wanderRadius: 0 },
+        stage === STAGE_INCANTATION_READY
+      );
+    }
+    faceIncantationScene(player);
+    syncBasementPortal(player);
     setSpawn(
       player,
       "cordelia-tower",
@@ -1131,6 +1181,32 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   function handleLine(event) {
     const { player, npcId } = event;
     if (!player || !MY_NPC_IDS.has(npcId)) return;
+    if (stageOf(player) === STAGE_INCANTATION_READY
+      && event.step?.speaker === "Persten and co."
+      && event.text === "Saris! Val! Curak! Belito!"
+      && event.step?.presentation === "overhead") {
+      const owned = spawns.get(player);
+      event.actors = [
+        owned?.get("incantation-tamara"),
+        owned?.get("incantation-felix"),
+        owned?.get("incantation-cordelia"),
+        owned?.get("incantation-persten"),
+      ];
+      event.before = () => {
+        const location = player.getLocation?.();
+        if (!location || !event.actors.every(actor => actor?.isRegistered?.() === true
+          && actor.isVisible?.() === true
+          && actor.isOwnerOnly?.() === true
+          && actor.getOwner?.() === player
+          && actor.getPrivateArea?.() === (player.getPrivateArea?.() ?? null)
+          && actor.getLocation?.()?.getZ?.() === location.getZ())) return;
+        event.actors.forEach(actor => {
+          actor.performAnimation(new Animation(INCANTATION_ANIMATION_ID));
+          actor.performGraphic(new Graphic(INCANTATION_GRAPHIC_ID));
+        });
+      };
+      return;
+    }
     if (PUZZLE_INTROS.get(npcId) === event.text) {
       const key = [...TOWER_APPRENTICES].find(([id]) => id === npcId)?.[1]?.key;
       if (key) openPuzzleLater(player, key);
@@ -1194,6 +1270,12 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       return;
     }
     switch (stepId) {
+      case "Dj2PaV": // The captured "A blue portal opens" action follows the overhead chant.
+        if (stageOf(player) !== STAGE_INCANTATION_READY || !hasIncantationCast(player)) return;
+        player.setAttribute(BASEMENT_PORTAL_OPEN_ATTRIBUTE, true);
+        syncBasementPortal(player);
+        event.handled = true;
+        return;
       case "5SxUiq":
       case "YdNgEz": // the Mage of Zamorak's one-time teleport
         player.setAttribute(TELEPORT_ATTRIBUTE, teleports(player) | ABYSS_TELEPORT_BIT);
@@ -1609,12 +1691,12 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   function enterBluePortal(event) {
     const { player } = event;
     const stage = stageOf(player);
-    if (stage < STAGE_INCANTATION_READY || stage >= STAGE_COMPLETE) return;
+    if (stage !== STAGE_INCANTATION_READY || !flag(player, BASEMENT_PORTAL_OPEN_ATTRIBUTE)) return;
+    player.setAttribute(BASEMENT_PORTAL_OPEN_ATTRIBUTE, false);
+    syncBasementPortal(player);
     moveTo(player, TEMPLE_ARRIVAL_TILE);
-    if (stage === STAGE_INCANTATION_READY) {
-      setStage(player, STAGE_PORTAL_OPEN);
-      play(player, PERSTEN_TEMPLE_NPC_ID, "enter-the-gate-temple-of-the-eye-cutscene");
-    }
+    setStage(player, STAGE_PORTAL_OPEN);
+    play(player, PERSTEN_TEMPLE_NPC_ID, "enter-the-gate-temple-of-the-eye-cutscene");
     event.handled = true;
   }
 
@@ -1772,7 +1854,6 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   }
 
   function handleLogin({ player }) {
-    installWorld();
     migrateLegacyStage(player);
     syncSpawns(player);
     syncTowerPuzzleVarbits(player);
@@ -1789,6 +1870,9 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     if (!player) return;
     Scenes.cancel(player);
     clearSpawns(player);
+    const portal = basementPortalByPlayer.get(player);
+    if (portal) ObjectManager.deregister(portal, true);
+    basementPortalByPlayer.delete(player);
   }
 
   // ---------------------------------------------------------------------------
@@ -1953,6 +2037,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   api.persistAttribute(STAGE_SCHEMA_ATTRIBUTE, 0);
   api.persistAttribute(AMULET_GIVEN_ATTRIBUTE);
   api.persistAttribute(INCANTATION_GIVEN_ATTRIBUTE);
+  api.persistAttribute(BASEMENT_PORTAL_OPEN_ATTRIBUTE, false);
   api.persistAttribute(TEA_ATTRIBUTE);
   api.persistAttribute(TELEPORT_ATTRIBUTE);
   api.persistAttribute(DARK_MAGE_ATTRIBUTE);
@@ -1992,7 +2077,6 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onInterfaceActionButton(PUZZLE_CLOSE_UID, closePuzzle);
   api.onNpcInteraction("The Great Guardian", { "Power-up": powerUpGreatGuardian });
-  api.onServerStartup(installWorld);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

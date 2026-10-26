@@ -7,6 +7,7 @@ const Tithe = require("./Tithe.Farming");
 const Guild = require("./Guild.Farming");
 const Hespori = require("./Hespori.Farming");
 const Redwood = require("./Redwood.Farming");
+const { pauseForLevelUp } = require("../SkillActions");
 
 const FARM_ATTRIBUTE = "farming:state";
 const TROLL_HERB_PATCH = Data.CACHE.patches.find(p => p.type === "HERB" && p.x === 2826 && p.y === 3694 && p.z === 0);
@@ -152,6 +153,7 @@ function workStep(player, work) {
         WORK.delete(player);
         return;
     }
+    if (work.levelUpPaused) return;
     if (Date.now() < work.nextAt) return;
     const again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
     work.nextAt = Date.now() + 1800;
@@ -222,6 +224,7 @@ function plant(player, patch, id) {
     if (crop.type !== "HERB") award(player, crop.plant, patch);
     animate(player, crop.sapling ? ANIM.SAPLING : ANIM.PLANT);
     player.sendMessage(`You plant the ${crop.name.toLowerCase()}.`);
+    core.PluginManager.emitCustomEvent("farming:planted", { player, crop: crop.key, seedId: id, patch });
 }
 function water(player, id, slot) {
     const inventory = player.getInventory();
@@ -371,7 +374,9 @@ function dig(player, patch) {
     if (crop.type === "REDWOOD" && state.status === "grown") { player.sendMessage("Ask Alexandra to remove the redwood tree."); return; }
     if (state.status === "dead" || state.stump) {
         if (state.stump && crop.type === "TREE") {
-            const roots = 1 + Math.min(3, Math.floor((player.getSkillManager().getCurrentLevel(core.Skill.FARMING) - crop.level) / 15));
+            // Wiki Tree_roots_(Farming): one more root every eight levels above planting,
+            // capped at four; temporary boosts apply when the stump is dug.
+            const roots = 1 + Math.min(3, Math.floor((player.getSkillManager().getCurrentLevel(core.Skill.FARMING) - crop.level) / 8));
             if (!give(player, Data.itemId(`${crop.name} roots`), Math.max(1, roots))) return;
         }
         clearPatch(player, patch); animate(player, ANIM.DIG); return;
@@ -729,6 +734,10 @@ function logout({ player }) {
 }
 function cancelWork({ player }) { WORK.delete(player); }
 
+function pauseWork(event) {
+    pauseForLevelUp(event, WORK, (player) => WORK.delete(player));
+}
+
 /** Every hook the Farming plugin attaches. */
 function attach(api) {
     api.persistAttribute(FARM_ATTRIBUTE);
@@ -739,7 +748,7 @@ function attach(api) {
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
     api.onPlayerLogout(Tithe.titheLogout);
-    api.onCustomEvent("level-up:popup-opened", cancelWork);
+    api.onCustomEvent("level-up:popup-opened", pauseWork);
     api.onObjectInteraction(objectInteraction);
     api.onItemOnObject(itemOnObject, { noted: false });
     api.onItemOnItem(itemOnItem, { noted: false });

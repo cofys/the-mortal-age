@@ -62,6 +62,8 @@ module.exports = function registerPiratesTreasureQuest(api) {
   const MAGIC_TAB = 82;
   const PANDEMONIUM_LANDING = new Location(3069, 2987, 0); // Pandemonium.Quest.js landing tile.
   const FARE = 30;
+  /** The customs officer's half fare for worn Karamja gloves (Pay-fare transcript). */
+  const GLOVES_FARE = 15;
   const GARDENER_SHOUT = "First moles, now this! Take this, vandal!";
 
   const EMPLOYMENT_ATTRIBUTE = "pirates-treasure.employment";
@@ -225,13 +227,21 @@ module.exports = function registerPiratesTreasureQuest(api) {
     if (CUSTOMS_OFFICER_IDS.has(npcId)) {
       if (value.includes("does not have karamjan rum")) return !hasItem(player, RUM_ITEM_ID);
       if (value.includes("has karamjan rum")) return hasItem(player, RUM_ITEM_ID);
+      const coins = player.getInventory().getAmount(COINS_ITEM_ID);
+      if (value.includes("karamja gloves")) {
+        if (!wearsKaramjaGloves(player)) return false;
+        if (value.includes("does not have 15")) return coins < GLOVES_FARE;
+        if (value.includes("has 15")) return coins >= GLOVES_FARE;
+        return true;
+      }
+      // The Karamja gloves' half fare comes before the 30-coin answers.
       if (stepId === "l2iXlt" || stepId === "o99Ow0" || value.includes("does not have enough coins")) {
-        return player.getInventory().getAmount(COINS_ITEM_ID) < 30;
+        return !wearsKaramjaGloves(player) && coins < FARE;
       }
       if (stepId === "GGmLiT" || value.includes("has 30 coins")) {
-        return player.getInventory().getAmount(COINS_ITEM_ID) >= 30;
+        return !wearsKaramjaGloves(player) && coins >= FARE;
       }
-      if (value.includes("karamja gloves") || value.includes("ring of charos")) return false;
+      if (value.includes("ring of charos")) return false;
     }
 
     if (SAIL_FARE_CONDITION_IDS.has(stepId)) {
@@ -492,6 +502,25 @@ module.exports = function registerPiratesTreasureQuest(api) {
     return true;
   }
 
+  function wearsKaramjaGloves(player) {
+    const gloves = player.getEquipment?.()?.getItems?.()?.[Equipment.HANDS_SLOT];
+    return /^Karamja gloves/.test(gloves?.getDefinition?.()?.getName?.() ?? "");
+  }
+
+  /** The Pay-fare transcript: worn Karamja gloves halve the 30-coin fare. */
+  function payFareToPortSarim(player) {
+    if (!wearsKaramjaGloves(player)) return sailToPortSarim(player);
+    if (sailing.has(player)) return false;
+    if (player.getInventory().getAmount(COINS_ITEM_ID) < GLOVES_FARE) {
+      player.sendMessage("You do not have enough coins to pay passage. You need 15 when wearing the Karamja gloves.");
+      return false;
+    }
+    payFare(player, GLOVES_FARE);
+    player.sendMessage("The officer smiles as she recognises your Karamja gloves and lets you pass for half price - 15 coins.");
+    voyage(player, PORT_SARIM_LANDING, TO_PORT_SARIM_ROUTE, "The ship arrives at Port Sarim.", 0);
+    return true;
+  }
+
   function sailToPandemonium(player) {
     if (sailing.has(player)) return;
     if (!payFare(player, FARE)) {
@@ -517,7 +546,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
   }
 
   function travelToPortSarim(event) {
-    if (!searchedForRum(event)) sailToPortSarim(event.player);
+    if (!searchedForRum(event)) payFareToPortSarim(event.player);
   }
 
   function travelFromKaramjaToPandemonium(event) {

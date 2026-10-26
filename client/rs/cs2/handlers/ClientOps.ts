@@ -43,6 +43,9 @@ function normalizeUiZoomPercent(percent: number, minPercent: number): number {
 /** Rev 241 translations_set/clear: key -> text. */
 const TRANSLATIONS = new Map<string, string>();
 
+/** ^gameoption_chat_timestamps: the mode of setting 119 "Chat timestamps" (0 off, 1 server time, 2 local time). */
+const GAMEOPTION_CHAT_TIMESTAMPS = 10;
+
 export function registerClientOps(handlers: HandlerMap): void {
     // === Clock ===
     // clientclock returns Client.cycleCntr (20ms cycles)
@@ -1385,17 +1388,23 @@ export function registerClientOps(handlers: HandlerMap): void {
         ctx.pushInt(value);
     });
 
-    // gameoption_set(optionId, value)
+    // gameoption_set(optionId, value). Option 10 is the chat timestamp mode: proc 4619
+    // (settings_chat_timestamps) stores varbit 12384 there when the setting changes, and the
+    // history ops read it back as chat_gettimestamps.
     handlers.set(Opcodes.GAMEOPTION_SET, (ctx) => {
         const value = ctx.intStack[--ctx.intStackSize];
         const optionId = ctx.intStack[--ctx.intStackSize];
+        if (optionId === GAMEOPTION_CHAT_TIMESTAMPS) ctx.chatTimestampMode = value | 0;
         ctx.setGameOption?.(optionId, value);
     });
 
     // gameoption_get(optionId) -> value
     handlers.set(Opcodes.GAMEOPTION_GET, (ctx) => {
         const optionId = ctx.intStack[--ctx.intStackSize];
-        const value = ctx.getGameOption?.(optionId) ?? 0;
+        const value =
+            optionId === GAMEOPTION_CHAT_TIMESTAMPS
+                ? ctx.chatTimestampMode | 0
+                : (ctx.getGameOption?.(optionId) ?? 0);
         ctx.pushInt(value);
     });
 

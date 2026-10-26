@@ -12,7 +12,7 @@ const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 const Potions = require("../plugins/items/Potions.plugin");
 const { Item } = require("../dist/game/model/Item");
 const { PluginManager } = require("../dist/plugins/PluginManager");
-let combinePotions, emptyVessel, staminaFromHook, core;
+let combinePotions, emptyVessel, staminaFromHook, drinkPotion, core;
 before(async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -21,6 +21,7 @@ before(async () => {
   Potions.register(new Proxy({}, {
     get: (_, key) => key === "core" ? core : (...args) => {
       if (key === "onItemAction") emptyVessel = args[0];
+      if (key === "onItemFirstAction") drinkPotion = args[0];
       if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
       // The Skillcapes plugin answers this; a worn Prayer cape is all these tests need.
       if (key === "emitCustomEvent" && args[0] === "skillcape:has-perk" && args[1].skill === "PRAYER") {
@@ -36,7 +37,7 @@ before(async () => {
 const {
   applyPrayerRestore, applySanfewRestore, applyAncientBrew, applyDivine, processDivine,
   applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration,
-  clearPrayerRegeneration, processBoostDecay, curePoisonAndVenom,
+  clearPrayerRegeneration, processBoostDecay, notePreserveActivated, curePoisonAndVenom,
   pauseTimedEffects, resumeTimedEffects,
 } = Potions._test;
 
@@ -154,12 +155,14 @@ function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] }
   const player = {
     levels,
     attributes,
+    prayerActive: [],
     poisonImmunity,
     poisonDamage: current,
     venomed: current > 0,
     isVenomed() { return this.venomed && this.poisonDamage > 0; },
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
+    getPrayerActive: () => player.prayerActive,
     getInventory: () => ({ contains: (id) => inventory.includes(id) }),
     getEquipment: () => ({ contains: (id) => equipment.includes(id) }),
     getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {}, sendRunEnergy() {} }),
@@ -358,7 +361,7 @@ test("a house tablet goes to the house portal and enters unless Outside was chos
   assert.deepEqual(teleports.map(({ onArrival }) => onArrival?.() ?? null), ["entered", "entered", null]);
 });
 
-test("the minute cycle decays boosts and restores drains one point toward base", () => {
+test("the minute cycle decays boosts one point toward base and leaves drains to the core", () => {
   const player = createPlayer({ base: 99, current: 99 });
   player.levels.set(Skill.ATTACK, 110);
   player.levels.set(Skill.STRENGTH, 90);
@@ -370,9 +373,32 @@ test("the minute cycle decays boosts and restores drains one point toward base",
   player.setAttribute("potions:boost-cycle", Date.now() - 1);
   processBoostDecay(player);
   assert.equal(player.levels.get(Skill.ATTACK), 109, "a boost loses a point");
-  assert.equal(player.levels.get(Skill.STRENGTH), 91, "a drain gains a point");
+  assert.equal(player.levels.get(Skill.STRENGTH), 90, "drains restore on the core's own timer, not a second time here");
   assert.equal(player.levels.get(Skill.PRAYER), 110, "prayer points do not decay");
-  assert.equal(player.levels.get(Skill.HITPOINTS), 110, "hitpoints do not decay");
+  assert.equal(player.levels.get(Skill.HITPOINTS), 110, "hitpoints above base drop on the core's Hitpoints timer");
+});
+
+test("Preserve stretches the boost cycle to 90 seconds once it has been on for 15", () => {
+  const { PrayerHandler } = core;
+  const player = createPlayer({ base: 99, current: 99 });
+  player.levels.set(Skill.ATTACK, 110);
+  player.prayerActive[PrayerHandler.PRESERVE] = true;
+  notePreserveActivated({ player, prayerId: PrayerHandler.PRESERVE });
+  player.setAttribute("potions:preserve-since", Date.now() - 15_000);
+
+  const cycleEnd = Date.now() - 1;
+  player.setAttribute("potions:boost-cycle", cycleEnd);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 110, "the boost holds when the minute ends");
+  assert.equal(player.getAttribute("potions:boost-cycle"), cycleEnd + 30_000, "the cycle runs 30 seconds longer");
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 109, "then the stretched cycle decays it");
+
+  notePreserveActivated({ player, prayerId: PrayerHandler.PRESERVE });
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 108, "Preserve switched on under 15 seconds ago does not stretch it");
 });
 
 test("a divine-timed skill is pinned and only decays after the divine state ends", () => {
@@ -558,6 +584,34 @@ test("the Drunken Dwarf's beer is drinkable and leaves a beer glass", () => {
   assert.equal(player.levels.get(Skill.ATTACK), 43, "the drain uses the current level");
 });
 
+test("drinking beer sends its captured feedback instead of potion completion text", t => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const player = new Player(null);
+  const messages = [];
+  const sender = new Proxy({}, { get: () => () => sender });
+  t.mock.method(player, "getPacketSender", () => sender);
+  t.mock.method(player, "sendMessage", message => messages.push(message));
+  const beer = core.CacheDefinitions.getObjId("beer");
+  const glass = core.CacheDefinitions.getObjId("beer_glass");
+  assert.equal(beer, ItemIdentifiers.BEER);
+  assert.equal(glass, ItemIdentifiers.BEER_GLASS);
+  assert.equal(core.CacheDefinitions.getItem(beer).inventoryActions[0], "Drink");
+  player.getInventory().setItem(0, new Item(beer, 1));
+
+  assert.equal(drinkPotion({ player, itemId: beer, slot: 0 }), true);
+  assert.equal(player.getInventory().getItems()[0].getId(), glass);
+  assert.deepEqual(messages, [
+    "You drink the beer. You feel slightly reinvigorated...",
+    "...and slightly dizzy too.",
+  ]);
+
+  // A blocked repeat must neither consume another beer nor repeat success feedback.
+  player.getInventory().setItem(1, new Item(beer, 1));
+  drinkPotion({ player, itemId: beer, slot: 1 });
+  assert.equal(player.getInventory().getItems()[1].getId(), beer);
+  assert.equal(messages.length, 2);
+});
+
 test("Moonlight mead and Slayer's respite match the Wiki", () => {
   const mead = createPlayer({ base: 99, current: 50 });
   Potions._test.findPotionEntry(ItemIdentifiers.MOONLIGHT_MEAD).potion.effect(mead);
@@ -575,11 +629,8 @@ test("Moonlight mead and Slayer's respite match the Wiki", () => {
   assert.equal(matureRespite.levels.get(Skill.SLAYER), 103, "+4 Slayer");
 });
 
-test("Overload needs more than 50 Hitpoints and a Saradomin brew may over-heal", () => {
-  const overload = Potions._test.findPotionEntry(ItemIdentifiers.OVERLOAD_4_);
-  assert.equal(overload.potion.canUse(createPlayer({ base: 99, current: 50 })), false);
-  assert.equal(overload.potion.canUse(createPlayer({ base: 99, current: 51 })), true);
-
+// Nightmare Zone's overload (and its 51 Hitpoints) is tested in nightmare-zone.test.cjs.
+test("a Saradomin brew may over-heal", () => {
   const brewed = createPlayer({ base: 99, current: 50 });
   Potions._test.findPotionEntry(ItemIdentifiers.SARADOMIN_BREW_4_).potion.effect(brewed);
   assert.equal(brewed.levels.get(Skill.HITPOINTS), 50 + Math.floor(2 + 99 * 0.15), "the brew may heal over max");

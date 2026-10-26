@@ -32,10 +32,6 @@ function disconnect({ player }) {
   Anvil.forget(player);
 }
 
-function levelUpPopup({ player }) {
-  Sessions.stop(player, false);
-}
-
 function startBotSmelting(player, recipe, amount) {
   return Smelting.startSmelting(player, recipe, amount);
 }
@@ -58,7 +54,7 @@ module.exports = {
   register(api) {
     Core.init(api);
     api.onPlayerDisconnect(disconnect);
-    api.onCustomEvent("level-up:popup-opened", levelUpPopup);
+    api.onCustomEvent("level-up:popup-opened", Sessions.pause);
     api.onItemOnObject(useItemOnObject, { noted: false });
     Sessions(api);
     Smelting(api);

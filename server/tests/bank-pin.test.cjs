@@ -421,3 +421,163 @@ test('a bond asks for a locked PIN before its Redeem options', () => {
   tick();
   assert.equal(prompts, 1, 'the options after the PIN');
 });
+
+function farmingStorage(t, { pin = true } = {}) {
+  const Guard = require('../plugins/interface/bankpin/Guard.BankPin');
+  require('../plugins/skills/farming/Core.Farming').init({ core });
+  const Patches = require('../plugins/skills/farming/Patches.Farming');
+  const Guild = require('../plugins/skills/farming/Guild.Farming');
+  const Services = require('../plugins/skills/farming/Services.Farming');
+  require('../plugins/skills/farming/Data.Farming').initializeFarmingData();
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const owner = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  owner.getPacketSender = () => sender;
+  const inventory = owner.getInventory();
+  const player = pin ? withPin('2468') : fakePlayer();
+  let location = new core.Location(1240, 3720, 0);
+  player.getLocation = () => location;
+  player.getInventory = () => inventory;
+  const target = { getLocation: () => new core.Location(1241, 3720, 0) };
+  const menus = [], features = [];
+  t.mock.method(Patches, 'choose', (_, entries) => menus.push(entries));
+  t.mock.method(core.PluginManager, 'emitCustomEvent', (name, request) => {
+    if (name === 'bank-pin:guard') { features.push(request.feature); Guard.guard(request); }
+  });
+  const vault = () => Guild.guildObject({ player, object: target, definition: { getName: () => 'Seed Vault' } });
+  const leprechaun = action => Services.farmingNpc({ player, npc: target, clickType: 1,
+    definition: { getName: () => 'Tool Leprechaun', getActions: () => [action] } });
+  const spade = core.ItemIdentifiers.SPADE;
+  const useTool = (itemId = spade) => Services.farmingItemOnNpc({ player, target, itemId, slot: 0,
+    definition: { getName: () => 'Tool Leprechaun' } });
+  return { player, inventory, Patches, Services, target, menus, features, vault, leprechaun, useTool, spade,
+    leave: () => { location = new core.Location(3200, 3200, 0); } };
+}
+
+test('Seed Vault asks for the real PIN before creating storage and resumes after entry', t => {
+  const f = farmingStorage(t);
+  f.vault();
+  assert.equal(f.player.interface, 213);
+  assert.equal(f.player.getAttribute(f.Patches.FARM_ATTRIBUTE), undefined);
+  assert.equal(f.menus.length, 0);
+  assert.deepEqual(f.features, ['seed-vault']);
+  enter(f.player, '2468');
+  assert.equal(f.menus.length, 0);
+  tick();
+  assert.equal(f.menus.length, 1);
+  f.vault();
+  assert.equal(f.menus.length, 2, 'the unlocked session is reusable');
+});
+
+for (const action of ['Exchange', 'Deposit-all']) test(`Tool Leprechaun ${action} waits for the PIN`, t => {
+  const f = farmingStorage(t);
+  f.inventory.add(new core.Item(f.spade), false);
+  f.leprechaun(action);
+  assert.equal(f.player.interface, 213);
+  assert.equal(f.player.getAttribute(f.Patches.FARM_ATTRIBUTE), undefined);
+  assert.equal(f.inventory.getAmount(f.spade), 1);
+  assert.deepEqual(f.features, ['tool-leprechaun']);
+  enter(f.player, '2468');
+  tick();
+  if (action === 'Deposit-all') {
+    assert.equal(f.inventory.getAmount(f.spade), 0);
+    assert.equal(f.Patches.farmFor(f.player).tools[f.spade], 1);
+  } else assert.match(f.player.messages.at(-1), /Use farming tools/);
+});
+
+test('using a tool on the leprechaun cannot bypass the PIN', t => {
+  const f = farmingStorage(t);
+  f.inventory.add(new core.Item(f.spade), false);
+  f.useTool();
+  assert.equal(f.player.interface, 213);
+  assert.equal(f.inventory.getAmount(f.spade), 1);
+  enter(f.player, '2468');
+  tick();
+  assert.equal(f.inventory.getAmount(f.spade), 0);
+  assert.equal(f.Patches.farmFor(f.player).tools[f.spade], 1);
+});
+
+for (const action of ['vault', 'leprechaun', 'useTool']) test(`PIN resume rechecks proximity for ${action}`, t => {
+  const f = farmingStorage(t);
+  f.inventory.add(new core.Item(f.spade), false);
+  if (action === 'leprechaun') f.leprechaun('Deposit-all'); else f[action]();
+  assert.equal(f.player.interface, 213);
+  f.leave();
+  enter(f.player, '2468');
+  tick();
+  assert.equal(f.menus.length, 0);
+  assert.equal(f.inventory.getAmount(f.spade), 1);
+  assert.equal(f.player.getAttribute(f.Patches.FARM_ATTRIBUTE), undefined);
+});
+
+test('a changed inventory slot is not deposited by a delayed PIN resume', t => {
+  const f = farmingStorage(t);
+  f.inventory.add(new core.Item(f.spade), false);
+  f.useTool();
+  assert.equal(f.player.interface, 213);
+  f.inventory.deleteAtSlot(0, 1, false);
+  f.inventory.add(new core.Item(core.ItemIdentifiers.RAKE), false);
+  enter(f.player, '2468');
+  tick();
+  assert.equal(f.inventory.getAmount(core.ItemIdentifiers.RAKE), 1);
+  assert.equal(f.player.getAttribute(f.Patches.FARM_ATTRIBUTE), undefined);
+});
+
+test('a farmer without a PIN can access both stores normally', t => {
+  const f = farmingStorage(t, { pin: false });
+  f.vault();
+  assert.equal(f.menus.length, 1);
+  f.inventory.add(new core.Item(f.spade), false);
+  f.leprechaun('Deposit-all');
+  assert.equal(f.inventory.getAmount(f.spade), 0);
+  assert.equal(f.Patches.farmFor(f.player).tools[f.spade], 1);
+});
+
+test('Seed Vault transfers happen only after the correct PIN', t => {
+  const f = farmingStorage(t), id = core.ItemIdentifiers.POTATO_SEED;
+  f.inventory.add(new core.Item(id, 6), false);
+  f.vault();
+  enter(f.player, '1357');
+  tick(2);
+  assert.equal(f.menus.length, 0);
+  assert.equal(f.inventory.getAmount(id), 6);
+  f.vault();
+  enter(f.player, '2468');
+  tick();
+  f.menus[0][0][1]();
+  assert.equal(f.inventory.getAmount(id), 0);
+  assert.equal(f.Patches.farmFor(f.player).vault[id], 6);
+  f.vault();
+  f.menus[1][1][1]();
+  f.menus[2][0][1]();
+  assert.equal(f.inventory.getAmount(id), 1);
+  assert.equal(f.Patches.farmFor(f.player).vault[id], 5);
+});
+
+test('produce noting does not access stored tools or prompt for a PIN', t => {
+  const f = farmingStorage(t), id = core.ItemIdentifiers.POTATO;
+  const note = core.CacheDefinitions.getItem(id).note;
+  f.inventory.add(new core.Item(id, 3), false);
+  f.Services.farmingItemOnNpc({ player: f.player, target: f.target, itemId: id, slot: 0,
+    definition: { getName: () => 'Tool Leprechaun' } });
+  assert.deepEqual(f.features, []);
+  assert.equal(f.inventory.getAmount(id), 0);
+  assert.equal(f.inventory.getAmount(note), 3);
+  assert.equal(Common.isUnlocked(f.player), false);
+});
+
+test('every ordinary watering-can state requires a PIN before a tool deposit', t => {
+  const Data = require('../plugins/skills/farming/Data.Farming');
+  for (const name of ['Watering can', ...Array.from({ length: 8 }, (_, i) => `Watering can(${i + 1})`)]) {
+    const f = farmingStorage(t), id = Data.itemId(name);
+    f.inventory.add(new core.Item(id), false);
+    f.useTool(id);
+    assert.equal(f.player.interface, 213, name);
+    assert.equal(f.inventory.getAmount(id), 1, name);
+    assert.equal(f.player.getAttribute(f.Patches.FARM_ATTRIBUTE), undefined, name);
+    enter(f.player, '2468');
+    tick();
+    assert.equal(f.inventory.getAmount(id), 0, name);
+    assert.equal(f.Patches.farmFor(f.player).tools[id], 1, name);
+  }
+});

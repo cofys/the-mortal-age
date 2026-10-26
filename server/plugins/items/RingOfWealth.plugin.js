@@ -112,8 +112,28 @@ function teleport(player, event, item, destination) {
   if (!TeleportHandler.checkReqs(player, destination, 30)) {
     return;
   }
-  consumeCharge(player, item);
-  TeleportHandler.teleport(player, destination, TeleportType.NORMAL, false);
+  // The charge goes on arrival, like the other teleport jewellery (Jewellery.plugin.js).
+  const ringId = item.getId();
+  TeleportHandler.teleport(player, destination, TeleportType.NORMAL, false, () => {
+    const ring = findRing(player, item, ringId);
+    if (ring) consumeCharge(player, ring);
+  });
+}
+
+/**
+ * The carried ring on arrival: this object, or else one with the id it had when the teleport
+ * started (moving it between the inventory and equipment can replace the object).
+ */
+function findRing(player, item, ringId) {
+  const containers = [player.getEquipment(), player.getInventory()];
+  for (const container of containers) {
+    if (container.getItems().includes(item)) return item;
+  }
+  for (const container of containers) {
+    const ring = container.getItems().find((other) => other?.getId?.() === ringId);
+    if (ring) return ring;
+  }
+  return null;
 }
 
 function recharge(player, item) {

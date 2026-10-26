@@ -1,0 +1,37 @@
+{
+  "_comment": "aide_signpost_1 (18493) by the tile it stands on: each side's text in interface aide_compass, as recorded (rsprox 229/02346, 223/01318).",
+  "signposts": [
+    {
+      "where": "West of the Lumbridge bridge",
+      "x": 3235, "y": 3228, "z": 0,
+      "north": "Head north towards Fred's farm and the windmill.",
+      "east": "Cross the bridge and head east to Al Kharid or north to Varrock.",
+      "south": "South to the swamps of Lumbridge.",
+      "west": "West to the Lumbridge Castle and Draynor Village. Beware the goblins!"
+    },
+    {
+      "where": "East of the Lumbridge bridge",
+      "x": 3261, "y": 3230, "z": 0,
+      "north": "North to farms and Varrock.",
+      "east": "East to Al Kharid - toll gate; bring some money.",
+      "south": "The River Lum lies to the south.",
+      "west": "West to Lumbridge."
+    },
+    {
+      "where": "Draynor crossroads",
+      "x": 3107, "y": 3296, "z": 0,
+      "north": "North to Draynor Manor.",
+      "east": "East to Lumbridge.",
+      "south": "South to Draynor Village and the Wizards' Tower.",
+      "west": "West to Port Sarim, Falador and Rimmington."
+    },
+    {
+      "where": "South Falador crossroads, east of the Crafting Guild",
+      "x": 2983, "y": 3278, "z": 0,
+      "north": "North to the glorious White Knights' city of Falador.",
+      "east": "Follow the path east to Port Sarim and Draynor Village.",
+      "south": "Follow the path south to Rimmington.",
+      "west": "Follow the path west to the Crafting Guild."
+    }
+  ]
+}

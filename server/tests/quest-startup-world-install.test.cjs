@@ -18,7 +18,7 @@ const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager
 const WORLD_INSTALLER_QUESTS = [
   'BeneathCursedSands', 'CrabQuest', 'CurseOfArrav', 'DeathToTheDorgeshuun', 'DefenderOfVarrock',
   'EaglesPeak', 'EyesOfGlouphrie', 'GrimTales', 'InAidOfTheMyreque', 'Pandemonium',
-  'PerilousMoons', 'PryingTimes', 'SecretsOfTheNorth', 'SwanSong', 'TempleOfTheEye', 'WhatLiesBelow',
+  'PerilousMoons', 'PryingTimes', 'SecretsOfTheNorth', 'SwanSong', 'WhatLiesBelow',
 ];
 
 /** The real plugin api, except that hook registrations are captured instead of installed. */
@@ -65,3 +65,10 @@ for (const quest of WORLD_INSTALLER_QUESTS) {
     assert.equal(countRegistrations(startup), 0, `${quest} installed its world objects twice`);
   });
 }
+
+test('TempleOfTheEye leaves its earned owner-only portal out of global world installation', () => {
+  const { api, hooks } = capturingApi();
+  assert.equal(countRegistrations(() => require('../plugins/quests/quests/TempleOfTheEye.Quest')(api)), 0);
+  const startup = () => { for (const handler of hooks.onServerStartup ?? []) handler({ timestamp: Date.now() }); };
+  assert.equal(countRegistrations(startup), 0, 'the portal is created only for its player after the captured chant');
+});

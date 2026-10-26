@@ -4,7 +4,7 @@
  * "Pick" takes one banana and steps the tree down a stage: 2073 (full) -> 2074 -> 2075
  * -> 2076 -> 2077 -> 2078 (empty, "Search"). The tree reverts to the stage it was
  * spawned at 500 ticks (5 minutes) after the most recent pick.
- * Messages and timing follow Lost City's banana_tree.rs2 (oploc1,_banana_tree).
+ * Successful picks play Sound.PICK with the reward (rsprox recording 4287).
  */
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
@@ -58,7 +58,7 @@ class BananaTreeRegrowTask extends Task {
   }
 }
 
-function pickBanana(event) {
+function pickBanana(api, event) {
   const { player, object } = event;
   const id = object?.getId?.();
   if (!(id >= FULL_TREE_ID && id < EMPTY_TREE_ID)) return false;
@@ -77,6 +77,7 @@ function pickBanana(event) {
   const stage = replaceTree(object, id + 1);
   TaskManager.submit(new BananaTreeRegrowTask(key, state.generation, stage));
 
+  api.core.Sounds.sendSound(player, api.core.Sound.PICK);
   player.getInventory().adds(ItemIdentifiers.BANANA, 1);
   player.sendMessage("You pick a banana.");
   return true;
@@ -94,6 +95,6 @@ module.exports = {
   register(api) {
     ObjectManager = api.getObjectManager();
     TaskManager = api.getTaskManager();
-    api.onObjectInteraction("Banana tree", { Pick: pickBanana, Search: searchEmptyTree });
+    api.onObjectInteraction("Banana tree", { Pick: pickBanana.bind(null, api), Search: searchEmptyTree });
   },
 };

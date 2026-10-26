@@ -102,6 +102,7 @@ type ClientToServer =
           type: "chat_filter";
           payload: { publicMode: number; privateMode: number; tradeMode: number };
       }
+    | { type: "report_abuse"; payload: { name: string; ruleId: number; mute: boolean } }
     | { type: "smithing_make"; payload: { recipeId: string; mode: string } }
     | { type: "smithing_mode"; payload: { mode: number; custom?: number } }
     | { type: "inventory_use_on"; payload: Record<string, unknown> }

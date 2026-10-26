@@ -10,25 +10,50 @@ Server.installProductionPathResolver();
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const { TimerRepository } = require('../dist/util/timers/TimerRepository');
+const Food = require('../plugins/items/Food.plugin');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PrayerHandler } = require('../dist/game/content/PrayerHandler');
+const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+const { PvpCombatExecutionNode } = require('../plugins/bots/behaviours/nodes/pvp/PvpCombatExecutionNode.PlayerBots');
+const Potions = require('../plugins/items/Potions.plugin');
+let core, eatFood, drinkPotion;
 
 // The bots ask the Food plugin what is food, and it reads item names from the cache.
 before(async () => {
   await CachePipeline.initialize();
-  require('../plugins/items/Food.plugin').register({
-    core: PluginManager.getCoreApi(), persistAttribute() {}, onPlayerLogin() {}, onItemAction() {},
+  core = { ...PluginManager.getCoreApi(), ItemActionPacketListener: {
+    handleAction(player, interfaceId, itemId, slot) {
+      if (Food.isFoodItem(itemId)) eatFood({ player, interfaceId, itemId, slot, clickType: 1 });
+      else drinkPotion({ player, interfaceId, itemId, slot, clickType: 1 });
+      return true;
+    },
+  } };
+  Food.register({
+    core, persistAttribute() {}, onPlayerLogin() {},
+    onItemAction: handler => { eatFood = handler; },
+    emitCanEat: player => player.canEat !== false,
+    emitCustomEvent() {},
   });
+  Potions.register(new Proxy({
+    core,
+    onItemFirstAction: handler => { drinkPotion = handler; },
+    emitCanDrink: player => player.canDrink !== false,
+    emitCanEat: player => player.canEat !== false,
+    emitCustomEvent() {},
+  }, { get: (object, key) => object[key] ?? (() => {}) }));
 });
 
 const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/actions/EatFoodActionNode.PlayerBots.js');
 const localRequire = createRequire(filename);
 
-function loadNode() {
+function loadNode(comboEatChance) {
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), {
     module,
     require: (name) => {
       if (name.endsWith('/PvpAssignment.PlayerBots')) {
-        return { getPvpProfile: () => ({ id: 'standard', foodCharges: 10, eatAtHpRatio: 0.45, comboEatChance: 0 }) };
+        return { getPvpProfile: () => ({ id: 'standard', foodCharges: 10, eatAtHpRatio: 0.45, comboEatChance }) };
       }
       if (name.endsWith('/state/State.PlayerBots')) return {
         computeEatThreshold: (maxHp, ratio, f2p) =>
@@ -41,26 +66,38 @@ function loadNode() {
   return module.exports;
 }
 
-function buildHarness() {
+function buildHarness(comboEatChance = 0) {
   let hp = 30;
   let target = {};
   let attacker = null;
   let following = null;
   let foodItems = [];
-  const combat = { getTarget: () => target, getAttacker: () => attacker, delayAttack: () => {} };
+  const timers = new TimerRepository();
+  const delays = [];
+  const attributes = new Map();
+  const combat = { getTarget: () => target, getAttacker: () => attacker, delayAttack: ticks => delays.push(ticks) };
   const player = {
-    getSkillManager: () => ({ getCurrentLevel: () => hp, getMaxLevel: () => 60 }),
+    getSkillManager: () => ({ getCurrentLevel: () => hp, getMaxLevel: () => 60, stopSkillable() {} }),
     getCombat: () => combat,
     getCombatFollowing: () => following,
     getInventory: () => ({
+      capacity: () => 28,
       getItems: () => foodItems,
-      deleteAtSlot: (slot) => { foodItems[slot] = null; },
+      deleteAtSlot: (slot) => {
+        const item = foodItems[slot];
+        if ((item.getAmount?.() ?? 1) > 1) item.setAmount(item.getAmount() - 1);
+        else foodItems[slot] = null;
+      },
       refreshItems: () => {},
     }),
-    getTimers: () => ({ has: () => false, extendOrRegister: () => {} }),
-    getPacketSender: () => ({ sendInterfaceRemoval: () => {} }),
+    getTimers: () => timers,
+    getPacketSender: () => ({ sendInterfaceRemoval() {}, sendConfig() {} }),
     performAnimation: () => {},
-    heal: (amount) => { hp += amount; },
+    setHitpoints: value => { hp = value; },
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    isPlayerBot: () => true,
+    sendMessage() {},
     getUsername: () => 'f2p-test',
   };
   const state = {
@@ -73,13 +110,15 @@ function buildHarness() {
       f2pFoodPendingHp: null,
     },
   };
-  const node = new (loadNode().EatFoodActionNode)(null, { log: () => {} }, {});
+  const node = new (loadNode(comboEatChance).EatFoodActionNode)(null, { core, log: () => {} }, {});
   return {
     setHp: (value) => { hp = value; },
     getHp: () => hp,
     setFood: (count) => { foodItems = Array.from({ length: count }, () => ({ getId: () => ItemIdentifiers.SHARK })); },
     engage: (value) => { target = value ? {} : null; attacker = null; following = null; },
     tick: () => node.tick({ player, state, nowMs: 1000 }),
+    player, timers, delays,
+    setItems: ids => { foodItems = ids.map(id => new core.Item(id, 1)); },
     state,
   };
 }
@@ -130,9 +169,173 @@ test('PvP bots consume actual remaining food after virtual charges run out', () 
   assert.equal(h.tick(), 'success', 'real meals are usable despite a stale counter');
   assert.equal(h.state.virtualFoodChargesRemaining, 1);
   h.setHp(20);
+  h.timers.cancel(core.TimerKey.FOOD);
   assert.equal(h.tick(), 'success', 'the last real meal is usable with a consumed empty slot');
   assert.ok(h.getHp() > 20, 'the final meal heals the bot');
   assert.equal(h.state.virtualFoodChargesRemaining, 0, 'the remaining supply now matches the empty inventory');
   h.setHp(20);
   assert.equal(h.tick(), 'failure', 'no food is invented after the last real meal');
+});
+
+
+test('low HP reacts with a real shark and karambwan in one turn, preserving food cooldowns and delays', () => {
+  const h = buildHarness(1);
+  h.state.pvp.loadoutId = 'edge_main_melee';
+  h.setHp(5);
+  h.setItems([ItemIdentifiers.COOKED_KARAMBWAN, ItemIdentifiers.SHARK]);
+  assert.equal(h.tick(), 'success');
+  assert.equal(h.getHp(), 43, 'shark heals 20 and karambwan 18');
+  assert.deepEqual(h.delays, [3, 2], 'normal food then combo food uses the real attack delays');
+  assert.equal(h.state.pvp.lastComboEatAt, 1000);
+  assert.equal(h.state.virtualFoodChargesRemaining, 0);
+  assert.ok(h.timers.has(core.TimerKey.KARAMBWAN));
+});
+
+test('two normal foods cannot be combo eaten, and eating permissions/cooldowns still apply', () => {
+  const h = buildHarness(1);
+  h.state.pvp.loadoutId = 'edge_main_melee';
+  h.setHp(5);
+  h.setFood(2);
+  h.player.canEat = false;
+  assert.equal(h.tick(), 'failure');
+  assert.equal(h.getHp(), 5);
+  h.player.canEat = true;
+  assert.equal(h.tick(), 'success');
+  assert.equal(h.getHp(), 25);
+  assert.equal(h.state.virtualFoodChargesRemaining, 1);
+  assert.equal(h.tick(), 'failure', 'a second shark must wait for the food timer');
+  assert.equal(h.state.virtualFoodChargesRemaining, 1);
+});
+
+test('a combo food can save a low-HP bot while normal food is on cooldown', () => {
+  const h = buildHarness(0);
+  h.state.pvp.loadoutId = 'edge_main_melee';
+  h.setHp(5);
+  h.setItems([ItemIdentifiers.SHARK, ItemIdentifiers.COOKED_KARAMBWAN]);
+  h.timers.extendOrRegister(core.TimerKey.FOOD, 3);
+  assert.equal(h.tick(), 'success');
+  assert.equal(h.getHp(), 23);
+  assert.deepEqual(h.delays, [2]);
+  assert.equal(h.state.virtualFoodChargesRemaining, 1);
+});
+
+
+function prayerHarness({ prayer = 99, defence = 99, confidenceTier = 2 } = {}) {
+  const player = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.sendMessage = () => {};
+  player.isPlayerBot = () => true;
+  const skills = player.getSkillManager();
+  for (const [skill, level] of [[core.Skill.PRAYER, prayer], [core.Skill.DEFENCE, defence], [core.Skill.HITPOINTS, 99]]) {
+    skills.setMaxLevels(skill, level, false);
+    skills.setCurrentLevel(skill, level, false);
+  }
+  const profile = { confidenceTier, prayerReviewMs: { min: 600, max: 600 } };
+  const node = new PvpCombatExecutionNode({ api: {
+    core,
+    getCombatFactory: () => core.CombatFactory,
+    getPrayerHandler: () => PrayerHandler,
+    getServerPerf: () => ({ measurePhase: (_, fn) => fn() }),
+  }, getProfile: () => profile });
+  const state = { pvp: { preferredCombatStyle: 'melee' } };
+  const target = { getUsername: () => 'opponent' };
+  node.resolveObservedTargetCombatType = () => core.CombatType.MELEE;
+  node.resolveProtectionPrayer = () => PrayerHandler.PROTECT_FROM_MELEE;
+  return { player, skills, node, state, target, profile,
+    review() { return node.reviewPrayers(player, state, target, 1000, profile); } };
+}
+
+test('Protect Item is a stable 40/50 percent engagement choice and considers valuable inventory items', t => {
+  t.mock.method(Math, 'random', () => 0.45);
+  const original = ItemDefinition.forId.bind(ItemDefinition);
+  t.mock.method(ItemDefinition, 'forId', id => id === ItemIdentifiers.DRAGON_WARHAMMER
+    ? { getGrandExchangeValue: () => 4_000_000 } : original(id));
+  const ordinary = prayerHarness();
+  ordinary.node.reviewItemProtection(ordinary.player, ordinary.state, ordinary.target);
+  assert.equal(ordinary.state.pvp.protectItemWanted, false);
+  const valuable = prayerHarness();
+  valuable.player.getInventory().setItem(0, new core.Item(ItemIdentifiers.DRAGON_WARHAMMER));
+  valuable.node.reviewItemProtection(valuable.player, valuable.state, valuable.target);
+  assert.equal(valuable.player.getPrayerActive()[PrayerHandler.PROTECT_ITEM], true);
+  t.mock.method(Math, 'random', () => 0);
+  ordinary.node.reviewItemProtection(ordinary.player, ordinary.state, ordinary.target);
+  assert.equal(ordinary.state.pvp.protectItemWanted, false, 'failed rolls are not repeated each tick');
+});
+
+test('Protect Item respects Prayer level, depleted points and red skull restrictions, including novices', t => {
+  t.mock.method(Math, 'random', () => 0);
+  for (const prayer of [24, 25]) {
+    const f = prayerHarness({ prayer, confidenceTier: 1 });
+    f.review();
+    assert.equal(f.player.getPrayerActive()[PrayerHandler.PROTECT_ITEM] === true, prayer >= 25);
+  }
+  const drained = prayerHarness();
+  drained.skills.setCurrentLevel(core.Skill.PRAYER, 0, false);
+  drained.node.reviewItemProtection(drained.player, drained.state, drained.target);
+  assert.equal(drained.player.getPrayerActive()[PrayerHandler.PROTECT_ITEM] === true, false);
+  drained.skills.setCurrentLevel(core.Skill.PRAYER, 10, false);
+  drained.node.reviewItemProtection(drained.player, drained.state, drained.target);
+  assert.equal(drained.player.getPrayerActive()[PrayerHandler.PROTECT_ITEM], true, 'restoring prayer re-enables the cached item-protection choice');
+  const redSkull = prayerHarness();
+  redSkull.player.setSkullTimer(100);
+  redSkull.player.setSkullType(core.SkullType.RED_SKULL);
+  redSkull.node.reviewItemProtection(redSkull.player, redSkull.state, redSkull.target);
+  assert.equal(redSkull.player.getPrayerActive()[PrayerHandler.PROTECT_ITEM] === true, false);
+});
+
+test('bots choose unlocked style prayers and retain Piety alongside Smite', () => {
+  for (const [combatType, expected] of [[core.CombatType.MELEE, PrayerHandler.PIETY],
+    [core.CombatType.RANGED, PrayerHandler.RIGOUR], [core.CombatType.MAGIC, PrayerHandler.AUGURY]]) {
+    const f = prayerHarness();
+    f.player.getWeapon = () => combatType === core.CombatType.RANGED ? core.WeaponInterfaces.SHORTBOW
+      : combatType === core.CombatType.MAGIC ? core.WeaponInterfaces.STAFF : core.WeaponInterfaces.UNARMED;
+    f.review();
+    assert.equal(f.player.getPrayerActive()[expected], true);
+  }
+  const smiter = prayerHarness();
+  smiter.node.shouldSmite = () => true;
+  smiter.review();
+  assert.equal(smiter.player.getPrayerActive()[PrayerHandler.SMITE], true);
+  assert.equal(smiter.player.getPrayerActive()[PrayerHandler.PIETY], true);
+  smiter.node.shouldSmite = () => false;
+  smiter.review();
+  assert.equal(smiter.player.getPrayerActive()[PrayerHandler.SMITE], false);
+  assert.equal(smiter.player.getPrayerActive()[PrayerHandler.PROTECT_FROM_MELEE], true);
+});
+
+test('low prayer consumes real restore doses, obeys potion cooldowns and does not invent supplies', () => {
+  for (const key of ['SUPER_RESTORE_4_', 'PRAYER_POTION_4_', 'SANFEW_SERUM_4_']) {
+    const f = prayerHarness();
+    f.skills.setCurrentLevel(core.Skill.PRAYER, 10, false);
+    f.player.getInventory().setItem(0, new core.Item(ItemIdentifiers[key]));
+    assert.equal(f.node.drinkPrayerPotion(f.player), true, key);
+    assert.ok(f.skills.getCurrentLevel(core.Skill.PRAYER) > 10);
+    assert.notEqual(f.player.getInventory().getItems()[0].getId(), ItemIdentifiers[key], 'one dose was consumed');
+    const after = f.skills.getCurrentLevel(core.Skill.PRAYER);
+    assert.equal(f.node.drinkPrayerPotion(f.player), false, 'potion cooldown blocks the next sip');
+    assert.equal(f.skills.getCurrentLevel(core.Skill.PRAYER), after);
+  }
+  const full = prayerHarness();
+  full.player.getInventory().setItem(0, new core.Item(ItemIdentifiers.SUPER_RESTORE_4_));
+  assert.equal(full.node.drinkPrayerPotion(full.player), false, 'healthy prayer does not waste a restore');
+  const empty = prayerHarness();
+  empty.skills.setCurrentLevel(core.Skill.PRAYER, 0, false);
+  assert.equal(empty.node.drinkPrayerPotion(empty.player), false, 'no supplies means no free prayer');
+  empty.player.getInventory().setItem(0, new core.Item(ItemIdentifiers.SUPER_RESTORE_4_));
+  empty.player.canDrink = false;
+  assert.equal(empty.node.drinkPrayerPotion(empty.player), false, 'area potion bans preserve the dose');
+  assert.equal(empty.skills.getCurrentLevel(core.Skill.PRAYER), 0);
+});
+
+
+test('a stacked food decrement is recognised as a successful eat', () => {
+  const h = buildHarness();
+  h.state.pvp.loadoutId = 'edge_main_melee';
+  h.setHp(5);
+  h.setItems([ItemIdentifiers.PURPLE_SWEETS]);
+  h.player.getInventory().getItems()[0].setAmount(3);
+  assert.equal(h.tick(), 'success');
+  assert.equal(h.player.getInventory().getItems()[0].getAmount(), 2);
+  assert.equal(h.state.virtualFoodChargesRemaining, 1, 'the occupied food slot remains available');
 });

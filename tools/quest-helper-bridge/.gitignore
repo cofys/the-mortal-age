@@ -1,0 +1,5 @@
+build/
+.gradle/
+*.log
+coverage-*.json
+quest-helper-upstream/

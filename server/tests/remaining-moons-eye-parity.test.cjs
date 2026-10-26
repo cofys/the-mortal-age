@@ -26,10 +26,10 @@ before(async () => { await CachePipeline.initialize(path.resolve(__dirname, '..'
 function harness(name) {
   const hooks = {}, events = {}, tasks = [], areas = [], npcs = [], removed = [], objects = [], ground = [], clicks = new Map(), buttons = new Map(), namedNpcs = new Map(), namedObjects = new Map(), persisted = new Map();
   const objectManager = { register: object => objects.push(object), deregister: object => { const i = objects.indexOf(object); if (i >= 0) objects.splice(i, 1); } };
-  const api = new Proxy({ core: { ...core, World: { ...core.World, getNpcsNear: () => npcs }, TaskManager: {
+  const api = new Proxy({ core: { ...core, ObjectManager: objectManager, World: { ...core.World, getNpcsNear: () => npcs }, TaskManager: {
     submit(task) { task.setRunning(true); tasks.push(task); },
     cancelTasks(key) { tasks.filter(task => task.key === key).forEach(task => task.stop()); },
-  }, ObjectManager: { register: object => objects.push(object), deregister: noop } },
+  } },
     registerArea: area => areas.push(area),
     getObjectManager: () => objectManager,
     getItemOnGroundManager: () => ({ registerLocation: (...args) => ground.push(args) }),
@@ -46,8 +46,11 @@ function harness(name) {
       let location = new core.Location(definition.x, definition.y, definition.z), area = null;
       const npc = { ...definition, animations: [], graphics: [], getId: () => definition.id, getIndex: () => npc.index,
         index: nextIndex++, setForceMovement: movement => { npc.forceMovement = movement; }, getLocation: () => location, moveTo: to => { location = to; },
-        getArea: () => area, setArea: value => { area = value; }, isNpc: () => true, isPlayer: () => false, getAsNpc: () => npc,
-        isRegistered: () => !npc.removed, setPositionToFace: noop, forceChat: text => { npc.said = text; },
+        getArea: () => area, getPrivateArea: () => area, setArea: value => { area = value; },
+        getCurrentDefinition: () => core.NpcDefinition.forId(definition.id), isVisible: () => true,
+        isOwnerOnly: () => definition.ownerOnly === true,
+        isNpc: () => true, isPlayer: () => false, getAsNpc: () => npc,
+        isRegistered: () => !npc.removed, setPositionToFace: noop, faceTile: tile => { npc.facing = tile; return npc; }, forceChat: text => { npc.said = text; },
         performAnimation: animation => npc.animations.push(animation.getId()), performGraphic: graphic => npc.graphics.push(graphic.id),
         getMovementQueue: () => ({ reset() { return this; }, addSteps: to => { npc.walkingTo = to; } }),
         exactMove: (to, options) => { npc.exact = options; location = to; },
@@ -66,8 +69,8 @@ function harness(name) {
   const h = { api, hooks, events, tasks, areas, npcs, removed, objects, ground, clicks, buttons, namedNpcs, namedObjects, persisted, quest: runtime.getRegisteredQuests().at(-1),
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
     variant(p, npcId) { return (hooks.onNpcDialogueVariant ?? []).map(fn => fn({ player: p, npcId })).find(Boolean); },
-    talk(p, npcId) { p.prompt = null; const choice = h.variant(p, npcId); assert.ok(choice, `no variant for ${npcId}`); runtime.startTranscript(api, p, npcId, typeof choice === 'string' ? h.quest.name : choice.page, typeof choice === 'string' ? choice : choice.variant); },
-    line(p, npcId, text) { const event = { player: p, npcId, text }; h.emit('npc-dialogue:line', event); return event; },
+    talk(p, npcId, npc = null) { p.prompt = null; const choice = h.variant(p, npcId); assert.ok(choice, `no variant for ${npcId}`); runtime.startTranscript(api, p, npcId, typeof choice === 'string' ? h.quest.name : choice.page, typeof choice === 'string' ? choice : choice.variant, undefined, npc); },
+    line(p, npcId, text, step = undefined) { const event = { player: p, npcId, text, step }; h.emit('npc-dialogue:line', event); return event; },
     action(p, npcId, stepId) { const event = { player: p, npcId, stepId }; h.emit('npc-dialogue:action', event); return event; },
     object(p, objectId, location, clickType = 1, actions = ['Pass-through']) {
       const event = { player: p, objectId, location: new core.Location(location.x, location.y, location.z), clickType, definition: { getInteractions: () => actions } };
@@ -137,8 +140,97 @@ test('Temple of the Eye accepts, declines and recovers; real stage scale and amu
   assert.equal(p.attrs.get('temple-of-the-eye:declined'), 0);
 });
 
+test('Temple of the Eye stage-90 chant binds the captured owner-only scene cast', () => {
+  const h = harness('TempleOfTheEye'), p = player();
+  h.quest.setStage(p, 85);
+  h.action(p, N.ARCHMAGE_SEDRIDOR_2, 'DLPFdT');
+  assert.equal(h.quest.getStage(p), 90);
+
+  const expected = [
+    [11441, 3103, 9572],
+    [11447, 3104, 9572],
+    [11444, 3105, 9572],
+    [11449, 3106, 9570],
+    [11450, 3104, 9570],
+    [11438, 3106, 9573],
+  ];
+  const cast = expected.map(([id, x, y]) => {
+    const npc = h.npcs.find(candidate => candidate.id === id && !candidate.removed);
+    assert.ok(npc, `captured actor ${id} is spawned`);
+    assert.deepEqual([npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ()], [x, y, 0]);
+    assert.equal(npc.owner, p, 'the scene cast is private to the player');
+    return npc;
+  });
+  const line = {
+    step: { speaker: 'Persten and co.', presentation: 'overhead' },
+    text: 'Saris! Val! Curak! Belito!',
+  };
+  const event = { player: p, npcId: N.WIZARD_PERSTEN_2, ...line };
+  h.emit('npc-dialogue:line', event);
+  assert.deepEqual(event.actors, [cast[0], cast[1], cast[2], cast[5]], 'only the three apprentices and Persten chant together');
+  event.before();
+  assert.deepEqual(event.actors.map(npc => npc.animations), [[1818], [1818], [1818], [1818]]);
+  assert.deepEqual(event.actors.map(npc => npc.graphics), [[2067], [2067], [2067], [2067]]);
+
+  const unrelatedLine = { player: p, npcId: N.WIZARD_PERSTEN_2, step: { speaker: 'Persten and co.', presentation: 'overhead' }, text: 'A different line' };
+  h.emit('npc-dialogue:line', unrelatedLine);
+  assert.equal(unrelatedLine.actors, undefined, 'the group binding is limited to the captured line');
+});
+
+test('the captured chant opens an owner-only portal, restores it on relog and consumes it on entry', () => {
+  const h = harness('TempleOfTheEye');
+  const p = player();
+  const other = player();
+  assert.equal(h.persisted.get('temple-of-the-eye:basement-portal-open'), false);
+  h.quest.setStage(p, 90);
+  h.quest.setStage(other, 90);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: other });
+  assert.equal(h.objects.some(object => object.getId?.() === O.PORTAL_106), false, 'stage 90 alone does not open the portal');
+
+  const line = h.line(p, N.APPRENTICE_TAMARA_2, 'Saris! Val! Curak! Belito!', {
+    speaker: 'Persten and co.', presentation: 'overhead',
+  });
+  assert.equal(Boolean(p.attrs.get('temple-of-the-eye:basement-portal-open')), false,
+    'the queued overhead line does not grant the portal');
+  assert.equal(line.actors.length, 4);
+  line.before();
+  for (const actor of h.npcs.filter(npc => npc.owner === p && [11441, 11447, 11444, 11449, 11450, 11438].includes(npc.id))) {
+    assert.deepEqual([actor.facing?.getX(), actor.facing?.getY(), actor.facing?.getZ()], [3104, 9574, 0]);
+  }
+  assert.equal(h.objects.some(object => object.getId?.() === O.PORTAL_106), false,
+    'the portal appears only when the canonical action is executed');
+  const missingCastActor = h.npcs.find(npc => npc.owner === other && npc.id === 11441 && !npc.removed);
+  h.api.removeNpc(missingCastActor);
+  h.action(other, N.WIZARD_PERSTEN_2, 'Dj2PaV');
+  assert.equal(h.objects.some(object => object.getId?.() === O.PORTAL_106 && object.getOwner() === other), false,
+    'the canonical action cannot open a portal when a scene actor is missing');
+  h.action(p, N.WIZARD_PERSTEN_2, 'Dj2PaV');
+  const portal = h.objects.find(object => object.getId?.() === O.PORTAL_106);
+  assert.ok(portal, 'the captured portal appears after the incantation line');
+  assert.equal(portal.getType(), 10);
+  assert.equal(portal.getFace(), 2);
+  assert.equal(portal.getOwner(), p);
+
+  for (const fn of h.hooks.onPlayerLogout ?? []) fn({ player: p });
+  assert.equal(h.objects.includes(portal), false, 'logout removes the owner-only object');
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
+  const restored = h.objects.find(object => object.getId?.() === O.PORTAL_106);
+  assert.ok(restored, 'saved earned state rebuilds the portal on login');
+  assert.equal(restored.getOwner(), p);
+  assert.equal(h.objects.some(object => object.getId?.() === O.PORTAL_106 && object.getOwner() === other), false,
+    'another player at stage 90 does not see a portal they have not earned');
+
+  const entered = h.object(p, O.PORTAL_106, { x: 3104, y: 9574, z: 0 });
+  assert.equal(entered.handled, true);
+  assert.equal(h.quest.getStage(p), 95);
+  assert.equal(p.attrs.get('temple-of-the-eye:basement-portal-open'), false);
+  assert.equal(h.objects.includes(restored), false, 'using the portal removes this player\'s copy');
+});
+
 test('Temple of the Eye follows varbit stages 5..125 through dialogue, items, altars and the tutorial', () => {
   const h = harness('TempleOfTheEye'), p = player();
+  p.getLocalNpcs = () => h.npcs;
   p.level = 99; p.attrs.set('quest.rune_mysteries.stage', 6);
   const stage = () => h.quest.getStage(p);
   const finishTo = (npcId, choice) => { h.talk(p, npcId); if (choice) { h.continueUntil(p, () => Boolean(p.prompt)); h.choose(p, choice); } h.finish(p); };
@@ -157,9 +249,13 @@ test('Temple of the Eye follows varbit stages 5..125 through dialogue, items, al
   assert.equal(p.items.get(I.STRONG_CUP_OF_TEA), 1);
   finishTo(N.MAGE_OF_ZAMORAK, 'Could you help me with that amulet now?');
   assert.equal(stage(), 20);
-  h.talk(p, N.MAGE_OF_ZAMORAK);
+  p.getLocalNpcs = () => h.npcs;
+  const mage = h.api.spawnNpc({ id: N.MAGE_OF_ZAMORAK, x: p.getLocation().getX(), y: p.getLocation().getY(), z: 0, owner: p, ownerOnly: true });
+  h.talk(p, N.MAGE_OF_ZAMORAK, mage);
   h.continueUntil(p, () => Boolean(p.prompt)); h.choose(p, 'Could you help me with that amulet now?');
-  h.continueUntil(p, () => Boolean(p.prompt)); h.choose(p, 'Yes.'); h.finish(p);
+  h.continueUntil(p, () => Boolean(p.prompt)); h.choose(p, 'Yes.');
+  h.tick(2); // Mage's captured teleport line is overhead and resumes on its two-tick continuation.
+  h.finish(p);
   assert.equal(stage(), 25);
 
   h.talk(p, N.DARK_MAGE); h.continueUntil(p, () => Boolean(p.prompt)); h.choose(p, 'I need your help with an amulet.'); h.finish(p);
@@ -214,7 +310,30 @@ test('Temple of the Eye follows varbit stages 5..125 through dialogue, items, al
   assert.equal(stage(), 80, `stage before traiborn ${stage()}`);
   finishTo(N.WIZARD_TRAIBORN, "I think I know what a thingummywut is!");
   assert.equal(stage(), 85);
-  finishTo(N.ARCHMAGE_SEDRIDOR, "Let's do it.");
+  h.talk(p, N.ARCHMAGE_SEDRIDOR);
+  h.continueUntil(p, () => Boolean(p.prompt));
+  h.choose(p, "Let's do it.");
+  assert.equal(h.objects.some(object => object.getId?.() === O.PORTAL_106), false,
+    'the real dialogue manager has not opened the portal while the scene is queued');
+  let portalLimit = 100;
+  while (!h.objects.some(object => object.getId?.() === O.PORTAL_106) && portalLimit-- > 0) {
+    const current = p.manager.getCurrent();
+    assert.ok(current, 'the incantation dialogue remains active until its captured portal action');
+    if (current.constructor?.name === 'ActionDialogue' && h.tasks.some(task => task.isRunning?.())) {
+      h.tick(2);
+    } else {
+      p.manager.advance();
+    }
+  }
+  assert.ok(portalLimit > 0, 'the real dialogue manager executes the captured portal action');
+  let cutsceneLimit = 400;
+  while (p.manager.getCurrent() && cutsceneLimit-- > 0) {
+    const current = p.manager.getCurrent();
+    const overheadWaiting = current.constructor?.name === 'ActionDialogue' && h.tasks.some(task => task.isRunning?.());
+    if (overheadWaiting) h.tick(2);
+    else p.manager.advance();
+  }
+  assert.ok(cutsceneLimit > 0, 'the cutscene dialogue continues after its captured overhead cadence');
   assert.equal(stage(), 100);
   assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 3107 && row[2] === 9563), 'incantation camera');
   assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 2399 && row[2] === 5636), 'temple arrival camera');

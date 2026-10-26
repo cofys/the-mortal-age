@@ -65,6 +65,10 @@ function farmingButton(event) {
     const key = core.CacheDefinitions.getSpellName(event.buttonId, -1)?.toLowerCase();
     if (key !== "geomancy") return;
     event.handled = true;
+    if (core.CombatFactory.inCombat(event.player)) {
+        event.player.sendMessage("You can't commune with the land while fighting.");
+        return;
+    }
     if (!new FarmingSpell(key, event.buttonId).cast(event.player)) return;
     const farm = Patches.farmFor(event.player);
     Model.advanceFarm(farm, Date.now());

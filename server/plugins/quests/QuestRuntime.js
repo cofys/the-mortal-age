@@ -244,7 +244,9 @@ function openCompletedScroll(player, quest, questPoints) {
   packet.sendInterfaceFlagsRange((COMPLETED_GROUP << 16) | COMPLETED_CLOSE_CHILD, -1, -1, 1 << 1);
   setText((COMPLETED_GROUP << 16) | COMPLETED_TITLE_CHILD, "Congratulations!");
   setText((COMPLETED_GROUP << 16) | COMPLETED_NAME_CHILD, `You have completed ${quest.name}!`);
-  const scrollItemId = quest.scrollItemId ?? quest.rewardItemId;
+  const scrollItemId = typeof quest.scrollItemId === "function"
+    ? quest.scrollItemId(player)
+    : quest.scrollItemId ?? quest.rewardItemId;
   if (scrollItemId !== undefined) {
     packet.sendItemOnInterfaces((COMPLETED_GROUP << 16) | COMPLETED_REWARD_ITEM_CHILD, scrollItemId, 1);
   }
@@ -296,29 +298,36 @@ function showCompletedScroll(player, quest, questPoints) {
 }
 
 /**
- * quest:is-complete / quest:is-started { player, key, complete | started }: answered for quests
- * registered here, by each quest's own stage values. An unknown key is left unanswered (null).
+ * quest:is-complete / quest:is-started { player, key | name, complete | started }: answered for
+ * quests registered here, by each quest's own stage values, looked up by key or (as the cache's
+ * music unlock hints name them) by name. An unknown quest is left unanswered (null).
  */
+function requestedQuest(request) {
+  if (request?.key !== undefined) return quests.find((entry) => entry.key === request.key);
+  return request?.name === undefined ? undefined : questNamed(request.name);
+}
+
 function answerIsComplete(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.complete = quest.isComplete(request.player);
 }
 
 function answerIsStarted(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.started = quest.isStarted(request.player);
 }
 
 function answerGetStage(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.stage = quest.getStage(request.player);
 }
 
 /** A shop version named after a quest: "Fremennik Isles", "After Lunar Diplomacy", "Before Contact!". */
 const QUEST_SHOP_VERSION = /\((?:(After|During|Before) )?([^()]+)\)$/;
 
+/** Case, a leading "The" and punctuation don't count: "Another Slice of H.A.M" is "Another Slice of H.A.M.". */
 function questNamed(name) {
-  const plain = (text) => text.toLowerCase().replace(/^the /, "");
+  const plain = (text) => String(text).toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
   return quests.find((quest) => plain(quest.name) === plain(name));
 }
 
@@ -367,7 +376,7 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-started", answerIsStarted);
   api.onCustomEvent("quest:get-stage", answerGetStage);
   api.onCustomEvent("npc-dialogue:shop", pickQuestShopVersion);
-  // Registered with the first quest, so this runs before every quest's own login hook.
+  // Registered before the quests, so this runs before every quest's own login hook.
   api.onPlayerLogin(holdLoginQuestList);
   api.onCustomEvent("player:bootstrap-complete", sendLoginQuestList);
   api.onPlayerLogout?.(releaseLoginQuestList);
@@ -452,6 +461,7 @@ function sendQuestVarps({ player }) {
  * @param api  the plugin api
  * @param def  { key, name, varpId, varbitId, varbitValue, startedValue, completionValue, questPoints,
  *               xpRewards?, rewardItemId?, rewardItemLabel?, otherRewards?,
+ *               scrollItemId? (item id or function of player),
  *               buildJournal?(player, quest), onReward?(player, quest),
  *               varpValue?(stage, player) }
  */
@@ -634,6 +644,7 @@ module.exports = {
   QUEST_POINTS_VARP,
   QUEST_POINTS_ATTRIBUTE,
   QUEST_COMPLETE_JINGLE,
+  registerQuestWidgets,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
   pickQuestShopVersion,

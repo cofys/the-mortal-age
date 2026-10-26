@@ -5,6 +5,7 @@ import { Skill } from "../../../model/Skill";
 import { HitDamage } from "../hit/HitDamage";
 import { HitMask } from "../hit/HitMask";
 import { Animation } from "../../../model/Animation";
+import { Graphic } from "../../../model/Graphic";
 import { CombatRange } from "../CombatRange";
 import { PathFinder } from "../../../model/movement/path/PathFinder";
 import { Task } from "../../../task/Task";
@@ -17,7 +18,8 @@ const THRALL_KEY = "arceuus:thrall";
 const THRALL_PURSUIT_KEY = "arceuus:thrall-pursuit";
 
 export class ArceuusThralls {
-    public static summon(player: Player, npcId: number, prayerCost: number, maxHit: number, attackDistance: number): void {
+    /** `spawn` is the thrall's rising animation and the graphic it appears with. */
+    public static summon(player: Player, npcId: number, prayerCost: number, maxHit: number, attackDistance: number, spawn?: { rise: number; impact: number }): void {
         const previous = player.getAttribute(THRALL_KEY) as NPC | null;
         if (previous?.isRegistered()) World.getRemoveNPCQueue().push(previous);
 
@@ -34,6 +36,10 @@ export class ArceuusThralls {
         (thrall as any).__skipDefaultRespawn = true;
         player.setAttribute(THRALL_KEY, thrall);
         World.getAddNPCQueue().push(thrall);
+        if (spawn) {
+            thrall.performAnimation(new Animation(spawn.rise));
+            thrall.performGraphic(new Graphic(spawn.impact));
+        }
 
         const duration = { player, ticks: player.getSkillManager().getCurrentLevel(Skill.MAGIC) };
         PluginManager.emitCustomEvent("magic:thrall-duration", duration);

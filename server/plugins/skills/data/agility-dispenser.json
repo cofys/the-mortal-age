@@ -1,0 +1,73 @@
+{
+  "_source": "rsprox 233/00449-00461 (the varbits, the order of a lap's end, Tag, Pay, Redeem and their lines) and the Wiki (Agility dispenser, Wilderness Agility Course, Wilderness agility ticket: the loot tables, the ticket XP, the streak rules).",
+  "dispenser": "wildy_agility_pillar",
+  "_lapStart": "The course's first obstacle: starting it with an unclaimed ticket or reward resets the streak (Wiki).",
+  "lapStart": "obstical_pipe2",
+  "fee": 150000,
+  "coins": 995,
+  "ticket": "wildy_agility_token",
+  "lootingBags": [11941, 22586],
+  "clue": 2801,
+  "clueChance": 40,
+  "_course": "The course pit, from the pipe to the climbing rocks; leaving it loses the payment (recorded after the exit ridge).",
+  "course": { "minX": 2988, "maxX": 3009, "minY": 3931, "maxY": 3966 },
+  "_logoutStreakLoss": "Wiki: logging out takes 10 laps off the streak (recorded: 5 -> 0, 1 -> 0).",
+  "logoutStreakLoss": 10,
+  "varbits": {
+    "deposit": "wildy_agility_deposit",
+    "reward": "wildy_agility_reward_available",
+    "ticket": "wildy_agility_token_available",
+    "paymentWarning": "wildy_agility_payment_warning",
+    "streak": "wildy_agility_reward_lap_new"
+  },
+  "_redeem": "Wiki: XP per ticket by how many are redeemed at once (recorded 200 each for 1, 2 and 3).",
+  "redeem": [[101, 230], [51, 220], [11, 210], [1, 200]],
+  "_tiers": "Wiki: from this many laps in the reward streak. Resources are noted, rolled once; armour is noted, rolled once.",
+  "tiers": [
+    {
+      "from": 1,
+      "resources": [[24592, 3, 6, 8], [24589, 3, 6, 8], [24595, 3, 6, 8], [24598, 1, 2, 7]],
+      "armour": [[1161, 1], [1123, 2], [1073, 1], [1109, 1], [1071, 1], [1085, 1], [1147, 2], [1119, 1]]
+    },
+    {
+      "from": 16,
+      "resources": [[24592, 6, 11, 8], [24589, 6, 11, 8], [24595, 6, 11, 8], [24598, 2, 4, 7]],
+      "armour": [[1161, 1], [1123, 1], [1073, 1], [1109, 1], [1071, 1], [1085, 1], [1113, 1], [1201, 1], [1147, 1]]
+    },
+    {
+      "from": 31,
+      "resources": [[24592, 10, 16, 8], [24589, 10, 16, 8], [24595, 10, 16, 8], [24598, 3, 6, 7]],
+      "armour": [[1161, 1], [1123, 1], [1073, 1], [1071, 1], [1085, 1], [1113, 2], [1201, 2], [1147, 1]]
+    },
+    {
+      "from": 61,
+      "resources": [[24592, 14, 20, 8], [24589, 14, 20, 8], [24595, 14, 20, 8], [24598, 4, 8, 7]],
+      "armour": [[1161, 1], [1123, 2], [1073, 1], [1071, 1], [1085, 1], [1113, 6], [1201, 6], [1147, 2]]
+    }
+  ],
+  "_extra": "Wiki: with a free inventory slot, one unnoted blighted food (5/16 each) or super restore(4) (1/16) as well (recorded: anglerfish, karambwan, super restore).",
+  "extra": [[24592, 5], [24589, 5], [24595, 5], [24598, 1]],
+  "_messages": "All recorded.",
+  "messages": {
+    "streak": "Your Wilderness Agility reward streak is: <col=ff0000>{streak}</col>",
+    "needLap": "You need to complete one full lap to receive a ticket and pay 150,000 coins to receive a reward after each lap.",
+    "ticket": "You received <col=ef1020>a Wilderness agility ticket</col> from the Agility dispenser.",
+    "noBag": "You must have an open looting bag in your inventory before trying to claim loot.",
+    "bagFull": "You must have free space in your looting bag before trying to claim loot.",
+    "awarded": "You have been awarded <col=ef1020>{a} x {first}</col> and <col=ef1020>{b} x {second}</col> from the Agility dispenser.",
+    "awardedExtra": "You have been awarded <col=ef1020>{a} x {first}</col> and <col=ef1020>{b} x {second}</col>, and an extra <col=ef1020>{extra}</col> from the Agility dispenser.",
+    "payPrompt": "Do you want to pay 150,000 coins to receive a reward after each lap?<br>You'll lose your payment if you leave the course.",
+    "yes": "Yes.",
+    "yesNoAsk": "Yes, and don't ask again.",
+    "no": "No.",
+    "paid": "You have paid 150,000 coins to receive a reward after each lap.",
+    "alreadyPaid": "You have already paid 150,000 coins to receive a reward after each lap.",
+    "poor": "You need 150,000 coins to pay to receive additional rewards.",
+    "noSlot": "You need at least 1 free inventory slot before depositing coins.",
+    "bagGiven": "You received <col=ef1020>a Looting bag</col> from the Agility dispenser.",
+    "noTickets": "You do not have any Wilderness agility tickets to redeem.",
+    "redeemOne": "You redeem 1 Wilderness agility ticket and have been awarded {xp} Agility XP!",
+    "redeemMany": "You redeem {count} Wilderness agility tickets and have been awarded {xp} Agility XP!"
+  },
+  "redeemSound": 2655
+}

@@ -1258,7 +1258,8 @@ registerProcessor("music-worklet-processor", MusicWorkletProcessor);
             return false;
         }
 
-        const file = jingleIndex.getFileSmart(jingleId);
+        // Jingle data may still be streaming in (sparse cache); wait for it like a track.
+        const file = await retryOnMissingGroup(() => jingleIndex.getFileSmart(jingleId));
         if (!file) {
             console.error(`[RealtimeMidiSynth] Jingle ${jingleId} not found`);
             return false;

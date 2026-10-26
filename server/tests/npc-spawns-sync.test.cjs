@@ -134,6 +134,21 @@ test("reads the Wiki's coordinate forms", () => {
   // Muriel: a polygon outlining an area is one spawn at its centre.
   assert.deepEqual(parseInfoboxMaps('|map = {{Map|2584,2255|2589,2255|2589,2264|2586,2264|2586,2261|2584,2261|mtype=polygon|r=3|zoom=3}}'),
     [{ version: null, points: [{ x: 2587, y: 2260 }], plane: 0, mapId: null }]);
+  // Cabin Boy Herbert: labels before each map, and two maps on one line, both read.
+  assert.deepEqual(parseInfoboxMaps('|map = Port Sarim Docks {{Map|name=Cabin Boy Herbert|x=3054|y=3245|r=3|mtype=square}} '
+    + 'Port Piscarilius {{Map|name=Cabin Boy Herbert|x=1824|y=3690|r=3|mtype=square}}\n|id = 10932,10933,10934'), [
+    { version: null, points: [{ x: 3054, y: 3245 }], plane: 0, mapId: null },
+    { version: null, points: [{ x: 1824, y: 3690 }], plane: 0, mapId: null },
+  ]);
+  // Several maps on a numbered line all belong to that version; the next line's maps to its own.
+  assert.deepEqual(parseInfoboxMaps('|map1 = {{Map|10,20}} or {{Map|30,40|plane=1}}\n|map2 = Upstairs {{Map|x=50|y=60|plane=2}}')
+    .map(({ version, points, plane }) => ({ version, points, plane })), [
+    { version: 1, points: [{ x: 10, y: 20 }], plane: 0 },
+    { version: 1, points: [{ x: 30, y: 40 }], plane: 1 },
+    { version: 2, points: [{ x: 50, y: 60 }], plane: 2 },
+  ]);
+  // A {{Map}} outside a map line (prose, another parameter) isn't a spawn.
+  assert.deepEqual(parseInfoboxMaps('|location = Near {{Map|1,2}}\nSee {{Map|3,4}}.\n|map = No'), []);
   const box = parseBox('2640,2290,2530,2190');
   assert.ok(inBoxes({ x: 2576, y: 2253, level: 2 }, [box]), 'every plane unless given');
   assert.ok(!inBoxes({ x: 2576, y: 2253, level: 2 }, [parseBox('2530,2190,2640,2290,0')]));

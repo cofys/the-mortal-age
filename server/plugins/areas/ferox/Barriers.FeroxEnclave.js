@@ -6,7 +6,6 @@
  * - The town is safe from other players unless one of them is teleblocked; the buffer outside the
  *   barriers too. Inside, varbit 6549 is set; in the buffer, varbit 10530.
  */
-const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const Bounds = require("./Bounds.FeroxEnclave");
 const Ferox = require("./Common.FeroxEnclave");
 
@@ -30,7 +29,7 @@ function isTeleblocked(player) {
 /** Tick 0: face the way through, drag; tick 1: through (as captured). */
 function cross(player, crossing) {
   const sender = player.getPacketSender();
-  const target = new Location(crossing.target.x, crossing.target.y, crossing.target.z);
+  const target = new Ferox.core.Location(crossing.target.x, crossing.target.y, crossing.target.z);
   sender.sendVarbit(Ferox.BUSY_VARBIT, 1);
   player.setPositionToFace(target);
   player.performAnimation(new Ferox.core.Animation(CROSS_ANIMATION));
@@ -85,14 +84,68 @@ function denySafeZoneAttack(event) {
 
 function syncState({ player }) {
   const location = player.getLocation();
-  const near = location.getZ() === 0 && location.getX() >= 3110 && location.getX() <= 3170
-    && location.getY() >= 3605 && location.getY() <= 3660;
-  const inside = near && Bounds.isInsideEnclave(location) ? 1 : 0;
-  const buffer = near && !inside && Bounds.isInBuffer(location) ? 1 : 0;
+  const inside = Bounds.isInsideEnclave(location) ? 1 : 0;
+  const buffer = !inside && Bounds.isInBuffer(location) ? 1 : 0;
+  sendState(player, inside, buffer);
+}
+
+function sendState(player, inside, buffer) {
   const state = `${inside},${buffer}`;
   if (lastState.get(player) === state) return;
   lastState.set(player, state);
   player.getPacketSender().sendVarbit(INSIDE_VARBIT, inside).sendVarbit(BUFFER_VARBIT, buffer);
+}
+
+function defineEnclave() {
+  let wildernessRules = null;
+  function rules() {
+    if (!wildernessRules) {
+      const request = { rules: null };
+      Ferox.api.emitCustomEvent("wilderness:rules", request);
+      wildernessRules = request.rules;
+    }
+    return wildernessRules;
+  }
+  return class FeroxEnclaveArea extends Ferox.core.Area {
+    postEnter(mobile) {
+      if (!mobile.isPlayer()) return;
+      rules()?.postEnter(mobile);
+      syncState({ player: mobile.getAsPlayer() });
+    }
+
+    process(mobile) {
+      if (!mobile.isPlayer()) return;
+      rules()?.process(mobile);
+      syncState({ player: mobile.getAsPlayer() });
+    }
+
+    postLeave(mobile, logout) {
+      if (!mobile.isPlayer()) return;
+      rules()?.postLeave(mobile, logout);
+      if (!logout) sendState(mobile.getAsPlayer(), 0, 0);
+      else lastState.delete(mobile.getAsPlayer());
+    }
+
+    canAttack(attacker, target, method) {
+      const event = { attacker, target, allow: null };
+      denySafeZoneAttack(event);
+      return event.allow ?? rules()?.canAttack(attacker, target, method) ?? null;
+    }
+
+    canTeleport(player, wildernessLevelLimit) {
+      return rules()?.canTeleport(player, wildernessLevelLimit) ?? null;
+    }
+
+    npcAggressionTolerance(player) {
+      return rules()?.npcAggressionTolerance(player) ?? null;
+    }
+  };
+}
+
+function registerEnclave(api) {
+  const Enclave = defineEnclave();
+  const { minX, maxX, minY, maxY } = Bounds.AREA;
+  api.registerArea(new Enclave([new api.core.Boundary(minX, maxX, minY, maxY, 0)]));
 }
 
 function sendWarningVarbit({ player }) {
@@ -102,8 +155,7 @@ function sendWarningVarbit({ player }) {
 module.exports = function attachBarriers(api) {
   api.persistAttribute(DONT_ASK_ATTRIBUTE);
   api.onObjectFirstClick(Bounds.BARRIER_IDS, passThrough);
-  api.onCanAttack(denySafeZoneAttack);
-  api.onPlayerProcess(syncState);
+  registerEnclave(api);
   api.onPlayerLogin(sendWarningVarbit);
 };
 

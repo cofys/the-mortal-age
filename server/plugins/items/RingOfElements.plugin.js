@@ -82,11 +82,24 @@ function teleport(player, item, destination, label) {
   if (!TeleportHandler.checkReqs(player, destination)) {
     return false;
   }
+  // The charge goes on arrival, like the other teleport jewellery (Jewellery.plugin.js).
+  TeleportHandler.teleport(player, destination, TeleportType.NORMAL, false, () => arrive(player, label));
+  return true;
+}
+
+/** Spends the player's charge and updates every ring they carry, wherever it moved meanwhile. */
+function arrive(player, label) {
+  const charges = getCharges(player);
+  if (charges <= 0) {
+    return;
+  }
   setCharges(player, charges - 1);
   player.setAttribute?.(LAST_DESTINATION_ATTRIBUTE, label);
-  syncRing(player, item, charges - 1);
-  TeleportHandler.teleport(player, destination, TeleportType.NORMAL, false);
-  return true;
+  for (const container of [player.getInventory?.(), player.getEquipment?.()]) {
+    for (const ring of container?.getItems?.() ?? []) {
+      if (ring && isRingOfElements(ring.getId?.())) syncRing(player, ring, charges - 1);
+    }
+  }
 }
 
 function lastDestinationTeleport(player, item) {
@@ -182,7 +195,7 @@ module.exports = {
   name: "RingOfElements",
   members: true,
   _test: {
-    TELEPORTS, WORN_ACTIONS, MAX_CHARGES, getCharges, setCharges, syncRing, handleChargeAttempt,
+    TELEPORTS, WORN_ACTIONS, MAX_CHARGES, getCharges, setCharges, syncRing, handleChargeAttempt, teleport,
   },
   register(api) {
     api.persistAttribute(CHARGES_ATTRIBUTE);

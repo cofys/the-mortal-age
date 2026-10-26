@@ -299,7 +299,11 @@ export class MovementQueue {
         if (this.character.getTimers().has(TimerKey.FREEZE)) {
             return Mobility.FROZEN_SPELL;
         }
+        return this.getMobilityIgnoringFreeze();
+    }
 
+    /** Every lock besides a freeze: a stun, a pending placement, a busy trade or duel still stops a frozen player's interactions. */
+    private getMobilityIgnoringFreeze(): Mobility {
         if (this.character.getTimers().has(TimerKey.STUN)) {
             return Mobility.STUNNED;
         }
@@ -1133,11 +1137,16 @@ export class MovementQueue {
         const direction = object.getFace();
 
         if (type === 10 || type === 11 || type === 22) {
-            // Multi-locs expose their real footprint/mask only after the player's
-            // varbits resolve the MORPH child; raw ids can carry the parent's size.
+            // The MORPH child supplies the displayed actions and the side-access mask.
+            // Collision builds solid rectangular locs (types 10/11) from the placed map
+            // object's definition (RegionManager.addObjectClipping), so the route must use
+            // that same base footprint; a smaller child (Ancient Grave 34602 is 4x2, child
+            // 33578 is 1x1) would put the reach rectangle inside the blocked footprint.
+            // Type 22 clips only its origin tile, so it keeps the resolved child size.
             const def = ObjectDefinition.forPlayer(id, this.player) ?? ObjectDefinition.forId(id);
-            const xLength = def.getSizeX();
-            const yLength = def.getSizeY();
+            const footprint = type === 22 ? def : (ObjectDefinition.forId(id) ?? def);
+            const xLength = footprint.getSizeX();
+            const yLength = footprint.getSizeY();
             const blockingMask = def.getBlockingMask() | blockAccessFlags;
 
             return {
@@ -1176,6 +1185,20 @@ export class MovementQueue {
             reachShape: type,
             reachBlockAccessFlags: blockAccessFlags,
         };
+    }
+
+    /** The reach check respects shape, rotation and access flags, from the player's own tile. */
+    private reachesObject(object: GameObject, routeSpec: ReturnType<MovementQueue["buildObjectRouteSpec"]>): boolean {
+        return PathFinder.reachedObject(
+            this.player,
+            routeSpec.objectX,
+            routeSpec.objectY,
+            routeSpec.reachWidth,
+            routeSpec.reachLength,
+            routeSpec.reachAngle,
+            routeSpec.reachShape,
+            routeSpec.reachBlockAccessFlags
+        ) || this.isMountedDecorationReachable(object, routeSpec.reachBlockAccessFlags, routeSpec.reachAngle);
     }
 
     /**
@@ -1222,10 +1245,20 @@ export class MovementQueue {
             && (RegionManager.getClipping(destX, destY, z, area) & destWall) !== 0;
     }
 
-    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1, ignoreProjectileClip = false) {
+    public walkToEntity(
+        entity: Mobile,
+        runnable?: () => void,
+        range = 1,
+        ignoreProjectileClip = false,
+        allowOverlappingTiles = false
+    ) {
         let mobility = this.getMobility();
-        if (!mobility.canMove()) {
-            mobility.sendMessage(this.player);
+        // Frozen players still interact with what they reach from their tile (see below),
+        // unless another lock (a stun) holds them too.
+        const frozen = mobility === Mobility.FROZEN_SPELL;
+        const blocking = frozen ? this.getMobilityIgnoringFreeze() : mobility;
+        if (!blocking.canMove()) {
+            blocking.sendMessage(this.player);
             this.reset();
             return;
         }
@@ -1249,20 +1282,33 @@ export class MovementQueue {
             return;
         }
 
+        if (!this.isInteractionTargetValid(entity)) {
+            this.reset();
+            return;
+        }
+
         this.reset();
 
         this.walkToReset();
 
-        const reached = () => range <= 1 ? PathFinder.reachedEntity(this.player, entity) :
-            this.isInteractionTargetValid(entity) && this.player.getLocation().isWithinDistance(entity.getLocation(), range)
-            && (ignoreProjectileClip || RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation()));
+        const reached = () => (allowOverlappingTiles && this.overlapsEntity(entity)) || (
+            range <= 1
+                ? PathFinder.reachedEntity(this.player, entity)
+                : this.isInteractionTargetValid(entity) &&
+                  this.player.getLocation().isWithinDistance(entity.getLocation(), range) &&
+                  (ignoreProjectileClip || RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation()))
+        );
         if (reached()) {
             this.player.setMobileInteraction(entity);
             runnable?.();
             return;
         }
+        if (frozen) {
+            this.player.sendMessage("I can't reach that!");
+            return;
+        }
 
-        PathFinder.calculateEntityRoute(this.player, entity);
+        PathFinder.calculateEntityRoute(this.player, entity, range);
         if (this.canInteractWithUnreachableNpc(entity)) {
             this.reset();
             this.player.setMobileInteraction(entity);
@@ -1320,7 +1366,7 @@ export class MovementQueue {
             }
             // A step the clipping map rejected invalidates the corridor wherever we stand.
             if (this.points.length <= 1 || this.wasRouteInvalidated()) {
-                PathFinder.calculateEntityRoute(this.player, entity);
+                PathFinder.calculateEntityRoute(this.player, entity, range);
             }
         };
         TaskManager.submit(task);
@@ -1354,11 +1400,20 @@ export class MovementQueue {
     }
 
     private isInteractionTargetValid(entity: Mobile): boolean {
-        return !!entity &&
-            entity.isRegistered() &&
-            entity.getHitpoints() > 0 &&
-            entity.getPrivateArea() === this.player.getPrivateArea() &&
-            entity.getLocation().getZ() === this.player.getLocation().getZ();
+        if (!entity || !entity.isRegistered() || entity.getHitpoints() <= 0 ||
+            entity.getPrivateArea() !== this.player.getPrivateArea() ||
+            entity.getLocation().getZ() !== this.player.getLocation().getZ()) return false;
+        const owner = entity.isNpc?.() ? (entity as NPC).getOwner?.() : null;
+        return !owner || owner === this.player;
+    }
+
+    private overlapsEntity(entity: Mobile): boolean {
+        const player = this.player.getLocation();
+        const target = entity.getLocation();
+        const playerSize = Math.max(1, this.player.getSize());
+        const targetSize = Math.max(1, entity.getSize());
+        return player.getX() < target.getX() + targetSize && player.getX() + playerSize > target.getX() &&
+            player.getY() < target.getY() + targetSize && player.getY() + playerSize > target.getY();
     }
 
     /** An NPC in the main world that a player aboard a boat can see and talk to from its root. */
@@ -1409,9 +1464,19 @@ export class MovementQueue {
             return;
         }
 
+        const routeSpec = this.buildObjectRouteSpec(object, routeEvent.blockAccessFlags);
+        // A frozen player still operates what they reach from where they stand (a ladder, a
+        // cave entrance: Wiki, Freeze); anything further is "I can't reach that!" as live.
+        // Another lock (a stun) still stops a frozen player.
         let mobility = this.getMobility();
-        if (!mobility.canMove()) {
-            mobility.sendMessage(this.player);
+        const frozen = mobility === Mobility.FROZEN_SPELL;
+        const blocking = frozen ? this.getMobilityIgnoringFreeze() : mobility;
+        if (!blocking.canMove() || (frozen && !this.reachesObject(object, routeSpec))) {
+            if (blocking.canMove()) {
+                this.player.sendMessage("I can't reach that!");
+            } else {
+                blocking.sendMessage(this.player);
+            }
             this.reset();
             return;
         }
@@ -1425,7 +1490,6 @@ export class MovementQueue {
 
         this.walkToReset();
 
-        const routeSpec = this.buildObjectRouteSpec(object, routeEvent.blockAccessFlags);
         const objectX = routeSpec.objectX;
         const objectY = routeSpec.objectY;
         const type = routeSpec.type;
@@ -1443,7 +1507,9 @@ export class MovementQueue {
             routeSpec.routeBlockingMask
         );
 
-        queueObjectRoute();
+        if (!frozen) {
+            queueObjectRoute();
+        }
 
         const finalDestinationX = this.player.getMovementQueue().pathX;
         const finalDestinationY = this.player.getMovementQueue().pathY;
@@ -1464,16 +1530,7 @@ export class MovementQueue {
             }
             // The reach check already respects shape, rotation and access flags.
             // Accept either reachable side, even if the original route ended elsewhere.
-            if (this.points.length === 0 && (PathFinder.reachedObject(
-                this.player,
-                objectX,
-                objectY,
-                routeSpec.reachWidth,
-                routeSpec.reachLength,
-                routeSpec.reachAngle,
-                routeSpec.reachShape,
-                routeSpec.reachBlockAccessFlags
-            ) || this.isMountedDecorationReachable(object, routeSpec.reachBlockAccessFlags, routeSpec.reachAngle))) {
+            if (this.points.length === 0 && this.reachesObject(object, routeSpec)) {
                 // Arrival is not a failed route: operate on the following cycle.
                 // No extra arriveDelay here: in OSRS that delay only applies to actions that
                 // move you. Banks, tables, shops and NPCs fire the tick after you arrive, which
@@ -1570,9 +1627,7 @@ export class MovementQueue {
         let message: string;
 
         switch (this) {
-            case Mobility.FROZEN_SPELL:
-                message = "A magical spell has made you unable to move.";
-                break;
+            // FROZEN_SPELL: live sends nothing when a frozen player clicks to walk.
             case Mobility.STUNNED:
                 message = "You're stunned!";
                 break;
@@ -1623,9 +1678,7 @@ class Mobility {
         let message: string;
 
         switch (this) {
-            case Mobility.FROZEN_SPELL:
-                message = "A magical spell has made you unable to move.";
-                break;
+            // FROZEN_SPELL: live sends nothing when a frozen player clicks to walk.
             case Mobility.STUNNED:
                 message = "You're stunned!";
                 break;

@@ -28,7 +28,7 @@ yarn sync:npc-spawns --box 2520,2170,2660,2310 --box 2560,8560,2640,8660 --tag W
 
 **Where the Wiki keeps spawns:**
 - **Monsters:** `{{LocLine}}` coordinates, one per spawn (bucket `locline`), with ids per page version from bucket `infobox_monster`.
-- **Single NPCs:** the infobox's `{{Map}}` in the page's wikitext, with ids from bucket `infobox_npc`. A polygon, rectangle or line outlines an area: it becomes one spawn at its centre.
+- **Single NPCs:** the infobox's `{{Map}}` in the page's wikitext, with ids from bucket `infobox_npc`. A polygon, rectangle or line outlines an area: it becomes one spawn at its centre. Every `{{Map}}` on a `|map =` line counts, labelled or not (`|map = Port Sarim Docks {{Map|…}} Port Piscarilius {{Map|…}}`).
 - **Not counted:** pages without an NPC infobox (LocLine also places scenery and items), and historical or event pages without real ids.
 
 **NPCs with several versions:** an infobox's `map1`, `map2`… belong to its `id1`, `id2`… (Guild Hunter Fox: `map1` the Hunter Guild with `id1` 13426, `map3` the Avium Savannah with `id3`, injured). The script pairs them by that number. It used to take the versions in the data bucket's order, which differs, so 60 spawns on 32 pages got the wrong id or a quest stage; they're fixed below.
@@ -166,6 +166,12 @@ The fix to the version pairing above, on the 60 spawns it affected (32 Wiki page
 - **Achilka:** one per boat stop, each with that stop's id (14727 Kastori, 14728 Tal Teklan, 14729 the Gloomthorn Trail); there had been two or three per stop with the wrong ids.
 - **Added:** Primio's Varrock end (12888), lost when the Civitas one took its id.
 - **Decisions:** the quest-stage ids are in `npc-spawn-sync.json` under `ids` (`Quest stage`, skipped), so a rerun doesn't add them back.
+
+## Labelled and several maps on one line
+
+The sync read a map line only when it began with `{{Map}}`, and only its first map. Pages that label their places, or give several on one line, lost some or all of their spawns: 35 pages in the Wiki authoring cache gain maps (Cabin Boy Herbert, Veos, Zanik, Captain Barnaby, Jenny Blade, the Gamer and others). They show up on their next sync; none was synced with the fix.
+
+**Cabin Boy Herbert** at Port Sarim, placed from rsprox captures instead (26 recordings): `cabin_boy_herbert_sarim` (11126) at 3053, 3245, facing north, standing still. The Wiki lists only his visible ids (10932-10934), so a sync would pick the wrong one. 11126 shows as 10933 (Talk-to, Port Piscarilius, Land's End) once varbit 12296 `akd` reaches 12, when Fuggy names Veos' ship in *A Kingdom Divided*. Veos (1063) keeps his spawn beside him, but from the same stage *X Marks the Spot* sends his visibility (`veos_sarim_vis`, 12148) as 0, so he's gone: captures at `akd` 150 have it at 0 and never add him.
 
 ## Doubled spawns
 

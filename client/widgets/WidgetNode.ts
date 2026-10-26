@@ -319,6 +319,8 @@ export interface WidgetNode {
     _absY?: number;
     _absWidth?: number;
     _absHeight?: number;
+    // Screen rect of a text widget's drawn text (set during rendering)
+    _textBounds?: { x: number; y: number; width: number; height: number };
 
     // PARITY: Layout validity flag for lazy evaluation pattern
     // True if x/y/width/height are current with raw values

@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useSyncExternalStore } from "react";
 import { NavigationButton } from "@runelite/client/ui/NavigationButton";
+import { imageIcon, runeliteImage } from "@runelite/client/ui/runeliteImages";
 import { customPackError, isCustomPack, type TilePack } from "./tilePackData";
 import type { TilePacksPlugin } from "./TilePacksPlugin";
 
@@ -7,7 +8,8 @@ import type { TilePacksPlugin } from "./TilePacksPlugin";
 const DARK_GRAY = "rgb(40, 40, 40)";
 const DARKER_GRAY = "rgb(30, 30, 30)";
 const DARK_GRAY_HOVER = "rgb(35, 35, 35)";
-const FONT = "'RuneScape', 'RuneScape Small', monospace";
+/** FontManager.getRunescapeFont(), the panels' default (Sidebar.css's variables). */
+const FONT = "var(--rl-font)";
 /** Tile Packs' icon colours. */
 const GREY = "#858585";
 const GREEN = "#4CAF50";
@@ -211,20 +213,11 @@ export function TilePacksPanel({ plugin }: { plugin: TilePacksPlugin }): JSX.Ele
     );
 }
 
-function TilePacksIcon({ label }: { label: string }): JSX.Element {
-    return (
-        <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
-            <path d="M12 3 21 7.5 12 12 3 7.5Z" />
-            <path d="M3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5" />
-        </svg>
-    );
-}
-
 /** Tile Packs' nav button: "Tile Packs", priority 4. */
 export function createTilePacksNavigationButton(plugin: TilePacksPlugin): NavigationButton {
     return NavigationButton.builder()
         .tooltip("Tile Packs")
-        .icon(TilePacksIcon)
+        .icon(imageIcon(runeliteImage("tile_packs_icon.png")))
         .priority(4)
         .panel(() => <TilePacksPanel plugin={plugin} />)
         .build();

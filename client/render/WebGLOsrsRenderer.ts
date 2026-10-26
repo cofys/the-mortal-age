@@ -252,6 +252,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public instanceLocRebuildTimer: ReturnType<typeof setTimeout> | null = null;
     /** Bumped per instance scene build; only the latest build's result is applied. */
     public instanceBuildSeq: number = 0;
+    /** Instance scene builds the worker has not returned yet. */
+    public instanceBuildsInFlight: number = 0;
     /** A built instance scene waiting in mapsToLoad; it replaces the drawn scene when applied. */
     public pendingInstanceScene: SdMapData | null = null;
     /** The map square the drawn instance scene is built as; it owns every NPC in the scene. */
@@ -1544,6 +1546,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     public scheduleInstanceLocRebuild(): void {
         return render.scheduleInstanceLocRebuild(this);
+    }
+
+    public scheduleInstanceLocUpdate(group: "loc" | "door" | "full"): void {
+        return render.scheduleInstanceLocUpdate(this, group);
     }
 
     public replaceSceneWithInstance(mapData: SdMapData): void {

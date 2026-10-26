@@ -78,10 +78,8 @@ export function processWidgetDragInput(
             const w = widgetInteraction.clickedWidget;
             // UI input can run more often than the native 20 ms client cycle.
             const cycle = deps.getTransmitCycles().cycleCntr | 0;
-            if ((w as any)._lastDragEventCycle !== cycle) {
-                (w as any)._lastDragEventCycle = cycle;
-                for (const listener of WidgetInteractionController.dragListeners) listener();
-            }
+            const dragEventDue = (w as any)._lastDragEventCycle !== cycle;
+            if (dragEventDue) (w as any)._lastDragEventCycle = cycle;
 
             // clickedWidgetParent defines clamp/coordinate space.
             // If null, widget can be dragged freely without clamping (like bank items).
@@ -267,6 +265,10 @@ export function processWidgetDragInput(
                     w.uid,
                     getInterfaceParentRoots,
                 );
+            }
+
+            if (dragEventDue) {
+                for (const listener of WidgetInteractionController.dragListeners) listener({ released: false });
             }
 
             const dragCtx: Partial<ScriptEvent> = {

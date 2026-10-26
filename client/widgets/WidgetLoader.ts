@@ -316,7 +316,9 @@ export class WidgetLoader {
 
         // Legacy flags logic
         if (buttonType === 1 || buttonType === 4 || buttonType === 5) {
-            w.flags = (w.flags || 0) | 0x400000;
+            // Normalize legacy buttons for the client's shared op menu/packet path.
+            w.actions = [w.buttonText!];
+            w.flags = (w.flags || 0) | 0x400000 | (1 << 1);
         }
         if (buttonType === 6) {
             w.flags = (w.flags || 0) | 1;

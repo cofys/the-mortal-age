@@ -83,6 +83,7 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] }
     setPositionToFace() {},
     forceChat() {},
     sendMessage: (message) => state.messages.push(message),
+    getDialogueManager: () => ({ startDialogues: () => { state.mesboxes = (state.mesboxes ?? 0) + 1; } }),
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getSkillManager: () => ({
@@ -267,6 +268,19 @@ for (const course of COURSES) {
   });
 }
 
+test("a Draynor lap completes the Lumbridge & Draynor easy diary task", () => {
+  hooks.events.length = 0;
+  const draynor = COURSES.find((course) => course.key === "draynor");
+  const player = createPlayer(3103, 3279, 0);
+  runLap(draynor, player);
+  const task = hooks.events.find((event) => event.name === "diary:task");
+  assert.deepEqual(task?.payload, {
+    player,
+    diary: "lumbridge",
+    task: "complete-a-lap-of-the-draynor-village-agility-co",
+  });
+});
+
 test("every shortcut plays out from either side without leaving the player locked", () => {
   const random = Math.random;
   Math.random = () => 0.5;
@@ -284,6 +298,36 @@ test("every shortcut plays out from either side without leaving the player locke
   } finally {
     Math.random = random;
   }
+});
+
+test("the cache-backed Varrock broken fence crosses its clipped north-south edge", () => {
+  const { RegionManager } = require("../dist/game/collision/RegionManager");
+  const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
+  const core = PluginManager.getCoreApi();
+  const objectId = core.ObjectIdentifiers.BROKEN_FENCE_2;
+  const location = new Location(3308, 3492, 0);
+  core.ObjectDefinition.init();
+  RegionManager.init();
+  RegionManager.loadMapFiles(location.getX(), location.getY());
+
+  const fence = MapObjects.get(objectId, location, null);
+  assert.ok(fence, "the cache places the Broken fence at the Quest Helper Lumber Yard route tile");
+  assert.equal(fence.getType(), 10);
+  assert.equal(fence.getFace(), 1, "cache rotation 1 blocks the north-south crossing");
+  assert.equal(fence.getDefinition().getActions()[0], "Climb-over");
+  assert.equal(RegionManager.canMove(3308, 3491, 3308, 3492, 0, 1, 1, null), false,
+    "the south approach is clipped until the obstacle runs");
+
+  const south = createPlayer(3308, 3491, 0, 1);
+  assert.notEqual(operate(south, objectId, [3308, 3492, 0]), false);
+  assert.deepEqual(tileOf(south), [3308, 3494, 0], "Climb-over lands north of the clipped fence");
+  assert.ok(south.state.messages.includes("You climb over the broken fence."));
+  assert.equal(south.getAttribute("agility.obstacle") ?? null, null);
+
+  const north = createPlayer(3308, 3494, 0, 1);
+  assert.notEqual(operate(north, objectId, [3308, 3492, 0]), false);
+  assert.deepEqual(tileOf(north), [3308, 3491, 0], "the reverse interaction lands south of the fence");
+  assert.equal(north.getAttribute("agility.obstacle") ?? null, null);
 });
 
 /** A loc's first option, or (for a multiloc like Wyrmscraig's cliff top) one of the locs it shows. */
@@ -677,4 +721,80 @@ test("Ape Atoll: the rope won't take a pet across (Wiki)", () => {
     delete hooks.answers["pets:current"];
     answerForm(null);
   }
+});
+
+test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets the streak and the unclaimed ticket and reward; the payment stays", () => {
+  const listeners = {};
+  const Dispenser = require("../plugins/skills/AgilityDispenser.plugin");
+  Dispenser.register(new Proxy({
+    core: PluginManager.getCoreApi(),
+    onCustomEvent: (name, handler) => { listeners[name] = handler; },
+  }, { get: (target, key) => (key in target ? target[key] : () => {}) }));
+  const answers = ["agility:lap", "agility:obstacle-start"];
+  for (const name of answers) hooks.answers[name] = listeners[name];
+  try {
+    const course = COURSES.find((entry) => entry.key === "wilderness");
+    const player = createPlayer(3004, 3937, 0);
+    player.setAttribute(Dispenser.ATTRIBUTES.deposit, 1);
+    const varbit = (name) => player.state.varbits.get(CacheDefinitions.getVarbitId(name));
+    runLap(course, player);
+    assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "a paid lap: streak 1");
+    assert.equal(varbit("wildy_agility_reward_available"), 1);
+    player.setLocation(new Location(3004, 3937, 0));
+    runLap(course, player);
+    assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "the untagged lap's pipe reset it, so this lap starts again at 1");
+    assert.equal(player.getAttribute(Dispenser.ATTRIBUTES.deposit), 1, "the payment stays");
+    assert.equal(varbit("wildy_agility_token_available"), 1, "this lap's own ticket");
+  } finally {
+    for (const name of answers) delete hooks.answers[name];
+  }
+});
+
+/** A real Player whose packet sender records game messages; levels set through its SkillManager. */
+function realPlayer(x, y, z, agility) {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const player = new Player(null);
+  const messages = [];
+  const sender = new Proxy({ sendMessage: (text) => (messages.push(text), sender) }, { get: (target, key) => target[key] ?? (() => sender) });
+  player.getPacketSender = () => sender;
+  player.setUsername(`crevice${Math.random()}`.slice(0, 12));
+  player.setRegistered(true);
+  player.setLocation(new Location(x, y, z));
+  player.getSkillManager().setCurrentLevel(Skill.AGILITY, agility, false).setMaxLevels(Skill.AGILITY, agility, false);
+  return { player, messages };
+}
+
+test("the Waterbirth crevice goes one way, from the crab room down; from below it's slippery", () => {
+  const CREVICE = 53258;
+  // From the crab room (rsprox 1057, 1851, 3433): crawl, then out at the foot.
+  const down = realPlayer(1852, 4406, 3, 81);
+  assert.notEqual(operate(down.player, CREVICE, [1853, 4406, 3]), false);
+  assert.deepEqual(tileOf(down.player), [1862, 4406, 1]);
+  assert.ok(down.messages.includes("You crawl through the narrow crevice."));
+  assert.equal(down.player.getMovementQueue().isMovementBlocked(), false);
+
+  // From below (rsprox 2950): the game message and the same line in a message box; no move.
+  const slip = "You try to go up the crevice, but it's slippery and you slide back down. Looks like this is one way only.";
+  const up = realPlayer(1862, 4406, 1, 99);
+  operate(up.player, CREVICE, [1861, 4406, 1]);
+  assert.deepEqual(tileOf(up.player), [1862, 4406, 1]);
+  assert.deepEqual(up.messages, [slip]);
+  assert.ok(up.player.getDialogueManager().getCurrent(), "the message box is open");
+  // Clicking again only repeats the refusal; a low level below gets the same slip, not a level check.
+  operate(up.player, CREVICE, [1861, 4406, 1]);
+  assert.deepEqual(tileOf(up.player), [1862, 4406, 1]);
+  assert.deepEqual(up.messages, [slip, slip]);
+  const novice = realPlayer(1862, 4406, 1, 1);
+  operate(novice.player, CREVICE, [1861, 4406, 1]);
+  assert.deepEqual(novice.messages, [slip]);
+
+  // Below the level, the crab room side refuses before anything moves.
+  const low = realPlayer(1852, 4406, 3, 80);
+  operate(low.player, CREVICE, [1853, 4406, 3]);
+  assert.deepEqual(tileOf(low.player), [1852, 4406, 3]);
+  assert.deepEqual(low.messages, ["You need an Agility level of at least 81 to attempt this."]);
+});
+
+test("a refuse entry is a message or a mesbox, and nothing else", () => {
+  assert.throws(() => build({ name: "x", object: 1, level: 1, refuse: { text: "no" } }, 0), /refuse needs a message or a mesbox/);
 });

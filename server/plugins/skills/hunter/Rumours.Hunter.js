@@ -130,4 +130,6 @@ function open({player,itemId}) {
   if(['expert','master'].includes(tier))H.api.emitCustomEvent("hunter:success",{player,skill:H.core.Skill.HUNTER,npcId:H.core.NpcIdentifiers.QUETZIN,method:"rumour-sack",petChance:tier==='master'?1000:2000});
   return true;
 }
-module.exports={ATTRIBUTE,state,masters,interact,verity,check,success,open,assign,sackRewards,tasks};
+/** `hunter:rumours-completed` { player, completed }: how many rumours the player has finished. */
+function completedCount(request){if(request?.player)request.completed=state(request.player).completed|0;}
+module.exports={ATTRIBUTE,state,masters,interact,verity,check,success,open,assign,sackRewards,tasks,completedCount};

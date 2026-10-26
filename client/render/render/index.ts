@@ -140,6 +140,7 @@ export { loadInstanceScene } from "./instance";
 export { doInstanceSceneBuild } from "./instance";
 export { getInstanceExtraLocs } from "./instance";
 export { scheduleInstanceLocRebuild } from "./instance";
+export { scheduleInstanceLocUpdate } from "./instance";
 export { replaceSceneWithInstance } from "./instance";
 export { clearInstance } from "./instance";
 export { loadWorldEntityScene } from "./worldEntity";

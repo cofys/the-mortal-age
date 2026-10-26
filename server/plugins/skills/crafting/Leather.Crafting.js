@@ -79,6 +79,7 @@ function craftLeatherItem(player, materialId, recipe) {
   Shared.addCraftingXp(player, recipe.xp);
   player.sendMessage(`You make ${recipe.made}.`);
   useThread(player);
+  Shared.getApi().emitCustomEvent("crafting:made", { player, itemId: recipe.itemId });
   return true;
 }
 

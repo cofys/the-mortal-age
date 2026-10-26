@@ -38,6 +38,8 @@
  *
  * Sources: OSRS Wiki "Another Slice of H.A.M.", its Quick guide and Transcript;
  * the cache for every id, varbit, transform and placement.
+ * Tunnel checkpoints: Quest Helper 06da90f982518a093f2fe1c9cfac5547fa7053d3,
+ * helpers/quests/anothersliceofham/AnotherSliceOfHam.java (guardsPassed/guardEngaged).
  *
  * Gaps / approximations:
  *  - Cutscenes replay as transcript lines on one chathead; there is no camera and
@@ -47,8 +49,8 @@
  *    hiding crate (23533), and the finish teleports back to the real village.
  *  - Zanik has no follower system here: "following" is varbit 3557, and she is
  *    hidden again once the Goblin Village teleport fires.
- *  - The H.A.M. guards do not fight the sergeants; an escort count gates whether
- *    walking the corridor or climbing the end ladder gets the player caught.
+ *  - The tunnel patrol uses an inferred two-tick checkpoint, pending a live
+ *    timing capture. Hiding, the passed guard and sergeant combat gate the ladder.
  *  - Sigmund has no prayer immunity (combat core): his first hit while the
  *    player carries the ancient mace replays his "overcoming Saradomin's
  *    protection" line, then he fights normally.
@@ -87,6 +89,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   const VARBIT_STAGE = 3550; // slice_quest
   const ARTIFACT_VARBITS = [3551, 3552, 3553, 3554, 3555, 3556]; // slice_artifact_1..6
   const VARBIT_ZANIK_AT_DIG = 3557; // slice_zanik_at_dig
+  const VARBIT_HIDING = 3558; // slice_hiding
   const VARBIT_RECEIVED_MACE = 3564; // slice_received_mace
 
   const STAGE_STARTED = 1;
@@ -109,6 +112,9 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   const ESCORT_ATTRIBUTE = "quest.another_slice_of_ham.escort"; // sergeants following
   const SEPARATED_ATTRIBUTE = "quest.another_slice_of_ham.sergeants-separated";
   const GUARDS_ENGAGED_ATTRIBUTE = "quest.another_slice_of_ham.guards-engaged";
+  const HIDING_ATTRIBUTE = "another-slice-of-ham:hiding";
+  const PATROL_PASSED_ATTRIBUTE = "another-slice-of-ham:patrol-passed";
+  const GUARD_DEFEATED_ATTRIBUTE = "another-slice-of-ham:guard-defeated";
 
   // ==========================================================================
   // Npc ids (content ids: the cache transform resolution the dialogue index uses)
@@ -229,6 +235,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   const LADDER_TOWER_UP_OBJECT_ID = ObjectIdentifiers.LADDER_309; // 23531
   const LADDER_TOWER_DOWN_OBJECT_ID = ObjectIdentifiers.LADDER_310; // 23532
   const LADDER_TRAIN_OBJECT_ID = ObjectIdentifiers.LADDER_308; // 23504
+  const HIDING_CRATE_OBJECT_ID = ObjectIdentifiers.CRATE_204; // 23283, slice_stealth_crate_stacked
 
   // ==========================================================================
   // Tiles
@@ -236,6 +243,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
 
   const STATION_LANDING = new Location(2513, 5556, 0);
   const STATION_BOTTOM = new Location(2512, 5533, 0);
+  const CITY_LANDING = new Location(2696, 5277, 1);
   const VILLAGE_LANDING = new Location(2955, 3507, 0);
   const INSTANCE_LANDING = new Location(2445, 5425, 0);
   const TOWER_LANDING = new Location(2443, 5417, 2);
@@ -259,13 +267,17 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   const GUARD_TILES = [
     { x: 2402, y: 5538 },
     { x: 2405, y: 5536 },
-    { x: 2411, y: 5532 },
+    { x: 2412, y: 5536 },
   ];
+  // Quest Helper's SLICE_HIDING, guardsPassed and lureHamMember checkpoints.
+  const HIDING_TILE = new Location(2407, 5538, 0);
+  const PASSED_GUARD_TILE = new Location(2397, 5551, 0);
+  const SERGEANT_FIGHT_TILE = new Location(2411, 5536, 0);
 
-  // Walking into the cave hole drops the player into the tunnel; the corridor
-  // zone is the guard stretch between the entry room and the railway ladder.
+  // The crate approach must remain reachable before the patrol passes. Detection
+  // starts in the final guard's lure stretch, east of the marked crate.
   const CAVE_HOLE_ZONE = { minX: 3170, maxX: 3173, minY: 9566, maxY: 9570, levels: [0] };
-  const GUARD_CORRIDOR_ZONE = { minX: 2396, maxX: 2416, minY: 5524, maxY: 5539, levels: [0] };
+  const GUARD_CORRIDOR_ZONE = { minX: 2410, maxX: 2416, minY: 5524, maxY: 5539, levels: [0] };
 
   // ==========================================================================
   // Condition step ids (transcript page)
@@ -321,6 +333,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   const armedCaveReturn = new WeakSet();
   /** Tracked per-player owner-only spawns, keyed by role. */
   const trackedNpcs = new WeakMap();
+  const patrolTasks = new WeakMap();
 
   function stageOf(player) {
     return quest.getStage(player);
@@ -407,8 +420,30 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   }
 
   function giveAncientMace(player) {
-    if (!hasAncientMace(player)) addItem(player, ANCIENT_MACE_ITEM_ID);
+    if (!hasAncientMace(player)) {
+      if (player.getInventory().isFull()) {
+        player.sendMessage("You need free inventory space for the ancient mace.");
+        return false;
+      }
+      addItem(player, ANCIENT_MACE_ITEM_ID);
+      if (!hasAncientMace(player)) return false;
+    }
     markMaceReceived(player);
+    return true;
+  }
+
+  function reclaimMace(player) {
+    if (stageOf(player) < STAGE_KIDNAPPED || hasAncientMace(player)) return;
+    const inventory = player.getInventory();
+    const coins = inventory.getAmount(COINS_ITEM_ID);
+    if (coins < 1000) return;
+    if (inventory.isFull() && coins !== 1000) {
+      player.sendMessage("You need free inventory space for the ancient mace.");
+      return;
+    }
+    // Keep payment and delivery together: the following transcript action can be interrupted.
+    inventory.deleteNumber(COINS_ITEM_ID, 1000);
+    if (!giveAncientMace(player)) inventory.adds(COINS_ITEM_ID, 1000);
   }
 
   /** Re-sends every quest varbit that login scripts can clobber. */
@@ -420,6 +455,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     }
     sender.sendVarbit(VARBIT_ZANIK_AT_DIG, player.getAttribute(ZANIK_AT_DIG_ATTRIBUTE) === true ? 1 : 0);
     sender.sendVarbit(VARBIT_RECEIVED_MACE, player.getAttribute(MACE_ATTRIBUTE) === true ? 1 : 0);
+    sender.sendVarbit(VARBIT_HIDING, player.getAttribute(HIDING_ATTRIBUTE) === true ? 1 : 0);
   }
 
   // ==========================================================================
@@ -437,7 +473,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
 
   function spawnTracked(player, key, definition) {
     const existing = tracked(player).get(key);
-    if (existing) return existing;
+    if (existing && existing.isRegistered() !== false) return existing;
     const npc = api.spawnNpc({ ...definition, owner: player, ownerOnly: true });
     if (npc) tracked(player).set(key, npc);
     return npc;
@@ -474,13 +510,75 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   function spawnTunnelNpcs(player) {
     spawnTracked(player, "mossfists", { id: NpcIdentifiers.SERGEANT_MOSSFISTS, ...SERGEANT_TILES[0], z: 0, wanderRadius: 0 });
     spawnTracked(player, "slimetoes", { id: NpcIdentifiers.SERGEANT_SLIMETOES, ...SERGEANT_TILES[1], z: 0, wanderRadius: 0 });
-    spawnTracked(player, "guard-1", { id: GUARD_NPC_ID, ...GUARD_TILES[0], z: 0, wanderRadius: 0 });
+    const passed = player.getAttribute(PATROL_PASSED_ATTRIBUTE) === true;
+    const firstGuard = spawnTracked(player, "guard-1", { id: GUARD_NPC_ID, ...GUARD_TILES[0], z: 0, wanderRadius: 0 });
+    if (passed) firstGuard?.moveTo(PASSED_GUARD_TILE);
     spawnTracked(player, "guard-2", { id: GUARD_NPC_ID, ...GUARD_TILES[1], z: 0, wanderRadius: 0 });
-    spawnTracked(player, "guard-3", { id: GUARD_NPC_ID, ...GUARD_TILES[2], z: 0, wanderRadius: 0 });
+    if (player.getAttribute(GUARD_DEFEATED_ATTRIBUTE) !== true) {
+      spawnTracked(player, "guard-3", { id: GUARD_NPC_ID, ...GUARD_TILES[2], z: 0, wanderRadius: 0 });
+    }
+    if (player.getAttribute(ESCORT_ATTRIBUTE) === undefined) player.setAttribute(ESCORT_ATTRIBUTE, 2);
+    if (player.getAttribute(GUARDS_ENGAGED_ATTRIBUTE) === true) engageGuard(player);
+    else followSergeants(player);
   }
 
   function clearTunnel(player) {
+    patrolTasks.get(player)?.stop();
+    patrolTasks.delete(player);
     for (const key of ["mossfists", "slimetoes", "guard-1", "guard-2", "guard-3"]) despawnTracked(player, key);
+  }
+
+  function followSergeants(player) {
+    if (player.getAttribute(GUARDS_ENGAGED_ATTRIBUTE) === true) return;
+    const escort = escortOf(player);
+    tracked(player).get("mossfists")?.setFollowing?.(escort === 2 ? player : null);
+    tracked(player).get("slimetoes")?.setFollowing?.(escort > 0 ? player : null);
+  }
+
+  function engageGuard(player) {
+    if (player.getAttribute(GUARD_DEFEATED_ATTRIBUTE) === true) return;
+    const guard = tracked(player).get("guard-3");
+    const sergeant = tracked(player).get(escortOf(player) === 2 ? "mossfists" : "slimetoes");
+    if (!guard || !sergeant) return;
+    sergeant.moveTo(SERGEANT_FIGHT_TILE);
+    sergeant.setMultiCombat(true);
+    guard.setMultiCombat(true);
+    sergeant.getCombat().attack(guard);
+    guard.getCombat().attack(sergeant);
+    player.setAttribute(GUARDS_ENGAGED_ATTRIBUTE, true);
+  }
+
+  function hideBehindCrate(player) {
+    if (stageOf(player) !== STAGE_TUNNEL) return;
+    player.moveTo(HIDING_TILE);
+    player.setAttribute(HIDING_ATTRIBUTE, true);
+    player.getPacketSender().sendVarbit(VARBIT_HIDING, 1);
+    if (player.getAttribute(PATROL_PASSED_ATTRIBUTE) === true || patrolTasks.has(player)) return;
+    const { CountdownTask, TaskManager } = api.core;
+    // shortcut: this patrol checkpoint takes two ticks; calibrate its traversal from a live capture.
+    const task = new CountdownTask(player, 2, () => {
+      if (patrolTasks.get(player) !== task) return;
+      patrolTasks.delete(player);
+      if (!player.isRegistered() || stageOf(player) !== STAGE_TUNNEL ||
+          player.getAttribute(HIDING_ATTRIBUTE) !== true || !player.getLocation().equals(HIDING_TILE)) return;
+      tracked(player).get("guard-1")?.moveTo(PASSED_GUARD_TILE);
+      player.setAttribute(PATROL_PASSED_ATTRIBUTE, true);
+    });
+    patrolTasks.set(player, task);
+    TaskManager.submit(task);
+  }
+
+  function caughtInTunnel(player, variant) {
+    clearTunnel(player);
+    for (const key of [HIDING_ATTRIBUTE, PATROL_PASSED_ATTRIBUTE, GUARDS_ENGAGED_ATTRIBUTE, GUARD_DEFEATED_ATTRIBUTE]) {
+      player.setAttribute(key, false);
+    }
+    player.setAttribute(ESCORT_ATTRIBUTE, 2);
+    player.setAttribute(SEPARATED_ATTRIBUTE, false);
+    player.getPacketSender().sendVarbit(VARBIT_HIDING, 0);
+    startTranscript(api, player, GUARD_NPC_ID, PAGE, variant);
+    player.moveTo(CAVE_LANDING);
+    armedCaveReturn.add(player);
   }
 
   function spawnSigmund(player) {
@@ -621,14 +719,12 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     const { player, npcId } = event;
     if (!GENERAL_NPC_IDS.has(npcId)) return false;
     const stage = stageOf(player);
-    const location = player.getLocation();
-    const inInstance = location.getX() < 2700 && location.getY() > 5300;
     if (stage === STAGE_VILLAGE) {
       player.moveTo(INSTANCE_LANDING);
       startTranscript(api, player, npcId, PAGE, "the-goblin-generals");
       return;
     }
-    if (stage === STAGE_SNIPERS_DEAD && inInstance) {
+    if (stage === STAGE_SNIPERS_DEAD) {
       startTranscript(api, player, npcId, PAGE, "upon-defeating-the-two-h-a-m-members");
       return;
     }
@@ -701,7 +797,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
         break;
     }
     if (npcId !== TEGDAK_NPC_ID) return null;
-    if (SIXTH_HAND_IN_CONDITION_IDS.has(stepId)) return handedIn(player) + 1 >= DIG_SPOTS.length;
+    if (SIXTH_HAND_IN_CONDITION_IDS.has(stepId)) return handedIn(player) >= DIG_SPOTS.length;
     if (ANOTHER_ARTEFACT_CONDITION_IDS.has(stepId)) return false;
     if (NO_ARTEFACT_CONDITION_IDS.has(stepId)) return true;
     const spot = DIG_SPOT_BY_HAND_IN.get(stepId);
@@ -725,6 +821,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
         break;
     }
     if (SIXTH_HAND_IN_CONDITION_IDS.has(stepId)) {
+      if (handedIn(player) < DIG_SPOTS.length) return;
       setZanikAtDig(player, true);
       setStage(player, STAGE_ARTEFACTS);
       return;
@@ -759,6 +856,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
         return;
       case OLDAK_TELEPORT_ACTION_ID:
         if (npcId !== OLDAK_NPC_ID) return;
+        if (hasItem(player, GOBLIN_VILLAGE_SPHERE_ITEM_ID)) player.getInventory().deleteNumber(GOBLIN_VILLAGE_SPHERE_ITEM_ID, 1);
         setZanikAtDig(player, false);
         player.moveTo(VILLAGE_LANDING);
         setStage(player, STAGE_VILLAGE);
@@ -774,7 +872,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
         return;
       case KIDNAP_CUTSCENE_END_ACTION_ID:
         if (!GENERAL_NPC_IDS.has(npcId) || stageOf(player) !== STAGE_SNIPERS_DEAD) return;
-        giveAncientMace(player);
+        if (!giveAncientMace(player)) return;
         setStage(player, STAGE_KIDNAPPED);
         clearInstance(player);
         player.moveTo(VILLAGE_LANDING);
@@ -782,11 +880,11 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
         return;
       case PAY_COINS_ACTION_ID:
         if (!GENERAL_NPC_IDS.has(npcId)) return;
-        if (hasItem(player, COINS_ITEM_ID, 1000)) player.getInventory().deleteNumber(COINS_ITEM_ID, 1000);
+        reclaimMace(player);
         return;
       case RECEIVE_MACE_ACTION_ID:
         if (!GENERAL_NPC_IDS.has(npcId)) return;
-        giveAncientMace(player);
+        // PAY_COINS_ACTION_ID already delivered it atomically; replaying this is not a free reclaim.
         return;
       case COMPLETE_ACTION_ID:
         if (npcId !== SIGMUND_NPC_ID) return;
@@ -822,21 +920,26 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     switch (option) {
       case "Both of you follow me":
         player.setAttribute(ESCORT_ATTRIBUTE, 2);
+        player.setAttribute(SEPARATED_ATTRIBUTE, false);
+        followSergeants(player);
         return;
       case "One of you wait here":
         player.setAttribute(ESCORT_ATTRIBUTE, 1);
         player.setAttribute(SEPARATED_ATTRIBUTE, true);
-        despawnTracked(player, "mossfists");
+        followSergeants(player);
         return;
       case "Both of you wait here":
         player.setAttribute(ESCORT_ATTRIBUTE, 0);
         player.setAttribute(SEPARATED_ATTRIBUTE, true);
+        followSergeants(player);
         return;
       case "Wait here":
         player.setAttribute(ESCORT_ATTRIBUTE, 0);
+        followSergeants(player);
         return;
       case "Follow me":
         player.setAttribute(ESCORT_ATTRIBUTE, 1);
+        followSergeants(player);
         return;
       default:
         return;
@@ -925,6 +1028,14 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   function handleNpcDeath(event) {
     const npcId = event?.npcId ?? event?.npc?.getId?.();
     const killer = event?.killer;
+    if (npcId === GUARD_NPC_ID) {
+      const owner = event.npc?.getOwner?.();
+      if (!owner || stageOf(owner) !== STAGE_TUNNEL || tracked(owner).get("guard-3") !== event.npc) return;
+      if (killer !== tracked(owner).get("mossfists") && killer !== tracked(owner).get("slimetoes")) return;
+      owner.setAttribute(GUARD_DEFEATED_ATTRIBUTE, true);
+      forgetTracked(owner, "guard-3");
+      return;
+    }
     const player = killer?.isPlayer?.() ? killer : null;
     if (!player) return;
     if (npcId === HAM_ARCHER_NPC_ID || npcId === HAM_MAGE_NPC_ID) {
@@ -972,15 +1083,12 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
 
   function enterTunnel(player) {
     player.moveTo(TUNNEL_LANDING);
-    player.setAttribute(ESCORT_ATTRIBUTE, 0);
-    player.setAttribute(SEPARATED_ATTRIBUTE, false);
-    player.setAttribute(GUARDS_ENGAGED_ATTRIBUTE, false);
-    spawnTunnelNpcs(player);
+    if (stageOf(player) === STAGE_TUNNEL) spawnTunnelNpcs(player);
     startTranscript(api, player, GUARD_NPC_ID, PAGE, "the-under-underground");
   }
 
   function handleCaveZoneEnter({ player }) {
-    if (stageOf(player) !== STAGE_TUNNEL) return;
+    if (stageOf(player) < STAGE_TUNNEL || stageOf(player) > STAGE_RAILWAY) return;
     if (armedCaveReturn.has(player)) {
       armedCaveReturn.delete(player);
       return;
@@ -992,24 +1100,28 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     if (stageOf(player) !== STAGE_TUNNEL) return;
     const location = player.getLocation();
     if (location.getY() >= 9000) return;
-    if (escortOf(player) > 0) {
+    if (player.getAttribute(HIDING_ATTRIBUTE) === true && location.equals(HIDING_TILE)) return;
+    player.setAttribute(HIDING_ATTRIBUTE, false);
+    player.getPacketSender().sendVarbit(VARBIT_HIDING, 0);
+    if (player.getAttribute(PATROL_PASSED_ATTRIBUTE) === true && escortOf(player) > 0) {
       if (player.getAttribute(GUARDS_ENGAGED_ATTRIBUTE) !== true) {
-        player.setAttribute(GUARDS_ENGAGED_ATTRIBUTE, true);
+        engageGuard(player);
         startTranscript(api, player, GUARD_NPC_ID, PAGE, "the-distraction-guards-engaging-in-combat-with-the-sergeants");
       }
       return;
     }
-    startTranscript(api, player, GUARD_NPC_ID, PAGE, "the-distraction-if-the-guards-spot-the-player");
-    player.moveTo(CAVE_LANDING);
-    armedCaveReturn.add(player);
+    caughtInTunnel(player, "the-distraction-if-the-guards-spot-the-player");
   }
 
   function descendToRailway(player) {
+    if (stageOf(player) === STAGE_RAILWAY) {
+      player.moveTo(RAILWAY_LANDING);
+      spawnSigmund(player);
+      return;
+    }
     if (stageOf(player) !== STAGE_TUNNEL) return;
-    if (escortOf(player) <= 0) {
-      startTranscript(api, player, GUARD_NPC_ID, PAGE, "the-distraction-if-the-guard-at-the-end-spots-the-player");
-      player.moveTo(CAVE_LANDING);
-      armedCaveReturn.add(player);
+    if (player.getAttribute(GUARDS_ENGAGED_ATTRIBUTE) !== true && player.getAttribute(GUARD_DEFEATED_ATTRIBUTE) !== true) {
+      caughtInTunnel(player, "the-distraction-if-the-guard-at-the-end-spots-the-player");
       return;
     }
     clearTunnel(player);
@@ -1050,20 +1162,26 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
 
   function handleObjectInteraction(event) {
     const { player, objectId, location } = event;
+    if (objectId === HIDING_CRATE_OBJECT_ID && stageOf(player) === STAGE_TUNNEL) {
+      event.handled = true;
+      hideBehindCrate(player);
+      return;
+    }
     if (objectId === DOORWAY_CITY_OBJECT_ID) {
+      if (stageOf(player) < STAGE_KIDNAPPED || stageOf(player) >= STAGE_COMPLETE) return; // Captured transport belongs to LocTeleports.
       event.handled = true;
       enterStation(player);
       return;
     }
     if (objectId === DOORWAY_TUNNEL_GOBLIN_OBJECT_ID) {
+      if (location?.x === 2489 && location?.y === 5536) return; // Captured station-side exit.
       event.handled = true;
-      player.moveTo(location?.x < 2510 ? STATION_BOTTOM : new Location(2513, 5562, 0));
+      const at = player.getLocation();
+      player.moveTo(at.getX() < 2600 ? CITY_LANDING : STATION_LANDING);
       return;
     }
     if (objectId === DOORWAY_TUNNEL_DWARF_OBJECT_ID) {
-      event.handled = true;
-      player.moveTo(new Location(2410, 5535, 0));
-      return;
+      return; // Captured dwarf-side exit belongs to LocTeleports.
     }
     if (objectId === DOORWAY_TUNNEL_FAR_OBJECT_ID) return;
     if (objectId === TIED_ZANIK_OBJECT_ID) {
@@ -1083,7 +1201,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
         armedCaveReturn.add(player);
         return;
       case LADDER_TO_RAILWAY_OBJECT_ID:
-        if (stageOf(player) !== STAGE_TUNNEL) return;
+        if (stageOf(player) < STAGE_TUNNEL || stageOf(player) > STAGE_RAILWAY) return;
         event.handled = true;
         descendToRailway(player);
         return;
@@ -1117,7 +1235,21 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     const stage = stageOf(player);
     if (stage === STAGE_VILLAGE) spawnSnipers(player);
     if (stage === STAGE_SNIPERS_DEAD) spawnInstanceGenerals(player);
+    const at = player.getLocation();
+    if (stage === STAGE_TUNNEL && at.getX() >= 2393 && at.getX() <= 2414 && at.getY() >= 5525 && at.getY() <= 5560) {
+      spawnTunnelNpcs(player);
+      if (player.getAttribute(HIDING_ATTRIBUTE) === true) hideBehindCrate(player);
+    }
     if (stage === STAGE_RAILWAY) spawnSigmund(player);
+  }
+
+  function handleLogout({ player }) {
+    patrolTasks.get(player)?.stop();
+    patrolTasks.delete(player);
+    for (const key of [...(trackedNpcs.get(player)?.keys() ?? [])]) despawnTracked(player, key);
+    trackedNpcs.delete(player);
+    pendingHandIn.delete(player);
+    armedCaveReturn.delete(player);
   }
 
   // ==========================================================================
@@ -1222,6 +1354,9 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   api.persistAttribute(ESCORT_ATTRIBUTE);
   api.persistAttribute(SEPARATED_ATTRIBUTE);
   api.persistAttribute(GUARDS_ENGAGED_ATTRIBUTE);
+  api.persistAttribute(HIDING_ATTRIBUTE, false);
+  api.persistAttribute(PATROL_PASSED_ATTRIBUTE, false);
+  api.persistAttribute(GUARD_DEFEATED_ATTRIBUTE, false);
 
   quest = registerQuest(api, {
     key: "another_slice_of_ham",
@@ -1271,4 +1406,5 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   api.onZoneEnter(CAVE_HOLE_ZONE, handleCaveZoneEnter);
   api.onZoneEnter(GUARD_CORRIDOR_ZONE, handleGuardZoneEnter);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
 };

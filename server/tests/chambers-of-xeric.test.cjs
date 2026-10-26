@@ -438,6 +438,76 @@ test('Tekton follows rsprox captures: swings before the anvil, anvil heals', () 
   assert.equal(Tekton.anvilHeal(8400), 85);
 });
 
+test('Tekton and defence specials (Wiki): the first DWH or elder maul special lands, failed ones still drain', () => {
+  const Tekton = require('../plugins/minigames/cox/Tekton.ChambersOfXeric');
+  const { HitDamage } = require('../dist/game/content/combat/hit/HitDamage');
+  const { HitMask } = require('../dist/game/content/combat/hit/HitMask');
+  const methods = {};
+  for (const file of ['DragonWarhammer', 'ElderMaul', 'BandosGodsword']) {
+    require(`../plugins/combat/specials/${file}.SpecialAttack`)({
+      core: PluginManager.getCoreApi(),
+      registerCombatSpecial: (entry) => { methods[entry.id] = entry.combatMethod; },
+      emitCustomEvent: (name, event) => { if (name === 'combat-special:missed-drain') Tekton.missedDrain(event); },
+    });
+  }
+  const npc = (id, defence) => ({
+    defence,
+    getId: () => id,
+    isPlayer: () => false,
+    isNpc: () => true,
+    getAsNpc() { return this; },
+    performGraphic() {},
+    getCurrentLevel() { return this.defence; },
+    setCurrentLevels(skill, level) { this.defence = Math.max(0, level); },
+    getDefenceLevel() { return this.defence; },
+    setDefenceLevel(level) { this.defence = Math.max(0, level); },
+  });
+  const raider = (specialId, activated = true) => ({
+    isPlayer: () => true,
+    getAsPlayer() { return this; },
+    isSpecialActivated: () => activated,
+    getCombatSpecial: () => ({ getId: () => specialId }),
+    sendMessage() {},
+  });
+  const impact = (attacker, target, damage, accurate) => ({
+    getAttacker: () => attacker, getTarget: () => target, getTotalDamage: () => damage, isAccurate: () => accurate,
+  });
+  const swing = (attacker, target, rolled = 0) => {
+    const roll = { attacker, target, forceAccurate: false };
+    Tekton.guaranteeFirstSpecial(roll);
+    const event = { attacker, target, damage: new HitDamage(rolled, rolled > 0 ? HitMask.RED : HitMask.BLUE), accurate: roll.forceAccurate };
+    Tekton.landGuaranteedSpecial(event);
+    return { forced: roll.forceAccurate, accurate: event.accurate, damage: event.damage.getDamage() };
+  };
+
+  // The first DWH / elder maul special on a Tekton is accurate and deals damage; only one.
+  const tekton = npc(7540, 205);
+  const dwh = raider('dragon_warhammer');
+  assert.deepEqual(swing(raider('dragon_warhammer', false), tekton), { forced: false, accurate: false, damage: 0 }, 'a normal swing');
+  assert.deepEqual(swing(raider('bandos_godsword'), tekton), { forced: false, accurate: false, damage: 0 }, 'not a BGS');
+  assert.deepEqual(swing(dwh, tekton, 0), { forced: true, accurate: true, damage: 1 }, 'a rolled 0 still damages');
+  assert.deepEqual(swing(raider('elder_maul'), tekton), { forced: false, accurate: false, damage: 0 }, 'only the first');
+  const enraged = npc(7544, 205);
+  assert.deepEqual(swing(raider('elder_maul'), enraged, 40), { forced: true, accurate: true, damage: 40 }, 'every Tekton form, its own first');
+  assert.deepEqual(swing(dwh, npc(7413, 100)), { forced: false, accurate: false, damage: 0 }, 'not Tekton');
+
+  // A failed DWH or elder maul special drains 5% of his Defence; a failed BGS 10 levels.
+  methods.dragon_warhammer.handleAfterHitEffects(impact(dwh, tekton, 0, true));
+  assert.equal(tekton.defence, 195, 'DWH dealing no damage: 205 - floor(10.25)');
+  methods.elder_maul.handleAfterHitEffects(impact(dwh, tekton, 0, false));
+  assert.equal(tekton.defence, 186, 'elder maul miss: 195 - floor(9.75)');
+  methods.bandos_godsword.handleAfterHitEffects(impact(dwh, tekton, 0, false));
+  assert.equal(tekton.defence, 176, 'BGS miss: 10 levels');
+  methods.dragon_warhammer.handleAfterHitEffects(impact(dwh, tekton, 30, true));
+  assert.equal(tekton.defence, 124, 'a damaging Smash is the usual 30%');
+
+  const other = npc(7413, 100);
+  methods.dragon_warhammer.handleAfterHitEffects(impact(dwh, other, 0, true));
+  methods.elder_maul.handleAfterHitEffects(impact(dwh, other, 0, false));
+  methods.bandos_godsword.handleAfterHitEffects(impact(dwh, other, 0, false));
+  assert.equal(other.defence, 100, 'other monsters lose nothing to a failed special');
+});
+
 test('puzzle rules from the Wiki: brazier, chest and grub rolls, stuns, tightrope guards', () => {
   assert.equal(IceDemon.lightChance(1), 0.08);
   assert.ok(Math.abs(IceDemon.lightChance(99) - 0.78) < 1e-9);

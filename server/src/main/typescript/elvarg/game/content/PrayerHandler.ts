@@ -10,6 +10,8 @@ import { Sound } from "../Sound";
 import { Sounds } from "../Sounds";
 import { Misc } from "../../util/Misc";
 
+const RUN_OUT_MESSAGE = "You have run out of prayer points, you can recharge at an altar.";
+
 export class PrayerHandler {
 
     private static readonly PRAYER_BY_CHILD = new Map<number, number>([
@@ -208,6 +210,8 @@ export class PrayerHandler {
             }
             PrayerHandler.startDrain(player);
             player.markPrayerActivatedThisTick();
+            // Loaded lazily, as in canUse: PluginManager imports Player.
+            require("../../plugins/PluginManager").PluginManager.emitCustomEvent("prayer:activated", { player, prayerId });
             if (pd.hint !== -1) {
                 const hintId = PrayerHandler.getHeadHint(character);
                 player.getAppearance().setHeadHint(hintId);
@@ -239,7 +243,7 @@ export class PrayerHandler {
         if (player.getSkillManager().getMaxLevel(Skill.PRAYER) < (prayer.requirement)) {
             if (msg) {
                 player.getPacketSender().sendVarbit(prayer.configId, 0);
-                player.sendMessage("You need a Prayer level of at least" + prayer.requirement + " to use" + PrayerData.getPrayerName() + ".");
+                player.sendMessage(`You need a Prayer level of at least ${prayer.requirement} to use ${prayer.getPrayerName()}.`);
             }
             return false;
         }
@@ -393,6 +397,15 @@ export class PrayerHandler {
             return;
         }
 
+        // Recordings 1764, 1852, 4152: Prayer shows 0 on one tick and every prayer
+        // is switched off, with this message, on the next.
+        if (player.getSkillManager().getCurrentLevel(Skill.PRAYER) <= 0) {
+            PrayerHandler.deactivatePrayers(player);
+            player.sendMessage(RUN_OUT_MESSAGE);
+            PrayerHandler.stopDrain(player);
+            return;
+        }
+
         let drainEffect = 0;
         let pointDrain = Number(player.getPrayerPointDrain());
         if (!Number.isFinite(pointDrain) || pointDrain < 0) {
@@ -407,10 +420,9 @@ export class PrayerHandler {
             if (!pd) {
                 continue;
             }
-            // OSRS prayer drain uses a per-tick drain effect against a resistance
-            // threshold of 60 + (prayer bonus * 2). Each prayer's effect is its
-            // per-minute drain rate scaled by the 0.6s game tick.
-            drainEffect += pd.drainRate * 0.6;
+            // Wiki: Prayer. Each tick the active prayers' drain effects are added
+            // to a counter; a point goes each time it reaches 60 + 2 * prayer bonus.
+            drainEffect += pd.drainEffect;
         }
 
         if (player.getHitpoints() <= 0 || drainEffect <= 0) {
@@ -426,13 +438,6 @@ export class PrayerHandler {
         if (drainTreshold >= 1) {
             const total = player.getSkillManager().getCurrentLevel(Skill.PRAYER) - drainTreshold;
             player.getSkillManager().setCurrentLevel(Skill.PRAYER, total, true);
-            if (player.getSkillManager().getCurrentLevel(Skill.PRAYER) <= 0) {
-                PrayerHandler.deactivatePrayers(player);
-                player.sendMessage("You have run out of Prayer points!");
-                Sounds.sendSound(player, Sound.PRAYER_DEPLETED);
-                PrayerHandler.stopDrain(player);
-                return;
-            }
             pointDrain -= drainTreshold * drainResistance;
             if (pointDrain < 0) {
                 pointDrain = 0;
@@ -482,35 +487,35 @@ export class PrayerHandler {
 
 export class PrayerData {
 
-    public static readonly THICK_SKIN = new PrayerData(1, 5, 5609, 4104);
-    public static readonly BURST_OF_STRENGTH =  new PrayerData(4, 5, 5610, 4105);
-    public static readonly CLARITY_OF_THOUGHT = new PrayerData(7, 5, 5611, 4106);
-    public static readonly SHARP_EYE = new PrayerData(8, 5, 19812, 4122);
-    public static readonly MYSTIC_WILL = new PrayerData(9, 5, 19814, 4123);
-    public static readonly ROCK_SKIN = new PrayerData (10, 10, 5612, 4107);
-    public static readonly SUPERHUMAN_STRENGTH = new PrayerData (13, 10, 5613, 4108);
-    public static readonly IMPROVED_REFLEXES = new PrayerData (16, 10, 5614, 4109);
-    public static readonly RAPID_RESTORE = new PrayerData (19, 2.3, 5615, 4110);
-    public static readonly RAPID_HEAL = new PrayerData (22, 3, 5616, 4111);
-    public static readonly PROTECT_ITEM = new PrayerData (25, 3, 5617, 4112);
-    public static readonly HAWK_EYE = new PrayerData (26, 10, 19816, 4124);
-    public static readonly MYSTIC_LORE = new PrayerData (27, 10, 19818, 4125);
-    public static readonly STEEL_SKIN = new PrayerData (28, 20, 5618, 4113);
-    public static readonly ULTIMATE_STRENGTH = new PrayerData (31, 20, 5619, 4114);
-    public static readonly INCREDIBLE_REFLEXES = new PrayerData (34, 20, 5620, 4115);
-    public static readonly PROTECT_FROM_MAGIC = new PrayerData (37, 20, 5621, 4116, [2]);
-    public static readonly PROTECT_FROM_MISSILES = new PrayerData (40, 20, 5622, 4117, [1]);
-    public static readonly PROTECT_FROM_MELEE = new PrayerData (43, 20, 5623, 4118, [0]);
-    public static readonly EAGLE_EYE = new PrayerData(44, 20, 19821, 4126);
-    public static readonly MYSTIC_MIGHT = new PrayerData (45, 20, 19823, 4127);
-    public static readonly RETRIBUTION = new PrayerData (46, 5, 683, 4119, [4]);
-    public static readonly REDEMPTION = new PrayerData (49, 10, 684, 4120, [5]);
-    public static readonly SMITE = new PrayerData (52, 32.0, 685, 4121, [6]);
-    public static readonly PRESERVE = new PrayerData (55, 3, 28001, 5466);
-    public static readonly CHIVALRY = new PrayerData (60, 38.5, 19825, 4128);
-    public static readonly PIETY = new PrayerData (70, 38.5, 19827, 4129);
-    public static readonly RIGOUR = new PrayerData (74, 38.5, 28004, 5464);
-    public static readonly AUGURY = new PrayerData (77, 38.5, 28007, 5465);
+    public static readonly THICK_SKIN = new PrayerData(1, 1, 5609, 4104);
+    public static readonly BURST_OF_STRENGTH =  new PrayerData(4, 1, 5610, 4105);
+    public static readonly CLARITY_OF_THOUGHT = new PrayerData(7, 1, 5611, 4106);
+    public static readonly SHARP_EYE = new PrayerData(8, 1, 19812, 4122);
+    public static readonly MYSTIC_WILL = new PrayerData(9, 1, 19814, 4123);
+    public static readonly ROCK_SKIN = new PrayerData (10, 6, 5612, 4107);
+    public static readonly SUPERHUMAN_STRENGTH = new PrayerData (13, 6, 5613, 4108);
+    public static readonly IMPROVED_REFLEXES = new PrayerData (16, 6, 5614, 4109);
+    public static readonly RAPID_RESTORE = new PrayerData (19, 1, 5615, 4110);
+    public static readonly RAPID_HEAL = new PrayerData (22, 2, 5616, 4111);
+    public static readonly PROTECT_ITEM = new PrayerData (25, 2, 5617, 4112);
+    public static readonly HAWK_EYE = new PrayerData (26, 6, 19816, 4124);
+    public static readonly MYSTIC_LORE = new PrayerData (27, 6, 19818, 4125);
+    public static readonly STEEL_SKIN = new PrayerData (28, 12, 5618, 4113);
+    public static readonly ULTIMATE_STRENGTH = new PrayerData (31, 12, 5619, 4114);
+    public static readonly INCREDIBLE_REFLEXES = new PrayerData (34, 12, 5620, 4115);
+    public static readonly PROTECT_FROM_MAGIC = new PrayerData (37, 12, 5621, 4116, [2]);
+    public static readonly PROTECT_FROM_MISSILES = new PrayerData (40, 12, 5622, 4117, [1]);
+    public static readonly PROTECT_FROM_MELEE = new PrayerData (43, 12, 5623, 4118, [0]);
+    public static readonly EAGLE_EYE = new PrayerData(44, 12, 19821, 4126);
+    public static readonly MYSTIC_MIGHT = new PrayerData (45, 12, 19823, 4127);
+    public static readonly RETRIBUTION = new PrayerData (46, 3, 683, 4119, [4]);
+    public static readonly REDEMPTION = new PrayerData (49, 6, 684, 4120, [5]);
+    public static readonly SMITE = new PrayerData (52, 18, 685, 4121, [6]);
+    public static readonly PRESERVE = new PrayerData (55, 2, 28001, 5466);
+    public static readonly CHIVALRY = new PrayerData (60, 12, 19825, 4128);
+    public static readonly PIETY = new PrayerData (70, 24, 19827, 4129);
+    public static readonly RIGOUR = new PrayerData (74, 24, 28004, 5464);
+    public static readonly AUGURY = new PrayerData (77, 24, 28007, 5465);
 
     /**
        * Contains the PrayerData with their corresponding prayerId.
@@ -537,10 +542,10 @@ export class PrayerData {
      */
     public configId: number;
     /**
-     * The rate of which the player's prayer points will be drained at
-     * per minute.
+     * Added to the player's prayer drain counter every tick the prayer is on
+     * (Wiki: Prayer, "Drain effect").
      */
-    public drainRate: number;
+    public drainEffect: number;
     /**
      * The prayer's head icon hint index.
      */
@@ -551,9 +556,9 @@ export class PrayerData {
      */
     private name: string;
 
-    constructor(requirement: number, drainRate: number, buttonId: number, configId: number, hint: number[] = []) {
+    constructor(requirement: number, drainEffect: number, buttonId: number, configId: number, hint: number[] = []) {
         this.requirement = requirement;
-        this.drainRate = drainRate;
+        this.drainEffect = drainEffect;
         this.buttonId = buttonId;
         this.configId = configId;
         if (hint && hint.length > 0)
@@ -565,9 +570,7 @@ export class PrayerData {
      *
      * @return The prayer's name
      */
-    public static getPrayerName(): string {
-        if (this.name == null)
-            return Misc.capitalizeWords(toString().toLowerCase().replace("_", " "));
+    public getPrayerName(): string {
         return this.name;
     }
 
@@ -608,7 +611,9 @@ export class PrayerData {
             return;
         }
         let prayerId = 0;
-        for (const pd of PrayerData.values()) {
+        for (const [name, pd] of Object.entries(PrayerData)) {
+            if (!(pd instanceof PrayerData)) continue;
+            pd.name = Misc.capitalizeWords(name.toLowerCase().replace(/_/g, " ")).replace(" Of ", " of ").replace(" From ", " from ");
             pd.prayerId = prayerId;
             this.prayerData.set(prayerId, pd);
             this.actionButton.set(pd.buttonId, pd);

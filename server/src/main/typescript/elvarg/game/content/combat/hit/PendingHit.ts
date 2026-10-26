@@ -49,6 +49,8 @@ export class PendingHit {
     private spell: CombatSpell | null = null;
     /** A roll hook (Verac's set) let this hit through protection prayers. */
     private protectionBypassed = false;
+    /** Index of the `firstSuccessfulAccuracyDamageRanges` branch that landed; -1 when every roll missed. */
+    private firstSuccessfulRangeIndex: number | undefined;
 
     constructor(attacker: Mobile, target: Mobile, method: CombatMethod, delayOrConfig?: number | PendingHitConfig, handleAfterHitEffects?: boolean,
         private readonly spellContext: SpellCastContext | null = null) {
@@ -141,6 +143,11 @@ export class PendingHit {
     /** Whether the attacker gets the usual combat XP for this hit. */
     public rewardsExperience(): boolean {
         return this.experience;
+    }
+
+    /** The branch of a first-successful-roll special that landed (0-based), -1 if all rolls missed, undefined if not such a special. */
+    public getFirstSuccessfulRangeIndex(): number | undefined {
+        return this.firstSuccessfulRangeIndex;
     }
 
     public isAccurate(): boolean {
@@ -419,9 +426,11 @@ export class PendingHit {
             }
             this.accurate = total > 0;
             this.totalDamage = total;
+            this.firstSuccessfulRangeIndex = attempt;
             return hits;
         }
 
+        this.firstSuccessfulRangeIndex = -1;
         const patterns = traits.allMissDamagePatterns;
         const fallbackRoll = Math.random();
         const pattern = patterns && patterns.length > 0

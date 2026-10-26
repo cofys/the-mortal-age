@@ -33,6 +33,10 @@
  *   ticks, 85 at 8,400 hitpoints (1% + 1). He stays 12-21 ticks (12, 15, 18 or 21 seen), then
  *   rises enraged (7487) and walks 2 ticks later.
  * - Dying: anim 7495; he goes 3 ticks later; the fire goes as well.
+ * - Defence specials (https://oldschool.runescape.wiki/w/Tekton): the first elder maul or dragon
+ *   warhammer special to make contact always lands as a damaging successful hit (only one of
+ *   several landing on the same tick); later ones act as normal. One of those that fails to hit still drains 5% of his Defence, and
+ *   a Bandos godsword that fails drains 10 levels in its usual order.
  * Not on the Wiki (to check against a capture): the tiles; the spark spots; spark damage 10-20
  *   on the 3x3; stomps 1-3; protect from melee letting half through; which sides each swing
  *   hits; the exit crystal 30017.
@@ -68,6 +72,17 @@ const SPARK_TILES = [
 ];
 /** Facing south, west, north, east; the side to his right is the next one. */
 const FACINGS = ["south", "west", "north", "east"];
+
+/** Wiki (Tekton): specials whose first hit on him always lands, and what a failed one drains. */
+const GUARANTEED_SPECIALS = new Set(["dragon_warhammer", "elder_maul"]);
+const MISSED_DRAIN = {
+  dragon_warhammer: { fraction: 0.05 },
+  elder_maul: { fraction: 0.05 },
+  bandos_godsword: { levels: 10 },
+};
+/** Tektons that have taken their guaranteed special, and the attacker each one's roll is for. */
+const guaranteedSpent = new WeakSet();
+const guaranteedRolls = new WeakMap();
 
 /** rsprox captures: 85 a heal at 8,400 hitpoints. */
 function anvilHeal(maxHitpoints) {
@@ -406,10 +421,44 @@ function crossFire(event) {
   return true;
 }
 
+function isTekton(mobile) {
+  return mobile?.isNpc?.() === true && Monsters.ID.TEKTON.has(mobile.getId());
+}
+
+function activeSpecialId(attacker) {
+  if (attacker?.isPlayer?.() !== true) return null;
+  const player = attacker.getAsPlayer();
+  return player.isSpecialActivated() ? player.getCombatSpecial()?.getId() ?? null : null;
+}
+
+/** The first elder maul or dragon warhammer special on him is accurate; the damage roll follows. */
+function guaranteeFirstSpecial(roll) {
+  if (!isTekton(roll.target) || guaranteedSpent.has(roll.target)) return;
+  if (!GUARANTEED_SPECIALS.has(activeSpecialId(roll.attacker))) return;
+  guaranteedSpent.add(roll.target);
+  guaranteedRolls.set(roll.attacker, roll.target);
+  roll.forceAccurate = true;
+}
+
+/** ...and damaging: a rolled 0 becomes a 1. */
+function landGuaranteedSpecial(event) {
+  if (guaranteedRolls.get(event.attacker) !== event.target) return;
+  guaranteedRolls.delete(event.attacker);
+  event.accurate = true;
+  if (event.damage.getDamage() < 1) event.damage.setDamage(1);
+}
+
+function missedDrain(event) {
+  if (isTekton(event.hit.getTarget())) Object.assign(event, MISSED_DRAIN[event.specialId]);
+}
+
 module.exports = function registerCoxTekton(api) {
   Shared.bind(api);
   api.registerNpcCombatMethodProvider(Object.values(FORM), tektonCombat(api));
   Shared.onObjectIds(api, [OBJECT.FIRE], crossFire);
+  api.onCombatHitRoll(guaranteeFirstSpecial);
+  api.onCombatHitDamage(landGuaranteedSpecial);
+  api.onCustomEvent("combat-special:missed-drain", missedDrain);
 };
 
-Object.assign(module.exports, { TektonRoom, anvilHeal, SWINGS });
+Object.assign(module.exports, { TektonRoom, anvilHeal, SWINGS, guaranteeFirstSpecial, landGuaranteedSpecial, missedDrain });

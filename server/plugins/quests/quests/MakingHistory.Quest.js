@@ -10,28 +10,41 @@
  * north of Castle Wars, opening it for the journal, Droalak's sapphire-amulet
  * task, Dron's quiz after Blanin, the letter to King Lathas and the reward.
  *
- * Stages (varbit 1383 "makinghistory_prog" of varp 604, values 0-2): 1 started,
- * 2 complete. The finer progress lives in persisted attributes and is mirrored
- * to the real sibling varbits with sendVarbit as it advances (1384
- * trader_prog 0-5, 1385 warr_prog 0-7, 1386 ghost_prog 0-15); Melina/Droalak
- * presence is driven through their multi-NPC transform varbits (1387/1388), so
- * they vanish for the player without touching the shared spawn. 1390 objloc /
- * 1391 locstatus stay unset (museum gap).
+ * Durable stage (attribute) is 1 started, 2 complete, but the canonical wire
+ * "makinghistory_prog" (varbit 1383) is 0 not started, 1 started, 2 the letter
+ * to King Lathas is held, 3 King Lathas's reply is held and 4 complete - the
+ * cache completion threshold (quest DB row 92, column 19). The finer progress
+ * lives in persisted attributes and is mirrored to the real sibling varbits
+ * with sendVarbit as it advances; all of them are bit fields of varp 604
+ * (cache: 1383 bits 0-2, 1384 bits 3-5, 1385 bits 6-8, 1386 bits 9-12,
+ * 1387 bit 13, 1388 bit 14, 1390 objloc bit 20), so the server keeps the
+ * sibling bits when one of them is written. The wire values are the native
+ * ones Quest Helper reads: 1384 trader 1 key / 2 chest / 3 journal found /
+ * 4 journal handed to Jorral, 1385 warr 2 Blanin / 3 Dron / 4 told to Jorral,
+ * 1386 ghost 2 Droalak / 4 Melina / 5 scroll / 6 scroll handed to Jorral.
+ * Melina/Droalak presence is driven through their multi-NPC transform varbits
+ * (1387/1388), so they vanish for the player without touching the shared
+ * spawn. 1390 objloc is set to 1 on completion (the outpost becomes the
+ * museum); 1391 locstatus stays unset (the enchanted-key digs are post-quest).
  *
  * Rewards per the OSRS Wiki: 3 Quest points, 1,000 Crafting XP, 1,000 Prayer XP,
- * 750 coins, the enchanted key and access to the outpost museum.
+ * 750 coins, the enchanted key and access to the outpost museum. The key is
+ * Erin's, so it is only handed over when the player does not hold one; a lost
+ * key is bought back from the silver merchant for 500 coins (the wiki's own
+ * post-quest conversation).
  *
  * Gaps: the requirements (Priest in Peril and The Restless Ghost) are checked
- * against the registered quests; the outpost museum swap (locstatus 1391 /
- * objloc 1390) is not simulated, completing only plays the scroll; the key's
+ * through public quest queries; the outpost museum swap itself (the objects
+ * behind objloc 1390) is not simulated, but the native 1390 switch is set on
+ * completion; the key's
  * post-quest treasure digs (The Enchanted Key miniquest) are not implemented;
  * the master-clue condition is answered false; Dron's "North West side of town"
- * wrong answer is a transcript "unavailable" marker and closes silently, and his
- * "kittens" menu is reassembled from the export's split "Tea" / "Lunch" menus so
- * the correct answer is reachable; the dig spot tolerates one tile around
- * (2442,3139); King Lathas has no npc-spawns.json entry, so an owner-only copy is
- * spawned in the Ardougne Castle throne room while the player has business with
- * him; the Droalak/Melina variants are replayed with their conditions inlined
+ * wrong answer is a transcript "unavailable" marker and closes silently;
+ * the dig spot tolerates one tile around
+ * (2442,3139); King Lathas is already in the throne room - the cache spawns
+ * npc 9228 there and the client transforms it to 9005 - so the owner-only copy
+ * is only spawned when that canonical NPC is missing; the Droalak/Melina
+ * variants are replayed with their conditions inlined
  * because HandInTheSand's earlier global condition handler mis-answers their
  * "inventory space" branch; the post-quest Droalak fade is also selected through
  * the transcript selector for the indexed 3493/3494 fallback (the 6128
@@ -39,8 +52,8 @@
  * 6128 at all after completion that is a core multi-NPC resolution issue.
  */
 module.exports = function registerMakingHistoryQuest(api) {
-  const { Equipment, Item, ItemIdentifiers, NpcIdentifiers, Skill } = api.core;
-  const { getRegisteredQuests, registerQuest, refreshQuestList, startTranscript } =
+  const { Equipment, Item, ItemIdentifiers, Location, NpcIdentifiers, Skill, World } = api.core;
+  const { registerQuest, refreshQuestList, startTranscript } =
     require("../QuestRuntime");
 
   const PAGE = "Making History";
@@ -57,11 +70,21 @@ module.exports = function registerMakingHistoryQuest(api) {
   const VARBIT_GHOST_PROGRESS = 1386; // makinghistory_ghost_prog, bits 9-12
   const VARBIT_MELINA_PRESENT = 1387; // makinghistory_melina_pres
   const VARBIT_DROALAK_PRESENT = 1388; // makinghistory_droalak_pres
+  const VARBIT_MUSEUM = 1390; // makinghistory_objloc, the outpost becomes the museum
 
   const STAGE_STARTED = 1;
   const STAGE_COMPLETE = 2;
 
+  // Canonical varbit 1383 values (the durable stage above is not the wire value).
+  const WIRE_STARTED = 1;
+  const WIRE_JORRAL_LETTER = 2;
+  const WIRE_KING_LETTER = 3;
+  const WIRE_COMPLETE = 4;
+
   const JORRAL_NPC_ID = NpcIdentifiers.JORRAL; // 3490
+  // The cache spawns npc 9228 in the Ardougne Castle throne room; its transform
+  // varbit (9016) resolves it to 9005 "King Lathas" for every player.
+  const KING_LATHAS_NATIVE_NPC_ID = 9228;
   const DRON_NPC_ID = NpcIdentifiers.DRON; // 3495
   const BLANIN_NPC_ID = NpcIdentifiers.BLANIN; // 3496
   const MELINA_NPC_IDS = new Set([
@@ -102,6 +125,8 @@ module.exports = function registerMakingHistoryQuest(api) {
   const DIG_RADIUS = 1; // ponytail: one-tile tolerance, the wiki marks the spot with r=4
 
   const KING_LATHAS_SPAWN = { x: 2579, y: 3294, z: 1 }; // Ardougne Castle throne room
+  const KING_LATHAS_NATIVE_SPAWN = { x: 2578, y: 3293, z: 1 }; // the cache's own King Lathas
+  const KING_LATHAS_SEARCH_RADIUS = 2;
 
   // Persisted progress.
   const TRADER_ATTRIBUTE = "quest.making_history.trader";
@@ -129,6 +154,8 @@ module.exports = function registerMakingHistoryQuest(api) {
   const BIT_WARR_DONE = 1 << 2;
   const BIT_FULL_STORY = 1 << 3;
   const BIT_KING_SEEN = 1 << 4;
+  const BIT_DROALAK_GONE = 1 << 5;
+  const BIT_JORRAL_LETTER_SEEN = 1 << 6;
 
   const START_HOOK = "quest:making-history:start";
 
@@ -149,6 +176,11 @@ module.exports = function registerMakingHistoryQuest(api) {
   const MELINA_TAKES_AMULET_STEP = "Uu67E-";
   const DROALAK_FADES_STEP = "tsNvdU";
   const COMPLETE_STEP = "pMj4WQ";
+  // The silver merchant's post-quest conversation: he sells the key back for
+  // 500 coins (give) and hands it over (receive).
+  const GIVE_KEY_PRICE_STEP = "57gscX";
+  const RECEIVE_ENCHANTED_KEY_STEP = "uDpunX";
+  const KEY_PRICE = 500;
 
   // Enchanted key "Feel" conditions, in variant order.
   const ABSOLUTE_STEP_IDS = ["wPalrl", "LkzTaF", "ylnnaL", "nRVZPr", "tBNM2n", "P2_Key"];
@@ -166,6 +198,11 @@ module.exports = function registerMakingHistoryQuest(api) {
   const lastPersonQueued = new WeakSet();
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
+
+  const bankedKey = (player) => (player.getBanks?.() ?? []).some(
+    (bank) => (bank?.getAmount(ENCHANTED_KEY) ?? 0) > 0
+  );
+  const ownsKey = (player) => held(player, ENCHANTED_KEY) || bankedKey(player);
 
   function freeSlots(player) {
     const inventory = player.getInventory();
@@ -203,27 +240,65 @@ module.exports = function registerMakingHistoryQuest(api) {
   function setTrader(player, value) {
     if (trader(player) >= value) return;
     player.setAttribute(TRADER_ATTRIBUTE, value);
-    player.getPacketSender().sendVarbit(VARBIT_TRADER_PROGRESS, value);
+    sendPathVarbits(player);
   }
 
   function setGhost(player, value) {
     if (ghost(player) >= value) return;
     player.setAttribute(GHOST_ATTRIBUTE, value);
-    player.getPacketSender().sendVarbit(VARBIT_GHOST_PROGRESS, value);
+    sendPathVarbits(player);
   }
 
   function setWarr(player, value) {
     if (warr(player) >= value) return;
     player.setAttribute(WARR_ATTRIBUTE, value);
-    player.getPacketSender().sendVarbit(VARBIT_WARR_PROGRESS, value);
+    sendPathVarbits(player);
   }
 
-  /** Re-send the per-path progress varbits from the persisted attributes. */
+  /**
+   * Native wire values of the three path varbits (Quest Helper reads these):
+   * 1384 trader 1 key / 2 chest / 3 journal found / 4 journal given to Jorral,
+   * 1385 warr 2 Blanin / 3 Dron / 4 Dron's account given to Jorral,
+   * 1386 ghost 2 Droalak / 4 Melina / 5 scroll / 6 scroll given to Jorral.
+   * The durable attributes keep their own 0..3 scale; only the wire is mapped.
+   */
+  function traderWire(player) {
+    const value = trader(player);
+    if (value >= TRADER_JOURNAL && hasBit(player, BIT_JOURNAL_DONE)) return 4;
+    return value;
+  }
+
+  function warrWire(player) {
+    const value = warr(player);
+    if (value >= WARR_QUIZ) return hasBit(player, BIT_WARR_DONE) ? 4 : 3;
+    if (value >= WARR_BRIEFED) return 2;
+    return 0;
+  }
+
+  function ghostWire(player) {
+    const value = ghost(player);
+    if (value >= GHOST_SCROLL) return hasBit(player, BIT_SCROLL_DONE) ? 6 : 5;
+    if (value >= GHOST_AMULET) return 4;
+    if (value >= GHOST_ASKED) return 2;
+    return 0;
+  }
+
+  /** Send the three path progress varbits from the durable state. */
+  function sendPathVarbits(player) {
+    const packet = player.getPacketSender();
+    packet.sendVarbit(VARBIT_TRADER_PROGRESS, traderWire(player));
+    packet.sendVarbit(VARBIT_WARR_PROGRESS, warrWire(player));
+    packet.sendVarbit(VARBIT_GHOST_PROGRESS, ghostWire(player));
+  }
+
+  /** Re-send the per-path progress/presence varbits from persisted state. */
   function sendProgressVarbits(player) {
     const packet = player.getPacketSender();
-    packet.sendVarbit(VARBIT_TRADER_PROGRESS, trader(player));
-    packet.sendVarbit(VARBIT_WARR_PROGRESS, warr(player));
-    packet.sendVarbit(VARBIT_GHOST_PROGRESS, ghost(player));
+    sendPathVarbits(player);
+    // These share varp 604 with the login bootstrap's all-spells varps.
+    packet.sendVarbit(VARBIT_MELINA_PRESENT, ghost(player) >= GHOST_AMULET ? 1 : 0);
+    packet.sendVarbit(VARBIT_DROALAK_PRESENT, hasBit(player, BIT_DROALAK_GONE) ? 1 : 0);
+    packet.sendVarbit(VARBIT_MUSEUM, quest.isComplete(player) ? 1 : 0);
   }
 
   function wearingGhostspeak(player) {
@@ -231,9 +306,27 @@ module.exports = function registerMakingHistoryQuest(api) {
   }
 
   function meetsRequirements(player) {
-    const quests = getRegisteredQuests();
-    const complete = (key) => quests.some((entry) => entry.key === key && entry.isComplete(player));
-    return complete("the_restless_ghost") && complete("priest_in_peril");
+    const ghost = { player, key: "the_restless_ghost", started: null };
+    const priest = { player, key: "priest_in_peril", complete: null };
+    api.emitCustomEvent("quest:is-started", ghost);
+    api.emitCustomEvent("quest:is-complete", priest);
+    // Father Urhney gives the amulet before The Restless Ghost is finished.
+    return ghost.started === true && priest.complete === true;
+  }
+
+  /**
+   * The canonical progress varbit is finer than the durable stage: the letter
+   * steps between "started" and "complete" are visible to cache quest scripts.
+   */
+  function canonicalProgressValue(player) {
+    if (quest.isComplete(player)) return WIRE_COMPLETE;
+    if (hasBit(player, BIT_KING_SEEN)) return WIRE_KING_LETTER;
+    if (hasBit(player, BIT_JORRAL_LETTER_SEEN) || held(player, JORRAL_LETTER)) return WIRE_JORRAL_LETTER;
+    return quest.getStage(player) >= STAGE_STARTED ? WIRE_STARTED : 0;
+  }
+
+  function sendCanonicalProgress(player) {
+    player.getPacketSender().sendVarbit(VARBIT_PROGRESS, canonicalProgressValue(player));
   }
 
   function allInformationDone(player) {
@@ -339,56 +432,24 @@ module.exports = function registerMakingHistoryQuest(api) {
     });
   }
 
-  /**
-   * The transcript export splits Dron's "When are kittens best devoured?" menu
-   * into a one-option "Tea" menu, the PgE_Go wrong-answer action, an end, and a
-   * one-option "Lunch" menu, so the correct answer is unreachable. Reassemble
-   * the two options into one menu; both option texts and branches are the wiki's.
-   */
-  function repairDronQuiz(steps) {
-    if (!Array.isArray(steps)) return [];
-    const out = [];
-    for (let index = 0; index < steps.length; index++) {
-      const step = steps[index];
-      if (
-        step?.type === "choice" &&
-        step.options?.length === 1 &&
-        step.options[0].text === "Tea" &&
-        steps[index + 1]?.type === "action" &&
-        steps[index + 1].id === "PgE_Go" &&
-        steps[index + 2]?.type === "end" &&
-        steps[index + 3]?.type === "choice" &&
-        steps[index + 3].options?.length === 1 &&
-        steps[index + 3].options[0].text === "Lunch"
-      ) {
-        const lunch = steps[index + 3];
-        const wrongTea = { ...step.options[0], steps: [steps[index + 1]] };
-        out.push({ ...lunch, options: [...lunch.options, wrongTea] });
-        index += 3;
-        continue;
-      }
-      const copy = { ...step };
-      if (Array.isArray(copy.steps)) copy.steps = repairDronQuiz(copy.steps);
-      if (Array.isArray(copy.options)) {
-        copy.options = copy.options.map((option) => ({ ...option, steps: repairDronQuiz(option.steps) }));
-      }
-      out.push(copy);
-    }
-    return out;
-  }
-
   function playDronQuiz(player) {
     api.emitCustomEvent("npc-dialogue:start", {
       player,
       npcId: DRON_NPC_ID,
       variant: "talking-to-dron-talking-to-dron-again",
-      select: repairDronQuiz,
     });
   }
 
   // ==========================================================================
   // Variant selection
   // ==========================================================================
+
+  /** Slug Menace owns Jorral while its pages are being translated. */
+  function otherQuestNeedsJorral(player) {
+    const request = { player, key: "the_slug_menace", stage: null };
+    api.emitCustomEvent("quest:get-stage", request);
+    return request.stage === 5 || request.stage === 6;
+  }
 
   function jorralVariant(player, stage) {
     if (stage >= STAGE_COMPLETE) return { page: JORRAL_PAGE, variant: "after-making-history" };
@@ -436,7 +497,9 @@ module.exports = function registerMakingHistoryQuest(api) {
   }
 
   function lathasVariant(player, stage) {
-    if (stage >= STAGE_COMPLETE) return { page: KING_LATHAS_PAGE, variant: "standard-dialogue" };
+    // Post-quest the generic King Lathas page already plays standard-dialogue;
+    // return null so Regicide and Underground Pass can claim him at their steps.
+    if (stage >= STAGE_COMPLETE) return null;
     if (stage < STAGE_STARTED || !hasBit(player, BIT_FULL_STORY)) return null;
     if (hasBit(player, BIT_KING_SEEN) && held(player, KING_LETTER)) {
       return "talking-to-king-lathas-talking-to-king-lathas-again";
@@ -446,7 +509,13 @@ module.exports = function registerMakingHistoryQuest(api) {
 
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
-    if (npcId === JORRAL_NPC_ID) return jorralVariant(player, stage);
+    if (npcId === JORRAL_NPC_ID) {
+      if (otherQuestNeedsJorral(player)) return null;
+      // Before the quest starts the generic Jorral page is the canonical start
+      // conversation (its own conditions and start hook), so do not shadow it.
+      if (stage < STAGE_STARTED) return null;
+      return jorralVariant(player, stage);
+    }
     if (SILVER_MERCHANT_NPC_IDS.has(npcId)) return erinVariant(player, stage);
     if (npcId === DRON_NPC_ID) return dronVariant(player, stage);
     if (npcId === BLANIN_NPC_ID) return blaninVariant(player, stage);
@@ -469,8 +538,10 @@ module.exports = function registerMakingHistoryQuest(api) {
       case "rh-9rb":
         return false; // no master-clue hot/cold support here
       case "PwpLer":
+      case "zjWUw5":
         return !meetsRequirements(player);
       case "vVZ0NF":
+      case "QIdJ0k":
         return meetsRequirements(player);
       // The last-person conversation is replayed by the plugin once every
       // hand-in is done; the transcript's cross-reference step is not runnable.
@@ -513,6 +584,24 @@ module.exports = function registerMakingHistoryQuest(api) {
         return true;
       case "m0t7Hg":
         return held(player, JOURNAL);
+      // The silver merchant's post-quest conversation: without the key he
+      // sells it back for 500 coins, with it he only comments on it.
+      case "q_Kz9y":
+        return !ownsKey(player);
+      case "9kVLlg":
+        return held(player, ENCHANTED_KEY);
+      case "PaZHfR":
+        return player.getInventory().getAmount(COINS) < KEY_PRICE;
+      case "PkuYso":
+        return freeSlots(player) < 1;
+      case "q4Kcl6":
+        return freeSlots(player) >= 1 && player.getInventory().getAmount(COINS) >= KEY_PRICE;
+      case "hiIg7x":
+        return bankedKey(player);
+      case "07rNIp":
+      case "APjFg8":
+        // No steel-key-ring owner or Enchanted Key miniquest exists yet.
+        return false;
       case "7eJupI":
       case "mNP0yr":
       case "CKCM76":
@@ -649,8 +738,6 @@ module.exports = function registerMakingHistoryQuest(api) {
     player.setAttribute(BITS_ATTRIBUTE, 0);
     player.setAttribute(KEY_LAST_ATTRIBUTE, -1);
     sendProgressVarbits(player);
-    player.getPacketSender().sendVarbit(VARBIT_MELINA_PRESENT, 0);
-    player.getPacketSender().sendVarbit(VARBIT_DROALAK_PRESENT, 0);
     quest.setStage(player, STAGE_STARTED);
   }
 
@@ -665,10 +752,32 @@ module.exports = function registerMakingHistoryQuest(api) {
     });
   }
 
+  /**
+   * The cache already places King Lathas in the throne room (npc 9228, which
+   * the client's transform varbit turns into 9005). Only spawn an owner-only
+   * copy when that canonical NPC is not there. Owner-scoped copies are
+   * skipped: they belong to another player, not to the world.
+   */
+  function nativeKingLathasPresent(player) {
+    if (typeof World?.getNpcsNear !== "function") return false;
+    const location = new Location(
+      KING_LATHAS_NATIVE_SPAWN.x,
+      KING_LATHAS_NATIVE_SPAWN.y,
+      KING_LATHAS_NATIVE_SPAWN.z
+    );
+    const nearby = World.getNpcsNear(location, KING_LATHAS_SEARCH_RADIUS, player.getPrivateArea?.() ?? null) ?? [];
+    return nearby.some((npc) => {
+      if (!npc || npc.getOwner?.()) return false;
+      const contentId = npc.getContentId?.(player);
+      return contentId !== undefined && KING_LATHAS_NPC_IDS.has(contentId);
+    });
+  }
+
   function ensureKingLathas(player) {
     if (!player || quest.getStage(player) < STAGE_STARTED || quest.isComplete(player)) return;
     if (!hasBit(player, BIT_FULL_STORY) || held(player, KING_LETTER)) return;
     if (kingLathasByPlayer.has(player)) return;
+    if (nativeKingLathasPresent(player)) return;
     const npc = api.spawnNpc({
       id: NpcIdentifiers.KING_LATHAS,
       x: KING_LATHAS_SPAWN.x,
@@ -717,7 +826,12 @@ module.exports = function registerMakingHistoryQuest(api) {
     }
     if (RECEIVE_SCROLL_STEPS.has(stepId)) {
       event.handled = true;
-      if (!held(player, SCROLL)) player.getInventory().adds(SCROLL, 1);
+      if (!held(player, SCROLL)) {
+        // The first-scroll transcript branch already requires a free slot; the
+        // lost-scroll recovery branch does not, so drop it rather than lose it.
+        if (freeSlots(player) < 1) dropScrollOnGround(player);
+        else player.getInventory().adds(SCROLL, 1);
+      }
       setGhost(player, GHOST_SCROLL);
       return;
     }
@@ -729,25 +843,50 @@ module.exports = function registerMakingHistoryQuest(api) {
     }
     if (event.kind === "message" && stepId === JOURNAL_READ_STEP) {
       setBit(player, BIT_JOURNAL_DONE);
+      sendPathVarbits(player);
       maybeQueueLastPerson(player);
       return;
     }
     if (event.kind === "message" && stepId === SCROLL_READ_STEP) {
       setBit(player, BIT_SCROLL_DONE);
+      sendPathVarbits(player);
       maybeQueueLastPerson(player);
       return;
     }
     if (RECEIVE_JORRAL_LETTER_STEPS.has(stepId)) {
       event.handled = true;
       if (!held(player, JORRAL_LETTER)) player.getInventory().adds(JORRAL_LETTER, 1);
+      setBit(player, BIT_JORRAL_LETTER_SEEN);
       ensureKingLathas(player);
+      sendCanonicalProgress(player);
       return;
     }
     if (stepId === RECEIVE_KING_LETTER_STEP) {
       event.handled = true;
       player.getInventory().deleteNumber(JORRAL_LETTER, 1);
-      if (!held(player, KING_LETTER)) player.getInventory().adds(KING_LETTER, 1);
+      if (!held(player, KING_LETTER)) {
+        const inventory = player.getInventory();
+        if (inventory.isFull()) inventory.forceAdd(player, new Item(KING_LETTER, 1));
+        else inventory.adds(KING_LETTER, 1);
+      }
+      removeKingLathas(player);
       setBit(player, BIT_KING_SEEN);
+      sendCanonicalProgress(player);
+      return;
+    }
+    if (stepId === GIVE_KEY_PRICE_STEP) {
+      event.handled = true;
+      // The adjacent receive action validates and commits the purchase together.
+      return;
+    }
+    if (stepId === RECEIVE_ENCHANTED_KEY_STEP) {
+      event.handled = true;
+      if (!quest.isComplete(player) || ownsKey(player)) return;
+      const inventory = player.getInventory();
+      if (freeSlots(player) < 1 || inventory.getAmount(COINS) < KEY_PRICE) return;
+      const before = inventory.getAmount(ENCHANTED_KEY);
+      inventory.adds(ENCHANTED_KEY, 1);
+      if (inventory.getAmount(ENCHANTED_KEY) === before + 1) inventory.deleteNumber(COINS, KEY_PRICE);
       return;
     }
     if (stepId === MELINA_TAKES_AMULET_STEP) {
@@ -759,6 +898,7 @@ module.exports = function registerMakingHistoryQuest(api) {
     }
     if (stepId === DROALAK_FADES_STEP) {
       event.handled = true;
+      setBit(player, BIT_DROALAK_GONE);
       player.getPacketSender().sendVarbit(VARBIT_DROALAK_PRESENT, 1);
       return;
     }
@@ -768,6 +908,8 @@ module.exports = function registerMakingHistoryQuest(api) {
       player.getInventory().deleteNumber(KING_LETTER, 1);
       removeKingLathas(player);
       if (!quest.isComplete(player)) quest.complete(player);
+      // The outpost becomes the museum (native objloc switch).
+      player.getPacketSender().sendVarbit(VARBIT_MUSEUM, 1);
       return;
     }
     if (WRONG_ANSWER_STEP_IDS.has(stepId)) {
@@ -785,16 +927,21 @@ module.exports = function registerMakingHistoryQuest(api) {
     }
   }
 
-  /** Erin's first "Ask about the outpost" hands over the enchanted key. */
+  /**
+   * Erin's "Ask about the outpost" hands over the enchanted key, and hands
+   * another if the player lost it (Quest Helper's key tooltip).
+   */
   function handleDialogueChoice(event) {
     const { player, npcId, option } = event;
     if (!SILVER_MERCHANT_NPC_IDS.has(npcId)) return;
-    if (trader(player) > TRADER_NONE) return;
     if (!/ask about the outpost/i.test(String(option ?? ""))) return;
-    if (held(player, ENCHANTED_KEY)) {
+    if (quest.isComplete(player)) return;
+    if (ownsKey(player)) {
       setTrader(player, TRADER_KEY);
       return;
     }
+    // Once the journal is delivered the key has done its job.
+    if (hasBit(player, BIT_JOURNAL_DONE)) return;
     if (freeSlots(player) < 1) {
       player.sendMessage("You need more inventory space to take the key.");
       return;
@@ -809,6 +956,7 @@ module.exports = function registerMakingHistoryQuest(api) {
     if (npcId === JORRAL_NPC_ID) {
       if (text.startsWith("I've talked to the warrior.")) {
         setBit(player, BIT_WARR_DONE);
+        sendPathVarbits(player);
         maybeQueueLastPerson(player);
       } else if (text.startsWith("It all makes sense now")) {
         setBit(player, BIT_FULL_STORY);
@@ -828,8 +976,14 @@ module.exports = function registerMakingHistoryQuest(api) {
       return;
     }
     if (KING_LATHAS_NPC_IDS.has(npcId) && text.startsWith("Very well, take another.")) {
-      if (!held(player, KING_LETTER)) player.getInventory().adds(KING_LETTER, 1);
+      if (!held(player, KING_LETTER)) {
+        const inventory = player.getInventory();
+        if (inventory.isFull()) inventory.forceAdd(player, new Item(KING_LETTER, 1));
+        else inventory.adds(KING_LETTER, 1);
+      }
+      removeKingLathas(player);
       setBit(player, BIT_KING_SEEN);
+      sendCanonicalProgress(player);
     }
   }
 
@@ -1075,14 +1229,24 @@ module.exports = function registerMakingHistoryQuest(api) {
 
   function grantReward(player) {
     // registerQuest adds one coin for rewardItemId; top the reward up to 750.
-    player.getInventory().adds(COINS, 749);
+    player.getInventory().forceAdd(player, new Item(COINS, 749));
     player.getSkillManager().addExperiences(Skill.CRAFTING, 1000);
     player.getSkillManager().addExperiences(Skill.PRAYER, 1000);
+    // Quest Helper advertises the enchanted key as a reward item. The key is
+    // Erin's, so it is only handed over when the player does not hold one;
+    // a full bag drops it at the reward location, like the runtime's own
+    // reward item.
+    if (!ownsKey(player)) {
+      const inventory = player.getInventory();
+      if (inventory.isFull()) inventory.forceAdd(player, new Item(ENCHANTED_KEY, 1));
+      else inventory.adds(ENCHANTED_KEY, 1);
+    }
   }
 
   function handleLogin({ player }) {
     refreshQuestList(player);
     sendProgressVarbits(player);
+    sendCanonicalProgress(player);
     ensureKingLathas(player);
   }
 
@@ -1103,6 +1267,15 @@ module.exports = function registerMakingHistoryQuest(api) {
     varbitId: VARBIT_PROGRESS,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
+    // Keep the durable 1/2 stage values (existing saves) but send the cache's
+    // canonical 1..4 progress values. The mapping is player-aware: the login
+    // bootstrap re-sends every quest's wire value after the login hooks, so a
+    // stage-only mapping would replay 1 over the letter steps 2/3.
+    varbitValue(stage, player) {
+      if (player) return canonicalProgressValue(player);
+      if (stage >= STAGE_COMPLETE) return WIRE_COMPLETE;
+      return stage >= STAGE_STARTED ? WIRE_STARTED : 0;
+    },
     questPoints: 3,
     xpRewards: [
       { skillId: Skill.CRAFTING.getIndex(), amount: 1000, label: "Crafting" },

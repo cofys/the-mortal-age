@@ -26,7 +26,7 @@ module.exports = function registerAbyssalTentacleSpecialAttack(api) {
         return;
       }
       target.performGraphic(GRAPHIC);
-      CombatFactory.freeze(target, Misc.getSeconds(BIND_DURATION_TICKS));
+      CombatFactory.freeze(target, Misc.getSeconds(BIND_DURATION_TICKS), undefined, character);
       if (Math.random() < POISON_CHANCE) {
         CombatFactory.poisonEntity(target, POISON_POTENCY, POISON_ORB_TYPE);
       }

@@ -143,6 +143,11 @@ export class ChatboxTextInput extends ChatboxInput implements ChatboxKeyListener
         return this;
     }
 
+    /** RuneLite's getFontID. */
+    protected getFontId(): number {
+        return this.fontId;
+    }
+
     build(): this {
         if (this.promptText === undefined) throw new Error("prompt must be non-null");
         this.chatboxPanelManager.openInput(this);

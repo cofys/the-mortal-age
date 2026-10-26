@@ -17,14 +17,26 @@ export class AreaManager {
      */
     public static process(c: Mobile): void {
         let position = c.getLocation();
+        let hintX = position.getX();
+        let hintY = position.getY();
+        let hintZ = position.getZ();
         let area = c.getArea();
         const hint = AreaManager.areaHints.get(c);
 
         let previousArea: Area | null = null;
         let boundaryIndex = -1;
+        let resolved: AreaSearchResult | null = null;
 
         if (area != null) {
             boundaryIndex = AreaManager.findBoundaryIndex(position, area, hint != null && hint.area === area ? hint.boundaryIndex : -1);
+            if (boundaryIndex !== -1
+                && (hint == null || hint.area !== area
+                    || hint.x !== hintX || hint.y !== hintY || hint.z !== hintZ)
+                && AreaManager.areas.includes(area)) {
+                // Moving inside a broad area can enter a higher-priority overlapping area.
+                resolved = AreaManager.getWithBoundaryIndex(position);
+                if (resolved.area !== area) boundaryIndex = -1;
+            }
             if (boundaryIndex === -1) {
                 PluginManager.callArea(area, "leave", c, false);
                 previousArea = area;
@@ -33,14 +45,17 @@ export class AreaManager {
         }
 
         if (area == null) {
-            if (hint != null
+            if (resolved != null) {
+                area = resolved.area;
+                boundaryIndex = resolved.boundaryIndex;
+            } else if (hint != null
                 && hint.area == null
-                && hint.x === position.getX()
-                && hint.y === position.getY()
-                && hint.z === position.getZ()) {
+                && hint.x === hintX
+                && hint.y === hintY
+                && hint.z === hintZ) {
                 area = null;
             } else {
-                const resolved = AreaManager.getWithBoundaryIndex(position);
+                resolved = AreaManager.getWithBoundaryIndex(position);
                 area = resolved.area;
                 boundaryIndex = resolved.boundaryIndex;
             }
@@ -58,9 +73,13 @@ export class AreaManager {
             PluginManager.callArea(area, "process", c);
             if (c.getArea() !== processedArea) {
                 area = c.getArea();
+                const currentPosition = c.getLocation();
                 boundaryIndex = area == null
                     ? -1
-                    : AreaManager.findBoundaryIndex(c.getLocation(), area);
+                    : AreaManager.findBoundaryIndex(currentPosition, area);
+                hintX = currentPosition.getX();
+                hintY = currentPosition.getY();
+                hintZ = currentPosition.getZ();
             }
         }
 
@@ -76,13 +95,13 @@ export class AreaManager {
 
         // Update area..
         c.setArea(area);
-        const currentPosition = c.getLocation();
+        // A process() teleport within the same area still needs a priority lookup next tick.
         AreaManager.areaHints.set(c, {
             area,
             boundaryIndex,
-            x: currentPosition.getX(),
-            y: currentPosition.getY(),
-            z: currentPosition.getZ(),
+            x: hintX,
+            y: hintY,
+            z: hintZ,
         });
 
     }

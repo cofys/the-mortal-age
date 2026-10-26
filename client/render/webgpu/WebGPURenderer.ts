@@ -65,6 +65,8 @@ interface QueuedMap {
     streamGeneration?: number;
     /** LocUpdates reload version the build started at; stale builds are dropped. */
     locVersion?: number;
+    /** A door/loc rebuild of the drawn instance scene (applyInstanceScene applies it). */
+    instance?: boolean;
 }
 
 const SKY_BLEND_PER_FRAME = 0.15;
@@ -335,8 +337,55 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     /** Rebuilds a square after a loc change: just its door or loc geometry when that is all that changed. */
     queueLocReload(mapX: number, mapY: number, group: LocReloadGroup): void {
-        if (this.instanceActive || !this.osrsClient.loadedCache) return;
+        if (!this.osrsClient.loadedCache) return;
+        if (this.instanceActive) {
+            // Only the drawn instance scene reloads in place, and only one group of it.
+            const scene = this.instanceSceneMap;
+            if (group === "full" || scene?.mapX !== mapX || scene.mapY !== mapY) this.scheduleInstanceLocRebuild();
+            else void this.loadInstancePartial(group);
+            return;
+        }
         void this.loadMapData(mapX, mapY, undefined, group === "full" ? undefined : group);
+    }
+
+    /**
+     * Rebuilds just the door or loc geometry of the drawn instance scene from its template
+     * chunks (WebGL's instance scheduleInstanceLocUpdate), not the whole scene.
+     */
+    private async loadInstancePartial(partial: "door" | "loc"): Promise<void> {
+        const scene = this.instanceSceneMap;
+        const templateChunks = this.instanceTemplateChunks;
+        if (!scene || !templateChunks) return;
+        const { mapX, mapY } = scene;
+        const epoch = this.mapLoadEpoch;
+        const locVersion = this.locUpdates.version(mapX, mapY);
+        const current = () => epoch === this.mapLoadEpoch && this.instanceActive &&
+            this.instanceTemplateChunks === templateChunks;
+        try {
+            const mapData = await this.loadSceneData({
+                mapX,
+                mapY,
+                maxLevel: Scene.MAX_LEVELS - 1,
+                loadNpcs: false,
+                smoothTerrain: true,
+                ...this.osrsClient.clientPlugins.objectSettings(),
+                minimizeDrawCalls: true,
+                instance: { templateChunks, regionX: this.instanceRegionX, regionY: this.instanceRegionY },
+                locOverrides: this.locOverrides,
+                locSpawns: this.locSpawns,
+                terrainOverrides: this.terrainOverrides,
+                mapRegionReplacements: this.mapRegionReplacements,
+                extraLocs: this.getExtraLocs(),
+                doorOnly: partial === "door",
+                locOnly: partial === "loc",
+            }, current);
+            if (!current() || !mapData) return;
+            this.mapsToLoad.push({ mapData, locVersion, instance: true });
+        } catch (error) {
+            if ((error as Error)?.name === "AbortError" || !current()) return;
+            console.error("[webgpu] instance loc rebuild failed", error);
+            this.scheduleInstanceLocRebuild();
+        }
     }
 
     private async loadMapData(
@@ -544,11 +593,33 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
      * instance is active are dropped, as WebGL's queueStreamMapData does.
      */
     private applyInstanceScene(frameCount: number): void {
-        for (const queued of this.mapsToLoad.toArray()) WebGPUMapSquare.cancelPreparedLoad(queued.mapData);
+        const partials: SdMapData[] = [];
+        for (const queued of this.mapsToLoad.toArray()) {
+            const { mapData, locVersion } = queued;
+            if (queued.instance && locVersion !== undefined && this.locUpdates.isCurrent(mapData.mapX, mapData.mapY, locVersion)) {
+                partials.push(mapData);
+            } else {
+                WebGPUMapSquare.cancelPreparedLoad(mapData);
+            }
+        }
         this.mapsToLoad.clear();
         const world = this.world;
         const mapData = world ? this.instances.takeBuiltScene((data) => WebGPUMapSquare.prepareLoad(this.device, data)) : null;
-        if (!world || !mapData) return;
+        if (!world) return;
+        if (!mapData) {
+            // A door or loc rebuild only replaces that group of the drawn scene.
+            for (const partial of partials) {
+                const square = this.mapManager.getMap(partial.mapX, partial.mapY);
+                if (!square) continue;
+                square.refreshPartial(partial, this.osrsClient.seqTypeLoader, getClientCycle() | 0);
+                world.uploadMapTextures(partial.loadedTextures);
+                if (partial.locOnly) this.ui?.registerMinimapData(partial);
+                this.locUpdates.applied(partial.mapX, partial.mapY);
+            }
+            return;
+        }
+        // A whole scene built since covers them.
+        for (const partial of partials) WebGPUMapSquare.cancelPreparedLoad(partial);
         // The scene's loc animations go on in the new one (LocAnimated.carryOver): a held one (a
         // collapsed floor) would replay from frame 0 otherwise.
         const carried: LocAnimated[] = [];

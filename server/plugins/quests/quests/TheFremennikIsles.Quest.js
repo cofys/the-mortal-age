@@ -124,6 +124,13 @@ module.exports = function registerTheFremennikIslesQuest(api) {
   const MORD_RELLEKKA = NpcIdentifiers.MORD_GUNNARS; // 1900
   const MORD_JATIZSO = NpcIdentifiers.MORD_GUNNARS_2; // 1940
   const MORD_IDS = new Set([MORD_RELLEKKA, MORD_JATIZSO]);
+
+  /** Hands an ordinary crossing to the Ferries plugin's captured trip; without it, the plain move. */
+  function ferry(player, route, fallback) {
+    const request = { player, route, handled: false };
+    api.emitCustomEvent("ferries:travel", request);
+    if (!request.handled) player.moveTo(fallback);
+  }
   const SLUG_HEMLIGSSEN = NpcIdentifiers.SLUG_HEMLIGSSEN; // 1895
   const KING_GJUKI_SORVOTT_IV = NpcIdentifiers.KING_GJUKI_SORVOTT_IV; // 1897
   const HRH_HRAFN = NpcIdentifiers.HRH_HRAFN; // 1898
@@ -1233,14 +1240,14 @@ module.exports = function registerTheFremennikIslesQuest(api) {
     switch (stepId) {
       // Ferries.
       case "itvaHf":
-        player.moveTo(JATIZSO_LANDING);
+        ferry(player, "jatizso", JATIZSO_LANDING);
         return;
       case "ynQW7s":
       case "BDz1Ek":
-        player.moveTo(RELLEKKA_LANDING);
+        ferry(player, event.npcId === MARIA_NEITIZNOT ? "neitiznot-back" : "jatizso-back", RELLEKKA_LANDING);
         return;
       case "y8Zfde":
-        player.moveTo(NEITIZNOT_LANDING);
+        ferry(player, "neitiznot", NEITIZNOT_LANDING);
         return;
       // Tuna.
       case "Py3jqy":

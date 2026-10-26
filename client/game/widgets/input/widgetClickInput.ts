@@ -16,12 +16,14 @@ import type { PrimaryWidgetAction } from "./widgetPrimaryAction";
 import { isCombatSkillWidgetAction } from "../widgetActionPayload";
 
 /** Whether a widget offers a menu op of its own: an op with text, shown by its flags or onOp. */
-function offersMenuOp(w: any, getWidgetFlags: (w: any) => number): boolean {
+function offersMenuOp(w: any, getWidgetFlags: (w: any) => number, getWidgetOpMask: (w: any) => number): boolean {
     if (!Array.isArray(w?.actions)) return false;
     const flags = getWidgetFlags(w) | 0;
+    const opMask = getWidgetOpMask(w) | 0;
     const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp || w.jsListeners?.onOp);
     return w.actions.some(
-        (action: any, index: number) => !!sanitizeText(action) && shouldShowMenuOption(flags, index, hasOnOpHandler),
+        (action: any, index: number) =>
+            !!sanitizeText(action) && shouldShowMenuOption(flags, index, hasOnOpHandler, opMask),
     );
 }
 
@@ -35,6 +37,7 @@ export function processWidgetClickInput(
     isNewClick: boolean,
 ): void {
     const { input, collectFromAllRoots, getWidgetFlags } = frame;
+    const getWidgetOpMask = (w: any): number => widgetManager?.getWidgetOpMask?.(w) ?? 0;
     if (isNewClick) {
         // New click - reset drag state
         widgetInteraction.widgetDragDuration = 0;
@@ -63,7 +66,7 @@ export function processWidgetClickInput(
                 const hasInventoryItem =
                     hitWidgetGroupId === 149 &&
                     typeof (w as any).itemId === "number" &&
-                    (w as any).itemId > 0;
+                    (w as any).itemId >= 0;
                 // Check for actual handlers, not just empty arrays
                 // Empty arrays are truthy but shouldn't count as having handlers.
                 // OSRS lists an op only when it has text, and a left-click is the top menu
@@ -75,13 +78,15 @@ export function processWidgetClickInput(
                 // slot - the Slayer Rewards Tasks tab's view_tasks (426:36), which lies over the
                 // Cancel/Block/Store buttons - mustn't take their clicks.
                 const opFlags = getWidgetFlags(w) | 0;
+                const opMask = getWidgetOpMask(w);
                 const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp || w.jsListeners?.onOp);
                 const hasActionList = Array.isArray(w.actions) && w.actions.length > 0;
                 const hasActions =
                     hasActionList &&
                     w.actions.some(
                         (action: any, index: number) =>
-                            !!sanitizeText(action) && shouldShowMenuOption(opFlags, index, hasOnOpHandler),
+                            !!sanitizeText(action) &&
+                            shouldShowMenuOption(opFlags, index, hasOnOpHandler, opMask),
                     );
                 const opsCleared = hasActionList && !hasActions;
                 const getWidgetByUid = (uid: number) => widgetManager?.getWidgetByUid(uid);
@@ -141,7 +146,7 @@ export function processWidgetClickInput(
                     !(!isDynamicWidget && hasTransmitOps && !opsCleared) &&
                     !(w.eventHandlers?.onClick || w.eventHandlers?.onClickRepeat || w.eventHandlers?.onHold ||
                         w.eventHandlers?.onRelease || w.onClick || w.onClickRepeat || w.onHold || w.onRelease);
-                if (dragOnly && clickHits.slice(0, i).some((below: any) => offersMenuOp(below, getWidgetFlags))) {
+                if (dragOnly && clickHits.slice(0, i).some((below: any) => offersMenuOp(below, getWidgetFlags, getWidgetOpMask))) {
                     continue;
                 }
                 if (hasHandlers) {
@@ -500,12 +505,12 @@ export function processWidgetClickInput(
                                 widgetManager?.getWidgetFlags?.(transmitFlagWidget) ??
                                 transmitFlagWidget?.flags ??
                                 0;
+                            const opMask = getWidgetOpMask(transmitFlagWidget);
                             const opId = payload.opId ?? 0;
                             const actionIndex = opId > 0 ? opId - 1 : -1;
                             if (
                                 actionIndex >= 0 &&
-                                actionIndex <= 9 &&
-                                !shouldTransmitAction(flags, actionIndex)
+                                !shouldTransmitAction(flags, actionIndex, opMask)
                             ) {
                                 break;
                             }

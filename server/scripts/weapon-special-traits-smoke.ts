@@ -343,7 +343,7 @@ assert.equal(
 // 10) Dragon warhammer drains current Defence at impact, including NPCs and PvP bots.
 {
     require("../plugins/combat/specials/DragonWarhammer.SpecialAttack")({
-        core: (PluginManager as any).getCoreApi(), registerCombatSpecial: CombatSpecial.register,
+        core: (PluginManager as any).getCoreApi(), registerCombatSpecial: CombatSpecial.register, emitCustomEvent: () => {},
     });
     const smash = CombatSpecial.getById("dragon_warhammer")!;
     for (const id of [ItemIdentifiers.DRAGON_WARHAMMER, ItemIdentifiers.DRAGON_WARHAMMER_3, ItemIdentifiers.DRAGON_WARHAMMER_OR_, ItemIdentifiers.DRAGON_WARHAMMER_CR_]) {

@@ -27,6 +27,8 @@ const COMPONENT = {
   NO_HITBOX: 12,
 };
 const uid = (component) => (GROUP_ID << 16) | component;
+const DEFAULT_QUESTION = "Are you sure you want to destroy this item?";
+const DEFAULT_WARNING = "This item will be destroyed permanently.";
 const DESTROY_ITEM_YES = uid(COMPONENT.YES_HITBOX);
 const DESTROY_ITEM_NO = uid(COMPONENT.NO_HITBOX);
 
@@ -49,7 +51,7 @@ function buildInterface() {
     rawHeight: 18,
     width: 479,
     height: 18,
-    text: "Are you sure you want to destroy this item?",
+    text: DEFAULT_QUESTION,
     fontId: FANCY_FONT,
     textColor: 0x990000,
     textShadowed: false,
@@ -126,7 +128,7 @@ function buildInterface() {
     rawHeight: 24,
     width: 479,
     height: 24,
-    text: "This item will be destroyed permanently.",
+    text: DEFAULT_WARNING,
     fontId: FANCY_FONT,
     textColor: 0x0000cc,
     textShadowed: false,
@@ -177,20 +179,29 @@ function buildInterface() {
 
 const INTERFACE_DEFINITION = buildInterface();
 const pendingDestroys = new WeakMap();
+let pluginApi = null;
 
 function close(player) {
   pendingDestroys.delete(player);
   player.getPacketSender().sendInterfaceRemoval();
 }
 
+/**
+ * "destroy-item:prompt" `{ player, item, question, warning }`: the plugin that owns an item can
+ * word its confirmation (the looting bag's names its contents).
+ */
 function open(player, item, slot) {
+  const prompt = { player, item, question: DEFAULT_QUESTION, warning: DEFAULT_WARNING };
+  pluginApi?.emitCustomEvent?.("destroy-item:prompt", prompt);
   pendingDestroys.set(player, { itemId: item.getId(), amount: item.getAmount(), slot });
   player.setAttribute(PENDING_ATTRIBUTE, item.getId());
   player
     .getPacketSender()
     .sendChatboxInterface(GROUP_ID)
     .sendItemOnInterface(uid(COMPONENT.ITEM), item.getId(), 0, item.getAmount())
-    .sendString(item.getDefinition().getName(), uid(COMPONENT.NAME));
+    .sendString(item.getDefinition().getName(), uid(COMPONENT.NAME))
+    .sendString(prompt.question, uid(COMPONENT.QUESTION))
+    .sendString(prompt.warning, uid(COMPONENT.WARNING));
 }
 
 function pendingDestroy(player) {
@@ -203,6 +214,7 @@ function pendingDestroy(player) {
 module.exports = {
   name: "DestroyItem",
   register(api) {
+    pluginApi = api;
     api.registerCustomInterface(INTERFACE_DEFINITION);
 
     api.onItemDropPolicy((event) => {

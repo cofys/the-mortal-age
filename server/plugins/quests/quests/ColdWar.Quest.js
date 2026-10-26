@@ -53,9 +53,9 @@
  *  - The destroyed-hide transition, the "caught as a human" extra, the war-room
  *    cutscene visuals, the giant-suit cutscene and Larry's dance are replayed as
  *    transcript lines without scenes; 0BlU-b never fires.
- *  - The cowbell comes from the Zanaris talking cow (NpcIdentifiers.COW_5) because
- *    this cache's plain cows have no Steal-cowbell option; the generic
- *    extras-stealing-a-cowbell fail branch (B-J5lc) is unanswered.
+ *  - DairyCow.plugin owns the Steal-cowbell object option (both plain and Zanaris
+ *    cows); its generic extras-stealing-a-cowbell fail branch (B-J5lc) is
+ *    unanswered. The talking Zanaris cow's transcript is the quest conversation.
  */
 module.exports = function registerColdWarQuest(api) {
   const {

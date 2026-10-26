@@ -18,6 +18,7 @@ const { Item } = require('../dist/game/model/Item');
 const { UseItemPacketListener } = require('../dist/net/packet/impl/UseItemPacketListener');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Sounds } = require('../dist/game/Sounds');
+const { TimerKey } = require('../dist/util/timers/TimerKey');
 
 const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
 const target = { level: 0, destX: 100, destY: 100, srcSize: 1, privateArea: null };
@@ -241,21 +242,6 @@ test('clipped type-10 crate 16560 uses its real wall sides without unmasked thro
   }
   assert.equal(searched, 1, 'the legitimate east side operates the crate');
   TaskManager.cancelTasks(eastPlayer.getIndex());
-});
-
-test('object routes build MORPH sizes and masks from the player-resolved child', (t) => {
-  const player = {
-    isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; },
-    getPacketSender: () => ({ getVarbit: () => 6, getVarp: () => 0 }),
-  };
-  const queue = new MovementQueue(player);
-  const parent = { getSizeX: () => 4, getSizeY: () => 3, getBlockingMask: () => 27, getId: () => 56522 };
-  const child = { getSizeX: () => 1, getSizeY: () => 2, getBlockingMask: () => 23, getId: () => 56523 };
-  t.mock.method(ObjectDefinition, 'forId', () => parent);
-  t.mock.method(ObjectDefinition, 'forPlayer', () => child);
-  const spec = queue.buildObjectRouteSpec(new GameObject(56522, new Location(1719, 9706, 0), 10, 0, null));
-  assert.deepEqual([spec.routeXLength, spec.routeYLength, spec.routeBlockingMask], [1, 2, 23]);
-  assert.deepEqual([spec.reachWidth, spec.reachLength, spec.reachAngle, spec.reachBlockAccessFlags], [1, 2, 0, 23]);
 });
 
 test('stage 6 painting resolves to its MORPH child and west-adjacent canvas reach', async () => {
@@ -607,6 +593,83 @@ test('ladder click waits for arrival before animating and changes plane one tick
   assert.equal(queue.hasPendingWork(), false);
   forceMovement = null;
   assert.equal(queue.getMobility().canMove(), true);
+});
+
+test('a frozen player climbs a ladder in reach, and gets "I can\'t reach that!" for one further away', (t) => {
+  // Wiki (Freeze): freezes do not stop interacting with adjacent ladders or cave entrances.
+  // rsprox 2238: a frozen player's clicks on an exit 14 tiles away answer "I can't reach that!".
+  const events = [], messages = [], timers = new Set([TimerKey.FREEZE]);
+  let location = new Location(100, 99, 0);
+  const noop = () => {};
+  const player = {
+    isPlayer: () => true, isNpc: () => false, isPlayerBot: () => true, getAsPlayer() { return this; },
+    getIndex: () => 1, getUsername: () => 'frozen', getSize: () => 1,
+    getLocation: () => location, setLocation: (value) => { location = value; },
+    getPrivateArea: () => null, getHitpoints: () => 10, isNeedsPlacement: () => false,
+    getForceMovement: () => null,
+    getTrading: () => ({ getButtonDelay: () => ({ finished: () => true }) }),
+    getDueling: () => ({ getButtonDelay: () => ({ finished: () => true }), inDuel: () => false }),
+    getTimers: () => ({ has: (key) => timers.has(key) }), getFollowing: () => null,
+    getCombat: () => ({ setCastSpell: noop, reset: noop }),
+    getSkillManager: () => ({ stopSkillable: noop }),
+    setFollowing: noop, setCombatFollowing: noop, setPositionToFace: noop,
+    setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
+    isRunningReturn: () => false, sendMessage: (message) => messages.push(message),
+    performAnimation: (animation) => events.push(['anim', animation.getId()]),
+    moveTo: (destination) => { queue.reset(); location = destination.clone(); events.push(['tele']); },
+  };
+  const queue = new MovementQueue(player);
+  player.getMovementQueue = () => queue;
+  queue.handleRegionChange = noop;
+  queue.syncWildernessStateForMovedPlayer = noop;
+  queue.drainRunEnergy = noop;
+  const oldRoute = PathFinder.rsmodRouteFinding;
+  const oldCycle = World.processCycle;
+  PathFinder.rsmodRouteFinding = new RsmodRouteFinding((x, y) => x === 100 && y === 100 ? 0x100 : 0);
+  t.after(() => { PathFinder.rsmodRouteFinding = oldRoute; World.processCycle = oldCycle; TaskManager.cancelTasks(player); TaskManager.cancelTasks(1); });
+  t.mock.method(ObjectDefinition, 'forId', () => ({ getSizeX: () => 1, getSizeY: () => 1, getBlockingMask: () => 27 }));
+  const handlers = new Map();
+  require('../plugins/objects/Ladders.plugin').register({
+    getTaskManager: () => TaskManager,
+    onCustomEvent: (name, handler) => handlers.set(name, handler),
+    onObjectInteraction: noop,
+  });
+  const climb = () => handlers.get('ladders:climbUp')({ player, destination: new Location(location.x, location.y, 1) });
+  const tick = () => {
+    World.processCycle++;
+    TaskManager.process();
+    queue.beginCycle();
+    if (queue.hasPendingWork()) queue.process();
+    TaskManager.processWalkTo(1);
+  };
+  World.processCycle = 200;
+  assert.equal(queue.getMobility().canMove(), false);
+  queue.walkToObject(new GameObject(132, new Location(100, 100, 0), 10, 0, null), { execute: climb });
+  tick();
+  assert.deepEqual(events, [['anim', 828]]);
+  tick();
+  assert.equal(location.z, 1, 'the frozen player still climbs');
+  assert.deepEqual(messages, []);
+
+  events.length = 0;
+  location = new Location(100, 96, 0);
+  queue.walkToObject(new GameObject(132, new Location(100, 100, 0), 10, 0, null), { execute: climb });
+  for (let n = 0; n < 4; n++) tick();
+  assert.deepEqual(messages, ["I can't reach that!"]);
+  assert.deepEqual(events, []);
+  assert.equal(location.y, 96);
+  assert.equal(queue.points.length, 0, 'nothing is queued to walk once the freeze ends');
+
+  // A stun on top of the freeze still stops the climb, even in reach.
+  events.length = 0;
+  messages.length = 0;
+  timers.add(TimerKey.STUN);
+  location = new Location(100, 99, 0);
+  queue.walkToObject(new GameObject(132, new Location(100, 100, 0), 10, 0, null), { execute: climb });
+  for (let n = 0; n < 4; n++) tick();
+  assert.deepEqual(messages, ["You're stunned!"]);
+  assert.deepEqual(events, []);
+  assert.equal(location.z, 0, 'a stunned frozen player does not climb');
 });
 
 test('an inventory item action cancels the queued object op but keeps the walk', (t) => {

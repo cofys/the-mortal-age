@@ -1,8 +1,16 @@
-/** One row of the plugin hub, as RuneLite draws it: name, a settings cog, an on/off switch. */
+import { runeliteImage } from "@runelite/client/ui/runeliteImages";
+
+/**
+ * One row of the plugin hub, as RuneLite's `PluginListItem` draws it: a pin star, the name (its
+ * description only in the tooltip), a settings cog and an on/off switch.
+ */
 export interface PluginListItemProps {
     name: string;
     description?: string;
     failure?: string;
+    /** Absent for rows that can't be pinned (the client's own settings, always first). */
+    pinned?: boolean;
+    onPin?: (pinned: boolean) => void;
     /** Absent for rows that can't be turned off (the client's own settings). */
     enabled?: boolean;
     onToggle?: (enabled: boolean) => void;
@@ -10,64 +18,96 @@ export interface PluginListItemProps {
     onOpenConfig?: () => void;
 }
 
-function CogIcon(): JSX.Element {
-    return (
-        <svg className="rl-plugin-item-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M10.3 3h3.4l.5 2.4 1.6.9 2.3-.8 1.7 2.9-1.8 1.6v1.9l1.8 1.6-1.7 2.9-2.3-.8-1.6.9-.5 2.4h-3.4l-.5-2.4-1.6-.9-2.3.8-1.7-2.9 1.8-1.6v-1.9L4.2 8.4l1.7-2.9 2.3.8 1.6-.9Z" />
-        </svg>
-    );
+/** RuneLite's tooltip: "<html>Name:<br>Description</html>". */
+function tooltip(name: string, description?: string): string {
+    return description ? `${name}:\n${description}` : name;
 }
 
 export function PluginListItem({
     name,
     description,
     failure,
+    pinned,
+    onPin,
     enabled,
     onToggle,
     onOpenConfig,
 }: PluginListItemProps): JSX.Element {
     const off = enabled === false;
-    const label = (
-        <>
-            <span className="rl-plugin-item-name">{name}</span>
-            {description ? <span className="rl-plugin-item-desc">{description}</span> : null}
-            {failure ? <span className="rl-plugin-item-failure">Failed: {failure}</span> : null}
-        </>
-    );
+    const title = tooltip(name, description);
     return (
-        <div className={`rl-plugin-item${off ? " off" : ""}`} title={description}>
-            {onOpenConfig ? (
-                <button type="button" className="rl-plugin-item-main" onClick={onOpenConfig}>
-                    {label}
-                </button>
-            ) : (
-                <div className="rl-plugin-item-main">{label}</div>
-            )}
-            {onOpenConfig ? (
-                <button
-                    type="button"
-                    className="rl-plugin-item-cog"
-                    onClick={onOpenConfig}
-                    aria-label={`${name} settings`}
-                    title="Edit settings"
-                >
-                    <CogIcon />
-                </button>
-            ) : null}
-            {onToggle ? (
-                <button
-                    type="button"
-                    role="switch"
-                    aria-checked={!off}
-                    aria-label={`${off ? "Enable" : "Disable"} ${name}`}
-                    title={off ? "Enable plugin" : "Disable plugin"}
-                    className={`rl-switch${off ? "" : " on"}`}
-                    onClick={() => onToggle(off)}
-                >
-                    <span className="rl-switch-knob" />
-                </button>
-            ) : null}
+        <div className="rl-plugin-item">
+            <div className="rl-plugin-item-row">
+                {onPin ? (
+                    <button
+                        type="button"
+                        className={`rl-plugin-item-pin${pinned ? " on" : ""}`}
+                        aria-pressed={pinned === true}
+                        aria-label={`${pinned ? "Unpin" : "Pin"} ${name}`}
+                        title={pinned ? "Unpin plugin" : "Pin plugin"}
+                        onClick={() => onPin(!pinned)}
+                    >
+                        <img src={runeliteImage("star_on.png")} alt="" width={18} height={18} />
+                    </button>
+                ) : (
+                    <span className="rl-plugin-item-pin" aria-hidden="true" />
+                )}
+                {onOpenConfig ? (
+                    <button
+                        type="button"
+                        className="rl-plugin-item-name"
+                        onClick={onOpenConfig}
+                        title={title}
+                    >
+                        {name}
+                    </button>
+                ) : (
+                    <span className="rl-plugin-item-name" title={title}>
+                        {name}
+                    </span>
+                )}
+                <span className="rl-plugin-item-buttons">
+                    {onOpenConfig ? (
+                        <button
+                            type="button"
+                            className="rl-plugin-item-cog"
+                            onClick={onOpenConfig}
+                            aria-label={`${name} settings`}
+                            title="Edit plugin configuration"
+                        >
+                            <img
+                                src={runeliteImage("config_edit_icon.png")}
+                                alt=""
+                                width={18}
+                                height={18}
+                            />
+                        </button>
+                    ) : (
+                        <span aria-hidden="true" />
+                    )}
+                    {onToggle ? (
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={!off}
+                            aria-label={`${off ? "Enable" : "Disable"} ${name}`}
+                            title={off ? "Enable plugin" : "Disable plugin"}
+                            className={`rl-switch${off ? "" : " on"}`}
+                            onClick={() => onToggle(off)}
+                        >
+                            <img
+                                src={runeliteImage("switcher_on.png")}
+                                alt=""
+                                width={25}
+                                height={15}
+                            />
+                        </button>
+                    ) : (
+                        <span aria-hidden="true" />
+                    )}
+                </span>
+            </div>
+            {failure ? <span className="rl-plugin-item-failure">Failed: {failure}</span> : null}
         </div>
     );
 }

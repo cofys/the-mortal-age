@@ -47,9 +47,33 @@ test("Zarosian items by name, the ancient hilt excepted", () => {
   assert.equal(Common.isZarosian("Torva platebody"), true);
   assert.equal(Common.isZarosian("Zaryte vambraces"), true);
   assert.equal(Common.isZarosian("Gloves of darkness"), true);
-  assert.equal(Common.isZarosian("Ring of endurance"), true);
+  assert.equal(Common.isZarosian("Ring of endurance"), false);
   assert.equal(Common.isZarosian("Ancient hilt"), false);
   assert.equal(Common.isZarosian("Rune platebody"), false);
+});
+
+test("the prison aggression rule requires Zarosian equipment, not a ring of endurance", () => {
+  const Prison = require("../plugins/bosses/nex/Prison.Nex");
+  let area;
+  const api = new Proxy({
+    registerArea(value) { area = value; },
+  }, { get: (target, key) => target[key] ?? (() => {}) });
+  fakeApi.core.Area = class {};
+  fakeApi.core.Boundary = class {};
+  Prison.attachPrison(api);
+  // IDs in fakeApi.core.ItemDefinition above, not cache IDs.
+  const enduranceRing = 6;
+  const ancientBody = 1;
+  const equipment = [];
+  const player = { getEquipment: () => ({ getItems: () => equipment.map((id) => ({ getId: () => id })) }) };
+  const follower = { getId: () => Common.data.npcs.followers[0][0] };
+  assert.equal(area.npcAggression(player, follower), true, "no god item: aggressive");
+  equipment.push(enduranceRing);
+  assert.equal(area.npcAggression(player, follower), true, "endurance is Saradomin, not Zaros");
+  equipment.push(ancientBody);
+  assert.equal(area.npcAggression(player, follower), false, "ancient d'hide still protects alongside the ring");
+  equipment.shift();
+  assert.equal(area.npcAggression(player, follower), false, "ancient d'hide protects by itself");
 });
 
 test("shares: present players over 1% of the damage, the MVP the biggest", () => {

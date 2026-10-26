@@ -24,6 +24,7 @@
 const Shared = require("./Shared.Colosseum");
 const Loot = require("./Loot.Colosseum");
 const { byKey } = require("./Modifiers.Colosseum");
+const Scoreboard = require("./Scoreboard.Colosseum");
 
 const INVENTORY = { REWARDS: 843, FUTURE: 844, PREVIOUS: 845 };
 const INVENTORY_SIZE = 28;
@@ -118,6 +119,7 @@ function waveCompleted(run) {
 function keepGlory(run) {
   const player = run.player;
   if (run.glory > Shared.gloryOf(player)) player.setAttribute(Shared.ATTR.GLORY, run.glory);
+  Scoreboard.gloryKept(run);
 }
 
 /** Died, teleported or logged out: the loot is gone. */

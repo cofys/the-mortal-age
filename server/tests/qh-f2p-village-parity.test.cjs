@@ -175,14 +175,14 @@ function realPlayer() {
     sendConfig(id, value) { configs.set(id, value); return packet; },
     sendVarbit(id, value) { varbits.set(id, value); return packet; },
     sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
-    sendString() { return packet; },
+    sendString(text) { if (typeof text === 'string') p.dialogueTexts.push(text); return packet; },
     sendChatboxInterface() { return packet; },
     sendNpcHeadOnInterface() { return packet; },
     sendPlayerHeadOnInterface() { return packet; },
     sendInterfaceFlagsRange() { return packet; },
     sendInterfaceAnimation() { return packet; },
   }, { get: (target, key) => target[key] ?? ((...args) => packet) });
-  const p = { attributes, items, configs, varbits, banks, messages: [], animations: [], prompt: null, failAddId: null, full: false,
+  const p = { attributes, items, configs, varbits, banks, messages: [], dialogueTexts: [], animations: [], prompt: null, failAddId: null, full: false,
     index: realIndex++,
     getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory, getBanks: () => p.banks,
@@ -261,6 +261,20 @@ function registerRealDialogues() {
     return () => {};
   } });
   require('../plugins/npcs/NpcDialogues.plugin').register(api);
+}
+
+function registerRealDialoguesScoped() {
+  const interactions = PluginManager.npcAnyInteractionHooks.length;
+  const customEvents = new Map([...PluginManager.customEventHooks].map(([name, hooks]) => [name, [...hooks]]));
+  registerRealDialogues();
+  return () => {
+    PluginManager.npcAnyInteractionHooks.length = interactions;
+    for (const name of new Set([...PluginManager.customEventHooks.keys(), ...customEvents.keys()])) {
+      const previous = customEvents.get(name);
+      if (previous?.length) PluginManager.customEventHooks.set(name, previous);
+      else PluginManager.customEventHooks.delete(name);
+    }
+  };
 }
 
 function harlowEvent(player) {
@@ -444,6 +458,31 @@ function registerBartendersDispatch() {
   };
 }
 
+function registerBaraekDispatch() {
+  const before = PluginManager.npcDialogueConditionHooks.length;
+  const api = new Proxy({ core }, { get(target, key) {
+    if (key in target) return target[key];
+    if (key === 'onNpcDialogueCondition') return (handler) => PluginManager.npcDialogueConditionHooks.push({ pluginName: 'BaraekTest', handler });
+    if (key === 'onCustomEvent') return (name, handler) => {
+      const hooks = PluginManager.customEventHooks.get(name) ?? [];
+      hooks.push({ pluginName: 'BaraekTest', handler });
+      PluginManager.customEventHooks.set(name, hooks);
+    };
+    if (key === 'emitCustomEvent') return (name, payload) => PluginManager.emitCustomEvent(name, payload);
+    return () => {};
+  } });
+  require('../plugins/npcs/Baraek.plugin').register(api);
+  return {
+    cleanup() {
+      PluginManager.npcDialogueConditionHooks.length = before;
+      for (const [name, hooks] of PluginManager.customEventHooks) {
+        const kept = hooks.filter((hook) => hook.pluginName !== 'BaraekTest');
+        if (kept.length) PluginManager.customEventHooks.set(name, kept); else PluginManager.customEventHooks.delete(name);
+      }
+    },
+  };
+}
+
 function bartenderEvent(player, npcId) {
   const entity = NPC.create(npcId, new core.Location(3222, 3399, 0));
   const definition = entity.getCurrentDefinition(player);
@@ -451,6 +490,32 @@ function bartenderEvent(player, npcId) {
     player, npc: entity, definition, npcId: entity.getContentId(player), npcIndex: entity.getIndex(),
     clickType: 1, handled: false, location: { x: 3222, y: 3399, z: 0 },
   };
+}
+
+function baraekEvent(player) {
+  const entity = NPC.create(core.NpcIdentifiers.BARAEK, new core.Location(3210, 3424, 0));
+  const definition = entity.getCurrentDefinition(player);
+  return {
+    player, npc: entity, definition, npcId: entity.getContentId(player), npcIndex: entity.getIndex(),
+    clickType: 1, handled: false, location: { x: 3210, y: 3424, z: 0 },
+  };
+}
+
+function buyFurAtBaraek(player) {
+  PluginManager.emitNpcInteraction(baraekEvent(player));
+  let prompt = advanceToPrompt(player);
+  assert.ok(prompt?.options.includes('Can you sell me some furs?'), 'Baraek transcript exposes the fur purchase');
+  choosePrompt(player, 'Can you sell me some furs?');
+  prompt = advanceToPrompt(player);
+  assert.ok(prompt?.options.includes('Yeah, okay, here you go.'), 'Baraek transcript exposes the 20-coin offer');
+  choosePrompt(player, 'Yeah, okay, here you go.');
+  if ((player.items.get(core.ItemIdentifiers.COINS) ?? 0) < 20) {
+    prompt = advanceToPrompt(player);
+    assert.ok(prompt?.options.includes('OK, here you go.'), 'the fallback asks for confirmation at 18 coins');
+    choosePrompt(player, 'OK, here you go.');
+  }
+  finishDialogue(player);
+  return player.dialogueTexts;
 }
 
 function buyAt(player, npcId, choice, label) {
@@ -558,6 +623,58 @@ test('Bartenders let exactly 2 coins free a full-bag slot at all three pubs and 
     assert.match(player.messages.at(-1), /free inventory slot/);
     player.failAddId = null;
   } finally {
+    cleanup();
+  }
+});
+
+test('Baraek sells fur for 20 coins or the 18-coin fallback, with safe inventory and coin checks', () => {
+  const { cleanup } = registerBaraekDispatch();
+  const cleanupDialogues = registerRealDialoguesScoped();
+  try {
+    const I = core.ItemIdentifiers;
+    const standard = realPlayer();
+    standard.items.set(I.COINS, 20);
+    buyFurAtBaraek(standard);
+    assert.equal(standard.items.get(I.FUR), 1);
+    assert.equal(standard.items.get(I.COINS), 0);
+
+    const fallback = realPlayer();
+    fallback.items.set(I.COINS, 18);
+    buyFurAtBaraek(fallback);
+    assert.equal(fallback.items.get(I.FUR), 1);
+    assert.equal(fallback.items.get(I.COINS), 0);
+
+    for (const amount of [18, 20]) {
+      const full = realPlayer();
+      full.full = true;
+      full.items.set(I.COINS, amount);
+      buyFurAtBaraek(full);
+      assert.equal(full.items.get(I.FUR), 1, `${amount}-coin stack should free its slot for the fur`);
+      assert.equal(full.items.get(I.COINS), 0);
+    }
+
+    const tooPoor = realPlayer();
+    tooPoor.items.set(I.COINS, 17);
+    buyFurAtBaraek(tooPoor);
+    assert.equal(tooPoor.items.get(I.FUR) ?? 0, 0);
+    assert.equal(tooPoor.items.get(I.COINS), 17);
+
+    const failedDelivery = realPlayer();
+    failedDelivery.items.set(I.COINS, 20);
+    failedDelivery.failAddId = I.FUR;
+    buyFurAtBaraek(failedDelivery);
+    assert.equal(failedDelivery.items.get(I.FUR) ?? 0, 0);
+    assert.equal(failedDelivery.items.get(I.COINS), 20, 'failed delivery restores the full price');
+
+    const fullWithRemainder = realPlayer();
+    fullWithRemainder.full = true;
+    fullWithRemainder.items.set(I.COINS, 21);
+    const refusal = buyFurAtBaraek(fullWithRemainder);
+    assert.equal(fullWithRemainder.items.get(I.FUR) ?? 0, 0);
+    assert.equal(fullWithRemainder.items.get(I.COINS), 21);
+    assert.ok(refusal.some((text) => /free inventory slot/.test(text)), 'full inventory refusal is shown');
+  } finally {
+    cleanupDialogues();
     cleanup();
   }
 });

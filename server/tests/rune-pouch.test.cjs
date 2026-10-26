@@ -58,6 +58,12 @@ function createContainer(capacity, initial = []) {
     delete(id, amount) {
       return container.deleteNumber(id, amount);
     },
+    deleteAtSlot(slot, amount = 1) {
+      const item = items[slot];
+      item.setAmount(item.getAmount() - amount);
+      if (item.getAmount() <= 0) items.splice(slot, 1);
+      return container;
+    },
     deletes(item) {
       return container.deleteNumber(item.getId(), item.getAmount());
     },
@@ -522,7 +528,7 @@ test("utility magic pays alchemy costs from inventory and the carried rune pouch
   const target = new Item(Items.RUNE_PLATEBODY, 1);
   target.isTradeable = () => true;
   target.isSellable = () => true;
-  target.getDefinition = () => ({ getHighAlchValue: () => 100, getLowAlchValue: () => 60 });
+  target.getDefinition = () => ({ getHighAlchValue: () => 100, getLowAlchValue: () => 60, isTradeable: () => true });
   const player = createPlayer([target, new Item(Items.DIVINE_RUNE_POUCH, 1), new Item(Items.FIRE_RUNE, 2)]);
   const inventory = player.getInventory();
   inventory.capacity = () => 28;

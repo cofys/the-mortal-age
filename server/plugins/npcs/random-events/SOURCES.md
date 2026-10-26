@@ -207,6 +207,44 @@ and incorrect answers, packet option/owner/interface checks, full inventory,
 stacked coins, stale prompts, banking changes and duplicate reward prevention.
 Native Certer/tray appearance still needs a live-client visual check.
 
+## Rewards with a full inventory
+
+Every event reward goes through `Rewards.RandomEvents.js`. The
+[Random events Wiki page](https://oldschool.runescape.wiki/w/Random_events) says a reward
+received with a full inventory is dropped to the floor and stays there for up to three
+hours. The rsprox captures show how:
+
+- Each item is handled on its own. What fits joins the inventory with
+  `Your reward is: <col=ff0000>N</col> x <col=ff0000>Name</col>.`; the rest is placed
+  under the player with
+  `Your reward is: <col=ff0000>N</col> x <col=ff0000>Name</col> - it has been placed <col=ff0000>on the ground</col>.`
+  A live Drunken Dwarf capture (not published on rsprox.net) with one free
+  slot gave the beer, then placed the kebab on the ground, then the dwarf's line
+  "I 'new it were you matey! I remember your kebab stories! 'Ere, have some ob the good
+  stuff!".
+- The dropped stack is owner-only with `despawn=18000` ticks (three hours). Tradeable
+  items turn public after the usual 100 ticks (`reveal=100`: a sandwich lady's meat pie in
+  recording 96, Maze runes, feathers and arrows in 1764); untradeable ones never do
+  (`neverturnpublic=true`: Drill Demon camo top in 1852, Freaky Forester lederhosen in
+  554 and 1757). These are Leagues V recordings; the Wiki statement above is the
+  main-game source. The Strange plant's fruit stays private although it is tradeable,
+  as its own Wiki page says.
+- The reward message comes first, then the NPC's line in a chat dialogue: the Genie's
+  "Ah, so you are there, Master <name>. I'm so glad you summoned me. Please take this lamp
+  and make your wish." (1434, 2605, 3056), the Mysterious Old Man's "Ah, so you are there.
+  I hoped you would talk to me, I get so lonely. Here, have a present! I must be going now
+  though." (1545; also 3276 and 3285 on Grid Master worlds), the Sandwich lady's "Hope that fills you up!" (1695, 3057,
+  4222) and the Strange plant's "You pick the fruit from the plant." message (1625). Live
+  sends no "gives you a lamp" style message of its own.
+- The Sandwich lady offers the food in a dialogue first, "You look hungry to me. I tell
+  you what - have a <food> on me." (a bread roll, a pie, a kebab ...), and opens the tray
+  when it is continued (3057).
+
+Teleporting events give their rewards at the return tile through the same path.
+`ItemOnGround` carries the per-stack lifetime (`registerLocation(..., { goesGlobal,
+despawnDelay })`), which the client is also sent as the stack's despawn tick; a stack
+with its own lifetime never merges into an ordinary one.
+
 ## Mysterious Old Man and Strange Plant
 
 The direct-gift [Mysterious Old Man](https://oldschool.runescape.wiki/w/Mysterious_Old_Man)
@@ -238,9 +276,9 @@ against standard poison/venom reapplication, and no Hitpoints restoration.
 It uses canonical Food data and the same run-energy/cure helpers as Potions;
 the standard immunity timer covers reapplication but does not stop custom
 poison-like damage. Existing longer protection is retained. Zero-heal food
-preserves already-overhealed HP. The dropped fruit uses the existing floor-item
-clock with a negative initial tick, expires after 18,000 server ticks, and never
-becomes public; tests exercise its real `ItemOnGround.process()` lifecycle.
+preserves already-overhealed HP. The dropped fruit goes through the shared reward
+path below with its own 18,000-tick floor lifetime, and never becomes public; tests
+exercise its real `ItemOnGround.process()` lifecycle.
 
 The scheduler now selects among eight events on members worlds and six on F2P.
 Tests cover growth boundaries, owner checks, exactly-once gifts/fruit, full

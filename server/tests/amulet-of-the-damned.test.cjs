@@ -21,6 +21,7 @@ BarrowsEquipment.register({
   registerMagicDefenseModifier() {},
   registerMeleeHitModifier() {},
   onCombatHitRoll() {},
+  onCombatHitDamage() {},
   onPlayerDealtDamage() {},
   onCombatHitResolved() {},
   onPlayerLogin() {},

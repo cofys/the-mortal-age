@@ -22,8 +22,8 @@ four Water, four Earth and three Nature runes.
 The current individual Snare page specifies max hit2. An older generic spell table
 and pinned Wiki damage calculator specify3. This implementation follows the current
 individual page and discloses the disagreement; it does not claim recording-exact
-Snare damage. Exact fade-warning timing and the general PvP owner-distance escape
-policy remain separate audits and are not changed by this patch.
+Snare damage. The fade warning, the silent landing, the immunity message and the
+PvP 10-tile escape are covered in [freezes.md](freezes.md).
 
 The public rsps.app progress data marks normal DT2 encounters functional but retains
 unverified balance values. Its Magic completion label is not evidence of exact spell

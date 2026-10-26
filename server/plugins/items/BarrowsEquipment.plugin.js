@@ -185,6 +185,27 @@ let BonusManager;
 
 let pluginApi;
 
+// Attackers whose current hit roll is a Defiler hit, until its damage is rolled.
+const defilerHits = new WeakSet();
+
+/**
+ * Verac's set (Defiler, https://oldschool.runescape.wiki/w/Verac%27s_armour): a melee attack
+ * has a 25% chance to hit for certain and through protection prayers.
+ */
+function defilerRoll(event) {
+  defilerHits.delete(event.attacker);
+  if (event.combatType !== CombatType.MELEE || !pluginApi.getCombatFactory().fullVeracs(event.attacker) || !chance()) return;
+  event.forceAccurate = true;
+  event.bypassProtectionPrayer = true;
+  defilerHits.add(event.attacker);
+}
+
+/** "When the effect activates against monsters, the attack will do 1 extra damage." */
+function defilerDamage({ attacker, target, damage }) {
+  if (!defilerHits.delete(attacker) || !target?.isNpc?.()) return;
+  damage.incrementDamage(1);
+}
+
 /**
  * `barrows:repair` { player, itemId, costMultiplier }: a repair somewhere other than an NPC (a
  * player-owned house's armour repair stand, which charges less with Smithing).
@@ -241,12 +262,8 @@ module.exports = {
       return target && PrayerHandler.isActivated(target, PrayerHandler.PROTECT_FROM_MELEE)
         ? Math.floor(maxHit * 2 / 3) : maxHit;
     });
-    api.onCombatHitRoll((event) => {
-      if (event.combatType === CombatType.MELEE && CombatFactory.fullVeracs(event.attacker) && chance()) {
-        event.forceAccurate = true;
-        event.bypassProtectionPrayer = true;
-      }
-    });
+    api.onCombatHitRoll(defilerRoll);
+    api.onCombatHitDamage(defilerDamage);
     api.onPlayerDealtDamage(({ player, target, hit }) => {
       if (!hit.getHandleAfterHitEffects() || !hit.isAccurate()) return;
       if (hit.getCombatType() === CombatType.MAGIC && Barrows.hasDamnedSet(player, "ahrims") && chance()) {

@@ -240,12 +240,18 @@ function savedSettings(player) {
   return saved && typeof saved === "object" ? saved : {};
 }
 
-/** Sends a setting's var and remembers it for the next login. */
-function setSettingVar(player, key, value) {
+/** Sends a setting's var ("varp:<id>" or "varbit:<id>") without remembering it. */
+function sendSettingVar(player, key, value) {
   const [kind, id] = key.split(":");
   const sender = player.getPacketSender();
   if (kind === "varp") sender.sendConfig(Number(id), value);
   else sender.sendVarbit(Number(id), value);
+}
+
+/** Sends a setting's var and remembers it for the next login. */
+function setSettingVar(player, key, value) {
+  const [, id] = key.split(":");
+  sendSettingVar(player, key, value);
   player.setAttribute(SETTINGS_VALUES_ATTRIBUTE, { ...savedSettings(player), [key]: value });
   if (Object.values(QUEST_SETTINGS).some(varbit => key === `varbit:${varbit}`) || QUEST_COLOUR_VARPS.has(Number(id))) pluginApi?.emitCustomEvent("quest:list-refresh", { player });
 }
@@ -271,6 +277,7 @@ function chooseSettingOption(player, settingId, option) {
   if (!row || setting?.type !== SETTING_TYPE_DROPDOWN || option < 0 || option >= setting.optionCount) return false;
   if (!row.options) {
     setSettingVar(player, varKey(row), option);
+    if (row.script !== undefined) player.getPacketSender().sendClientScript(row.script);
     return true;
   }
   const entry = row.options[option];
@@ -280,10 +287,17 @@ function chooseSettingOption(player, settingId, option) {
   return true;
 }
 
-/** Login: the client starts from zero, so send every setting the player changed. */
+/**
+ * Login: the client starts from zero, so send every setting the player changed, and the rows
+ * whose live default is not zero (`default` in settings.json) until the player chooses.
+ */
 function restoreSettings({ player }) {
-  for (const [key, value] of Object.entries(savedSettings(player))) {
+  const saved = savedSettings(player);
+  for (const [key, value] of Object.entries(saved)) {
     if (Number.isInteger(value)) setSettingVar(player, key, value);
+  }
+  for (const row of Object.values(SETTINGS)) {
+    if (row.default !== undefined && saved[varKey(row)] === undefined) sendSettingVar(player, varKey(row), row.default);
   }
 }
 

@@ -177,6 +177,11 @@ export class ItemDefinition {
         return this.grandExchangeValue > 0 ? this.grandExchangeValue : this.value;
     }
 
+    /** Whether item-prices.json has a Grand Exchange quote for this item. */
+    public hasGrandExchangeValue(): boolean {
+        return this.grandExchangeValue > 0;
+    }
+
     /** The guide sell quote, falling back to the buy quote when there is none. */
     public getGrandExchangeSellValue(): number {
         return this.grandExchangeSellValue > 0 ? this.grandExchangeSellValue : this.getGrandExchangeValue();

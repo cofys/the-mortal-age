@@ -1,7 +1,10 @@
 // TODO: ported from xrsps-typescript; untested.
-function buildSpecial(core) {
-  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Skill } = core;
+// A Pulverize that misses asks "combat-special:missed-drain" whether the target still loses some
+// Defence (Tekton: 5%, https://oldschool.runescape.wiki/w/Elder_maul).
+function buildSpecial(api) {
+  const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Skill } = api.core;
 
+  const ID = "elder_maul";
   const DRAIN = 50;
   const DEFENCE_DRAIN_FRACTION = 0.35;
   // Pulverize: dedicated player animation + self VFX + target impact (RuneLite
@@ -11,13 +14,19 @@ function buildSpecial(core) {
   const IMPACT_GRAPHIC = new Graphic(2805);
 
   function pulverize(hit) {
-    if (!hit.isAccurate()) {
+    if (hit.isAccurate()) {
+      drainDefence(hit.getTarget(), DEFENCE_DRAIN_FRACTION);
       return;
     }
-    const target = hit.getTarget();
+    const missed = { hit, specialId: ID, fraction: 0, levels: 0 };
+    api.emitCustomEvent("combat-special:missed-drain", missed);
+    if (missed.fraction > 0) drainDefence(hit.getTarget(), missed.fraction);
+  }
+
+  function drainDefence(target, fraction) {
     const skillManager = target.isPlayer() ? target.getAsPlayer().getSkillManager() : target.getAsNpc();
     const current = skillManager.getCurrentLevel(Skill.DEFENCE);
-    const drainAmount = Math.floor(current * DEFENCE_DRAIN_FRACTION);
+    const drainAmount = Math.floor(current * fraction);
     skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(target.isPlayer() ? 1 : 0, current - drainAmount));
   }
 
@@ -37,7 +46,7 @@ function buildSpecial(core) {
   }
 
   return {
-    id: "elder_maul",
+    id: ID,
     itemIds: [ItemIdentifiers.ELDER_MAUL, ItemIdentifiers.ELDER_MAUL_OR_],
     drainAmount: DRAIN,
     strengthMultiplier: 1,
@@ -49,5 +58,5 @@ function buildSpecial(core) {
 }
 
 module.exports = function registerElderMaulSpecialAttack(api) {
-  api.registerCombatSpecial(buildSpecial(api.core));
+  api.registerCombatSpecial(buildSpecial(api));
 };

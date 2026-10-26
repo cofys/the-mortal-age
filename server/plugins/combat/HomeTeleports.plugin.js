@@ -13,6 +13,13 @@ const { startHomeTeleport, dateMinutes } = require("./HomeTeleportSequence");
 const COOLDOWN_MINUTES = 30;
 const LAST_HOME_TELEPORT_VARP = 892;
 const LAST_HOME_TELEPORT_ATTRIBUTE = "home-teleport:last-minute";
+// Cache: animation_picker, CS2 7707/1196/1197, home_tele_anim_toggle_list.
+const ANIMATION_PICKER = 525;
+const ANIMATION_PICKER_INIT = 7707;
+const ANIMATION_CATEGORY_VARP = 4559;
+const HOME_ANIMATION_CATEGORY = 4093;
+// shortcut: only Default is supported; add cosmetic unlocks and cast sequences together.
+const HOME_ANIMATION_TOGGLES_VARP = 4560;
 
 /** Destinations (Wiki): a tile, or a random tile in an area. */
 const HOMES = new Map([
@@ -51,6 +58,16 @@ function castHomeTeleport(event) {
   if (!home) return;
   event.handled = true;
   const { player } = event;
+  const op = event.opId ?? event.action ?? 1;
+  if (op === 10) {
+    player.getPacketSender()
+      .sendConfig(ANIMATION_CATEGORY_VARP, HOME_ANIMATION_CATEGORY)
+      .sendConfig(HOME_ANIMATION_TOGGLES_VARP, 1)
+      .sendInterface(ANIMATION_PICKER)
+      .sendClientScript(ANIMATION_PICKER_INIT);
+    return;
+  }
+  if (op !== 1) return;
   const left = minutesLeft(Number(player.getAttribute(LAST_HOME_TELEPORT_ATTRIBUTE)), COOLDOWN_MINUTES);
   if (left > 0) {
     player.sendMessage(`You need to wait another ${left} minutes to cast this spell.`);
@@ -76,6 +93,7 @@ function castHomeTeleport(event) {
 function sendLastHomeTeleport({ player }) {
   const minute = Number(player.getAttribute(LAST_HOME_TELEPORT_ATTRIBUTE) ?? 0);
   if (minute > 0) player.getPacketSender().sendConfig(LAST_HOME_TELEPORT_VARP, minute);
+  player.getPacketSender().sendConfig(HOME_ANIMATION_TOGGLES_VARP, 1);
 }
 
 module.exports = {

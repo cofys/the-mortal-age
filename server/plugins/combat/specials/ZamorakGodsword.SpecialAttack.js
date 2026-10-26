@@ -17,7 +17,7 @@ module.exports = function registerZamorakGodswordSpecialAttack(api) {
     handleAfterHitEffects(hit) {
       if (hit.isAccurate()) {
         hit.getTarget().performGraphic(GRAPHIC);
-        CombatFactory.freeze(hit.getTarget(), FREEZE_SECONDS);
+        CombatFactory.freeze(hit.getTarget(), FREEZE_SECONDS, undefined, hit.getAttacker());
       }
     }
   }

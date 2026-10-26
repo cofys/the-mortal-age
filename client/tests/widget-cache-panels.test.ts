@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Inventory } from "../rs/inventory/Inventory";
+import { deriveRawMenuEntriesForWidget } from "../widgets/menu/utils";
 
 // Exercise the cache's actual panels and long-price script, not just the VM opcode.
 {
@@ -23,6 +24,30 @@ import { Inventory } from "../rs/inventory/Inventory";
     assert.equal(wm.getWidgetByUid((464 << 16) | 2).children[0].itemId, 1333);
     assert.ok(wm.getWidgetByUid((464 << 16) | 2).children.some((child: any) =>
         child?.text?.includes('12,345,678,901')), 'guide-price text preserves a 64-bit total');
+
+    wm.getGroup(218);
+    const spellbook = wm.getWidgetByUid(218 << 16);
+    for (const [book, child] of [[0, 6], [1, 108], [2, 109], [3, 153]]) {
+        cacheVm.context.varManager.setVarbit(4070, book);
+        cacheVm.runScriptEvent({ args: spellbook.onLoad, widget: spellbook });
+        const home = wm.getWidgetByUid((218 << 16) | child);
+        assert.ok(deriveRawMenuEntriesForWidget(home).some(entry => entry.option === 'Animation' && entry.opIndex === 10),
+            `Home Teleport animation menu entry in spellbook ${book}`);
+    }
+
+    wm.getGroup(525);
+    cacheVm.context.varManager.setVarp(4559, 4093);
+    cacheVm.context.varManager.setVarp(4560, 1);
+    cacheVm.run(cacheVm.context.loadScript(7707), [], []);
+    assert.equal(cacheVm.lastError, null, 'native Home Teleport animation picker initializes');
+    assert.ok(wm.getWidgetByUid((525 << 16) | 3).children.some((child: any) =>
+        child?.text === 'Home Teleport Animations'));
+    const toggles = wm.getWidgetByUid((525 << 16) | 8).children;
+    for (const toggle of [toggles[0], toggles[1]]) {
+        cacheVm.runScriptEvent({ args: toggle.onClick, widget: toggle });
+        assert.equal(cacheVm.context.varManager.getVarp(4560), 1,
+            'Default remains selected: the last animation and locked cosmetics cannot be toggled');
+    }
 }
 
 console.log("Cache panel scripts retain dynamic inventory items and 64-bit prices");

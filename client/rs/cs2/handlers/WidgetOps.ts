@@ -6,6 +6,7 @@ import {
     markWidgetsLoaded,
 } from "../../../game/TransmitCycles";
 import { markWidgetInteractionDirty } from "../../../widgets/WidgetInteraction";
+import { MAX_WIDGET_OPS } from "../../../widgets/WidgetFlags";
 import { SCRIPT_LAYOUT, type WidgetNode } from "../../../widgets/WidgetManager";
 import { getViewportSize } from "../../../common/utils/DeviceUtil";
 import { Cs2ArrayObject } from "../Cs2ArrayObject";
@@ -2707,13 +2708,15 @@ export function registerWidgetOps(handlers: HandlerMap): void {
     });
 
     // === Operations/Actions ===
+    // Ops 1-32, as the client's op transmit mask (IF_SETEVENTS_V2) has a bit for each.
+    // The bank's ~bankmain_drawitem sets op 11 "Examine" on every item.
     handlers.set(Opcodes.CC_SETOP, (ctx, intOp) => {
         const text = ctx.stringStack[--ctx.stringStackSize];
         const index = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (w) {
             if (!w.actions) w.actions = [];
-            if (index >= 1 && index <= 10) {
+            if (index >= 1 && index <= MAX_WIDGET_OPS) {
                 w.actions[index - 1] = text;
                 markWidgetInteractionDirty(w);
             }
@@ -2727,7 +2730,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         const text = ctx.stringStack[--ctx.stringStackSize];
         if (w) {
             if (!w.actions) w.actions = [];
-            if (index >= 1 && index <= 10) {
+            if (index >= 1 && index <= MAX_WIDGET_OPS) {
                 w.actions[index - 1] = text;
                 markWidgetInteractionDirty(w);
             }
@@ -3345,13 +3348,21 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         ctx.queueTriggerOp(w, opIndex);
     });
 
+    // if_triggerop(component, slot, op): clicks op `op` of the component, or of its child at
+    // `slot` when slot is not -1 (the report form's submit clicks its own Close this way).
     handlers.set(Opcodes.IF_TRIGGEROP, (ctx) => {
-        const uid = ctx.intStack[--ctx.intStackSize];
-        const opIndex = ctx.intStack[--ctx.intStackSize];
+        ctx.intStackSize -= 3;
+        const uid = ctx.intStack[ctx.intStackSize];
+        const slot = ctx.intStack[ctx.intStackSize + 1];
+        const opIndex = ctx.intStack[ctx.intStackSize + 2];
         if (opIndex < 1 || opIndex > 10) {
             throw new Error("RuntimeException");
         }
-        const w = ctx.widgetManager.getWidgetByUid(uid);
+        const parent = ctx.widgetManager.getWidgetByUid(uid);
+        const w =
+            slot === -1 || !parent
+                ? parent
+                : (parent.children?.[slot] ?? findNestedDynamicChild(parent, slot));
         if (!w) {
             throw new Error("RuntimeException");
         }

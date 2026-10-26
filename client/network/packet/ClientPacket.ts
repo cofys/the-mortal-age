@@ -97,6 +97,7 @@ export const ClientPacket = {
     IF_TRIGGEROPLOCAL: ClientPacketId.IF_TRIGGEROPLOCAL,
     IF_BUTTOND: ClientPacketId.IF_BUTTOND,
     IF_BUTTONT: ClientPacketId.IF_BUTTONT,
+    IF_BUTTONX: ClientPacketId.IF_BUTTONX,
 
     // Movement
     MOVE_GAMECLICK: ClientPacketId.MOVE_GAMECLICK,

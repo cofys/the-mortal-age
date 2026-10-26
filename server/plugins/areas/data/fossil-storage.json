@@ -1,0 +1,52 @@
+{
+  "_source": "rsprox 231/00711, 231/00712, 227/00073, 227/01843, 227/01862 (the crate's interface, its varbits, deposits, withdrawals and the bench) and the Wiki (Fossil Storage: 510 of each; Fossil cleaning bench and the unidentified fossils: what each size cleans into).",
+  "crates": ["fossil_storage_crate1", "fossil_storage_crate2"],
+  "bench": "fossil_cleaning_bench",
+  "benchBuilt": "fossil_bench",
+  "_build": "Wiki (Fossil cleaning bench): built from its table parts with 5 planks, 5 nails and a hammer, at 5 Construction, for 100 Construction XP; the cache's varbit fossil_bench shows it built (recorded 0 -> 1).",
+  "build": { "level": 5, "xp": 100, "planks": 5, "nails": 5, "plank": "woodplank", "hammer": "hammer", "nailTypes": ["nails_bronze", "nails_iron", "nails", "nails_black", "nails_mithril", "nails_adamant", "nails_rune"] },
+  "storage": "fossil_storage",
+  "side": "fossil_storage_inv",
+  "sideModal": "toplevel_osrs_stretch:sidemodal",
+  "components": { "list": "fossil_storage:list", "depositAll": "fossil_storage:inv2chest", "withdrawAll": "fossil_storage:chest2inv", "sideInv": "fossil_storage_inv:inv" },
+  "inventory": "inv",
+  "_max": "Wiki: \"Only 510 of each type of fossil stack can be stored in the crate\".",
+  "max": 510,
+  "_fossils": "The list's slots 0-29 in order (recorded), each stored in its own varbit fossil_storage_<name minus fossil_>.",
+  "fossils": [
+    "fossil_small_1", "fossil_small_2", "fossil_small_3", "fossil_small_4", "fossil_small_5",
+    "fossil_medium_1", "fossil_medium_2", "fossil_medium_3", "fossil_medium_4", "fossil_medium_5",
+    "fossil_large_1", "fossil_large_2", "fossil_large_3", "fossil_large_4", "fossil_large_5",
+    "fossil_plant_1", "fossil_plant_2", "fossil_plant_3", "fossil_plant_4", "fossil_plant_5",
+    "fossil_rare_1", "fossil_rare_2", "fossil_rare_3", "fossil_rare_4", "fossil_rare_5", "fossil_rare_6",
+    "fossil_small_unid", "fossil_medium_unid", "fossil_large_unid", "fossil_rare_unid"
+  ],
+  "_amounts": "The side's ops (interface_inv_init: Deposit 1, 5, 10, All, X) and the list's, recorded 1 and All for withdrawals.",
+  "amounts": { "1": 1, "2": 5, "3": 10 },
+  "_cleaning": "Wiki: each unidentified size cleans into one of its five (rare: six) pieces; a large one is either a large or a plant fossil, half and half. Equal chances within a set (the Wiki gives no rates).",
+  "cleaning": {
+    "fossil_small_unid": [["fossil_small_1", "fossil_small_2", "fossil_small_3", "fossil_small_4", "fossil_small_5"]],
+    "fossil_medium_unid": [["fossil_medium_1", "fossil_medium_2", "fossil_medium_3", "fossil_medium_4", "fossil_medium_5"]],
+    "fossil_large_unid": [["fossil_large_1", "fossil_large_2", "fossil_large_3", "fossil_large_4", "fossil_large_5"], ["fossil_plant_1", "fossil_plant_2", "fossil_plant_3", "fossil_plant_4", "fossil_plant_5"]],
+    "fossil_rare_unid": [["fossil_rare_1", "fossil_rare_2", "fossil_rare_3", "fossil_rare_4", "fossil_rare_5", "fossil_rare_6"]]
+  },
+  "_tools": "Recorded: the brush or the rock pick, chosen each time (7 and 7 across the recordings), a fossil every 6 ticks, the first the tick after.",
+  "tools": [
+    { "message": "You clean the fossil with your brush.", "anim": "vm_player_use_specimen_brush", "graphic": "vm_specimen_brush_dust_spotanim", "sound": 3594 },
+    { "message": "You clean the fossil with your rock pick.", "anim": "vm_player_use_rockpick", "graphic": "vm_rockpick_dust_spotanim", "sound": 3593 }
+  ],
+  "cleanTicks": 6,
+  "_messages": "All recorded except full, noRoom and the building lines (mine).",
+  "messages": {
+    "useOnBench": "Use your fossil on the bench to clean it.",
+    "needKit": "You will need a full archaeology kit to clean your finds. Wear leather gloves and boots and have a rock pick, trowel and specimen brush. You can find them in the tool crate.",
+    "nothing": "Nothing interesting happens.",
+    "store": "You store {name} x {amount}.",
+    "withdraw": "You withdraw {name} x {amount}.",
+    "full": "Your fossil storage can't hold any more of those.",
+    "noRoom": "You don't have enough inventory space.",
+    "buildLevel": "You need a Construction level of 5 to build the cleaning bench.",
+    "buildItems": "You need 5 planks, 5 nails and a hammer to build the cleaning bench.",
+    "built": "You build the cleaning bench."
+  }
+}

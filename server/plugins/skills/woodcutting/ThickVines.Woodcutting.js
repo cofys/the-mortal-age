@@ -49,12 +49,18 @@ function displayName(object) {
   return object.getDefinition?.()?.getName?.()?.toLowerCase() ?? "vines";
 }
 
-/** Which clearing group a live object belongs to, by its cache name. */
+/**
+ * Which clearing group a live object belongs to, by its cache name and its own option: other
+ * locs share these names (the Brimhaven Dungeon's "Vines" are chopped down, not cleared), and a
+ * tool used on them must not clear them.
+ */
 function groupFor(object) {
-  const name = object?.getDefinition?.()?.getName?.();
+  const definition = object?.getDefinition?.();
+  const name = definition?.getName?.();
   if (!name) return null;
-  if (CHOP_NAMES.includes(name)) return "chop";
-  if (CLEAR_NAMES.includes(name)) return "clear";
+  const options = definition.getInteractions?.() ?? [];
+  if (CHOP_NAMES.includes(name) && options.includes(CHOP_ACTION)) return "chop";
+  if (CLEAR_NAMES.includes(name) && options.includes(CLEAR_ACTION)) return "clear";
   return null;
 }
 

@@ -36,9 +36,13 @@ before(async () => {
 function createPlayer({ base = 99, current = base, hearts = 1 } = {}) {
   const attributes = new Map();
   const messages = [];
+  const graphics = [];
+  const sounds = [];
   const inventory = { reads: 0, items: Array.from({ length: hearts }, () => Items.IMBUED_HEART) };
   const player = {
-    attributes, messages, inventory,
+    attributes, messages, inventory, graphics, sounds,
+    performGraphic: (graphic) => graphics.push({ id: graphic.getId(), height: graphic.getHeight(), delay: graphic.getDelay() }),
+    getPacketSender: () => ({ sendSoundEffect: (...args) => sounds.push(args) }),
     getSkillManager: () => ({
       getMaxLevel: () => base,
       getCurrentLevel: () => current,
@@ -122,4 +126,17 @@ test("only the activatable item offers Invigorate, so notes and placeholders nev
     assert.equal(CacheDefinitions.getItem(id).name, "Imbued heart");
     assert.equal(options(id).includes("Invigorate"), false, `${id} has no Invigorate option`);
   }
+});
+
+// rsprox recording 1763: Invigorate sends imbued_heart_impact and synth 6847.
+test("Invigorate sends its activation feedback once, never on a drained click", () => {
+  const { player, level } = createPlayer();
+  use(player);
+  assert.equal(level(), 109);
+  assert.deepEqual(player.graphics, [{ id: 1316, height: 0, delay: 0 }]);
+  assert.deepEqual(player.sounds, [[6847, 1, 0]]);
+  use(player);
+  assert.deepEqual(player.graphics, [{ id: 1316, height: 0, delay: 0 }]);
+  assert.deepEqual(player.sounds, [[6847, 1, 0]]);
+  assert.match(player.messages.at(-1), /heart is still drained/);
 });

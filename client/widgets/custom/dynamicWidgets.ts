@@ -22,6 +22,10 @@ export type WidgetJsListeners = {
     onOp?: (event: WidgetOpEvent) => void;
     onMouseOver?: () => void;
     onMouseLeave?: () => void;
+    /** The wheel over the widget: `mouseY` is the step, -1 up or 1 down (RuneLite's ScriptEvent). */
+    onScrollWheel?: (event: { mouseY: number }) => void;
+    /** Replaces the widget's drag-complete script; `target` is the widget it was dropped on. */
+    onDragComplete?: (event: { source: WidgetNode; target: WidgetNode | null }) => void;
 };
 
 export function jsListeners(widget: WidgetNode | null | undefined): WidgetJsListeners | undefined {

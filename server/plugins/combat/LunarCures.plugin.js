@@ -8,7 +8,10 @@ const DEFINITIONS = new Map([
 const POISON_SEVERITY_PER_DAMAGE = 5;
 const GROUP_RADIUS = 1;
 const TARGET_RANGE = 10;
-// Preserve the existing LunarSpell presentation; visual parity is a separate audit.
+// Cache: quest_lunar_pushing_magic_animation / quest_lunar_cure_me_spot.
+const CURE_ME_ANIMATION = 4411;
+const CURE_ME_GRAPHIC = 742;
+// Uncaptured cure spells keep their existing presentation.
 const CAST_ANIMATION = 4413;
 const CAST_GRAPHIC = 747;
 const spells = new WeakMap();
@@ -49,8 +52,8 @@ function cast(core, player, name, effect) {
   const spell = spellFor(core, name);
   if (!spell.canCast(player, false) || !spell.canCast(player, true)) return;
   if (name === 'cure me') lastCureMeCycle.set(player, cycle);
-  player.performAnimation(new core.Animation(CAST_ANIMATION));
-  player.performGraphic(new core.Graphic(CAST_GRAPHIC));
+  player.performAnimation(new core.Animation(name === 'cure me' ? CURE_ME_ANIMATION : CAST_ANIMATION));
+  player.performGraphic(new core.Graphic(name === 'cure me' ? CURE_ME_GRAPHIC : CAST_GRAPHIC));
   effect();
   player.getSkillManager().addExperiences(core.Skill.MAGIC, spell.baseExperience());
 }

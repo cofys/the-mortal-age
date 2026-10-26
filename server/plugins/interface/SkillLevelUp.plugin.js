@@ -4,7 +4,7 @@
 // gained with it follows a tick later; its pop-up waits until the skill's is continued.
 //
 // Opening a pop-up interrupts what the player is doing: it emits "level-up:popup-opened"
-// { player, skill }, which the skilling plugins stop on. With pop-ups off, nothing stops.
+// { player, skill, pause }, which holds skilling until Continue. With pop-ups off, nothing stops.
 const GROUP = 233;
 const TEXT1 = (GROUP << 16) | 1;
 const TEXT2 = (GROUP << 16) | 2;
@@ -35,6 +35,7 @@ const COMBAT_POPUP_FROM_ATTRIBUTE = "level-up:combat-popup-from";
 const POPUP_OPENED_EVENT = "level-up:popup-opened";
 
 let pluginApi = null;
+const pending = new WeakMap();
 
 function celebrate(player, message, graphicId) {
   const { Graphic, Sounds } = pluginApi.core;
@@ -49,26 +50,47 @@ function celebrate(player, message, graphicId) {
 const popupsEnabled = (player) => player.getPacketSender().getVarbit(POPUP_DISABLED_VARBIT) !== 1;
 
 function openPopup(player, layer, line1, line2) {
+  const state = pending.get(player);
+  if (state) state.replacing = true;
   const sender = player.getPacketSender();
-  sender.sendInterfaceRemoval();
-  sender.sendClientScript(TOPLEVEL_CHATBOX_RESETBACKGROUND_SCRIPT);
-  sender.sendChatboxInterface(GROUP);
-  sender.sendString(`<col=000080>${line1}`, TEXT1);
-  sender.sendString(line2, TEXT2);
-  sender.sendString("Click here to continue", CONTINUE);
-  for (const icon of ICON_LAYERS) {
-    sender.sendInterfaceDisplayState((GROUP << 16) | icon, icon !== layer);
+  try {
+    sender.sendInterfaceRemoval();
+    sender.sendClientScript(TOPLEVEL_CHATBOX_RESETBACKGROUND_SCRIPT);
+    sender.sendChatboxInterface(GROUP);
+    sender.sendString(`<col=000080>${line1}`, TEXT1);
+    sender.sendString(line2, TEXT2);
+    sender.sendString("Click here to continue", CONTINUE);
+    for (const icon of ICON_LAYERS) {
+      sender.sendInterfaceDisplayState((GROUP << 16) | icon, icon !== layer);
+    }
+  } finally {
+    if (state) state.replacing = false;
   }
 }
 
 function openSkillPopup(player, skill, newLevel) {
-  player.getSkillManager().stopSkillable();
+  let state = pending.get(player);
+  if (!state) {
+    state = { actions: new Map(), queue: [], location: player.getLocation().clone(), replacing: false };
+    pending.set(player, state);
+  } else {
+    state.queue.push({ skill, newLevel });
+    return;
+  }
+  pluginApi.emitCustomEvent(POPUP_OPENED_EVENT, {
+    player, skill,
+    pause: (action, resume, cancel) => state.actions.set(action, { resume, cancel }),
+  });
+  if (state.actions.size === 0) player.getSkillManager().stopSkillable();
   // Combat XP lands on the swing's tick; resetting here would wipe the attack (or block) animation.
   const combat = player.getCombat();
   if (!combat.getTarget() && !combat.getAttacker()) {
     player.performAnimation(pluginApi.core.Animation.DEFAULT_RESET_ANIMATION);
   }
-  pluginApi.emitCustomEvent(POPUP_OPENED_EVENT, { player, skill });
+  showSkillPopup(player, skill, newLevel);
+}
+
+function showSkillPopup(player, skill, newLevel) {
   const name = skill.getName();
   openPopup(player, SKILL_LAYERS[skill.getIndex()],
     `Congratulations, you just advanced a ${name} level.`, `Your ${name} level is now ${newLevel}.`);
@@ -132,14 +154,42 @@ function showLevelUp({ player, skill, oldLevel, newLevel }) {
 /** Continue: a queued combat pop-up comes next, otherwise the pop-up closes. */
 function continueLevelUp({ player }) {
   if (!player.getPacketSender().isChatboxInterface(GROUP)) return false;
+  const state = pending.get(player);
+  const next = state?.queue.shift();
+  if (next) {
+    showSkillPopup(player, next.skill, next.newLevel);
+    return true;
+  }
   const combatFrom = player.getAttribute(COMBAT_POPUP_FROM_ATTRIBUTE);
   if (combatFrom !== undefined) {
     player.setAttribute(COMBAT_POPUP_FROM_ATTRIBUTE, undefined);
     openCombatPopup(player, combatFrom);
     return true;
   }
+  pending.delete(player);
   player.getPacketSender().closeInterface(GROUP);
+  if (state) {
+    const resume = player.isRegistered() && player.getHitpoints() > 0 &&
+      player.getLocation().equals(state.location) && player.getMovementQueue().size() === 0 && !player.getForceMovement();
+    for (const action of state.actions.values()) (resume ? action.resume : action.cancel)();
+  }
   return true;
+}
+
+function cancelPending({ player }) {
+  const state = pending.get(player);
+  if (!state || state.replacing) return;
+  pending.delete(player);
+  player.setAttribute(COMBAT_POPUP_FROM_ATTRIBUTE, undefined);
+  for (const action of state.actions.values()) action.cancel();
+}
+
+function interfaceClosed(event) {
+  if (event.interfaceId === GROUP) cancelPending(event);
+}
+
+function itemAction(event) {
+  if (event.action !== "bonus") cancelPending(event);
 }
 
 module.exports = {
@@ -149,5 +199,11 @@ module.exports = {
     api.onPlayerLogin(trackCombatLevel);
     api.onPlayerLevelUp(showLevelUp);
     api.onInterfaceActionButton(CONTINUE, continueLevelUp);
+    api.onCustomEvent("player:world-input", cancelPending);
+    api.onCustomEvent("interface:closed", interfaceClosed);
+    api.onCanUseItem(itemAction);
+    api.onPlayerLogout(cancelPending);
+    api.onPlayerDisconnect(cancelPending);
+    api.onPlayerDeath(cancelPending);
   },
 };

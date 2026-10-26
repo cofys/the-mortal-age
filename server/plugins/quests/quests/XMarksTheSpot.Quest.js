@@ -1,7 +1,7 @@
 /** X Marks the Spot. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerXMarksTheSpotQuest(api) {
   const { Animation, ItemIdentifiers, NpcIdentifiers, WorldDefinition, ItemStatementDialogue, DialogueChainBuilder } = api.core;
-  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, startTranscript, getRegisteredQuests } = require("../QuestRuntime");
 
   const VEOS_NPC_ID = NpcIdentifiers.VEOS; // 8484, "veos_visible"
   const VEOS_POST_QUEST_NPC_ID = NpcIdentifiers.VEOS_4; // 10723, "veos_visible_amulet"
@@ -19,6 +19,10 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   const VARP_X_MARKS = 2111; // "cluequest_main"
   const VARBIT_X_MARKS = 8063; // "cluequest", bits 0-5
   const ZEAH_VISITED_VARBIT = 4897; // "zeah_playerhasvisited"
+  // Cabin Boy Herbert (11126) shows at Port Sarim from akd 12 and Veos leaves (Wiki: Cabin Boy
+  // Herbert); captures at akd 150 have veos_sarim_vis 0 and no Veos there.
+  const AKD_KEY = "a_kingdom_divided";
+  const AKD_HERBERT_STAGE = 12;
 
   const STAGE_FIRST_CLUE = 1;
   const STAGE_SECOND_CLUE = 2;
@@ -199,11 +203,16 @@ module.exports = function registerXMarksTheSpotQuest(api) {
     return stage > 0 ? stage + 1 : player.getAttribute(ACCEPTED_ATTRIBUTE) ? 1 : 0;
   }
 
+  function herbertTookOver(player) {
+    const akd = getRegisteredQuests().find((entry) => entry.key === AKD_KEY);
+    return (akd?.getStage(player) ?? 0) >= AKD_HERBERT_STAGE;
+  }
+
   function ensureVeos(player) {
     const stage = quest.getStage(player);
     const sender = player.getPacketSender();
     sender.sendVarbit(LUMBRIDGE_VISIBILITY, stage < STAGE_CASKET ? 2 : 0);
-    sender.sendVarbit(SARIM_VISIBILITY, stage >= STAGE_COMPLETE ? 1 : 3);
+    sender.sendVarbit(SARIM_VISIBILITY, herbertTookOver(player) ? 0 : stage >= STAGE_COMPLETE ? 1 : 3);
   }
 
   // ==========================================================================
@@ -609,4 +618,7 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   api.onItemAction("Antique lamp", { Rub: handleLampRub });
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
+  api.onCustomEvent("quest:stage-changed", ({ player, key }) => {
+    if (key === AKD_KEY && player) ensureVeos(player);
+  });
 };

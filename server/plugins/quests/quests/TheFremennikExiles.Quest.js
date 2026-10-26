@@ -153,6 +153,13 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   const SAILOR = NpcIdentifiers.SAILOR; // 3680, the Miscellania dock
   const SAILOR_2 = NpcIdentifiers.SAILOR_2; // 3936, the Rellekka dock
   const SAILOR_NPC_IDS = new Set([SAILOR, SAILOR_2]);
+
+  /** Hands an ordinary crossing to the Ferries plugin's captured trip; without it, the plain move. */
+  function ferry(player, route, fallback) {
+    const request = { player, route, handled: false };
+    api.emitCustomEvent("ferries:travel", request);
+    if (!request.handled) player.moveTo(fallback);
+  }
   const HASKELL_NPC_IDS = new Set([
     NpcIdentifiers.HASKELL, // 9270
     NpcIdentifiers.HASKELL_2, // 9271
@@ -1663,22 +1670,22 @@ module.exports = function registerTheFremennikExilesQuest(api) {
 
     if ((npcId === JARVALD || npcId === JARVALD_2 || npcId === JARVALD_3)) {
       if (npcId === JARVALD && option === "Please Jarvald, it's really important!") {
-        player.moveTo(WATERBIRTH_LANDING);
+        ferry(player, "waterbirth", WATERBIRTH_LANDING);
         return;
       }
       if (npcId !== JARVALD && option === "Yes please.") {
-        player.moveTo(RELLEKKA_JARVALD_PIER);
+        ferry(player, "waterbirth-back", RELLEKKA_JARVALD_PIER);
         return;
       }
     }
 
     if (SAILOR_NPC_IDS.has(npcId)) {
       if (npcId === SAILOR_2 && option === "Please, I must get to Miscellania.") {
-        player.moveTo(new Location(2581, 3847, 0));
+        ferry(player, "miscellania", new Location(2581, 3847, 0));
         return;
       }
       if (npcId === SAILOR && option === "Let's go!") {
-        player.moveTo(RELLEKKA_JARVALD_PIER);
+        ferry(player, "miscellania-back", RELLEKKA_JARVALD_PIER);
         return;
       }
     }

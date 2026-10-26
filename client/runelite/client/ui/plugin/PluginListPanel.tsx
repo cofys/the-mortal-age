@@ -6,6 +6,8 @@ import type { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { RuneLiteConfig } from "@runelite/client/config/RuneLiteConfig";
 import { PluginConfigView } from "./PluginConfigView";
 import { PluginListItem } from "./PluginListItem";
+import { comparePlugins, getPinnedPlugins, setPluginPinned } from "./pinnedPlugins";
+import { runeliteImage } from "@runelite/client/ui/runeliteImages";
 import { onConfigurationRequest, takePendingConfiguration } from "@runelite/client/plugins/config/configurationRequests";
 
 /** The client's own settings row, pinned above the plugins (RuneLite's "RuneLite" entry). */
@@ -20,8 +22,9 @@ function matches(pluginClass: PluginClass, needle: string): boolean {
 }
 
 /**
- * The plugin hub (RuneLite's PluginListPanel): every listed plugin with an on/off switch and,
- * where it has settings, a cog that opens them as their own view.
+ * The plugin hub (RuneLite's PluginListPanel): a search field, then every listed plugin with a
+ * pin star, an on/off switch and, where it has settings, a cog that opens them as their own
+ * view. Pinned plugins come first.
  */
 export function PluginListPanel({
     pluginManager,
@@ -32,6 +35,13 @@ export function PluginListPanel({
 }): JSX.Element {
     const [, forceUpdate] = useReducer((version: number) => version + 1, 0);
     useEffect(() => pluginManager.subscribe(forceUpdate), [pluginManager]);
+    useEffect(
+        () =>
+            configManager.addListener((event) => {
+                if (event.getGroup() === RuneLiteConfig.group) forceUpdate();
+            }),
+        [configManager],
+    );
     const [search, setSearch] = useState("");
     const [view, setView] = useState<View>(() => {
         const requested = takePendingConfiguration();
@@ -67,22 +77,55 @@ export function PluginListPanel({
     }
 
     const needle = search.trim().toLowerCase();
+    const pinned = getPinnedPlugins(configManager);
     const pluginClasses = pluginManager
         .getPluginClasses()
         .filter((pluginClass) => !pluginClass.descriptor.hidden && matches(pluginClass, needle))
-        .sort((a, b) => a.descriptor.name.localeCompare(b.descriptor.name));
+        .sort((a, b) =>
+            comparePlugins(
+                { name: a.descriptor.name, pinned: pinned.has(a.descriptor.name) },
+                { name: b.descriptor.name, pinned: pinned.has(b.descriptor.name) },
+                needle,
+            ),
+        );
     const showClientRow = !needle || CLIENT_NAME.toLowerCase().includes(needle);
 
     return (
         <div className="rl-plugin-list">
-            <input
-                type="search"
-                className="rl-plugin-search"
-                value={search}
-                placeholder="Search plugins"
-                aria-label="Search plugins"
-                onChange={(event) => setSearch(event.target.value)}
-            />
+            {/* RuneLite's IconTextField: a search icon, the text, and a clear button. */}
+            <div className="rl-plugin-search-bar">
+                <label className="rl-plugin-search">
+                    <img
+                        className="rl-plugin-search-icon"
+                        src={runeliteImage("search.png")}
+                        alt=""
+                        width={24}
+                        height={24}
+                    />
+                    <input
+                        type="search"
+                        value={search}
+                        aria-label="Search plugins"
+                        onChange={(event) => setSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Escape" && search) {
+                                event.stopPropagation();
+                                setSearch("");
+                            }
+                        }}
+                    />
+                    {search ? (
+                        <button
+                            type="button"
+                            className="rl-plugin-search-clear"
+                            aria-label="Clear search"
+                            onClick={() => setSearch("")}
+                        >
+                            ×
+                        </button>
+                    ) : null}
+                </label>
+            </div>
             <div className="rl-sidebar-scrollable rl-plugin-list-items">
                 {showClientRow ? (
                     <PluginListItem
@@ -97,6 +140,10 @@ export function PluginListPanel({
                         name={pluginClass.descriptor.name}
                         description={pluginClass.descriptor.description}
                         failure={pluginManager.getFailure(pluginClass)}
+                        pinned={pinned.has(pluginClass.descriptor.name)}
+                        onPin={(pin) =>
+                            setPluginPinned(configManager, pluginClass.descriptor.name, pin)
+                        }
                         enabled={pluginManager.isEnabled(pluginClass)}
                         onToggle={(enabled) =>
                             void pluginManager.setPluginEnabled(pluginClass, enabled)

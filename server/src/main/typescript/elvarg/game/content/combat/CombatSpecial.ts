@@ -129,6 +129,27 @@ export class CombatSpecial {
         return true;
     }
 
+    /** Ticks one 10% restore takes for this character now (50, 25 with the Lightbearer). */
+    public static restoreDelayTicks(character: Mobile): number {
+        return RestoreSpecialAttackTask.restoreDelayTicks(character);
+    }
+
+    /** Ticks until the next 10% restore, or 0 when energy isn't restoring. */
+    public static restoreTicksRemaining(character: Mobile): number {
+        return RestoreSpecialAttackTask.running(character)?.getRemainingTicks() ?? 0;
+    }
+
+    /** Restarts a running restore timer so the next 10% comes `ticks` from now; false when nothing is restoring. */
+    public static restartRestoreTimer(character: Mobile, ticks: number): boolean {
+        const task = RestoreSpecialAttackTask.running(character);
+        if (!task) {
+            return false;
+        }
+        task.stop();
+        TaskManager.submit(new RestoreSpecialAttackTask(character, ticks));
+        return true;
+    }
+
     public static updateBar(player: Player) {
         const packetSender = player.getPacketSender();
         packetSender.updateSpecialAttackOrb();

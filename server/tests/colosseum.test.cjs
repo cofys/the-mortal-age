@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/colosseum.test.cjs
 const assert = require('node:assert/strict');
-const { test, before, beforeEach } = require('node:test');
+const { test, before, beforeEach, after } = require('node:test');
 
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
@@ -21,6 +21,7 @@ const Effects = require('../plugins/minigames/colosseum/ModifierEffects.Colosseu
 const Hazards = require('../plugins/minigames/colosseum/Hazards.Colosseum');
 const Sol = require('../plugins/minigames/colosseum/SolHeredit.Colosseum');
 const Patterns = require('../plugins/minigames/colosseum/SolPatterns.Colosseum');
+const Scoreboard = require('../plugins/minigames/colosseum/Scoreboard.Colosseum');
 
 const hooks = { objects: {}, npcs: {}, buttons: [], prompts: [], dialogues: [], variants: [], custom: {}, login: [], death: [], drops: [], attack: [] };
 const spawned = [];
@@ -195,9 +196,14 @@ function ticks(count) {
   for (let i = 0; i < count; i++) TaskManager.process();
 }
 
+const SCOREBOARD_FILE = require('node:path').join(require('node:os').tmpdir(), `colosseum-scoreboard-${process.pid}.json`);
+after(() => require('node:fs').rmSync(SCOREBOARD_FILE, { force: true }));
+
 before(() => {
   CachePipeline.initialize();
   RegionManager.init();
+  // The scoreboard's world records go to a scratch file, never the server's saves.
+  Scoreboard._useFile(SCOREBOARD_FILE);
   // The fake NPCs here have no real movement queue to route.
   PluginManager.getCoreApi().PathFinder.calculateWalkRoute = () => {};
   const api = fakeApi();
@@ -805,6 +811,7 @@ test('wave 12: Sol greets by attempt, lands behind the barricade, and his death 
   run.tick();
   assert.equal(run.stage, 'won');
   assert.equal(player.getAttribute(Sol.ATTR.KILLS), 1);
+  assert.equal(player.getAttribute(Scoreboard.ATTR.BEST), run.totalTicks, "the run's time is the scoreboard's best");
   ticks(5);
   assert.equal(run.stage, 'finished');
   assert.ok(run.chest, 'the rewards chest');
@@ -947,6 +954,8 @@ test('a cleared wave banks its loot and earns Glory; dying loses the loot but ke
   assert.equal(run.glory, 750 + 200 + 100 + 800, 'no no-damage bonus when hit');
   run.end('death');
   assert.equal(Shared.gloryOf(player), 1850);
+  assert.equal(player.getAttribute(Scoreboard.ATTR.WAVES), 2, 'the scoreboard counts both waves');
+  assert.equal(player.getAttribute(Scoreboard.ATTR.DEATHS), 1, 'and the death');
   assert.deepEqual(player.inventories[844], [], 'the preview is emptied');
 });
 

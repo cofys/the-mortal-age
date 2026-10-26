@@ -5,8 +5,9 @@
  *   Dairy cow > Steal-cowbell   15 Thieving, 16 XP; success 50%@1 -> 78%@99,
  *                               stuns you on failure
  *
- * The Cold War quest gate on stealing isn't modelled (this server has no Cold
- * War); the Thieving level requirement is enforced.
+ * The wiki's Cowbells page requires the Cold War quest to have been started;
+ * completed players may keep stealing more. The option is in the cache before
+ * the quest, so the handler refuses it until stage >= 1.
  */
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
@@ -24,6 +25,8 @@ const THIEVING_ANIMATION = new Animation(881);
 const STEAL_LEVEL = 15;
 const STEAL_XP = 16;
 const STEAL_STUN_TICKS = 8;
+const COLD_WAR_QUEST_KEY = "cold_war";
+const COLD_WAR_REQUIRED_MESSAGE = "You need to have started Cold War to steal a cowbell.";
 
 let TaskManager;
 let pluginApi;
@@ -58,8 +61,18 @@ function milkCow(event) {
   }));
 }
 
+function coldWarStarted(player) {
+  const request = { player, key: COLD_WAR_QUEST_KEY, started: false };
+  pluginApi.emitCustomEvent("quest:is-started", request);
+  return request.started === true;
+}
+
 function stealCowbell(event) {
   const { player } = event;
+  if (!coldWarStarted(player)) {
+    player.sendMessage(COLD_WAR_REQUIRED_MESSAGE);
+    return;
+  }
   const level = player.getSkillManager().getCurrentLevel(Skill.THIEVING);
   if (level < STEAL_LEVEL) {
     player.sendMessage(`You need a Thieving level of at least ${STEAL_LEVEL} to do this.`);

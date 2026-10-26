@@ -272,6 +272,9 @@ function withdrawTools(player, npc) {
     if (!entries.length) { player.sendMessage("Use farming tools or compost on me to store them."); return; }
     Patches.choose(player, entries);
 }
+function toolCapacity(name) {
+    return TOOL_CAPACITY[name] ?? (/^Watering can|^Gricoller's can$/.test(name) ? 1 : 0);
+}
 function storeTool(player, slot) {
     const inventory = player.getInventory(), item = inventory.forSlot(slot);
     if (!item || item.getId() < 0) return false;
@@ -279,7 +282,7 @@ function storeTool(player, slot) {
     const id = definition.noteTemplate >= 0 ? definition.note : item.getId();
     const name = core.CacheDefinitions.getItem(id).name;
     const watering = /^Watering can|^Gricoller's can$/.test(name);
-    const capacity = TOOL_CAPACITY[name] ?? (watering ? 1 : 0);
+    const capacity = toolCapacity(name);
     if (!capacity) return false;
     const farm = Patches.farmFor(player), tools = farm.tools;
     if (/secateurs/i.test(name) && Object.entries(tools).some(([key, count]) => count > 0
@@ -308,6 +311,15 @@ function farmingItemOnNpc(event) {
     const definition = core.CacheDefinitions.getItem(id);
     const unnoted = definition.noteTemplate >= 0 ? definition.note : id;
     const name = core.CacheDefinitions.getItem(unnoted).name;
+    if (toolCapacity(name)) {
+        if (!player.getLocation().isWithinDistance(target.getLocation(), 5)) return;
+        const pin = { player, feature: "tool-leprechaun", resume: () => {
+            // The player may rearrange inventory while the keypad is open.
+            if (player.getInventory().forSlot(event.slot)?.getId() === id) farmingItemOnNpc(event);
+        } };
+        core.PluginManager.emitCustomEvent("bank-pin:guard", pin);
+        if (pin.locked) return;
+    }
     if (storeTool(player, event.slot)) return;
     const harvested = ["Weeds", "Willow branch"].includes(name) || [...Data.CROPS.values()].some(c => c.sapling === id || (!Data.WOOD_TREES.has(c.type) && c.produce === id)
         || (c.type === "HERB" && core.CacheDefinitions.getItem(c.produce).name.replace(/^Grimy /, "").toLowerCase() === name.toLowerCase()));
@@ -372,6 +384,10 @@ function farmingNpc(event) {
     }
     if (/leprechaun/i.test(name)) {
         event.handled = true;
+        if (!player.getLocation().isWithinDistance(npc.getLocation(), 5)) return;
+        const pin = { player, feature: "tool-leprechaun", resume: () => farmingNpc(event) };
+        core.PluginManager.emitCustomEvent("bank-pin:guard", pin);
+        if (pin.locked) return;
         if (action === "deposit-all") {
             for (let slot = 0; slot < player.getInventory().capacity(); slot++) storeTool(player, slot);
             return;

@@ -1,12 +1,7 @@
-const { Animation } = require("../../../../../src/main/typescript/elvarg/game/model/Animation");
-const { Skill } = require("../../../../../src/main/typescript/elvarg/game/model/Skill");
-const { TimerKey } = require("../../../../../src/main/typescript/elvarg/util/timers/TimerKey");
 const { getPvpProfile } = require("../../pvp/PvpAssignment.PlayerBots");
-const { isFoodItem, ATTACK_DELAY, COMBO_ATTACK_DELAY } = require("../../../../items/Food.plugin");
+const { isFoodItem, isComboFoodItem } = require("../../../../items/Food.plugin");
 const { computeEatThreshold } = require("../../state/State.PlayerBots");
 const { resolveBotNodeContext } = require("../context/NodeContext.PlayerBots");
-
-const EAT_ANIMATION = new Animation(829);
 
 function findFoodSlots(inventory) {
   return (inventory?.getItems?.() ?? [])
@@ -19,17 +14,6 @@ class EatFoodActionNode {
     this.botStatesByName = botStatesByName;
     this.api = api;
     this.lowHpRatio = Math.max(0.05, Math.min(0.95, Number(options.lowHpRatio ?? 0.45)));
-    this.minHeal = Math.max(1, Number(options.minHeal ?? 12));
-    this.maxHeal = Math.max(this.minHeal, Number(options.maxHeal ?? 18));
-    this.maxCharges = Math.max(1, Math.floor(Number(options.maxCharges ?? 16)));
-  }
-
-  randomHealAmount() {
-    const range = this.maxHeal - this.minHeal;
-    if (range <= 0) {
-      return this.minHeal;
-    }
-    return this.minHeal + Math.floor(Math.random() * (range + 1));
   }
 
   resolvePvpProfile(state) {
@@ -63,6 +47,7 @@ class EatFoodActionNode {
     }
 
     const { player, state, nowMs } = resolved;
+    const { Skill, TimerKey, ItemActionPacketListener, Inventory } = this.api.core;
     const skillManager = player.getSkillManager?.();
     if (!skillManager || !state) {
       return "failure";
@@ -108,21 +93,13 @@ class EatFoodActionNode {
 
     const inventory = player.getInventory?.();
     const foodSlots = findFoodSlots(inventory);
-    // PvP loadouts have real food; a profile budget must not hide remaining meals.
-    if (pvpProfile) {
-      state.virtualFoodChargesRemaining = foodSlots.length;
-    } else if (!Number.isFinite(state.virtualFoodChargesRemaining)) {
-      const profileCharges = Number(pvpProfile?.foodCharges);
-      state.virtualFoodChargesRemaining = Number.isFinite(profileCharges)
-        ? Math.max(1, Math.floor(profileCharges))
-        : this.maxCharges;
-    }
+    state.virtualFoodChargesRemaining = foodSlots.length;
     if (!Number.isFinite(state.nextNoFoodLogAt)) {
       state.nextNoFoodLogAt = 0;
     }
     if (state.virtualFoodChargesRemaining <= 0) {
       if ((nowMs ?? Date.now()) >= state.nextNoFoodLogAt) {
-        this.api?.log?.("bot_imaginary_food_empty", {
+        this.api?.log?.("bot_food_empty", {
           username: player.getUsername?.(),
           currentHp,
           maxHp,
@@ -133,59 +110,38 @@ class EatFoodActionNode {
       return "failure";
     }
 
-    if (foodSlots.length === 0) {
-      if (Number(state.virtualFoodChargesRemaining) > 0) {
-        state.virtualFoodChargesRemaining = 0;
-      }
-      return "failure";
-    }
-
     const timers = player.getTimers?.();
-    if (!timers || timers.has?.(TimerKey.FOOD) || timers.has?.(TimerKey.STUN)) {
-      return "failure";
-    }
+    if (!timers || timers.has?.(TimerKey.STUN)) return "failure";
 
-    timers.extendOrRegister?.(TimerKey.FOOD, 3);
-    player.getPacketSender?.().sendInterfaceRemoval?.();
-    skillManager.stopSkillable?.();
-    player.performAnimation?.(EAT_ANIMATION);
+    const normalSlot = foodSlots.find((slot) => !isComboFoodItem(inventory.getItems()[slot].getId()));
+    const comboSlot = foodSlots.find((slot) => isComboFoodItem(inventory.getItems()[slot].getId()));
+    const firstSlot = !timers.has(TimerKey.FOOD) && normalSlot !== undefined ? normalSlot : comboSlot;
+    if (firstSlot === undefined) return "failure";
 
-    let healAmount = this.randomHealAmount();
+    const consume = (slot) => {
+      const item = inventory.getItems()[slot];
+      const itemId = item.getId();
+      const amount = item.getAmount?.() ?? 1;
+      ItemActionPacketListener.handleAction(player, Inventory.INTERFACE_ID, itemId, slot, 1);
+      const remaining = inventory.getItems()[slot];
+      return remaining?.getId() !== itemId || (remaining.getAmount?.() ?? 1) < amount;
+    };
+    if (!consume(firstSlot)) return "failure";
+
     let comboEatTriggered = false;
-    if (
-      pvpProfile &&
-      foodSlots.length > 1 &&
-      Math.random() < Number(pvpProfile.comboEatChance ?? 0) &&
-      currentHp <= Math.max(1, Math.ceil(maxHp * Math.max(0.1, lowHpRatio * 0.72)))
-    ) {
-      healAmount += 6 + Math.floor(Math.random() * 7);
-      comboEatTriggered = true;
-      if (state?.pvp) {
-        state.pvp.lastComboEatAt = nowMs ?? Date.now();
-      }
+    if (pvpProfile && firstSlot !== comboSlot && comboSlot !== undefined &&
+        currentHp <= Math.max(1, Math.ceil(maxHp * Math.max(0.1, lowHpRatio * 0.72))) &&
+        Math.random() < Number(pvpProfile.comboEatChance ?? 0)) {
+      comboEatTriggered = consume(comboSlot);
+      if (comboEatTriggered) state.pvp.lastComboEatAt = nowMs ?? Date.now();
     }
-    const foodItemsConsumed = comboEatTriggered ? 2 : 1;
-    player.getCombat?.().delayAttack?.(ATTACK_DELAY + (comboEatTriggered ? COMBO_ATTACK_DELAY : 0));
-    for (const slot of foodSlots.slice(0, foodItemsConsumed)) {
-      inventory.deleteAtSlot?.(slot, 1, false);
-    }
-    inventory.refreshItems?.();
-    state.virtualFoodChargesRemaining = Math.max(
-      0,
-      Number(state.virtualFoodChargesRemaining) - foodItemsConsumed
-    );
-    player.heal?.(healAmount);
-    if (state?.pvp) {
-      state.pvp.lastFoodAt = nowMs ?? Date.now();
-    }
-    const nextHp = Number(skillManager.getCurrentLevel?.(Skill.HITPOINTS) ?? currentHp);
-    this.api?.log?.("bot_imaginary_food_eat", {
+    state.virtualFoodChargesRemaining = findFoodSlots(inventory).length;
+    if (state?.pvp) state.pvp.lastFoodAt = nowMs ?? Date.now();
+    this.api?.log?.("bot_food_eat", {
       username: player.getUsername?.(),
       currentHp,
-      nextHp,
-      healAmount,
+      nextHp: skillManager.getCurrentLevel(Skill.HITPOINTS),
       comboEatTriggered,
-      foodItemsConsumed,
       chargesRemaining: state.virtualFoodChargesRemaining,
       maxHp,
       threshold: lowHpThreshold,

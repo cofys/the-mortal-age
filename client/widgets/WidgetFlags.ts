@@ -29,9 +29,14 @@ export const FLAG_PAUSE_BUTTON = 1 << 0;
  * Bits 1-10: Transmit action flags
  * When action N (0-indexed) is clicked, check bit (N+1) to determine if it
  * should be transmitted to the server. If not set, only run CS2 handler.
- * OSRS supports 10 ops total (indices 0-9, bits 1-10).
  * Check bit (actionIndex+1) in the flags bitfield.
+ *
+ * Widgets have up to 32 ops. IF_SETEVENTS_V2 sends their transmit bits as a second mask (bit N
+ * for action index N); the client keeps ops 1-10 in these bits too, and ops 11-32 only in that
+ * op mask (WidgetManager.getWidgetOpMask).
  */
+export const MAX_WIDGET_OPS = 32;
+
 export const FLAG_TRANSMIT_OP1 = 1 << 1;
 export const FLAG_TRANSMIT_OP2 = 1 << 2;
 export const FLAG_TRANSMIT_OP3 = 1 << 3;
@@ -105,7 +110,7 @@ export function isPauseButton(flags: number): boolean {
 /**
  * Get the transmit flag bit for a given action index (0-indexed).
  * Returns the bit value (1 << (actionIndex + 1)).
- * OSRS supports action indices 0-9 (10 ops total).
+ * The flags hold action indices 0-9; ops 11-32 transmit through the op mask.
  */
 export function getTransmitActionBit(actionIndex: number): number {
     if (actionIndex < 0 || actionIndex > 9) return 0;
@@ -114,11 +119,12 @@ export function getTransmitActionBit(actionIndex: number): number {
 
 /**
  * Check if action at given index (0-indexed) should be transmitted to server.
- * OSRS supports action indices 0-9 (10 ops total).
- * (flags >> (actionIndex + 1) & 1) != 0
+ * Actions 0-9 use the flags, (flags >> (actionIndex + 1) & 1) != 0; actions 10-31 use the
+ * op mask from IF_SETEVENTS_V2, (opMask >>> actionIndex & 1) != 0.
  */
-export function shouldTransmitAction(flags: number, actionIndex: number): boolean {
-    if (actionIndex < 0 || actionIndex > 9) return false;
+export function shouldTransmitAction(flags: number, actionIndex: number, opMask = 0): boolean {
+    if (actionIndex < 0 || actionIndex >= MAX_WIDGET_OPS) return false;
+    if (actionIndex > 9) return ((opMask >>> actionIndex) & 1) !== 0;
     return ((flags >> (actionIndex + 1)) & 1) !== 0;
 }
 
@@ -133,8 +139,9 @@ export function shouldShowMenuOption(
     flags: number,
     actionIndex: number,
     hasOnOpHandler: boolean,
+    opMask = 0,
 ): boolean {
-    const transmitSet = shouldTransmitAction(flags, actionIndex);
+    const transmitSet = shouldTransmitAction(flags, actionIndex, opMask);
     return transmitSet || hasOnOpHandler;
 }
 

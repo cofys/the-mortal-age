@@ -32,9 +32,42 @@ node --test tests/lumbridge-vampyre-parity.test.cjs tests/climb-links.test.cjs t
 
 The focused tests cover delayed rewards, partial ingredient deliveries and interrupted conversations, duplicate prevention, partial wool deliveries, sheep regrowth, native spinning amount selection, Harlow's beer/stake progression and banked stake checks, tools required to finish the Count, his private coffin sequence, garlic stat reductions, regeneration, reduced combat XP, remaining in the basement, and the special range's quest gate and food-specific burn levels.
 
+## Shearing sheep
+
+[rsprox captures](https://rsprox.net/database) of the Shear option and of shears used on a sheep
+(recordings **1619**, **1620** and **1621**, revision 225; **3276**, an event world on revision 234;
+Leagues recordings **69**, **96** and **1718** agree) show:
+
+- The shearing animation (893) and sound 761 (delay 10) play at once. "You get some wool.", the
+  wool and the sheared sheep (the same colour's `sheepsheered*` npc) follow **two ticks** after the
+  animation, in every attempt.
+- Shears used on a sheep that has no wool yet: "This sheep has already been shorn." and the sheep
+  says "Baa!" (recording 1621). No capture shows shears used on a sheep in the two ticks before
+  its wool comes off; here it answers the same way.
+- The Thing (`sheep_shearer_the_thing`): animation 893 with sound 760, the Thing's
+  `the_thing_shear` animation (3570) with sound 686 a tick later (recordings 1620, 1718), and
+  "The... whatever it is... manages to get away from you!" on the third tick (recording 1620,
+  the only attempt that shows the message).
+
+The [Sheep](https://oldschool.runescape.wiki/w/Sheep) page gives the regrowth: wool is back after
+**50 ticks**, or **100 ticks** for Zanaris' sheep, and shearing elsewhere always succeeds. The
+[Zanaris sheep](https://oldschool.runescape.wiki/w/Sheep_(Zanaris)) have no Shear option but take
+shears, fail **25%** of the time with "The sheep manages to get away from you!", and both colours
+(5843, 5844) turn into the dark-grey sheared sheep 5845. No capture covers Zanaris, so its
+failure message uses the two-tick timing of a successful shear.
+
+```sh
+node --test tests/qh-f2p-basics-parity.test.cjs tests/lumbridge-vampyre-parity.test.cjs
+```
+
+Checked with the agent MCP: shears used from the next tile gave the wool and the sheared sheep two
+ticks after the click was processed, and the wool grew back 50 ticks after that (about 100 in Zanaris,
+where one of six attempts got away and left the sheep shearable). Shears on a shorn sheep gave the
+captured message and "Baa!", and The Thing reared a tick after the click and got away on the third.
+
 ## Remaining evidence limits
 
-Recording 3275 predates the current revision 241 Harlow transcript. Current Wiki dialogue wording is retained rather than replacing it with the older speech, while the captured beer-request progression and exchanges are restored. Neither recording exercises every optional dialogue branch or the normal wool-gathering path. Sheep escape probability, the Count's long encounter timeout, and the exact Cooking success curve below the published burn thresholds need further OSRS measurements. Existing gathering plugins still own wheat milling, milk collection and ingredient floor spawns.
+Recording 3275 predates the current revision 241 Harlow transcript. Current Wiki dialogue wording is retained rather than replacing it with the older speech, while the captured beer-request progression and exchanges are restored. Neither recording exercises every optional dialogue branch or the normal wool-gathering path. The Count's long encounter timeout, and the exact Cooking success curve below the published burn thresholds need further OSRS measurements. Existing gathering plugins still own wheat milling, milk collection and ingredient floor spawns.
 
 ## Cowbell amulet follow-up
 

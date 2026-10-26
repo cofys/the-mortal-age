@@ -7,10 +7,10 @@ import {
     type SidebarModeValue,
 } from "@runelite/client/config/RuneLiteConfig";
 
-/** The game view's minimum width (GameContainer.css), the rail and a docked panel. */
+/** The game view's minimum width (GameContainer.css), the icon strip and a docked panel (Sidebar.css). */
 const MIN_GAME_WIDTH = 765;
-const RAIL_WIDTH = 36;
-const PANEL_WIDTH = 250;
+const RAIL_WIDTH = 26;
+const PANEL_WIDTH = 242;
 
 function windowWidth(): number {
     return typeof window === "undefined" ? Infinity : window.innerWidth;

@@ -22,6 +22,8 @@ export class GameObject extends Entity {
     private baseMap = false;
     /** The very instance the region loader created from the cache's map data. */
     private mapOriginal = false;
+    /** The plugin whose code registered this object, or null for core's own. */
+    private spawnedBy: string | null = null;
 
     constructor(id: number, position: Location, type: number, face: number, privateArea: PrivateArea) {
         super(position);
@@ -55,6 +57,15 @@ export class GameObject extends Entity {
     public markMapOriginal(): this {
         this.mapOriginal = true;
         return this.markBaseMap();
+    }
+
+    public getSpawnedBy(): string | null {
+        return this.spawnedBy;
+    }
+
+    public setSpawnedBy(pluginName: string | null): this {
+        this.spawnedBy = pluginName;
+        return this;
     }
 
     public getType(): number {

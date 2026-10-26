@@ -1195,7 +1195,8 @@ function createPestControl(api) {
   api.onSpellDisabled((event) => {
     if (!(event.player.getAttribute?.("pest-control:match") instanceof PestControlMatch)) return;
     if (event.spellId === 1162 || event.spellId === 1178) {
-      event.player.sendMessage("You cannot use alchemy in Pest Control.");
+      // rsprox 4031: refused with this message, no cast.
+      event.player.sendMessage("There are more pressing matters at hand than alchemy!");
       event.disabled = true;
     }
   });

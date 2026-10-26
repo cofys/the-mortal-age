@@ -5,6 +5,10 @@
 // The server owns the board: slots 0-24 row-major, an empty slot is the blank, and only a
 // piece next to the blank may move. Solved is piece i in slot i with the blank last.
 const Runtime = require("./Runtime.TreasureTrails");
+const Dialogue = require("./Dialogue.TreasureTrails");
+// Live captures (rsprox.net) of puzzle and light boxes.
+const SOLVED = "Well done, hand this back!";
+const ALREADY_SOLVED = "You've already solved this challenge! Go hand it back.";
 const { TIERS } = require("./Tiers.TreasureTrails");
 const SIZE = 5;
 const CELLS = SIZE * SIZE;
@@ -88,6 +92,7 @@ function open(event) {
   const { player } = event;
   const trail = boxTrail(player, event.slot);
   if (!trail) return false;
+  if (trail.state.solved) { Dialogue.mesbox(player, ALREADY_SOLVED); return true; }
   const sender = player.getPacketSender();
   sender.sendConfig(core.CacheDefinitions.getVarpId("if1"), trail.state.image);
   sendBoard(player, trail.state.image, boardFor(player, trail));
@@ -103,6 +108,7 @@ function click({ player, slot }) {
   if (!trail.state.solved && slide(session.board, slot) && isSolved(session.board)) {
     trail.item.setMetaValue(Runtime.metaKey(trail.tier), { ...trail.state, solved: true });
     player.getInventory().refreshItems();
+    Dialogue.mesbox(player, SOLVED);
   }
   // Always resend, so a refused move snaps the client's prediction back.
   sendBoard(player, trail.state.image, session.board);
@@ -122,4 +128,4 @@ module.exports = function attachPuzzles(pluginApi) {
   api.onPlayerDisconnect(leave);
 };
 
-Object.assign(module.exports, { CELLS, BLANK, SCRAMBLE_SLIDES, solvedBoard, isSolved, neighbours, slide, scramble, pieces, open, click, boards: () => boards });
+Object.assign(module.exports, { SOLVED, ALREADY_SOLVED, CELLS, BLANK, SCRAMBLE_SLIDES, solvedBoard, isSolved, neighbours, slide, scramble, pieces, open, click, boards: () => boards });

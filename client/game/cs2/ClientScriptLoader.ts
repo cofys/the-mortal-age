@@ -3,6 +3,7 @@ import { IndexType } from "../../rs/cache/IndexType";
 import { isGroupMissingError } from "../../rs/cache/js5/GroupMissingError";
 import { retryOnMissingGroup } from "../../rs/cache/js5/retryOnMissingGroup";
 import { Opcodes } from "../../rs/cs2/Opcodes";
+import { loadRuneliteScript } from "../../rs/cs2/runeliteScripts";
 import { type Script as Cs2Script, parseScriptFromBytes } from "../../rs/cs2/Script";
 import { applySortCallbacks } from "../../rs/cs2/sortCallbacks";
 import { applyZoomCallbacks } from "../../rs/cs2/zoomCallbacks";
@@ -57,11 +58,7 @@ export class ClientScriptLoader {
         const file = arch?.getFile(0);
         if (!file?.data) return null;
 
-        const script = parseScriptFromBytes(
-            scriptId,
-            file.data,
-            this.deps.getCacheSystem().decodeProfile,
-        );
+        const script = this.parse(scriptId, file.data);
         this.cacheClientScript(scriptId, script);
         return script;
     }
@@ -108,16 +105,18 @@ export class ClientScriptLoader {
             const arch = scriptIdx.getArchive(scriptId | 0);
             const file = arch?.getFile(0);
             if (!file?.data) return null;
-            const script = parseScriptFromBytes(
-                scriptId | 0,
-                file.data,
-                this.deps.getCacheSystem().decodeProfile,
-            );
+            const script = this.parse(scriptId | 0, file.data);
             this.cacheClientScript(scriptId | 0, script);
             return script;
         } catch {
             return null;
         }
+    }
+
+    /** The cache's script, or RuneLite's patched version of it (bank tags' callbacks). */
+    private parse(scriptId: number, data: Int8Array): Cs2Script {
+        const script = parseScriptFromBytes(scriptId, data, this.deps.getCacheSystem().decodeProfile);
+        return loadRuneliteScript(scriptId, data, script) ?? script;
     }
 
     private cacheClientScript(scriptId: number, script: Cs2Script): void {

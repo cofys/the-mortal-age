@@ -5,10 +5,10 @@
  * supplies the variant selector for Timfraku, Tiadeche, Tinsay, Tamayu and
  * Lubufu, the prose-condition answers, the start hook, the item-on-item /
  * item-on-NPC / item-on-object conversions (karambwan vessel, pastes, monkey
- * corpse, banana rum, jogre bones, karambwan paste on a spear), the fishing
- * spots by the Holy Lake and Brimhaven, the tribal statue and the bamboo
- * door, plus completion via Timfraku's reward and the post-quest training
- * claimed from the three sons.
+ * corpse, banana rum, jogre bones, karambwan paste on a spear), the tribal
+ * statue and the bamboo door, plus completion via Timfraku's reward and the
+ * post-quest training claimed from the three sons. Karambwanji and karambwan
+ * are fished through the Fishing plugin.
  *
  * Stages (varp 320, capture 75): 3 started, 4 all three sons home, 5 reward
  * dialogue, 6 complete (captured 0->1->2 dialogue boundaries precede 3).
@@ -48,13 +48,6 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
     NpcIdentifiers.TAMAYU_4,
   ]);
   const LUBUFU_ID = NpcIdentifiers.LUBUFU;
-
-  const KARAMBWANJI_SPOT_IDS = new Set([NpcIdentifiers.FISHING_SPOT_58]); // 4710, Holy Lake
-  const KARAMBWAN_SPOT_IDS = new Set([
-    NpcIdentifiers.FISHING_SPOT_60,
-    NpcIdentifiers.FISHING_SPOT_61,
-    NpcIdentifiers.FISHING_SPOT_62,
-  ]); // 4712, 4713, 4714
 
   const STATUE_IDS = new Set([
     ObjectIdentifiers.TRIBAL_STATUE,
@@ -227,7 +220,6 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
   const agilityLevel = (player) => player.getSkillManager().getCurrentLevel(Skill.AGILITY);
   const cookingLevel = (player) => player.getSkillManager().getCurrentLevel(Skill.COOKING);
   const firemakingLevel = (player) => player.getSkillManager().getCurrentLevel(Skill.FIREMAKING);
-  const fishingLevel = (player) => player.getSkillManager().getCurrentLevel(Skill.FISHING);
 
   function addXp(player, skill, amount) {
     player.getSkillManager().addExperiences(skill, amount);
@@ -963,12 +955,6 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
     const itemId = event.itemId;
     const stage = quest.getStage(player);
 
-    if (KARAMBWAN_SPOT_IDS.has(npcId) && itemId === ITEM.KARAMBWAN_VESSEL_3) {
-      catchKarambwan(player);
-      event.handled = true;
-      return;
-    }
-
     if (npcId === LUBUFU_ID && itemId === ITEM.RAW_KARAMBWANJI) {
       const progress = state(player, LUBUFU_KEY);
       if (progress < LUBUFU_FETCH || progress >= LUBUFU_GIVEN) return;
@@ -1179,44 +1165,6 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
     }
   }
 
-  function catchKarambwan(player) {
-    if (fishingLevel(player) < 65) {
-      player.sendMessage("You need a Fishing level of 65 to catch Karambwan.");
-      return;
-    }
-    player.getInventory().deleteNumber(ITEM.KARAMBWAN_VESSEL_3, 1);
-    player.getInventory().adds(ITEM.KARAMBWAN_VESSEL, 1);
-    player.getInventory().adds(ITEM.RAW_KARAMBWAN, 1);
-    addXp(player, Skill.FISHING, 50);
-    player.sendMessage("You catch a raw Karambwan.");
-  }
-
-  /** Holy Lake Karambwanji (net) and the Karambwan shoals (baited vessel). */
-  function handleNpcInteraction(event) {
-    const { player, npcId, clickType } = event;
-    const action = String(event.definition?.getActions?.()?.[clickType - 1] ?? "").toLowerCase();
-    if (KARAMBWANJI_SPOT_IDS.has(npcId)) {
-      if (action && !action.includes("net")) return;
-      event.handled = true;
-      if (!held(player, ITEM.SMALL_FISHING_NET)) {
-        player.sendMessage("You need a small fishing net to catch Karambwanji.");
-        return;
-      }
-      if (fishingLevel(player) < 5) {
-        player.sendMessage("You need a Fishing level of 5 to catch Karambwanji.");
-        return;
-      }
-      player.getInventory().adds(ITEM.RAW_KARAMBWANJI, 1);
-      addXp(player, Skill.FISHING, 5);
-      player.sendMessage("You catch a raw Karambwanji.");
-      return;
-    }
-    if (KARAMBWAN_SPOT_IDS.has(npcId) && held(player, ITEM.KARAMBWAN_VESSEL_3)) {
-      event.handled = true;
-      catchKarambwan(player);
-    }
-  }
-
   /** Wiki-export artefact: a couple of lines end in stray "}}" braces. */
   function handleLine(event) {
     if (typeof event.text === "string" && event.text.endsWith("}}")) {
@@ -1287,7 +1235,6 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
-  api.onNpcInteraction(handleNpcInteraction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onPlayerLogout(handleLogout);
   api.onPlayerLogin(handleLogin);

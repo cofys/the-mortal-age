@@ -79,6 +79,8 @@ export const enum ClientPacketId {
     FRIENDS_CHAT_ACTION = 196,
     PRIVATE_MESSAGE = 197,
     CHAT_FILTER = 198,
+    /** An abuse report from interface 875: name, internal rule id, mute flag (OSRS SEND_SNAPSHOT). */
+    REPORT_ABUSE = 199,
 }
 
 /**
@@ -133,6 +135,7 @@ export const CLIENT_PACKET_LENGTHS: Record<ClientPacketId, number> = {
     [ClientPacketId.FRIENDS_CHAT_ACTION]: -1,
     [ClientPacketId.PRIVATE_MESSAGE]: -1,
     [ClientPacketId.CHAT_FILTER]: 3,
+    [ClientPacketId.REPORT_ABUSE]: -1, // name(string) + rule(1) + mute(1)
 
     [ClientPacketId.DEBUG]: -2,
 };

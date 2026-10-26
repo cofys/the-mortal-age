@@ -61,6 +61,31 @@ interpolation in `Context.probability`. Where the Wiki publishes no numbers, the
   `quest.<key>.stage >= 2`. Tracking, box traps, Herbiboar and a full drift-net cycle have been
   played through with the agent MCP; most other methods have not.
 
+## Impling catching
+
+From rsprox captures (main game 1342, 1389, 1510, 2520; Leagues 92, 95, 164, 1757, 1823, 1858)
+and the Wiki ([Implings](https://oldschool.runescape.wiki/w/Implings),
+[Baby impling](https://oldschool.runescape.wiki/w/Baby_impling)):
+
+- A catch resolves on the tick the player reaches the impling (most attempts by a player already
+  in reach land on the click's own tick, most others one tick later): the net throw
+  (`ii_human_net_throw_oldnet`, 6606) or barehanded grab (`hunting_impling_catch`, 7171), sound
+  2623, the message, the jar or loot and the XP arrive together.
+- The impling plays `ii_impling_caught` (6615) and is removed two ticks later, in every attempt
+  whose window shows the removal (1342; Leagues 92, 95, 1858).
+- Messages: "You manage to catch the impling and squeeze it into a jar.", "You manage to catch the
+  impling and acquire some loot." (barehanded without a jar, outside Puro-Puro), "You don't have
+  an empty impling jar in which to keep an impling.", "You need a Hunter level of at least # to
+  catch this impling." (with " barehanded" when no net is wielded), and "You'll need to clear
+  some space in your pack to catch this impling without a jar."
+- Puro-Puro's fixed spawns return 50 ticks after removal for earth and essence implings and 7
+  ticks for the others (Wiki). Puro-Puro needs a jar for every catch; outside it a barehanded
+  catch without a jar is looted at once.
+
+Not reproduced: the two main-game barehanded loot catches gave 14 (earth, 1510) and 16 (essence,
+2520) Hunter XP, against the Wiki's overworld 27 and 29; no source explains it, so the
+Wiki value stays. Puro-Puro's 35 roaming spawn points and overworld impling spawns are not in.
+
 ## Sources
 
 Requirements, drop tables and success charts come from the [OSRS Wiki](https://oldschool.runescape.wiki/w/Hunter)

@@ -1,5 +1,5 @@
 module.exports = function registerDragonBattleaxeSpecialAttack(api) {
-  const { Animation, CombatMethod, CombatSpecial, CombatType, Graphic, ItemIdentifiers, Skill } = api.core;
+  const { Animation, CombatMethod, CombatSpecial, CombatType, Graphic, ItemIdentifiers, Skill, Sound, Sounds } = api.core;
 
   const DRAIN = 100;
   const DRAIN_FRACTION = 0.1;
@@ -11,7 +11,8 @@ module.exports = function registerDragonBattleaxeSpecialAttack(api) {
   const DRAINED_SKILLS = [Skill.ATTACK, Skill.DEFENCE, Skill.RANGED, Skill.MAGIC];
 
   // Rampage is an instant utility special: drain 10% of Attack/Defence/Ranged/Magic,
-  // then add 10 + a quarter of the total drained levels to Strength. No attack roll.
+  // then boost base Strength by 10 + a quarter of the total drained levels.
+  // Visible boosts do not stack, and a stronger existing boost is preserved. No attack roll.
   class DragonBattleaxeCombatMethod extends CombatMethod {
     hits() {
       return null;
@@ -29,6 +30,7 @@ module.exports = function registerDragonBattleaxeSpecialAttack(api) {
       character.forceChat(FORCED_CHAT);
       character.performAnimation(ANIMATION);
       character.performGraphic(GRAPHIC);
+      Sounds.sendSound(character, Sound.DRAGON_BATTLEAXE_SPECIAL);
       const skillManager = character.getAsPlayer().getSkillManager();
 
       let totalDrained = 0;
@@ -43,7 +45,8 @@ module.exports = function registerDragonBattleaxeSpecialAttack(api) {
       const strengthBoost = Math.floor(
         BASE_STRENGTH_BOOST + Math.floor(totalDrained / DRAIN_TO_STRENGTH_DIVISOR),
       );
-      skillManager.setCurrentLevels(Skill.STRENGTH, currentStrength + strengthBoost);
+      const baseStrength = skillManager.getMaxLevel(Skill.STRENGTH);
+      skillManager.setCurrentLevels(Skill.STRENGTH, Math.max(currentStrength, baseStrength + strengthBoost));
     }
   }
 

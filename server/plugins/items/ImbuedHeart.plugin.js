@@ -17,7 +17,9 @@ const DRAINED_MESSAGE = (minutes) =>
   `The heart is still drained of its power. Judging by how it feels, it will be ready in around ${minutes} minutes.`;
 const READY_AT_ATTRIBUTE = "imbued-heart:ready-at";
 
-let core;
+// Cache rev 241: spotanim imbued_heart_impact; rsprox recording 1763.
+const INVIGORATE_GRAPHIC = 1316;
+const INVIGORATE_SOUND = 6847;
 
 /** When the next activation is allowed; 0 (never used, or reset by death) means now. */
 function readyAt(player) {
@@ -25,7 +27,7 @@ function readyAt(player) {
   return Number.isFinite(saved) && saved > 0 ? saved : 0;
 }
 
-function invigorate(event) {
+function invigorate(core, event) {
   const { player } = event;
   const now = Date.now();
   const nextReadyAt = readyAt(player);
@@ -36,6 +38,8 @@ function invigorate(event) {
 
   player.setAttribute(READY_AT_ATTRIBUTE, now + COOLDOWN_MS);
   boostSkill(player, core.Skill.MAGIC, 1, 0.1);
+  player.performGraphic(new core.Graphic(INVIGORATE_GRAPHIC));
+  player.getPacketSender().sendSoundEffect(INVIGORATE_SOUND, 1, 0);
 }
 
 /** Death restores the stats, so the heart's wait goes with them (Wiki). */
@@ -49,9 +53,8 @@ module.exports = {
   COOLDOWN_MS,
   _test: { invigorate, readyAt, READY_AT_ATTRIBUTE },
   register(api) {
-    core = api.core;
     api.persistAttribute(READY_AT_ATTRIBUTE, 0);
-    api.onItemAction("Imbued heart", { Invigorate: invigorate });
+    api.onItemAction("Imbued heart", { Invigorate: invigorate.bind(null, api.core) });
     api.onPlayerDeath(resetOnDeath);
   },
 };

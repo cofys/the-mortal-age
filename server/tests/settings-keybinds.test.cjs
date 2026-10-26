@@ -394,3 +394,43 @@ test('closing or replacing a quest colour picker invalidates only its owned amou
   events.get('interface:closed')({player,interfaceId:288});
   assert.equal(amount,unrelated,'unrelated amount prompt is preserved');
 });
+
+// Chat timestamps (setting 119): a dropdown over Off / On (Server time) / On (Local time) on
+// varbit 12384. Live sends 12384=1 at login in 532 of 540 rsprox recordings (revs 236-239), so
+// a player who never touched it starts on server time; the row's clientscript 4586 re-applies it.
+const CHAT = 2;
+const CHAT_TIMESTAMPS = 119;
+const CHAT_TIMESTAMPS_VARBIT = 12384;
+const CHAT_TIMESTAMPS_SCRIPT = 4586;
+
+function chatRowOf(settingId) {
+  const category = CacheDefinitions.getStructParams(Number(CacheDefinitions.getEnumValues(422).get(CHAT)));
+  const rows = [...CacheDefinitions.getEnumValues(Number(category.get(745)))].sort(([a], [b]) => a - b)
+    .map(([, struct]) => CacheDefinitions.getStructParams(Number(struct)).get(1077));
+  const row = rows.indexOf(settingId);
+  assert.ok(row >= 0, `setting ${settingId} is in the Chat category`);
+  return row;
+}
+
+test('Chat timestamps: choosing an option sets varbit 12384 to it and runs the row\'s clientscript', () => {
+  const { click, varbit } = allSettings(CHAT);
+  const row = chatRowOf(CHAT_TIMESTAMPS);
+  assert.deepEqual(click(CLICKZONE, row), ['varbit 9657=119'], 'a dropdown row only selects');
+  assert.deepEqual(click(DROPDOWN, 2 * 3), [`varbit ${CHAT_TIMESTAMPS_VARBIT}=2`, `script ${CHAT_TIMESTAMPS_SCRIPT}`, 'varbit 9657=0'], 'On (Local time)');
+  click(CLICKZONE, row);
+  assert.deepEqual(click(DROPDOWN, 0), [`varbit ${CHAT_TIMESTAMPS_VARBIT}=0`, `script ${CHAT_TIMESTAMPS_SCRIPT}`, 'varbit 9657=0'], 'Off');
+  assert.equal(varbit(CHAT_TIMESTAMPS_VARBIT), 0);
+});
+
+test('Chat timestamps: login sends the live default (server time) until the player chooses', () => {
+  const { player, logins } = allSettings(CHAT);
+  const restore = logins.find((login) => login.name === 'restoreSettings');
+  player.sent.length = 0;
+  restore({ player });
+  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'fresh account: On (Server time)');
+  player.setAttribute('settings:values', { [`varbit:${CHAT_TIMESTAMPS_VARBIT}`]: 0 });
+  player.sent.length = 0;
+  restore({ player });
+  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=0`), 'a chosen Off is restored');
+  assert.ok(!player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'the default does not override a choice');
+});

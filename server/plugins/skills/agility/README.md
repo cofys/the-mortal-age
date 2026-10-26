@@ -29,7 +29,7 @@ and one way to play it:
 | `between` | A two-way crossing: `ends` (two tiles), optional `via` (tiles in between, listed from the first end) and `cross`, the steps from one end to the other, or `{ "forward": [...], "back": [...] }` when the two directions differ |
 | `stile` | A two-tile stile: `axis` (`"x"`/`"y"`), `before`, `after`, `anim` |
 | `script` | A named script from `shortcuts/<Region>.Agility.js` or `shortcuts/Common.Agility.js`, given the entry's `params`, for what a template can't say (which way the player faces, which rock they clicked). Its `route`, `precondition` and `steps` replace the data's |
-| `refuse` | A message: the loc can't be used from there |
+| `refuse` | A message: the loc can't be used from there, or `{ "mesbox": text }` when the game also shows it in a message box |
 
 ### Requirements
 

@@ -21,6 +21,7 @@ import { ShopManager } from './model/container/shop/ShopManager';
 import { BoatManager } from "./content/sailing/BoatManager";
 import type { Mobile } from "./entity/impl/Mobile";
 import { HitQueue } from './content/combat/hit/HitQueue';
+import { NpcSpawnDefinitionLoader } from './definition/loader/impl/NpcSpawnDefinitionLoader';
 
 const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 
@@ -292,6 +293,7 @@ export class World {
     }
 
     public static registerPlayerPosition(player: Player, location: Location | null | undefined = player?.getLocation?.()): void {
+        if (location) NpcSpawnDefinitionLoader.activateNear(location, player.getNpcViewDistance?.());
         World.addPlayerToTileOccupants(player, location);
     }
 
@@ -310,6 +312,11 @@ export class World {
         if ((previousLocation.getX() >> 6) !== (nextLocation.getX() >> 6)
             || (previousLocation.getY() >> 6) !== (nextLocation.getY() >> 6)
             || previousLocation.getZ() !== nextLocation.getZ()) {
+            NpcSpawnDefinitionLoader.activateNear(nextLocation, player.getNpcViewDistance?.());
+            if (player.isPlayerBot?.() !== true) {
+                World.refreshActiveRegions();
+                World.activeNpcsForUpdate = World.collectActiveNpcsForUpdate();
+            }
             PluginManager.emitPlayerMapSquareChange({ player, previous: previousLocation, location: nextLocation });
         }
     }
@@ -1107,6 +1114,7 @@ export class World {
                 }
                 // Bots must not be dropped by a host-imposed human player cap: they
                 // share the list but never take a human slot.
+                NpcSpawnDefinitionLoader.activateNear(player.getLocation(), player.getNpcViewDistance());
                 World.players.add(player, player.isPlayerBot?.() === true);
                 if (
                     player.isPlayerBot?.() !== true &&
@@ -1239,6 +1247,7 @@ export class World {
             }
         });
 
+        for (const player of World.players) NpcSpawnDefinitionLoader.activateNear(BoatManager.rootLocation(player), player.getNpcViewDistance());
         World.rebuildRealPlayerObserverBuckets();
         timed("process_npcs", () => {
             // One pass per cycle: the collection scans every occupied bucket,

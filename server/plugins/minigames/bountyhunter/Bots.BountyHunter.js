@@ -24,7 +24,7 @@ const { isFoodItem } = require("../../items/Food.plugin");
 const Entry = require("./Entry.BountyHunter");
 const Coffer = require("./Coffer.BountyHunter");
 
-const MIN_BOTS = 20;
+const MIN_BOTS = 30;
 const MAX_BOTS = 50;
 const BOT_ATTRIBUTE = "bounty-hunter:bot";
 const PVP_ACTIVITY = "pvp";
@@ -44,6 +44,7 @@ let bh;
 const bots = new Set();
 /** Numbers each spawn: bots despawned a moment ago may still be online under their names. */
 let spawnedBots = 0;
+let populationTarget = 0;
 const nextDecisionAt = new WeakMap();
 /** One fight-or-flee decision for each low-food episode; a committed flee lasts until logout. */
 const retreatDecisions = new WeakMap();
@@ -81,17 +82,18 @@ function spawnBot(runtime, behaviorMode) {
 }
 
 function populate({ player }) {
-  if (player.isPlayerBot?.() === true || bots.size > 0) return;
+  if (player.isPlayerBot?.() === true || populationTarget > 0) return;
   const { runtime, behaviorMode } = getActiveBotRuntime();
   if (!runtime) {
     player.sendMessage("Bots are unavailable on this world.");
     return;
   }
-  const count = core.Misc.random(MIN_BOTS, MAX_BOTS);
-  for (let index = 0; index < count; index++) spawnBot(runtime, behaviorMode);
+  populationTarget = core.Misc.random(MIN_BOTS, MAX_BOTS);
+  for (let index = 0; index < populationTarget; index++) spawnBot(runtime, behaviorMode);
 }
 
 function despawnAll() {
+  populationTarget = 0;
   for (const player of bots) {
     player.getForcedLogoutTimer().start(0);
     player.requestLogout();
@@ -272,10 +274,15 @@ function clearRetreat({ player }) {
 }
 
 function tick() {
-  if (bots.size === 0) return;
+  if (populationTarget === 0 && bots.size === 0) return;
   if (realPlayersInCrater().length === 0) {
     despawnAll();
     return;
+  }
+  // Low-food exits must not drain an occupied crater; pace replacements across ticks.
+  if (bots.size < populationTarget) {
+    const { runtime, behaviorMode } = getActiveBotRuntime();
+    if (runtime) spawnBot(runtime, behaviorMode);
   }
   const nowMs = Date.now();
   for (const player of bots) {

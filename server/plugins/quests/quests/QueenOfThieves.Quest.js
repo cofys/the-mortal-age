@@ -17,10 +17,17 @@
  *   stew, 4 stew given (Warrens known), 5 Devan's task (kill Conrad King),
  *   6 Conrad killed, 7 queen impressed (go in), 8 queen revealed (search
  *   Hughes), 9 letter found, 10 letter handed to Tomas, 11 complete.
- * The OSRS Wiki does not publish this varp's stage values; the map above is
- * internal, while the varp/varbit ids are cache-confirmed. Varbit 6039
- * "piscquest_favour" is deliberately NOT set: the wiki's 10 January 2024 change
- * removed Kourend favour and the Piscarilius favour certificate from the rewards.
+ * The durable stages above keep their old saves' meaning, but they are not the
+ * values the cache reads: the varbit 6037 wire follows Quest Helper's
+ * loadSteps keys (the helper reads the same varbit), whose final active step is
+ * 12 (talk to Lady Shauna) and whose completion threshold is 13 (quest DB row
+ * 113, read by script 4029). stageWireValue below maps the durable stages:
+ * 5->6, 6->7, 7->8, 8->10, 9->11, 10->12, 11->13; 0-4 are unchanged. Helper
+ * keys 5 (inside the Warrens) and 9 (another talk-to-queen step) are duplicate
+ * guide states this plugin does not store separately, so they are not emitted.
+ * Varbit 6039 "piscquest_favour" is deliberately NOT set: the wiki's 10 January
+ * 2024 change removed Kourend favour and the Piscarilius favour certificate
+ * from the rewards.
  *
  * Requirements (wiki): Client of Kourend complete, 20 Thieving, required to
  * start (not boostable). Rewards (wiki): 1 Quest point, 2,000 Thieving XP,
@@ -29,22 +36,11 @@
  *
  * Source: https://oldschool.runescape.wiki/w/The_Queen_of_Thieves (+ quick guide).
  *
- * Gaps: npc-spawns.json still carries stale ids for the quest NPCs (the Tomas
- * rows 7926/7927/10930, Conrad 7928 and the queen 7929 resolve to nameless
- * null-definition NPCs in this cache, while Tomas 7904, Conrad 7907 and the
- * Queen 7908 are not spawned at all), so the plugin spawns those three itself on
- * server startup; Sophia Hughes is not needed (she is not home). The wiki's
- * "interrupting the Queen of Thieves" resume variant ends in a "continues above"
- * jump the dialogue runtime cannot follow from a typed line, so a player who
- * leaves mid-reveal replays the reveal from the start. The chest has no wiki
- * dialogue, so its picklock/search messages are minimal authored text; picking it
- * without the quest's lead is refused, and its picklocked/searched state is kept
- * in a persisted per-player attribute ("quest.the_queen_of_thieves.chest") so the
- * world chest is rebuilt on every region load instead of relying on the base
- * nameless 10084 still being registered. The graceful recolour and the letter's
- * readable transcript are not implemented, and the tent NPC keeps the name "The
- * Queen of Thieves" after completion (her post-quest talk is Lady Shauna's
- * standard transcript). The manhole stays open until closed by hand.
+ * The cache map already places transform parents for Tomas, Conrad and the
+ * Queen; the plugin does not add duplicate static children. The Queen's reveal
+ * enables the post-reveal Lady Shauna form for this player. The Hughes chest
+ * uses an owner-only visual over the unchanged map chest and clipping.
+ * The graceful recolour and letter-reading interface remain unimplemented.
  */
 module.exports = function registerQueenOfThievesQuest(api) {
   const {
@@ -64,6 +60,8 @@ module.exports = function registerQueenOfThievesQuest(api) {
 
   const VARP_PISCQUEST = 1672; // piscquest_main
   const VARBIT_PISCQUEST_STAGE = 6037; // piscquest, bits 0-5
+  const VARBIT_QUEEN_VISIBLE = 12145; // piscquest_queen_vis
+  const VARBIT_MEMOIR_PAGE_ADDED = 7921; // kourend_diary_pisc_teleport
   const VARBIT_PISCQUEST_REWARD = 6038; // piscquest_reward, bit 6
   // 6039 piscquest_favour: unused, Kourend favour was removed in January 2024.
 
@@ -71,6 +69,7 @@ module.exports = function registerQueenOfThievesQuest(api) {
   const THIEVING_XP = 2000;
   const COINS_REWARD = 2000;
   const CLIENT_OF_KOUREND_KEY = "client_of_kourend";
+  const KINGDOM_DIVIDED_HOUSES_STAGE = 110;
 
   const STAGE_NOT_STARTED = 0;
   const STAGE_STARTED = 1;
@@ -85,10 +84,34 @@ module.exports = function registerQueenOfThievesQuest(api) {
   const STAGE_LETTER_GIVEN = 10;
   const STAGE_COMPLETE = 11;
 
+  // Quest Helper loadSteps keys, which are varbit 6037 values: 5 is the
+  // in-the-Warrens duplicate of step 4 and 9 is a second talk-to-queen step.
+  // The cache's completion threshold is 13 (quest DB row 113, script 4029).
+  const WIRE_CONRAD_TASK = 6;
+  const WIRE_CONRAD_KILLED = 7;
+  const WIRE_QUEEN_VIS = 8;
+  const WIRE_QUEEN_REVEALED = 10;
+  const WIRE_LETTER_FOUND = 11;
+  const WIRE_LETTER_GIVEN = 12;
+  const WIRE_COMPLETE = 13;
+
+  /** Durable stage (old saves keep their meaning) -> canonical varbit value. */
+  function stageWireValue(stage) {
+    if (stage >= STAGE_COMPLETE) return WIRE_COMPLETE;
+    if (stage === STAGE_LETTER_GIVEN) return WIRE_LETTER_GIVEN;
+    if (stage === STAGE_LETTER_FOUND) return WIRE_LETTER_FOUND;
+    if (stage === STAGE_QUEEN_REVEALED) return WIRE_QUEEN_REVEALED;
+    if (stage === STAGE_QUEEN_VIS) return WIRE_QUEEN_VIS;
+    if (stage === STAGE_CONRAD_KILLED) return WIRE_CONRAD_KILLED;
+    if (stage === STAGE_CONRAD_TASK) return WIRE_CONRAD_TASK;
+    return stage; // 0-4 match the helper's wire values
+  }
+
   const TOMAS_LAWRY_NPC_ID = NpcIdentifiers.TOMAS_LAWRY; // 7904
   const ROBERT_OREILLY_NPC_ID = NpcIdentifiers.ROBERT_OREILLY; // 7905
   const DEVAN_RUTTER_NPC_ID = NpcIdentifiers.DEVAN_RUTTER; // 7906
   const CONRAD_KING_NPC_ID = NpcIdentifiers.CONRAD_KING; // 7907
+  const LADY_SHAUNA_NPC_ID = NpcIdentifiers.LADY_SHAUNA_PISCARILIUS; // 7909
   const THE_QUEEN_OF_THIEVES_NPC_ID = NpcIdentifiers.THE_QUEEN_OF_THIEVES; // 7908
   const POOR_LOOKING_NPC_IDS = new Set([
     NpcIdentifiers.POOR_LOOKING_MAN, // 6982
@@ -108,22 +131,17 @@ module.exports = function registerQueenOfThievesQuest(api) {
   const MANHOLE_OPEN_OBJECT_ID = ObjectIdentifiers.MANHOLE_8; // 31707 piscquest_manhole_open
   const MANHOLE_LADDER_OBJECT_ID = ObjectIdentifiers.LADDER_367; // 31708 piscquest_manhole_ladder
   const TENT_DOOR_OBJECT_ID = ObjectIdentifiers.DOORWAY_10; // 31709 piscquest_tentdoor
-  const CHEST_OPEN_OBJECT_ID = ObjectIdentifiers.CHEST_110; // 31711 piscquest_chest_open
   const CHEST_PICKLOCK_OBJECT_ID = ObjectIdentifiers.CHEST_136; // 41760 piscquest_chest_closed_picklock
   const CHEST_SEARCH_OBJECT_ID = ObjectIdentifiers.CHEST_137; // 41761 piscquest_chest_closed_search
 
-  // The world places the nameless closed chest (dump: loc 10084 at 1681,3677,1);
-  // 41760/41761/31711 are the picklock/search/open states the cache defines but
-  // does not place. 10084 has no ObjectIdentifiers constant (null name in cache).
-  const CLOSED_CHEST_OBJECT_ID = 10084;
+  // Owner visuals share the map's 10084 chest geometry and never remove its clipping.
   const CHEST_TILE = { x: 1681, y: 3677, z: 1 };
   const CHEST_REGION_ID = ((CHEST_TILE.x >> 6) << 8) | (CHEST_TILE.y >> 6);
   // The placed 10084 chest is shape 10 rotation 0 (dump:loc); every runtime
   // state is registered with the same pose so the client keeps seeing a chest.
   const CHEST_TYPE = 10;
   const CHEST_FACE = 0;
-  // Persisted per-player chest progress, so the world chest can be restored
-  // after the base 10084 has been deregistered and the region reloads.
+  // Saved lock progress rebuilds this player's menu on login.
   const CHEST_ATTRIBUTE = "quest.the_queen_of_thieves.chest";
   const CHEST_LOCKED = 0;
   const CHEST_PICKLOCKED = 1;
@@ -165,15 +183,8 @@ module.exports = function registerQueenOfThievesQuest(api) {
   const LETTER_TAKEN_MESSAGE_ID = "CI6IE4"; // "Tomas takes the letter."
   const QUEST_COMPLETE_ACTION_ID = "4FEXH_"; // "Congratulations! Quest complete!"
 
-  const STATIC_NPC_SPAWNS = [
-    // Wiki map: Tomas outside the bank, Conrad on the dock south of the
-    // Piscarilius mess hall, the Queen inside the Warrens tent.
-    { id: TOMAS_LAWRY_NPC_ID, x: 1796, y: 3782, z: 0, wanderRadius: 0 },
-    { id: CONRAD_KING_NPC_ID, x: 1847, y: 3734, z: 0, wanderRadius: 0 },
-    { id: THE_QUEEN_OF_THIEVES_NPC_ID, x: 1764, y: 10158, z: 0, wanderRadius: 0 },
-  ];
-
   let quest;
+  const chestObjects = new WeakMap();
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
   const hasStew = (player) => held(player, STEW_ITEM_ID) || held(player, STEW_ITEM_ID_2);
@@ -227,8 +238,9 @@ module.exports = function registerQueenOfThievesQuest(api) {
       if (stage >= STAGE_CONRAD_TASK) return DEVAN_AGAIN_VARIANT;
       return DEVAN_FIRST_VARIANT;
     }
-    if (npcId === THE_QUEEN_OF_THIEVES_NPC_ID) {
-      if (quest.isComplete(player)) return null; // Lady Shauna's standard dialogue
+    if (npcId === THE_QUEEN_OF_THIEVES_NPC_ID || npcId === LADY_SHAUNA_NPC_ID) {
+      if (quest.isComplete(player)) return lostMemoirPage(player)
+        ? { page: "Lady Shauna Piscarilius", variant: "if-the-player-lost-the-memoir-page-before-using-it-on-the-memoir" } : null; // Lady Shauna's standard dialogue
       if (stage >= STAGE_LETTER_GIVEN) return QUEEN_REWARD_VARIANT;
       if (stage >= STAGE_QUEEN_REVEALED) return QUEEN_AGAIN_VARIANT;
       if (stage === STAGE_QUEEN_VIS) return QUEEN_REVEAL_VARIANT;
@@ -268,6 +280,19 @@ module.exports = function registerQueenOfThievesQuest(api) {
   function handleDialogueLine(event) {
     const text = String(event.text ?? "");
     const player = event.player;
+    if ([THE_QUEEN_OF_THIEVES_NPC_ID, LADY_SHAUNA_NPC_ID].includes(event.npcId)
+      && text === "Looking for your reward, idiot? Take it and get lost." && lostMemoirPage(player)) {
+      const previous = event.after;
+      event.after = () => {
+        previous?.();
+        if (!lostMemoirPage(player)) return;
+        if (player.getInventory().getFreeSlots() < 1) {
+          player.sendMessage("You need a free inventory space.");
+          return;
+        }
+        player.getInventory().adds(FISHERS_FLUTE_ITEM_ID, 1);
+      };
+    }
     if (event.npcId === DEVAN_RUTTER_NPC_ID) {
       if (/find Conrad King south of the Piscarilius Foodhall/i.test(text)) {
         advance(player, STAGE_CONRAD_TASK);
@@ -279,7 +304,7 @@ module.exports = function registerQueenOfThievesQuest(api) {
       return;
     }
     if (
-      event.npcId === THE_QUEEN_OF_THIEVES_NPC_ID &&
+      [THE_QUEEN_OF_THIEVES_NPC_ID, LADY_SHAUNA_NPC_ID].includes(event.npcId) &&
       /now get lost/i.test(text) &&
       quest.getStage(player) === STAGE_QUEEN_VIS
     ) {
@@ -358,34 +383,34 @@ module.exports = function registerQueenOfThievesQuest(api) {
   }
 
   /** wiki: pick the lock (may take a few tries), then search for the letter. */
-  function picklockChest(player, object) {
+  function picklockChest(player) {
     if (quest.getStage(player) < STAGE_QUEEN_REVEALED) {
       player.sendMessage("You have no reason to pick the lock on this chest.");
       return;
     }
     if (chestState(player) >= CHEST_PICKLOCKED) {
-      // Already unlocked on an earlier visit; only make sure the world matches,
-      // so a second click cannot unlock or message twice.
-      if (object.getId?.() !== CHEST_SEARCH_OBJECT_ID) replaceObject(object, CHEST_SEARCH_OBJECT_ID);
+      // A repeated stale Picklock click only restores this player's Search menu.
+      dressChest(player);
       return;
     }
     setChestState(player, CHEST_PICKLOCKED);
-    replaceObject(object, CHEST_SEARCH_OBJECT_ID);
+    dressChest(player);
     player.sendMessage("You pick the lock on the chest.");
   }
 
-  function searchChest(player, object) {
+  function searchChest(player) {
     const stage = quest.getStage(player);
     if (stage < STAGE_QUEEN_REVEALED) {
       player.sendMessage("You have no reason to search through this chest.");
       return;
     }
-    // A second invocation for the same click (the open chest is already there)
-    // must not emit anything again.
-    if (object.getId?.() === CHEST_OPEN_OBJECT_ID && chestState(player) >= CHEST_SEARCHED) return;
-    // One letter per missing letter: hasLetter guards a second copy, and the
-    // searched state below means the open-chest message can never repeat a handout.
-    if (hasLetter(player)) {
+    if (chestState(player) < CHEST_PICKLOCKED) {
+      player.sendMessage("The chest is locked.");
+      return;
+    }
+    // Once the letter is handed in the quest no longer needs it; before that,
+    // an empty hand may search again after destroying or losing the letter.
+    if (stage >= STAGE_LETTER_GIVEN || hasLetter(player)) {
       player.sendMessage("The chest is empty.");
       return;
     }
@@ -395,7 +420,7 @@ module.exports = function registerQueenOfThievesQuest(api) {
     }
     player.getInventory().adds(LETTER_ITEM_ID, 1);
     setChestState(player, CHEST_SEARCHED);
-    replaceObject(object, CHEST_OPEN_OBJECT_ID);
+    dressChest(player);
     player.sendMessage("You search the chest and find a letter.");
     advance(player, STAGE_LETTER_FOUND);
   }
@@ -408,44 +433,23 @@ module.exports = function registerQueenOfThievesQuest(api) {
     if (chestState(player) < state) player.setAttribute(CHEST_ATTRIBUTE, state);
   }
 
-  /** Every object currently on the chest's tile. */
-  function objectsAt(location) {
-    const hash = MapObjects.getHash(location.getX(), location.getY(), location.getZ());
-    return MapObjects.mapObjects.get(hash) ?? [];
+  /** Keep the map chest and its clipping intact; only this player's menu changes. */
+  function dressChest(player) {
+    const previous = chestObjects.get(player);
+    const objectId = chestState(player) >= CHEST_PICKLOCKED
+      ? CHEST_SEARCH_OBJECT_ID : CHEST_PICKLOCK_OBJECT_ID;
+    if (previous?.getId() === objectId) return;
+    if (previous) ObjectManager.deregister(previous, true);
+    const object = new GameObject(objectId,
+      new Location(CHEST_TILE.x, CHEST_TILE.y, CHEST_TILE.z), CHEST_TYPE, CHEST_FACE, null).setOwner(player);
+    ObjectManager.register(object, true);
+    chestObjects.set(player, object);
   }
 
-  /** The furthest-along chest state any online player has reached. */
-  function highestChestState() {
-    let state = CHEST_LOCKED;
-    const world = api.getWorld();
-    const players = world?.getPlayers?.();
-    if (players) {
-      for (const player of players) {
-        const value = chestState(player);
-        if (value > state) state = value;
-      }
-    }
-    return state;
-  }
-
-  /**
-   * Puts the right chest state back on the tile from scratch. The base nameless
-   * chest (10084) is deregistered the first time the chest is touched and the
-   * region loader does not put it back, so never wait for it: clear whatever is
-   * there and register the state object the world should show.
-   */
-  function dressChest(state) {
-    const location = new Location(CHEST_TILE.x, CHEST_TILE.y, CHEST_TILE.z);
-    for (const object of [...objectsAt(location)]) ObjectManager.deregister(object, true);
-    const objectId = state >= CHEST_SEARCHED
-      ? CHEST_OPEN_OBJECT_ID
-      : state >= CHEST_PICKLOCKED
-        ? CHEST_SEARCH_OBJECT_ID
-        : CHEST_PICKLOCK_OBJECT_ID;
-    ObjectManager.register(
-      new GameObject(objectId, location, CHEST_TYPE, CHEST_FACE, null),
-      true
-    );
+  function clearChest({ player }) {
+    const object = chestObjects.get(player);
+    if (object) ObjectManager.deregister(object, true);
+    chestObjects.delete(player);
   }
 
   /** The tent doorway drops the player on the far side of its wall. */
@@ -495,35 +499,19 @@ module.exports = function registerQueenOfThievesQuest(api) {
     }
     if (objectId === CHEST_PICKLOCK_OBJECT_ID) {
       event.handled = true;
-      picklockChest(player, event.object);
+      picklockChest(player);
       return;
     }
     if (objectId === CHEST_SEARCH_OBJECT_ID) {
       event.handled = true;
-      searchChest(player, event.object);
+      searchChest(player);
     }
   }
 
-  /** Rebuild the quest chest on every region load, never assuming 10084 is there. */
+  /** Register owner visuals when the map region first loads. */
   function handleRegionLoaded({ regionId }) {
     if (regionId !== CHEST_REGION_ID) return;
-    dressChest(highestChestState());
-  }
-
-  function worldHasNpc(id) {
-    const world = api.getWorld();
-    const npcs = world?.getNpcs?.();
-    if (!npcs) return false;
-    for (const npc of npcs) if (npc?.getId?.() === id) return true;
-    return false;
-  }
-
-  /** npc-spawns.json's quest rows are stale, so the quest places its own NPCs. */
-  function spawnStaticNpcs() {
-    for (const spawn of STATIC_NPC_SPAWNS) {
-      if (worldHasNpc(spawn.id)) continue;
-      api.spawnNpc(spawn);
-    }
+    for (const player of api.getWorld().getPlayers()) dressChest(player);
   }
 
   function buildJournal(player, questHandle) {
@@ -636,23 +624,61 @@ module.exports = function registerQueenOfThievesQuest(api) {
     ];
   }
 
+  function ownsItem(player, itemId) {
+    return held(player, itemId) || (player.getBanks?.() ?? []).some(bank => (bank?.getAmount(itemId) ?? 0) > 0)
+      || (player.getBank?.()?.getAmount?.(itemId) ?? 0) > 0
+      || (player.getEquipment?.()?.getItems?.() ?? []).some(item => item?.getId?.() === itemId);
+  }
+
+  function pageAdded(player) {
+    return player.getPacketSender().getVarbit(VARBIT_MEMOIR_PAGE_ADDED) !== 0;
+  }
+
+  function lostMemoirPage(player) {
+    if (!quest.isComplete(player) || ownsItem(player, FISHERS_FLUTE_ITEM_ID) || pageAdded(player)) return false;
+    return !api.core.World.getItems().some(item => !item.isPendingRemoval()
+      && item.getOwner() === player.getUsername() && item.getItem().getId() === FISHERS_FLUTE_ITEM_ID);
+  }
+
+  function syncAppearance(player) {
+    const sender = player.getPacketSender();
+    // AKD also owns this transform: 1 is Shauna, 2/3 hide the sewer actor.
+    const kingdom = { player, key: "a_kingdom_divided", stage: null };
+    api.emitCustomEvent("quest:get-stage", kingdom);
+    const kingdomStage = kingdom.stage ?? Number(player.getAttribute("quest.a_kingdom_divided.stage") ?? 0);
+    if ((quest.getStage(player) >= STAGE_QUEEN_REVEALED || kingdomStage >= KINGDOM_DIVIDED_HOUSES_STAGE)
+      && sender.getVarbit(VARBIT_QUEEN_VISIBLE) === 0) {
+      sender.sendVarbit(VARBIT_QUEEN_VISIBLE, 1);
+    }
+  }
+
+  function syncRewardFlag(player) {
+    const sender = player.getPacketSender();
+    if (quest.isComplete(player) && sender.getVarbit(VARBIT_PISCQUEST_REWARD) !== 1) {
+      sender.sendVarbit(VARBIT_PISCQUEST_REWARD, 1);
+    }
+  }
+
+  function handleAppearanceStageChanged({ player, key }) {
+    if (key === "the_queen_of_thieves" || key === "a_kingdom_divided") syncAppearance(player);
+  }
+
+  function handleAppearanceBootstrap({ player }) {
+    syncAppearance(player);
+    syncRewardFlag(player);
+  }
+
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.THIEVING, THIEVING_XP);
-    player.getInventory().adds(COINS_ITEM_ID, COINS_REWARD);
+    player.getInventory().forceAdd(player, new api.core.Item(COINS_ITEM_ID, COINS_REWARD));
     player.getPacketSender().sendVarbit(VARBIT_PISCQUEST_REWARD, 1);
   }
 
-  /** A login inside the already-loaded region must still see the right chest. */
-  function syncChestFor(player) {
-    const from = player.getLocation();
-    const regionId = ((from.getX() >> 6) << 8) | (from.getY() >> 6);
-    if (regionId !== CHEST_REGION_ID) return;
-    dressChest(highestChestState());
-  }
-
   function handleLogin({ player }) {
+    syncAppearance(player);
+    syncRewardFlag(player);
     refreshQuestList(player);
-    syncChestFor(player);
+    dressChest(player);
   }
 
   api.persistAttribute(CHEST_ATTRIBUTE);
@@ -671,9 +697,11 @@ module.exports = function registerQueenOfThievesQuest(api) {
     otherRewards: ["2,000 Coins"],
     buildJournal,
     onReward: grantReward,
+    varbitValue: stageWireValue,
   });
 
-  api.onServerStartup(spawnStaticNpcs);
+  api.onCustomEvent("quest:stage-changed", handleAppearanceStageChanged);
+  api.onCustomEvent("player:bootstrap-complete", handleAppearanceBootstrap);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
@@ -686,4 +714,5 @@ module.exports = function registerQueenOfThievesQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onRegionLoaded(handleRegionLoaded);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(clearChest);
 };

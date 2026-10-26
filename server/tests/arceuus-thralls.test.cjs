@@ -19,7 +19,8 @@ const Progress = require('../plugins/achievements/combatachievements/Progress.Co
 
 function fixture(t,{magic=99,hp=100,claimed=false}={}) {
   const tasks=[],actors=[],shown=[],attributes=new Map(),runes=new Map([[558,100],[556,100],[560,100],[557,100],[565,100],[554,100],[564,100]]);
-  const p={magic,prayer:100,registered:true,isNpc:()=>false,isPlayer:()=>true,isRegistered:()=>p.registered,
+  const p={magic,prayer:100,registered:true,animations:[],graphics:[],isNpc:()=>false,isPlayer:()=>true,isRegistered:()=>p.registered,
+    performAnimation:animation=>p.animations.push(animation.getId()),performGraphic:graphic=>p.graphics.push(graphic.getId()),
     getLocation:()=>new Location(3200,3200,0),getAttribute:k=>attributes.get(k),setAttribute:(k,v)=>attributes.set(k,v),
     getPacketSender:()=>({sendVarbit(){}}),sendMessage(){},getSpellbook:()=>MagicSpellbook.ARCEUUS,
     getEquipment:()=>({contains:id=>id===25818,containsAllItem:()=>true}),
@@ -34,7 +35,8 @@ function fixture(t,{magic=99,hp=100,claimed=false}={}) {
   const combat=new Combat(target);
   t.mock.method(NPC,'create',()=>{
     const attrs=new Map(),movement={reset(){},setPursuitCheckpoint(){}};
-    const a={registered:true,following:null,isRegistered:()=>a.registered,getLocation:()=>p.getLocation(),getSize:()=>1,
+    const a={registered:true,following:null,graphics:[],isRegistered:()=>a.registered,getLocation:()=>p.getLocation(),getSize:()=>1,
+      performGraphic:graphic=>a.graphics.push(graphic.getId()),
       setOwner(){},setPet(){},setUntargetable(){},setFollowing:v=>{a.following=v;},getFollowing:()=>a.following,
       getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getInteractingMobile:()=>target,setMobileInteraction(){},
       getMovementQueue:()=>movement,calculateDistance:()=>3,getAttackAnim:()=>1,performAnimation(){}};
@@ -82,6 +84,9 @@ test('all resurrection spells share a ten-second cooldown and rejection spends n
   let wallClock=100000;t.mock.method(Date,'now',()=>wallClock);
   const spells=['lesser ghost','superior ghost','greater ghost','lesser skeleton','superior skeleton','greater skeleton','lesser zombie','superior zombie','greater zombie'];
   ArceuusSpells.handleSpell(f.p,`Resurrect ${spells[0]}`);
+  assert.deepEqual(f.p.animations,[8973]);
+  assert.deepEqual(f.p.graphics,[1873]);
+  assert.deepEqual(f.actors[0].graphics,[1903]);
   const initialDeadline=f.attributes.get('arceuus:thrall-until');
   // Upstream 3bbf1cc8e uses whole ticks; the older installed integration uses
   // milliseconds. Validate either exact ten-second protocol, never infer an

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { NavigationButton } from "@runelite/client/ui/NavigationButton";
+import { imageIcon, runeliteImage } from "@runelite/client/ui/runeliteImages";
 import { IndexType } from "../../../rs/cache/IndexType";
 import { OVERALL_ICON_SPRITE, skillIconSprite } from "../../../rs/skill/skillIcons";
 import { MAX_XP, SKILL_NAME, getXpForLevel, type SkillId } from "../../../rs/skill/skills";
@@ -22,7 +23,9 @@ const DARK_GRAY = "rgb(40, 40, 40)";
 const DARKER_GRAY = "rgb(30, 30, 30)";
 const LIGHT_GRAY = "rgb(165, 165, 165)";
 const BAR_BACKGROUND = "rgb(61, 56, 49)";
-const FONT = "'RuneScape Small', 'RuneScape', monospace";
+/** FontManager.getRunescapeSmallFont(): RuneScape Small at 16 (Sidebar.css's variables). */
+const FONT = "var(--rl-font-small)";
+const FONT_SIZE = "var(--rl-font-size)";
 
 type MenuItem = { label: string; run: () => void };
 type MenuState = { x: number; y: number; items: MenuItem[] } | undefined;
@@ -126,7 +129,7 @@ function ProgressBar({ plugin, view }: { plugin: XpTrackerPlugin; view: XpSkillV
             title={tooltip}
             style={{
                 position: "relative", height: 16, background: BAR_BACKGROUND, opacity: paused ? 0.5 : 1,
-                fontSize: 11, lineHeight: "16px", color: "white", textShadow: "1px 1px 0 black",
+                fontSize: FONT_SIZE, lineHeight: "16px", color: "white", textShadow: "1px 1px 0 black",
             }}
         >
             <div style={{ position: "absolute", inset: 0, width: `${progress}%`, background: skillColorCss(skill) }} />
@@ -180,7 +183,7 @@ function InfoBox({
             onContextMenu={(e) => openMenu(e, items)}
             style={{
                 background: DARKER_GRAY, marginTop: 7, padding: compact ? "1px 5px 5px 5px" : "7px 7px 7px 0",
-                fontFamily: FONT, fontSize: 11, cursor: "default",
+                fontFamily: FONT, fontSize: FONT_SIZE, cursor: "default",
             }}
         >
             {!compact && (
@@ -233,7 +236,7 @@ export function XpPanel({ plugin }: { plugin: XpTrackerPlugin }): JSX.Element {
         <div className="rl-sidebar-panel-content" style={{ background: DARK_GRAY, padding: 10, fontFamily: FONT }}>
             {view.overall.gained === 0 ? (
                 <div style={{ textAlign: "center", padding: "20px 0", color: LIGHT_GRAY }}>
-                    <div style={{ color: "white", fontSize: 14, marginBottom: 6 }}>Exp trackers</div>
+                    <div style={{ color: "white", fontFamily: "var(--rl-font)", marginBottom: 6 }}>Exp trackers</div>
                     <div>You have not gained experience yet.</div>
                 </div>
             ) : (
@@ -242,7 +245,7 @@ export function XpPanel({ plugin }: { plugin: XpTrackerPlugin }): JSX.Element {
                     style={{ display: "flex", alignItems: "center", gap: 10, background: DARKER_GRAY, padding: 10 }}
                 >
                     {overallIcon && <img src={overallIcon} alt="Overall" />}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <Label name="Gained: " value={quantityToRSDecimalStack(view.overall.gained)} />
                         <Label name="Per hour: " value={quantityToRSDecimalStack(view.overall.perHour)} />
                     </div>
@@ -263,19 +266,11 @@ export function XpPanel({ plugin }: { plugin: XpTrackerPlugin }): JSX.Element {
     );
 }
 
-function XpTrackerIcon({ label }: { label: string }): JSX.Element {
-    return (
-        <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
-            <path d="M4 20V12H8V20ZM10 20V8H14V20ZM16 20V3H20V20Z" />
-        </svg>
-    );
-}
-
 /** RuneLite's nav button: "XP Tracker", priority 2. */
 export function createXpTrackerNavigationButton(plugin: XpTrackerPlugin): NavigationButton {
     return NavigationButton.builder()
         .tooltip("XP Tracker")
-        .icon(XpTrackerIcon)
+        .icon(imageIcon(runeliteImage("xp_overall.png")))
         .priority(2)
         .panel(() => <XpPanel plugin={plugin} />)
         .build();

@@ -48,6 +48,7 @@ function makeOne(player, recipe) {
   }
   Common.spam(player, message(recipe));
   Common.addXp(player, recipe.xp);
+  Common.api.emitCustomEvent("herblore:made", { player, itemId: recipe.productId });
   return true;
 }
 

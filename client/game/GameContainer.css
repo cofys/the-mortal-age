@@ -183,6 +183,8 @@
 .map-editor-launching .leva-left,
 .map-editor-launching .rl-sidebar,
 .map-editor-active .leva-left,
-.map-editor-active .rl-sidebar {
+.map-editor-active .rl-sidebar,
+.map-editor-launching .rl-sidebar-toggle-zone,
+.map-editor-active .rl-sidebar-toggle-zone {
     display: none !important;
 }

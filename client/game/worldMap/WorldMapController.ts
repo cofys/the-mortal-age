@@ -36,7 +36,7 @@ import {
     updateWorldMapIconHover as updateIconHover,
     type WorldMapIconDeps,
 } from "./WorldMapIconInteraction";
-import type { WorldMapImageTile, WorldMapRenderedIcon, WorldMapRetainTile, WorldMapCitizenDot } from "./WorldMapTypes";
+import type { WorldMapImageTile, WorldMapRenderedIcon, WorldMapRetainTile, WorldMapCitizenDot, WorldMapViewport } from "./WorldMapTypes";
 
 export type WorldMapControllerDeps = {
     getCacheSystem: () => CacheSystem;
@@ -52,6 +52,8 @@ export type WorldMapControllerDeps = {
     getMinimapImageKey: (mapX: number, mapY: number, level?: number) => number;
     loadClientScriptIfExists: (scriptId: number) => Cs2Script | null;
     clearHostRenderCaches: () => void;
+    /** Plugin menu entries for a world map tile. */
+    getPluginMenuEntries?: (point: { x: number; y: number; plane: number }) => SimpleMenuEntry[];
 };
 
 /**
@@ -89,6 +91,8 @@ export class WorldMapController {
     renderedWorldMapIcons: WorldMapRenderedIcon[] = [];
     renderedCitizenDots: WorldMapCitizenDot[] = [];
     hoveredWorldMapIcons: Map<string, WorldMapRenderedIcon> = new Map();
+    /** Where the map was last drawn, for turning a mouse position back into a tile. */
+    worldMapViewport: WorldMapViewport | undefined;
 
     private readonly iconDeps: WorldMapIconDeps;
     private readonly imageDeps: WorldMapImageDeps;
@@ -101,6 +105,10 @@ export class WorldMapController {
                 this.deps.getCs2Vm()?.run(script, intArgs);
             },
             invalidateAllWidgets: () => this.deps.getWidgetManager()?.invalidateAll?.(),
+            pluginMenuEntries: (screenX, screenY) => {
+                const point = this.getWorldMapPointAt(screenX, screenY);
+                return point ? this.deps.getPluginMenuEntries?.(point) ?? [] : [];
+            },
         };
         this.imageDeps = {
             getMinimapImageKey: (mapX, mapY, level) =>
@@ -211,6 +219,21 @@ export class WorldMapController {
 
     getWorldMapMenuEntriesAt(screenX: number, screenY: number): SimpleMenuEntry[] {
         return getMenuEntriesAt(this, this.iconDeps, screenX, screenY);
+    }
+
+    setWorldMapViewport(viewport: WorldMapViewport | undefined): void {
+        this.worldMapViewport = viewport;
+    }
+
+    /** The world tile drawn at a screen position on the map (WorldMapManager's mapCoordinate). */
+    getWorldMapPointAt(screenX: number, screenY: number): { x: number; y: number; plane: number } | undefined {
+        const view = this.worldMapViewport;
+        const area = this.worldMapState?.currentArea;
+        if (!view || !area || view.pixelsPerTileX <= 0 || view.pixelsPerTileY <= 0) return undefined;
+        if (screenX < view.x || screenY < view.y || screenX >= view.x + view.width || screenY >= view.y + view.height) return undefined;
+        const displayX = Math.floor(view.displayX + (screenX - (view.x + view.width / 2)) / view.pixelsPerTileX);
+        const displayY = Math.floor(view.displayY - (screenY - (view.y + view.height / 2)) / view.pixelsPerTileY);
+        return area.coord(displayX, displayY);
     }
 
     handleWorldMapDragInput(

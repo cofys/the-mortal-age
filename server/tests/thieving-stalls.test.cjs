@@ -11,10 +11,14 @@ const O = core.ObjectIdentifiers;
 const I = core.ItemIdentifiers;
 const hooks = new Map();
 let tick, tasks, npcs, objects, events, realObjects = false;
-core.ItemDefinition.forId = (id) => ({ getName: () => `item ${id}` });
-Thieving.register({
+const npcHooks = new Map(), lifecycle = {};
+const bits = { cake: 158, silk: 159, fur: 160, silver: 161, spice: 162, gem: 163, tea: 170, seed: 594, wine: 2050, keldabread: 589, keldagem: 590, keldasilver: 592, vikingfur: 165, silk_prif: 8422, silver_prif: 8424, gem_prif: 8423, spice_prif: 8425 };
+const itemNames = new Map([[I.CUP_OF_TEA, 'Cup of tea'], [I.UNCUT_SAPPHIRE, 'Uncut sapphire'], [I.BREAD, 'Bread']]);
+core.ItemDefinition.forId = (id) => ({ getName: () => itemNames.get(id) ?? `item ${id}` });
+const testApi = {
     core: {
         ...core,
+        CacheDefinitions: { getLocNames: () => new Map([[O.BAKERY_STALL_2, 'dwarf_market_bakery'], [O.SILK_STALL_5, 'prif_marketstall_silk']]), getVarbitId: (name) => bits[name.replace("marketthief_", "")], getSeqId: (name) => { assert.equal(name, "human_pickuptable"); return 832; } },
         World: { getProcessCycle: () => tick, getNpcsNear: (at, radius, area) => npcs.filter((npc) => npc.getLocation().getDistance(at) <= radius && npc.area === area) },
         RegionManager: { canProjectileAttackBounds: (at) => npcs.find((npc) => npc.getLocation() === at).visible },
         TaskManager: { submit: (task) => { task.setRunning(true); tasks.push(task); } },
@@ -23,10 +27,14 @@ Thieving.register({
             deregister: (object) => { objects.push(['remove', object]); if (realObjects) core.ObjectManager.deregister(object, false); },
         },
     },
-    onCustomEvent() {}, onNpcsInteraction() {}, onNpcInteraction() {}, onItemAction() {}, log() {},
+    onCustomEvent() {}, onNpcInteraction() {}, onItemAction() {}, log() {}, persistAttribute() {},
+    onNpcsInteraction: (names, actions) => { for (const name of names) npcHooks.set(name, actions); },
+    onPlayerLogin: (handler) => lifecycle.login = handler,
+    onPlayerLogout: (handler) => lifecycle.logout = handler,
     onObjectInteraction: (name, actions) => hooks.set(name, actions),
     emitCustomEvent: (name, request) => events.push([name, request]),
-});
+};
+Thieving.register(testApi);
 beforeEach(() => { tick = 100; tasks = []; npcs = []; objects = []; events = []; });
 function advance(count = 1) {
     for (let i = 0; i < count; i++) {
@@ -35,14 +43,16 @@ function advance(count = 1) {
     }
 }
 function player({ level = 99, full = false, area = null } = {}) {
-    const items = [], xp = [], messages = [];
+    const items = [], xp = [], messages = [], varbits = [], sounds = [], animations = [], attributes = new Map();
     return {
-        items, xp, messages,
+        items, xp, messages, varbits, sounds, animations,
+        getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+        getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]), sendSound: (...args) => sounds.push(args) }),
         getSkillManager: () => ({ getCurrentLevel: () => level, addExperiences: (_skill, amount) => xp.push(amount) }),
         getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
         getInventory: () => ({ isFull: () => full, full: () => messages.push('full'), addItem: (item) => items.push(item) }),
         getLocation: () => new core.Location(3200, 3200), getPrivateArea: () => area,
-        setPositionToFace() {}, performAnimation() {}, sendMessage: (message) => messages.push(message),
+        setPositionToFace() {}, performAnimation: (animation) => animations.push(animation), sendMessage: (message) => messages.push(message),
     };
 }
 function object(id = O.SPICE_STALL_3, area = null) {
@@ -57,7 +67,7 @@ function npc(name, { visible = true, attackable = false, hp = 10, area = null, x
     const at = new core.Location(x, 3200);
     const lookout = {
         visible, area, chats: [], attacks: [],
-        getDefinition: () => ({ getName: () => name, isAttackable: () => attackable }),
+        getDefinition: () => ({ getName: () => name, isAttackable: () => attackable, getActions: () => ["Talk-to", null, "Trade"] }),
         getLocation: () => at, getSize: () => 1, getHitpoints: () => hp,
         forceChat: (line) => lookout.chats.push(line),
         getCombat: () => ({ getTarget: () => target, attack: (who) => lookout.attacks.push(who) }),
@@ -81,20 +91,22 @@ test('silver, spice and wine grant loot/XP and restock at their Wiki intervals',
     ]) {
         const who = player(), stallObject = object(id);
         assert.equal(click(who, stallObject, name).handled, true);
+        assert.equal(who.items.length, 0);
+        advance();
         assert.equal(who.items.length, 1);
         assert.deepEqual(who.xp, [xp]);
         assert.equal(events.at(-1)[0], 'thieving:success');
-        advance();
         assert.equal(objects.at(-1)[1].getId(), emptyStallId(stallObject));
         assert.equal(objects.at(-1)[1].getFace(), stallObject.getFace());
         click(who, stallObject, name); // Stale queued clicks cannot bypass depletion.
         assert.equal(who.items.length, 1);
-        advance(ticks - 2);
+        advance(ticks - 1);
         assert.ok(depleted.has(stallObject));
         advance();
         assert.ok(!depleted.has(stallObject));
         assert.equal(objects.at(-1)[1], stallObject);
         click(who, stallObject, name);
+        advance();
         assert.equal(who.items.length, 2);
     }
 });
@@ -103,13 +115,15 @@ test('depletion is shared, permits simultaneous thieves and leaves other stalls 
     const a = player(), b = player(), stall = object(), other = object();
     click(a, stall);
     click(b, stall);
+    assert.equal(a.items.length, 0);
+    advance();
     assert.equal(a.items.length, 1);
     assert.equal(b.items.length, 1);
-    assert.equal(tasks.length, 2, 'one removal and one respawn for both thieves');
-    advance();
+    assert.equal(objects.length, 2, 'one replacement for both thieves');
     click(b, stall);
     assert.equal(b.items.length, 1);
     click(b, other);
+    advance();
     assert.equal(b.items.length, 2);
 });
 
@@ -127,7 +141,8 @@ test('visible guards catch and attack thieves, preventing loot, XP, pets and dep
     const guard = npc('Guard', { attackable: true });
     click(who, stall);
     assert.deepEqual(guard.attacks, [who]);
-    assert.ok(who.messages.includes("You've been caught stealing!"));
+    assert.deepEqual(guard.chats, ["Hey! Get your hands off there!"]);
+    assert.ok(!who.messages.includes("You've been caught stealing!"));
     assert.equal(who.items.length, 0);
     assert.equal(who.xp.length, 0);
     assert.equal(events.length, 0);
@@ -154,6 +169,7 @@ test('blocked, dead, distant, other-instance guards and unrelated owners cannot 
     npc('Guard', { attackable: true, target: player() });
     const who = player();
     click(who, object());
+    advance();
     assert.equal(who.items.length, 1);
 });
 
@@ -181,7 +197,8 @@ test('existing stalls use current restock times and market-specific empty models
         tasks = [];
         const stall = object(id);
         click(player(), stall, name);
-        assert.equal(tasks[1].getDelay(), ticks, name);
+        advance();
+        assert.equal(tasks.at(-1).getDelay(), ticks, name);
         assert.equal(emptyStallId(stall), empty, name);
     }
 });
@@ -194,7 +211,7 @@ test('destroying a private area before restock never resurrects its objects', ()
     advance();
     objects = [];
     destroyed = true;
-    advance(9);
+    advance(10);
     assert.equal(objects.length, 0);
     assert.ok(!depleted.has(stall));
 });
@@ -213,7 +230,7 @@ test('a depleted private stall remains resolvable and is removed when its instan
         assert.equal(empty.getId(), emptyStallId(stall));
         assert.equal(core.MapObjects.get(empty.getId(), empty.getLocation(), area), empty);
         area.destroy();
-        advance(9);
+        advance(10);
         assert.equal(core.ObjectManager.objectsAt(stall.getLocation()).some((o) => o.getPrivateArea() === area), false);
         assert.equal(core.World.getRemovedObjects().some((o) => o.getPrivateArea() === area), false);
         assert.equal(area.getObjects().length, 0);
@@ -226,14 +243,205 @@ test('a depleted private stall remains resolvable and is removed when its instan
 test('Port Roberts stalls keep their stock instead of acquiring classic stall depletion', () => {
     const stall = object(O.SILVER_STALL_7), who = player();
     click(who, stall, 'Silver stall');
+    advance();
     assert.equal(who.items.length, 1);
-    assert.equal(tasks.length, 0);
+    assert.equal(objects.length, 0);
 });
 
 test('standing under the baker remains a safe spot', () => {
     const baker = npc('Baker', { x: 3200 });
     const who = player();
     click(who, object(O.BAKERS_STALL), "Baker's stall");
+    advance();
     assert.equal(who.items.length, 1);
     assert.equal(baker.chats.length, 0);
+});
+
+// rsprox recordings 3220 (tea) and 1554 (bread, silver, gem):
+// the reward and empty stall arrive one tick after the attempt animation.
+test('recorded stall theft rewards follow the attempt by one tick', () => {
+    for (const [name, id, attempt, success, roll = 0] of [
+        ['Tea stall', O.TEA_STALL, 'You attempt to steal a cup of tea...', 'You steal a cup of tea.'],
+        ["Baker's stall", O.BAKERS_STALL, null, 'You steal some bread.', 0.65],
+        ['Silver stall', O.SILVER_STALL_3, 'You attempt to steal some silver from the silver stall.', 'You steal a piece of silver.'],
+        ['Gem stall', O.GEM_STALL_3, 'You attempt to steal a gem from the gem stall.', 'You steal an uncut sapphire.'],
+    ]) {
+        const who = player(), stall = object(id);
+        const random = Math.random;
+        Math.random = () => roll;
+        try {
+            click(who, stall, name);
+            assert.deepEqual(who.items, [], name + ': no immediate item');
+            assert.deepEqual(who.xp, [], name + ': no immediate XP');
+            if (attempt) assert.ok(who.messages.includes(attempt), name);
+            assert.equal(who.animations[0].getId(), 832);
+            assert.deepEqual(who.sounds, [[2581, 10, 0]]);
+            advance();
+            assert.equal(who.items.length, 1, name);
+            assert.ok(who.messages.includes(success), name);
+            assert.equal(objects.at(-1)[1].getId(), emptyStallId(stall), name);
+        } finally { Math.random = random; }
+    }
+});
+
+test('captured theft varbits change only with the reward, then clear when the wait expires', () => {
+    for (const [name, id, key, ticks] of [
+        ['Tea stall', O.TEA_STALL, 'tea', 1000], ["Baker's stall", O.BAKERS_STALL, 'cake', 1500],
+        ['Silver stall', O.SILVER_STALL_3, 'silver', 1000], ['Gem stall', O.GEM_STALL_3, 'gem', 1000],
+        ['Spice stall', O.SPICE_STALL_3, 'spice', 600],
+    ]) {
+        const who = player();
+        click(who, object(id), name);
+        assert.deepEqual(who.varbits, []);
+        advance();
+        assert.deepEqual(who.varbits, [[bits[key], 1]]);
+        advance(ticks - 1);
+        assert.equal(who.varbits.at(-1)[1], 1);
+        advance();
+        assert.deepEqual(who.varbits.at(-1), [bits[key], 0]);
+    }
+});
+function merchant(who, name, option = 'Trade') {
+    const owner = npc(name);
+    const event = { player: who, npc: owner, definition: owner.getDefinition() };
+    const handler = npcHooks.get(name)?.[option];
+    assert.ok(handler, `registered ${name} ${option}`);
+    const result = handler(event);
+    return { owner, event, result };
+}
+test('recent thieves cannot talk or trade with the recorded stall owners', () => {
+    for (const [name, id, owner] of [
+        ['Tea stall', O.TEA_STALL, 'Tea Seller'], ["Baker's stall", O.BAKERS_STALL, 'Baker'],
+        ['Silk stall', O.SILK_STALL_3, 'Silk merchant'], ['Spice stall', O.SPICE_STALL_3, 'Spice seller'],
+        ['Seed Stall', O.SEED_STALL, 'Olivia'], ['Market stall', O.MARKET_STALL_14, 'Fortunato'],
+    ]) {
+        npcs = [];
+        const who = player();
+        assert.equal(merchant(who, owner).result, false, 'ordinary trade falls through');
+        npcs = [];
+        click(who, object(id), name);
+        advance();
+        for (const option of ['Trade', 'Talk-to']) {
+            const refusal = merchant(who, owner, option);
+            assert.equal(refusal.event.handled, true, owner);
+            assert.deepEqual(refusal.owner.chats, [owner === 'Fortunato' ? "You're the thief who stole from me!" : "You're the one who stole something from me!"]);
+            advance();
+            assert.equal(refusal.owner.chats.length, 1);
+            advance();
+            assert.equal(refusal.owner.chats.at(-1), 'Guards guards!');
+        }
+        assert.equal(merchant(who, 'Gem merchant').result, false, 'unrelated stall remains available');
+    }
+});
+test('repeated theft and relog restart the consecutive online wait', () => {
+    const who = player(), stall = object(O.TEA_STALL);
+    click(who, stall, 'Tea stall');
+    advance(901);
+    click(who, stall, 'Tea stall');
+    advance(101);
+    assert.equal(merchant(who, 'Tea Seller').event.handled, true);
+    lifecycle.logout({ player: who });
+    advance(2000);
+    lifecycle.login({ player: who });
+    advance(999);
+    assert.equal(merchant(who, 'Tea Seller').event.handled, true);
+    advance();
+    assert.equal(merchant(who, 'Tea Seller').result, false);
+});
+test('a merchant summons an idle nearby guard', () => {
+    const who = player();
+    click(who, object(O.TEA_STALL), 'Tea stall');
+    advance();
+    const guard = npc('Guard', { attackable: true });
+    assert.equal(merchant(who, 'Tea Seller').event.handled, true);
+    assert.deepEqual(guard.attacks, [who]);
+    assert.equal(who.items.length, 1);
+});
+test('caught attempts warn without success animation, sound, loot or theft flag', () => {
+    const who = player(), owner = npc('Spice seller');
+    click(who, object());
+    advance();
+    assert.deepEqual(owner.chats, ['Hey! Get your hands off there!']);
+    for (const values of [who.animations, who.sounds, who.varbits, who.items]) assert.deepEqual(values, []);
+    assert.equal(merchant(who, 'Spice seller').result, false);
+});
+test('a bag filled during the attempt cannot swallow a reward', () => {
+    const who = player(), inventory = who.getInventory(), stall = object(O.TEA_STALL);
+    let full = false;
+    who.getInventory = () => ({ ...inventory, isFull: () => full });
+    click(who, stall, 'Tea stall');
+    full = true;
+    advance();
+    for (const values of [who.items, who.xp, who.varbits]) assert.deepEqual(values, []);
+    assert.ok(!depleted.has(stall));
+});
+
+test('regional stalls send their own cache theft bits and preserve both until expiry', () => {
+    const who = player();
+    click(who, object(O.BAKERY_STALL_2), 'Bakery stall');
+    advance();
+    assert.deepEqual(who.varbits, [[bits.keldabread, 1]]);
+    click(who, object(O.BAKERS_STALL), "Baker's stall");
+    advance();
+    assert.ok(who.varbits.some(([id, value]) => id === bits.cake && value === 1));
+    lifecycle.logout({ player: who });
+    lifecycle.login({ player: who });
+    advance(1500);
+    assert.ok(who.varbits.some(([id, value]) => id === bits.keldabread && value === 0));
+    assert.ok(who.varbits.some(([id, value]) => id === bits.cake && value === 0));
+    click(who, object(O.SILK_STALL_5), 'Silk stall');
+    advance();
+    assert.deepEqual(who.varbits.at(-1), [bits.silk_prif, 1]);
+});
+
+test('real named dispatch blocks recent thieves before generic dialogue and shop handlers', () => {
+    const who = player(), owner = npc('Tea Seller');
+    let opened = 0;
+    PluginManager.createApi('StallGenericFallback').onAnyNpcInteraction({
+        'Talk-to': () => { opened++; }, Trade: () => { opened++; },
+    });
+    Thieving.register({ ...PluginManager.createApi('StallDispatch'), core: testApi.core });
+    const dispatch = (clickType) => PluginManager.emitNpcInteraction({
+        player: who, npc: owner, definition: owner.getDefinition(), clickType, handled: false,
+    });
+    assert.equal(dispatch(3), true);
+    assert.equal(opened, 1, 'ordinary trader reaches the existing shop fallback');
+    npcs = [];
+    click(who, object(O.TEA_STALL), 'Tea stall');
+    advance();
+    dispatch(1);
+    dispatch(3);
+    assert.equal(opened, 1, 'recent thief reaches neither dialogue nor shop');
+    advance(1000);
+    dispatch(3);
+    assert.equal(opened, 2, 'expiry releases the existing interaction');
+});
+
+// Recording 1554: caught gem attempts at 869/871/875 and caught silver
+// attempts at 1128/1129 precede the successful attempt at 1130.
+test('owners can catch same-tile thieves outside bakery safe spots', () => {
+    const who = player(), owner = npc('Gem merchant', { x: 3200 });
+    click(who, object(O.GEM_STALL_3), 'Gem stall');
+    advance();
+    assert.deepEqual(owner.chats, ['Hey! Get your hands off there!']);
+    assert.deepEqual(who.items, []);
+    assert.deepEqual(who.xp, []);
+    assert.deepEqual(who.varbits, []);
+    assert.deepEqual(who.messages, ['You attempt to steal a gem from the gem stall.']);
+});
+test('caught thefts can be attempted again on the next tick', () => {
+    const who = player(), stall = object(O.SILVER_STALL_3);
+    let lastSuccess = -Infinity;
+    who.getClickDelay = () => ({ elapsedTime: () => tick - lastSuccess >= 2, reset: () => lastSuccess = tick });
+    npc('Silver merchant');
+    click(who, stall, 'Silver stall');
+    advance();
+    click(who, stall, 'Silver stall');
+    assert.equal(who.messages.filter((message) => message.startsWith('You attempt')).length, 2);
+    npcs = [];
+    advance();
+    click(who, stall, 'Silver stall');
+    advance();
+    assert.equal(who.items.length, 1);
+    assert.deepEqual(who.xp, [205]);
 });
