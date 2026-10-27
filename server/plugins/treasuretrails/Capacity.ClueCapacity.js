@@ -25,15 +25,28 @@ function containers(player) {
   return [player.getInventory(), ...Array.from({length: core.Bank.TOTAL_BANK_TABS}, (_, tab) => player.getBank?.(tab))];
 }
 
-function boxUnlocked(player) {
+/**
+ * Scroll boxes: unlocked by X Marks the Spot, then a plugin may answer
+ * `treasure-trails:scroll-boxes` {player, unlocked, capacity:null} to unlock them another way or
+ * set the combined limit itself (a league's tier passive: always boxes, no limit).
+ */
+function boxes(player) {
   const query = {player, key: "x_marks_the_spot", complete: null};
   api.emitCustomEvent("quest:is-complete", query);
-  return query.complete === true;
+  const request = {player, unlocked: query.complete === true, capacity: null};
+  api.emitCustomEvent("treasure-trails:scroll-boxes", request);
+  return request;
+}
+
+function boxUnlocked(player) {
+  return boxes(player).unlocked;
 }
 
 function capacity(player, tier = "beginner") {
   if (!TIERS.includes(tier)) return null;
-  if (!boxUnlocked(player)) return 1;
+  const box = boxes(player);
+  if (!box.unlocked) return 1;
+  if (typeof box.capacity === "number" && box.capacity >= 1) return box.capacity;
   return 2 + [CASE_ATTRIBUTES[tier].minor, CASE_ATTRIBUTES[tier].major, MIMIC_ATTRIBUTE]
     .filter(key => player.getAttribute(key) === true).length;
 }
@@ -230,8 +243,9 @@ function openCase(event) {
   event.player.setAttribute(entry.attribute, true);
   sync(event);
   api.emitCustomEvent("persistence:save", {player: event.player, reason: "scroll-case"});
+  const held = entry.tier == null ? null : capacity(event.player, entry.tier);
   event.player.sendMessage(entry.tier == null ? "You have increased the capacity for all of your clue scrolls by one!"
-    : `You can now hold ${capacity(event.player, entry.tier)} ${entry.tier} clues.`);
+    : Number.isFinite(held) ? `You can now hold ${held} ${entry.tier} clues.` : `You can hold any number of ${entry.tier} clues.`);
   return true;
 }
 

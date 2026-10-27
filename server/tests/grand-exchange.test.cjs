@@ -392,3 +392,44 @@ test('register persists both attributes', () => {
 });
 
 setMarketData(market);
+
+test('buys use coins first, then platinum tokens with change in coins', t => {
+  const { inventory, place, messages } = exchange(t);
+  inventory.add(new Item(995, 10), false);
+  inventory.add(new Item(13204, 1), false);
+  assert.equal(place(false, PRICED, 1, 1_100), undefined);
+  assert.match(messages.at(-1), /enough coins/);
+  assert.equal(place(false, PRICED, 1, 500).total, 500);
+  assert.equal(inventory.getAmount(995), 510);
+  assert.equal(inventory.getAmount(13204), 0);
+  inventory.add(new Item(13204, 2), false);
+  assert.equal(place(false, PRICED, 1, 400, 1).total, 400);
+  assert.equal(inventory.getAmount(995), 110);
+  assert.equal(inventory.getAmount(13204), 2);
+});
+
+test('a token payment whose change has no free slot is refused and takes nothing', t => {
+  const { inventory, place, messages } = exchange(t);
+  inventory.add(new Item(13204, 5), false);
+  for (let slot = 1; slot < 28; slot++) inventory.add(new Item(5000 + slot, 1), false);
+  assert.equal(place(false, PRICED, 1, 500), undefined);
+  assert.match(messages.at(-1), /inventory space/);
+  assert.equal(inventory.getAmount(13204), 5);
+  assert.equal(place(false, PRICED, 1, 1_000).total, 1_000);
+  assert.equal(inventory.getAmount(13204), 4);
+  assert.equal(inventory.getAmount(995), 0);
+});
+
+test('trades above the coin stack pay with tokens and collect as tokens plus coins', t => {
+  const { MAX_TRADE, payout } = plugin._test;
+  assert.equal(MAX_TRADE, 2_149_631_130_647);
+  assert.deepEqual(payout({ sell: true, total: 3_000_000_123 }), [{ itemId: 13204, amount: 3_000_000 }, { itemId: 995, amount: 123 }]);
+  assert.deepEqual(payout({ sell: true, total: MAX_TRADE }), [{ itemId: 13204, amount: 2_147_483_647 }, { itemId: 995, amount: 2_147_483_647 }]);
+  assert.deepEqual(payout({ sell: true, total: 500 }), [{ itemId: 995, amount: 500 }]);
+  const { inventory, place } = exchange(t);
+  inventory.add(new Item(995, 2_000_000_000), false);
+  inventory.add(new Item(13204, 1_500_000), false);
+  assert.equal(place(false, UNLIMITED, 1_000, 3_000_000).total, 3_000_000_000);
+  assert.equal(inventory.getAmount(995), 0);
+  assert.equal(inventory.getAmount(13204), 500_000);
+});

@@ -518,39 +518,54 @@ function registerPotion(definition) {
     entries: [],
   };
 
-  for (const chain of definition.chains || []) {
-    if (!Array.isArray(chain) || chain.length === 0) {
-      continue;
-    }
-
-    for (let index = 0; index < chain.length; index++) {
-      const itemId = chain[index];
-      if (!isItemId(itemId)) {
-        continue;
-      }
-
-      const replacementId = index + 1 < chain.length
-        ? chain[index + 1]
-        : normalized.emptyItemId;
-
-      const entry = {
-        potion: normalized,
-        itemId,
-        chain,
-        doses: chain.length - index,
-        replacementId: isItemId(replacementId)
-          ? replacementId
-          : normalized.emptyItemId,
-      };
-
-      POTION_BY_ITEM_ID.set(itemId, entry);
-      normalized.entries.push(entry);
-    }
-  }
+  for (const chain of definition.chains || []) addChain(normalized, chain, normalized.emptyItemId);
 
   if (normalized.entries.length > 0) {
     REGISTERED_POTIONS.push(normalized);
   }
+}
+
+/** One dose chain (most doses first) of a potion; the last dose leaves `emptyItemId`. */
+function addChain(potion, chain, emptyItemId) {
+  if (!Array.isArray(chain) || chain.length === 0) {
+    return;
+  }
+
+  for (let index = 0; index < chain.length; index++) {
+    const itemId = chain[index];
+    if (!isItemId(itemId)) {
+      continue;
+    }
+
+    const replacementId = index + 1 < chain.length
+      ? chain[index + 1]
+      : emptyItemId;
+
+    const entry = {
+      potion,
+      itemId,
+      chain,
+      doses: chain.length - index,
+      replacementId: isItemId(replacementId)
+        ? replacementId
+        : emptyItemId,
+    };
+
+    POTION_BY_ITEM_ID.set(itemId, entry);
+    potion.entries.push(entry);
+  }
+}
+
+/**
+ * "potions:register-copy" `{ name, chain, emptyItemId? }`: a minigame's own copies of a potion's
+ * doses (Last Man Standing's), drunk as the potion called `name`, each dose leading to the copy's
+ * next and the last to `emptyItemId` (the potion's own vessel when left out). Sets `registered`.
+ */
+function registerCopy(request) {
+  const potion = REGISTERED_POTIONS.find((candidate) => candidate.name === request?.name);
+  if (!potion || !Array.isArray(request.chain) || request.chain.some((id) => POTION_BY_ITEM_ID.has(id))) return;
+  addChain(potion, request.chain, isItemId(request.emptyItemId) ? request.emptyItemId : potion.emptyItemId);
+  request.registered = true;
 }
 
 // https://oldschool.runescape.wiki/w/Free-to-play_Ironman_guide#Boosts
@@ -1524,6 +1539,7 @@ module.exports = {
     applyRankFrothyPotion, applyFoulChunkyPotion, applyRancidSlimyPotion, applyJarOfCongealedBlood,
     processBoostDecay, notePreserveActivated, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
     findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
+    registerCopy,
     cureFromHealthOrb,
   },
   getPotionName(itemId) {
@@ -1532,6 +1548,7 @@ module.exports = {
   register(api) {
     api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
     api.onCustomEvent("potions:dose-family", answerDoseFamily);
+    api.onCustomEvent("potions:register-copy", registerCopy);
     api.onCustomEvent("prayer:activated", notePreserveActivated);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);

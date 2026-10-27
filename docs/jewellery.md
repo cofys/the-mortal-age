@@ -95,3 +95,42 @@ craft Diamond amulet (u), string it, cast Lvl-4 Enchant, and verify Amulet of po
 furnace layout and enchant effects still need a manual visual check.
 
 Silver jewellery crafting recipes remain outside this page's scope.
+
+## Dragonstone jewellery charging
+
+The Fountain of Rune charges all eligible jewellery in the inventory and equipment in
+one interaction: rings of wealth receive five charges; glories (including trimmed ones),
+skills necklaces and combat bracelets receive six. Rings need no quest, glories need
+Heroes' Quest, and skills necklaces and combat bracelets need Legends' Quest. Imbued rings
+keep their imbue. Using an already full piece still charges other eligible pieces.
+
+Skills necklaces and combat bracelets can be charged in noted stacks at Rune, retaining
+their quantities and noted form. Noted glories and rings are excluded. The usual success
+message also applies when a ring initiates charging. The existing 1-in-25,000 eternal-glory
+roll and its replacement message remain part of the same charging pass.
+
+The Fountain of Heroes charges carried and worn unnoted glories to four. The Legends'
+Guild totem charges skills necklaces and combat bracelets to four, leaving pieces with
+five or six charges alone. The unrelated Kharazi Jungle totems do not charge jewellery.
+The charging handler resolves player-visible cache transforms: the map uses parent
+objects 26782 (Rune), 2939 (Heroes) and 2638 (Legends), rather than their display-child IDs.
+
+Evidence checked for these charging rules:
+
+- [Fountain of Rune](https://oldschool.runescape.wiki/w/Fountain_of_Rune): families,
+  requirements, bulk inventory/equipment charging, banknotes, charges and success messages.
+- [Fountain of Heroes](https://oldschool.runescape.wiki/w/Fountain_of_Heroes): four-charge
+  bulk charging of unnoted carried and worn glories.
+- [Skills necklace](https://oldschool.runescape.wiki/w/Skills_neckalace) and
+  [Jewellery](https://oldschool.runescape.wiki/w/Jewellery): the guild totem's four charges
+  and the skills-necklace/combat-bracelet charging location.
+- Cache revision 241: morph parents and children, separate Kharazi totems, ring variants
+  and item note links. No charging recording was available for these
+  sites, so exact animation and tick timing are not asserted here.
+
+Regression checks exercise the registered charging handler with real cache definitions,
+including mixed families, worn pieces, imbued rings, full-piece inputs, unmet quests,
+noted stacks, both mapped fountains, the guild totem and unrelated totems. Eleven of these
+checks fail against the previous charging code. Live interaction checks also verified the
+mapped Rune fountain, mixed and noted charging, and both guild charging sites. Quest
+completion and supplies were test setup; the quests themselves were not replayed.

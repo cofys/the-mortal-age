@@ -123,10 +123,13 @@ function outfit(player) {
     .every(id => player.getEquipment().getItems().some(item => item?.getId() === id));
 }
 
+/** The catch roll, as content may raise it ("hunter:catch-chance", a league relic that never fails). */
 function chance(player, creature, bonus = 0, required = creature.level) {
   const l = level(player);
   if (l < required) return false;
-  return Math.random() < Math.min(1, probability(creature.low, creature.high, l) + bonus + (outfit(player) ? 0.025 : 0));
+  const request = { player, npcId: creature.npc, chance: Math.min(1, probability(creature.low, creature.high, l) + bonus + (outfit(player) ? 0.025 : 0)) };
+  H.api.emitCustomEvent("hunter:catch-chance", request);
+  return Math.random() < request.chance;
 }
 
 function choose(player, entries, entity = null) {

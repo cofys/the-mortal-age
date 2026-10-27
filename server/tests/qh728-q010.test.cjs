@@ -45,7 +45,7 @@ test('Munty door opens into its matching cache model and clears the blocked appr
         register(object, update) { registered.push(object); core.ObjectManager.register(object, update); },
       },
     },
-    emitCustomEvent() {},
+    onCustomEvent() {}, emitCustomEvent() {},
     onObjectInteraction: (name, handlers) => actions.set(name, handlers),
     onRegionLoaded() {},
     onServerStartup() {},

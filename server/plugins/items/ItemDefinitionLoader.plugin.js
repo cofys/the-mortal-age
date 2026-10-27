@@ -187,8 +187,9 @@ function loadItemDefinitions() {
     const equipmentType = hydrateEquipmentType(rawDef.equipmentType);
     if (equipmentType.getSlot() !== -1) def.equipmentType = equipmentType;
     def.weaponInterface = hydrateWeaponInterface(rawDef.weaponInterface);
+    // Two-handedness is the cache's (ItemDefinition), like stackable and tradeable.
     for (const property of [
-      "doubleHanded", "sellable", "bloodMoneyValue", "highAlch",
+      "sellable", "bloodMoneyValue", "highAlch",
       "lowAlch", "dropValue", "blockAnim", "standAnim", "walkAnim", "runAnim",
       "standTurnAnim", "turn180Anim", "turn90CWAnim", "turn90CCWAnim", "attackAnim", "equipSound", "bonuses",
       "requirements", "deathComponents", "combatRequirement",

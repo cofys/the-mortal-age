@@ -129,7 +129,7 @@ const bowAmmo = {
 module.exports = function registerGauntletWeapons(api) {
   Shared.bind(api);
   api.registerWeaponProfile({ itemIds: HALBERDS, attackSpeed: 4, attackDistance: 2 });
-  api.registerWeaponProfile({ itemIds: BOWS, attackSpeed: 5, attackDistance: 10, longRangeDistance: 10 });
+  api.registerWeaponProfile({ itemIds: BOWS, attackSpeed: 5, attackDistance: 10 });
   api.registerRangedAmmoHandler(bowAmmo);
   api.registerCombatMethodResolver({ resolve: resolveStaff });
 };

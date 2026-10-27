@@ -240,3 +240,27 @@ test("the quantity buttons set what an item's left-click buys, and the choice is
   });
   assert.equal(player.getInventory().getAmount(BRONZE_AXE), 2, "buys up to 5, capped at the 2 in stock");
 });
+
+test("a currency with a unit uses OSRS's wording: costs, buy-back and too few", () => {
+  const STICKS = 6306;
+  DEFINITIONS[STICKS] = { name: "Trading sticks", stackable: true, value: 1 };
+  ShopManager.registerItemCurrency(STICKS, { name: "Trading sticks", unit: "trade sticks" });
+  ShopDefinition.replace([
+    new ShopDefinition(902, "Stick shop", "TRADING STICKS", [
+      { id: STEEL_AXE, amount: 5, restockTicks: null, price: null },
+    ], 100, 100, 100, "test"),
+  ]);
+  ShopManager.initialize();
+  const player = createPlayer();
+  player.getInventory().add(new Item(STICKS, 100), false);
+  player.getInventory().add(new Item(STEEL_AXE, 1), false);
+  ShopManager.open(player, 902);
+  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.ITEMS_INTERFACE_ID, slot: 0, itemId: STEEL_AXE, amount: 0 });
+  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.INVENTORY_INTERFACE_ID, slot: 1, itemId: STEEL_AXE, amount: 0 });
+  buy(player, 0, STEEL_AXE);
+  assert.deepEqual(player.messages, [
+    "Steel axe: currently costs 200 trade sticks.",
+    "Steel axe: shop will buy for 170 trade sticks.",
+    "You don't have enough trade sticks.",
+  ]);
+});

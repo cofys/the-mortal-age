@@ -373,8 +373,8 @@ class Raid {
   /** The Great Olm is slain: the raid is over, its time fixed; rewards and records follow. */
   complete() {
     if (this.completed || this.destroyed) return;
-    this.completed = true;
     this.duration = this.ticksSinceStart();
+    this.completed = true;
     for (const player of this.players) player.getPacketSender().sendVarbit(Shared.VARBIT.TIMER, this.duration);
     for (const hook of completeHooks) {
       try {

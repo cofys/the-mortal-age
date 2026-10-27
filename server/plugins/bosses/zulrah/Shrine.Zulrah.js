@@ -19,6 +19,7 @@
  */
 
 const Shared = require("./Shared.Zulrah");
+const Access = require("./Access.Zulrah");
 const CombatAchievements = require("./CombatAchievements.Zulrah");
 const Fight = require("./Fight.Zulrah");
 const { MeleeSnakeling, MagicSnakeling } = require("./Hazards.Zulrah");
@@ -31,12 +32,6 @@ const RETRIEVAL_FEE = 100000;
 const COINS = 995;
 const BOAT_TEXT = "The priestess rows you to Zulrah's shrine,<br>then hurriedly paddles away.";
 
-// ---------------------------------------------------------------- access
-
-/** Everyone may be Zulrah's sacrifice: the boat and the priestess show their full options. */
-function grantAccess({ player }) {
-  player.getPacketSender().sendVarbit(Shared.ACCESS_VARBIT, Shared.ACCESS_VALUE);
-}
 
 /** Logged in on the shrine with no fight left (it ended at logout): back by the boat. */
 function returnFromShrine({ player }) {
@@ -62,6 +57,23 @@ function refusedBoarding(player) {
   return true;
 }
 
+/**
+ * Rowed out once the priestess's last line ("I shall now transport you to Zulrah's shrine...", or her
+ * "Return to Zulrah's shrine?" Yes) has been read: the trip waits for the dialogue to close.
+ */
+function sailWhenRead({ player }) {
+  const { Task, TaskManager } = Shared.core();
+  TaskManager.submit(new (class extends Task {
+    constructor() { super(1, player.getIndex(), false); }
+    execute() {
+      if (!player.isRegistered()) return void this.stop();
+      if (player.getDialogueManager().isActive?.()) return;
+      this.stop();
+      if (!refusedBoarding(player)) sail(player);
+    }
+  })());
+}
+
 function sail(player) {
   Shared.fade(player, true);
   Shared.later(player, 2, () => {
@@ -72,13 +84,13 @@ function sail(player) {
 }
 
 function board({ player }) {
-  if (refusedBoarding(player)) return true;
+  if (Access.refuseBoarding(player) || refusedBoarding(player)) return true;
   Shared.options(player, "Return to Zulrah's shrine?", "Yes.", () => sail(player), "No.", () => {});
   return true;
 }
 
 function quickBoard({ player }) {
-  if (refusedBoarding(player)) return true;
+  if (Access.refuseBoarding(player) || refusedBoarding(player)) return true;
   sail(player);
   return true;
 }
@@ -249,8 +261,8 @@ function payFee(player, held) {
 }
 
 /** While she holds items, she says so and hands them back (Near-Reality); else her transcript. */
-function talkTo({ player }) {
-  if (!heldItems(player)) return false;
+function talkTo({ player, npc }) {
+  if (!heldItems(player)) return Access.talkToPriestess(player, npc);
   const { DialogueChainBuilder, NpcDialogue, ActionDialogue } = Shared.core();
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
     new NpcDialogue(0, Shared.NPC.PRIESTESS, "You left some stuff at Zulrah's shrine when you left earlier."),
@@ -295,7 +307,7 @@ module.exports = function registerZulrahShrine(api) {
   api.registerNpcCombatMethodProvider([...Shared.FORM_IDS], Fight.idleMethod(), { singleton: false });
   api.registerNpcCombatMethodProvider([Shared.NPC.SNAKELING_MELEE], MeleeSnakeling(), { singleton: false });
   api.registerNpcCombatMethodProvider([Shared.NPC.SNAKELING_MAGIC], MagicSnakeling(), { singleton: false });
-  api.onPlayerLogin(grantAccess);
+  api.onCustomEvent(Access.SAIL_EVENT, sailWhenRead);
   api.onPlayerLogin(returnFromShrine);
   api.onObjectInteraction(Shared.OBJECT.BOAT, { Board: board, "Quick-Board": quickBoard });
   api.onObjectInteraction(readTeleport);

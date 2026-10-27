@@ -9,18 +9,26 @@ The owner authorized the 108-PR split merge batch on 25 October 2026; the
 full suites on the earlier repaired snapshot separately from latest-main delta checks.
 The repaired Another Slice of H.A.M. runtime now passes its focused regressions and has
 a bounded stage-9-to-10 native checkpoint recorded below. Neither those repairs nor
-publication changes the accepted **25/106** scoped natural-route count. Unplayed routes,
+publication changes the accepted **26/106** scoped natural-route count. Unplayed routes,
 alternate/recovery branches and visual Quest Helper overlay parity remain unverified.
 
 ## Active 106: accepted natural main-route proofs
 
-Twenty-five quests have accepted scoped main-route completion evidence: **25 / 106 active quests (23.58%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q080, q084, q085, q088, q090, q099, q105, q117). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084, q099 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
+**Community reports accepted for scheduling:** the user-directed [community completion exclusions](quest-helper-728-community-completions.md) lists 21 community-completed quests whose full manual playthroughs must not be repeated. Preserve their caveats; keep that evidence separate from the independently audited routes below. No active 106 job overlaps this F2P/supplemental list.
+
+Twenty-six quests have accepted scoped main-route completion evidence: **26 / 106 active quests (24.53%)** (q003, q006, q008, q010, q011, q017, q019, q026, q030, q040, q041, q048, q055, q063, q067, q072, q074, q080, q084, q085, q088, q090, q099, q105, q117, q118). These results include declared ordinary setup/prerequisites; they do not claim those fixtures as quest progress. q067, q072, q084, q099 and q117 used declared combat aids and are not unassisted-combat evidence. Each proof remains scoped to its recorded route and limitations.
 
 The original inventory remains 128 quests. On 23 October 2026 the user deferred 22
-long or complex quests; all 25 accepted routes are within the retained 106. Against
-the original inventory the count is 25/128 (19.53%). Deferral changes scope,
+long or complex quests; all 26 accepted routes are within the retained 106. Against
+the original inventory the count is 26/128 (20.31%). Deferral changes scope,
 not the number of completed routes. The [coverage tracker](quest-helper-728-coverage.md)
 lists the exact active and deferred sets and preserves their prior evidence.
+
+### q118 — Tribal Totem
+
+- **Revision/route:** preserved fresh stage0 prefix in epoch26; real address-label delivery/Cromperty teleport, actual KURT interface/buttons and investigated stairs under epoch27, then chest and Kangai hand-in under epoch28. Tribal source `fbc37c84ba86a45ed0194fcb80014cdb1e48e3ad24ca74ed419c78455e13c32e`; the real chest required Tourist Trap’s shared-owner fix `e74305093359070ac00ae9d2d82ce0818b162b5b2d423f69da40edf0b98aae56`. No target-state or quest-item grants.
+- **Reward/closeout:** actual2709 Open→2710 Search gave one totem1857; normal Kangai hand-in consumed it. Stage200=5, QP+1, Thieving+1,775 and five swordfish; repeat dialogue and same-account relog retained values, then final logout/offline. A declared ordinary glory teleport consumed one charge.
+- **Root audit/scope:** actual epoch28 raw SHA `ba8065ca54083652c08090bd34cbbc16ce7cd2314fab7d163b8a31aadbe0312c` and read-only SQLite rows2060–2062 agree. Prefix and puzzle raw hashes are retained in `/tmp/tsps-728/native/jobs/q118-epoch28-acceptance.md`; sanitized root artifact `/tmp/tsps-728/native/evidence/q118-root-accepted-20261025.json`. One linked main-route proof, not fresh replay, alternate/recovery or visual-overlay certification.
 
 ### q099 — A Ruff Situation
 
@@ -28,6 +36,8 @@ lists the exact active and deferred sets and preserves their prior evidence.
 - **Natural route/reward:** Talia, Gertrude, guard/den, actual dog routes, three puppies, Picklenose trade and the outlaws completed normally. Grain was picked; bear fur was dropped by a real grizzly and picked up, then crafted into the stuffed dog. Stage15889=120; QP +1 and Crafting +1,000 XP. Combat aid followed real encounters/player hits; not unassisted-combat proof.
 - **Audit/persistence:** Talia follow-up did not repeat rewards; same-account relog retained stage120/QP1/XP13,035,431 and no quest puppies/stuffed dog; final normal logout confirmed offline. Root checked raw SHA `c88b1d0d6ea8cc95bcd9a92329b695d62907630e488b8ff2415a4ef498450ac2`, relog SHA `ce77ee8e227e9792e21ae44e14752e70d0d831d6fe4a1a807cc048a182b59531`, and read-only saves2037–2039. Sanitized artifact `/tmp/tsps-728/native/evidence/q099-root-accepted-20261025.json`.
 - **Limit:** Baraek's paid-fur dialogue gave neither fur nor payment on this runtime. The accepted route used the natural grizzly alternative; it does not certify that shop route, all recovery or visual overlay parity. The shared Baraek transaction fix has its own follow-up PR and live delta check.
+
+- **Paid-fur delta closed:** epoch27 loaded Baraek source `23281d84b322381ec6e129777cee69572d8f60a3d2765a4e2d2196b77a18ddac`. Normal purchase changed coins100→80 and Fur0→1; saved quest stage120/QP1/Crafting13,035,431 stayed unchanged and logout confirmed offline. Root independently checked raw SHA `6e56e2f63b78ee025c78ca91ac6cd4445fbc79d89b979958469d5a5dfb539992`; sanitized audit `/tmp/tsps-728/native/evidence/baraek-root-accepted-20261025.json`. This adds branch evidence, not another quest completion.
 
 ### q080 — Murder Mystery
 

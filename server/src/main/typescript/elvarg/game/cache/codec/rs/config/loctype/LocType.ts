@@ -15,6 +15,8 @@ export class LocType extends Type {
     types?: LocModelType[];
 
     name: string;
+    /** Generic loc category (cache opcode 61), used by category-based content targets. */
+    category: number = -1;
     desc?: string;
 
     recolorFrom!: number[];
@@ -329,7 +331,7 @@ export class LocType extends Type {
         } else if (opcode === 60) {
             this.mapFunctionId = buffer.readUnsignedShort();
         } else if (opcode === 61) {
-            buffer.readUnsignedShort();
+            this.category = buffer.readUnsignedShort();
         } else if (opcode === 62) {
             this.isRotated = true;
         } else if (opcode === 64) {

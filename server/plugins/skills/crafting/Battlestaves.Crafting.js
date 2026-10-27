@@ -39,6 +39,7 @@ function makeStaff(player, recipe) {
   inventory.deleteNumber(I.BATTLESTAFF, 1);
   inventory.addItem(new Item(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp);
   return true;
 }
 
@@ -49,7 +50,7 @@ function startStaves(player, recipe, amount) {
     return;
   }
   Shared.startMaking(player, {
-    amount, startTick: 0, firstTick: 3, interval: 2, animation: data().animation,
+    amount, startTick: 0, firstTick: 3, interval: 2, animation: data().animation, kind: "battlestaves",
     has: () => hasMaterials(player, recipe),
     make: () => makeStaff(player, recipe),
   });

@@ -13,6 +13,7 @@ const Cycle = require("./Cycle.MoonsOfPeril");
 const Curses = require("./Curses.MoonsOfPeril");
 const { Fight } = require("./Fight.MoonsOfPeril");
 const Kill = require("./Kill.MoonsOfPeril");
+const Scoreboard = require("./Scoreboard.MoonsOfPeril");
 
 const QUEST = "perilous_moons";
 const ALREADY_SUBDUED = (name) => `You have already subdued the ${name}. Claim your reward from the Lunar Chest first.`;
@@ -212,6 +213,7 @@ function recoverOnLogin({ player }) {
 
 function endOnDeath({ player }) {
   const arena = arenaOfPlayer(player);
+  if (arena) Scoreboard.died(player);
   arena?.fights.get(player)?.end();
 }
 

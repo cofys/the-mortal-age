@@ -1,5 +1,5 @@
 {
-  "underwater": { "box": [3712, 3775, 10240, 10367], "plane": 1 },
+  "underwater": { "box": [3712, 3839, 10240, 10367], "plane": 1 },
   "arrival": [3732, 10281, 1],
   "surface": [3769, 3898, 0],
   "destinations": {

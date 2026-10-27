@@ -1,17 +1,19 @@
 /**
  * Scurrius' fight (Wiki: Scurrius, Scurrius/Strategies), timed and animated from the rsprox
  * captures (docs/scurrius.md):
- * - phase one: tail swipes in melee, one attack in five a stomp that drops rubble, and only
+ * - phase one: tail swipes in melee, three attacks in ten a stomp that drops rubble, and only
  *   stomps while his target is out of reach, walking in on them (every 4 ticks);
- * - at 80% he walks to one of the three food piles and eats there: five heals of 5 or 10 per
- *   player in the room, about every six ticks, while he throws magic and fur balls, stomps and
- *   calls six giant rats; then back to melee;
- * - at 30% he walks to the middle of the room and keeps to magic, ranged, stomps and rats (every
- *   4 ticks), and goes back to eating if he heals above 30%;
+ * - at 80% he runs to one of the three food piles and eats there: three to five heals of 5 or
+ *   10 per player in the room, each just before an attack (every 6 or 7 ticks), while he throws
+ *   magic and fur balls, stomps and calls six giant rats; then he walks two tiles off, swipes
+ *   three to five times (no stomps) and goes back to the pile to eat again, until 30%;
+ * - at 30% he runs to the middle of the room and keeps to magic, ranged, stomps and rats (every
+ *   4 ticks), turning only to stomp at his target's tile, and goes back to eating if he heals
+ *   above 30%;
  * - the rubble: twelve tiles, one under each player, the rest anywhere on the floor, landing nine
  *   ticks after the stomp for 15-22 (solo) or 15-24 (public);
- * - the rats: at most twelve waves; any hit from a player kills one, and rat bone weapons hit
- *   them without an attack delay.
+ * - the rats: at most twelve waves, and none while his last ones live; any hit from a player
+ *   kills one, and rat bone weapons hit them without an attack delay.
  */
 const Common = require("./Common.Scurrius");
 
@@ -24,18 +26,43 @@ const ROCKFALL_MIN_HIT = 15;
 
 const FEED_THRESHOLD = 0.8;
 const ENRAGE_THRESHOLD = 0.3;
-/** Wiki: five heals of 5 or 10 per player in the room. Captured: about every six ticks. */
-const FEED_HEALS = 5;
-const FEED_HEAL_TICKS = 6;
-const FEED_HEAL_AMOUNTS = Object.freeze([5, 10]);
-/** Captured: the eating idle in between, twice per heal. */
-const FEED_EAT_TICKS = 3;
+/**
+ * Wiki: heals of 5 or 10 per player in the room. Captured (live, rev 241): three to five heals a
+ * round at the pile, each on his attack's tick, and three to five tail swipes between rounds.
+ */
+const FEED_HEALS = Object.freeze([3, 5]);
+/**
+ * Wiki: 5 or 10 per player. Captured (live, 42 solo heals): 10 in 26 of the 38 taken with none of
+ * his rats alive (about 2:1), and 5 in all 4 taken while some were (Wiki: the rats get in the way
+ * of his healing; a small sample).
+ */
+const FEED_HEAL_AMOUNTS = Object.freeze([[10, 2], [5, 1]]);
+const FEED_HEAL_WITH_RATS = 5;
+const MELEE_BETWEEN_ROUNDS = Object.freeze([3, 5]);
+/** Captured: a round's last turn is a stomp in 3 rounds of 10, otherwise he just gets up. */
+const LAST_TURN_STOMP_CHANCE = Object.freeze([3, 10]);
+/** Captured: back to the same pile for the next round in 5 of 6 kills. */
+const SAME_PILE_CHANCE = Object.freeze([5, 6]);
+/**
+ * Captured (11 of 11 rounds): getting up, he walks two tiles in a straight line, any way but
+ * towards the pile, a tick after the eating idle ends (or as his last stomp finishes).
+ */
+const STEP_OFF_TILES = 2;
+const STEP_OFF_TICKS = 1;
+const STEP_OFF_AFTER_STOMP_TICKS = 5;
+const CARDINALS = Object.freeze([[0, 1], [1, 0], [0, -1], [-1, 0]]);
+/** Captured: his next round starts about two ticks after the last swing. */
+const BACK_TO_EATING_TICKS = 2;
+/** Captured: his first turn comes two ticks after he reaches the pile or the middle. */
+const FIRST_TURN_TICKS = 2;
 /** Captured heal hitsplat. */
 const HEAL_SPLAT = Object.freeze({ mine: 6, others: 6 });
 
-/** Captured attack speeds: 4 ticks, but about 6 while he eats. */
+/** Captured attack speeds: 4 ticks, but 6 or 7 while he eats. */
 const ATTACK_SPEED = 4;
-const FEEDING_ATTACK_SPEED = 6;
+const FEEDING_ATTACK_SPEEDS = Object.freeze([6, 7]);
+/** Captured: he runs (two tiles a tick) to the food and to the middle. */
+const RUN_STEPS = 2;
 /** He keeps his place while eating and in the middle; the room is 17 tiles across. */
 const RANGED_DISTANCE = 20;
 
@@ -53,8 +80,9 @@ const STOMP_SOUND_RANGE = 9;
 const SUMMON_SOUND_DELAY = 90;
 
 /**
- * Wiki: six rats a wave, twelve waves at most. Captured: they appear two ticks into the call, and
- * calls are at least 41 ticks apart (27 gaps between calls, 41 to 190).
+ * Wiki: six rats a wave, twelve waves at most. Captured: they appear two ticks into the call,
+ * calls are at least 41 ticks apart (27 gaps between calls, 41 to 190), and he never calls while
+ * any of his rats live (live, rev 241: 6 calls, all with none left; none in 27 turns with some).
  */
 const RATS_PER_WAVE = 6;
 const RAT_WAVE_LIMIT = 12;
@@ -66,15 +94,34 @@ const KEEP_FACING_FLAG = "combat:keep-facing";
 /** Generic engine flag: keeps walking in on the target while attacking from range. */
 const CLOSE_IN_FLAG = "combat:close-in";
 
-/** Captured projectile: a fixed 30-120 cycle flight, so the hit lands 4 ticks after the cast. */
-const PROJECTILE = Object.freeze({ start: 30, end: 120, startHeight: 200, endHeight: 100, angle: 40, progress: 0 });
-const DISTANT_HIT_DELAY = 3;
+/**
+ * Captured projectile: a fixed 30-120 cycle flight, so the hit lands 4 ticks after the cast. The
+ * heights are the packet's 50 and 25 (rsprox prints map_projanim_v2 heights four times over:
+ * 200 and 100). Live names no source actor, so the flight starts from its tile, not his model.
+ */
+const PROJECTILE = Object.freeze({ start: 30, end: 120, startHeight: 50, endHeight: 25, angle: 40, progress: 0 });
+/**
+ * Captured: the projectile leaves from a back corner of his 3x3 body, on his left for ranged and
+ * on his right for magic, relative to where he faces (every cast at a pile, all three piles).
+ */
+const HAND_ANGLES = Object.freeze({ ranged: (3 * Math.PI) / 4, magic: -(3 * Math.PI) / 4 });
+/**
+ * Captured: the hitsplat and impact come 4 ticks after the cast, as the flight ends (live: 47 of
+ * 52 casts; the other 5 never landed, as he died first). An NPC's hit on a player lands on the attack's tick plus this delay (melee,
+ * delay 0, lands on the swing's tick, as live).
+ */
+const DISTANT_HIT_DELAY = 4;
+/** Captured on the player: a missed bolt splashes (failedspell_impact) with sound 227. */
+const SPLASH_GFX = 85;
+const SPLASH_SOUND = 227;
 
 /**
- * Captured share of each attack per phase (rsprox, 35 recordings). In phase one, beside his
- * target: tail swipe 95, stomp 21 (solo instances); out of reach he stomps (46 to 11).
+ * Captured share of each attack per phase. In phase one, beside his target: tail swipe 24, stomp
+ * 10 (live, rev 241; 95 to 21 on Leagues); out of reach he stomps (46 to 11). Eating: magic 18,
+ * ranged 18, stomp 7, rats 2. Below 30%: magic 8, ranged 8, stomp 13, rats 4. Between rounds at
+ * the pile he only swipes (26 of 26).
  */
-const PHASE_ONE = Object.freeze([["melee", 4], ["stomp", 1]]);
+const PHASE_ONE = Object.freeze([["melee", 7], ["stomp", 3]]);
 const FEEDING = Object.freeze([["magic", 4], ["ranged", 4], ["stomp", 2], ["summon", 1]]);
 const ENRAGED = Object.freeze([["magic", 2], ["ranged", 2], ["stomp", 3], ["summon", 1]]);
 
@@ -88,7 +135,7 @@ const states = new WeakMap();
 function stateOf(npc) {
   let state = states.get(npc);
   if (!state) {
-    state = { phase: "combat", feeding: null, fed: false, ratWaves: 0, walking: null };
+    state = { phase: "combat", feeding: null, spot: null, swingsLeft: 0, ratWaves: 0, walking: null };
     states.set(npc, state);
     npc.setFlag?.(CLOSE_IN_FLAG, true);
   }
@@ -124,11 +171,18 @@ function weighted(choices, allowed = () => true) {
   return pool[0][0];
 }
 
+/** Whether any rat from his calls is still alive. */
+function ratsAlive(state) {
+  return (state.rats ?? []).some((rat) => rat.isRegistered?.() !== false && rat.getHitpoints() > 0);
+}
+
 function pickAction(state, now = core.World.getProcessCycle(), beside = true) {
   const canSummon = (name) => name !== "summon"
-    || (state.ratWaves < RAT_WAVE_LIMIT && now - (state.lastCallAt ?? -Infinity) >= RAT_CALL_COOLDOWN_TICKS);
+    || (state.ratWaves < RAT_WAVE_LIMIT && now - (state.lastCallAt ?? -Infinity) >= RAT_CALL_COOLDOWN_TICKS
+      && !ratsAlive(state));
   if (state.phase === "feeding") return weighted(FEEDING, canSummon);
   if (state.phase === "enraged") return weighted(ENRAGED, canSummon);
+  if (state.phase === "between") return "melee";
   return beside ? weighted(PHASE_ONE) : "stomp";
 }
 
@@ -147,11 +201,20 @@ function targetOf(npc) {
   return npc.getCombat?.().getTarget?.() ?? null;
 }
 
-function sendProjectile(npc, target, projectileId) {
+/** The tile of his body a ranged or magic attack leaves from, turned to face `toward`. */
+function handTile(npc, toward, kind) {
+  const centre = core.Projectile.centreOf(npc);
+  const facing = Math.atan2(toward.getY() - centre.getY(), toward.getX() - centre.getX());
+  const angle = facing + HAND_ANGLES[kind];
+  const step = (value) => Math.max(-1, Math.min(1, Math.round(Math.SQRT2 * value)));
+  return centre.transform(step(Math.cos(angle)), step(Math.sin(angle)));
+}
+
+function sendProjectile(npc, target, projectileId, kind, toward = target.getLocation()) {
   new core.Projectile(
-    core.Projectile.centreOf(npc), target.getLocation(), target, projectileId, PROJECTILE.start,
+    handTile(npc, toward, kind), target.getLocation(), target, projectileId, PROJECTILE.start,
     PROJECTILE.end, PROJECTILE.startHeight, PROJECTILE.endHeight, npc.getPrivateArea(),
-  ).withSource(npc).withAngle(PROJECTILE.angle).withProgress(PROJECTILE.progress).sendProjectile();
+  ).withAngle(PROJECTILE.angle).withProgress(PROJECTILE.progress).sendProjectile();
 }
 
 function areaSound(npc, soundId, [x, y, z], delay, range) {
@@ -205,6 +268,7 @@ function summonRats(npc, state) {
   Common.later(RAT_SPAWN_TICKS, () => {
     if (npc.getHitpoints() <= 0 || !npc.isRegistered?.()) return;
     const players = Common.playersInRoom(npc);
+    state.rats = [];
     for (let i = 0; i < RATS_PER_WAVE; i++) {
       const tile = floorTile(npc);
       const rat = core.NPC.create(Common.RAT_ID, tile);
@@ -212,6 +276,7 @@ function summonRats(npc, state) {
       rat.setMultiCombat?.(true);
       if (area) area.add(rat);
       core.World.getAddNPCQueue().push(rat);
+      state.rats.push(rat);
       const target = players[i % Math.max(1, players.length)];
       if (target) rat.getCombat().attack(target);
     }
@@ -223,15 +288,16 @@ function stopWalk(npc, state) {
   npc.setScriptedMovement(false);
   npc.removeFlag(core.NPC.WALK_THROUGH_ENTITIES_FLAG);
   npc.removeFlag(NO_RETALIATE_FLAG);
+  npc.setMovementSteps?.(1);
 }
 
 /**
- * Walks him to `destination`. Combat pauses while the walk is scripted (Combat.preMovementProcess).
+ * Runs (or walks, one step a tick) him to `destination`. Combat pauses while the walk is scripted (Combat.preMovementProcess).
  * Wiki: nothing holds him on the way (he breaks free of binds), so players in his path don't
  * either, and hits don't stop him to turn on the attacker (captured: he faces where he walks);
  * a walk that stops getting anywhere is given up rather than freezing the boss.
  */
-function walkTo(npc, state, destination, onArrive) {
+function walkTo(npc, state, destination, onArrive, steps = RUN_STEPS) {
   const { PathFinder, Task, TaskManager } = core;
   const target = destination.clone();
   // The scripted walk clears his fight; he picks it back up where he arrives.
@@ -241,6 +307,7 @@ function walkTo(npc, state, destination, onArrive) {
   npc.setScriptedMovement(true);
   npc.setFlag(core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
   npc.setFlag(NO_RETALIATE_FLAG, true);
+  npc.setMovementSteps?.(steps);
   npc.removeFlag(KEEP_FACING_FLAG);
   // He keeps his place where he arrives; only phase one and two close in again.
   npc.removeFlag(CLOSE_IN_FLAG);
@@ -250,6 +317,8 @@ function walkTo(npc, state, destination, onArrive) {
   PathFinder.calculateWalkRoute(npc, target.getX(), target.getY());
   let failedRepaths = 0;
   let last = npc.getLocation().clone();
+  // The way his last step went: he faces it where he stops.
+  let heading = null;
   TaskManager.submit(new (class extends Task {
     constructor() {
       super(1, npc, false);
@@ -271,6 +340,7 @@ function walkTo(npc, state, destination, onArrive) {
       if (npc.getInteractingMobile() != null) npc.setMobileInteraction(null);
       const arrived = npc.getLocation().equals(target);
       const moved = !npc.getLocation().equals(last);
+      if (moved) heading = [Math.sign(npc.getLocation().getX() - last.getX()), Math.sign(npc.getLocation().getY() - last.getY())];
       last = npc.getLocation().clone();
       if (!arrived && moved) {
         failedRepaths = 0;
@@ -287,7 +357,7 @@ function walkTo(npc, state, destination, onArrive) {
       movement.reset();
       stopWalk(npc, state);
       this.stop();
-      onArrive();
+      onArrive(heading);
       reengage(npc, opponent);
     }
   })());
@@ -308,57 +378,87 @@ function facePile(npc, spot) {
   npc.setPositionToFace(Common.location(spot.face));
 }
 
-/** Five heals, about every six ticks, with the eating animation in between. */
+const between = ([min, max]) => core.Misc.randomInclusive(min, max);
+const chance = ([times, outOf]) => core.Misc.randomInclusive(1, outOf) <= times;
+
+/**
+ * A round at the pile: the eating idle as his base animation (captured: a `bas` change, set on
+ * arrival and cleared as he gets up), and three to five heals, each taken on an attack's turn.
+ */
 function startFeeding(npc, state, spot) {
-  const feeding = { heals: 0, ticks: 0, spot };
   state.phase = "feeding";
-  state.feeding = feeding;
+  state.spot = spot;
+  state.feeding = { heals: 0, of: between(FEED_HEALS) };
   facePile(npc, spot);
-  npc.performAnimation(new core.Animation(ANIM.feedingIdle));
-  core.TaskManager.submit(new (class extends core.Task {
-    constructor() {
-      super(1, npc, false);
-    }
-    execute() {
-      if (state.feeding !== feeding || !npc.isRegistered?.() || npc.getHitpoints() <= 0) {
-        this.stop();
-        return;
-      }
-      feeding.ticks++;
-      if (feeding.ticks % FEED_HEAL_TICKS === 0) {
-        heal(npc);
-        // Captured: his facing is sent again with each heal.
-        npc.setPositionToFace(Common.location(spot.face));
-        if (++feeding.heals >= FEED_HEALS) {
-          finishFeeding(npc, state);
-          this.stop();
-          return;
-        }
-      }
-      if (feeding.ticks % FEED_EAT_TICKS === 0) npc.performAnimation(new core.Animation(ANIM.feedingIdle));
-    }
-  })());
+  npc.setBaseAnimations({ idle: ANIM.feedingIdle });
+  npc.getCombat().setAttackDelay(FIRST_TURN_TICKS);
 }
 
 function heal(npc) {
   const players = Math.max(1, Common.playersInRoom(npc).length);
-  const amount = FEED_HEAL_AMOUNTS[core.Misc.randomInclusive(0, FEED_HEAL_AMOUNTS.length - 1)] * players;
+  const each = ratsAlive(stateOf(npc)) ? FEED_HEAL_WITH_RATS : weighted(FEED_HEAL_AMOUNTS);
+  const amount = each * players;
   npc.heal(amount);
   npc.showHitsplat(amount, HEAL_SPLAT);
 }
 
-function finishFeeding(npc, state) {
+/**
+ * He gets up from the pile and walks two tiles off it; three to five tail swipes later he goes
+ * back to eat. `stomped`: his last turn was a stomp, which he finishes first.
+ */
+function finishFeeding(npc, state, stomped = false) {
   state.feeding = null;
   npc.removeFlag(KEEP_FACING_FLAG);
+  npc.setBaseAnimations(null);
   if (state.phase !== "feeding") return;
-  state.phase = "combat";
-  npc.setFlag(CLOSE_IN_FLAG, true);
+  state.phase = "between";
+  state.swingsLeft = between(MELEE_BETWEEN_ROUNDS);
+  const delay = stomped ? STEP_OFF_AFTER_STOMP_TICKS : STEP_OFF_TICKS;
+  // No swing before he has walked off.
+  npc.getCombat().setAttackDelay(delay + 1);
+  const spot = state.spot;
+  Common.later(delay, () => {
+    if (state.phase === "between" && !state.walking && npc.getHitpoints() > 0 && npc.isRegistered?.()) stepOff(npc, state, spot);
+  }, npc);
+}
+
+/** Whether his whole body fits on the floor with its south-west corner on `tile`. */
+function roomFor(npc, tile) {
+  const size = Math.max(1, npc.getSize?.() ?? 1);
+  for (let x = 0; x < size; x++) {
+    for (let y = 0; y < size; y++) {
+      const at = tile.transform(x, y);
+      if (!Common.within(Common.FLOOR, at) || core.RegionManager.blocked(at, npc.getPrivateArea())) return false;
+    }
+  }
+  return true;
+}
+
+/** Two tiles in a straight line, any way but towards the pile, at a walk. */
+function stepOff(npc, state, spot) {
+  const at = npc.getLocation();
+  const ways = CARDINALS
+    .filter(([dx, dy]) => dx !== spot.pile[0] || dy !== spot.pile[1])
+    .map(([dx, dy]) => at.transform(dx * STEP_OFF_TILES, dy * STEP_OFF_TILES))
+    .filter((tile) => roomFor(npc, tile));
+  if (ways.length === 0) return;
+  walkTo(npc, state, ways[core.Misc.randomInclusive(0, ways.length - 1)], () => {}, 1);
+}
+
+/** A swing between rounds; the last one sends him back to eat. */
+function swungBetweenRounds(npc, state) {
+  if (--state.swingsLeft > 0) return;
+  Common.later(BACK_TO_EATING_TICKS, () => {
+    if (state.phase === "between" && npc.getHitpoints() > 0 && npc.isRegistered?.()) goEat(npc, state);
+  }, npc);
 }
 
 function goEat(npc, state) {
   state.phase = "walking";
   const { FEEDING_SPOTS } = Common;
-  const spot = FEEDING_SPOTS[core.Misc.randomInclusive(0, FEEDING_SPOTS.length - 1)];
+  const spot = state.spot && chance(SAME_PILE_CHANCE)
+    ? state.spot
+    : FEEDING_SPOTS[core.Misc.randomInclusive(0, FEEDING_SPOTS.length - 1)];
   walkTo(npc, state, Common.location(spot.stand), () => {
     if (state.phase === "walking" && npc.getHitpoints() > 0) startFeeding(npc, state, spot);
   });
@@ -367,9 +467,18 @@ function goEat(npc, state) {
 function enrage(npc, state) {
   state.feeding = null;
   npc.removeFlag(KEEP_FACING_FLAG);
+  npc.setBaseAnimations(null);
   state.phase = "walking-centre";
-  walkTo(npc, state, Common.location(Common.CENTRE_TILE), () => {
-    if (state.phase === "walking-centre") state.phase = "enraged";
+  walkTo(npc, state, Common.location(Common.CENTRE_TILE), (heading) => {
+    if (state.phase !== "walking-centre") return;
+    state.phase = "enraged";
+    // Captured: in the middle he never turns to his target; he faces the way he came in until a
+    // stomp turns him to his target's tile.
+    npc.setFlag(KEEP_FACING_FLAG, true);
+    npc.setMobileInteraction(null);
+    const centre = core.Projectile.centreOf(npc);
+    state.facing = heading ? centre.transform(heading[0], heading[1]) : null;
+    npc.getCombat().setAttackDelay(FIRST_TURN_TICKS);
   });
 }
 
@@ -384,14 +493,35 @@ function advancePhase(npc) {
   }
   // Wiki: healed above 30% in the middle, he goes back to eating.
   if (state.phase === "enraged") {
-    state.phase = "combat";
     goEat(npc, state);
     return;
   }
-  if (state.phase === "combat" && ratio <= FEED_THRESHOLD && !state.fed) {
-    state.fed = true;
-    goEat(npc, state);
+  if (state.phase === "combat" && ratio <= FEED_THRESHOLD) goEat(npc, state);
+}
+
+/**
+ * His turn at the pile: a heal, then an attack, until the round's heals are done; the turn after
+ * the last heal he gets up, sometimes with a stomp.
+ */
+function feedingTurn(npc, state) {
+  const feeding = state.feeding;
+  if (feeding.heals >= feeding.of) {
+    const stomped = chance(LAST_TURN_STOMP_CHANCE);
+    finishFeeding(npc, state, stomped);
+    return stomped ? "stomp" : "none";
   }
+  feeding.heals++;
+  heal(npc);
+  // Captured: his facing is sent again with each heal.
+  npc.setPositionToFace(Common.location(state.spot.face));
+  return pickAction(state);
+}
+
+/** Where he faces for a cast: the pile while he eats, his last turn in the middle, otherwise his target. */
+function facingFor(state, target) {
+  if (state.phase === "feeding" && state.spot) return Common.location(state.spot.face);
+  if (state.phase === "enraged" && state.facing) return state.facing;
+  return target.getLocation();
 }
 
 function trackPhase(event) {
@@ -435,7 +565,7 @@ function defineCombatMethod() {
       this.npc = null;
     }
 
-    /** In phase one and two, melee beside his target; out of reach, the stomp works from range. */
+    /** In phase one, melee beside his target; out of reach, the stomp works from range. */
     type() {
       const npc = this.npc;
       if (npc && stateOf(npc).phase === "combat") return besideTarget(npc, targetOf(npc)) ? CombatType.MELEE : CombatType.RANGED;
@@ -443,8 +573,9 @@ function defineCombatMethod() {
     }
 
     /**
-     * Phase one and two: melee beside his target, so he steps round to an edge as usual; further
-     * away he stomps, closing in as he does. Eating and in the middle he keeps his place.
+     * Phase one: melee beside his target, so he steps round to an edge as usual; further away he
+     * stomps, closing in as he does. Between rounds at the pile he walks in to swipe. Eating and
+     * in the middle he keeps his place.
      */
     attackDistance(character) {
       this.npc = character;
@@ -454,7 +585,7 @@ function defineCombatMethod() {
     }
 
     attackSpeed(character) {
-      return stateOf(character).phase === "feeding" ? FEEDING_ATTACK_SPEED : ATTACK_SPEED;
+      return stateOf(character).phase === "feeding" ? between(FEEDING_ATTACK_SPEEDS) : ATTACK_SPEED;
     }
 
     start(character, target) {
@@ -468,19 +599,26 @@ function defineCombatMethod() {
         return;
       }
       const feeding = state.phase === "feeding";
-      this.action = pickAction(state, core.World.getProcessCycle(), besideTarget(character, target));
+      this.action = feeding ? feedingTurn(character, state) : pickAction(state, core.World.getProcessCycle(), besideTarget(character, target));
+      if (this.action === "none") return;
       if (this.action === "melee") {
         character.performAnimation(new Animation(ANIM.melee));
+        if (state.phase === "between") swungBetweenRounds(character, state);
         return;
       }
       if (this.action === "stomp") {
         character.performAnimation(new Animation(feeding ? ANIM.feedingStomp : ANIM.stomp));
+        // Captured: in the middle a stomp is his only turn, to his target's tile.
+        if (state.phase === "enraged") {
+          state.facing = target.getLocation().clone();
+          character.setPositionToFace(state.facing);
+        }
         stomp(character);
         return;
       }
       if (this.action === "summon") {
         character.performAnimation(new Animation(feeding ? ANIM.feedingSummon : ANIM.enragedSummon));
-        if (!feeding) areaSound(character, SOUND.enragedSummon, Common.CENTRE_TILE, SUMMON_SOUND_DELAY, STOMP_SOUND_RANGE);
+        areaSound(character, SOUND.summon, Common.CENTRE_TILE, SUMMON_SOUND_DELAY, STOMP_SOUND_RANGE);
         summonRats(character, state);
         return;
       }
@@ -488,14 +626,14 @@ function defineCombatMethod() {
       if (this.action === "ranged") {
         this.stance = CombatType.RANGED;
         character.performAnimation(new Animation(feeding ? ANIM.feedingRanged : ANIM.ranged));
-        sendProjectile(character, target, GFX.rangedProjectile);
+        sendProjectile(character, target, GFX.rangedProjectile, "ranged", facingFor(state, target));
         sender?.sendSound(SOUND.ranged, 1, 0);
         return;
       }
       this.stance = CombatType.MAGIC;
       character.performAnimation(new Animation(feeding ? ANIM.feedingMagic : ANIM.magic));
       character.performGraphic(new Graphic(feeding ? GFX.feedingMagicCast : GFX.magicCast));
-      sendProjectile(character, target, GFX.magicProjectile);
+      sendProjectile(character, target, GFX.magicProjectile, "magic", facingFor(state, target));
       sender?.sendSound(SOUND.magic, 1, 0);
     }
 
@@ -509,11 +647,20 @@ function defineCombatMethod() {
       return [hit];
     }
 
+    /** Captured on the player, at height 100: the fur ball's impact, or the bolt's (a splash on a miss). */
     handleAfterHitEffects(hit) {
       const target = hit.getTarget();
       if (!target.isPlayer()) return;
-      if (hit.getCombatType() === CombatType.RANGED) target.performGraphic(new Graphic(GFX.rangedImpact));
-      else if (hit.getCombatType() === CombatType.MAGIC) target.performGraphic(new Graphic(GFX.magicImpact));
+      const high = core.GraphicHeight.HIGH;
+      const sender = target.getPacketSender();
+      if (hit.getCombatType() === CombatType.RANGED) {
+        target.performGraphic(new Graphic(GFX.rangedImpact, 0, high));
+        sender.sendSound(SOUND.rangedImpact, 1, 0);
+      } else if (hit.getCombatType() === CombatType.MAGIC) {
+        const landed = hit.isAccurate();
+        target.performGraphic(new Graphic(landed ? GFX.magicImpact : SPLASH_GFX, 0, high));
+        sender.sendSound(landed ? SOUND.magicImpact : SPLASH_SOUND, 1, 0);
+      }
     }
   };
 }
@@ -534,7 +681,8 @@ module.exports = {
   advancePhase,
   _test: {
     SOLO_MAX_HITS, PUBLIC_MAX_HITS, PHASE_ONE, FEEDING, ENRAGED, RAT_WAVE_LIMIT, ROCKFALL_TILES,
-    RAT_CALL_COOLDOWN_TICKS, pickAction, rockfallTiles, stomp, summonRats, startFeeding, heal, goEat, enrage, oneShotRat,
-    removeRatAttackDelay, defineCombatMethod, maxHitsFor,
+    RAT_CALL_COOLDOWN_TICKS, FEED_HEALS, MELEE_BETWEEN_ROUNDS, PROJECTILE, pickAction, rockfallTiles, stomp, summonRats,
+    FEED_HEAL_AMOUNTS, DISTANT_HIT_DELAY, startFeeding, feedingTurn, finishFeeding, stepOff, ratsAlive, facingFor, heal, goEat, enrage, handTile, oneShotRat, removeRatAttackDelay,
+    defineCombatMethod, maxHitsFor,
   },
 };

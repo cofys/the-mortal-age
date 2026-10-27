@@ -4,8 +4,8 @@
  * Puro-Puro itself: per-tick wheat pushes for players inside, cancelled when they leave,
  * and a logout inside moved to the entry field so the saved position is outside.
  * No temporary NPCs or objects are spawned by this plugin, so there is nothing else to
- * clean up on leave. Out of scope, left to a later pass: the 35 2-minute spawn points +
- * 51 fixed respawns network, and the imp defenders (npc 5738) freeing jarred implings.
+ * clean up on leave. The roaming spawn points are Roaming.ImpetuousImpulses.js. Out of scope,
+ * left to a later pass: the imp defenders (npc 5738) freeing jarred implings.
  */
 const Entry = require("./Entry.ImpetuousImpulses");
 const Wheat = require("./Wheat.ImpetuousImpulses");

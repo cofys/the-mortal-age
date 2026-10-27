@@ -7,21 +7,12 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type MouseEvent } from "react";
 
 import { NavigationButton } from "@runelite/client/ui/NavigationButton";
+import { imageIcon } from "@runelite/client/ui/runeliteImages";
 import type { GuidePlugin } from "./GuidePlugin";
 import { cssColor, questNameColor, requirementColor, visibleRows, type QuestRow } from "./GuideView";
-import { requirementIcon } from "./QuestInfo";
+import { guideImage, requirementIcon } from "./QuestInfo";
 
 type Menu = { x: number; y: number; uri: string } | undefined;
-
-/** A quest scroll with ticks, drawn like the other sidebar icons. */
-function GuideIcon({ label }: { label: string }): JSX.Element {
-    return (
-        <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
-            <path d="M6.5 3.5h11a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z" />
-            <path d="M7.5 8l1.2 1.2 2.1-2.4M7.5 13l1.2 1.2 2.1-2.4M13 8h4M13 13h4M8 17.5h9" />
-        </svg>
-    );
-}
 
 /** RuneLite's LinkBrowser.browse. */
 function openWiki(uri: string): void {
@@ -141,7 +132,7 @@ export function GuidePanel({ plugin }: { plugin: GuidePlugin }): JSX.Element {
 export function createGuideNavigationButton(plugin: GuidePlugin): NavigationButton {
     return NavigationButton.builder()
         .tooltip("Optimal Quest Guide")
-        .icon(GuideIcon)
+        .icon(imageIcon(guideImage("panel_icon.png")))
         .priority(7)
         .panel(() => <GuidePanel plugin={plugin} />)
         .build();

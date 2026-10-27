@@ -11,22 +11,6 @@
       "args": { "shopId": 2 }
     }
   },
-  "315": {
-    "first_click": {
-      "method": "core.shops.open",
-      "args": { "shopId": 2 }
-    },
-    "second_click": {
-      "method": "core.shops.open",
-      "args": { "shopId": 2 }
-    }
-  },
-  "316": {
-    "second_click": {
-      "method": "core.shops.open",
-      "args": { "shopId": 2 }
-    }
-  },
   "506": {
     "first_click": {
       "method": "core.shops.open",

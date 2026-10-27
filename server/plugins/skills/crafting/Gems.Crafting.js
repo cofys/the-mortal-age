@@ -88,6 +88,7 @@ function cutOne(player, gem) {
   }
   inventory.addItem(new Item(gem.cut, 1));
   Shared.addCraftingXp(player, gem.xp);
+  Shared.produced(player, gem.cut, 1, gem.xp);
   player.sendMessage(`You cut the ${gemName(gem)}.`);
   if (jewellers && inventory.contains(gem.uncut) && Math.random() < JEWELLERS_CHISEL_DOUBLE_CHANCE) {
     inventory.deleteNumber(gem.uncut, 1);
@@ -115,7 +116,7 @@ function cutGem(event) {
     items: [{ itemId: gem.uncut }],
     maxAmount: player.getInventory().getAmount(gem.uncut),
     choose: (_item, amount) => Shared.startMaking(player, {
-      amount, startTick: null, firstTick: 1, interval: 2, animation: gem.animation, sound: data().cuttingSound,
+      amount, startTick: null, firstTick: 1, interval: 2, animation: gem.animation, kind: "gems", sound: data().cuttingSound,
       has: () => player.getInventory().contains(gem.uncut) && chiselOf(player) !== null,
       make: () => cutOne(player, gem),
     }),
@@ -129,6 +130,7 @@ function cutAmethyst(player, recipe) {
   inventory.deleteNumber(I.AMETHYST, 1);
   inventory.addItem(new Item(recipe.itemId, recipe.amount));
   Shared.addCraftingXp(player, recipe.xp);
+  Shared.produced(player, recipe.itemId, recipe.amount, recipe.xp);
   return true;
 }
 
@@ -140,7 +142,7 @@ function startAmethyst(player, recipe, amount) {
     return;
   }
   Shared.startMaking(player, {
-    amount, startTick: null, firstTick: 1, interval: 2, animation: data().amethystAnimation,
+    amount, startTick: null, firstTick: 1, interval: 2, animation: data().amethystAnimation, kind: "amethyst",
     has: () => player.getInventory().contains(I.AMETHYST) && chiselOf(player) !== null,
     make: () => cutAmethyst(player, recipe),
   });
@@ -161,9 +163,18 @@ function handleAmethyst(event) {
   });
 }
 
+/** "crafting:cut-gem": the cut gem request.uncutId gives and its XP, for content that cuts as it mines (a league relic). */
+function answerCutGem(request) {
+  const gem = data().gems.get(request.uncutId);
+  if (!gem) return;
+  request.cutId = gem.cut;
+  request.xp = gem.xp;
+}
+
 module.exports = function attach(api) {
   api.onItemOnItem(cutGem, { noted: false });
   api.onItemOnItem(handleAmethyst, { noted: false });
+  api.onCustomEvent("crafting:cut-gem", answerCutGem);
 };
 
 module.exports.cutChance = cutChance;

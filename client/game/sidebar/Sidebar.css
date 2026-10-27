@@ -64,9 +64,19 @@
     --sidebar-panel-width: min(242px, calc(100vw - 52px));
 }
 
+/* RuneLite's 16x16 icons are tiny on a retina screen, so the icon strip is drawn half as big
+   again there: each icon pixel is then 3 device pixels, not 2. Panels keep RuneLite's size.
+   useSidebarMode.ts repeats the query and the scale. */
+@media (min-resolution: 2dppx) and (pointer: fine) {
+    .rl-sidebar:not(.mobile) {
+        --sidebar-rail-zoom: 1.5;
+    }
+}
+
 /* Icon strip */
 .rl-sidebar-rail {
     width: var(--sidebar-rail-width);
+    zoom: var(--sidebar-rail-zoom, 1);
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -103,6 +113,18 @@
     outline-offset: -1px;
 }
 
+.rl-sidebar-icon-svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    fill: none;
+    stroke: var(--rl-light-gray);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
+
 .rl-sidebar-icon-img {
     width: 16px;
     height: 16px;
@@ -130,7 +152,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    right: var(--sidebar-rail-width);
+    right: calc(var(--sidebar-rail-width) * var(--sidebar-rail-zoom, 1));
     box-shadow: -8px 0 20px var(--rl-shadow);
 }
 

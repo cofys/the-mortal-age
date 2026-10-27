@@ -762,10 +762,15 @@ function startNpcAnimationScanner(api, player, npcId, possibleAnimations) {
   next();
 }
 
+/** The character a name means on this world: the one every login here gets (the league character on a league world, docs/leagues.md). */
+function worldProfile() {
+  return GameConstants.WORLD_PROFILE;
+}
+
 function resolveSaveFilePathForUsername(username) {
   const persistence = GameConstants.PLAYER_PERSISTENCE;
   if (persistence && typeof persistence.resolveFilePath === "function") {
-    return persistence.resolveFilePath(username);
+    return persistence.resolveFilePath(username, worldProfile());
   }
   return null;
 }
@@ -1700,7 +1705,7 @@ module.exports = {
     api.registerCommand("mute", ({ player, raw, parts }) => {
       const targetName = commandTail(raw, parts);
       const target = World.getPlayerByName(targetName);
-      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName) && !target) {
+      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName, worldProfile()) && !target) {
         player.sendMessage(`Player ${targetName} does not exist.`);
       }
       return true;
@@ -1709,7 +1714,7 @@ module.exports = {
     api.registerCommand("unmute", ({ player, raw, parts }) => {
       const targetName = commandTail(raw, parts);
       const target = World.getPlayerByName(targetName);
-      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName) && !target) {
+      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName, worldProfile()) && !target) {
         player.sendMessage(`Player ${targetName} does not exist.`);
         return true;
       }
@@ -1744,7 +1749,7 @@ module.exports = {
     api.registerCommand("ban", ({ player, raw, parts }) => {
       const targetName = commandTail(raw, parts);
       const target = World.getPlayerByName(targetName);
-      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName) && !target) {
+      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName, worldProfile()) && !target) {
         player.sendMessage(`Player ${targetName} is not a valid online player.`);
         return true;
       }
@@ -1759,7 +1764,7 @@ module.exports = {
 
     api.registerCommand("unban", ({ player, raw, parts }) => {
       const targetName = commandTail(raw, parts);
-      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName)) {
+      if (!GameConstants.PLAYER_PERSISTENCE.exists(targetName, worldProfile())) {
         player.sendMessage(`Player ${targetName} is not online.`);
         return true;
       }

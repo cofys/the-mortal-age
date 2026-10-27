@@ -1,4 +1,3 @@
-// TODO: ported from xrsps-typescript; untested.
 module.exports = function registerExcaliburSpecialAttack(api) {
   const { CombatMethod, CombatSpecial, CombatType, ItemIdentifiers, Skill } = api.core;
 
@@ -22,7 +21,9 @@ module.exports = function registerExcaliburSpecialAttack(api) {
       }
       const skillManager = character.getAsPlayer().getSkillManager();
       const current = skillManager.getCurrentLevel(Skill.DEFENCE);
-      skillManager.setCurrentLevels(Skill.DEFENCE, Math.floor(current + DEFENCE_BOOST));
+      const cap = skillManager.getMaxLevel(Skill.DEFENCE) + DEFENCE_BOOST;
+      // Visible boosts do not stack; a stronger existing boost is preserved.
+      skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(current, Math.min(current + DEFENCE_BOOST, cap)));
     }
   }
 

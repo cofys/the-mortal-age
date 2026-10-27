@@ -18,6 +18,7 @@
  * in: underwater players are followed per map square, and one task visits only them.
  */
 const DATA = require("./data/fossil-island-underwater.json");
+const ObstacleRunner = require("../skills/agility/ObstacleRunner.Agility");
 
 const OXYGEN_VARBIT = 5811; // fossil_underwater_oxygen
 const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
@@ -206,12 +207,19 @@ function breathe(player) {
     if (oxygen.get(player) !== DATA.oxygen.max) { oxygen.set(player, DATA.oxygen.max); sendOxygen(player); }
     return;
   }
+  // Out of air: drown on the first tick the player isn't mid-swim through an obstacle or hole (its
+  // steps would carry them back down), not just on the drain cadence, which back-to-back crossings
+  // could otherwise always land on.
+  if (oxygen.get(player) === 0) {
+    if (!ObstacleRunner.isBusy(player)) drown(player);
+    return;
+  }
   const ticks = drainTicks.get(player) + 1;
   if (ticks < DATA.oxygen.everyTicks) { drainTicks.set(player, ticks); return; }
   drainTicks.set(player, 0);
   oxygen.set(player, Math.max(0, oxygen.get(player) - DATA.oxygen.drain));
   sendOxygen(player);
-  if (oxygen.get(player) === 0) drown(player);
+  if (oxygen.get(player) === 0 && !ObstacleRunner.isBusy(player)) drown(player);
 }
 
 function underwaterTick() {

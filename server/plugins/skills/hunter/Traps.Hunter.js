@@ -154,12 +154,12 @@ function collect(event, reset = false, check = true) {
   if (!trap || !nearby(player, object)) return true;
   if (["luring", "closing"].includes(trap.state)) { player.sendMessage("Wait until the creature has finished investigating your trap."); return true; }
   if (check && trap.state !== "caught") return true;
-  const rewards = trap.state === "caught" ? (trap.rewards ??= catchRewards(trap)) : [];
+  const rewards = trap.state === "caught" ? (trap.rewards ??= rewardsFor(player, trap)) : [];
   const items = returnedItems(trap).concat(rewards);
   if (!exchange(player, [], items, false)) { player.getInventory().full(); return true; }
   begin(player, 2, ANIM.TAKE, () => {
     if (!H.traps.has(trap) || !owned(player, object) || !exchange(player, [], items)) return;
-    if (trap.state === "caught") xp(player, trap.creature.xp, trap.kind, trap.creature.npc);
+    if (trap.state === "caught") xp(player, trap.xp ?? trap.creature.xp, trap.kind, trap.creature.npc);
     const { kind, location, base } = trap;
     remove(trap);
     player.sendMessage(check ? "You check the trap and collect your catch." : "You dismantle the trap.");
@@ -300,7 +300,7 @@ function process() {
         releasePrey(trap); setState(trap, "idle");
       } else if (distance(npc.getLocation(), trap.location) <= (H.data.traps[trap.kind].tree || trap.kind === "deadfall" ? 1 : 0)) attempt(trap);
     } else if (trap.state === "idle" && !["pit", "rabbit"].includes(trap.kind) && H.tick >= trap.next) {
-      trap.next = H.tick + 5;
+      trap.next = H.tick + lureInterval(trap);
       for (const npc of H.core.World.getNearbyNpcsForUpdate(trap.objects[0])) {
         const creature = H.data.creatures.find(c => c.npc === npc.getId());
         if (!eligible(trap, npc, creature)) continue;
@@ -313,6 +313,21 @@ function process() {
       }
     }
   }
+}
+
+/** The catch's loot and XP, as content may change them ("hunter:rewards", a league relic's doubled box traps). */
+function rewardsFor(player, trap) {
+  const request = { player, kind: trap.kind, npcId: trap.creature.npc, rewards: catchRewards(trap), xp: trap.creature.xp };
+  H.api.emitCustomEvent("hunter:rewards", request);
+  trap.xp = request.xp;
+  return request.rewards;
+}
+
+/** Ticks between an idle trap's looks for prey, as content may shorten them ("hunter:lure-interval"). */
+function lureInterval(trap) {
+  const request = { player: trap.player, kind: trap.kind, ticks: 5 };
+  H.api.emitCustomEvent("hunter:lure-interval", request);
+  return Math.max(1, request.ticks | 0);
 }
 
 function catchRewards(trap) {

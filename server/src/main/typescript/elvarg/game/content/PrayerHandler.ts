@@ -10,6 +10,8 @@ import { Sound } from "../Sound";
 import { Sounds } from "../Sounds";
 import { Misc } from "../../util/Misc";
 
+/** Set by the Horn of Bran (plugins/minigames/tfa/Rewards.FracturedArchive.js). */
+const ZEAL_UNLOCKED_ATTRIBUTE = "prayer:zeal-unlocked";
 const RUN_OUT_MESSAGE = "You have run out of prayer points, you can recharge at an altar.";
 
 export class PrayerHandler {
@@ -26,8 +28,10 @@ export class PrayerHandler {
     }
 
     public static togglePrayer(player: Player, childId: number): boolean {
-        const prayerId = this.prayerIdForChild(childId);
+        let prayerId = this.prayerIdForChild(childId);
         if (prayerId === null) return false;
+        // Zeal takes Piety's place in the book once unlocked (Wiki: Zeal).
+        if (prayerId === this.PIETY && player.getAttribute(ZEAL_UNLOCKED_ATTRIBUTE) === true) prayerId = this.ZEAL;
         if (player.getPrayerActive()[prayerId]) this.deactivatePrayer(player, prayerId);
         else this.activatePrayerPrayerId(player, prayerId);
         return true;
@@ -62,9 +66,10 @@ export class PrayerHandler {
     public static PIETY = 26;
     public static RIGOUR = 27
     public static AUGURY = 28;
-    public static DEFENCE_PRAYERS: number[] = [PrayerHandler.THICK_SKIN, PrayerHandler.ROCK_SKIN, PrayerHandler.STEEL_SKIN, PrayerHandler.CHIVALRY, PrayerHandler.PIETY, PrayerHandler.RIGOUR, PrayerHandler.AUGURY];
-    public static STRENGTH_PRAYERS: number[] = [PrayerHandler.BURST_OF_STRENGTH, PrayerHandler.SUPERHUMAN_STRENGTH, PrayerHandler.ULTIMATE_STRENGTH, PrayerHandler.CHIVALRY, PrayerHandler.PIETY];
-    public static ATTACK_PRAYERS: number[] = [PrayerHandler.CLARITY_OF_THOUGHT, PrayerHandler.IMPROVED_REFLEXES, PrayerHandler.INCREDIBLE_REFLEXES, PrayerHandler.CHIVALRY, PrayerHandler.PIETY];
+    public static ZEAL = 29;
+    public static DEFENCE_PRAYERS: number[] = [PrayerHandler.THICK_SKIN, PrayerHandler.ROCK_SKIN, PrayerHandler.STEEL_SKIN, PrayerHandler.CHIVALRY, PrayerHandler.PIETY, PrayerHandler.ZEAL, PrayerHandler.RIGOUR, PrayerHandler.AUGURY];
+    public static STRENGTH_PRAYERS: number[] = [PrayerHandler.BURST_OF_STRENGTH, PrayerHandler.SUPERHUMAN_STRENGTH, PrayerHandler.ULTIMATE_STRENGTH, PrayerHandler.CHIVALRY, PrayerHandler.PIETY, PrayerHandler.ZEAL];
+    public static ATTACK_PRAYERS: number[] = [PrayerHandler.CLARITY_OF_THOUGHT, PrayerHandler.IMPROVED_REFLEXES, PrayerHandler.INCREDIBLE_REFLEXES, PrayerHandler.CHIVALRY, PrayerHandler.PIETY, PrayerHandler.ZEAL];
     public static RANGED_PRAYERS: number[] = [PrayerHandler.SHARP_EYE, PrayerHandler.HAWK_EYE, PrayerHandler.EAGLE_EYE, PrayerHandler.RIGOUR];
     public static MAGIC_PRAYERS: number[] = [PrayerHandler.MYSTIC_WILL, PrayerHandler.MYSTIC_LORE, PrayerHandler.MYSTIC_MIGHT, PrayerHandler.AUGURY];
     public static OVERHEAD_PRAYERS: number[] = [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MISSILES, PrayerHandler.PROTECT_FROM_MELEE, PrayerHandler.RETRIBUTION, PrayerHandler.REDEMPTION, PrayerHandler.SMITE];
@@ -179,6 +184,7 @@ export class PrayerHandler {
                 break;
             case PrayerHandler.CHIVALRY:
             case PrayerHandler.PIETY:
+            case PrayerHandler.ZEAL:
             case PrayerHandler.RIGOUR:
             case PrayerHandler.AUGURY:
                 PrayerHandler.resetPrayersC(character, PrayerHandler.DEFENCE_PRAYERS, prayerId);
@@ -228,15 +234,25 @@ export class PrayerHandler {
         }
     }
 
+    /** A refusal in the chatbox's messagebox ("<col=000080>Redemption</col> is currently disabled here."). */
+    private static messageBox(player: Player, text: string): void {
+        const { DialogueChainBuilder } = require("../model/dialogues/builders/DialogueChainBuilder");
+        const { StatementDialogue } = require("../model/dialogues/entries/impl/StatementDialogue");
+        const builder = new DialogueChainBuilder();
+        builder.add(new StatementDialogue(0, text));
+        player.getDialogueManager().startDialogues(builder);
+    }
+
     public static canUse(player: Player, prayer: PrayerData, msg: boolean): boolean {
         // Loaded lazily: PluginManager imports Player, and QuickPrayers -> PrayerHandler -> Player
         // is already a cycle at module load.
         const { PluginManager } = require("../../plugins/PluginManager");
-        const disabledMessage = PluginManager.emitPrayerDisabled(player, prayer);
-        if (disabledMessage !== null) {
+        const disabled = PluginManager.emitPrayerDisabled(player, prayer);
+        if (disabled !== null) {
             if (msg) {
                 player.getPacketSender().sendVarbit(prayer.configId, 0);
-                player.sendMessage(disabledMessage);
+                if (disabled.messageBox) PrayerHandler.messageBox(player, disabled.message);
+                else player.sendMessage(disabled.message);
             }
             return false;
         }
@@ -516,6 +532,8 @@ export class PrayerData {
     public static readonly PIETY = new PrayerData (70, 24, 19827, 4129);
     public static readonly RIGOUR = new PrayerData (74, 24, 28004, 5464);
     public static readonly AUGURY = new PrayerData (77, 24, 28007, 5465);
+    // Wiki: Zeal. Drain 40 points a minute, as Piety (drain effect 24). Varbit prayer_zeal; no button of its own.
+    public static readonly ZEAL = new PrayerData (84, 24, -1, 16577);
 
     /**
        * Contains the PrayerData with their corresponding prayerId.
@@ -604,6 +622,7 @@ export class PrayerData {
         yield PrayerData.PIETY
         yield PrayerData.RIGOUR
         yield PrayerData.AUGURY
+        yield PrayerData.ZEAL
       }
 
     public static initializeMaps(): void {

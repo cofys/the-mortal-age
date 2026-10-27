@@ -466,10 +466,10 @@ export function applyChoiceRules(manager: WidgetManager | undefined, rules: read
     const unnumbered = (text: string | undefined) => (text ?? "").replace(/^\[\d+\] /, "");
     for (const rule of rules) {
         if (rule.excludes?.length && rule.excludeGroupId !== undefined && rule.excludeChildId !== undefined) {
-            const exclusion = manager.findWidget(rule.excludeGroupId, rule.excludeChildId);
+            const exclusion = manager.findLoadedWidget(rule.excludeGroupId, rule.excludeChildId);
             if (exclusion && childrenOf(manager, exclusion).some((c) => rule.excludes!.some((e) => (c.text ?? "").includes(e)))) continue;
         }
-        const parent = manager.findWidget(rule.groupId, rule.childId);
+        const parent = manager.findLoadedWidget(rule.groupId, rule.childId);
         if (!parent || manager.isEffectivelyHidden(parent.uid)) continue;
         if (rule.whole) { highlight(parent, -1, rule); continue; }
         const choices = childrenOf(manager, parent);

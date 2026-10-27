@@ -14,10 +14,10 @@ const SESSIONS = new Map();
 const EVERY_TICK = [];
 let tick = 0;
 
-function start(player, { type, remaining, interval, firstDelay = 0, finishDelay = 0, begin, step, onStop }) {
+function start(player, { type, skill = null, remaining, interval, firstDelay = 0, finishDelay = 0, begin, step, onStop }) {
   stop(player, false);
   SESSIONS.set(player, {
-    type, remaining, interval, finishDelay, begin, step, onStop,
+    type, skill, remaining, interval, finishDelay, begin, step, onStop,
     // The task's next run is the tick the session started on (offset 0).
     nextCycle: tick + 1 + firstDelay,
     finishAt: null,
@@ -75,10 +75,18 @@ function advance(player, session) {
   }
   if (session.finishAt == null || tick < session.finishAt) return true;
   session.finishAt = null;
-  if (!session.step(player)) return false;
-  if (--session.remaining <= 0) {
-    stop(player, false);
-    return true;
+  // Content may make several items in the one cycle ("skills:actions-per-cycle", a league relic's all at once).
+  const actions = require("./Common.Smithing").actionsPerCycle(player, session.skill ?? Core.Skill.SMITHING, session.type);
+  for (let done = 0; done < actions; done++) {
+    if (!session.step(player)) {
+      if (done === 0) return false;
+      stop(player, false);
+      return true;
+    }
+    if (--session.remaining <= 0) {
+      stop(player, false);
+      return true;
+    }
   }
   return true;
 }

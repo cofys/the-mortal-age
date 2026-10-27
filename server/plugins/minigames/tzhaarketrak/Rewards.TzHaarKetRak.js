@@ -11,10 +11,12 @@
  *   "Failure..." (no line to a player who logged out);
  * - Combat Achievements: the tasks the completion meets, by name. Its kill-count tasks ("Complete
  *   TzHaar-Ket-Rak's second challenge.") name a challenge, not a count, so no count is reported:
- *   Data.CombatAchievements would read each as "once". Best times are kept for the scoreboard.
+ *   Data.CombatAchievements would read each as "once". Completions, best times and deaths are kept for the scoreboard
+ *   (Scoreboard.TzHaarKetRak.js).
  */
 const Common = require("./Common.TzHaarKetRak");
 const Dialogue = require("./Dialogue.TzHaarKetRak");
+const Scoreboard = require("./Scoreboard.TzHaarKetRak");
 
 const SECONDS_PER_TICK = 0.6;
 const STYLES = ["MELEE", "RANGED", "MAGIC"];
@@ -27,6 +29,13 @@ function give(player, itemId, amount) {
     return;
   }
   core.ItemOnGroundManager.registerLocation(player, new core.Item(itemId, amount), player.getLocation().clone(), null);
+}
+
+/** The Elite Karamja Diary doubles the TokKul (Wiki: Karamja Diary). */
+function tokkulFor(player, amount) {
+  const request = { player, amount };
+  Common.api.emitCustomEvent("diary:tokkul", request);
+  return request.amount;
 }
 
 function sendCounts(player) {
@@ -82,6 +91,7 @@ function lastJadDown(player, challenge) {
     times[number] = ticks;
     player.setAttribute(Common.BEST_TIMES_ATTRIBUTE, times);
   }
+  Scoreboard.completed(number, ticks);
   sendCounts(player);
   const ordinal = data.ordinals[number - 1];
   const time = Common.formatTicks(ticks);
@@ -96,7 +106,7 @@ function lastJadDown(player, challenge) {
   }
   const variant = number !== Common.SIX ? Dialogue.VARIANT.completed
     : firstSixth ? Dialogue.VARIANT.sixthFirst : Dialogue.VARIANT.sixthAgain;
-  challenge.result = { tokkul: data.rewards[number - 1], unlocked, variant };
+  challenge.result = { tokkul: tokkulFor(player, data.rewards[number - 1]), unlocked, variant };
   // After the challenge's own lines, and once the reward is safe.
   for (const task of tasks) api.emitCustomEvent("combat-achievements:complete", { player, task });
 }
@@ -115,6 +125,8 @@ function completed(player, challenge, { logout = false } = {}) {
 function failed(player, challenge, { logout = false, died = false } = {}) {
   const { data } = Common;
   player.setAttribute(Common.LAST_COMPLETED_ATTRIBUTE, 0);
+  // A death once the Jads are in counts; one during the fade in, before they arrive, doesn't.
+  if (died && challenge.startTick !== -1) Scoreboard.died(player, challenge.number);
   const kills = challenge.kills;
   if (challenge.startTick !== -1) {
     const values = { time: Common.formatTicks(challenge.elapsedTicks()), end: died ? data.messages.perishing : "." };
@@ -127,7 +139,7 @@ function failed(player, challenge, { logout = false, died = false } = {}) {
     }
   }
   if (kills > 0) {
-    const tokkul = data.rewards[kills - 1];
+    const tokkul = tokkulFor(player, data.rewards[kills - 1]);
     give(player, Common.ids.objs.tokkul, tokkul);
     if (!logout) {
       Dialogue.say(player, Dialogue.VARIANT.completed, { challenge: challenge.number, tokkul, npcLine: data.messages.notBad });

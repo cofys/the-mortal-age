@@ -1,0 +1,118 @@
+{
+  "$comment": "Raging Echoes' combat masteries (docs/leagues.md), used by plugins/modes/LeagueCombatMasteries.plugin.js. Styles, tiers, effects, the cross-style passives and the ten point challenges are the Wiki's (Raging_Echoes_League/Combat_Masteries and the Melee_I .. Magic_VI pages); the names, descriptions and struct ids are the rev 241 cache's (league struct 6211, node enums 5691 melee / 5692 ranged / 5693 magic keyed by tier, params 2026 name, 2027 category, 2028 description; the cache carries this league's masteries, so nothing is sent as overrides). Varbits, the interface flow, the unlock presentation and the point message are from rsprox 227/00075 (the Leagues V recording). `requires` is the previous tier of the same style (Wiki: each mastery needs the previous tier). `passiveStructs` is the tier -> passive struct order the captured views used (1155 and 1156 are swapped relative to their ids). Numbers under `effect` are the Wiki's; readings of ours are marked `_ours`.",
+  "league": 5,
+  "varbits": {
+    "pointsToSpend": 11583,
+    "pointsEarned": 11584,
+    "pointUnlocks": [11585, 11586, 11587, 11588, 11589, 11590, 11591, 11592, 11593, 11594],
+    "lastViewed": 11595,
+    "tab": 11596,
+    "tutorial": 17553
+  },
+  "_tutorialValue": "league_combat_mastery_tutorial as both captured logins sent it (227/00070, 227/00075).",
+  "tutorialValue": 5,
+  "interface": {
+    "_comment": "league_combat_mastery (311) and the league side panel's mastery button (656:32), as captured: open as the main modal with if_setevents OP1 on clickzones 311:36 slots 0-18, league_menu_frame 311:78 slots 10-18 and combat_mastery_tabs 311:73 slots 0-26, then script 3186 on mastery_highlight 656:31; a tab click sets league_combat_mastery_tab (sub / 9); a clickzone click sets league_combat_mastery_last_viewed to its slot and runs 7674 (17 components, the node struct, the tier's passive struct); confirm_button 311:71 unlocks the viewed node: the style's progress varbit, points_to_spend, human_relic_unlock 8524, league_5_mastery_unlock_spot 3045 at height 92, the modal closed, sounds 4215/4211/4213/4212 at 8/44/80/104; close_button 311:76 closes it. Script 2524 [-1, -3] precedes the open in the capture, as before the relic interface, which this server does not send either.",
+    "group": 311,
+    "openButton": [656, 32],
+    "highlight": [656, 31],
+    "highlightScript": 3186,
+    "clickzones": 36,
+    "clickzoneSlots": [0, 18],
+    "menuFrame": 78,
+    "menuFrameSlots": [10, 18],
+    "tabs": 73,
+    "tabSlots": [0, 26],
+    "tabStride": 9,
+    "confirm": 71,
+    "close": 76,
+    "viewScript": 7674,
+    "viewScriptComponents": [8, 9, 11, 10, 54, 39, 44, 45, 55, 56, 13, 69, 70, 71, 72, 50, 51],
+    "slotsPerStyle": 6,
+    "unlockAnimation": 8524,
+    "unlockSpotanim": 3045,
+    "unlockGraphicHeight": 92,
+    "unlockSounds": [[4215, 8], [4211, 44], [4213, 80], [4212, 104]]
+  },
+  "passiveStructs": [1153, 1154, 1156, 1155, 1157, 1158],
+  "styles": {
+    "melee": {
+      "name": "Melee", "combatType": "MELEE", "progressVarbit": 11580, "slotBase": 0,
+      "masteries": [
+        { "key": "melee-1", "tier": 1, "struct": 1165, "name": "Melee I", "requires": null, "description": "Melee hits have a 25% chance to roll damage twice and take the highest result.", "effect": { "rerollChance": 0.25, "_roll": "Both rolls are of the undefended hit (the core's combat:hit-rolled); the target's protection prayer and damage reductions then apply to the higher." } },
+        { "key": "melee-2", "tier": 2, "struct": 1166, "name": "Melee II", "requires": "melee-1", "description": "Melee hits have a 10% chance to generate an echo hit (additional melee hit, 50% max-hit, respects Accuracy, PvM only).", "effect": { "echoChance": 0.1, "echoMaxHitFraction": 0.5, "echoDelay": 1, "_xp": "An echo is queued as any hit, so it pays combat XP; the Wiki does not say.", "_echoProjectiles": "vfx_league_5_melee_mastery_left / right (3186 / 3187) as other players' echoes travelled in the capture: start 0, end 42, heights 6 to 10; which side is ours (alternating).", "echoProjectiles": [3186, 3187], "echoProjectileDelay": 0, "echoProjectileSpeed": 42, "echoProjectileHeights": [6, 10] } },
+        { "key": "melee-3", "tier": 3, "struct": 1167, "name": "Melee III", "requires": "melee-2", "description": "Melee attack rate set to 80%, rounding down.", "effect": { "attackRate": 0.8 } },
+        { "key": "melee-4", "tier": 4, "struct": 1168, "name": "Melee IV", "requires": "melee-3", "description": "Melee hits have a 5% chance to heal 40% of damage dealt.", "effect": { "healChance": 0.05, "healFraction": 0.4 } },
+        { "key": "melee-5", "tier": 5, "struct": 1169, "name": "Melee V", "requires": "melee-4", "description": "Melee attack rate set to 50%, rounded down for 5t and above, rounded up below 4t.", "effect": { "attackRate": 0.5, "roundDownFrom": 5 } },
+        { "key": "melee-6", "tier": 6, "struct": 1170, "name": "Melee VI", "requires": "melee-5", "description": "Your chance to generate a Melee echo increases to 20%, and your echoes can generate additional echoes (Up to 8 times in a row).", "effect": { "echoChance": 0.2, "echoChainLimit": 8 } }
+      ]
+    },
+    "ranged": {
+      "name": "Ranged", "combatType": "RANGED", "progressVarbit": 11581, "slotBase": 6,
+      "masteries": [
+        { "key": "ranged-1", "tier": 1, "struct": 1171, "name": "Ranged I", "requires": null, "description": "Damage rolls beneath 30% of max hit with Ranged are increased to 30%.", "effect": { "minimumFraction": 0.3 } },
+        { "key": "ranged-2", "tier": 2, "struct": 1172, "name": "Ranged II", "requires": "ranged-1", "description": "Each subsequent Ranged attack has its max hit increased by an additional 5%. Resets after +20%.", "effect": { "maxHitStep": 0.05, "maxHitCap": 0.2 } },
+        { "key": "ranged-3", "tier": 3, "struct": 1173, "name": "Ranged III", "requires": "ranged-2", "description": "Ranged attack rate set to 80%, rounding down.", "effect": { "attackRate": 0.8 } },
+        { "key": "ranged-4", "tier": 4, "struct": 1174, "name": "Ranged IV", "requires": "ranged-3", "description": "Every 5th Ranged hit, heal 5 hitpoints.", "effect": { "everyHits": 5, "heal": 5, "_perHitsplat": "Wiki: a 5th hit split into several hitsplats heals 5 for each." } },
+        { "key": "ranged-5", "tier": 5, "struct": 1175, "name": "Ranged V", "requires": "ranged-4", "description": "Ranged attack rate set to 50%, rounded down for 5t and above, rounded up below 4t.", "effect": { "attackRate": 0.5, "roundDownFrom": 5 } },
+        { "key": "ranged-6", "tier": 6, "struct": 1176, "name": "Ranged VI", "requires": "ranged-5", "description": "Never miss with Ranged (PvM only).", "effect": { "neverMiss": true } }
+      ]
+    },
+    "magic": {
+      "name": "Magic", "combatType": "MAGIC", "progressVarbit": 11582, "slotBase": 12,
+      "masteries": [
+        { "key": "magic-1", "tier": 1, "struct": 1159, "name": "Magic I", "requires": null, "description": "When you roll above 90% of your max hit with Magic, damage is increased by 50%.", "effect": { "highRollFraction": 0.9, "damageMultiplier": 1.5 } },
+        { "key": "magic-2", "tier": 2, "struct": 1160, "name": "Magic II", "requires": "magic-1", "description": "Magic max hit is increased by 5% per tick in-between your attacks (Up to +40%).", "effect": { "perTick": 0.05, "cap": 0.4, "_ours": "The ticks in-between two magic attacks are the idle ticks (the gap less one); the Wiki does not say whether the attack's own tick counts. The first cast since login, with no previous cast known, takes the cap." } },
+        { "key": "magic-3", "tier": 3, "struct": 1161, "name": "Magic III", "requires": "magic-2", "description": "Magic attack rate set to 80%, rounding down.", "effect": { "attackRate": 0.8 } },
+        { "key": "magic-4", "tier": 4, "struct": 1162, "name": "Magic IV", "requires": "magic-3", "description": "When you roll above 90% of your max hit with Magic, heal 10% of damage dealt.", "effect": { "highRollFraction": 0.9, "healFraction": 0.1 } },
+        { "key": "magic-5", "tier": 5, "struct": 1163, "name": "Magic V", "requires": "magic-4", "description": "Magic attack rate set to 50%, rounded down for 5t and above, rounded up below 4t.", "effect": { "attackRate": 0.5, "roundDownFrom": 5 } },
+        { "key": "magic-6", "tier": 6, "struct": 1164, "name": "Magic VI", "requires": "magic-5", "description": "Max hit with Magic is increased by 1% for every 100 Hitpoints remaining on target (Up to 10%). On a successful Magic hit, if your target has less Hitpoints than your max hit, you max hit.", "effect": { "perHitpoints": 100, "perStep": 0.01, "cap": 0.1, "execute": true, "_execute": "Wiki: the execute compares the target's Hitpoints with the max hit before Magic I's +50%." } }
+      ]
+    }
+  },
+  "passives": [
+    { "tier": 1, "struct": 1153, "name": "Charge Reduction", "text": "95% chance to save weapon charges, ammunition, and runes used for spells.", "effect": { "saveChance": 0.95 } },
+    { "tier": 2, "struct": 1154, "name": "Healing", "text": "Healing from all sources is increased by 20%.", "effect": { "healMultiplier": 1.2 } },
+    { "tier": 3, "struct": 1156, "name": "Accuracy", "text": "Accuracy with all styles is increased by 100%.", "effect": { "accuracyMultiplier": 2 } },
+    { "tier": 4, "struct": 1155, "name": "Damage Reduction", "text": "Damage taken is reduced by 15%.", "effect": { "incomingDamageMultiplier": 0.85 } },
+    { "tier": 5, "struct": 1157, "name": "Prayer Point Gain", "text": "Prayer Point gain from all sources is increased by 25%.", "effect": { "prayerGainMultiplier": 1.25 } },
+    { "tier": 6, "struct": 1158, "name": "Prayer Penetration", "text": "Attacks with all styles now have 60% Prayer penetration.", "effect": { "penetration": 0.6 } }
+  ],
+  "challenges": {
+    "_comment": "The ten Combat Mastery points (Wiki: Unlocking; cache structs 1177-1186, varbits league_combat_mastery_point_unlock_1..10 in the same order). A `kill` rule matches the NPC's name (`names`), its combat level (`minCombatLevel`) or its Slayer level requirement (`minSlayerLevel`); `solo` wants the killer as the only damager; `count` is kills of matching monsters, `unique` distinct names, both kept in league:mastery-progress under `track` (the challenge key unless given). `combatLevel` is the character's. Giants are the Wiki's Giant page (the giant race). No Echo boss is in this cache (no NPC is named so), so the three echo challenges can only be awarded with ::mastery point; the names are the Wiki's pages.",
+    "_giants": "The Wiki's giant race by NPC name as this cache spells it (both Moss giant and Moss Giant exist); Cloud Titan is the Wiki's but not in this cache.",
+    "giants": ["Hill Giant", "Obor", "Cyclops", "Giant Champion", "Black Knight Titan", "Reanimated giant", "Fire giant", "Branda the Fire Queen", "Ice giant", "Eldric the Ice King", "Moss giant", "Moss Giant", "Bryophyta", "Moss Guardian", "Glod", "Cloud Titan"],
+    "echoBosses": ["Kalphite Queen (Echo)", "Cerberus (Echo)", "King Black Dragon (Echo)", "Grotesque Guardians (Echo)", "Dagannoth Kings (Echo)", "Thermonuclear smoke devil (Echo)", "Corrupted Hunllef (Echo)", "Hespori (Echo)", "Sol Heredit (Echo)"],
+    "list": [
+      { "key": "giant", "struct": 1177, "text": "Defeat a Giant.", "rule": { "kill": { "names": "giants" } } },
+      { "key": "high-level-kills", "struct": 1178, "text": "Defeat 10 monsters with a combat level of 100 or more.", "rule": { "kill": { "minCombatLevel": 100 }, "count": 10 } },
+      { "key": "scurrius-solo", "struct": 1179, "text": "Defeat Scurrius by yourself.", "rule": { "kill": { "names": ["Scurrius"], "solo": true } } },
+      { "key": "slayer-55", "struct": 1180, "text": "Defeat a monster with a Slayer requirement of 55 or more.", "rule": { "kill": { "minSlayerLevel": 55 } } },
+      { "key": "jad", "struct": 1181, "text": "Defeat TzTok-Jad in the Fight Caves.", "rule": { "kill": { "names": ["TzTok-Jad"] } } },
+      { "key": "combat-100", "struct": 1182, "text": "Reach a combat level of 100.", "rule": { "combatLevel": 100 } },
+      { "key": "echo-boss", "struct": 1183, "text": "Defeat an Echo Boss.", "rule": { "kill": { "names": "echoBosses" }, "unique": 1, "track": "echo-bosses" }, "_missing": "no Echo boss in this cache" },
+      { "key": "echo-bosses-2", "struct": 1184, "text": "Defeat two unique Echo Bosses.", "rule": { "kill": { "names": "echoBosses" }, "unique": 2, "track": "echo-bosses" }, "_missing": "no Echo boss in this cache" },
+      { "key": "echo-bosses-3", "struct": 1185, "text": "Defeat three unique Echo Bosses.", "rule": { "kill": { "names": "echoBosses" }, "unique": 3, "track": "echo-bosses" }, "_missing": "no Echo boss in this cache" },
+      { "key": "zuk", "struct": 1186, "text": "Defeat TzKal-Zuk.", "rule": { "kill": { "names": ["TzKal-Zuk"] } } }
+    ]
+  },
+  "notifications": {
+    "pointEarned": {
+      "text": "<col=229628>Congratulations, you've earned a Combat Mastery point! Check the Combat Mastery interface to choose your next mastery.",
+      "source": "capture 227/00075, the game message after the kill that earned a point"
+    }
+  },
+  "messages": {
+    "notLeague": { "text": "Only a Raging Echoes character has combat masteries.", "source": "ours" },
+    "noSuchMastery": { "text": "There is no such combat mastery.", "source": "ours" },
+    "selectFirst": { "text": "Select a combat mastery to unlock first.", "source": "ours" },
+    "alreadyUnlocked": { "text": "You have already unlocked that combat mastery.", "source": "ours" },
+    "needsPrevious": { "text": "You need to unlock {previous} first.", "source": "ours" },
+    "noPoints": { "text": "You don't have a Combat Mastery point to spend.", "source": "ours" },
+    "masteryUsage": { "text": "Use ::mastery, ::mastery <melee|ranged|magic> <tier 1-6> or ::mastery point <1-10>.", "source": "ours" },
+    "masteryStatus": { "text": "Combat masteries: Melee {melee}, Ranged {ranged}, Magic {magic} (passives to tier {passive}); points {available} to spend of {earned} earned; challenges done: {challenges}.", "source": "ours" },
+    "challengeNone": { "text": "none", "source": "ours" },
+    "pointAwarded": { "text": "Awarded combat mastery challenge {key}.", "source": "ours" },
+    "pointRepeat": { "text": "You already have combat mastery challenge {key}.", "source": "ours" }
+  }
+}

@@ -105,6 +105,7 @@ for (const [x, y] of BLADE_TILES) {
 }
 for (const [x, y] of BLADE_TILES) BLADE_HITS.delete(tileKey(x, y));
 
+let api = null;
 let core = null;
 let random = Math.random;
 /** The one world cycle: the tick clock, how many cycles have passed, and the active dispenser. */
@@ -113,6 +114,7 @@ const cycle = { tick: 0, index: -1, active: null, nextAt: CYCLE_TICKS };
 const sessions = new Map();
 
 function init(pluginApi) {
+  api = pluginApi;
   core = pluginApi.core;
 }
 
@@ -233,8 +235,10 @@ function rewardTag(player) {
   state.taggedCycle = cycle.index;
   state.lastTrap = "TAG";
   const Items = core.ItemIdentifiers;
-  player.getInventory().forceAdd(player, new core.Item(Items.AGILITY_ARENA_TICKET, 1));
-  player.getInventory().forceAdd(player, new core.Item(Items.BRIMHAVEN_VOUCHER, 1));
+  const award = { player, minigame: "brimhaven-agility-arena", points: 1 };
+  api.emitCustomEvent("minigame:points", award);
+  player.getInventory().forceAdd(player, new core.Item(Items.AGILITY_ARENA_TICKET, award.points));
+  player.getInventory().forceAdd(player, new core.Item(Items.BRIMHAVEN_VOUCHER, award.points));
   addXp(player, tagXp(agilityLevel(player)));
   player.sendMessage(RECEIVED_MESSAGE);
 }

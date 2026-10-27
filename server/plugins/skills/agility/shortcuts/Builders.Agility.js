@@ -35,6 +35,10 @@ const ShortcutAnim = Object.freeze({
   STEPPING_STONE_JUMP: 769, // human_steppingstonejump
   GRAPPLE_CLIMB: 1779, // xbows_human_fire_and_climb_grapple_fast
   GRAPPLE_CLIMB_GRAPHIC: 3575, // xbows_fire_and_climbed_grapple_spot_anim_fast
+  SWIM_CAVEWALL: 7702, // human_swim_cavewall
+  SWIM_SHIPWALL: 7704, // human_swim_shipwall
+  SWIM_HOLE_ENTER: 7705, // human_swim_hole_enter
+  SWIM_HOLE_LEAVE: 7706, // human_swim_hole_leave
 });
 
 const PIPE_SOUND = 2489;
@@ -43,10 +47,16 @@ function distance(a, b) {
   return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
 }
 
-/** [from, to]: the end nearer the player first. */
+/**
+ * [from, to]: the end nearer the player first. When both are as many tiles away (a player off to
+ * one side), the straight-line distance decides, so they aren't sent round to the far side.
+ */
 function ordered(pos, ends) {
   const here = [pos.x, pos.y];
-  return distance(here, ends[0]) <= distance(here, ends[1]) ? ends : [ends[1], ends[0]];
+  const [a, b] = [distance(here, ends[0]), distance(here, ends[1])];
+  if (a !== b) return a < b ? ends : [ends[1], ends[0]];
+  const straight = (end) => (end[0] - here[0]) ** 2 + (end[1] - here[1]) ** 2;
+  return straight(ends[0]) <= straight(ends[1]) ? ends : [ends[1], ends[0]];
 }
 
 /**

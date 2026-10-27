@@ -208,6 +208,11 @@ export interface ClientPlugin {
     transformSceneProgram?(source: ProgramSource): ProgramSource;
     sceneProgramsReady?(renderer: WebGLOsrsRenderer, programs: Program[]): void;
     beforeSceneRender?(renderer: WebGLOsrsRenderer, drawActors: () => void): void;
+    /**
+     * A frame is drawn, scene and interface (WebGL and WebGPU). The scene canvas holds it only
+     * until this task ends, so read it here (a screenshot).
+     */
+    afterFrame?(sceneCanvas: HTMLCanvasElement): void;
     /** Draws over the finished scene (depth test and blending still active). */
     afterSceneRender?(renderer: WebGLOsrsRenderer): void;
     configureSceneDrawCall?(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void;
@@ -374,6 +379,10 @@ export class ClientPluginManager {
 
     afterSceneRender(renderer: WebGLOsrsRenderer): void {
         for (const plugin of this.plugins) plugin.afterSceneRender?.(renderer);
+    }
+
+    afterFrame(sceneCanvas: HTMLCanvasElement): void {
+        for (const plugin of this.plugins) plugin.afterFrame?.(sceneCanvas);
     }
 
     configureSceneDrawCall(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void {

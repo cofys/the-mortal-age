@@ -1,8 +1,9 @@
 /**
  * The amulet of avarice and Forinthry surge (Wiki: Revenant Caves, Revenant maledictus):
  *
- * - Worn in the caves, the amulet adds 20% accuracy and damage against revenants, and keeps its
- *   wearer skulled.
+ * - Worn in the caves, the amulet adds 20% accuracy and damage against revenants. Worn anywhere,
+ *   it keeps its wearer skulled, and the skull lasts 20 minutes after it comes off (Wiki: Amulet
+ *   of avarice, Skull (status)).
  * - Forinthry surge, from killing the maledictus with the amulet on, adds another 15% for 30
  *   minutes while the amulet is worn. Applied one after the other here (the Wiki doesn't say
  *   how they combine), and without the surge's own skull icon, which isn't identified yet.
@@ -12,7 +13,6 @@ const { REVENANT_IDS, MALEDICTUS_ID: MALEDICTUS, ITEMS, inCaves } = require("./D
 const AMULET_SLOT = 2;
 const SURGE_ATTRIBUTE = "revenants:forinthry-surge-until";
 const SURGE_MS = 30 * 60_000;
-const SKULL_REFRESH_TICKS = 100;
 
 let core = null;
 
@@ -47,10 +47,12 @@ function boost(entity, value) {
   return boosted;
 }
 
-/** Permanently skulled while the amulet is worn (Wiki). */
+/** Skulled while the amulet is worn, for 20 minutes after it comes off. */
 function keepSkulled({ player }) {
-  if (!wearsAvarice(player) || player.getSkullTimer() > SKULL_REFRESH_TICKS) return;
-  core.CombatFactory.skull(player, core.SkullType.WHITE_SKULL, core.CombatFactory.PVP_SKULL_SECONDS);
+  if (!wearsAvarice(player)) return;
+  const { CombatFactory, SkullType } = core;
+  if (player.isSkulled()) CombatFactory.extendSkull(player, CombatFactory.ITEM_SKULL_SECONDS);
+  else CombatFactory.skull(player, SkullType.WHITE_SKULL, CombatFactory.ITEM_SKULL_SECONDS);
 }
 
 module.exports = function attachAvarice(api) {
@@ -63,4 +65,4 @@ module.exports = function attachAvarice(api) {
   api.onPlayerProcess(keepSkulled);
 };
 
-Object.assign(module.exports, { grant, boost, wearsAvarice, surgeActive, SURGE_ATTRIBUTE });
+Object.assign(module.exports, { grant, boost, keepSkulled, wearsAvarice, surgeActive, SURGE_ATTRIBUTE });

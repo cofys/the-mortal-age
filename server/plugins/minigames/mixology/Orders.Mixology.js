@@ -190,7 +190,9 @@ function fulfil({ player }) {
   const filled = deposits.filter((deposit) => deposit.ordered).length;
   const bonus = 1 + MULTI_ORDER_BONUS * Math.max(0, filled - 1);
   for (const reagent of Shared.REAGENTS) {
-    gained[reagent] = Math.floor(gained[reagent] * bonus);
+    const award = { player, minigame: "mastering-mixology", points: Math.floor(gained[reagent] * bonus) };
+    Shared.api().emitCustomEvent("minigame:points", award);
+    gained[reagent] = award.points;
     if (gained[reagent] > 0) Shared.setResin(player, reagent, Shared.resin(player, reagent) + gained[reagent]);
   }
   if (filled > 0) Shared.addOrdersFulfilled(player, 1);

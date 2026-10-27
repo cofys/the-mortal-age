@@ -1,6 +1,6 @@
 "use strict";
 
-const { api, World, Animation, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition, PlayerRights } = require("./Core.Construction");
+const { api, World, Animation, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition, PlayerRights, EffectSpells } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
@@ -1194,6 +1194,13 @@ function recordRegionVisit({ player, location }) {
   }
 }
 
+// Vengeance can't be cast in a house (rsprox capture 1074, Wiki: Vengeance).
+function refuseHouseVengeance(event) {
+  if (event.spell !== EffectSpells.VENGEANCE || !houseFor(event.player)) return;
+  event.player.sendMessage("You can't use this spell inside a player-owned house.");
+  event.disabled = true;
+}
+
 const hotspotIds = [...Data.HOTSPOT_BY_OBJECT_ID.keys()].filter(id => id >= 0);
 const furnitureObjectIds = [...new Set(Data.CONSTRUCTION_BUILDABLES.flatMap(buildable => buildable.objectIds.filter(id => id >= 0)))];
 
@@ -1258,6 +1265,7 @@ function attach(api) {
   api.onCustomEvent("spell:teleport-arrival", houseTeleportArrival);
   api.onCustomEvent("construction:house-tablet", houseTablet);
   api.onCustomEvent("construction:owns-house", ownsHouse);
+  api.onSpellDisabled(refuseHouseVengeance);
   api.onPlayerLogin(loginHouse);
   api.onPlayerMapSquareChange(recordRegionVisit);
   api.onPlayerDisconnect(logoutHouse);

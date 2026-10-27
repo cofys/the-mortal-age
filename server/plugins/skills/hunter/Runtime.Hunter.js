@@ -15,6 +15,7 @@ const Crabs = require("./Crabs.Hunter");
 const DriftNets = require("./DriftNets.Hunter");
 const Dungeon = require("./Dungeon.Hunter");
 const Broavs = require("./Broavs.Hunter");
+const Overworld = require("./Overworld.Hunter");
 let task;
 // Bird house status only changes when a full house finishes, so a slow sweep is enough.
 const BIRDHOUSE_SYNC_TICKS = 50;
@@ -29,7 +30,7 @@ function start(api) {
 
 function tick() {
   H.tick++;
-  C.processActions(); Traps.process(); C.processHidden(); Catching.process(); Aerial.process(); Tracking.process(); Pitfalls.process(); Rabbits.process(); Herbiboar.process(); Crabs.process(); DriftNets.process(); Dungeon.process(); Broavs.process();
+  C.processActions(); Traps.process(); C.processHidden(); Catching.process(); Aerial.process(); Tracking.process(); Pitfalls.process(); Rabbits.process(); Herbiboar.process(); Crabs.process(); DriftNets.process(); Dungeon.process(); Broavs.process(); Overworld.process();
   if (H.tick % BIRDHOUSE_SYNC_TICKS === 0) {
     for (const player of H.players) if (player.isPlayerBot?.() !== true) Birdhouses.sync({ player });
   }
@@ -41,7 +42,7 @@ function cleanup(event) {
 }
 
 function shutdown() {
-  task?.stop(); Rabbits.shutdown();
+  task?.stop(); Rabbits.shutdown(); Overworld.clear();
   for (const player of H.players) cleanup({ player });
   for (const npc of H.hidden.keys()) C.reveal(npc);
 }

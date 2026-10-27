@@ -15,7 +15,7 @@ function uniqueEligible(player, now = Date.now()) {
     now - created >= TABLE.restrictions.unique_minimum_account_age_seconds * 1000;
 }
 
-function roll(random = Math.random, eligibleForUniques = true) {
+function roll(random = Math.random, eligibleForUniques = true, rolls = null) {
   // The published table marks unique rows. Until eligible, sample the remaining
   // canonical weights directly; no retries, invented items or empty rewards.
   // This conditional distribution is an implementation assumption, not a
@@ -23,8 +23,8 @@ function roll(random = Math.random, eligibleForUniques = true) {
   const entries = eligibleForUniques ? TABLE.entries : TABLE.entries.filter(entry => !entry.unique);
   const total = eligibleForUniques ? TABLE.out_of : entries.reduce((sum, entry) => sum + entry.weight, 0);
   const drops = [];
-  const rolls = between(...TABLE.rolls, random);
-  for (let i = 0; i < rolls; i++) {
+  const count = Number.isInteger(rolls) ? rolls : between(...TABLE.rolls, random);
+  for (let i = 0; i < count; i++) {
     let hit = random() * total;
     const entry = entries.find(entry => (hit -= entry.weight) < 0);
     drops.push({ itemId: entry.item_id, amount: between(...entry.quantity, random), noted: entry.noted });
@@ -86,7 +86,12 @@ function open(event) {
       if (!Number.isSafeInteger(completed) || completed < 0 || completed >= Number.MAX_SAFE_INTEGER)
         throw new Error("Invalid beginner completion count");
       count = completed + 1;
-      const request = {player, completed: count, milestones: TABLE.milestones, drops: roll(Math.random, uniqueEligible(player)), handled: false, error: null};
+      // Content may change how many times the casket rolls, within its tier's ("treasure-trails:casket-rolls", a league relic).
+      const [minimum, maximum] = TABLE.rolls;
+      const rolls = { player, tier: "beginner", rolls: between(minimum, maximum, Math.random), minimum, maximum };
+      api?.emitCustomEvent?.("treasure-trails:casket-rolls", rolls);
+      const casketRolls = Number.isInteger(rolls.rolls) ? Math.max(minimum, Math.min(maximum, rolls.rolls)) : null;
+      const request = {player, completed: count, milestones: TABLE.milestones, drops: roll(Math.random, uniqueEligible(player), casketRolls), handled: false, error: null};
       api.emitCustomEvent("treasure-trails:milestone-rewards", request);
       if (!request.handled || request.error) throw request.error ?? new Error("Beginner milestone service unavailable");
       drops = prepareDrops(request.drops);
@@ -108,6 +113,7 @@ function open(event) {
       [Runtime.data().rewardInventory]: { capacity: Math.max(3, slots.length), slots },
     });
     player.sendMessage(`You have completed ${count} beginner Treasure Trail${count === 1 ? "" : "s"}.`);
+    api?.emitCustomEvent?.("treasure-trails:casket-opened", { player, tier: "beginner" });
   } finally {
     player.setAttribute(OPENING_ATTRIBUTE, false);
   }

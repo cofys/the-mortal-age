@@ -267,12 +267,12 @@ test('a capped real bank stack keeps the entire collection and points until it f
   assert.equal(Ghrim.collect(p), false);
 });
 
-test('collection counts real bank-tab room and ignores free search-result slots', t => {
+test('collection counts the bank space every real tab shares and ignores free search-result slots', t => {
   install();
   const p = bankCollectionPlayer(t, [[Common.items().MAPLE_LOGS, 595], [Common.items().COAL, 1]]);
+  const perTab = core.Bank.MAX_SLOTS / core.Bank.BANK_SEARCH_TAB_INDEX;
   for (let tab = 0; tab < core.Bank.BANK_SEARCH_TAB_INDEX; tab++) {
-    const bank = p.getBank(tab);
-    bank.setItems(Array.from({ length: bank.capacity() }, (_, i) => new core.Item(10000 + i, 1)));
+    p.getBank(tab).setItems(Array.from({ length: perTab }, (_, i) => new core.Item(10000 + tab * perTab + i, 1)));
   }
   assert.ok(Ghrim.spaceShort(p, Ghrim.pendingFor(p, Common.kingdomOf(p))) > 0);
   const spare = p.getBank(1);
@@ -280,8 +280,9 @@ test('collection counts real bank-tab room and ignores free search-result slots'
   assert.equal(Ghrim.collect(p), false, 'two new resources require two slots');
   spare.setItem(1, new core.Item(-1, 0));
   assert.equal(Ghrim.collect(p), true);
-  assert.equal(spare.getAmount(Common.items().MAPLE_LOGS), 595);
-  assert.equal(spare.getAmount(Common.items().COAL), 1);
+  const banked = (id) => [...Array(core.Bank.BANK_SEARCH_TAB_INDEX).keys()].reduce((sum, tab) => sum + p.getBank(tab).getAmount(id), 0);
+  assert.equal(banked(Common.items().MAPLE_LOGS), 595);
+  assert.equal(banked(Common.items().COAL), 1);
 });
 
 test('a changed job or choice rolls the collection again', () => {

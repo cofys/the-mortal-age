@@ -12,6 +12,30 @@ the other course began, through that obstacle index; when a clicked object belon
 one course, the entry that continues the player's lap is used. A full lap's bonus counts the shared
 obstacles' XP once.
 
+## Marks of grace
+
+From the Wiki's [Mark of Grace](https://oldschool.runescape.wiki/w/Mark_of_Grace) page ("Spawning
+mechanics" and the despawn rules), run by `rollMarkOfGrace` in `Agility.plugin.js` from each
+course's `marks` block:
+
+- **When:** completing a lap rolls for a mark, once 3 minutes have passed since the player's last
+  mark. The cooldown counts whole clock minutes (a mark in minute 0 allows the next roll from minute
+  3) and is saved, so logging out doesn't reset it. Laps during the cooldown don't roll.
+- **Chance:** 2/6 a lap, 2/5 at Rellekka, 2/3 at Canifis and Ardougne. With unboosted Agility 20 or
+  more over the course's level, a fifth of that, except at Canifis (a coding error in the game).
+- **Diaries:** a missed roll is rerolled at 5%, 10% or 15% at Seers' Village for the easy, medium
+  or hard Kandarin diary, and at 25% at Ardougne for the elite Ardougne diary. The cooldown is
+  2 minutes instead of 3 half the time at Ardougne (elite Ardougne), and 1 time in 3 at
+  Pollnivneach (hard Desert) and Rellekka (hard Fremennik). A reroll's chance isn't cut for
+  overlevelling (the Wiki: diary boosts apply after the cut).
+- **On the floor:** a mark only its player sees, on one of the course's mark tiles, for 10 minutes.
+  Marks on one tile stack and restart the 10 minutes. Time logged out doesn't count: the plugin
+  pauses the player's course marks on logout and resumes them on login.
+- **Other courses:** the Wiki gives no roll chance for the non-rooftop courses. Ape Atoll uses 2/25,
+  which with the cooldown gives the Wiki's 5-6 marks an hour at 95 laps an hour; the Shayzien
+  courses use the rooftop 2/6. The Gnome Stronghold, Barbarian Outpost and Werewolf courses give
+  marks too (since 8 May 2024), but have no `marks` block: their tiles and chances aren't known.
+
 ## Shayzien Agility Course (basic and advanced)
 
 - **Shared start:** the ladder, monkeybars and first tightrope belong to the basic course
@@ -95,7 +119,7 @@ obstacles' XP once.
   chapter, and the island can't be reached without it.
 - **A lap:** stepping stone 40, tropical tree 40, monkeybars 40, skull slope 60, rope 100, then the
   second tropical tree 0 and the 300 lap bonus: 580. Marks of grace since May 2024, 5-6 an hour at
-  95 laps an hour, so one roll in 17 a lap.
+  95 laps an hour, so 2 rolls in 25 a lap with the 3-minute cooldown ([Marks of grace](#marks-of-grace)).
 - **Failing (Wiki):** from 75 Agility (boosts count) nothing fails, and the stepping stone and the
   second tree never fail (15 May 2024). A fall from the first tree, the monkeybars or the skull
   slope lands at the course entrance by the signpost; the rope drops a monkey by the first tree.

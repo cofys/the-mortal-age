@@ -431,12 +431,17 @@ function completeInventoryOrGroundFire(player, state) {
     return false;
   }
 
+  let logs = 1;
   if (state.mode === SESSION_MODE.INVENTORY) {
     if (!player.getInventory().contains(state.log.itemId)) {
       player.sendMessage("You've run out of logs.");
       return false;
     }
-    player.getInventory().deleteNumber(state.log.itemId, 1);
+    // Content may burn several logs in the one action ("firemaking:logs-per-action", a league relic's nine).
+    const burn = { player, logId: state.log.itemId, amount: 1 };
+    pluginApi.emitCustomEvent("firemaking:logs-per-action", burn);
+    logs = burn.amount > 1 ? Math.max(1, Math.min(burn.amount | 0, player.getInventory().getAmount(state.log.itemId))) : 1;
+    player.getInventory().deleteNumber(state.log.itemId, logs);
   } else {
     const groundLog = ItemOnGroundManager.getGroundItem(
       player.getUsername(),
@@ -451,7 +456,7 @@ function completeInventoryOrGroundFire(player, state) {
   }
 
   spawnFire(player, state.location);
-  grantFiremakingLogXp(player, state.log);
+  for (let burnt = 0; burnt < logs; burnt++) grantFiremakingLogXp(player, state.log);
   Sounds.sendSound(player, Sound.FIRE_SUCCESSFUL);
   player.sendMessage("The logs catch fire and begin to burn.");
   return true;
@@ -595,7 +600,10 @@ function processFiremakingTick(activeSessions, currentTick) {
     }
 
     player.performAnimation(LIGHT_FIRE_ANIMATION);
-    if (Math.random() >= lightingSuccessChance(getFiremakingLevel(player))) {
+    // Content may make the roll succeed ("firemaking:light-roll", a league relic that never fails to light).
+    const light = { player, success: Math.random() < lightingSuccessChance(getFiremakingLevel(player)) };
+    pluginApi.emitCustomEvent("firemaking:light-roll", light);
+    if (!light.success) {
       session.nextActionTick = currentTick + LIGHT_ATTEMPT_INTERVAL_TICKS;
       continue;
     }

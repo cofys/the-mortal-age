@@ -168,3 +168,25 @@ test('other spellbooks and god spells do not receive elemental scaling or weakne
     f.targetWithoutWeakness(); assert.equal(f.max(),withWeakness,spell);
   }
 });
+
+test('breaking an elemental fragment permanently adds two to that element base only', t => {
+  const actions = new Map();
+  require('../plugins/combat/elementalspells/Fragments.ElementalSpells').attach({
+    persistAttribute: () => {}, onItemAction: (name, handlers) => actions.set(name, handlers),
+  });
+  const f = fixture(t, {spell:'WIND_WAVE',type:0,percent:0});
+  assert.equal(f.max(),20);
+  const deleted = [];
+  const messages = [];
+  t.mock.method(f.player, 'getInventory', () => ({ deleteNumber: (id, n) => deleted.push([id, n]) }));
+  t.mock.method(f.player, 'sendMessage', m => messages.push(m));
+  const item = new core.Item(core.ItemIdentifiers.FRAGMENT_OF_WHISPERING_WIND);
+  actions.get('Fragment of whispering wind').Break({ player: f.player, item });
+  assert.deepEqual(deleted, [[core.ItemIdentifiers.FRAGMENT_OF_WHISPERING_WIND, 1]]);
+  assert.equal(f.max(),22, 'wind wave 20 + 2');
+  assert.equal(f.max(core.CombatSpells.EARTH_WAVE),20, 'other elements are unchanged');
+  actions.get('Fragment of whispering wind').Break({ player: f.player, item });
+  assert.equal(deleted.length, 1, 'a second wind fragment is kept');
+  actions.get('Fragment of burning fire').Break({ player: f.player, item: new core.Item(core.ItemIdentifiers.FRAGMENT_OF_BURNING_FIRE) });
+  assert.equal(f.max(core.CombatSpells.FIRE_WAVE),22);
+});

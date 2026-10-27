@@ -80,6 +80,7 @@ function craftLeatherItem(player, materialId, recipe) {
   player.sendMessage(`You make ${recipe.made}.`);
   useThread(player);
   Shared.getApi().emitCustomEvent("crafting:made", { player, itemId: recipe.itemId });
+  Shared.produced(player, recipe.itemId, 1, recipe.xp);
   return true;
 }
 
@@ -97,7 +98,7 @@ function startLeatherCrafting(player, materialId, recipe, amount) {
   }
   // Items on ticks 2, 5, 8 ... after the choice; the animation restarts with each one.
   Shared.startMaking(player, {
-    amount, startTick: 0, firstTick: 2, interval: 3, animation: data().animation, resetAnimation: true,
+    amount, startTick: 0, firstTick: 2, interval: 3, animation: data().animation, resetAnimation: true, kind: "leather",
     has: () => hasLeatherMaterials(player, materialId, recipe),
     make: () => craftLeatherItem(player, materialId, recipe),
   });
@@ -152,6 +153,7 @@ function combine(player, recipe) {
   for (const [id, amount] of recipe.materials ?? []) inventory.deleteNumber(id, amount);
   inventory.addItem(new (Shared.getCore().Item)(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp);
   return true;
 }
 
@@ -182,7 +184,7 @@ function startCombining(player, recipe, amount) {
   }
   Shared.startMaking(player, {
     amount, startTick: 0, firstTick: recipe.ticks - 1, interval: recipe.ticks,
-    animation: recipe.animation, resetAnimation: true,
+    animation: recipe.animation, resetAnimation: true, kind: "leather",
     has: () => hasCombineMaterials(player, recipe),
     make: () => combine(player, recipe),
   });

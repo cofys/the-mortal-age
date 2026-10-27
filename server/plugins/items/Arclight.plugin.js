@@ -2,6 +2,7 @@
 const ARC_META = 'arclight';
 const MAX_CHARGES = 10000;
 let core;
+let pluginApi;
 
 function state(item) {
   const saved = item.getMetaValue(ARC_META);
@@ -58,6 +59,10 @@ function hitResolved({ attacker, hit }) {
   if (hit.getCombatMethod() === core.CombatSpecial.getById('arclight')?.getCombatMethod()) return;
   const player = attacker.getAsPlayer(), sword = player.getEquipment().getItems()[core.Equipment.WEAPON_SLOT];
   if (sword?.getId() !== core.ItemIdentifiers.ARCLIGHT) return;
+  // Content may spare the charge (a league relic): the question every charged weapon asks.
+  const consume = { player, itemId: sword.getId(), skip: false };
+  pluginApi.emitCustomEvent('combat:consume-charge', consume);
+  if (consume.skip) return;
   const current = state(sword);
   current.charges = Math.max(0, current.charges - 1);
   current.infusion = Math.min(MAX_CHARGES, current.infusion + 1);
@@ -71,6 +76,7 @@ function hitResolved({ attacker, hit }) {
 
 function attach(api) {
   core = api.core;
+  pluginApi = api;
   api.onItemOnObject('Darklight', 'Altar', enhance, { noted: false });
   api.onItemOnItem(charge, { noted: false });
   api.onItemAction('Arclight', { Check: check });

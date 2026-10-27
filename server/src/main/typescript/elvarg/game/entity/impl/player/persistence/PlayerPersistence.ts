@@ -1,5 +1,7 @@
 import type { Player } from "../Player";
 import { PlayerSave } from "../persistence/PlayerSave";
+import { MAIN_PROFILE, profileStorageKey, siblingProfile, type PlayerProfile } from "./PlayerProfile";
+import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../../net/login/LoginTokens";
 const SKIP_PERSISTENCE_ATTRIBUTE = "bot-skip-persistence";
 
 
@@ -20,28 +22,63 @@ export interface PlayerSaveRestore {
 }
 
 export abstract class PlayerPersistence {
+    /** The profiles, for the backends in plugins/persistence (which reach core through this class). */
+    public static readonly MAIN_PROFILE: PlayerProfile = MAIN_PROFILE;
+    /** A backend's key for a profile's save: see PlayerProfile.profileStorageKey. */
+    public static readonly profileStorageKey = profileStorageKey;
+
     private readonly requestedSaves = new Map<Player, Set<string>>();
     private readonly requestErrors = new Map<Player, Error>();
 
-    abstract load(username: string): PlayerSave;
-    /** `reason` says why the save happened ("logout", "autosave", "shutdown", ...); a backend with a history records it. */
+    /** The account's save for `profile` (its main character unless asked for another), or null. */
+    abstract load(username: string, profile?: PlayerProfile): PlayerSave;
+    /** `reason` says why the save happened ("logout", "autosave", "shutdown", ...); a backend with a history records it. The key is the player's name and profile. */
     abstract save(player: Player, reason?: string): void;
-    abstract exists(username: string): boolean;
+    abstract exists(username: string, profile?: PlayerProfile): boolean;
 
-    /** External stores must use this path instead of editing a live account's saved row. */
-    public async updateOffline(username: string, update: (save: PlayerSave) => void, reason = "offline-purchase"): Promise<boolean> {
+    /**
+     * External stores must use this path instead of editing a live account's saved row. Both
+     * profiles share the name, so an online account blocks offline edits to either save, unless
+     * `evenIfOnline` says the profile edited is not the one online (the account's other character).
+     */
+    public async updateOffline(
+        username: string,
+        update: (save: PlayerSave) => void,
+        reason = "offline-purchase",
+        profile: PlayerProfile = MAIN_PROFILE,
+        { evenIfOnline = false }: { evenIfOnline?: boolean } = {}
+    ): Promise<boolean> {
         const { World } = require("../../../../World") as typeof import("../../../../World");
-        if (World.getPlayerByName(username)) throw new Error("Cannot update an online account through offline persistence");
-        const save = this.load(username);
+        const online = World.getPlayerByName(username);
+        if (online && (!evenIfOnline || online.getProfile() === profile)) {
+            throw new Error("Cannot update an online account through offline persistence");
+        }
+        const save = this.load(username, profile);
         if (!save) return false;
         update(save);
-        this.saveOffline(username, save, reason);
+        this.saveOffline(username, save, reason, profile);
         await this.flush();
         return true;
     }
 
-    protected saveOffline(_username: string, _save: PlayerSave, _reason: string): void {
+    protected saveOffline(_username: string, _save: PlayerSave, _reason: string, _profile: PlayerProfile = MAIN_PROFILE): void {
         throw new Error("This persistence backend does not support offline updates");
+    }
+
+    /**
+     * A new password for the account: the live character takes it (and signs out its remembered
+     * logins), its save is written, and the account's other character's save gets the same hash
+     * with its remembered logins signed out too, so the old password opens neither character.
+     */
+    public async changePassword(player: Player, passwordHashWithSalt: string): Promise<void> {
+        player.setPasswordHashWithSalt(passwordHashWithSalt);
+        this.requestSave(player, "password-change");
+        const other = siblingProfile(player.getProfile());
+        if (!this.exists(player.getUsername(), other)) return;
+        await this.updateOffline(player.getUsername(), (save) => {
+            save.setPasswordHashWithSalt(passwordHashWithSalt);
+            save.attributes = { ...(save.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: [] };
+        }, "password-change", other, { evenIfOnline: true });
     }
 
     /** Snapshot after the current operation finishes; overlapping triggers share one write. */
@@ -84,7 +121,7 @@ export abstract class PlayerPersistence {
     }
 
     /** A player's snapshots, newest first. */
-    public listSnapshots(_username: string, _limit?: number): PlayerSaveSnapshot[] {
+    public listSnapshots(_username: string, _limit?: number, _profile: PlayerProfile = MAIN_PROFILE): PlayerSaveSnapshot[] {
         return [];
     }
 
@@ -93,7 +130,12 @@ export abstract class PlayerPersistence {
      * `online`, the player's next save writes it instead (log them out), so their logout save
      * can't overwrite it.
      */
-    public restoreSnapshot(_username: string, _id: number, _options?: { online?: boolean }): PlayerSaveRestore | null {
+    public restoreSnapshot(
+        _username: string,
+        _id: number,
+        _options?: { online?: boolean },
+        _profile: PlayerProfile = MAIN_PROFILE
+    ): PlayerSaveRestore | null {
         return null;
     }
 

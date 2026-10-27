@@ -9,6 +9,7 @@ const Common = require("./phantommuspah/Common.PhantomMuspah");
 const Lair = require("./phantommuspah/Lair.PhantomMuspah");
 const Fight = require("./phantommuspah/Fight.PhantomMuspah");
 const Loot = require("./phantommuspah/Loot.PhantomMuspah");
+const Scoreboard = require("./phantommuspah/Scoreboard.PhantomMuspah");
 
 module.exports = {
   name: "PhantomMuspah",
@@ -18,6 +19,7 @@ module.exports = {
     Lair.attachLair(api);
     Fight.attachFight(api);
     Loot.attachLoot(api);
+    Scoreboard.attachScoreboard(api);
     require("./phantommuspah/Commands.PhantomMuspah")(api);
   },
 };

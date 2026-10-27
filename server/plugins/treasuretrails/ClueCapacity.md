@@ -22,6 +22,9 @@ quest/storage callbacks. Failed reservation preserves the complete inventory.
 
 Custom events:
 
+- `treasure-trails:scroll-boxes`: `{player, unlocked, capacity:null}`, asked by the plugin
+  itself after the X Marks the Spot check; a listener may set `unlocked` or a `capacity` of its
+  own (a league's tier passive: every clue a box, without a limit).
 - `treasure-trails:capacity`: `{player, tier, capacity:null}`.
 - `treasure-trails:can-receive`: `{player, tier, allowed:null}`.
 - `treasure-trails:clue-item`: `{player, itemId, box:false}` resolves a reward

@@ -171,6 +171,13 @@ function npcName(id: number): string | undefined {
     try { return CacheDefinitions.getNpc(id)?.name ?? undefined; } catch { return undefined; }
 }
 
+/** An NPC's name and, for a multinpc parent (live spawns 317 for the Leagues Tutor 316), its variants'. */
+function npcNames(id: number): string[] {
+    let transforms: number[] = [];
+    try { transforms = CacheDefinitions.getNpc(id)?.transforms ?? []; } catch { /* no such npc */ }
+    return [id, ...transforms.filter((variant) => variant >= 0)].map(npcName).filter((name): name is string => !!name);
+}
+
 /** The id for a page's spawns: --id, a --tag version, the one existing spawns use most, the first. */
 function chooseId(page: string, versions: Version[], tags: string[], overrides: Map<string, number>, usage: Map<number, number>): number | null {
     const override = overrides.get(nameKey(page));
@@ -362,7 +369,7 @@ async function main() {
     const only = argValues("--only");
     const eligible = (spawn: Candidate) => !spawn.skip && (only.length === 0 || only.some((label) => spawn.flags.includes(label)));
     const identities = repairIdentities
-        ? reconcileIdentities(spawns, identityEvidence.filter(eligible), npcName, radius, (spawn: Spawn) => inBoxes(spawn, boxes))
+        ? reconcileIdentities(spawns, identityEvidence.filter(eligible), npcNames, radius, (spawn: Spawn) => inBoxes(spawn, boxes))
         : { spawns, repairs: [], unresolved: [] };
     const existing = identities.spawns.filter((spawn: Spawn) => inBoxes(spawn, boxes)).map((spawn: Spawn) =>
         ({ ...spawn, name: spawn.name ?? (spawn.id !== undefined ? npcName(spawn.id) : undefined) }));

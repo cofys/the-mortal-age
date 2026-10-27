@@ -97,3 +97,38 @@ Ghommal plays the transcript's "combat-achievement-rewards" variant while a tier
 - **The tier perks** (better clue chances, Slayer, GWD, cannon and Pest Control boosts, the hilts' teleports and the slayer helmet recolours). They belong to their own plugins.
 - **Replacing lost rewards** at Ghommal, and handing in an older hilt.
 - **The Combat Achievements settings** (`ca_failure_notifications_enabled` and the rest) and failure messages.
+
+## Reward claim parity (26 October 2026)
+
+- Both Ghommal and his post-While Guthix Sleeps replacement Laidee Gnonock run
+  their canonical reward variants. All initial tiers work at the appropriate NPC;
+  this does not implement the separate lost-hilt reclaim interface.
+- Native confirmation retains the original nearby, registered reward NPC
+  context. Death, trade, placement, teleport, forced movement, ownership changes
+  or leaving the conversation's range cannot grant a delayed bundle.
+- The lamp/hilt/penny bundle is planned in a real copied Inventory before either
+  inventory or tier entitlement changes. Exact-fit bags work; failed bundles stay
+  unclaimed. Master still includes the nonstackable lucky penny.
+- Lamp confirmation rechecks the earned tier, exact item object/ID/slot, metadata,
+  life/status/movement and skill requirement. Logout clears pending requests;
+  refused XP keeps the lamp. Successful consumption requests a persistence save.
+- Six new real-object native tests cover Ghommal tiers1–5, Laidee tiers1–6, duplicate
+  continuation, full/exact-fit bags, delayed state changes, item replacement and
+  logout. Together with the existing framework tests, the focused suite passes26.
+- Independent Codex review found no gameplay blocker within this phase. It asked
+  to narrow an inherited comment equating all worlds with a League recording; the
+  comment now attributes only the observed LeagueVI tutor packet behavior.
+- Sources: RSProx237/01107 for the Easy claim and lamp; current Wiki
+  [Laidee Gnonock](https://oldschool.runescape.wiki/w/Laidee_Gnonock),
+  [Ghommal](https://oldschool.runescape.wiki/w/Ghommal), and
+  [Antique lamp](https://oldschool.runescape.wiki/w/Antique_lamp) for normal-world
+  roles and reward rules. No generated dialogue/index data was edited.
+
+Reclaim UI, current lucky-penny consumption/charge effects and other tier perks
+remain separate follow-ups; this phase does not certify the whole tracker item.
+
+Native worktree checks: the prepared QA account claimed Easy and then the remaining tiers through Ghommal’s complete canonical conversation, used its earned lamp for exactly5,000 Runecraft XP, and retained inventory/tier/XP state after relog. This uses a prepared completion-bit state, not a natural completion of655 tasks. The live walkthrough caught a lazy dialogue condition reading a cleared claim after the grant; its new regression fails before the fix and passes after it. The successful result is retained only until that condition is consumed, so the success text no longer becomes a false no-space warning. Codex re-review cleared it.
+
+Natural post-quest Laidee access is a separate data gap: the shipped generated spawn still uses an obsolete ID (13647), which resolves to an unnamed/no-option NPC on the active241 cache. Native unit tests use the correct cache named NPC; this PR does not certify that spawn. Repair through the canonical spawn generator is still needed; no generated JSON was hand-edited.
+
+Final complete suite after the real dialogue regression and legacy thrall fixture update:8,670/8,670 pass,0 failures/skips (node --test --test-concurrency=4 tests/). All owned native QA worlds are stopped.

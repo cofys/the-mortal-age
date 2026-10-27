@@ -74,12 +74,10 @@
  *  - Gem cutting is already handled by the Crafting plugin (no crush chance), so
  *    the "buy a replacement gem for 500 coins" branch is only reachable if a gem
  *    is dropped; it then sells whichever gem type is missing.
- *  - Pot lid making: Crafting's potter's wheel has no pot-lid recipe and its
- *    handler cannot be pre-empted (item-on-object hooks all run), so Tassie's
- *    "shows you how to make pot lids" step turns the soft clay into an unfired
- *    pot lid; it is fired on a pottery oven and used on a pot to make the
- *    airtight pot. The pot spawn in the Barbarian Village helmet shop has no map
- *    placement here, so a pot is picked up just outside Tassie's pottery.
+ *  - Pot lid making: Tassie's lesson supplies the first unfired lid. Crafting
+ *    handles the wheel's unlocked recipe and timed oven firing. The pot spawn
+ *    in the Barbarian Village helmet shop has no map placement here, so a pot
+ *    is picked up just outside Tassie's pottery.
  *  - Brewing: the bowl of hot water can be made on any range/oven/fire and used
  *    on an empty cup (or the harralander used on the bowl directly) while the
  *    Sanfew favour is open.
@@ -751,13 +749,6 @@ module.exports = function registerOneSmallFavourQuest(api) {
       addItem(player, BOWL_OF_HOT_WATER, 1);
       player.sendMessage("You heat the bowl of water.");
       return;
-    }
-
-    if (itemId === UNFIRED_POT_LID && objectName === "Pottery Oven") {
-      event.handled = true;
-      deleteItem(player, UNFIRED_POT_LID, 1);
-      addItem(player, POT_LID, 1);
-      player.sendMessage("You fire the pot lid in the oven.");
     }
   }
 

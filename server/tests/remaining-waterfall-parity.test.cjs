@@ -484,7 +484,7 @@ test('the Waterfall dungeon doors swap to their cache open locs', () => {
   doors.register({
     core: fakeCore,
     onObjectInteraction: (name, actions) => { if (name === 'Door') Object.assign(names, actions); },
-    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, emitCustomEvent() {},
+    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, onCustomEvent() {}, emitCustomEvent() {},
   });
   for (const [closedId, openId, face] of [[2000, 2001, 3], [2002, 2003, 1]]) {
     registered.length = 0; deregistered.length = 0;
@@ -523,7 +523,7 @@ test('north Waterfall large doors match the captured west swing and keep the thr
   require('../plugins/objects/Doors.plugin.js').register({
     core: doorCore,
     onObjectInteraction: (name, actions) => { if (name === 'Large door') Object.assign(names, actions); },
-    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, emitCustomEvent() {},
+    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, onCustomEvent() {}, emitCustomEvent() {},
   });
   const player = { getPrivateArea: () => null, getLocation: () => new core.Location(2581, 9876, 0) };
   const north = MapObjects.get(1521, new core.Location(2582, 9875, 0), null);
@@ -582,6 +582,7 @@ test('normal defaults reach and open both Baxtorian 2002 doors through the real 
       if (name === 'Door') names.door = actions;
     },
     onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {},
+    onCustomEvent: (event, handler) => q.api.onCustomEvent(event, handler),
     emitCustomEvent: (event, payload) => q.emit(event, payload),
   });
   const finder = new RsmodRouteFinding();

@@ -173,8 +173,8 @@ function withdrawAmount(player, amount) {
   open(player);
 }
 
-function onOpenRequest({ player }) {
-  if (player) open(player);
+function onOpenRequest(request) {
+  if (request?.player && open(request.player)) request.opened = true;
 }
 
 function toggleHelp(player) {

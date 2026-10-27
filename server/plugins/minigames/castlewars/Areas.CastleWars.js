@@ -2,9 +2,9 @@
 
 /**
  * Castle Wars areas - the lobby, the two waiting rooms and the game itself - and the rules that
- * hold inside them: team colours stay on, no friendly fire, no teleporting out, deaths respawn
- * in the team's start room, and anyone logging in inside is sent back to the lobby stripped of
- * game items.
+ * hold inside them: the arena is multi-combat, team colours stay on, no friendly fire, no
+ * teleporting out, deaths respawn in the team's start room, and anyone logging in inside is sent
+ * back to the lobby stripped of game items.
  */
 
 let game;
@@ -91,6 +91,15 @@ function defineAreas() {
 
     getName() {
       return "Castle Wars";
+    }
+
+    /**
+     * The whole arena (both castles on every floor, the field and the tunnels) is a
+     * multi-combat zone, as the Wiki's Multicombat area list has it; the lobby and the
+     * waiting rooms stay out of it, since nobody fights there.
+     */
+    isMulti() {
+      return true;
     }
 
     postEnter(character) {

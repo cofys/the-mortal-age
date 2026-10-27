@@ -1,4 +1,5 @@
 import { Entity } from "../Entity";
+import { getSequenceForcedPriority } from "../../cache/NpcAnimationScanner";
 import { Sound } from "../../Sound";
 import type { CombatType } from "../../content/combat/CombatType";
 import { HitDamage } from "../../content/combat/hit/HitDamage";
@@ -35,6 +36,8 @@ const getWorld = () =>
   require("../../World").World as typeof import("../../World").World;
 const getPlayerRights = () =>
   require("../../model/rights/PlayerRights").PlayerRights as typeof import("../../model/rights/PlayerRights").PlayerRights;
+const getPluginManager = () =>
+  require("../../../plugins/PluginManager").PluginManager as typeof import("../../../plugins/PluginManager").PluginManager;
 
 class MobileTask extends Task {
     constructor(ticks: number, private readonly execFunc: Function) {
@@ -331,6 +334,13 @@ export abstract class Mobile extends Entity {
         }
         if (this.animation != null && animation != null) {
             if (this.animation.getPriority() > animation.getPriority()) {
+                return;
+            }
+            // Two on one tick at the same priority: the cache's interrupt priority decides, as the
+            // client does for one already playing, so a block never replaces this tick's swing.
+            if (this.animation.getPriority() === animation.getPriority() && animation.getId() >= 0 &&
+                this.animation.getId() >= 0 &&
+                getSequenceForcedPriority(animation.getId()) < getSequenceForcedPriority(this.animation.getId())) {
                 return;
             }
         }
@@ -675,6 +685,9 @@ export abstract class Mobile extends Entity {
             if (hit.getDamage() < 0) hit.setDamage(0);
             return hit;
         }
+        // Final damage includes direct hits (poison, recoil, scripted hazards) as well as
+        // ordinary combat impacts. Plugins mutate the HitDamage before the HP cap.
+        getPluginManager().emitCustomEvent("combat:damage-apply", { target: this, hit });
         const PlayerRights = getPlayerRights();
         // Developers take no damage unless they turned it on (::mortal, for this session).
         const protectedDeveloper =

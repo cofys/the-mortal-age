@@ -27,11 +27,20 @@ function newStep(state, random = Math.random) {
     previous: null, uriReady: false };
 }
 
-function stateOf(item) {
+/** A new trail's length; content may set it within 1 to 3 ("treasure-trails:trail-length", a league relic). */
+function lengthFor(player, random = Math.random) {
+  const rolled = length(random);
+  if (!player) return rolled;
+  const request = { player, tier: "beginner", length: rolled, minimum: 1, maximum: 3 };
+  api?.emitCustomEvent?.("treasure-trails:trail-length", request);
+  return Number.isInteger(request.length) ? Math.max(1, Math.min(3, request.length)) : rolled;
+}
+
+function stateOf(item, player = null) {
   const current = item.getMetaValue(TRAIL_META);
   if (current?.version === 1 && data().byRow.has(current.row) && Number.isInteger(current.completed) && current.completed >= 0 &&
       [1, 2, 3].includes(current.length) && current.completed < current.length && typeof current.token === "string") return current;
-  const state = newStep({ version: 1, token: randomUUID(), revision: 0, completed: 0, length: length() });
+  const state = newStep({ version: 1, token: randomUUID(), revision: 0, completed: 0, length: lengthFor(player) });
   item.setMetaValue(TRAIL_META, state);
   return state;
 }
@@ -39,7 +48,7 @@ function stateOf(item) {
 function trails(player, initialize = false) {
   return player.getInventory().getItems().flatMap((item, slot) => {
     if (!item || item.getId() !== data().scroll || item.getAmount() < 1) return [];
-    const state = initialize ? stateOf(item) : item.getMetaValue(TRAIL_META);
+    const state = initialize ? stateOf(item, player) : item.getMetaValue(TRAIL_META);
     return state && data().byRow.has(state.row) ? [{ item, slot, state, step: data().byRow.get(state.row) }] : [];
   });
 }
@@ -56,7 +65,7 @@ function clicked(event, id) {
 function read(event) {
   const item = clicked(event, data().scroll);
   if (!item) return false;
-  const state = stateOf(item);
+  const state = stateOf(item, event.player);
   const step = data().byRow.get(state.row);
   const sender = event.player.getPacketSender();
   if (step.kind === "map") sender.sendInterface(step.interfaceId);
@@ -71,7 +80,7 @@ function read(event) {
 function checkSteps(event) {
   const item = clicked(event, data().scroll);
   if (!item) return false;
-  event.player.sendMessage(`You have completed ${stateOf(item).completed} steps on this beginner Treasure Trail.`);
+  event.player.sendMessage(`You have completed ${stateOf(item, event.player).completed} steps on this beginner Treasure Trail.`);
   return true;
 }
 
@@ -144,13 +153,17 @@ function talk(event) {
       dialogue(player, npcId, [task.text.replace("I need to give Charlie", "I really need").replace("I need to give", "I really need")]);
       return;
     }
-    if (!held(player, task.itemId)) {
+    // Content may lift Charlie's item ("treasure-trails:requirement-waived", a league relic): he is thanked without it.
+    const waiver = { player, kind: "charlie", waived: false };
+    api?.emitCustomEvent?.("treasure-trails:requirement-waived", waiver);
+    const waived = waiver.waived === true && !held(player, task.itemId);
+    if (!waived && !held(player, task.itemId)) {
       dialogue(player, npcId, [task.text.replace("I need to give Charlie", "I still need").replace("I need to give", "I still need")]);
       return;
     }
     dialogue(player, npcId, ["Thank you so much!"], () => {
-      if (!stillHeld(player, trail) || !nearNpc() || !held(player, task.itemId)) return;
-      player.getInventory().deleteNumber(task.itemId, 1);
+      if (!stillHeld(player, trail) || !nearNpc() || (!waived && !held(player, task.itemId))) return;
+      if (!waived) player.getInventory().deleteNumber(task.itemId, 1);
       advance(player, trail);
     });
     return;
@@ -180,7 +193,11 @@ function dig(event) {
 function emoteReady(player, step) {
   if (step.kind !== "emote" || distance(location(player), step.location) > step.radius) return false;
   const worn = player.getEquipment().getItems().filter(Boolean).map(item => item.getId());
-  return step.equipment.every(id => worn.includes(id));
+  if (step.equipment.every(id => worn.includes(id))) return true;
+  // Content may lift what the step asks to wear ("treasure-trails:requirement-waived", a league relic).
+  const request = { player, kind: "emote", waived: false };
+  if (step.equipment.length > 0) api?.emitCustomEvent?.("treasure-trails:requirement-waived", request);
+  return request.waived === true;
 }
 
 function emote({ player, slot }) {

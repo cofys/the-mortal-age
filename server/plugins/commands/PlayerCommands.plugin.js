@@ -173,8 +173,8 @@ module.exports = {
       }
       try {
         const passwordHash = await PasswordUtil.generatePasswordHashWithSalt(pass);
-        player.setPasswordHashWithSalt(passwordHash);
-        api.emitCustomEvent("persistence:save", { player, reason: "password-change" });
+        // The account's credential: this character, its save, and its other character's save.
+        await api.core.GameConstants.PLAYER_PERSISTENCE.changePassword(player, passwordHash);
         player.sendMessage(`Your password is now: ${pass}`);
       } catch (err) {
         console.error(err);

@@ -204,7 +204,8 @@ test("the Explorer's ring Functions submenu's Energy entry restores energy", () 
   const itemId = Rewards.objId("lumbridge_ring_medium");
   assert.equal(option("Explorer's ring 2", "Functions", p, { itemId, subOpId: 1 }), true);
   assert.equal(p.getRunEnergy(), 50);
-  assert.equal(option("Explorer's ring 2", "Functions", p, { itemId, subOpId: 2 }), false);
+  // Alchemy (subop2) is exercised with real objects/native input in explorers-ring-alchemy.
+  assert.equal(option("Explorer's ring 2", "Functions", p, { itemId, subOpId: 20 }), false);
 });
 
 test("Explorer's ring 2 Check also lists its cabbage patch teleports", () => {

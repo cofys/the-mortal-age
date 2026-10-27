@@ -129,10 +129,11 @@ module.exports = {
   name: "Ape Atoll Agility",
   lapXp: 580,
   petBase: 37720, // Giant squirrel base chance (Wiki)
-  // 5-6 marks an hour at 95 laps an hour (Wiki).
+  // 5-6 marks an hour at 95 laps an hour (Wiki). The Wiki gives no roll chance; with the 3-minute
+  // cooldown, 2/25 a lap makes 60 / (3 + (60 / 95) / (2 / 25)) = 5.5 an hour.
   marks: {
     level: LEVEL,
-    chance: 1 / 17,
+    chance: 2 / 25,
     tiles: [[2744, 2738, 0], [2748, 2733, 0], [2760, 2748, 0]],
   },
   obstacles: [

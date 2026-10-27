@@ -1,0 +1,54 @@
+{
+  "_source": "OSRS Wiki: Bank (bank space, the purchase table) and Banker (\"I'd like to buy more bank slots.\"); rsprox capture of a members account with 2 blocks bought, no PIN, on a Jagex Account (rev 241): the bank's capacity text \"1040\" and tooltip (script 1495), \"Set a Bank PIN to unlock more bank space.\" depositing into the full bank, the menu_new purchase list (script 9142), the purchase (varbit bank_extra_blocks_purchased 2 -> 3, sound 2114) and the refusal with only bank coins; a second capture (3 blocks, a PIN pending) of \"other options\", \"(Cancel)\" and the tooltip while the PIN is pending.",
+  "capacity": {
+    "members": 900,
+    "freeToPlay": 400,
+    "pin": 20,
+    "jagexAccount": 40
+  },
+  "slotsPerBlock": 50,
+  "blockCosts": [1000000, 2000000, 5000000, 10000000, 20000000, 50000000, 100000000, 200000000, 500000000],
+  "purchaseSound": 2114,
+  "messages": {
+    "fullWithoutPin": "Set a Bank PIN to unlock more bank space."
+  },
+  "tooltip": {
+    "members": "Members' capacity: [slots]",
+    "freeToPlay": "Free-to-play capacity: [slots]",
+    "purchased": "+[slots] that you've purchased.",
+    "forSale": "A banker can sell you up to [slots] more.",
+    "pinMissing": "Set a PIN for [slots] more.",
+    "pinSet": "+[slots] for having a Bank PIN.",
+    "jagexAccount": "+[slots] as a Jagex Account."
+  },
+  "dialogue": {
+    "offerLine": "I can sell you up to [number] additional bank slots",
+    "offer": "I can sell you up to [slots] additional bank slots in sets of 50. How many are you interested in buying?",
+    "menuTitle": "How many do you wish to purchase?",
+    "option": "[slots] slots ([coins] coins)",
+    "otherOptions": "Do I have any other options for extra bank space?",
+    "cancel": "(Cancel)",
+    "choose": "[slots] slots please.",
+    "cost": "Buying [slots] additional bank slots will cost [coins] coins. Be warned, this purchase is not reversible. Are you happy to proceed?",
+    "tooPoor": "Oh... I don't seem to have enough money for that. Never mind.",
+    "confirmTitle": "Buy [slots] bank slots for [coins] coins?",
+    "yes": "Yes.",
+    "no": "No.",
+    "accept": "Yes, I'm happy with that.",
+    "changedMind": "Actually, I've changed my mind.",
+    "added": "Your additional bank slots have been added.",
+    "allFree": "I'm afraid not! You've already got as much bank space as you can obtain without purchase.",
+    "pinHint": "I'm not supposed to tell you this, but you can obtain more bank space by setting up a PIN."
+  },
+  "expressions": {
+    "offer": 568,
+    "choose": 567,
+    "cost": 569,
+    "tooPoor": 576,
+    "accept": 567,
+    "added": 567,
+    "otherOptions": 554,
+    "pinHint": 593,
+    "changedMind": 575
+  }
+}

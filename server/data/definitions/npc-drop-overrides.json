@@ -3,7 +3,9 @@
  "removeNpcs": {
   "6594": "Ent: its loot comes from the Ent trunk it leaves (Woodcutting Guild, plugins/skills/woodcutting).",
   "7234": "Ent: as above.",
-  "9474": "Ent: as above."
+  "9474": "Ent: as above.",
+  "6406": "Tai Bwo Wannai Cleanup's tribesman (hiding form): it drops nothing.",
+  "6407": "Tai Bwo Wannai Cleanup's tribesman: only bones (Wiki, and every recorded kill), dropped by plugins/minigames/taibwowannaicleanup/Events."
  },
  "addNpcs": {
   "$comment": "NPC ids the dumper doesn't map to their table: variants and versions it misses (added 2026-09-15, 'import missing NPC tables with corrected variant mappings').",
@@ -36,8 +38,6 @@
   "5625": {"npc_id": 5625, "name": "Ghast", "cache_name": "Ghast", "wiki_page": "Ghast", "tables": ["ghast"]},
   "5626": {"npc_id": 5626, "name": "Ghast", "cache_name": "Ghast", "wiki_page": "Ghast", "tables": ["ghast"]},
   "5627": {"npc_id": 5627, "name": "Ghast", "cache_name": "Ghast", "wiki_page": "Ghast", "tables": ["ghast"]},
-  "6406": {"npc_id": 6406, "name": "Tribesman", "wiki_page": "Tribesman", "tables": ["tribesman"]},
-  "6407": {"npc_id": 6407, "name": "Tribesman", "cache_name": "Tribesman", "wiki_page": "Tribesman", "tables": ["tribesman"]},
   "7261": {"npc_id": 7261, "name": "Hill Giant", "cache_name": "Hill Giant", "wiki_page": "Hill Giant", "tables": ["hill_giant"]},
   "7800": {"npc_id": 7800, "name": "Ammonite Crab", "wiki_page": "Ammonite Crab", "tables": ["ammonite_crab"]},
   "7801": {"npc_id": 7801, "name": "Tar Monster", "wiki_page": "Tar Monster", "tables": ["tar_monster"]},

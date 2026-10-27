@@ -24,10 +24,11 @@ function slayerState(h) {
   const Data = require('../plugins/skills/slayer/Data.Slayer');
   const State = require('../plugins/skills/slayer/State.Slayer');
   const Tasks = require('../plugins/skills/slayer/Tasks.Slayer');
+  const SlaughterBracelet = require('../plugins/skills/slayer/SlaughterBracelet.Slayer');
   h.p.getSession = () => ({ sendClientPacket: () => true, write() {} });
   const sender = new PacketSender(h.p);
   h.p.getPacketSender = () => sender;
-  for (const unit of [Data, State, Tasks]) unit.init(h.api);
+  for (const unit of [Data, State, Tasks, SlaughterBracelet]) unit.init(h.api);
   const [bossId] = [...Data.get().bosses].find(([id]) => Data.isBossNpc(id, 'The Leviathan'));
   return {
     attach: () => Tasks.attach(h.api),

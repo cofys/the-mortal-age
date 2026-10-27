@@ -12,6 +12,17 @@ const FLAG_OP1 = 1 << 1;
 const FLAG_OP2 = 1 << 2;
 const FLAG_OP3 = 1 << 3;
 
+/** Every if_setevents bit by the name rsprox prints: the ten ops, then the target kinds. */
+const EVENT_FLAGS = Object.freeze({
+  OP1: FLAG_OP1, OP2: FLAG_OP2, OP3: FLAG_OP3, OP4: 1 << 4, OP5: 1 << 5, OP6: 1 << 6, OP7: 1 << 7, OP8: 1 << 8, OP9: 1 << 9, OP10: 1 << 10,
+  TGTOBJ: 1 << 11, TGTNPC: 1 << 12, TGTLOC: 1 << 13, TGTPLAYER: 1 << 14, TGTINV: 1 << 15, TGTCOM: 1 << 16,
+});
+
+/** The flags value for a capture's event list (`["OP1", "TGTNPC"]`). */
+function eventFlags(names) {
+  return names.reduce((bits, name) => bits | (EVENT_FLAGS[name] ?? 0), 0);
+}
+
 const TYPE_LAYER = 0;
 const TYPE_RECTANGLE = 3;
 const TYPE_TEXT = 4;
@@ -73,6 +84,8 @@ module.exports = {
   FLAG_OP1,
   FLAG_OP2,
   FLAG_OP3,
+  EVENT_FLAGS,
+  eventFlags,
   TYPE_LAYER,
   TYPE_RECTANGLE,
   TYPE_TEXT,

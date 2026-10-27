@@ -196,3 +196,24 @@ test("Elnock's Exchange: a shop_frame slot selects ii_elnex, Confirm trades it",
   assert.equal(p.varbits.get(elnock.SELECTED_VARBIT), 2, "only the offers' own slots select");
 });
 
+
+test("Puro-Puro roaming implings start invisible, show after two minutes and are replaced when caught", () => {
+  const roaming = plugin._test.roaming;
+  const spawns = [], removed = [];
+  roaming.init({ core, spawnNpc: (def) => { const npc = { def, setVisible(v) { npc.visible = v; } }; spawns.push(npc); return npc; }, removeNpc: (npc) => removed.push(npc) });
+  roaming.start();
+  assert.equal(spawns.length, 26, "10 low, 12 mid and 4 high points from the cache");
+  assert.ok(spawns.every((n) => n.visible === false));
+  for (let i = 0; i < roaming.MANIFEST_TICKS; i++) roaming.process();
+  assert.ok(spawns.every((n) => n.visible === true));
+  const event = { npc: spawns[0], handled: false };
+  roaming.caught(event);
+  assert.equal(event.handled, true);
+  for (let i = 0; i < roaming.CAUGHT_TICKS; i++) roaming.process();
+  assert.deepEqual(removed, [spawns[0]]);
+  assert.equal(spawns.length, 27, "respawns at once");
+  assert.deepEqual([spawns[26].def.x, spawns[26].def.y], [spawns[0].def.x, spawns[0].def.y]);
+  assert.equal(spawns[26].visible, false);
+  roaming.shutdown();
+  assert.equal(roaming.live.size, 0);
+});

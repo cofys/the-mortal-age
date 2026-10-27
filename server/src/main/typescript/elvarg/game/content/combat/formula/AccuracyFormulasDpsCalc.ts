@@ -113,6 +113,8 @@ export class AccuracyFormulasDpsCalc {
             return 115;
         } else if (PrayerHandler.isActivated(player, PrayerHandler.PIETY)) {
             return 120;
+        } else if (PrayerHandler.isActivated(player, PrayerHandler.ZEAL)) {
+            return 125; // Wiki: Zeal
         }
         return 100;
     }
@@ -147,7 +149,8 @@ export class AccuracyFormulasDpsCalc {
             return 115;
         } else if (PrayerHandler.isActivated(player, PrayerHandler.CHIVALRY)) {
             return 120;
-        } else if (PrayerHandler.isActivated(player, PrayerHandler.PIETY)) {
+        } else if (PrayerHandler.isActivated(player, PrayerHandler.PIETY)
+            || PrayerHandler.isActivated(player, PrayerHandler.ZEAL)) {
             return 125;
         } else if (PrayerHandler.isActivated(player, PrayerHandler.RIGOUR)) {
             return 125;

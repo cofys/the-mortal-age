@@ -11833,7 +11833,7 @@ function synapseFixture() {
  api.sendMultiChatboxPrompt=(p,title,...pairs)=>prompt=pairs;
  const inventory={getItems:()=>items,contains:id=>items.some(i=>i.getId()===id),getAmount:id=>items.filter(i=>i.getId()===id).length,refreshItems(){},deleteNumber:(id,n)=>{while(n--){const at=items.findIndex(i=>i.getId()===id);assert(at>=0);items.splice(at,1);}}};
  const player={getInventory:()=>inventory,getEquipment:()=>({getItems:()=>items,refreshItems(){}}),getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getHitpoints:()=>99,getLocation:()=>position,isRegistered:()=>registered,sendMessage(){},getCombat:()=>({getHitQueue:()=>({addPendingDamage:d=>damage.push(...d)})}),getSkillManager:()=>({getCurrentLevel:s=>current.get(s)??99,getMaxLevel:s=>base.get(s)??99,addExperience:(s,n)=>xp.push([s,n]),stopSkillable(){}})};
- const arc=require('../plugins/items/Arclight.plugin');arc.register({core:api.core,onItemOnObject(){},onItemOnItem(){},onItemAction(){},onCombatHitResolved(){}});
+ const arc=require('../plugins/items/Arclight.plugin');arc.register({core:api.core,emitCustomEvent(){},onItemOnObject(){},onItemOnItem(){},onItemAction(){},onCombatHitResolved(){}});
  const f=require('../plugins/quests/wgs/Rewards.WhileGuthixSleeps')({api,stage:()=>progress,held:(p,id)=>inventory.contains(id),val:(p,k)=>attrs.get(k)||0,ATTRIBUTES:[]});
  const add=id=>{const i=new api.core.Item(id,1);items.push(i);return i;};
  return {api,f,arc,attrs,items,tasks,xp,damage,player,current,base,add,prompt:()=>prompt,setStage:s=>progress=s,move:()=>position=new api.core.Location(3201,3200,0),disconnect:()=>registered=false};
@@ -20134,6 +20134,7 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   };
   const doorApi = {
     core: doorCore,
+    onCustomEvent: () => {},
     emitCustomEvent: () => {},
     onObjectInteraction: (name, actions) => doorActions.set(name, actions),
     onRegionLoaded: () => {},

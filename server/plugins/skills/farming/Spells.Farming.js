@@ -2,6 +2,7 @@ const core = require("./Core.Farming");
 const Data = require("./Data.Farming");
 const Model = require("./Model.Farming");
 const Patches = require("./Patches.Farming");
+const Geomancy = require("./Geomancy.Farming");
 
 const SPELLS = {
     "cure plant": { level: 66, xp: 60, runes: [["Astral rune", 1], ["Earth rune", 8]] },
@@ -65,19 +66,14 @@ function farmingButton(event) {
     const key = core.CacheDefinitions.getSpellName(event.buttonId, -1)?.toLowerCase();
     if (key !== "geomancy") return;
     event.handled = true;
+    const action = event.opId ?? event.action;
+    if ((action !== undefined && action !== 1) || event.player.busy()) return;
     if (core.CombatFactory.inCombat(event.player)) {
         event.player.sendMessage("You can't commune with the land while fighting.");
         return;
     }
     if (!new FarmingSpell(key, event.buttonId).cast(event.player)) return;
-    const farm = Patches.farmFor(event.player);
-    Model.advanceFarm(farm, Date.now());
-    const patches = Data.CACHE.patches.filter(p => farm.patches[Data.patchKey(p)]?.crop);
-    if (!patches.length) { event.player.sendMessage("You have no crops growing."); return; }
-    Patches.choose(event.player, patches.map(p => {
-        const s = farm.patches[Data.patchKey(p)];
-        return [`${Data.CROPS.get(s.crop).name}: ${s.status}`, () => event.player.sendMessage(`Patch at ${p.x}, ${p.y}: ${s.status}${s.protected ? ", gardener protected" : ""}.`)];
-    }));
+    Geomancy.open(event.player);
 }
 
 Object.assign(module.exports, { farmingSpell, farmingButton });

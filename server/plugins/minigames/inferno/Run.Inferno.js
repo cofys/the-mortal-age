@@ -115,6 +115,13 @@ function give(player, itemId, amount) {
   core.ItemOnGroundManager.registerLocation(player, new core.Item(itemId, amount), player.getLocation().clone(), null);
 }
 
+/** The Elite Karamja Diary doubles the TokKul (Wiki: Karamja Diary). */
+function tokkulFor(player, amount) {
+  const request = { player, amount };
+  api.emitCustomEvent("diary:tokkul", request);
+  return request.amount;
+}
+
 function createArea() {
   InfernoArea ??= class extends core.PrivateArea {
     constructor() {
@@ -576,7 +583,8 @@ function finishRun(player, wavesCleared, won) {
     CombatAchievements.finish(player, true, Number(player.getAttribute(ATTR_COMPLETIONS)));
     give(player, Items.INFERNAL_CAPE, 1);
     api.emitCustomEvent("collection-log:obtain", { player, itemId: Items.INFERNAL_CAPE, amount: 1 });
-    give(player, Items.TOKKUL, COMPLETION_TOKKUL);
+    const completionTokkul = tokkulFor(player, COMPLETION_TOKKUL);
+    give(player, Items.TOKKUL, completionTokkul);
     if (core.Misc.getRandom(PET_CHANCE - 1) === 0) {
       // Pets awards it as a follower (or backpack item on a duplicate) and removes it
       // from the array; without the Pets plugin it still lands as an item.
@@ -587,11 +595,11 @@ function finishRun(player, wavesCleared, won) {
     say(player, keh,
       "You are very impressive for a JalYt. You managed to defeat TzKal-Zuk, for now...",
       "Please accept this cape as a token of appreciation.");
-    player.sendMessage(`TzHaar-Ket-Keh hands you an Infernal cape and ${COMPLETION_TOKKUL} TokKul.`);
+    player.sendMessage(`TzHaar-Ket-Keh hands you an Infernal cape and ${completionTokkul} TokKul.`);
     return;
   }
   CombatAchievements.finish(player, false);
-  const tokkul = failedRunTokkul(wavesCleared);
+  const tokkul = tokkulFor(player, failedRunTokkul(wavesCleared));
   give(player, Items.TOKKUL, tokkul);
   if (tokkul > 0) {
     say(player, keh, "Well done in the Inferno, you can have this TokKul as reward.");

@@ -1,6 +1,6 @@
 # Optimal Quest Guide images
 
-- `quest_point.png` and `combat_level.png`: from Optimal Quest Guide (https://github.com/cesoun/optimal-quest-guide, commit `b801ca1`, `src/main/resources/`).
+- `panel_icon.png`, `quest_point.png` and `combat_level.png`: from Optimal Quest Guide (https://github.com/cesoun/optimal-quest-guide, commit `b801ca1`, `src/main/resources/`).
 - `skill_icons_small/*.png` (the 24 skills): from RuneLite (https://github.com/runelite/runelite, `runelite-client/src/main/resources/skill_icons_small/`), the icons RuneLite's `SkillIconManager` gives the plugin.
 
 Both projects are distributed under the BSD 2-Clause License:

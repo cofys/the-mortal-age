@@ -59,7 +59,11 @@ function rollClueGeodes({ player, skill, petBase }, random = Math.random) {
   }
   const level = player.getSkillManager().getCurrentLevel(core.Skill.MINING);
   for (const tier of tiers) {
-    const chance = geodeChance(petBase, level, tier.modifier);
+    // Content may make clue geodes commoner ("treasure-trails:vessel-chance", a league relic): `multiplier` times.
+    const boost = { player, vessel: "geode", tier: tier.name, multiplier: 1 };
+    pluginApi?.emitCustomEvent?.("treasure-trails:vessel-chance", boost);
+    const base = geodeChance(petBase, level, tier.modifier);
+    const chance = base < 1 ? base : Math.max(1, Math.floor(base / (boost.multiplier > 1 ? boost.multiplier : 1)));
     if (chance < 1 || Math.floor(random() * chance) !== 0 || ownsClue(player, tier)) {
       continue;
     }

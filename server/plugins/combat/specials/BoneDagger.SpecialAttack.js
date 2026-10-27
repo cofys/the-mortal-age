@@ -1,4 +1,6 @@
-// TODO: ported from xrsps-typescript; untested.
+// Backstab (https://oldschool.runescape.wiki/w/Bone_dagger): never misses a target nobody, or
+// another player, damaged last, and lowers the Defence of a player or NPC by the damage dealt
+// when it is at (or above) its base level.
 function buildSpecial(core) {
   const { CombatSpecial, ItemIdentifiers, MeleeCombatMethod, Skill } = core;
 
@@ -37,9 +39,7 @@ function buildSpecial(core) {
     drainAmount: DRAIN,
     strengthMultiplier: 1,
     accuracyMultiplier: 1,
-    // TODO: OSRS guarantees accuracy only when the wielder was not the target's
-    // most recent attacker; that combat-relationship check is not exposed here.
-    traits: { hitCount: 1 },
+    traits: { hitCount: 1, guaranteedHitOnUnsuspectingTarget: true },
     combatMethod: new BoneDaggerCombatMethod(),
   };
 }

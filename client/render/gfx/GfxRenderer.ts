@@ -4,19 +4,11 @@ import PicoGL, { DrawCall, Texture } from "picogl";
 import { WebGLMapSquare } from "../WebGLMapSquare";
 import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
 import { GfxCache, graphicFrameCycle } from "./GfxCache";
-import { GfxManager } from "./GfxManager";
+import { GfxManager, TILE_GFX_LIFT_UNITS } from "./GfxManager";
 import type { GfxInstance } from "./GfxManager";
 import { SpotAnimGpuCache } from "./SpotAnimGpuCache";
 
 type Pass = "opaque" | "alpha";
-
-/**
- * How far a graphic played on a tile is drawn above it, in model units (a tile is 128). The game
- * paints those after the floor's flat decorations - marble patterns (1 unit up), the light rays
- * falling through a window (4 up) - so a falling rock's shadow always shows on top of them; with
- * depth testing it would sink under them instead.
- */
-const TILE_GFX_LIFT_UNITS = 8;
 
 export class GfxRenderer {
     private cache: GfxCache;

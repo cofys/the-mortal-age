@@ -33,6 +33,7 @@ const CONFIGURE_CHARGES_OP = 9;
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five"];
 
 let core;
+let pluginApi;
 let bowId = -1;
 let unchargedId = -1;
 let shardId = -1;
@@ -196,6 +197,10 @@ function ricochet(player, primary, method, primaryDelay) {
 function spendCharge(player) {
   const item = player.getEquipment().get(core.Equipment.WEAPON_SLOT);
   if (item?.getId?.() !== bowId) return;
+  // Content may spare the charge (a league relic): the question every charged weapon asks.
+  const consume = { player, itemId: item.getId(), skip: false };
+  pluginApi.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) return;
   const left = charges(item) - 1;
   setCharges(item, left);
   if (left <= 0) {
@@ -367,6 +372,7 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
+    pluginApi = api;
     bowId = core.ItemIdentifiers.VENATOR_BOW;
     unchargedId = core.ItemIdentifiers.VENATOR_BOW_UNCHARGED_;
     shardId = core.ItemIdentifiers.VENATOR_SHARD;

@@ -195,6 +195,12 @@ function lobbyAreaClass() {
   };
 }
 
+function allowBountyHunterWeapons(event) {
+  const game = Match.gameOf(event.attacker);
+  if (game && !game.over && event.attacker.getPrivateArea() === game.area
+    && event.target.getPrivateArea() === game.area) event.allowed = true;
+}
+
 function attachLobby(api) {
   const [x0, y0, x1, y1] = Common.data.lobby.bounds;
   lobbyArea = new (lobbyAreaClass())([new Common.core.Boundary(x0, x1, y0, y1, 0)]);
@@ -203,6 +209,7 @@ function attachLobby(api) {
   api.onObjectInteraction("Portal", { Enter: leavePortal, Edgeville: leavePortal, "Ferox Enclave": leavePortal });
   api.onObjectInteraction("Barrier", { Pass: barrier });
   api.onPlayerLogout(forget);
+  api.onCustomEvent("bounty-hunter:weapon-area", allowBountyHunterWeapons);
   Common.every(tick);
 }
 

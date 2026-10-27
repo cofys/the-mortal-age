@@ -552,3 +552,31 @@ test("utility magic pays alchemy costs from inventory and the carried rune pouch
   assert.equal(Pouch.amountOf(player, Items.FIRE_RUNE), 0);
   assert.ok(inventory.getAmount(Items.COINS) > 0);
 });
+
+test("Vengeance on yourself pays its runes from the carried pouch", () => {
+  const { EffectSpells } = require("../dist/game/content/combat/magic/EffectSpells");
+  const { SecondsTimer } = require("../dist/game/model/SecondsTimer");
+  const player = createPlayer([new Item(Items.RUNE_POUCH, 1)]);
+  const timer = new SecondsTimer();
+  const experience = [];
+  let vengeance = false;
+  player.getSpellbook = () => MagicSpellbook.LUNAR;
+  player.getSkillManager = () => ({
+    getCurrentLevel: () => 99,
+    getMaxLevel: () => 99,
+    addExperiences: (skill, amount) => experience.push(amount),
+  });
+  player.getDueling = () => ({ inDuel: () => false });
+  player.hasVengeanceReturn = () => vengeance;
+  player.setHasVengeance = (value) => { vengeance = value; };
+  player.getVengeanceTimer = () => timer;
+  player.performAnimation = () => {};
+  player.performGraphic = () => {};
+  player.getPacketSender().sendEffectTimer = () => player.getPacketSender();
+  pouchWith(player, [[Items.ASTRAL_RUNE, 100], [Items.EARTH_RUNE, 100], [Items.DEATH_RUNE, 100]]);
+
+  assert.equal(EffectSpells.handleSpell(player, EffectSpells.VENGEANCE.spellId()), true);
+  assert.equal(vengeance, true);
+  assert.deepEqual(experience, [112]);
+  assert.deepEqual(varbitSlots(player), [[Items.ASTRAL_RUNE, 96], [Items.EARTH_RUNE, 90], [Items.DEATH_RUNE, 98]]);
+});

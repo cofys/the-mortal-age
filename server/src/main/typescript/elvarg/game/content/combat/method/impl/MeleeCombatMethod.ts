@@ -23,6 +23,6 @@ export class MeleeCombatMethod extends CombatMethod {
     }
 
     attackDistance(character: Mobile): number {
-        return character.isPlayer() ? WeaponProfiles.attackDistance(character.getAsPlayer(), 1) : 1;
+        return character.isPlayer() ? WeaponProfiles.meleeAttackDistance(character.getAsPlayer(), 1) : 1;
     }
 }

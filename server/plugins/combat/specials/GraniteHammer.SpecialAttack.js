@@ -1,13 +1,24 @@
-// TODO: ported from xrsps-typescript; untested.
-// TODO: Hammer Blow has a dedicated special-attack animation in OSRS (wiki: "special attack animation has been updated", 2017) and a guaranteed 5 damage on a miss; the animation id is not exposed by RuneLite AnimationID, upstream xrsps, or our cache tooling — needs a sequence dump from the OSRS cache.
+// Hammer Blow: https://oldschool.runescape.wiki/w/Granite_hammer#Special_attack
+let core;
+const SPECIAL_ID = "granite_hammer";
+const DAMAGE_BONUS = 5;
+
+/** Failed accuracy still deals the flat bonus, through the usual damage reductions. */
+function missedHammerBlow({ attacker, target, combatType, damage, accurate }) {
+  if (accurate || combatType !== core.CombatType.MELEE || !attacker.isPlayer() || !attacker.isSpecialActivated() ||
+      attacker.getCombatSpecial()?.getId() !== SPECIAL_ID) return;
+  const bounds = { minimumMultiplier: 0, maximumMultiplier: 0, minimumBonus: DAMAGE_BONUS, maximumBonus: DAMAGE_BONUS };
+  damage.setDamage(core.CombatFactory.getHitDamage(attacker, target, combatType, false, bounds).getDamage());
+}
+
 module.exports = function registerGraniteHammerSpecialAttack(api) {
+  core = api.core;
   const { CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod } = api.core;
 
   const DRAIN = 60;
-  // TODO: Hammer Blow special animation id not found
+  // The dedicated animation has no indexed recording; retain the existing swing pending evidence.
   const SPECIAL_VFX = new Graphic(1450);
   const ACCURACY_MULTIPLIER = 1.5;
-  const DAMAGE_BONUS = 5;
 
   class GraniteHammerCombatMethod extends MeleeCombatMethod {
     start(character, target) {
@@ -18,7 +29,7 @@ module.exports = function registerGraniteHammerSpecialAttack(api) {
   }
 
   api.registerCombatSpecial({
-    id: "granite_hammer",
+    id: SPECIAL_ID,
     itemIds: [
       ItemIdentifiers.GRANITE_HAMMER,
       ItemIdentifiers.GRANITE_HAMMER_2,
@@ -35,4 +46,5 @@ module.exports = function registerGraniteHammerSpecialAttack(api) {
     },
     combatMethod: new GraniteHammerCombatMethod(),
   });
+  api.onCombatHitDamage(missedHammerBlow);
 };

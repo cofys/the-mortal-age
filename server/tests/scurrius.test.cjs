@@ -116,7 +116,7 @@ test("the ids are the cache's rat_boss gamevals", () => {
   assert.equal(npc.get(Common.PUBLIC_ID), "rat_boss_normal");
   assert.equal(npc.get(Common.SOLO_ID), "rat_boss_instance");
   assert.equal(npc.get(Common.RAT_ID), "rat_boss_giant_rat");
-  assert.equal(npc.get(Common.ALDO_ID), "rat_boss_biologist_op2");
+  assert.equal(npc.get(Common.ALDO_ID), "rat_boss_biologist");
   const seq = gamevals.namesOf(GamevalKind.SEQ);
   for (const [key, id] of Object.entries(Common.ANIM)) assert.match(seq.get(id), /^npc_rat_boss_/, key);
   assert.equal(seq.get(Common.ANIM.melee), "npc_rat_boss_attack_melee_02");
@@ -126,6 +126,7 @@ test("the ids are the cache's rat_boss gamevals", () => {
   const varbit = gamevals.namesOf(GamevalKind.VARBIT);
   assert.equal(varbit.get(Lair._test.WARNING_VARBIT), "rat_boss_enter_warning");
   assert.equal(varbit.get(FoodPile._test.COOLDOWN_VARBIT), "rat_boss_food_pile_player_eat_delay");
+  assert.equal(varbit.get(Aldo._test.MET_VARBIT), "rat_boss_biologist_npc");
   const loc = gamevals.namesOf(GamevalKind.LOC);
   assert.equal(loc.get(14203), "rat_boss_entrance");
   assert.equal(loc.get(14204), "rat_boss_exit");
@@ -135,7 +136,12 @@ test("Scurrius' stats and the lair's locs are the cache's", () => {
   assert.equal(CacheDefinitions.getNpc(Common.PUBLIC_ID).hitpoints, 1500);
   assert.equal(CacheDefinitions.getNpc(Common.SOLO_ID).hitpoints, 500);
   assert.equal(CacheDefinitions.getNpc(Common.SOLO_ID).size, 3);
-  assert.deepEqual(CacheDefinitions.getNpc(Common.ALDO_ID).actions.filter(Boolean), ["Talk-to", "Trade"]);
+  // Talk-to only until he has told the player about his lamps (varbit 9586), then Trade too.
+  const aldo = CacheDefinitions.getNpc(Common.ALDO_ID);
+  assert.equal(aldo.transformVarbit, Aldo._test.MET_VARBIT);
+  assert.deepEqual(aldo.transforms.slice(0, 2), [7226, 7615]);
+  assert.deepEqual(CacheDefinitions.getNpc(7226).actions.filter(Boolean), ["Talk-to"]);
+  assert.deepEqual(CacheDefinitions.getNpc(7615).actions.filter(Boolean), ["Talk-to", "Trade"]);
   assert.deepEqual(Object.keys(objectHooks.get("Broken bars")), ["Climb-through (normal)", "Climb-through (private)", "Peek (normal)"]);
   assert.deepEqual(Object.keys(objectHooks.get("Sewage water")), ["Cross", "Quick-escape"]);
   assert.deepEqual(Object.keys(objectHooks.get("Food Pile")), ["Eat"]);
@@ -230,14 +236,15 @@ test("each phase picks only its captured attacks, and rats stop after twelve wav
   const { pickAction, RAT_WAVE_LIMIT } = Fight._test;
   const seen = (state) => new Set(Array.from({ length: 400 }, () => pickAction(state)));
   assert.deepEqual([...seen({ phase: "combat", ratWaves: 0 })].sort(), ["melee", "stomp"]);
+  assert.deepEqual([...seen({ phase: "between", ratWaves: 0 })], ["melee"]);
   assert.deepEqual([...seen({ phase: "feeding", ratWaves: 0 })].sort(), ["magic", "ranged", "stomp", "summon"]);
   assert.deepEqual([...seen({ phase: "enraged", ratWaves: 0 })].sort(), ["magic", "ranged", "stomp", "summon"]);
   assert.ok(!seen({ phase: "enraged", ratWaves: RAT_WAVE_LIMIT }).has("summon"));
 });
 
-test("in phase one he stomps one attack in five beside his target, and only stomps out of reach", () => {
+test("in phase one he stomps three attacks in ten beside his target, and only stomps out of reach", () => {
   const { pickAction, PHASE_ONE } = Fight._test;
-  assert.deepEqual(PHASE_ONE, [["melee", 4], ["stomp", 1]]);
+  assert.deepEqual(PHASE_ONE, [["melee", 7], ["stomp", 3]]);
   const state = { phase: "combat", ratWaves: 0 };
   assert.deepEqual(new Set(Array.from({ length: 100 }, () => pickAction(state, 0, false))), new Set(["stomp"]));
 });
@@ -459,4 +466,184 @@ test("rat calls are at least 41 ticks apart, as captured", () => {
   const seen = (state, now) => new Set(Array.from({ length: 300 }, () => pickAction(state, now)));
   assert.ok(!seen({ phase: "enraged", ratWaves: 1, lastCallAt: 100 }, 140).has("summon"));
   assert.ok(seen({ phase: "enraged", ratWaves: 1, lastCallAt: 100 }, 141).has("summon"));
+});
+
+test("he eats in rounds of three to five heals, swipes three to five times, and goes back for more", () => {
+  const { startFeeding, feedingTurn, FEED_HEALS, MELEE_BETWEEN_ROUNDS } = Fight._test;
+  const npc = core.NPC.create(Common.SOLO_ID, Common.location(Common.FEEDING_SPOTS[1].stand));
+  npc.isRegistered = () => true;
+  npc.setHitpoints(300);
+  const state = Fight.stateOf(npc);
+  const spot = Common.FEEDING_SPOTS[1];
+  const Method = Fight._test.defineCombatMethod();
+  const method = new Method();
+  const target = createPlayer({ x: 3303, y: 9867 });
+  for (let round = 1; round <= 3; round++) {
+    startFeeding(npc, state, spot);
+    assert.equal(state.phase, "feeding");
+    assert.deepEqual(npc.getBaseAnimationsForUpdate(), [{ slot: 0, seqId: Common.ANIM.feedingIdle }]);
+    // A heal on each turn until the round's last, then he gets up.
+    let heals = 0;
+    while (state.phase === "feeding") {
+      const before = npc.getHitpoints();
+      const action = feedingTurn(npc, state);
+      if (state.phase === "feeding") {
+        heals++;
+        assert.ok([5, 10].includes(npc.getHitpoints() - before), `round ${round} heal ${heals}`);
+        assert.notEqual(action, "none");
+      } else {
+        assert.ok(action === "none" || action === "stomp");
+      }
+    }
+    assert.ok(heals >= FEED_HEALS[0] && heals <= FEED_HEALS[1], `round ${round}: ${heals} heals`);
+    assert.equal(state.phase, "between");
+    assert.ok(state.swingsLeft >= MELEE_BETWEEN_ROUNDS[0] && state.swingsLeft <= MELEE_BETWEEN_ROUNDS[1]);
+    // Between rounds he only swipes; the last swing sends him back to a pile.
+    const swings = state.swingsLeft;
+    for (let i = 0; i < swings; i++) {
+      method.start(npc, target);
+      assert.equal(method.action, "melee");
+    }
+    npc.setHitpoints(300);
+    runTicks(2);
+    assert.equal(state.phase, "walking", `round ${round}`);
+    state.walking = null;
+    npc.setScriptedMovement(false);
+  }
+});
+
+test("he runs to the food and the middle", () => {
+  const npc = core.NPC.create(Common.SOLO_ID, Common.location(Common.SPAWN_TILE));
+  npc.setHitpoints(140);
+  Fight.advancePhase(npc);
+  assert.equal(Fight.stateOf(npc).phase, "walking-centre");
+  assert.equal(npc.getMovementSteps(), 2);
+});
+
+test("his bolts and fur balls fly at the captured heights, from a back corner of his body", () => {
+  const { handTile, PROJECTILE } = Fight._test;
+  // rsprox prints map_projanim_v2 heights four times over (200 and 100).
+  assert.equal(PROJECTILE.startHeight, 50);
+  assert.equal(PROJECTILE.endHeight, 25);
+  const offset = (spot, kind) => {
+    const npc = { getLocation: () => Common.location(spot.stand), getSize: () => 3 };
+    const tile = handTile(npc, Common.location(spot.face), kind);
+    return [tile.getX() - spot.stand[0], tile.getY() - spot.stand[1]];
+  };
+  const [north, east, south] = Common.FEEDING_SPOTS;
+  // Captured at each pile: ranged from his left, magic from his right, both behind him.
+  assert.deepEqual(offset(east, "ranged"), [0, 2]);
+  assert.deepEqual(offset(east, "magic"), [0, 0]);
+  assert.deepEqual(offset(south, "ranged"), [2, 2]);
+  assert.deepEqual(offset(south, "magic"), [0, 2]);
+  assert.deepEqual(offset(north, "ranged"), [0, 0]);
+  assert.deepEqual(offset(north, "magic"), [2, 0]);
+});
+
+test("Aldo offers Trade once he has told the player about his lamps", () => {
+  const { toldOfLamps, onLogin, MET_VARBIT } = Aldo._test;
+  const player = createPlayer();
+  const definition = { getName: () => "Historian Aldo" };
+  const other = { player, definition, text: "Of course! Scurrius spines are invaluable for my research." };
+  toldOfLamps(other);
+  assert.equal(other.after, undefined);
+  const line = { player, definition, text: "If you don't want a bone weapon, I can also trade you a lamp I found during my research expedition - one for every Scurrius spine you bring to me." };
+  toldOfLamps(line);
+  assert.ok(!player.log.includes(`varbit ${MET_VARBIT} 1`));
+  line.after();
+  assert.ok(player.log.includes(`varbit ${MET_VARBIT} 1`));
+  const back = createPlayer();
+  back.setAttribute(Aldo._test.MET_ATTRIBUTE, true);
+  onLogin({ player: back });
+  assert.ok(back.log.includes(`varbit ${MET_VARBIT} 1`));
+});
+
+test("he calls no rats while any of his last ones live", () => {
+  const { pickAction, ratsAlive } = Fight._test;
+  const rat = (hp, registered = true) => ({ getHitpoints: () => hp, isRegistered: () => registered });
+  const seen = (rats) => new Set(Array.from({ length: 300 }, () => pickAction({ phase: "enraged", ratWaves: 1, rats }, 1000)));
+  assert.ok(ratsAlive({ rats: [rat(0), rat(15)] }));
+  assert.ok(!seen([rat(0), rat(15)]).has("summon"));
+  assert.ok(!ratsAlive({ rats: [rat(0), rat(15, false)] }));
+  assert.ok(seen([rat(0), rat(15, false)]).has("summon"));
+});
+
+test("getting up, he walks two tiles off the pile, never towards it", () => {
+  const { stepOff } = Fight._test;
+  for (const spot of Common.FEEDING_SPOTS) {
+    const ends = new Set();
+    for (let i = 0; i < 60; i++) {
+      const npc = core.NPC.create(Common.SOLO_ID, Common.location(spot.stand));
+      const state = Fight.stateOf(npc);
+      stepOff(npc, state, spot);
+      assert.equal(npc.getMovementSteps(), 1);
+      const route = npc.getMovementQueue().getDestination?.() ?? null;
+      ends.add(route ? `${route.getX() - spot.stand[0]},${route.getY() - spot.stand[1]}` : "?");
+      state.walking = null;
+    }
+    const towards = `${spot.pile[0] * 2},${spot.pile[1] * 2}`;
+    assert.ok(!ends.has(towards), `${spot.stand}: ${[...ends]}`);
+    assert.equal(ends.size, 3, `${spot.stand}: ${[...ends]}`);
+  }
+});
+
+test("in the middle he turns only to stomp, at his target's tile, and casts from the way he faces", () => {
+  const { facingFor, handTile } = Fight._test;
+  const npc = core.NPC.create(Common.SOLO_ID, Common.location(Common.CENTRE_TILE));
+  npc.isRegistered = () => true;
+  npc.setHitpoints(100);
+  const state = Fight.stateOf(npc);
+  state.phase = "enraged";
+  state.ratWaves = 12;
+  npc.setFlag("combat:keep-facing", true);
+  const Method = Fight._test.defineCombatMethod();
+  const method = new Method();
+  const target = createPlayer({ x: 3302, y: 9870 });
+  const seen = new Set();
+  for (let i = 0; i < 60 && seen.size < 3; i++) {
+    method.start(npc, target);
+    seen.add(method.action);
+    assert.equal(npc.getInteractingMobile() ?? null, null, method.action);
+    if (method.action === "stomp") assert.ok(npc.getPositionToFace().equals(target.getLocation()));
+  }
+  assert.ok(seen.has("stomp") && seen.has("magic") && seen.has("ranged"));
+  // Live (kill 3): after a stomp turned him to (3302, 9870), magic left from his tile (1, 0)
+  // and ranged from (0, 1).
+  state.facing = new Location(3302, 9870, 0);
+  const offset = (kind) => {
+    const tile = handTile(npc, facingFor(state, target), kind);
+    return [tile.getX() - 3298, tile.getY() - 9867];
+  };
+  assert.deepEqual(offset("magic"), [1, 0]);
+  assert.deepEqual(offset("ranged"), [0, 1]);
+});
+
+test("he heals 10 about twice as often as 5, and only 5 while his rats live", () => {
+  const { heal, FEED_HEAL_AMOUNTS } = Fight._test;
+  assert.deepEqual(FEED_HEAL_AMOUNTS, [[10, 2], [5, 1]]);
+  const npc = core.NPC.create(Common.SOLO_ID, Common.location(Common.FEEDING_SPOTS[1].stand));
+  const state = Fight.stateOf(npc);
+  const amounts = () => {
+    const seen = [];
+    for (let i = 0; i < 300; i++) {
+      npc.setHitpoints(100);
+      heal(npc);
+      seen.push(npc.getHitpoints() - 100);
+    }
+    return seen;
+  };
+  const free = amounts();
+  const tens = free.filter((amount) => amount === 10).length;
+  assert.ok(free.every((amount) => amount === 5 || amount === 10));
+  assert.ok(tens > 150 && tens < 250, `${tens} of 300 were 10`);
+  state.rats = [{ getHitpoints: () => 15, isRegistered: () => true }];
+  assert.deepEqual([...new Set(amounts())], [5]);
+});
+
+test("his bolts and fur balls land four ticks after the cast, as the flight ends", () => {
+  // The hit lands on the attack's tick plus its delay (melee, 0, on the swing's tick).
+  assert.equal(Fight._test.DISTANT_HIT_DELAY, 4);
+  const { start, end } = Fight._test.PROJECTILE;
+  assert.equal(Math.round((end * 20) / 600), 4);
+  assert.equal(start, 30);
 });

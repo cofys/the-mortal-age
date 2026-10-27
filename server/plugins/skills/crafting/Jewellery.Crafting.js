@@ -95,6 +95,7 @@ function craftFurnaceProduct(player, product) {
   inventory.addItem(new Item(product.itemId, product.amount));
   Shared.addCraftingXp(player, product.xp);
   Shared.getApi().emitCustomEvent("crafting:made", { player, itemId: product.itemId, furnace: true });
+  Shared.produced(player, product.itemId, product.amount, product.xp);
   return true;
 }
 
@@ -113,7 +114,7 @@ function startFurnaceProduct(player, menu, product) {
   player.getPacketSender().closeSubInterface(MAIN_MODAL_TARGET_UID);
   const { animation, sound } = data();
   Shared.startMaking(player, {
-    amount: menu.amount, startTick: 0, firstTick: 2, interval: 3, animation, sound,
+    amount: menu.amount, startTick: 0, firstTick: 2, interval: 3, animation, sound, kind: "jewellery",
     anchor: menu.location, resetAnimation: true,
     has: () => hasFurnaceMaterials(player, product),
     make: () => craftFurnaceProduct(player, product),

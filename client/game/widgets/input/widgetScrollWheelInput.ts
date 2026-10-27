@@ -6,6 +6,19 @@ import type { WidgetManager } from "../../../widgets/WidgetManager";
 import { SCROLL_WHEEL_ZOOM_INCREMENT_EVENT, SCROLL_WHEEL_ZOOM_SCRIPT } from "../../../rs/cs2/zoomCallbacks";
 import { CAMERA_ZOOM_BIG, CAMERA_ZOOM_SMALL } from "../../../runelite/api/gameval/VarClientID";
 
+/**
+ * The toplevels' overlay_atmosphere slots (gamevals toplevel_osrs_stretch, toplevel_pre_eoc,
+ * toplevel_display and toplevel): full-screen screen effects (the Last Man Standing fog tint, cave
+ * darkness, fades) mount there, and they never take the wheel from the camera.
+ */
+const ATMOSPHERE_SLOTS = new Set([(161 << 16) | 1, (164 << 16) | 1, (165 << 16) | 9, (548 << 16) | 27]);
+
+function isAtmosphereEffect(widgetManager: WidgetManager, w: { uid?: number; groupId?: number }): boolean {
+    const groupId = typeof w.groupId === "number" ? w.groupId | 0 : ((w.uid ?? 0) >>> 16);
+    const container = widgetManager.getContainerUidForGroup?.(groupId);
+    return container !== undefined && ATMOSPHERE_SLOTS.has(container);
+}
+
 export function processWidgetScrollWheelInput(
     deps: WidgetInputControllerDeps,
     frame: WidgetInputFrame,
@@ -27,8 +40,9 @@ export function processWidgetScrollWheelInput(
             if (widgetManager.isEffectivelyHidden(wUid)) continue;
 
             // Camera zoom blocking is based on actual visible widget surfaces.
-            // Listener-only widgets (for example buff_bar transmit children) must not block.
-            if (!blockedByVisibleWidget && isVisibleWidgetSurfaceAt(w, mx, my)) {
+            // Listener-only widgets (for example buff_bar transmit children) must not block,
+            // nor screen effects drawn over the scene.
+            if (!blockedByVisibleWidget && isVisibleWidgetSurfaceAt(w, mx, my) && !isAtmosphereEffect(widgetManager, w)) {
                 blockedByVisibleWidget = true;
             }
 

@@ -37,12 +37,13 @@ test('the shipped world.json has f2p zones covering the spawn', () => {
 
 test('allow hooks: first answer wins, no answer is null', () => {
   const api = PluginManager.createApi('MembersHookTest');
-  assert.equal(PluginManager.emitCanGainExperience({}, 'agility', 10), null);
+  // Experience gains also carry a multiplier (a league profile's rate), so the answer is a pair.
+  assert.deepEqual(PluginManager.emitCanGainExperience({}, 'agility', 10), { allow: null, multiplier: 1 });
   api.onCanGainExperience(() => {});
   api.onCanGainExperience((event) => { event.allow = event.skill !== 'agility'; });
-  api.onCanGainExperience((event) => { event.allow = true; });
-  assert.equal(PluginManager.emitCanGainExperience({}, 'agility', 10), false);
-  assert.equal(PluginManager.emitCanGainExperience({}, 'mining', 10), true);
+  api.onCanGainExperience((event) => { event.allow = true; event.multiplier *= 5; });
+  assert.deepEqual(PluginManager.emitCanGainExperience({}, 'agility', 10), { allow: false, multiplier: 1 }, 'a refusal wins');
+  assert.deepEqual(PluginManager.emitCanGainExperience({}, 'mining', 10), { allow: true, multiplier: 5 }, 'every hook runs, so a rate set by a later one counts');
 
   api.onCanUseItem((event) => { if (event.option !== 'Drop') event.allow = false; });
   assert.equal(PluginManager.emitCanUseItem({}, 1, 'action', 'Wield'), false);
@@ -54,8 +55,19 @@ test('allow hooks: first answer wins, no answer is null', () => {
   assert.equal(PluginManager.emitCanStockItem(1, 9), false);
 
   api.onPrayerDisabled((event) => { if (event.prayer.requirement > 45) { event.disabled = true; event.message = 'no'; } });
-  assert.equal(PluginManager.emitPrayerDisabled({}, { requirement: 70 }), 'no');
+  assert.deepEqual(PluginManager.emitPrayerDisabled({}, { requirement: 70 }), { message: 'no', messageBox: false });
   assert.equal(PluginManager.emitPrayerDisabled({}, { requirement: 1 }), null);
+});
+
+test('attack speed hooks: the resolved speed passes through every hook, never below 1', () => {
+  const api = PluginManager.createApi('AttackSpeedHookTest');
+  const attacker = { isPlayer: () => true };
+  assert.equal(PluginManager.emitAttackSpeed(attacker, {}, 'magic', 5), 5, 'no hook: the speed is what the method said');
+  api.onAttackSpeed((event) => { if (event.combatType === 'magic') event.speed = 2; });
+  api.onAttackSpeed((event) => { event.speed -= 3; });
+  assert.equal(PluginManager.emitAttackSpeed(attacker, {}, 'magic', 5), 1, 'both hooks ran, floored at 1');
+  assert.equal(PluginManager.emitAttackSpeed(attacker, {}, 'melee', 4), 1);
+  assert.equal(PluginManager.emitAttackSpeed(null, {}, 'melee', 4), 4, 'nothing to ask about');
 });
 
 test('isMembersArea map-square index matches a scan of every f2p zone', () => {

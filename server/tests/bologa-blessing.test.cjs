@@ -141,23 +141,4 @@ test('insufficient Prayer, coins or NPC distance refuses the transaction', t => 
         assert.equal(f.saves.length, 0);
     }
 });
-test('unlock enables the existing twenty-blessings-per-point reward without repeat fees or equipment checks', t => {
-    const f = prepare(t), score = Patches.farmFor(f.p).tithe;
-    let options;
-    t.mock.method(Patches, 'choose', (_p, entries) => { options = entries; });
-    const rewards = () => {
-        Tithe.titheNpc({ player: f.p, npc: { getLocation: () => f.p.getLocation().clone() },
-            definition: { getName: () => 'Farmer Gricoller' } });
-        options.find(([label]) => label.startsWith("Bologa's blessing"))[1]();
-    };
-    score.points = 2;
-    rewards();
-    assert.equal(score.points, 2, 'locked rewards take no points');
-    assert.equal(f.p.getInventory().getAmount(Data.itemId("Bologa's blessing")), 0);
-    f.pay();
-    f.p.getEquipment().resetItems();
-    rewards();
-    assert.equal(score.points, 1);
-    assert.equal(f.p.getInventory().getAmount(Data.itemId("Bologa's blessing")), 20);
-    assert.equal(f.coins(), 0);
-});
+// The native reward-shop integration is covered in farming-tithe-rewards-interface.test.cjs.

@@ -1,0 +1,460 @@
+// Run after `yarn build`: node --test tests/league-areas.test.cjs
+// League areas (docs/leagues.md, Areas): the defaults a league character starts with, the map
+// squares each area owns, a refused walk, teleport and respawn into a locked area, an unlock at
+// the threshold (and not before, nor past the third pick), the area interface's captured flow,
+// its teleport, and a reload.
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const { test, before } = require("node:test");
+
+const { Server } = require("../dist/Server");
+Server.installProductionPathResolver();
+
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const { Player } = require("../dist/game/entity/impl/player/Player");
+const { GameConstants } = require("../dist/game/GameConstants");
+
+const AREAS = 512;
+const SIDE_PANEL = 656;
+const SELECTION = [10662, 10663, 10664, 10665, 10666, 10667];
+const LAST_VIEWED = 11693;
+const AVAILABLE = 11695;
+const THRESHOLD_STRUCTS = [5971, 5972, 5973, 5974, 5975];
+const MISTHALIN = 1, KARAMJA = 2, ASGARNIA = 3, KANDARIN = 4, MORYTANIA = 5, DESERT = 6, TIRANNWN = 7, FREMENNIK = 8, WILDERNESS = 11, KOUREND = 20, VARLAMORE = 21;
+const uid = (group, child) => (group << 16) | child;
+
+let core;
+const hooks = {};
+const custom = {};
+const emitted = [];
+let inCombat = false;
+/** world.json pluginConfig "league:type": a Trailblazer Reloaded world, 5 while a Raging Echoes character is made. */
+let worldLeague = 4;
+
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  core = PluginManager.getCoreApi();
+  GameConstants.setWorldProfile("league"); // a league world
+  core.TeleportHandler.checkReqs = () => true;
+  core.CombatFactory.inCombat = () => inCombat;
+  const lists = {};
+  const on = (name) => (handler) => {
+    (lists[name] ??= []).push(handler);
+    hooks[name] = (event) => {
+      let result;
+      for (const attached of lists[name]) {
+        const answer = attached(event);
+        if (answer !== undefined) result = answer;
+      }
+      return result;
+    };
+  };
+  const api = new Proxy({
+    core,
+    persistAttribute() {},
+    getPluginConfig: (key, fallback) => (key === "league:type" ? worldLeague : fallback),
+    setWorldProfile: (profile) => GameConstants.setWorldProfile(profile),
+    getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
+    registerCommand: (name, handler) => (hooks[`command:${name}`] = handler),
+    onInterfaceActionButton: (ids, handler) => {
+      for (const id of [].concat(ids)) on(`button:${id}`)(handler);
+    },
+    onCustomEvent: (name, handler) => (custom[name] = (custom[name] ?? []).concat(handler)),
+    emitCustomEvent: (name, payload) => {
+      emitted.push([name, payload]);
+      for (const handler of custom[name] ?? []) handler(payload);
+    },
+  }, { get: (target, key) => (key in target ? target[key] : on(String(key))) });
+  require("../plugins/modes/LeagueMode.plugin").register(api);
+  require("../plugins/modes/LeaguePoints.plugin").register(api);
+  require("../plugins/modes/LeagueRelics.plugin").register(api);
+  require("../plugins/modes/LeagueAreaUnlocks.plugin").register(api);
+});
+
+/** A real player whose packets are recorded; logged in as a new character of `profile`. */
+function character(name, profile = "league", { login = true } = {}) {
+  const player = new Player(null);
+  player.setUsername(name);
+  player.setProfile(profile);
+  const sent = { messages: [], varbits: new Map(), scripts: [], subs: [], flags: [], sounds: [], content: [], removals: 0 };
+  const sender = new Proxy({}, {
+    get: (target, key) => {
+      switch (key) {
+        case "sendVarbit": return (id, value) => (sent.varbits.set(id, value), sender);
+        case "sendInterfaceScript": return (id, args) => (sent.scripts.push([id, args]), sender);
+        case "sendSubInterface": return (target, group) => (sent.subs.push([target, group]), sender);
+        case "sendInterface": return (group) => (sent.subs.push(["main", group]), sender);
+        case "sendInterfaceFlagsRange": return (...args) => (sent.flags.push(args), sender);
+        case "sendSound": return (...args) => (sent.sounds.push(args), sender);
+        case "sendContentData": return (source, datasets) => (sent.content.push(datasets), sender);
+        case "sendInterfaceRemoval": return () => (sent.removals++, sender);
+        default: return () => sender;
+      }
+    },
+  });
+  player.getPacketSender = () => sender;
+  player.sendMessage = (text) => sent.messages.push(text);
+  if (login) hooks.onPlayerLogin({ player, username: name, isNewAccount: true, profile });
+  return Object.assign(player, { sent });
+}
+
+function completeTasks(player, count) {
+  for (let i = 0; i < count; i++) {
+    hooks["command:leaguetask"]({ player, parts: ["leaguetask", `task-${i}-${Math.random()}`, "10"] });
+  }
+}
+
+const query = (name, payload) => {
+  for (const handler of custom[name]) handler(payload);
+  return payload;
+};
+
+const areaAt = (x, y, extra = {}) => query("league:area-at", { x, y, ...extra }).area;
+const at = (x, y, z = 0) => new core.Location(x, y, z);
+const popups = (title) => emitted.filter(([name, payload]) => name === "notification:show" && payload.title === title).map(([, payload]) => payload);
+const thresholds = (player) => {
+  const structs = new Map(player.sent.content.at(-1).find((entry) => entry.key === "structOverrides").rows.map((row) => [row.structId, row.params]));
+  return THRESHOLD_STRUCTS.map((id) => structs.get(id)[1010]);
+};
+
+function openAreas(player) {
+  return hooks[`button:${uid(SIDE_PANEL, 40)}`]({ player });
+}
+
+function viewArea(player, area) {
+  const button = areaButton(area);
+  return hooks[`button:${button}`]({ player, buttonId: button });
+}
+
+/** The shield component of an area, from the plugin's own data (the cache's region_data table). */
+function areaButton(area) {
+  return require("../plugins/modes/leagueareas/Common.LeagueAreaUnlocks").area(area).shield;
+}
+
+test("a new league character starts with Misthalin and Karamja; a main character has no areas", () => {
+  const league = character("starter");
+  assert.deepEqual(league.getAttribute("league:areas"), [MISTHALIN, KARAMJA]);
+  assert.deepEqual(SELECTION.map((varbit) => league.sent.varbits.get(varbit)), [1, 2, 0, 0, 0, 0], "league_area_selection_0..5");
+  assert.equal(league.sent.varbits.get(LAST_VIEWED), 0);
+  assert.equal(league.sent.varbits.get(AVAILABLE), 0, "no pick affordable yet");
+  assert.deepEqual(thresholds(league), [0, 0, 60, 140, 300], "Wiki: Trailblazer Reloaded's unlocks at 60, 140 and 300 tasks");
+  const structs = league.sent.content.at(-1).find((entry) => entry.key === "structOverrides").rows.map((row) => row.structId);
+  assert.ok(structs.includes(4699) && structs.includes(5971), "one packet carries the relic catalog and the area thresholds");
+  assert.equal(areaAt(league.getLocation().getX(), league.getLocation().getY()), MISTHALIN, "a new character starts in Misthalin (this world's spawn is on the Wilderness ditch)");
+  const areas = query("league:areas", { player: league });
+  assert.deepEqual([areas.league, areas.unlocked, areas.next, areas.available], [4, [1, 2], { slot: 2, tasks: 60 }, false]);
+
+  const main = character("mainstarter", "main");
+  assert.equal(main.getAttribute("league:areas"), undefined);
+  assert.equal(main.sent.varbits.has(SELECTION[0]), false);
+  assert.deepEqual(query("league:areas", { player: main }).unlocked, []);
+
+  worldLeague = 5;
+  const echoes = character("echoesstarter");
+  worldLeague = 4;
+  assert.deepEqual(thresholds(echoes), [0, 0, 90, 200, 400], "Wiki: Raging Echoes' unlocks at 90, 200 and 400 tasks");
+});
+
+test("the map squares follow the Wiki's areas; instances and the places open to everyone belong to none", () => {
+  const landmarks = [
+    ["Lumbridge Castle", 3222, 3218, MISTHALIN], ["Varrock", 3212, 3428, MISTHALIN], ["Edgeville", 3093, 3493, MISTHALIN],
+    ["Fossil Island", 3740, 3800, MISTHALIN], ["Zanaris", 2412, 4434, MISTHALIN], ["Paterdomus", 3410, 3485, MISTHALIN],
+    ["Brimhaven", 2777, 3173, KARAMJA], ["Crandor", 2840, 3260, KARAMJA], ["Mor Ul Rek", 2480, 5100, KARAMJA],
+    ["Falador", 2965, 3380, ASGARNIA], ["Entrana", 2830, 3350, ASGARNIA], ["Port Sarim", 3025, 3215, ASGARNIA],
+    ["Taverley Dungeon", 2900, 9800, ASGARNIA], ["Burthorpe", 2900, 3540, ASGARNIA], ["the Monastery", 3052, 3490, ASGARNIA],
+    ["Ardougne", 2662, 3305, KANDARIN], ["Catherby", 2810, 3440, KANDARIN], ["Ape Atoll", 2760, 2760, KANDARIN],
+    ["Castle Wars", 2440, 3090, KANDARIN], ["Piscatoris", 2340, 3690, KANDARIN], ["Yanille", 2600, 3090, KANDARIN],
+    ["Canifis", 3495, 3491, MORYTANIA], ["Mos Le'Harmless", 3680, 2970, MORYTANIA], ["Burgh de Rott", 3500, 3180, MORYTANIA],
+    ["Al Kharid", 3290, 3180, DESERT], ["Nardah", 3430, 2900, DESERT], ["the Duel Arena", 3360, 3230, DESERT],
+    ["Lletya", 2340, 3160, TIRANNWN], ["Prifddinas", 3260, 6080, TIRANNWN], ["the Underground Pass", 2420, 9700, TIRANNWN],
+    ["Rellekka", 2661, 3657, FREMENNIK], ["Lunar Isle", 2110, 3915, FREMENNIK], ["Keldagrim", 2880, 10200, FREMENNIK], ["Weiss", 2870, 3940, FREMENNIK],
+    ["Ferox Enclave", 3140, 3630, WILDERNESS], ["north of the ditch", 3090, 3525, WILDERNESS], ["the Frozen Waste Plateau", 2970, 3930, WILDERNESS],
+    ["Mudskipper Point", 2990, 3110, ASGARNIA], ["Musa Point's dock", 2956, 3146, KARAMJA], ["Ghorrock", 2920, 3900, FREMENNIK],
+    ["the Varrock sewers", 3240, 9870, MISTHALIN], ["the Stronghold of Security's second floor", 2020, 5220, MISTHALIN],
+    ["Kourend Castle", 1620, 3660, KOUREND], ["Mount Karuulm", 1310, 3830, KOUREND],
+    ["Civitas illa Fortis", 1700, 3140, VARLAMORE], ["Aldarin", 1400, 2950, VARLAMORE],
+    ["Death's Office", 3176, 5726, null], ["the rune essence mine", 2910, 4830, null], ["Tutorial Island", 3094, 3107, null],
+  ];
+  for (const [name, x, y, expected] of landmarks) {
+    assert.equal(areaAt(x, y), expected, `${name} (${x}, ${y})`);
+  }
+  assert.equal(query("league:area-at", { x: 3222, y: 3218 }).name, "Misthalin");
+  assert.equal(areaAt(1200, 3350), KOUREND, "the Stranglewood counts as Kourend in Trailblazer Reloaded");
+  assert.equal(areaAt(1200, 3350, { league: 5 }), VARLAMORE, "and as Varlamore in Raging Echoes");
+  assert.equal(areaAt(3000, 3000, { league: 99 }), null, "no league, no areas");
+});
+
+test("a locked area refuses a walk, a teleport and a respawn; open ground and a main character are untouched", () => {
+  const league = character("walker");
+  const lumbridgeSide = at(3263, 3220);
+  const alKharidSide = at(3265, 3220);
+  league.moveTo(alKharidSide);
+  hooks.onPlayerMapSquareChange({ player: league, previous: lumbridgeSide, location: alKharidSide });
+  assert.ok(league.getLocation().equals(lumbridgeSide), "the step into Al Kharid's square is undone");
+  assert.equal(league.sent.messages.at(-1), "You haven't unlocked that area yet.");
+
+  const teleport = { player: league, destination: at(3290, 3180), allow: null };
+  hooks.onCanTeleport(teleport);
+  assert.equal(teleport.allow, false, "a teleport to Al Kharid is refused");
+  const open = { player: league, destination: at(3222, 3218), allow: null };
+  hooks.onCanTeleport(open);
+  assert.equal(open.allow, null, "a teleport to Lumbridge is nobody's business");
+
+  const office = at(3176, 5726);
+  league.moveTo(office);
+  hooks.onPlayerMapSquareChange({ player: league, previous: lumbridgeSide, location: office });
+  assert.ok(league.getLocation().equals(office), "Death's Office is open from everywhere");
+
+  // A ladder, boat or dialogue into a locked area goes back to where it started.
+  const ardougne = at(2662, 3305);
+  league.moveTo(ardougne);
+  hooks.onPlayerMapSquareChange({ player: league, previous: office, location: ardougne });
+  assert.ok(league.getLocation().equals(office), "a jump into Kandarin returns to its start");
+
+  // A respawn another plugin sent into a locked area goes to the league home instead.
+  league.moveTo(ardougne);
+  query("player:respawn", { player: league, killer: null, handled: true });
+  const home = league.getLocation();
+  assert.equal(areaAt(home.getX(), home.getY()), MISTHALIN, "the respawn lands in Misthalin");
+  assert.notEqual(areaAt(core.WorldDefinition.WORLD_SPAWN.getX(), core.WorldDefinition.WORLD_SPAWN.getY()), MISTHALIN, "(this world's spawn is in another area, so the hub stands in)");
+
+  // The default respawn into a locked spawn is handled the same way.
+  const dead = { player: league, killer: null, handled: false };
+  query("player:respawn", dead);
+  assert.equal(dead.handled, true);
+  assert.equal(areaAt(league.getLocation().getX(), league.getLocation().getY()), MISTHALIN);
+
+  // A death flags the player: a respawn handler after ours that lands them in a locked area still goes home.
+  hooks.onPlayerDeath({ player: league, killer: null, handled: false });
+  league.moveTo(ardougne);
+  hooks.onPlayerMapSquareChange({ player: league, previous: office, location: ardougne });
+  assert.equal(areaAt(league.getLocation().getX(), league.getLocation().getY()), MISTHALIN, "home, not back to the death spot");
+  // A death a minigame handled itself (no respawn event) leaves no flag behind after its tick.
+  hooks.onPlayerDeath({ player: league, killer: null, handled: true });
+  core.TaskManager.process();
+  league.moveTo(ardougne);
+  hooks.onPlayerMapSquareChange({ player: league, previous: office, location: ardougne });
+  assert.ok(league.getLocation().equals(office), "back to the start, not home: the flag is gone");
+
+  // A crossing that starts from a locked square (the data changed under a saved character) goes home, once.
+  const stepper = character("stepper");
+  let moves = 0;
+  stepper.moveTo = function (destination) {
+    const previous = this.getLocation().clone();
+    Player.prototype.moveTo.call(this, destination);
+    assert.ok(++moves < 10, "the correction must not chain");
+    hooks.onPlayerMapSquareChange({ player: this, previous, location: this.getLocation() }); // as World.onPlayerMoved does
+  };
+  Player.prototype.moveTo.call(stepper, at(3290, 3180)); // Al Kharid, locked
+  stepper.moveTo(at(3330, 3230)); // the Duel Arena's square, locked too
+  assert.equal(areaAt(stepper.getLocation().getX(), stepper.getLocation().getY()), MISTHALIN, "home, since neither square is open");
+  assert.equal(moves, 2, "the step and one correction");
+  assert.equal(stepper.sent.messages.filter((text) => text === "You haven't unlocked that area yet.").length, 1);
+
+  const main = character("mainwalker", "main");
+  main.moveTo(alKharidSide);
+  hooks.onPlayerMapSquareChange({ player: main, previous: lumbridgeSide, location: alKharidSide });
+  assert.ok(main.getLocation().equals(alKharidSide), "a main character walks anywhere");
+  const mainTeleport = { player: main, destination: at(3290, 3180), allow: null };
+  hooks.onCanTeleport(mainTeleport);
+  assert.equal(mainTeleport.allow, null);
+});
+
+test("View Areas opens the interface as captured; an area's details show its state", () => {
+  const league = character("viewer");
+  assert.equal(openAreas(league), true);
+  assert.deepEqual(league.sent.subs.at(-1), ["main", AREAS], "opened as the main modal");
+  assert.deepEqual(league.sent.flags.at(-1), [uid(AREAS, 7), 10, 18, 2], "if_setevents on league_menu_frame as captured");
+  assert.equal(league.sent.content.length, 2, "the league's content is sent again before the interface opens");
+
+  assert.equal(viewArea(league, MISTHALIN), true);
+  assert.equal(league.sent.varbits.get(LAST_VIEWED), MISTHALIN);
+  let [script, args] = league.sent.scripts.at(-1);
+  assert.equal(script, 3668);
+  assert.equal(args.length, 24);
+  assert.equal(args[0], MISTHALIN);
+  assert.deepEqual(args.slice(1, 4), [uid(AREAS, 14), uid(AREAS, 39), uid(AREAS, 38)]);
+  assert.equal(args[11], 1, "unlocked: the details offer Teleport");
+  assert.deepEqual(args.slice(12, 15), [uid(AREAS, 66), uid(AREAS, 65), uid(AREAS, 12)]);
+  assert.equal(args[23], "");
+
+  viewArea(league, ASGARNIA);
+  assert.equal(league.sent.scripts.at(-1)[1][11], 0, "locked: more tasks needed");
+  viewArea(league, VARLAMORE);
+  [, args] = league.sent.scripts.at(-1);
+  assert.deepEqual([args[11], args[23]], [3, "That area is not part of this league."], "not this league's: a message");
+
+  assert.equal(hooks[`button:${uid(AREAS, 44)}`]({ player: league }), true, "the name header shows the last viewed area again");
+  assert.equal(league.sent.scripts.at(-1)[1][0], VARLAMORE);
+
+  const main = character("mainviewer", "main");
+  assert.equal(openAreas(main), false);
+  assert.equal(main.sent.subs.length, 0);
+
+  const forger = character("forger");
+  completeTasks(forger, 60);
+  assert.equal(viewArea(forger, ASGARNIA), false, "a shield click without View Areas is ignored");
+  assert.equal(hooks[`button:${uid(AREAS, 60)}`]({ player: forger }), false, "so is a confirm");
+  assert.deepEqual(forger.getAttribute("league:areas"), [1, 2]);
+  openAreas(forger);
+  assert.equal(hooks[`button:${uid(AREAS, 60)}`]({ player: forger }), true);
+  assert.equal(forger.sent.messages.at(-1), "Select an area first.");
+});
+
+test("a pick needs the next slot's tasks, then plays the captured unlock; at most three picks, none outside the league", () => {
+  const league = character("picker");
+  openAreas(league);
+  viewArea(league, ASGARNIA);
+  const confirm = () => hooks[`button:${uid(AREAS, 60)}`]({ player: league });
+
+  emitted.length = 0;
+  completeTasks(league, 59);
+  assert.equal(popups("New Area Available!").length, 0);
+  assert.equal(league.sent.varbits.get(AVAILABLE), 0);
+  confirm();
+  assert.equal(league.sent.messages.at(-1), "You need to complete more tasks to unlock this area.");
+  assert.deepEqual(league.getAttribute("league:areas"), [1, 2], "nothing written");
+
+  completeTasks(league, 1);
+  const available = popups("New Area Available!");
+  assert.equal(available.length, 1, "the 60th task shows the popup");
+  assert.deepEqual([available[0].text, available[0].colour, available[0].jingle], ["You've completed enough tasks to unlock a new area!", 16742144, { id: 283, length: 4500 }]);
+  assert.equal(league.sent.varbits.get(AVAILABLE), 1, "league_area_available");
+  completeTasks(league, 1);
+  assert.equal(popups("New Area Available!").length, 1, "not again");
+  viewArea(league, ASGARNIA);
+  assert.equal(league.sent.scripts.at(-1)[1][11], 2, "available: the details offer Unlock");
+
+  emitted.length = 0;
+  league.sent.sounds.length = 0;
+  league.sent.messages.length = 0;
+  confirm();
+  assert.deepEqual(league.getAttribute("league:areas"), [1, 2, ASGARNIA], "saved at once");
+  assert.equal(league.getAnimation()?.getId(), 8792, "trailblazer_league_area_unlock_emote");
+  assert.equal(league.getGraphic()?.getId(), 2624, "league_4_area_unlock_emote_spotanim_asgarnia");
+  assert.equal(league.sent.removals, 1, "the modal closes");
+  assert.deepEqual(league.sent.sounds, [[2353, 1, 24], [2344, 1, 116], [2330, 1, 241], [2331, 1, 273]]);
+  assert.equal(league.sent.varbits.get(SELECTION[2]), 0, "the slot's varbit waits for the emote");
+  assert.equal(league.sent.messages.length, 0);
+  const event = emitted.find(([name]) => name === "league:area-unlocked")[1];
+  assert.deepEqual([event.league, event.area, event.slot], [4, ASGARNIA, 2], "the event is immediate");
+
+  for (let tick = 0; tick < 14; tick++) core.TaskManager.process();
+  assert.equal(league.sent.varbits.get(SELECTION[2]), ASGARNIA, "league_area_selection_2 after fourteen ticks");
+  assert.equal(league.sent.messages.at(-1), "Congratulations, you've unlocked a new area: <col=FF7700>Asgarnia</col>.");
+  assert.deepEqual(league.sent.subs.at(-1), ["main", AREAS], "the interface opens again");
+  const unlocked = popups("Area Unlocked!");
+  assert.deepEqual([unlocked[0].text, unlocked[0].jingle], ["You have unlocked the <col=ffffff>Asgarnia</col> area.", { id: 281, length: 4500 }]);
+  assert.equal(league.sent.varbits.get(AVAILABLE), 0, "the next slot needs 140 tasks");
+
+  const falador = at(2965, 3380);
+  league.moveTo(falador);
+  hooks.onPlayerMapSquareChange({ player: league, previous: at(3060, 3380), location: falador });
+  assert.ok(league.getLocation().equals(falador), "Asgarnia is open now");
+  const teleport = { player: league, destination: at(2965, 3380), allow: null };
+  hooks.onCanTeleport(teleport);
+  assert.equal(teleport.allow, null);
+
+  viewArea(league, ASGARNIA);
+  confirm();
+  assert.equal(league.sent.messages.at(-1), "You have already unlocked this area.");
+  viewArea(league, KANDARIN);
+  confirm();
+  assert.equal(league.sent.messages.at(-1), "You need to complete more tasks to unlock this area.", "the second pick needs 140 tasks");
+  completeTasks(league, 80);
+  viewArea(league, VARLAMORE);
+  confirm();
+  assert.equal(league.sent.messages.at(-1), "That area is not part of this league.");
+  hooks["command:areas"]({ player: league, parts: ["areas", "Kandarin"] });
+  assert.deepEqual(league.getAttribute("league:areas"), [1, 2, ASGARNIA, KANDARIN], "::area by name");
+  for (let tick = 0; tick < 14; tick++) core.TaskManager.process();
+  completeTasks(league, 160);
+  hooks["command:areas"]({ player: league, parts: ["areas", String(MORYTANIA)] });
+  assert.deepEqual(league.getAttribute("league:areas"), [1, 2, ASGARNIA, KANDARIN, MORYTANIA], "::area by id");
+  for (let tick = 0; tick < 14; tick++) core.TaskManager.process();
+  assert.deepEqual(SELECTION.map((varbit) => league.sent.varbits.get(varbit)), [1, 2, 3, 4, 5, 0]);
+  viewArea(league, DESERT);
+  assert.equal(league.sent.scripts.at(-1)[1][11], 4, "no slot left");
+  confirm();
+  assert.equal(league.sent.messages.at(-1), "You cannot unlock any more areas.");
+  assert.equal(query("league:areas", { player: league }).next, null);
+  hooks["command:areas"]({ player: league, parts: ["areas"] });
+  assert.match(league.sent.messages.at(-1), /^Trailblazer Reloaded: Misthalin, Karamja, Asgarnia, Kandarin, Morytania\. No unlocks left \(301 tasks done\)\. You are in Asgarnia\.$/);
+
+  const main = character("mainpicker", "main");
+  hooks["command:areas"]({ player: main, parts: ["areas", "Asgarnia"] });
+  assert.equal(main.sent.messages.at(-1), "Only a league character can unlock areas.");
+  assert.equal(main.getAttribute("league:areas"), undefined);
+});
+
+test("the details' Teleport casts to an unlocked area's hub (the cache's coord), never to a locked one", () => {
+  const league = character("traveller");
+  league.setRegistered(true);
+  openAreas(league);
+  viewArea(league, ASGARNIA);
+  assert.equal(hooks[`button:${uid(AREAS, 82)}`]({ player: league }), false, "locked: nothing happens");
+  viewArea(league, KARAMJA);
+  const start = league.getLocation().clone();
+  assert.equal(hooks[`button:${uid(AREAS, 82)}`]({ player: league }), true);
+  assert.equal(league.sent.removals, 1, "the modal closes");
+  for (let tick = 0; tick < 26; tick++) core.TaskManager.process();
+  const landed = league.getLocation();
+  assert.ok(!landed.equals(start), "the cast landed");
+  assert.ok(Math.abs(landed.getX() - 2777) <= 2 && Math.abs(landed.getY() - 3173) <= 2, `Brimhaven, within two tiles of the table's hub: ${landed.getX()}, ${landed.getY()}`);
+
+  inCombat = true;
+  openAreas(league);
+  viewArea(league, MISTHALIN);
+  assert.equal(hooks[`button:${uid(AREAS, 82)}`]({ player: league }), false);
+  assert.equal(league.sent.messages.at(-1), "You can't teleport while in combat.");
+  assert.equal(league.sent.removals, 1, "a refusal in combat keeps the interface open");
+  inCombat = false;
+  league.setRegistered(false);
+
+  // Raging Echoes plays its captured cast: the first echoes animation a tick in, landing at +21.
+  worldLeague = 5;
+  const echoes = character("echoestraveller");
+  worldLeague = 4;
+  echoes.setRegistered(true);
+  openAreas(echoes);
+  viewArea(echoes, KARAMJA);
+  assert.equal(hooks[`button:${uid(AREAS, 82)}`]({ player: echoes }), true);
+  const from = echoes.getLocation().clone();
+  core.TaskManager.process();
+  core.TaskManager.process();
+  assert.equal(echoes.getAnimation()?.getId(), 11875, "home_teleport_human_echoes_1");
+  assert.equal(echoes.getGraphic()?.getId(), 3180, "vfx_league_5_home_teleport_01");
+  for (let tick = 2; tick < 21; tick++) core.TaskManager.process();
+  assert.ok(echoes.getLocation().equals(from), "still casting at +20");
+  core.TaskManager.process();
+  assert.ok(!echoes.getLocation().equals(from), "landed at +21");
+  echoes.setRegistered(false);
+});
+
+test("a reload restores the unlocks and their varbits", () => {
+  const league = character("reloader");
+  completeTasks(league, 60);
+  hooks["command:areas"]({ player: league, parts: ["areas", "Morytania"] });
+  for (let tick = 0; tick < 14; tick++) core.TaskManager.process();
+  const again = character("reloader", "league", { login: false });
+  again.setAttribute("league:type", league.getAttribute("league:type"));
+  again.setAttribute("league:tasks", { ...league.getAttribute("league:tasks") });
+  again.setAttribute("league:areas", [...league.getAttribute("league:areas")]);
+  hooks.onPlayerLogin({ player: again, username: "reloader", isNewAccount: false, profile: "league" });
+  assert.deepEqual(SELECTION.map((varbit) => again.sent.varbits.get(varbit)), [1, 2, MORYTANIA, 0, 0, 0]);
+  assert.equal(again.sent.varbits.get(AVAILABLE), 0);
+  assert.deepEqual(query("league:areas", { player: again }).unlocked, [1, 2, MORYTANIA]);
+  const canifis = at(3495, 3491);
+  again.moveTo(canifis);
+  hooks.onPlayerMapSquareChange({ player: again, previous: at(3400, 3480), location: canifis });
+  assert.ok(again.getLocation().equals(canifis), "Morytania stays open");
+
+  // A saved character standing in a square it no longer may (the data changed) logs in at the league home.
+  const stranded = character("stranded", "league", { login: false });
+  stranded.setAttribute("league:type", league.getAttribute("league:type"));
+  stranded.setAttribute("league:areas", [1, 2]);
+  stranded.moveTo(at(2662, 3305)); // Ardougne
+  hooks.onPlayerLogin({ player: stranded, username: "stranded", isNewAccount: false, profile: "league" });
+  assert.equal(areaAt(stranded.getLocation().getX(), stranded.getLocation().getY()), MISTHALIN);
+});

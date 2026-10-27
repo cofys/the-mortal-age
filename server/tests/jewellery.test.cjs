@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/jewellery.test.cjs
 const assert = require("node:assert/strict");
-const { test, beforeEach } = require("node:test");
+const { test, before, beforeEach } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
@@ -29,6 +29,8 @@ require("../plugins/quests/QuestRuntime").getRegisteredQuests = () =>
   ["Heroes' Quest", "Legends' Quest"].map((name) => ({ name, isComplete: () => completeQuests.has(name) }));
 const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
+const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
+const { ObjectDefinition } = require("../dist/game/definition/ObjectDefinition");
 const Jewellery = require("../plugins/items/Jewellery.plugin");
 const customEvents = [];
 /** Players the Colosseum plugin would say have the Hero title. */
@@ -41,7 +43,7 @@ class StatementDialogue {
 }
 Jewellery.register({
   getBonusManager: () => ({ update() {} }),
-  core: { ObjectIdentifiers, ItemIdentifiers, DialogueChainBuilder, StatementDialogue },
+  core: { ObjectIdentifiers, ItemIdentifiers, ItemDefinition, ObjectDefinition, Flag: require("../dist/game/model/Flag").Flag, DialogueChainBuilder, StatementDialogue },
   onItemAction: (handler) => { itemAction = handler; },
   onItemOnObject: (handler) => { itemOnObject = handler; },
   onSpellCast() {},
@@ -67,7 +69,7 @@ function container(capacity) {
   };
 }
 
-function createPlayer({ farming = 1 } = {}) {
+function createPlayer({ farming = 1, clientType = 0 } = {}) {
   const messages = [];
   const statements = [];
   return {
@@ -80,6 +82,7 @@ function createPlayer({ farming = 1 } = {}) {
     getEquipment() { return this.equipment; },
     sendMessage: (message) => messages.push(message),
     getUpdateFlag: () => ({ flag() {} }),
+    getPacketSender: () => ({ getVarbit: () => clientType, getVarp: () => 0 }),
     getSkillManager: () => ({ getMaxLevel: () => farming }),
   };
 }
@@ -104,6 +107,11 @@ function pick(text) {
   assert.ok(option, `"${text}" not offered: ${prompt.options.map((entry) => entry.text).join(", ")}`);
   option.pick();
 }
+
+before(async () => {
+  await require("../dist/game/cache/CachePipeline").CachePipeline.initialize();
+  ObjectDefinition.init();
+});
 
 beforeEach(() => {
   teleports.length = 0;
@@ -502,7 +510,7 @@ function useOnObject(player, item, objectId) {
   return event;
 }
 
-test("the Fountain of Rune recharges glories to 6 but not skills necklaces", () => {
+test("the Fountain of Rune recharges glories and skills necklaces to 6", () => {
   completeQuests.clear();
   completeQuests.add("Heroes' Quest").add("Legends' Quest");
   const player = createPlayer();
@@ -515,7 +523,7 @@ test("the Fountain of Rune recharges glories to 6 but not skills necklaces", () 
   const event = useOnObject(player, glory, ObjectIdentifiers.FOUNTAIN_OF_RUNE);
   assert.equal(event.handled, true);
   assert.ok([ItemIds.AMULET_OF_GLORY_6_, ItemIdentifiers.AMULET_OF_ETERNAL_GLORY].includes(glory.getId()));
-  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_2_, "the fountain does not recharge a skills necklace");
+  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_6_);
   assert.ok([ItemIds.AMULET_OF_GLORY_6_, ItemIdentifiers.AMULET_OF_ETERNAL_GLORY].includes(worn.getId()));
 });
 
@@ -535,7 +543,7 @@ test("the Fountain of Rune can turn a trimmed glory into an eternal glory", () =
   assert.equal(trimmed.getId(), ItemIdentifiers.AMULET_OF_ETERNAL_GLORY);
 });
 
-test("the Legends' Guild totem pole recharges skills necklaces and combat bracelets to 6", () => {
+test("the Legends' Guild totem pole recharges skills necklaces and combat bracelets to 4", () => {
   completeQuests.clear();
   completeQuests.add("Legends' Quest");
   const player = createPlayer();
@@ -545,10 +553,10 @@ test("the Legends' Guild totem pole recharges skills necklaces and combat bracel
   player.inventory.setItem(0, skills);
   player.inventory.setItem(1, combat);
   player.inventory.setItem(2, glory);
-  const event = useOnObject(player, skills, ObjectIdentifiers.TOTEM_POLE_2);
+  const event = useOnObject(player, skills, ObjectIdentifiers.TOTEM_POLE_5);
   assert.equal(event.handled, true);
-  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_6_);
-  assert.equal(combat.getId(), ItemIds.COMBAT_BRACELET_6_);
+  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_4_);
+  assert.equal(combat.getId(), ItemIds.COMBAT_BRACELET_4_);
   assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY_1_, "the totem does not recharge glories");
   assert.equal(player.messages.at(-1), "The totem pole recharges your jewellery.");
 });
@@ -576,4 +584,131 @@ test("the fountains need the jewellery's quest", () => {
   useOnObject(player, glory, ObjectIdentifiers.FOUNTAIN_OF_RUNE);
   assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY);
   assert.equal(player.messages.at(-1), "Nothing interesting happens.");
+});
+
+// The map's morph parent has no named ObjectIdentifiers entry. Its displayed child is
+// FOUNTAIN_OF_RUNE; item-on-object packets carry the parent id.
+const RUNE_FOUNTAIN_MORPH_PARENT = 26782;
+
+test("the mapped Fountain of Rune resolves its player-visible name", () => {
+  completeQuests.clear();
+  const player = createPlayer();
+  const ring = new Item(ItemIdentifiers.RING_OF_WEALTH, 1);
+  player.inventory.setItem(0, ring);
+  assert.equal(useOnObject(player, ring, RUNE_FOUNTAIN_MORPH_PARENT).handled, true);
+  assert.equal(ring.getId(), ItemIdentifiers.RING_OF_WEALTH_5_);
+  assert.equal(player.messages.at(-1), "You feel a power emanating from the fountain as it recharges your jewellery.");
+});
+
+test("using a full ring charges other carried and worn jewellery, preserving imbues", () => {
+  completeQuests.clear();
+  completeQuests.add("Heroes' Quest").add("Legends' Quest");
+  const player = createPlayer();
+  const ids = [ItemIdentifiers.RING_OF_WEALTH_5_, ItemIdentifiers.RING_OF_WEALTH, ItemIdentifiers.RING_OF_WEALTH_I_, ItemIds.SKILLS_NECKLACE_2_, ItemIds.COMBAT_BRACELET_1_];
+  const items = ids.map((id, slot) => { const item = new Item(id, 1); player.inventory.setItem(slot, item); return item; });
+  const worn = new Item(ItemIdentifiers.RING_OF_WEALTH_I1_, 1);
+  player.equipment.setItem(Equipment.RING_SLOT, worn);
+  useOnObject(player, items[0], ObjectIdentifiers.FOUNTAIN_OF_RUNE);
+  assert.deepEqual(items.map(item => item.getId()), [ItemIdentifiers.RING_OF_WEALTH_5_, ItemIdentifiers.RING_OF_WEALTH_5_, ItemIdentifiers.RING_OF_WEALTH_I5_, ItemIds.SKILLS_NECKLACE_6_, ItemIds.COMBAT_BRACELET_6_]);
+  assert.equal(worn.getId(), ItemIdentifiers.RING_OF_WEALTH_I5_);
+});
+
+test("ring charging needs no quest and skips the other jewellery's unmet quests", () => {
+  completeQuests.clear();
+  const player = createPlayer();
+  const ids = [ItemIdentifiers.RING_OF_WEALTH, ItemIds.AMULET_OF_GLORY, ItemIds.SKILLS_NECKLACE, ItemIds.COMBAT_BRACELET];
+  const items = ids.map((id, slot) => { const item = new Item(id, 1); player.inventory.setItem(slot, item); return item; });
+  useOnObject(player, items[0], ObjectIdentifiers.FOUNTAIN_OF_RUNE);
+  assert.deepEqual(items.map(item => item.getId()), [ItemIdentifiers.RING_OF_WEALTH_5_, ...ids.slice(1)]);
+});
+
+test("a used skills necklace charges the other eligible families in both containers", () => {
+  completeQuests.clear();
+  completeQuests.add("Legends' Quest").add("Heroes' Quest");
+  const player = createPlayer();
+  const skills = new Item(ItemIds.SKILLS_NECKLACE_1_, 1);
+  const ring = new Item(ItemIdentifiers.RING_OF_WEALTH, 1);
+  const worn = new Item(ItemIds.COMBAT_BRACELET_2_, 1);
+  player.inventory.setItem(0, skills);
+  player.inventory.setItem(1, ring);
+  player.equipment.setItem(Equipment.HANDS_SLOT, worn);
+  assert.equal(useOnObject(player, skills, ObjectIdentifiers.FOUNTAIN_OF_RUNE).handled, true);
+  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_6_);
+  assert.equal(ring.getId(), ItemIdentifiers.RING_OF_WEALTH_5_);
+  assert.equal(worn.getId(), ItemIds.COMBAT_BRACELET_6_);
+});
+
+test("Rune accepts noted skills necklaces and bracelets, preserving stack quantities", () => {
+  completeQuests.clear();
+  completeQuests.add("Legends' Quest");
+  const player = createPlayer();
+  const skills = new Item(ItemDefinition.forId(ItemIds.SKILLS_NECKLACE).getNoteId(), 150);
+  const combat = new Item(ItemDefinition.forId(ItemIds.COMBAT_BRACELET_2_).getNoteId(), 75);
+  const ring = new Item(ItemDefinition.forId(ItemIdentifiers.RING_OF_WEALTH).getNoteId(), 20);
+  const glory = new Item(ItemDefinition.forId(ItemIds.AMULET_OF_GLORY).getNoteId(), 30);
+  [skills, combat, ring, glory].forEach((item, slot) => player.inventory.setItem(slot, item));
+  assert.equal(useOnObject(player, skills, RUNE_FOUNTAIN_MORPH_PARENT).handled, true);
+  assert.deepEqual([skills.getId(), skills.getAmount()], [ItemDefinition.forId(ItemIds.SKILLS_NECKLACE_6_).getNoteId(), 150]);
+  assert.deepEqual([combat.getId(), combat.getAmount()], [ItemDefinition.forId(ItemIds.COMBAT_BRACELET_6_).getNoteId(), 75]);
+  assert.equal(ring.getId(), ItemDefinition.forId(ItemIdentifiers.RING_OF_WEALTH).getNoteId());
+  assert.equal(glory.getId(), ItemDefinition.forId(ItemIds.AMULET_OF_GLORY).getNoteId());
+  assert.equal(useOnObject(player, ring, RUNE_FOUNTAIN_MORPH_PARENT).handled, false);
+  assert.equal(useOnObject(player, glory, RUNE_FOUNTAIN_MORPH_PARENT).handled, false);
+});
+
+// Cache morph parents are intentionally absent from ObjectIdentifiers (their name is null).
+const HEROES_FOUNTAIN_MORPH_PARENT = 2939;
+const LEGENDS_TOTEM_MORPH_PARENT = 2638;
+
+test("the map's Heroes fountain charges carried and worn glories to four", () => {
+  completeQuests.clear();
+  completeQuests.add("Heroes' Quest");
+  const player = createPlayer();
+  const carried = new Item(ItemIds.AMULET_OF_GLORY_1_, 1);
+  const worn = new Item(ItemIds.AMULET_OF_GLORY_T2_, 1);
+  player.inventory.setItem(0, carried);
+  player.equipment.setItem(Equipment.AMULET_SLOT, worn);
+  assert.equal(useOnObject(player, carried, HEROES_FOUNTAIN_MORPH_PARENT).handled, true);
+  assert.equal(carried.getId(), ItemIds.AMULET_OF_GLORY_4_);
+  assert.equal(worn.getId(), ItemIds.AMULET_OF_GLORY_T4_);
+});
+
+test("the map's Legends totem charges to four and keeps existing five/six charges", () => {
+  completeQuests.clear();
+  completeQuests.add("Legends' Quest");
+  const player = createPlayer();
+  const ids = [ItemIds.SKILLS_NECKLACE, ItemIds.COMBAT_BRACELET_1_, ItemIds.SKILLS_NECKLACE_5_, ItemIds.COMBAT_BRACELET_6_];
+  const items = ids.map((id, slot) => { const item = new Item(id, 1); player.inventory.setItem(slot, item); return item; });
+  assert.equal(useOnObject(player, items[0], LEGENDS_TOTEM_MORPH_PARENT).handled, true);
+  assert.deepEqual(items.map(item => item.getId()), [ItemIds.SKILLS_NECKLACE_4_, ItemIds.COMBAT_BRACELET_4_, ...ids.slice(2)]);
+});
+
+test("unrelated Kharazi Jungle totems do not recharge jewellery", () => {
+  completeQuests.clear();
+  completeQuests.add("Legends' Quest");
+  const player = createPlayer();
+  const skills = new Item(ItemIds.SKILLS_NECKLACE, 1);
+  player.inventory.setItem(0, skills);
+  for (const id of [ObjectIdentifiers.TOTEM_POLE_2, ObjectIdentifiers.TOTEM_POLE_3, ObjectIdentifiers.TOTEM_POLE_4]) {
+    assert.equal(useOnObject(player, skills, id).handled, false);
+    assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE);
+  }
+});
+
+test("desktop and mobile cache transforms both resolve the charging sites", () => {
+  completeQuests.clear();
+  completeQuests.add("Heroes' Quest").add("Legends' Quest");
+  for (const clientType of [0, 1]) {
+    const player = createPlayer({ clientType });
+    for (const [objectId, before, after] of [
+      [RUNE_FOUNTAIN_MORPH_PARENT, ItemIdentifiers.RING_OF_WEALTH, ItemIdentifiers.RING_OF_WEALTH_5_],
+      [HEROES_FOUNTAIN_MORPH_PARENT, ItemIds.AMULET_OF_GLORY, ItemIds.AMULET_OF_GLORY_4_],
+      [LEGENDS_TOTEM_MORPH_PARENT, ItemIds.SKILLS_NECKLACE, ItemIds.SKILLS_NECKLACE_4_],
+    ]) {
+      const item = new Item(before, 1);
+      player.inventory.setItem(0, item);
+      assert.equal(useOnObject(player, item, objectId).handled, true);
+      assert.equal(item.getId(), after);
+    }
+  }
 });

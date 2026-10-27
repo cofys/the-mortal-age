@@ -1,5 +1,5 @@
 module.exports = function registerDragonAxeSpecialAttack(api) {
-  const { Animation, CombatMethod, CombatSpecial, CombatType, Equipment, Graphic, GraphicHeight, ItemIdentifiers, Skill } = api.core;
+  const { Animation, CombatMethod, CombatSpecial, CombatType, Equipment, Graphic, GraphicHeight, ItemIdentifiers, Skill, Sound, Sounds } = api.core;
 
   const DRAIN = 100;
   const WOODCUTTING_BOOST = 3;
@@ -28,6 +28,16 @@ module.exports = function registerDragonAxeSpecialAttack(api) {
       character.forceChat(FORCED_CHAT);
       character.performAnimation(ANIMATION);
       character.performGraphic(CRYSTAL_AXES.includes(weaponId) ? CRYSTAL_SWOOSH : SWOOSH);
+      const location = character.getLocation();
+      Sounds.playAreaSound({
+        soundId: Sound.DRAGON_AXE_SPECIAL.getId(),
+        x: location.getX(),
+        y: location.getY(),
+        level: location.getZ(),
+        loops: 1,
+        delay: 0,
+        radius: 1,
+      });
       const skillManager = character.getAsPlayer().getSkillManager();
       const base = skillManager.getMaxLevel(Skill.WOODCUTTING);
       const current = skillManager.getCurrentLevel(Skill.WOODCUTTING);
@@ -39,10 +49,20 @@ module.exports = function registerDragonAxeSpecialAttack(api) {
     id: "dragon_axe",
     itemIds: [
       ItemIdentifiers.DRAGON_AXE,
+      ItemIdentifiers.DRAGON_FELLING_AXE,
+      ItemIdentifiers.DRAGON_AXE_OR_,
+      ItemIdentifiers.DRAGON_AXE_OR__3,
       ItemIdentifiers.INFERNAL_AXE,
+      ItemIdentifiers.INFERNAL_AXE_UNCHARGED_,
+      ItemIdentifiers.INFERNAL_AXE_OR_,
+      ItemIdentifiers.INFERNAL_AXE_UNCHARGED__2,
+      ItemIdentifiers.INFERNAL_AXE_OR__3,
+      ItemIdentifiers.INFERNAL_AXE_UNCHARGED__4,
       ItemIdentifiers._3RD_AGE_AXE,
       ItemIdentifiers.CRYSTAL_AXE,
+      ItemIdentifiers.CRYSTAL_AXE_INACTIVE_,
       ItemIdentifiers.CRYSTAL_FELLING_AXE,
+      ItemIdentifiers.CRYSTAL_FELLING_AXE_INACTIVE_,
       ItemIdentifiers._3RD_AGE_FELLING_AXE,
     ],
     drainAmount: DRAIN,

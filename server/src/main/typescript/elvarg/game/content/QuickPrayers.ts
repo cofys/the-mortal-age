@@ -172,7 +172,9 @@ export class QuickPrayers {
     private selectedPrayerMask(): number {
         let selected = 0;
         for (const [prayerId, prayer] of this.prayers.entries()) {
-            if (prayer != null) selected |= 1 << QuickPrayers.QUICK_PRAYER_SLOT_BY_ID[prayerId];
+            const slot = QuickPrayers.QUICK_PRAYER_SLOT_BY_ID[prayerId];
+            // Prayers without a slot in the mask (Zeal) can't be shown as selected.
+            if (prayer != null && slot !== undefined) selected |= 1 << slot;
         }
         return selected;
     }
@@ -291,7 +293,7 @@ export class QuickPrayers {
             .sendInterfaceFlagsRange(
                 (QuickPrayers.SETUP_WIDGET_GROUP_ID << 16) | QuickPrayers.SETUP_WIDGET_CHILD_ID,
                 0,
-                QuickPrayers.PRAYER_VALUES.length - 1,
+                QuickPrayers.QUICK_PRAYER_SLOT_BY_ID.length - 1,
                 1 << 1,
             );
         this.selectingPrayers = true;
@@ -334,7 +336,7 @@ export class QuickPrayers {
         if (groupId === QuickPrayers.PRAYER_WIDGET_GROUP_ID && childId === QuickPrayers.QUICK_PRAYER_WIDGET_CHILD_ID) {
             if (buttonNum === 2) {
                 this.setPrayers(QuickPrayers.PRAYER_VALUES.map((prayer, prayerId) =>
-                    QuickPrayers.isActivated(this.player, prayerId) ? prayer : null,
+                    QuickPrayers.isActivated(this.player, prayerId) && prayerId < QuickPrayers.QUICK_PRAYER_SLOT_BY_ID.length ? prayer : null,
                 ));
                 this.sync();
             } else this.toggleQuickPrayers();

@@ -1,6 +1,7 @@
 const path = require("path");
 const crypto = require("crypto");
 const { JsonPlayerPersistence } = require("./JsonPlayerPersistence.plugin");
+const { MAIN_PROFILE, profileStorageKey } = JsonPlayerPersistence.PROFILES;
 const {
   HANDOFF_DIRECTORY,
   isBrowserHost,
@@ -64,10 +65,11 @@ class IndexedDbPlayerPersistence extends JsonPlayerPersistence {
   static HANDOFF_DIRECTORY = HANDOFF_DIRECTORY;
   static SAVE_DIRECTORY = path.join(process.cwd(), HANDOFF_DIRECTORY);
 
-  resolveFilePath(username) {
+  /** One flat directory (the browser syncs it): another profile's file carries the profile prefix in its name. */
+  resolveFilePath(username, profile = MAIN_PROFILE) {
     return path.join(
       IndexedDbPlayerPersistence.SAVE_DIRECTORY,
-      `${this.normalizeUsername(username)}.json`
+      `${profileStorageKey(this.normalizeUsername(username), profile).replace(":", "-")}.json`
     );
   }
 

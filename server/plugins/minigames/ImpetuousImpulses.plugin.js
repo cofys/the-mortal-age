@@ -4,12 +4,13 @@
  * Impetuous Impulses: Puro-Puro, reached through the Zanaris crop circle (Hunter 17, not
  * boostable), Elnock's equipment gift and jar exchanges, and the magical wheat push.
  * Catching implings is already the Hunter plugin's (skills/hunter/Catching.Hunter.js); this
- * plugin adds the entry gate, the exit portal, Elnock and the wheat. Each unit lives in
+ * plugin adds the entry gate, the exit portal, Elnock, the wheat and the roaming spawns. Each unit lives in
  * ./impetuousimpulses/.
  */
 const Entry = require("./impetuousimpulses/Entry.ImpetuousImpulses");
 const Elnock = require("./impetuousimpulses/Elnock.ImpetuousImpulses");
 const Wheat = require("./impetuousimpulses/Wheat.ImpetuousImpulses");
+const Roaming = require("./impetuousimpulses/Roaming.ImpetuousImpulses");
 const Area = require("./impetuousimpulses/Area.ImpetuousImpulses");
 
 module.exports = {
@@ -21,6 +22,7 @@ module.exports = {
       Elnock.init(api);
       Wheat.init(api);
       Area.init(api);
+      Roaming.init(api);
     },
     enterCropCircle: Entry.enterCropCircle,
     fieldOf: Entry.fieldOf,
@@ -40,11 +42,13 @@ module.exports = {
     cancel: Wheat.cancel,
     TIERS: Wheat.TIERS,
     pushes: Wheat.pushes,
+    roaming: Roaming,
   },
   register(api) {
     Entry(api);
     Elnock(api);
     Wheat(api);
+    Roaming(api);
     Area(api);
   },
 };

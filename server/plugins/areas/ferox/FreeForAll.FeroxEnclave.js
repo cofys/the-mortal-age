@@ -159,6 +159,13 @@ function blockXp(event) {
   if (event.player?.getAttribute?.(XP_DISABLE_ATTRIBUTE) === true && inArena(event.player.getLocation())) event.allow = false;
 }
 
+function allowBountyHunterWeapons(event) {
+  if (!event.attacker.getPrivateArea() && !event.target.getPrivateArea()
+    && inFightingArea(event.attacker.getLocation()) && inFightingArea(event.target.getLocation())) {
+    event.allowed = true;
+  }
+}
+
 /** Safe: nothing is dropped; the skull is kept through the death reset (Wiki). */
 function keepItems(event) {
   if (!inArena(event.player?.getLocation?.())) return;
@@ -214,6 +221,7 @@ module.exports = function attachFreeForAll(api) {
   api.onObjectInteraction("Portal", { Exit: exit });
   api.onObjectFirstClick([MYSTERIOUS_PORTAL], mysteriousPortal);
   api.onCanGainExperience(blockXp);
+  api.onCustomEvent("bounty-hunter:weapon-area", allowBountyHunterWeapons);
   api.onShouldDropItemsOnDeath(keepItems);
   api.onPlayerDeath(respawn);
   api.onPlayerLogin(sendXpSetting);

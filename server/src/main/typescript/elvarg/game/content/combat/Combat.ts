@@ -48,6 +48,8 @@ const COMBAT_TARGET_PLAYER_VARP = 1075;
 export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
     private damageMap: Map<Player, HitDamageCache> | null = null;
+    /** The player whose damage `addDamage` recorded last. */
+    private lastDamager: Player | null = null;
     private readonly lastAttack = new TickStopwatch();
     // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
     private poisonImmunityTimer: SecondsTimer | null = null;
@@ -225,11 +227,14 @@ export class Combat {
             state.attackBlocked = true;
         }
 
-        this.faceTarget(target);
-
         if (this.manualMovementUntilCycle >= cycle) {
+            // Walking where content sent them (a step between hits): they face where they walk,
+            // as a player who clicks a tile does, and turn back to the target once it ends.
+            if (this.character.hasFlag?.("combat:keep-facing") !== true) this.character.setMobileInteraction(null);
             return;
         }
+
+        this.faceTarget(target);
 
         // An overlapped NPC that can still reach its target (a large NPC fighting
         // underfoot) attacks in place; one that cannot steps aside below.
@@ -490,9 +495,16 @@ export class Combat {
     public addDamage(entity: Mobile, amount: number): void {
         if (amount <= 0 || entity.isNpc()) return;
         const player = entity as Player;
+        this.lastDamager = player;
         const cached = this.damageMap?.get(player);
         if (cached) cached.incrementDamage(amount);
         else (this.damageMap ??= new Map()).set(player, new HitDamageCache(amount));
+    }
+
+    /** The player who damaged this character most recently, while that damage still counts. */
+    public getLastDamager(): Player | null {
+        const player = this.lastDamager;
+        return player && player.isRegistered() && this.damageMapContains(player) ? player : null;
     }
 
     public getKiller(clearMap: boolean): Player | null {
@@ -653,7 +665,8 @@ export class Combat {
             CombatFactory.getMethod(target).onCombatBegan(target, this.character);
         }
         if (!bypass && !timing.keepDelay) {
-            const speed = specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character);
+            const speed = PluginManager.emitAttackSpeed(this.character, target, method.type(),
+                specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character));
             this.nextAttackCycle = cycle + Math.max(1, speed | 0);
             this.sendAttackTimer();
         } else if (!bypass && timing.minimumDelay > 0) {

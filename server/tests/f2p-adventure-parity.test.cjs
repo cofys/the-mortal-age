@@ -188,8 +188,9 @@ test('canonical Blurite mining checks level/pickaxe, rolls at pickaxe intervals,
     const mine=()=>interactions.get('Blurite rocks').Mine({player:p,object,definition:{getName:()=> 'Blurite rocks'}});
     p.items.set(ItemIds.BRONZE_PICKAXE,1);mine();assert.ok(p.log.some(row=>row[0]==='text'&&/Mining level of 10 to mine this rock/.test(row[2])));assert.equal(Mining.isMiningActive(p),false);
     level=10;mine();const ticks=n=>{while(n-->0)[...tasks].forEach(task=>task.tick());};
+    // Bronze rolls the tick after the swing (+2), then every 8 ticks (+10): the +2 roll fails at 0.99.
     ticks(8);assert.equal(p.items.get(I.BLURITE_ORE),undefined,'failed probability roll is not guaranteed ore');
-    Math.random=()=>0;ticks(7);assert.equal(p.items.get(I.BLURITE_ORE),undefined);ticks(1);
+    Math.random=()=>0;ticks(1);assert.equal(p.items.get(I.BLURITE_ORE),undefined,'no roll between pickaxe intervals');ticks(1);
     assert.equal(p.items.get(I.BLURITE_ORE),1);assert.deepEqual(xp,[[core.Skill.MINING,17.5]]);assert.equal(present.getId(),core.CacheDefinitions.getLocId('rocks1'));
     ticks(41);assert.notEqual(present,object);ticks(1);assert.equal(present,object);
   }finally{MapObjects.get=oldGet;Math.random=oldRandom;}

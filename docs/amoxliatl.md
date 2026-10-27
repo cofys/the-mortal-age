@@ -73,6 +73,19 @@ Counted by event (`combat-achievements/data/monsters.json`), so the kill count a
 | Totally Shattered | No unstable ice shattered in the fight. |
 | Without Ralos' Light | No prayer points lost in the fight. |
 
+## The scoreboard
+
+The Ancient tablet by her door (`amoxliatl_scoreboard` 52693, shown as `amoxliatl_scoreboard_op`
+54277 "Ancient tablet": Read once The Heart of Darkness is done) opens interface
+`amoxliatl_scoreboard` (878): the reader's kill count, deaths and best time, then the world's
+(Wiki, Ancient tablet (Amoxliatl); the labels and the "Amoxliatl Statistics" title are the
+cache's). The personal kill count and best time are the kill messages' own; a death in her chamber
+counts, the quest's fight doesn't. The world's numbers are kept in
+`data/saves/amoxliatl-scoreboard.json`. No recording reads it, so the number and time formats
+follow the Araxxor board's recording; a missing time is the cache's default "-". Deaths are heard
+through onPlayerDefeated, which every death reaches (onPlayerDeath stops at Death's Office's first
+grave).
+
 ## Data fixes
 
 - `npc-combat-defs.json`: her death 11532 and no block or attack animation (the plugin plays her attacks), the blocks with none, so the human ones never play on them.
@@ -95,6 +108,6 @@ Counted by event (`combat-achievements/data/monsters.json`), so the kill count a
 
 ## Testing
 
-`node --test tests/amoxliatl.test.cjs`
+`node --test tests/amoxliatl.test.cjs tests/amoxliatl-scoreboard.test.cjs`
 
 Developer commands: `::amoxliatl` (outside her door), `::amoxliatlhp <hitpoints>`, `::amoxliatlspecial <icicle|ice>` (her next attack). `::quest heart of darkness complete` opens the door.

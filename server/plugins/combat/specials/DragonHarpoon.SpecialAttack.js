@@ -9,6 +9,24 @@ module.exports = function registerDragonHarpoonSpecialAttack(api) {
   const DRAGON_STAB = new Animation(7393);
   const INFERNAL_STAB = new Animation(7394);
   const CRYSTAL_STAB = new Animation(8333);
+  const TRAILBLAZER_STAB = new Animation(11823);
+  const RELOADED_STAB = new Animation(11824);
+  const CRYSTAL_HARPOONS = [ItemIdentifiers.CRYSTAL_HARPOON, ItemIdentifiers.CRYSTAL_HARPOON_INACTIVE_];
+  // The cache's Fishstabber sequences carry the held tool model. Keep every
+  // wieldable variant here so an ornament or depleted charge cannot lose the special.
+  const HARPOON_ANIMATIONS = new Map([
+    [ItemIdentifiers.DRAGON_HARPOON, DRAGON_STAB],
+    [ItemIdentifiers.INFERNAL_HARPOON, INFERNAL_STAB],
+    [ItemIdentifiers.INFERNAL_HARPOON_UNCHARGED_, INFERNAL_STAB],
+    [ItemIdentifiers.CRYSTAL_HARPOON, CRYSTAL_STAB],
+    [ItemIdentifiers.CRYSTAL_HARPOON_INACTIVE_, CRYSTAL_STAB],
+    [ItemIdentifiers.DRAGON_HARPOON_OR_, TRAILBLAZER_STAB],
+    [ItemIdentifiers.INFERNAL_HARPOON_OR_, TRAILBLAZER_STAB],
+    [ItemIdentifiers.INFERNAL_HARPOON_UNCHARGED__2, TRAILBLAZER_STAB],
+    [ItemIdentifiers.DRAGON_HARPOON_OR__3, RELOADED_STAB],
+    [ItemIdentifiers.INFERNAL_HARPOON_OR__3, RELOADED_STAB],
+    [ItemIdentifiers.INFERNAL_HARPOON_UNCHARGED__4, RELOADED_STAB],
+  ]);
 
   // Fishstabber is an instant utility special: +3 Fishing, no attack roll.
   class DragonHarpoonCombatMethod extends CombatMethod {
@@ -26,10 +44,9 @@ module.exports = function registerDragonHarpoonSpecialAttack(api) {
         return;
       }
       const weaponId = character.getAsPlayer().getEquipment().get(Equipment.WEAPON_SLOT).getId();
-      const crystal = weaponId === ItemIdentifiers.CRYSTAL_HARPOON;
+      const crystal = CRYSTAL_HARPOONS.includes(weaponId);
       character.forceChat(FORCED_CHAT);
-      character.performAnimation(crystal ? CRYSTAL_STAB
-        : weaponId === ItemIdentifiers.INFERNAL_HARPOON ? INFERNAL_STAB : DRAGON_STAB);
+      character.performAnimation(HARPOON_ANIMATIONS.get(weaponId));
       character.performGraphic(crystal ? CRYSTAL_GLOW : GLOW);
       const skillManager = character.getAsPlayer().getSkillManager();
       const base = skillManager.getMaxLevel(Skill.FISHING);
@@ -40,11 +57,7 @@ module.exports = function registerDragonHarpoonSpecialAttack(api) {
 
   api.registerCombatSpecial({
     id: "dragon_harpoon",
-    itemIds: [
-      ItemIdentifiers.DRAGON_HARPOON,
-      ItemIdentifiers.INFERNAL_HARPOON,
-      ItemIdentifiers.CRYSTAL_HARPOON,
-    ],
+    itemIds: [...HARPOON_ANIMATIONS.keys()],
     drainAmount: DRAIN,
     strengthMultiplier: 1,
     accuracyMultiplier: 1,

@@ -757,6 +757,10 @@
     "$comment": "One soft clay shapes `shaped` unfired items (default 1).",
     "seq": 883,
     "seqName": "human_potterywheel",
+    "ovenSeq": 1317,
+    "ovenSeqName": "potteryoven_quick",
+    "sound": 2588,
+    "ovenSound": 2725,
     "recipes": [
       {
         "name": "pot",
@@ -765,16 +769,6 @@
         "level": 1,
         "shapingXp": 6.3,
         "firingXp": 6.3
-      },
-      {
-        "name": "cup",
-        "unfired": "UNFIRED_CUP",
-        "fired": "EMPTY_CUP",
-        "level": 3,
-        "shapingXp": 8.5,
-        "firingXp": 8.5,
-        "members": true,
-        "shaped": 4
       },
       {
         "name": "pie dish",
@@ -790,7 +784,10 @@
         "fired": "BOWL",
         "level": 8,
         "shapingXp": 18,
-        "firingXp": 15
+        "firingXp": 15,
+        "shapeMessage": "You make the clay into a bowl.",
+        "putMessage": "You put a bowl in the oven.",
+        "removeMessage": "You remove the bowl from the oven."
       },
       {
         "name": "plant pot",
@@ -800,6 +797,31 @@
         "shapingXp": 20,
         "firingXp": 17.5,
         "members": true
+      },
+      {
+        "name": "cup",
+        "unfired": "UNFIRED_CUP",
+        "fired": "EMPTY_CUP",
+        "level": 3,
+        "shapingXp": 8.5,
+        "firingXp": 8.5,
+        "members": true,
+        "shaped": 4,
+        "shapeLabel": "Set of cups",
+        "shapeMessage": "You make the clay into a set of cups.",
+        "putMessage": "You put an item in the oven.",
+        "removeMessage": "You remove the item from the oven.",
+        "cracks": false
+      },
+      {
+        "name": "pot lid",
+        "unfired": "UNFIRED_POT_LID",
+        "fired": "POT_LID",
+        "level": 25,
+        "shapingXp": 20,
+        "firingXp": 20,
+        "members": true,
+        "unlock": { "quest": "one_small_favour", "stage": 34 }
       }
     ],
     "waterContainers": [

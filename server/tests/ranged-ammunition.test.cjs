@@ -41,7 +41,8 @@ test('Blisterwood stakes resolve as stackable self-ammunition with their capture
   const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
   const { FightType } = require('../dist/game/content/combat/FightType');
   const items = Array.from({ length: 14 }, () => ({ getId: () => -1 }));
-  items[3] = { getId: () => Items.BLISTERWOOD_STAKE };
+  const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+  items[3] = { getId: () => Items.BLISTERWOOD_STAKE, getDefinition: () => ItemDefinition.forId(Items.BLISTERWOOD_STAKE) };
   const player = {
     getEquipment: () => ({ getItems: () => items }),
     getWeapon: () => WeaponInterfaces.DART,
@@ -264,7 +265,7 @@ test('ammo is consumed when the projectile lands, not at fire', () => {
   assert.equal(harness.ammo().getAmount(), 4);
 });
 
-test('hits on NPCs and player melee take the processing-order tick', () => {
+test('hits on NPCs take the processing-order tick; hits on players leave it to PID', () => {
   const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
   const { CombatType } = require('../dist/game/content/combat/CombatType');
   const hit = (playerAttacker, npcTarget, type) => ({
@@ -275,9 +276,37 @@ test('hits on NPCs and player melee take the processing-order tick', () => {
   assert.equal(CombatFactory.hitProcessingDelay(hit(true, true, CombatType.RANGED)), 1);
   assert.equal(CombatFactory.hitProcessingDelay(hit(true, true, CombatType.MAGIC)), 1);
   assert.equal(CombatFactory.hitProcessingDelay(hit(true, false, CombatType.RANGED)), 0);
-  assert.equal(CombatFactory.hitProcessingDelay(hit(true, false, CombatType.MELEE)), 1);
+  assert.equal(CombatFactory.hitProcessingDelay(hit(true, false, CombatType.MELEE)), 0, 'Wiki: in PvP, PID decides');
   assert.equal(CombatFactory.hitProcessingDelay(hit(false, false, CombatType.RANGED)), 0, 'NPC attacks on players are unchanged');
   assert.equal(CombatFactory.hitProcessingDelay(hit(false, true, CombatType.RANGED)), 1);
+});
+
+test('PvP melee on the same tick: the player processed first lands now, the other next tick (PID)', (t) => {
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { CombatType } = require('../dist/game/content/combat/CombatType');
+  const { HitQueue } = require('../dist/game/content/combat/hit/HitQueue');
+  const landed = [];
+  let cycle = 100;
+  t.mock.method(CombatFactory, 'executeHit', (pending) => landed.push([pending.name, cycle]));
+  const fighter = (name) => {
+    const player = { name, isRegistered: () => true, getHitpoints: () => 99, isUntargetable: () => false, isNpc: () => false, isPlayer: () => true };
+    player.queue = new HitQueue(player);
+    return player;
+  };
+  const first = fighter('first');
+  const second = fighter('second');
+  const swing = (attacker, target) => {
+    const pending = { name: `${attacker.name}->${target.name}`, getAttacker: () => attacker, getTarget: () => target, getCombatType: () => CombatType.MELEE };
+    target.queue.addPendingHit(pending, cycle + 0 + CombatFactory.hitProcessingDelay(pending));
+  };
+  // Tick 100, in PID order: each drains its own queue, then swings.
+  first.queue.process(cycle); swing(first, second);
+  second.queue.process(cycle); swing(second, first);
+  HitQueue.processAll(cycle);
+  cycle = 101;
+  first.queue.process(cycle); second.queue.process(cycle);
+  HitQueue.processAll(cycle);
+  assert.deepEqual(landed, [['first->second', 100], ['second->first', 101]]);
 });
 
 test("a thrown weapon doesn't get the ammo slot's ranged strength; a bow does", () => {
@@ -365,4 +394,22 @@ test('the scorching bow is a bow: arrows up to dragon, speed 5, range 10, its st
   assert.equal(definition.getBonuses()[4], 124, 'ranged attack');
   assert.equal(definition.getBonuses()[11], 40, 'ranged strength');
   assert.equal(definition.getRequirements()[4], 77, 'Ranged to wield');
+});
+
+test("a block on the tick of a swing doesn't replace it (cache interrupt priority: attacks 6, blocks 5)", (t) => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { Animation } = require('../dist/game/model/Animation');
+  const player = new Player(null);
+  t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+  const WHIP_ATTACK = 1658;
+  const WHIP_BLOCK = 1659;
+  player.performAnimation(new Animation(WHIP_ATTACK));
+  player.performAnimation(new Animation(WHIP_BLOCK));
+  assert.equal(player.getAnimation().getId(), WHIP_ATTACK, "the opponent's hit landing this tick keeps the swing");
+  player.resetUpdating();
+  player.performAnimation(new Animation(WHIP_BLOCK));
+  player.performAnimation(new Animation(WHIP_ATTACK));
+  assert.equal(player.getAnimation().getId(), WHIP_ATTACK, 'a swing replaces a block');
+  player.performAnimation(new Animation(-1));
+  assert.equal(player.getAnimation().getId(), -1, 'a reset always applies');
 });

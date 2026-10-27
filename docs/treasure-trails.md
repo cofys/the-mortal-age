@@ -441,7 +441,10 @@ Not yet implemented:
 `clue-caskets.json`.
 
 **Before anything is consumed,** it:
-- rolls the base rewards;
+- rolls the base rewards, each unique row (a tier's "clue uniques" and mega-rare rows, after
+  Entrana's filter) made as likely as `drops:chance` { player, source: "treasure-trails-casket",
+  rules } says (`Rolls.uniqueMultiplier`, which the Mimic's `treasure-trails:roll-casket` roll
+  shares; a league's boosted drops answer it);
 - rolls chance-based tertiaries using their exact `probability`;
 - asks ClueCapacity for milestone rewards (`treasure-trails:milestone-rewards`);
 - checks that every reward resolves to an item.

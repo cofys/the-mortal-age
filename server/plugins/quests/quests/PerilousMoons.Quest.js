@@ -594,10 +594,10 @@ module.exports = function registerPerilousMoonsQuest(api) {
       sender.sendVarbit(BOSS_DEAD_VARBITS.blue, moonDead(player, MOON_BLUE_BIT) ? 1 : 0);
       sender.sendVarbit(BOSS_DEAD_VARBITS.eclipse, moonDead(player, MOON_ECLIPSE_BIT) ? 1 : 0);
     }
-    sender.sendVarbit(
-      EYATLALLI_VIS_VARBIT,
-      stageOf(player) >= STAGE_EYAT_FOUND && stageOf(player) < STAGE_COMPLETE ? 1 : 0
-    );
+    // Only pmoon_eyatlalli_postquest reads it (the quest's own Eyatlallis go by pmoon_quest): 1
+    // once the quest is done shows her at the shrine, with Scoreboard. Every recording with it at
+    // 1 has pmoon_quest 36 (rsprox 237/01104 at login, 234/03276).
+    sender.sendVarbit(EYATLALLI_VIS_VARBIT, stageOf(player) >= STAGE_COMPLETE ? 1 : 0);
   }
 
   // ==========================================================================
@@ -1190,6 +1190,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     if (stageOf(player) < STAGE_FINISHED) quest.setStage(player, STAGE_FINISHED);
     if (!quest.complete(player)) return;
     syncNpcs(player);
+    syncSiblingVarbits(player); // the shrine's post-quest Eyatlalli appears now, not at the next login
   }
 
   // ==========================================================================

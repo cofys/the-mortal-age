@@ -4,7 +4,7 @@
 
 | Unit | What it covers |
 | --- | --- |
-| `Shared.Crafting.js` | The skillmulti menu and the make-many loop every unit uses |
+| `Shared.Crafting.js` | The skillmulti menu and common make-many loop |
 | `Leather.Crafting.js` | Needle on leather, hard leather, dragon leather, snakeskin, Xerician fabric and Hueycoatl hide; studs, kebbit claws, hide shields |
 | `Gems.Crafting.js` | Cutting gems (with crushing) and amethyst |
 | `Jewellery.Crafting.js` | Gold (446) and silver (6) jewellery at a furnace, 'perfect' jewellery, stringing amulets |
@@ -44,6 +44,8 @@ interface or running out of materials stops it.
 | Glassblowing | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_glassblowing, 2724 (delay 10) | "You make a beer glass." |
 | Spinning wheel | 16, "What would you like to spin?" | 1 | 3 | 2 | human_spinningwheel_60, 2590, wheel loc anim spinningwheel | none |
 | Loom | 35, "How many would you like to weave?" | 1 | 4 | 3 | farming_useloom, 2587 (delay 2) | none |
+| Potter's wheel | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_potterywheel, 2588 | bowl/set-of-cups shaping message |
+| Pottery oven | 9, "What would you like to fire in the oven?" | 0 | 6 | 7 | potteryoven_quick, 2725 | bowl/cup put and remove messages |
 | Gold/silver furnace | interface 446 / 6 | 0 | 2 | 3 | human_furnace, 2725 | none |
 
 ## Captured facts (rsprox captures)
@@ -100,4 +102,66 @@ Recording ids refer to the capture database at https://rsprox.net/database.
 
 - Golem crafting (Wyrmscraig) and fixing the Dorgesh-Kaan lamps: separate follow-ups.
 - Splitbark, mixed hide armour, snelms, crab armour, and the Broodoo shields.
-- Pottery firing never fails, and pot lids are left to One Small Favour.
+- Pottery: the cup crack rate, exact crack messages, messages for other pottery types and
+  full-inventory cup behaviour still need capture evidence. Cups retain their previous guaranteed
+  firing success until their rate is established. Tassie's initial teaching dialogue still supplies
+  its first unfired lid; reviewing that lesson is a separate quest dialogue interaction.
+
+## Pottery production parity
+
+The wheel and oven previously made one item immediately (or offered a one-item dialogue),
+so players could bypass the production delay and could not select a batch. Both now open the
+native quantity menu before spending materials. Shaping checks the Crafting level; firing has no
+level requirement. A batch stops on movement, interface opening, logout, death or exhausted
+materials. Cancellation before a result leaves that input unspent.
+
+Evidence checked for this interaction:
+
+- **Recording 3121**, normal world, rev 232: soft clay on the wheel opens mode 0 with the title
+  "How many do you wish to make?", quantity limited to the three clay carried, and ordered
+  choices Pot, Pie dish, Bowl, Plant pot, Set of cups, Pot lid. **Recording 331** confirms the
+  no-materials message box, "You don't have anything suitable to craft with."
+- **Recordings 1757 and 1858**, Leagues, rev 227: shaping starts with `human_potterywheel`
+  and sound 2588, consumes clay and produces a bowl two ticks after starting, then repeats
+  at three-tick intervals, restarting the next shaping animation on the preceding result tick. A set of cups produces four separate unfired cups from one clay.
+  Bowl/set-of-cups shaping messages are reproduced. The oven offers mode 9, the title
+  "What would you like to fire in the oven?", and the full ordered recipe list. Cup firing
+  starts at ticks 0 and 7, with results six ticks after each start; bowl firing has the same
+  six-tick result delay. `potteryoven_quick`, sound 2725 and the recorded bowl/cup put/remove
+  messages accompany firing. **Recording 1098**, Leagues, rev 237, confirms the bowl delay,
+  messages and oven animation. Leagues XP values are not used as normal-world XP evidence.
+- The [unfired bowl creation table](https://oldschool.runescape.wiki/w/Unfired_bowl) gives
+  three ticks for shaping. The [pot](https://oldschool.runescape.wiki/w/Pot) and
+  [empty cup](https://oldschool.runescape.wiki/w/Empty_cup) creation tables give seven ticks
+  for firing. These normal-game rates agree with the recorded production intervals.
+- The [Crafting pottery table](https://oldschool.runescape.wiki/w/Crafting#Pottery) supplies
+  levels, XP, four cups per clay, membership and the One Small Favour requirement for pot lids.
+  The existing quest advances to stage 34 when Tassie's lesson finishes. The wheel queries
+  that quest stage through the quest runtime and then offers the level-25 pot-lid recipe.
+  Pot lids now use ordinary oven production and award the table's 20 firing XP; the quest's
+  separate instant-firing shortcut has been removed.
+- The [pot's success section](https://oldschool.runescape.wiki/w/Pot#Success_chance) confirms
+  cracking at low levels and guaranteed success from level 13. The
+  [oven discussion](https://oldschool.runescape.wiki/w/Talk:Pottery_Oven#Success_chance_of_firing_pottery)
+  supplies estimated skilling-curve values 180/800 for non-cup pottery and no firing level
+  requirement. These are crowdsourced estimates, not exact Jagex rates. A crack consumes the
+  input without a product or XP; the [unfired bowl page](https://oldschool.runescape.wiki/w/Unfired_bowl)
+  confirms those consequences. The discussion explicitly leaves cups unconfirmed.
+
+The active cache confirms sequences 883 (`human_potterywheel`) and 1317
+(`potteryoven_quick`), native quantity-menu group 270, and the recipe item identifiers.
+Recipe additions are plugin-owned data; no generated exports changed.
+
+Regression coverage exercises the registered handlers, menu order/quantities, item and XP
+changes, level/membership/quest gates, deterministic crack outcomes, cancellation (including a
+completed one-step move), and the removed quest firing shortcut. All twelve new regressions fail
+with the original pottery/recipe/quest implementation. The focused Crafting and neighbouring
+quest checks pass after the fix (69 checks). The full server suite passed 8,585 checks; its only
+failure was `ai-bots.test.cjs`, blocked by a missing `standardwebhooks` dependency, also
+reproduced against the base implementation. Final focused checks were rerun after review adjustments.
+
+In-game verification uses the ordinary wheel menu, item-on-oven menu and native item/quantity
+selection. Two bowls consume two clay for 36 Crafting XP; two firings produce two bowls for
+30 XP after their delays. Additional checks cover pot-lid shaping/firing after a declared quest
+prerequisite fixture, four cups per clay, and movement cancellation. This is an interaction check,
+not a One Small Favour quest playthrough or a visual client review.

@@ -1,6 +1,7 @@
 {
   "//": "All Settings rows the server applies, by setting id (cache struct param 1077). A toggle flips its varbit or varp between 0 and 1. A dropdown option sets 'varbit' to the option's index, or sets every var in that option's entry of 'options'. 'script' runs after the change. 'default' is sent at login until the player chooses (a live default that is not zero). From an rsprox capture of live OSRS; see docs/settings.md.",
   "settings": {
+    "432": { "name": "Casting Alchemy spells by using items together always triggers a warning", "varbit": 2179 },
     "5": { "name": "Hitsplat tinting", "varbit": 10236 },
     "7": { "name": "Hide roofs", "varbit": 12378 },
     "10": { "name": "Show boss health overlay", "varbit": 12389 },
@@ -8,7 +9,7 @@
     "34": { "name": "Show chat effects", "varp": 171 },
     "35": { "name": "Split friends private chat", "varp": 287, "script": 83 },
     "37": { "name": "Enable profanity filter", "varp": 1074 },
-    "119": { "name": "Chat timestamps", "varbit": 12384, "script": 4586, "default": 1 },
+    "119": { "name": "Chat timestamps", "varbit": 12384, "script": 4586 },
     "54": { "name": "Modern Layout - Side panel can be closed by the hotkeys", "varbit": 4611 },
     "55": { "name": "Player Attack options", "varp": 1107 },
     "56": { "name": "NPC Attack options", "varp": 1306 },

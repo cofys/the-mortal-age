@@ -36,6 +36,16 @@ function coffinLoot(floor) {
   return drops;
 }
 
+/** The loot's Hallowed marks after "minigame:points" (a league's tier passive multiplies them). */
+function boostMarks(player, loot) {
+  return loot.map(([id, amount]) => {
+    if (id !== Common.data.items.mark) return [id, amount];
+    const award = { player, minigame: "hallowed-sepulchre", points: amount };
+    Common.api.emitCustomEvent("minigame:points", award);
+    return [id, award.points];
+  });
+}
+
 /** The Grand Hallowed Coffin (Wiki): 8-10 marks, the high table, the ring at 1/200. */
 function grandLoot() {
   const { grand } = Common.data.loot;
@@ -101,7 +111,7 @@ function open(event) {
     run.schedule(3, () => {
       if (run.looted.has(slot)) return;
       run.looted.add(slot);
-      give(player, grand ? grandLoot() : coffinLoot(run.floorNumber));
+      give(player, boostMarks(player, grand ? grandLoot() : coffinLoot(run.floorNumber)));
       if (which === "a") Common.varbit(player, "hallowed_current_floor_looted", 1);
       if (which === "b") Common.varbit(player, "hallowed_current_floor_looted_b", 1);
       if (grand) Common.varbit(player, "hallowed_final_chest_looted", 1);

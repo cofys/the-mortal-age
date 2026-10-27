@@ -22,6 +22,7 @@ module.exports = {
     require("./moonsofperil/Camps.MoonsOfPeril")(api);
     require("./moonsofperil/River.MoonsOfPeril")(api);
     require("./moonsofperil/Chest.MoonsOfPeril")(api);
+    require("./moonsofperil/Scoreboard.MoonsOfPeril").attachScoreboard(api);
     require("./moonsofperil/Commands.MoonsOfPeril")(api);
   },
 };

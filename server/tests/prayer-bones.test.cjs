@@ -31,6 +31,7 @@ let pluginConfig = {};
 const configReads = [];
 const api = {
   core: {
+    Bank: require("../dist/game/model/container/impl/Bank").Bank,
     Skill, Location, Equipment, ItemIdentifiers: Items, ObjectIdentifiers: Objects, CacheDefinitions, Animation, Sound,
     Task, CountdownTask, ItemDefinition,
     WorldDefinition: { isMembersWorld: () => membersWorld },
@@ -127,10 +128,10 @@ test("worship gives four times the burying experience, as the Wiki's tables do",
   }
 });
 
-test("burying rounds a bone's tenths up, and restores nothing outside the Catacombs without the necklace", () => {
+test("burying preserves a bone's fractional experience, and restores nothing outside the Catacombs without the necklace", () => {
   const who = player();
   assert.equal(bury(who, Items.BONES), true);
-  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.xp.get(Skill.PRAYER), 4.5);
   assert.equal(who.levels.current, 50);
   assert.equal(bury(who, Items.COINS), false);
 });
@@ -161,7 +162,7 @@ test("the bonecrusher crushes a kill's bones for half their experience, one char
   who.setAttribute("bonecrusher:charges", 10);
   const left = kill(who, [{ itemId: Items.BIG_BONES, amount: 2 }, { itemId: Items.COINS, amount: 5 }]);
   assert.deepEqual(left.map((drop) => drop.itemId), [Items.COINS]);
-  assert.equal(who.xp.get(Skill.PRAYER), 16);
+  assert.equal(who.xp.get(Skill.PRAYER), 15);
   assert.equal(who.getAttribute("bonecrusher:charges"), 8);
 });
 
@@ -277,7 +278,7 @@ test("by default a Bury click buries only the clicked bone on the click's tick, 
     assert.deepEqual(configReads.at(-1), ["Prayer:sequentialBurying", false]);
     assert.equal(who.state.skill, null, "a single burial is not a cancellable skilling action");
     // Rsprox captures 901, 3455, 3461: dig message, bone, experience, sequence and synth on the click.
-    assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
+    assert.equal(who.xp.get(Skill.PRAYER), 4.5, String(value));
     assert.equal(who.slots.filter(item => item.getId() === Items.BONES).length, 2);
     assert.deepEqual(who.messages, ["You dig a hole in the ground..."]);
     assert.deepEqual(who.animations.map(animation => animation.id), [827]);
@@ -285,7 +286,7 @@ test("by default a Bury click buries only the clicked bone on the click's tick, 
     tickBurials(1);
     assert.deepEqual(who.messages, ["You dig a hole in the ground...", "You bury the bones."]);
     tickBurials(4);
-    assert.equal(who.xp.get(Skill.PRAYER), 5, String(value));
+    assert.equal(who.xp.get(Skill.PRAYER), 4.5, String(value));
     assert.equal(who.slots.filter(item => item.getId() === Items.BONES).length, 2);
     assert.equal(burialTasks.some(task => task.isRunning()), false);
   }
@@ -303,7 +304,7 @@ test("by default walking away after the click does not give the bone back", () =
   clickBury(who);
   who.state.location = new Location(3223, 3218, 0);
   tickBurials(2);
-  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.xp.get(Skill.PRAYER), 4.5);
   assert.equal(who.slots[0].getId(), -1);
 });
 
@@ -314,10 +315,10 @@ test("one Bury click buries the remaining bones sequentially, one every two tick
   tickBurials(1);
   assert.equal(who.xp.get(Skill.PRAYER), undefined);
   tickBurials(1);
-  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.xp.get(Skill.PRAYER), 4.5);
   assert.equal(who.slots.filter(item => item.getId() === Items.BONES).length, 2);
   tickBurials(4);
-  assert.equal(who.xp.get(Skill.PRAYER), 15);
+  assert.equal(who.xp.get(Skill.PRAYER), 13.5);
   assert.equal(who.slots.some(item => item.getId() === Items.BONES), false);
   assert.equal(burialTasks.some(task => task.isRunning()), false);
 });
@@ -331,7 +332,7 @@ test("the clicked bone is first, then eligible mixed bones in slot order", () =>
   assert.equal(who.xp.get(Skill.PRAYER), 15);
   assert.equal(who.slots[0].getId(), Items.BONES);
   tickBurials(4);
-  assert.equal(who.xp.get(Skill.PRAYER), 35);
+  assert.equal(who.xp.get(Skill.PRAYER), 34.5);
   assert.equal(who.slots[1].getId(), Items.COINS);
   assert.equal(who.slots[3].getId(), superior);
 });
@@ -370,7 +371,7 @@ test("a repeated Bury click replaces its previous sequence instead of doubling r
   clickBury(who, 1);
   assert.equal(burialTasks.filter(task => task.isRunning()).length, 1);
   tickBurials(6);
-  assert.equal(who.xp.get(Skill.PRAYER), 15);
+  assert.equal(who.xp.get(Skill.PRAYER), 13.5);
 });
 
 test("automatic burial leaves members-only bones untouched on a free world", () => {
@@ -379,7 +380,7 @@ test("automatic burial leaves members-only bones untouched on a free world", () 
   const who = burialPlayer([Items.BONES, Items.DRAGON_BONES, Items.BONES]);
   clickBury(who);
   tickBurials(6);
-  assert.equal(who.xp.get(Skill.PRAYER), 10);
+  assert.equal(who.xp.get(Skill.PRAYER), 9);
   assert.equal(who.slots[1].getId(), Items.DRAGON_BONES);
 });
 
@@ -393,7 +394,7 @@ test("a level-up caused by resolving a bone stops before consuming the next bone
   } });
   clickBury(who);
   tickBurials(6);
-  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.xp.get(Skill.PRAYER), 4.5);
   assert.equal(who.slots[1].getId(), Items.BONES);
   assert.equal(who.state.skill, null);
   assert.equal(burialTasks.some(task => task.isRunning()), false);
@@ -413,12 +414,12 @@ test("an acknowledged level-up resumes sequential burial at the next bone withou
   } });
   clickBury(who);
   tickBurials(8);
-  assert.equal(who.xp.get(Skill.PRAYER), 5);
+  assert.equal(who.xp.get(Skill.PRAYER), 4.5);
   assert.equal(who.slots[1].getId(), Items.BONES, "the next bone remains while the popup is open");
   assert.equal(resumes.length, 1);
   resumes[0]();
   tickBurials(6);
-  assert.equal(who.xp.get(Skill.PRAYER), 10);
+  assert.equal(who.xp.get(Skill.PRAYER), 9);
   assert.equal(burialTasks.some(task => task.isRunning()), false);
 });
 

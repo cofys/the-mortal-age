@@ -78,6 +78,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2,
     // Ghorrock Prison's western gate has no separate open loc in the cache.
     O.GATE_282,
+    // Taverley jail/deeper-dungeon gates are Open-only model609 locs with no
+    // uniquely named open partner; keep their IDs while swinging the panels.
+    O.DOOR_99, O.GATE_57,
     // The Champions' Guild door (1805): its id+1 is an unrelated nameless loc.
     O.DOOR_45]);
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
@@ -1159,6 +1162,26 @@ function toggleDoor({ player, object, objectId, definition, location, clickType 
   return handleMappedDoor(player, object, definition?.id ?? objectId, location);
 }
 
+/** Key-on-object and other content request an Open, never toggle an open door shut. */
+function requestDoorOpen(event) {
+  if (event.handled || !event.player || !event.object) return;
+  const objectId = event.object.getId();
+  const location = event.object.getLocation();
+  const definition = core.ObjectDefinition.forPlayer(objectId, event.player) ?? event.object.getDefinition();
+  const area = event.player.getPrivateArea?.() ?? null;
+  const existing = [...OPEN_OBJECT_STATES.values()].some(state => state.current?.some(snapshot =>
+    snapshot.id === objectId && locationKey(snapshot.location) === locationKey(location)
+    && (snapshot.privateArea ?? null) === area));
+  if (existing) {
+    event.handled = true;
+    return;
+  }
+  const clickType = (definition?.getInteractions?.() ?? []).findIndex(action => action?.toLowerCase() === "open") + 1;
+  if (clickType < 1) return;
+  event.handled = toggleDoor({ player: event.player, object: event.object, objectId, definition,
+    location: { x: location.getX(), y: location.getY(), z: location.getZ() }, clickType });
+}
+
 function routeWallDoor(event) {
   const name = event.definition?.getName?.() ?? "";
   if (event.object?.getType?.() !== 0 ||
@@ -1187,6 +1210,7 @@ module.exports = {
     }
     api.onRegionLoaded(({ regionId }) => reapplyOpenDoorsForRegion(regionId));
     api.onServerStartup(registerWallDoorRoutes);
+    api.onCustomEvent("door:open", requestDoorOpen);
   },
   __internals: { OPEN_OBJECT_STATES, RUNTIME_DOUBLE_DOOR_RECORDS },
 };

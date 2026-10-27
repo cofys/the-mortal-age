@@ -10,6 +10,7 @@
  */
 const Common = require("./Common.SoulWars");
 const Match = require("./Match.SoulWars");
+const Scoreboard = require("./Scoreboard.SoulWars");
 
 const AVATAR_OF = new Map();
 
@@ -74,6 +75,7 @@ function avatarDied({ npc }) {
     Common.varbit(player, `soul_wars_${team}_avatar_check`, 0);
   }
   game.scored(scorer);
+  Scoreboard.avatarKilled(game);
   Common.later(Common.data.returnTicks, () => {
     if (game.over) return;
     spawnAvatar(game, team);

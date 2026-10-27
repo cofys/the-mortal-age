@@ -174,7 +174,10 @@ function catchImpling(player, npc, npcId, def) {
   player.sendMessage(jarred ? JAR_MESSAGE : LOOT_MESSAGE);
   xp(player, puro ? def.puroXp : def.xp, "impling", npcId);
   npc.performAnimation(new H.core.Animation(ANIM.IMPLING_CAUGHT));
-  hide(npc, CAUGHT_TICKS + (puro ? def.puroRespawn : OUTSIDE_RESPAWN_TICKS), CAUGHT_TICKS);
+  // Roaming spawns (Puro-Puro's and the overworld's) manage their own removal and respawn.
+  const event = { npc, handled: false };
+  H.api.emitCustomEvent("hunter:impling-caught", event);
+  if (!event.handled) hide(npc, CAUGHT_TICKS + (puro ? def.puroRespawn : OUTSIDE_RESPAWN_TICKS), CAUGHT_TICKS);
 }
 
 function inPuroPuro(player) {
@@ -246,7 +249,11 @@ function rewards(player, def) {
     MAGPIE: [["HARD", 50]], NINJA: [["HARD", 25]], DRAGON: [["ELITE", 50]], CRYSTAL: [["ELITE", 50]] };
   for (const [tier, denominator] of clues[def.key] ?? []) {
     const id = I[`${C.questComplete(player, "x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_SCROLL"}_${tier}_`];
-    if (roll(1, denominator) === 1 && !C.ownsClue(player, tier)) result.push([id, 1]);
+    // Content may make the jar's clue likelier ("hunter:impling-clue-chance", a league relic): 1 in `oneIn`.
+    const chance = { player, impling: def.key, tier: tier.toLowerCase(), oneIn: denominator };
+    H.api.emitCustomEvent("hunter:impling-clue-chance", chance);
+    const oneIn = Number.isInteger(chance.oneIn) && chance.oneIn > 0 ? chance.oneIn : denominator;
+    if (roll(1, oneIn) === 1 && !C.ownsClue(player, tier)) result.push([id, 1]);
   }
   return result;
 }
@@ -260,7 +267,10 @@ function loot(event) {
   if (!pending.has(event.itemId)) {
     const result = rewards(event.player, def);
     if (!result) return true;
-    if (roll(1, 10) !== 1) result.push([H.core.ItemIdentifiers.IMPLING_JAR, 1]);
+    // Content may keep the jar whole ("hunter:jar-kept", a league relic); one in ten breaks otherwise.
+    const jar = { player: event.player, kept: roll(1, 10) !== 1 };
+    H.api.emitCustomEvent("hunter:jar-kept", jar);
+    if (jar.kept) result.push([H.core.ItemIdentifiers.IMPLING_JAR, 1]);
     pending.set(event.itemId, result);
   }
   if (exchange(event.player, [[event.itemId, 1]], pending.get(event.itemId))) pending.delete(event.itemId);

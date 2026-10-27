@@ -1,0 +1,155 @@
+{
+  "$comment": "League areas (docs/leagues.md, Areas), used by plugins/modes/LeagueAreaUnlocks.plugin.js. The areas themselves (ids, names, the interface's shield/name components, the teleport hubs) come from the cache's DB table `region_data` (82) at runtime; this file holds what the cache lacks. Interface flow, varbits, scripts, sounds, texts and timings are from rsprox Leagues V recordings (osrs-captures 227/00070, 00075, 00095, 00196, 01710) and the client's own scripts 3658/3669/3676/3682 (`yarn dump:cs2`); thresholds, the areas each league offers, what each area covers and the places open from everywhere are the Wiki's (Trailblazer_Reloaded_League/Areas, Raging_Echoes_League/Areas). The map is ours: the cache carries no map-square to area table, so each area lists 64x64 map squares (`rects` [minX, minY, maxX, maxY] and `squares` [x, y] in map-square coordinates, tile >> 6) drawn from the Wiki's descriptions; see `regionRules`.",
+  "varbits": {
+    "_comment": "league_area_selection_0..5: the unlocked area ids in unlock order (slot 0 Misthalin, 1 Karamja, 2-4 the picks; slot 5 unused); league_area_last_viewed; league_area_available = 1 once the next pick is affordable.",
+    "selection": [10662, 10663, 10664, 10665, 10666, 10667],
+    "lastViewed": 11693,
+    "available": 11695
+  },
+  "maxUnlocked": 5,
+  "thresholds": {
+    "_comment": "Script 3682 reads the unlock slots from enum 5677 -> structs 5971-5975, param 1010 = tasks needed; the cache holds a later league's numbers, so a league's own go to the client as structOverrides (GamemodeContentStore) through LeagueMode's `league:send-content`.",
+    "structs": [5971, 5972, 5973, 5974, 5975],
+    "param": 1010
+  },
+  "table": {
+    "_comment": "DB table region_data (82): one row per area. `region_id` is the area id the varbits and script 3668 use; `area_teleport_coord` is a packed coord (plane << 28 | x << 14 | y), decoding to the captured landings (Lumbridge 3234,3213; Brimhaven 2777,3173; Rellekka 2661,3657; Canifis 3495,3491; Al Kharid 3290,3180).",
+    "name": "region_data",
+    "columns": { "id": "region_id", "name": "name", "shield": "shield_component", "nameComponent": "name_component", "teleport": "area_teleport_coord" }
+  },
+  "interface": {
+    "_comment": "trailblazer_areas (512) and the league side panel's View Areas (656:40), as captured: opened as the main modal with if_setevents on league_menu_frame 512:7 slots 10-18 OP1. A shield, a name or the name header (512:44) sets league_area_last_viewed and runs 3668 (the area id, ten components, the state, twelve components; the rev 241 script also takes a string, empty here): state 1 unlocked ('Teleport to'), 2 unlockable ('Unlock'); script 3676 gives the other states: 0 more tasks needed, 3 a server message, 4 no slot left. The details' button (512:82, gameval echo_boss_map_button) teleports when unlocked; confirm_frame (512:60) unlocks: trailblazer_league_area_unlock_emote 8792 (420 cycles = 14 ticks) with the league's spotanim for the area, the modal closed, four sounds; 14 ticks later the selection varbit, the chat message, the interface reopened and the 'Area Unlocked!' popup.",
+    "group": 512,
+    "openButton": [656, 40],
+    "menuFrame": 7,
+    "menuFrameSlots": [10, 18],
+    "nameHeader": 44,
+    "teleportButton": 82,
+    "confirm": 60,
+    "viewScript": 3668,
+    "viewScriptComponentsBefore": [14, 39, 38, 41, 42, 43, 78, 82, 83, 89],
+    "viewScriptComponentsAfter": [66, 65, 12, 56, 57, 58, 59, 60, 61, 40, 36],
+    "states": { "locked": 0, "unlocked": 1, "available": 2, "message": 3, "full": 4 },
+    "unlockAnimation": 8792,
+    "unlockSounds": [[2353, 24], [2344, 116], [2330, 241], [2331, 273]],
+    "unlockDelayTicks": 14,
+    "teleportSpread": 2
+  },
+  "notifications": {
+    "areaAvailable": { "title": "New Area Available!", "text": "You've completed enough tasks to unlock a new area!", "jingle": { "id": 283, "length": 4500 }, "source": "capture 227/00075, 00196 (the colour is the league's)" },
+    "areaUnlocked": { "title": "Area Unlocked!", "text": "You have unlocked the <col=ffffff>{area}</col> area.", "jingle": { "id": 281, "length": 4500 }, "source": "capture 227/00075, 00095, 01710" }
+  },
+  "messages": {
+    "unlocked": { "text": "Congratulations, you've unlocked a new area: <col={colour}>{area}</col>.", "source": "capture 227/00075 (the colour is the league struct's param 2050)" },
+    "moreTasks": { "text": "You need to complete more tasks to unlock this area.", "source": "client script 3676" },
+    "alreadyUnlocked": { "text": "You have already unlocked this area.", "source": "client script 3676" },
+    "noMoreAreas": { "text": "You cannot unlock any more areas.", "source": "client script 3676" },
+    "notInLeague": { "text": "That area is not part of this league.", "source": "ours" },
+    "notLeague": { "text": "Only a league character can unlock areas.", "source": "ours" },
+    "locked": { "text": "You haven't unlocked that area yet.", "source": "ours" },
+    "inCombat": { "text": "You can't teleport while in combat.", "source": "ours" },
+    "selectFirst": { "text": "Select an area first.", "source": "ours" },
+    "areaUsage": { "text": "Use ::areas [id or name] to unlock an area, or ::areas alone to list yours.", "source": "ours" },
+    "areaList": { "text": "{league}: {areas}. Next unlock at {next} tasks ({tasks} done). You are in {here}.", "source": "ours" },
+    "areaListFull": { "text": "{league}: {areas}. No unlocks left ({tasks} tasks done). You are in {here}.", "source": "ours" },
+    "noArea": { "text": "No area is called {name}.", "source": "ours" },
+    "openArea": { "text": "an area open to everyone", "source": "ours" }
+  },
+  "leagues": {
+    "4": {
+      "_comment": "Trailblazer Reloaded (Wiki): Misthalin and Karamja to start (Karamja is unlocked free during the live tutorial, which this server has none of), three picks at 60, 140 and 300 tasks from the other eight; no Varlamore (released after the league), so its squares stay locked. The unlock spotanims are the cache's league_4_area_unlock_emote_spotanim_<area>; the area teleport's own animation set was not captured, so it plays the standard home teleport cast. The Stranglewood counts as Kourend (Wiki).",
+      "defaults": [1, 2],
+      "thresholds": [60, 140, 300],
+      "areas": [1, 2, 3, 4, 5, 6, 7, 8, 11, 20],
+      "spotanimPrefix": "league_4_area_unlock_emote_spotanim_",
+      "overrides": [{ "rect": [17, 51, 20, 52], "area": 20 }]
+    },
+    "5": {
+      "_comment": "Raging Echoes (Wiki): the same start, picks at 90, 200 and 400 tasks, Varlamore among them; the Stranglewood counts as Varlamore. The area teleport's cast as captured (227/00070): home_teleport_human_echoes_1..5 with vfx_league_5_home_teleport_01..05 at +1, +4, +9, +14 and +18 ticks, movement locked from +18, landing at +21.",
+      "defaults": [1, 2],
+      "thresholds": [90, 200, 400],
+      "areas": [1, 2, 3, 4, 5, 6, 7, 8, 11, 20, 21],
+      "spotanimPrefix": "league_5_area_unlock_emote_spotanim_",
+      "overrides": [{ "rect": [17, 53, 19, 53], "area": 21 }],
+      "teleportCast": {
+        "steps": [
+          { "tick": 1, "animation": 11875, "graphic": 3180 },
+          { "tick": 4, "animation": 11876, "graphic": 3181 },
+          { "tick": 9, "animation": 11877, "graphic": 3182 },
+          { "tick": 14, "animation": 11878, "graphic": 3183 },
+          { "tick": 18, "animation": 11879, "graphic": 3184 }
+        ],
+        "lockTick": 18,
+        "landTick": 21
+      }
+    }
+  },
+  "regionRules": "A map square belongs to the lowest-numbered area that names it in `squares` or `rects`, then a league's `overrides` reassign squares. An underground square (map y >= 100) named by no area takes its surface square's area (y - 100): the Wiki's 'underground areas with an entrance in X'. A square named by no area is open to everyone: instances, Death's Office, the POH, random events, the essence mine, Tutorial Island, the sea. An area the league does not offer (Varlamore on a Trailblazer Reloaded world) is locked for good. Known approximations of the 64-tile grid: the four-tile strip between Lumbridge and the Al Kharid gate and the Catherby beach east of x 2816 fall with Al Kharid / Asgarnia; the River Salve's east bank at Paterdomus with Misthalin; Tutorial Island's easternmost tiles with the desert.",
+  "open": {
+    "_comment": "Open from everywhere (Wiki); listed for the record and the tests, since squares named by no area are open anyway.",
+    "deathsOffice": [49, 89],
+    "essenceMine": [45, 75],
+    "tutorialIsland": [[47, 47], [47, 48], [48, 47], [48, 48]]
+  },
+  "areas": {
+    "1": {
+      "key": "misthalin",
+      "_comment": "The Kingdom of Misthalin (Lumbridge, Draynor, the Wizards' Tower, Barbarian Village, Edgeville, Varrock, the Grand Exchange, the Digsite, Paterdomus), Fossil Island with Lithkren, Zanaris, Puro-Puro, the fairy-ring realms (Cosmic Entity's Plane, Enchanted Valley, Abyssal Area, Gorak Plane), Dorgesh-Kaan, the Stronghold of Security (its four floors) and the Isle of Souls.",
+      "rects": [[48, 49, 50, 54], [51, 52, 52, 54], [53, 53, 53, 54], [57, 57, 60, 60], [55, 62, 56, 63], [37, 68, 38, 69], [40, 66, 40, 67], [42, 82, 42, 83], [28, 80, 29, 82], [32, 43, 35, 46]],
+      "squares": [[32, 75], [47, 70], [47, 76], [47, 83], [31, 81], [33, 82], [36, 81]]
+    },
+    "2": {
+      "key": "karamja",
+      "_comment": "The island of Karamja (Brimhaven, Musa Point, the Ship Yard, Tai Bwo Wannai, the Kharazi Jungle, Shilo Village, Cairn Isle), Crandor, Mor Ul Rek with the Fight Caves and the Inferno, the Realm of the Fisher King, and the Brimhaven Dungeon under Kandarin's coast.",
+      "rects": [[42, 44, 46, 47], [42, 48, 45, 49], [46, 49, 46, 49], [42, 50, 44, 50], [44, 51, 44, 51], [37, 78, 39, 81], [42, 73, 43, 73], [41, 147, 42, 150]]
+    },
+    "3": {
+      "key": "asgarnia",
+      "_comment": "The Kingdom of Asgarnia (Rimmington, Port Sarim, Mudskipper Point, Melzar's Maze, the Crafting Guild, Falador, Taverley with its dungeon, Burthorpe, Goblin Village, Ice Mountain, the Monastery, White Wolf Mountain), Entrana, Troll Country (Death Plateau, the Troll Stronghold, Trollheim) with the God Wars Dungeon, the Void Knights' Outpost and the Ruins of Camdozaal.",
+      "rects": [[45, 50, 47, 54], [44, 53, 44, 57], [45, 55, 45, 58], [46, 48, 46, 48], [47, 49, 47, 49], [43, 52, 44, 52], [40, 40, 41, 41], [44, 81, 46, 84], [45, 89, 47, 90]]
+    },
+    "4": {
+      "key": "kandarin",
+      "_comment": "The Kingdom of Kandarin (Yanille, Gu'Tanoth, Port Khazard, the Tree Gnome Village, Ardougne, Witchaven, the Legends' Guild, Hemenster, Seers' Village, Catherby, the Sinclair Mansion, the Barbarian Outpost, the Tree Gnome Stronghold, Eagles' Peak), Castle Wars, the Piscatoris Fishing Colony, the Feldip Hills with Corsair Cove and the Myths' Guild, Ape Atoll and Crash Island; not Taverley Dungeon nor the Underground Pass (Wiki).",
+      "rects": [[38, 47, 41, 50], [38, 51, 43, 55], [37, 52, 37, 55], [36, 52, 36, 54], [35, 56, 37, 58], [38, 44, 41, 46], [42, 42, 43, 43]],
+      "squares": [[37, 48], [45, 42]]
+    },
+    "5": {
+      "key": "morytania",
+      "_comment": "Morytania (Canifis, the Slayer Tower, Mort Myre, Mort'ton, Barrows, Burgh de Rott, Meiyerditch, Darkmeyer, Slepe, Port Phasmatys, the Haunted Woods, Fenkenstrain's Castle), Dragontooth Island, Mos Le'Harmless with its caves, Harmony Island and Braindeath Island.",
+      "rects": [[54, 49, 60, 57], [53, 49, 53, 52], [53, 55, 53, 57], [57, 45, 60, 47], [58, 43, 59, 44], [32, 79, 33, 79], [57, 147, 59, 149]]
+    },
+    "6": {
+      "key": "kharidian_desert",
+      "_comment": "The Kharidian Desert (Al Kharid and its mine, the Emir's Arena, the Mage Training Arena, the Shantay Pass, the Bedabin and Bandit camps, the Desert Mining Camp, Pollnivneach, Nardah, the Ruins of Uzer, Sophanem, Menaphos, the Necropolis, the Ruins of Unkah, the Kalphite Lair).",
+      "rects": [[49, 42, 55, 47], [50, 48, 55, 48], [51, 49, 52, 51]]
+    },
+    "7": {
+      "key": "tirannwn",
+      "_comment": "Tirannwn (Arandar, Isafdar, Lletya, the Tyras Camp, Port Tyras, Zul-Andra, the Poison Waste, Gwenith), the Underground Pass with Iban's temple, the Temple of Light, Prifddinas with everything under it (the Iorwerth Dungeon, its mines; map rows 187-196) and Zalcano.",
+      "rects": [[33, 46, 37, 51], [33, 52, 35, 53], [37, 150, 38, 153], [32, 70, 34, 73], [28, 72, 31, 73], [50, 94, 51, 96], [50, 187, 51, 196]],
+      "squares": [[47, 94]]
+    },
+    "8": {
+      "key": "fremennik",
+      "_comment": "The Fremennik Province (the Lighthouse, Rellekka, the Keldagrim entrance and Keldagrim, the Mountain Camp, Waterbirth Island, Neitiznot and Jatizso, the Pirates' Cove, Miscellania and Etceteria, Lunar Isle, the Island of Stone, Ungael, Trollweiss, Weiss, Ghorrock).",
+      "rects": [[38, 56, 43, 58], [32, 58, 45, 63], [44, 158, 45, 159]]
+    },
+    "11": {
+      "key": "wilderness",
+      "_comment": "The Wilderness north of the ditch (Ferox Enclave, the Bandit Camp, the Dark Warriors' Fortress, the Rogues' Castle, the Pirates' Hideout, the Fountain of Rune, the Volcano), the Mage Arena, the King Black Dragon's lair, the Corporeal Beast's cave and the Abyss, whose entrances are there.",
+      "rects": [[46, 55, 52, 61], [35, 73, 36, 73]],
+      "squares": [[39, 73], [46, 68], [47, 75]]
+    },
+    "20": {
+      "key": "kourend",
+      "_comment": "Great Kourend and the Kebos Lowlands (Kourend Castle, Hosidius, Arceuus, Lovakengj, Port Piscarilius, Shayzien, Kingstown, Land's End, the Kourend Woodland, Mount Quidamortem, the Kebos Swamp, the Farming Guild, Mount Karuulm, the Northern Tundras, Wintertodt); the Stranglewood on a Trailblazer Reloaded world.",
+      "rects": [[17, 53, 29, 62]]
+    },
+    "21": {
+      "key": "varlamore",
+      "_comment": "Varlamore (Civitas illa Fortis, the Fortis Colosseum, the Hunter Guild, Sunset Coast, Aldarin, the Locus Oasis, Cam Torum, Tal Teklan, Ralos' Rise, Auburnvale, Darkfrost, the Moons of Peril); the Stranglewood on a Raging Echoes world.",
+      "rects": [[17, 44, 29, 52], [21, 151, 22, 152]]
+    }
+  }
+}

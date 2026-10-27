@@ -47,6 +47,7 @@ function pour(player, cannonball) {
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, cannonball.xpPerBar * bars);
   player.sendMessage(`The molten metal cools slowly to form ${bars * BALLS_PER_BAR} cannonballs.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: cannonball.ballId });
+  require("./Common.Smithing").produced(player, Core.Skill.SMITHING, cannonball.ballId, bars * BALLS_PER_BAR, cannonball.xpPerBar * bars);
   return true;
 }
 
@@ -64,7 +65,7 @@ function start(player, cannonball, amount) {
     player.sendMessage(`You need to complete ${Data.questName(QUEST)} to make cannonballs.`);
     return false;
   }
-  if (player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING) < cannonball.level) {
+  if (require("./Common.Smithing").smithingLevel(player) < cannonball.level) {
     Smelting.statement(player, `You need a Smithing level of ${cannonball.level} to make ${cannonball.metal} cannonballs.`);
     return false;
   }

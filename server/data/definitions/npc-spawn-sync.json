@@ -28,6 +28,7 @@
     "14330": {"label": "Quest stage", "skip": true, "why": "Furia Tullus imprisoned, during Twilight's Promise."},
     "14974": {"label": "Quest stage", "skip": true, "why": "Junior Jim during his quest; after it he's 14975."},
     "15238": {"label": "Quest stage", "skip": true, "why": "Junior Jim in 'Limbo', a quest stage."},
+    "12869": {"label": "Quest stage", "skip": true, "why": "Eyatlalli as the quest shows her: Perilous Moons spawns its own at the streambound camp; the Ancient Shrine's post-quest Eyatlalli is pmoon_eyatlalli_postquest (12868) at the RSProx 237/01104 tile (npc-spawns.json), the Wiki's 12869 pins there were her quest form."},
     "12653": {"label": "Quest stage", "skip": true, "why": "Furia Tullus: Twilight's Promise shows it through its multi-NPC at the RSProx 1695 tile (npc-spawns.json), by quest stage."},
     "12654": {"label": "Quest stage", "skip": true, "why": "Ennius Tullus: Twilight's Promise shows it through its multi-NPC at the RSProx 1695 tile (npc-spawns.json), by quest stage."},
     "12655": {"label": "Quest stage", "skip": true, "why": "Knight of Varlamore: Twilight's Promise shows it through its multi-NPC at the RSProx 1695 tile (npc-spawns.json), by quest stage."},

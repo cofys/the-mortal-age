@@ -431,17 +431,24 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
   }
 
   function pluckChompy(event) {
-    const { player } = event;
+    const { player, npc } = event;
     if (quest.getStage(player) < STAGE_KILLED_CHOMPY) return;
     event.handled = true;
+    if (!player.isRegistered() || player.busy() || !DEAD_CARCASS.get(player)?.has(npc) ||
+        !npc?.isRegistered() || npc.getOwner() !== player ||
+        npc.getPrivateArea() !== player.getPrivateArea() ||
+        !player.getLocation().isWithinDistance(npc.getLocation(), 1)) return;
     if (freeSlots(player) <= 0) {
       player.sendMessage("You need an empty inventory slot to pluck the chompy.");
       return;
     }
     player.getInventory().adds(RAW_CHOMPY, 1);
-    DEAD_CARCASS.delete(player);
+    const carcasses = DEAD_CARCASS.get(player);
+    carcasses.delete(npc);
+    if (carcasses.size === 0) DEAD_CARCASS.delete(player);
     api.removeNpc(event.npc);
     player.sendMessage("You pluck the chompy bird.");
+    api.emitCustomEvent("chompy:plucked", { player, npc });
   }
 
   function spawnChompy(player) {
@@ -460,7 +467,9 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
       id: DEAD_CHOMPY, x: location.x, y: location.y, z: location.z ?? 0,
       wanderRadius: 0, owner: player, ownerOnly: true,
     });
-    DEAD_CARCASS.set(player, npc);
+    let carcasses = DEAD_CARCASS.get(player);
+    if (!carcasses) DEAD_CARCASS.set(player, carcasses = new Set());
+    carcasses.add(npc);
     return npc;
   }
 

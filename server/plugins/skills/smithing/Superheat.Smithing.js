@@ -43,7 +43,7 @@ function recipeFor(player, oreId) {
   const byBar = (barId) => Smithing.SMELTING_RECIPES.find((recipe) => recipe.barId === barId);
   if (oreId === ItemIds.IRON_ORE) {
     const steel = Smithing.resolveCatalyst(player, byBar(ItemIds.STEEL_BAR));
-    const level = player.getSkillManager().getCurrentLevel(core.Skill.SMITHING);
+    const level = require("./Common.Smithing").smithingLevel(player);
     return level >= steel.level && Smithing.hasIngredients(player, steel) ? steel : { ...byBar(ItemIds.IRON_BAR), successChance: 1 };
   }
   // Coal is in several recipes but is never the ore; molten glass is Crafting, not a bar.
@@ -71,7 +71,7 @@ function castOnItem(event) {
   if (!recipe) return fail(player, MESSAGE.NOT_ORE);
 
   const Smithing = require("../Smithing.plugin");
-  if (player.getSkillManager().getCurrentLevel(core.Skill.SMITHING) < recipe.level) {
+  if (require("./Common.Smithing").smithingLevel(player) < recipe.level) {
     player.sendMessage(`You need a Smithing level of at least ${recipe.level} to smelt this bar.`);
     return;
   }

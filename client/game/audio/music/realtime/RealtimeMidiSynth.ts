@@ -233,7 +233,7 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
         this.eventQueue = [];
         this.eventQueueReadIndex = 0;
         // Reused every sample to avoid GC on the audio thread
-        this._sampleOut = { value: 0, volume: 0, pan: 8192 };
+        this._sampleOut = { value: 0 };
 
         // FIX: Calculate 50Hz tick based on ACTUAL sample rate (e.g. 48000 / 50 = 960)
         // 'sampleRate' is a global variable in AudioWorkletGlobalScope
@@ -496,6 +496,8 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
             cachedRate: 1,
             cachedVolume: 0,
             cachedPan: 8192,
+            cachedLeft: 0,
+            cachedRight: 0,
         };
 
         this.refreshNoteAudioCache(note);
@@ -509,16 +511,16 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
     }
 
     handleNoteOff(channel, key) {
-        // Channel 10 (index 9) is Percussion. Vanilla OSRS deliberately ignores Note-Off here
-        // so cymbals/drum samples ring out naturally; cutting them early sounds wrong.
-        // IMPORTANT: keep this behavior unless you also re-author percussion patches/tracks.
-        if (channel === 9) return;
-
         const ch = this.channels[channel];
         const noteKey = channel + ":" + key;
         const note = this.noteMap.get(noteKey);
 
         if (!note || note.releaseProgress >= 0) return;
+
+        // Channel 10 (index 9) is usually percussion: its one-shot drum samples ignore Note-Off and
+        // ring out. Tracks also put melodic instruments there (Getting Down to Business: a flute),
+        // whose looped samples would then sound forever, so those are released as usual.
+        if (channel === 9 && !note.looped) return;
 
         // Mark that note-off was received (for pedal release logic)
         note.noteOffReceived = true;
@@ -928,6 +930,10 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
         note.cachedRate = this.calculatePlaybackRate(note);
         note.cachedVolume = this.calculateVolume(note);
         note.cachedPan = this.calculatePan(note);
+        // OSRS's stereo volumes (RawPcmStream): volume * sqrt((16384 - pan) / 8192) on the left,
+        // volume * sqrt(pan / 8192) on the right, so a centred note plays at full volume in both.
+        note.cachedLeft = (note.cachedVolume * Math.sqrt((16384 - note.cachedPan) / 8192) + 0.5) | 0;
+        note.cachedRight = (note.cachedVolume * Math.sqrt(note.cachedPan / 8192) + 0.5) | 0;
     }
 
     refreshChannelNoteCaches(channel) {
@@ -942,15 +948,12 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
         const sample = this.samples.get(note.sampleIndex);
         if (!sample || sample.samples.length === 0) {
             this._sampleOut.value = 0;
-            this._sampleOut.volume = 0;
-            this._sampleOut.pan = 8192;
             return this._sampleOut;
         }
 
-        // Rate/volume/pan are refreshed at 50Hz ticks and on control changes — not per sample.
+        // Rate (and the channel volumes the mix uses) are refreshed at 50Hz ticks and on control
+        // changes — not per sample.
         const playbackRate = note.cachedRate;
-        const volume = note.cachedVolume;
-        const pan = note.cachedPan;
 
         // FIX: The patch (note.looped) is the authority on whether this specific note should loop.
         // Sample.looped is just a hint about the sample's default behavior, but patch overrides it.
@@ -1000,8 +1003,6 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
         }
 
         this._sampleOut.value = intSample;
-        this._sampleOut.volume = volume;
-        this._sampleOut.pan = pan;
         return this._sampleOut;
     }
 
@@ -1067,24 +1068,13 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
                 const note = this.activeNotes[j];
                 if (!note.active) continue;
 
-                const result = this.generateSample(note);
-                const sampleVal = result.value;   // -32768 to 32767
-                const volume = result.volume;     // 0 to 16384
-                const pan = result.pan;           // 0 to 16384 (8192 = center)
+                const sampleVal = this.generateSample(note).value; // -32768 to 32767
 
-                // B2/B3: OSRS-style stereo mixing with integer math
-                // Apply volume: sample * volume >> 14 (volume is 0-16384)
-                const scaledSample = (sampleVal * volume) >> 14;
-
-                // B3: OSRS pan law - pan is 0-16384, center is 8192
-                // Left channel: sample * (16384 - pan) >> 14
-                // Right channel: sample * pan >> 14
-                // This gives: at pan=0 -> L=full, R=0; pan=8192 -> L=half, R=half; pan=16384 -> L=0, R=full
-                const leftGain = 16384 - pan;
-                const rightGain = pan;
-
-                mixL += (scaledSample * leftGain) >> 14;
-                mixR += (scaledSample * rightGain) >> 14;
+                // OSRS mixes each note as sample * channelVolume >> 6 into a 24-bit buffer and
+                // writes its top 16 bits; here the same is sample * channelVolume >> 14 in 16
+                // bits, with the channel volumes from refreshNoteAudioCache.
+                mixL += (sampleVal * note.cachedLeft) >> 14;
+                mixR += (sampleVal * note.cachedRight) >> 14;
             }
 
             // B2: OSRS-style integer saturation (hard clamp) instead of tanh soft clip

@@ -9,6 +9,7 @@
 const Common = require("./Common.PhantomMuspah");
 const Fight = require("./Fight.PhantomMuspah");
 const Corruption = require("./Corruption.PhantomMuspah");
+const Scoreboard = require("./Scoreboard.PhantomMuspah");
 
 const SECRETS_OF_THE_NORTH = "secrets_of_the_north";
 
@@ -196,6 +197,16 @@ function endOnDeath({ player }) {
   session.end();
 }
 
+/**
+ * A death in the lair itself counts on the scoreboard (not one during the fade in, before the
+ * move). It is counted on defeat, which every death reaches: onPlayerDeath stops at the first
+ * plugin that handles the respawn, as Death's Office does for a first grave.
+ */
+function diedInLair({ victim: player }) {
+  const session = player ? sessionOf(player) : null;
+  if (session && player.getPrivateArea() === session.area) Scoreboard.died(player);
+}
+
 /** A grave from a death in the lair is left outside it, by the crevice (Wiki). */
 function graveOutside(request) {
   const session = request?.player ? sessionOf(request.player) : null;
@@ -209,7 +220,12 @@ function attachLair(api) {
   api.onPlayerLogin(recoverOnLogin);
   api.onObjectInteraction("Crevice", { Enter: enterCrevice, Escape: escape, "Quick-escape": quickEscape });
   api.onCustomEvent("gravestones:grave-location", graveOutside);
+  api.onPlayerDefeated(diedInLair);
   api.onPlayerDeath(endOnDeath);
 }
 
-module.exports = { attachLair, enter, leave, sessionOf, exitLocation };
+module.exports = {
+  attachLair, enter, leave, sessionOf, exitLocation, diedInLair,
+  /** Tests: stands `player` in a lair whose area is `area`, without building it. */
+  _setSession(player, area) { sessions.set(player, { player, area, end() { sessions.delete(player); } }); },
+};

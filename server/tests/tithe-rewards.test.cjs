@@ -1,119 +1,142 @@
-// Run after `yarn build`: node --test tests/tithe-rewards.test.cjs
+// Native Tithe reward input with all plugins and real game objects; only transport/message output is captured.
 const assert = require("node:assert/strict");
-const { test, before, after } = require("node:test");
 const path = require("node:path");
-
-const { Server } = require("../dist/Server");
-Server.installProductionPathResolver();
-
+const { before, test } = require("node:test");
+require("../dist/Server").Server.installProductionPathResolver();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { PluginManager } = require("../dist/plugins/PluginManager");
-const core = PluginManager.getCoreApi();
-require("../plugins/skills/farming/Core.Farming").init({ core });
-const Data = require("../plugins/skills/farming/Data.Farming");
-const Patches = require("../plugins/skills/farming/Patches.Farming");
-const Tithe = require("../plugins/skills/farming/Tithe.Farming");
-const ClogData = require("../plugins/achievements/collectionlog/Data.CollectionLog");
-ClogData({ core: { CacheDefinitions: require("../dist/game/cache/CacheDefinitions").CacheDefinitions } });
-
-let choices = [];
-let obtained = [];
-let originalChoose;
-let originalEmit;
+const { Player } = require("../dist/game/entity/impl/player/Player");
+const { PlayerSession } = require("../dist/net/PlayerSession");
+const { ClientConnection } = require("../dist/net/NetworkBuilder");
+const { SkillManager } = require("../dist/game/content/skill/SkillManager");
+const { PlayerStatus } = require("../dist/game/model/PlayerStatus");
+const ROOT = path.resolve(__dirname, "..");
+let core, Data, Patches;
+let actorIndex = 100;
 
 before(async () => {
-  await CachePipeline.initialize(path.resolve(__dirname, ".."));
-  Data.initializeFarmingData();
-  originalChoose = Patches.choose;
-  originalEmit = core.PluginManager.emitCustomEvent;
-  Patches.choose = (_player, entries) => { choices = entries; };
-  core.PluginManager.emitCustomEvent = (name, request) => {
-    if (name === "collection-log:obtain") obtained.push({ ...request });
-  };
+    await CachePipeline.initialize(ROOT);
+    PluginManager.loadFromDirectory(path.join(ROOT, "plugins"));
+    core = PluginManager.getCoreApi();
+    core.RegionManager.init();
+    core.RegionManager.loadMapFiles(1800, 3500);
+    Data = require("../plugins/skills/farming/Data.Farming");
+    Patches = require("../plugins/skills/farming/Patches.Farming");
+    Data.initializeFarmingData();
 });
 
-after(() => {
-  Patches.choose = originalChoose;
-  core.PluginManager.emitCustomEvent = originalEmit;
-});
-
-function player({ points = 150, full = false } = {}) {
-  const attributes = new Map([["farming:state", { tithe: { points, score: 0 } }]]);
-  const items = [];
-  let fullCalls = 0;
-  const inventory = {
-    getFreeSlots: () => full ? 0 : 28,
-    getAmount: (id) => items.filter((item) => item.getId() === id).reduce((sum, item) => sum + item.getAmount(), 0),
-    contains: (id) => items.some((item) => item.getId() === id),
-    isFull: () => full,
-    addItem: (item) => items.push(item),
-    full: () => { fullCalls++; },
-  };
-  const p = {
-    items,
-    getAttribute: (key) => attributes.get(key),
-    setAttribute: (key, value) => attributes.set(key, value),
-    getLocation: () => ({ isWithinDistance: () => true }),
-    getInventory: () => inventory,
-    getEquipment: () => ({ getItems: () => [] }),
-    getSkillManager: () => ({ getCurrentLevel: () => 99 }),
-    getPacketSender: () => ({ sendVarbit() { return this; } }),
-    sendMessage() {},
-    get points() { return attributes.get("farming:state").tithe.points; },
-    get fullCalls() { return fullCalls; },
-  };
-  return p;
+function channel() {
+    return {
+        kind: "test",
+        remoteAddress: "127.0.0.1",
+        isOpen: () => true,
+        send: () => true,
+        close() {},
+        onData() {},
+        onError() {},
+        onClose() {},
+    };
 }
 
-function openRewards(player) {
-  Tithe.titheNpc({
-    player,
-    definition: { getName: () => "Farmer Gricoller" },
-    npc: { getLocation: () => ({}) },
-  });
+function shopper(t, { points = 500, female = false } = {}) {
+    const transport = channel(),
+        p = new Player(new PlayerSession(transport));
+    p.setUsername("titheqa" + actorIndex);
+    p.setIndex(actorIndex++);
+    p.setRegistered(true);
+    p.setLocation(new core.Location(1800, 3500, 0));
+    p.needsPlacement = false;
+    if (female) p.getAppearance().setLook(0, 1);
+    const messages = [];
+    t.mock.method(p.getPacketSender(), "sendMessage", (text) => {
+        messages.push(text);
+        return p.getPacketSender();
+    });
+    Patches.farmFor(p).tithe = { points, score: 0 };
+    const npc = core.NPC.create(
+        core.CacheDefinitions.getNpcId("hosidius_tithe_farmer"),
+        new core.Location(1801, 3500, 0),
+    );
+    const connection = new ClientConnection(transport);
+    connection.player = p;
+    return {
+        p,
+        npc,
+        connection,
+        messages,
+        score: () => Patches.farmFor(p).tithe,
+        open: () =>
+            PluginManager.emitNpcInteraction({
+                player: p,
+                npc,
+                definition: npc.getDefinition(),
+                option: "Rewards",
+                optionSlot: 3,
+                handled: false,
+            }),
+    };
+}
+async function purchase(f, index, op = 2) {
+    const uid = core.CacheDefinitions.getComponentId("omnishop_main:list");
+    await f.connection.dispatch([
+        {
+            type: "widget_action",
+            widgetId: uid,
+            groupId: uid >>> 16,
+            childId: uid & 65535,
+            slot: index * 12,
+            buttonNum: op,
+        },
+    ]);
+    f.connection.processTurnPackets();
 }
 
-test("a purchased Tithe Farm reward is logged after it is granted and paid for", () => {
-  obtained = [];
-  const p = player();
-  openRewards(p);
-  const strawhat = choices.find(([label]) => label.startsWith("Farmer's strawhat"));
-  assert.ok(strawhat);
-  strawhat[1]();
-
-  const itemId = Data.itemId("Farmer's strawhat");
-  assert.equal(p.items[0].getId(), itemId);
-  assert.equal(p.points, 75);
-  assert.deepEqual(obtained.map(({ player: eventPlayer, itemId: loggedId, amount }) => ({ eventPlayer, loggedId, amount })), [
-    { eventPlayer: p, loggedId: itemId, amount: 1 },
-  ]);
+test("a purchased reward updates the real collection log after payment", async (t) => {
+    const f = shopper(t, { points: 150 });
+    f.open();
+    await purchase(f, 0);
+    assert.equal(f.p.getInventory().getAmount(Data.itemId("Farmer's strawhat")), 1);
+    assert.equal(f.score().points, 75);
+    assert.equal(f.p.getAttribute("clog.items")[Data.itemId("Farmer's strawhat")], 1);
 });
-
-test("a failed reward grant keeps points and emits no collection-log event", () => {
-  obtained = [];
-  const p = player({ points: 75, full: true });
-  openRewards(p);
-  choices.find(([label]) => label.startsWith("Farmer's strawhat"))[1]();
-  assert.equal(p.points, 75);
-  assert.equal(p.fullCalls, 1);
-  assert.deepEqual(obtained, []);
+test("a full bag keeps points and grants no reward", async (t) => {
+    const f = shopper(t, { points: 75 });
+    while (f.p.getInventory().getFreeSlots())
+        f.p.getInventory().add(new core.Item(Data.itemId("Spade")), false);
+    const beforeLog = structuredClone(f.p.getAttribute("clog.items") ?? {});
+    f.open();
+    await purchase(f, 0);
+    assert.deepEqual(f.p.getAttribute("clog.items") ?? {}, beforeLog);
+    assert.equal(f.score().points, 75);
+    assert.equal(f.p.getInventory().getAmount(Data.itemId("Farmer's strawhat")), 0);
 });
-
-test("Auto-weed is virtual and absent from the native Tithe Farm log category", () => {
-  obtained = [];
-  const category = ClogData.tabs().flatMap((tab) => tab.categories).find((entry) => entry.name === "Tithe Farm");
-  assert.ok(category);
-  assert.equal(category.items.includes(core.ItemIdentifiers.AUTO_WEED), false);
-
-  const p = player({ points: 50 });
-  openRewards(p);
-  const unlock = choices.find(([label]) => label.startsWith("Unlock Auto-weed"));
-  unlock[1]();
-  assert.equal(p.points, 0);
-  assert.deepEqual(obtained, []);
-
-  openRewards(p);
-  choices.find(([label]) => label.startsWith("Toggle Auto-weed"))[1]();
-  assert.equal(p.points, 0, "later toggles are not another unlock");
-  assert.deepEqual(obtained, []);
+test("Auto-weed unlock and toggle are virtual and do not spend points again", async (t) => {
+    const f = shopper(t, { points: 50 });
+    const beforeLog = structuredClone(f.p.getAttribute("clog.items") ?? {}),
+        beforeItems = f.p
+            .getInventory()
+            .getValidItems()
+            .map((i) => [i.getId(), i.getAmount()]);
+    const logData = require("../plugins/achievements/collectionlog/Data.CollectionLog");
+    const category = logData
+        .tabs()
+        .flatMap((tab) => tab.categories)
+        .find((row) => row.name === "Tithe Farm");
+    assert.ok(category);
+    assert.equal(category.items.includes(core.ItemIdentifiers.AUTO_WEED), false);
+    f.open();
+    await purchase(f, 14);
+    assert.equal(f.score().points, 0);
+    assert.equal(Patches.farmFor(f.p).autoWeed, true);
+    await purchase(f, 15);
+    assert.equal(f.score().points, 0);
+    assert.equal(Patches.farmFor(f.p).autoWeed, false);
+    assert.deepEqual(f.p.getAttribute("clog.items") ?? {}, beforeLog);
+    assert.deepEqual(
+        f.p
+            .getInventory()
+            .getValidItems()
+            .map((i) => [i.getId(), i.getAmount()]),
+        beforeItems,
+    );
 });

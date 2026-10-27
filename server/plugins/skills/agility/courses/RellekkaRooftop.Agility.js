@@ -23,8 +23,11 @@ module.exports = {
   name: "Rellekka Rooftop",
   lapXp: 780,
   petBase: 31063, // Giant squirrel base chance (Wiki)
+  // 2/5 a lap; the hard Fremennik diary makes 1 cooldown in 3 two minutes (Wiki: Mark of Grace).
   marks: {
     level: 80,
+    chance: 2 / 5,
+    shortCooldown: [{ diary: "fremennik", tier: "hard", chance: 1 / 3 }],
     tiles: [
       [2622, 3676, 3], [2617, 3664, 3], [2618, 3660, 3], [2628, 3652, 3], [2628, 3655, 3], [2641, 3649, 3],
       [2643, 3651, 3], [2649, 3659, 3], [2644, 3662, 3], [2658, 3674, 3], [2656, 3681, 3],

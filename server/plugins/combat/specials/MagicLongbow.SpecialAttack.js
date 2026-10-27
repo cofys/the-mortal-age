@@ -1,4 +1,3 @@
-// TODO: ported from xrsps-typescript; untested.
 // TODO: Powershot special attack animation/graphic ids not found; skipped.
 module.exports = function registerMagicLongbowSpecialAttack(api) {
   const { CombatSpecial, Equipment, ItemIdentifiers, Misc, PendingHit, RangedCombatMethod, Skill, WeaponProfiles } = api.core;
@@ -28,12 +27,14 @@ module.exports = function registerMagicLongbowSpecialAttack(api) {
       const player = character.getAsPlayer();
       const distance = character.getLocation().getDistance(target.getLocation());
       const delay = WeaponProfiles.hitDelays(player, distance)[0];
-      const hit = new PendingHit(character, target, this, delay);
-      if (hit.isAccurate()) {
-        hit.getHits()[0].setDamage(Misc.randomInclusive(0, resolvePowershotMaxHit(player)));
-        hit.updateTotalDamage();
-      }
-      return [hit];
+      // Supply the custom roll before the shared pipeline applies protection
+      // prayers and defensive equipment. Powershot guarantees accuracy, not
+      // unmitigated damage.
+      return [new PendingHit(character, target, this, {
+        delay,
+        rollAccuracy: false,
+        damage: Misc.randomInclusive(0, resolvePowershotMaxHit(player)),
+      })];
     }
 
     attackSpeed(character) {

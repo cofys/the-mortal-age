@@ -140,6 +140,8 @@ function alchemyPolicy(policy) {
   policy.coins = 0;
   policy.castTicks = Common.data.alchemists.alchemyTicks;
   policy.confirm = false;
+  policy.keepItem = false;
+  policy.recast = false;
   player.__mtaAlch = { itemId, coins: playground.values[key] ?? 0, free: key === playground.free, spellId: policy.spellId, cycle };
 }
 
@@ -176,7 +178,7 @@ function depositCoins(player, random = Math.random) {
   const whole = Math.floor(coins / alchemists.coinsPerPoint);
   const rest = coins % alchemists.coinsPerPoint;
   const points = whole + (random() < rest / alchemists.coinsPerPoint ? 1 : 0);
-  Common.addPoints(player, "alchemist", points);
+  Common.awardPoints(player, "alchemist", points);
   player.getSkillManager().addExperiences(Common.core.Skill.MAGIC, coins * alchemists.depositXp);
   const real = whole * alchemists.coinsBack;
   if (real > 0) payCoins(player, real);

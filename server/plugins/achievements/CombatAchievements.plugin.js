@@ -13,7 +13,8 @@
  *   answer "combat-achievements:personal-best" { player, monster, best }   best in ticks
  *   answer "combat-achievements:reset-best" { player, monster, handled }
  *   api.emitCustomEvent("combat-achievements:tier", { player, tier: "Hard" })
- *                                       comes back with `unlocked`: whether the tier is reached
+ *                                       comes back with `unlocked`: whether the tier is reached,
+ *                                       and `claimed`: whether its rewards were claimed from Ghommal
  *   api.emitCustomEvent("combat-achievements:open", { player, collectionLogCategory? })
  *                                       the account summary's row; a collection log boss's button
  * and it emits "combat-achievements:completed" { player, task: { id, name, tier } }.
@@ -41,10 +42,16 @@ function onComplete(request) {
   if (request?.player && request.task !== undefined) request.completed = Progress.complete(request.player, request.task);
 }
 
-/** Whether the player has reached a tier (by name), for content locked behind one (Nex's private fights). */
+/**
+ * Whether the player has reached a tier (by name), for content locked behind one (Nex's private fights),
+ * and whether they claimed its rewards, for perks that apply only once claimed.
+ */
 function onTier(request) {
   const tier = Data.tiers().find((each) => each.name.toLowerCase() === String(request?.tier ?? "").toLowerCase());
-  if (request?.player && tier) request.unlocked = Progress.tierStatus(request.player, tier) > 0;
+  if (!request?.player || !tier) return;
+  const status = Progress.tierStatus(request.player, tier);
+  request.unlocked = status > 0;
+  request.claimed = status === 2;
 }
 
 function onOpen({ player, collectionLogCategory }) {

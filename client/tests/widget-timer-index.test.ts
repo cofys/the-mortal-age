@@ -31,7 +31,7 @@ for (const groupId of [ROOT, 300, 301]) {
 }
 const manager = new WidgetManager({} as never, {
     loadWidgetGroup: (groupId: number) => groups.get(groupId),
-    getAvailableGroups: () => [...groups.keys()], clearCache() {},
+    getAvailableGroups: () => [...groups.keys()], clearCache() {}, unloadGroup() {},
 } as never);
 manager.setRootInterface(ROOT);
 manager.openSubInterface(mount.uid, 300);

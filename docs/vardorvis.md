@@ -135,6 +135,25 @@ All four kills that lived 31 ticks had: strangle at tick 16, axes at 24, head at
 - A tick later the barrier falls.
 - At twelve the HUD clears. At nineteen he rises again on his spot (normal: an awakened fight is one kill).
 
+## The scoreboard
+
+The Ancient Tablet by the rocks (`vardorvis_scoreboard` 49476 at 1116,3426) shows by varbit
+`dt2_scoreboards` (DesertTreasureScoreboards.plugin.js sets 1 after the quest):
+`vardorvis_scoreboard_vis` (47597) with Read, or at 2 `vardorvis_scoreboard_vis_awakened` (47598)
+with Read and Read (Awakened). Both open interface `vardorvis_scoreboard` (832): the reader's kill
+count, deaths and best time, then the world's (Wiki, Ancient Tablet (Vardorvis), which gives the
+normal and awakened figures separately; the labels and "Vardorvis Statistics" title are the cache's).
+Read shows the normal fight, Read (Awakened) the awakened one, titled "Vardorvis (Awakened)
+Statistics" (the Wiki's awakened screenshot hasn't been checked for it). The kill counts and best
+times are the kill messages' own; a death in the ritual site while his fight is on counts for that
+fight (as the Leviathan's), heard through onPlayerDefeated, which every death reaches. The world's numbers are kept in
+`data/saves/vardorvis-scoreboard.json`. Like the other DT2 boards it reads only after Desert
+Treasure II, and a click that kept the map loc's null name still reads (Site.Leviathan.js). Nothing
+sets `dt2_scoreboards` to 2 yet (all four awakened bosses killed), so Read (Awakened) only shows once
+that is added. No recording opens the tablet (rsprox 235/03344 clicks it and walks on). It writes as
+the other DT2 boards do (docs/leviathan-normal-evidence.md): the server's own counts read
+"N (recorded)" and a missing time "No recorded best"; times are m:ss.cc as the Araxxor recording.
+
 ## Combat Achievements
 
 Vardorvis is counted by event (`data/monsters.json` countedByEvent), so the kill-count message comes before the tasks, as live sends it.
@@ -173,3 +192,5 @@ The agent MCP, with `::infhp`, `::quest desert_treasure_ii complete` and a whip:
 4. The kill: the kill count, the time and the speed tasks in that order, the barrier's fall, the HUD clear at 12, the respawn at 19.
 5. Awakened with an orb: 1400 hitpoints, two heads below half, axes up to 96, the awakened count and Vardorvis Sleeper.
 6. Leave, a logout inside and a death inside: the grave appears at 1117,3428.
+7. The tablet at 1116,3426 after the quest: Read opens 832; a kill and a death inside reach
+   `data/saves/vardorvis-scoreboard.json`. `node --test tests/vardorvis-scoreboard.test.cjs`.

@@ -313,7 +313,7 @@ test('real capped stacks retain the catch and only delivered fish earn XP', t =>
   assert.equal(xp.length, 2, 'collected XP cannot be earned twice');
 });
 
-test('the catch uses free slots in another real bank tab', t => {
+test('the catch is banked while the bank has space, however full its tab', t => {
   const { Player } = require('../dist/game/entity/impl/player/Player');
   const p = new Player(null), bank = p.getBank(0);
   t.mock.method(p, 'sendMessage', () => {});
@@ -321,7 +321,7 @@ test('the catch uses free slots in another real bank tab', t => {
   bank.setItems(Array.from({ length: bank.capacity() }, (_, i) => new core.Item(10000 + i, 1)));
   p.setAttribute(Shared.REWARD_ATTRIBUTE, { items: [[317, 3]], xp: 10 });
   Rewards.inspectNet({ player: p });
-  assert.equal(p.getBank(1).getAmount(317), 3);
+  assert.equal(bank.getAmount(317), 3);
   assert.equal(p.getAttribute(Shared.REWARD_ATTRIBUTE), null);
 });
 

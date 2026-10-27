@@ -40,6 +40,7 @@ function blowOne(player, recipe) {
   player.getInventory().deleteNumber(I.MOLTEN_GLASS, 1);
   player.getInventory().addItem(new Item(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp);
   player.sendMessage(`You make ${Shared.withArticle(recipe.name)}.`);
   return true;
 }
@@ -51,7 +52,7 @@ function startBlowing(player, recipe, amount) {
   }
   const { animation, sound } = data();
   Shared.startMaking(player, {
-    amount, startTick: 0, firstTick: 2, interval: 3, animation, sound,
+    amount, startTick: 0, firstTick: 2, interval: 3, animation, sound, kind: "glassblowing",
     has: () => hasGlass(player),
     make: () => blowOne(player, recipe),
   });

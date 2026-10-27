@@ -73,8 +73,9 @@ function chance(key, npc) {
   return result;
 }
 
-/** "slayer:task-kill" { player, npc }: sent before the kill is taken off the task. */
-function taskKill({ player, npc }, random = Math.random) {
+/** "slayer:task-kill" { player, npc }: sent before the kill is taken off the task (a kill only counted as on task, `offTask`, is no task's). */
+function taskKill({ player, npc, offTask }, random = Math.random) {
+  if (offTask) return;
   const key = KEYS[Tasks.current(player)?.masterId];
   if (!key || random() >= chance(key, npc)) return;
   const itemId = core.CacheDefinitions.getObjId(key.obj);

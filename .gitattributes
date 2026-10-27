@@ -18,6 +18,8 @@
 /server/data/definitions/npc-status-immunities.json text eol=lf
 # Keep generated casket imports identical to the canonical exporter bytes.
 /server/data/definitions/reward-caskets.json text eol=lf
+# The league task catalog is generated (yarn generate:league-tasks --check compares it byte for byte).
+/server/plugins/modes/data/league-tasks.json text eol=lf
 # The Quest Helper bridge's Gradle wrapper: the shell script must keep LF, the jar is binary.
 /tools/quest-helper-bridge/gradlew text eol=lf
 /tools/quest-helper-bridge/gradlew.bat text eol=crlf

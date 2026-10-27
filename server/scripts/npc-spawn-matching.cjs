@@ -102,16 +102,17 @@ function squareOf(spawn) {
  * Reconcile literal IDs whose cache name contradicts the authored spawn name.
  * Only one nearby, same-plane Wiki/cache-confirmed identity is sufficient evidence.
  * Correct variants and explicit cache keys are retained; inputs are never mutated.
+ * `cacheName(id)` may give several names: a nameless multinpc parent answers with its variants'.
  */
 function reconcileIdentities(existingSpawns, wikiSpawns, cacheName, radius, inScope = () => true) {
   const repairs = [], unresolved = [];
-  const cached = id => { try { return nameKey(cacheName(id)); } catch { return ''; } };
+  const cached = id => { try { return [cacheName(id)].flat().map(nameKey); } catch { return []; } };
   const spawns = existingSpawns.map(spawn => {
     const expected = nameKey(spawn.name);
     if (!inScope(spawn) || !expected || spawn.key != null || !Number.isInteger(spawn.id) ||
-        cached(spawn.id) === expected) return spawn;
+        cached(spawn.id).includes(expected)) return spawn;
     const evidence = wikiSpawns.filter(candidate => !candidate.skip && nameKey(candidate.name) === expected &&
-      Number.isInteger(candidate.id) && cached(candidate.id) === expected && distance(spawn, candidate) <= radius);
+      Number.isInteger(candidate.id) && cached(candidate.id).includes(expected) && distance(spawn, candidate) <= radius);
     const ids = [...new Set(evidence.map(candidate => candidate.id))];
     if (ids.length !== 1) {
       unresolved.push({ name: spawn.name, id: spawn.id, x: spawn.x, y: spawn.y, level: spawn.level,

@@ -8,8 +8,8 @@ const PUBLIC_ID = 7221;
 const SOLO_ID = 7222;
 /** Cache: rat_boss_giant_rat, the summoned minion. */
 const RAT_ID = 7223;
-/** Cache: rat_boss_biologist_op2, Historian Aldo with Talk-to and Trade. */
-const ALDO_ID = 7615;
+/** Cache: rat_boss_biologist, Historian Aldo (7226 Talk-to, or 7615 with Trade, by varbit 9586). */
+const ALDO_ID = 12606;
 
 /** The lair: its walls, so a player on any of its tiles is inside. */
 const LAIR = Object.freeze({ minX: 3289, maxX: 3308, minY: 9858, maxY: 9877 });
@@ -21,12 +21,13 @@ const SPAWN_TILE = Object.freeze([3301, 9867, 0]);
 const CENTRE_TILE = Object.freeze([3298, 9867, 0]);
 /**
  * Captured: the tile Scurrius stands on to eat from each food pile (north, east, south), and the
- * pile he faces while he eats (each pile is 2x2: north 3298,9876, east 3307,9867, south 3298,9858).
+ * pile he faces while he eats (each pile is 2x2: north 3298,9876, east 3307,9867, south 3298,9858),
+ * and the pile's side of him (he never steps off towards it).
  */
 const FEEDING_SPOTS = Object.freeze([
-  Object.freeze({ stand: [3297, 9873, 0], face: [3298, 9876, 0] }),
-  Object.freeze({ stand: [3304, 9866, 0], face: [3307, 9867, 0] }),
-  Object.freeze({ stand: [3298, 9860, 0], face: [3298, 9859, 0] }),
+  Object.freeze({ stand: [3297, 9873, 0], face: [3298, 9876, 0], pile: [0, 1] }),
+  Object.freeze({ stand: [3304, 9866, 0], face: [3307, 9867, 0], pile: [1, 0] }),
+  Object.freeze({ stand: [3298, 9860, 0], face: [3299, 9859, 0], pile: [0, -1] }),
 ]);
 /** Captured landings: through the broken bars, and back out over the sewage water. */
 const INSIDE_TILE = Object.freeze([3290, 9868, 0]);
@@ -66,11 +67,15 @@ const GFX = Object.freeze({
 const SOUND = Object.freeze({
   magic: 7700,
   ranged: 7722,
+  /** On the player as the bolt lands (a splash plays 227 instead) and as the fur ball does. */
+  magicImpact: 7670,
+  rangedImpact: 7696,
   /** sound_area at the room's middle with every stomp. */
   stomp: Object.freeze([7699, 7667]),
   /** sound_area on each debris tile: delay 240, range 5. */
   debris: 4175,
-  enragedSummon: 7717,
+  /** sound_area with every rat call, eating or in the middle. */
+  summon: 7717,
   climb: 7655,
 });
 

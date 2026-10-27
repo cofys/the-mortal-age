@@ -84,7 +84,19 @@ and the Wiki ([Implings](https://oldschool.runescape.wiki/w/Implings),
 
 Not reproduced: the two main-game barehanded loot catches gave 14 (earth, 1510) and 16 (essence,
 2520) Hunter XP, against the Wiki's overworld 27 and 29; no source explains it, so the
-Wiki value stays. Puro-Puro's 35 roaming spawn points and overworld impling spawns are not in.
+Wiki value stays. 
+Roaming spawns ([Implings](https://oldschool.runescape.wiki/w/Implings)):
+
+- Puro-Puro (`minigames/impetuousimpulses/Roaming.ImpetuousImpulses.js`): each point holds an
+  invisible impling that roams two minutes before it shows and is replaced as soon as it is
+  caught, rolling its tier's Wiki table. Points come from the cache's map data (10 low, 12 mid,
+  4 high); the Wiki counts 35 (21/12/2) without coordinates, so the low tier is short.
+- Overworld (`Overworld.Hunter.js`, driven by the shared tick): every 30 minutes the previous
+  implings are removed and 4 high, N (5-10) mid and 2N low implings appear at random points from
+  the cache's map data, invisible for two minutes, plus a crystal impling in Prifddinas. A caught
+  one is gone until the next cycle. Not in: the Wiki's fixed low-tier points (ten, and Zanaris
+  marketplace) have no coordinates here, and the wander radius (8) is an estimate. The imp
+  defenders (npc 5738) freeing jarred implings are not in.
 
 ## Sources
 

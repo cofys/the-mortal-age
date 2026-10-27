@@ -29,6 +29,7 @@ kill whose landing a logout cut short), and opens the camps from the ritual stag
 | `Camps.MoonsOfPeril.js` | The cooking stove, supply crates, grubs, paste and potions, and Neypotzli's resources fizzling on the way out. |
 | `River.MoonsOfPeril.js` | Bream from the two river spots. |
 | `Chest.MoonsOfPeril.js` | The Lunar Chest and its loot, and Eyatlalli's offerings. |
+| `Scoreboard.MoonsOfPeril.js` | Eyatlalli's Scoreboard: chests opened and deaths, the player's and the world's. |
 | `Commands.MoonsOfPeril.js` | `::moon <moon>`, `::moonphase <moon> <focus>`, `::moonhp <hitpoints>`, `::moonreset`, `::moondead [moon]`. |
 
 The foods heal through `plugins/items/data/food.json` (a new `lowestOf` heal) and the moonlight
@@ -373,7 +374,18 @@ Loot (Wiki):
 Eyatlalli (Wiki): a Moon armour piece used on her asks "Sacrifice your <item>?" and, on Yes, is a
 1/50 chance at any of the twelve pieces, the same one too, with no duplicate protection;
 sulphurous essence used on her is 50 Runecraft xp each. The dialogue and messages are estimates.
-Her Scoreboard is not built.
+
+Her Scoreboard (Wiki, Eyatlalli) is op3 of the post-quest Eyatlalli: the shrine spawn is
+`pmoon_eyatlalli_postquest` (12868) at (1523, 9578, 0) facing west, as rsprox 237/01104 and
+234/03276 show it, which the client shows as `pmoon_eyatlalli_vis_postquest` (12870, Talk-to and
+Scoreboard) while varbit `pmoon_eyatlalli_vis` is 1. Every recording with it at 1 has the quest
+done (`pmoon_quest` 36: 237/01104 at login, 234/03276 later in the session), and nothing else reads
+it, so Perilous Moons sends 1 once the quest is complete (it used to send 1 only during the quest)
+and again on completion. The Wiki's two 12869 pins at the shrine are a lasting skip in
+`npc-spawn-sync.json`, so the Wiki sync leaves them out. The board opens `perilous_moons_scoreboard` (870): the player's Lunar Chest count (the
+chest's own) and deaths in a Moon's arena, then the world's, kept in
+`data/saves/moons-of-peril-scoreboard.json`. No recording reads it; numbers are written as the
+other boss boards' recordings show them.
 
 ## Our choices and estimates
 
@@ -404,7 +416,7 @@ Built and checked with the agent MCP:
   sacrifice and essence.
 
 Left for later: the armour and weapon set effects (Bloodrager with the dual macuahuitl, Frostweaver,
-Eclipse), in their own PR, and Eyatlalli's Scoreboard.
+Eclipse), in their own PR.
 
 ## Open questions
 

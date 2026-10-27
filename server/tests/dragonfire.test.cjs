@@ -26,7 +26,7 @@ before(async () => {
   CombatEquipment.hasDragonProtectionGear = () => shield;
   PrayerHandler.isActivated = (_player, id) => prayer && id === PrayerHandler.PROTECT_FROM_MAGIC;
   AccuracyFormulasDpsCalc.rollAccuracy = () => accurate;
-  Dragonfire.initDragonfireProtectionCoreAccess({ core, getPrayerHandler: () => PrayerHandler });
+  Dragonfire.initDragonfireProtectionCoreAccess({ core, getPrayerHandler: () => PrayerHandler, emitCustomEvent() {} });
 });
 
 after(() => {

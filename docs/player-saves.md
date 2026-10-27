@@ -117,6 +117,7 @@ Owner commands (`plugins/commands/SaveHistory.plugin.js`):
 
 - **`::snapshots <name>`:** their 15 newest copies: `#42  2026-10-07 13:05:12 UTC  autosave`.
 - **`::rollback <name> <#id | 30m | 2h | 1d>`:** puts back that copy, or the newest one at least that old.
+- A name means the character this world logs in: on a league world the account's league character (`server/docs/leagues.md`), elsewhere the main one.
 
 What a rollback does:
 - **Offline player:** their current save goes in the history as `pre-rollback`, then the copy is written (and recorded as `rollback`).

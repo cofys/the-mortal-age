@@ -242,6 +242,22 @@ function npcCountsFor(taskId, npcId, npcName) {
   return npcTaskId(npcId) === taskId || get().namedTaskNpcs.get(taskId)?.has(npcName) === true;
 }
 
+const taskMonsters = new Map();
+
+/**
+ * Whether some task counts this NPC: a Slayer monster that gives Slayer XP on task (its task
+ * param, or a named task's monster; boss tasks' monsters are not). Cached by id and name.
+ */
+function isTaskMonster(npcId, npcName) {
+  const key = `${npcId}:${npcName}`;
+  let known = taskMonsters.get(key);
+  if (known === undefined) {
+    known = npcTaskId(npcId) > 0 || [...get().namedTaskNpcs.values()].some((names) => names.has(npcName));
+    taskMonsters.set(key, known);
+  }
+  return known;
+}
+
 /** Whether a location is inside an area's boxes; an area without boxes holds everything. */
 function inArea(area, location) {
   if (!area?.boxes?.length) return true;
@@ -273,6 +289,7 @@ module.exports = {
   npcTaskId,
   isBossNpc,
   npcCountsFor,
+  isTaskMonster,
   taskLevel,
   taskQuests,
   inArea,

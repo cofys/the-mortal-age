@@ -58,6 +58,7 @@ function makeOne(player, recipe, spinning) {
   player.getInventory().addItem(new (Shared.getCore().Item)(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
   if (spinning) Shared.getApi().emitCustomEvent("crafting:spun", { player, itemId: recipe.itemId, amount: 1 });
+  Shared.produced(player, recipe.itemId, 1, recipe.xp);
   return true;
 }
 
@@ -69,12 +70,12 @@ function start(player, station, recipe, amount, spinning) {
   }
   const tables = data();
   Shared.startMaking(player, spinning ? {
-    amount, startTick: 1, firstTick: 3, interval: 2, animation: tables.spinningAnimation, sound: tables.spinningSound,
+    amount, startTick: 1, firstTick: 3, interval: 2, animation: tables.spinningAnimation, sound: tables.spinningSound, kind: "spinning",
     onAnimate: () => player.getPacketSender().sendObjectAnimation(station, tables.wheelAnimation),
     has: () => carriedMaterial(player, recipe) !== undefined,
     make: () => makeOne(player, recipe, true),
   } : {
-    amount, startTick: 1, firstTick: 4, interval: 3, animation: tables.weavingAnimation, sound: tables.weavingSound,
+    amount, startTick: 1, firstTick: 4, interval: 3, animation: tables.weavingAnimation, sound: tables.weavingSound, kind: "weaving",
     has: () => carriedMaterial(player, recipe) !== undefined,
     make: () => makeOne(player, recipe, false),
   });

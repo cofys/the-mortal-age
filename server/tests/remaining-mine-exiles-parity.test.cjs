@@ -1315,6 +1315,19 @@ test('Fremennik Trials: Olaf can offer his own trial during the merchant errand'
   assert.match(h.player.getDialogueManager().getCurrent().getDialogues().values().next().value.getText(), /writing this epic/);
 });
 
+test('Fremennik Trials: Askeladden hands out the pet rock during the merchant errand', () => {
+  const h = fremennik(), N = NPCS(h);
+  h.quest.setStage(h.player, 1);
+  h.attrs.set('quest.fremennik_trials.merchant', 1);
+  h.choice(N.OLAF_THE_BARD_2, 'Yes');
+  assert.equal(trial(h, 1), 1);
+  assert.match(h.hooks.variants[0]({ player: h.player, npcId: N.ASKELADDEN }), /finding-the-unique-flower/);
+  h.choice(N.ASKELADDEN, 'Ask about becoming a Fremennik');
+  assert.equal(h.tasks.length, 1, 'the merchant menu must link to Askeladden’s pet rock talk');
+  h.tick(1);
+  assert.match(h.player.getDialogueManager().getCurrent().getDialogues().values().next().value.getText(), /golden wool from Lalli/);
+});
+
 test('Fremennik Trials: Swensen requires the real maze, including failure and exit ladders', () => {
   const h = fremennik(), O = OBJECTS(h), N = NPCS(h);
   h.quest.setStage(h.player, 1);
@@ -1472,4 +1485,42 @@ test('Fremennik Trials: Peer doors outrank the generic opener and other click ha
   h.setLocation(new h.core.Location(3200, 3200, 0));
   const foreign = h.object(O.UNICORNS_HEAD_2);
   assert.equal(foreign.handled, false, 'head study outside the puzzle is left to its normal handler');
+});
+
+test('Fremennik Trials: Peer offers and performs his bank spell when talked to again with items', () => {
+  const h = fremennik(), N = NPCS(h), I = ITEMS(h);
+  h.quest.setStage(h.player, 1);
+  h.choice(N.PEER_THE_SEER, 'Yes');
+  const answer = (text) => h.hooks.conditions[0]({ player: h.player, npcId: N.PEER_THE_SEER, text });
+  const HAS = 'If the player has items in their inventory and/or wearing any armour:';
+  const EMPTY = 'If the player does not have any items in their inventory or in their worn slots:';
+  assert.deepEqual([answer(HAS), answer(EMPTY)], [false, true], 'nothing carried: no bank offer');
+  h.setWeapon(I.BRONZE_SWORD);
+  assert.deepEqual([answer(HAS), answer(EMPTY)], [true, false], 'worn items count');
+  h.setWeapon(-1);
+  h.inventory.set(I.COINS, 5);
+  assert.deepEqual([answer(HAS), answer(EMPTY)], [true, false], 'inventory items count');
+
+  // The offer's Yes/No lost their jump targets; the offer line replays the first-talk bank menu.
+  const offer = h.line(N.PEER_THE_SEER, 'You will need to manually go to the bank to withdraw them again however. Would you like me to perform this small spell upon you, outerlander?');
+  assert.equal(typeof offer.after, 'function');
+  assert.equal(offer.after(), true);
+  h.player.getDialogueManager().getCurrent().getDialogues().get(0).send(h.player);
+  assert.deepEqual(h.menus.at(-1).pairs.filter((entry) => typeof entry === 'string'), ['Yes', 'No']);
+  h.menu('Yes');
+  const chain = [...h.player.getDialogueManager().getCurrent().getDialogues().values()];
+  assert.match(chain[0].getText(), /Yes, thank you!/);
+  const moved = [];
+  const items = [new h.core.Item(I.COINS, 5)];
+  const container = (list) => ({
+    getValidItems: () => list.slice(), refreshItems() {}, getAmount: () => 0,
+    switchItems(_to, item) { moved.push(item.getId()); list.splice(list.findIndex((entry) => entry.getId() === item.getId()), 1); },
+  });
+  Object.assign(h.player, {
+    getInventory: () => container(items), getEquipment: () => container([]),
+    getBank: () => ({ contains: () => false, getFreeSlots: () => 800, refreshItems() {} }),
+    isSearchingBank: () => false, getCurrentBankTab: () => 0,
+  });
+  chain.find((entry) => entry.constructor.name === 'ActionDialogue').send(h.player);
+  assert.deepEqual(moved, [I.COINS], 'Yes deposits what the player carries');
 });

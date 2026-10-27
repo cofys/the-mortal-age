@@ -4,7 +4,8 @@
  * A demonic gorilla's protection prayer (Wiki, rsprox captures):
  *
  * - It protects against one style, shown by which of its three ids it is, and a hit in that
- *   style does nothing. Verac's set gets through; special attacks don't.
+ *   style does nothing. Verac's set gets through, and so do the ancient mace and dragon sword
+ *   specials (22 October 2025 update); other special attacks don't.
  * - Once it has taken four damaging hits and 70 damage in styles it doesn't protect against,
  *   it protects against the style of the hit that took it there: it changes id and beats its
  *   chest on the same tick.

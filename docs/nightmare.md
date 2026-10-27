@@ -87,8 +87,27 @@ Between 1 and 5 standard attacks, then a special (capture). The Nightmare's: hus
 
 Everyone in the dream who hurt both her shield and a totem gets a roll of her table; big bones go to whoever did the most, plain bones only with a unique (Wiki). Phosani's always drops big bones. The loot lands at (3870, 9954) in the dream.
 
+## Scoreboards
+
+Two "Scoreboard" locs in the sanctuary, both Read into interface `nightmare_scoreboard` (530):
+`nightmare_scoreboard` (37949) before the lair for The Nightmare, and
+`nightmare_challenge_scoreboard` (29708) by Sister Senga for Phosani's. rsprox 231/00392 reads
+Phosani's: the title "Phosani's Nightmare Statistics", then the player's kill count, deaths and best
+time and the world's (ms2-ms12, "24,494,091" and "7:51.00" forms). Times follow the reader's
+Enable precise timing setting (`option_precise_timing`): that recording has it on and shows
+m:ss.cc; rsprox 234/03284 has it off and shows the best time as "3:45", as the kill messages print
+it. The Nightmare's board keeps the cache title, "The Nightmare Statistics". Kills and best times
+are the kill messages' own, a death counts when it wakes the player by the Pool, and the world's
+numbers are kept in `data/saves/nightmare-scoreboard.json` (written once per kill). A team kill
+counts once for each player credited.
+
 ## Not captured, so ours
 
+- The Nightmare's scoreboard was never read in a recording; it follows Phosani's layout under the
+  cache title.
+- rsprox 234/03284 shows "-" in Phosani's three world rows (an event world, it seems); the Wiki's
+  figures and 231/00392 have the world's numbers.
+- Whether the world kill count counts a team kill once or once per player: once per player here.
 - The Nightmare's restart after a kill uses Phosani's "reawaken" countdown wording; the capture has no restart of the shared fight.
 - How many husks, parasites and sleepwalkers come with more players (one target per five players; one sleepwalker per player).
 - Claws' exact tile pattern: about one tile in each 3x3 block, as many as captured; Phosani's are thick within two tiles of each player.

@@ -29,6 +29,17 @@ type PendingHitConfig = {
     bypassProtectionPrayer?: boolean;
     /** Shared across one attack's hits on the same victim; applied after queue-time modifiers. */
     damageBudget?: { remaining: number };
+    /** A single hit rolls this many times and keeps the best; only the kept roll goes through the hooks. */
+    bestOf?: number;
+    /** Scales the kept roll's damage before the hook and the HP cap (a size bonus). */
+    damageMultiplier?: number;
+    /**
+     * An ordinary attack whatever is armed when it is built: while its rolls are made the attacker
+     * counts as having no special armed, so no special's traits, accuracy or damage formulas apply
+     * (a hit derived from an earlier one, which must not borrow a special armed since). The armed
+     * special stays armed, with its energy, for the attacker's next attack.
+     */
+    ordinary?: boolean;
 };
 
 export class PendingHit {
@@ -43,6 +54,10 @@ export class PendingHit {
     private handleAfterHitEffects: boolean;
     private experience = true;
     private damageBudget?: { remaining: number };
+    private bestOf = 1;
+    private damageMultiplier = 1;
+    /** No special attack's traits apply (PendingHitConfig.ordinary). */
+    private ordinary = false;
     /** Optional per-hitsplat extra reveal delays (from `hitDelayTicks`). */
     private hitDelays?: number[];
     /** Spell selected when this hit was launched; the caster may clear it before impact. */
@@ -71,6 +86,9 @@ export class PendingHit {
             }
         } else if (delayOrConfig && typeof delayOrConfig === "object") {
             this.damageBudget = delayOrConfig.damageBudget;
+            this.bestOf = Math.max(1, Math.trunc(delayOrConfig.bestOf ?? 1));
+            this.damageMultiplier = delayOrConfig.damageMultiplier ?? 1;
+            this.ordinary = delayOrConfig.ordinary === true;
             if (Number.isInteger(delayOrConfig.delay)) {
                 resolvedDelay = delayOrConfig.delay as number;
             }
@@ -88,10 +106,19 @@ export class PendingHit {
             }
         }
 
-        this.hits = Spell.withCastContext(attacker, this.spellContext, () =>
-            this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
-                typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
-                typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true));
+        // An ordinary hit is rolled as if no special were armed: every formula reads the armed
+        // special through isSpecialActivated (CombatSpecial.activeTraitsFor, the accuracy and damage
+        // formulas), so the flag is lowered for the rolls and put back after.
+        const armed = this.ordinary && attacker?.isSpecialActivated?.() === true;
+        if (armed) attacker.setSpecialActivated(false);
+        try {
+            this.hits = Spell.withCastContext(attacker, this.spellContext, () =>
+                this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
+                    typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
+                    typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true));
+        } finally {
+            if (armed) attacker.setSpecialActivated(true);
+        }
         this.delay = Math.max(0, resolvedDelay);
         this.handleAfterHitEffects = resolvedHandleAfterHitEffects;
     }
@@ -196,7 +223,7 @@ export class PendingHit {
 
         // Utility-only specials (e.g. stat boosts that resolve outside the hit
         // pipeline) declare skipAttack and produce no hitsplat.
-        const traits = fixedDamage === undefined ? CombatSpecial.activeTraitsFor(this.attacker) : null;
+        const traits = fixedDamage === undefined && !this.ordinary ? CombatSpecial.activeTraitsFor(this.attacker) : null;
         if (traits?.skipAttack === true) {
             this.totalDamage = 0;
             return [];
@@ -231,20 +258,35 @@ export class PendingHit {
             const roll = { attacker: this.attacker, target: this.target, combatType: this.combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer };
             PluginManager.emitCombatHitRoll(roll);
             if (roll.bypassProtectionPrayer) this.protectionBypassed = true;
-            const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
-            this.accurate = resolved.accurate;
-            const damage: HitDamage = this.accurate
-                ? ServerPerf.measurePhase(
-                    "combat.process.method_hits.damage",
-                    () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer,
-                        fixedDamage === undefined ? resolved.bounds : {
-                            minimumMultiplier: 0,
-                            maximumMultiplier: 0,
-                            minimumBonus: fixedDamage,
-                            maximumBonus: fixedDamage,
-                        }, fixedDamage === undefined)
-                )
-                : new HitDamage(0, HitMask.BLUE);
+            let damage: HitDamage = new HitDamage(0, HitMask.BLUE);
+            this.accurate = false;
+            const bestOf = fixedDamage === undefined && this.bestOf > 1;
+            const rollDamage = bestOf ? CombatFactory.rollHitDamage : CombatFactory.getHitDamage;
+            for (let attempt = fixedDamage === undefined ? this.bestOf : 1; attempt > 0; attempt--) {
+                const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
+                const rolled: HitDamage = resolved.accurate
+                    ? ServerPerf.measurePhase(
+                        "combat.process.method_hits.damage",
+                        () => rollDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer,
+                            fixedDamage === undefined ? resolved.bounds : {
+                                minimumMultiplier: 0,
+                                maximumMultiplier: 0,
+                                minimumBonus: fixedDamage,
+                                maximumBonus: fixedDamage,
+                            }, fixedDamage === undefined)
+                    )
+                    : new HitDamage(0, HitMask.BLUE);
+                if (rolled.getDamage() > damage.getDamage() || (resolved.accurate && !this.accurate)) {
+                    damage = rolled;
+                    this.accurate = resolved.accurate;
+                }
+            }
+            if (bestOf && this.accurate) {
+                damage = CombatFactory.applyIncomingHitDamage(this.attacker, this.target, this.combatType, damage);
+            }
+            if (this.damageMultiplier !== 1) {
+                damage.setDamage(Math.floor(damage.getDamage() * this.damageMultiplier));
+            }
             if (this.accurate && this.attacker.isPlayer() && this.target.isPlayer()) {
                 ArceuusSpells.applyCorruption(this.attacker.getAsPlayer(), this.target.getAsPlayer());
             }
@@ -340,7 +382,8 @@ export class PendingHit {
         const guaranteed =
             traits.guaranteedHit === true ||
             forceAccurate ||
-            (hitIndex === 0 && traits.guaranteedFirstAccuracyRoll === true);
+            (hitIndex === 0 && traits.guaranteedFirstAccuracyRoll === true) ||
+            (traits.guaranteedHitOnUnsuspectingTarget === true && this.target.getCombat().getLastDamager() !== this.attacker);
         const rollCount = Math.max(1, Math.trunc(traits.accuracyRollCount ?? 1));
         let successfulRolls: number;
         if (guaranteed || !rollAccuracyFlag) {

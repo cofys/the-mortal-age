@@ -453,6 +453,8 @@ module.exports = function registerFremennikTrialsQuest(api) {
   const inRellekka = (player) => inBox(player, 2590, 2760, 3610, 3710);
   const inLonghall = (player) => inBox(player, 2648, 2676, 3660, 3682);
   const inPeerHouse = (player) => inBox(player, 2624, 2648, 3658, 3680);
+  const carryingAnything = (player) =>
+    player.getInventory().getValidItems().length > 0 || player.getEquipment().getValidItems().length > 0;
   const inTrollCave = (player) => inBox(player, 2755, 2790, 3605, 3640);
 
   function hasLevel99(player) {
@@ -536,11 +538,12 @@ module.exports = function registerFremennikTrialsQuest(api) {
     const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
     if (merchantActive && held(player, STURDY_BOOTS)) return swensenGiving("the-boots-to-olaf");
-    if (merchantActive && step === M_SAILOR) {
-      setMerchantStep(player, M_OLAF);
-      return `${SAILOR_FAVOR}-talking-to-olaf-the-bard`;
-    }
+    if (merchantActive && step === M_SAILOR) setMerchantStep(player, M_OLAF);
+    if (merchantActive && step >= M_BALLAD) return swensenTalk("olaf-again");
     if (merchantActive && step >= M_BOWSTRING) return bowAsk("olaf");
+    // He keeps asking for boots until he has them. The step moves when this variant is
+    // picked, so a closed menu or "Ask about becoming a Fremennik" must not lose it.
+    if (merchantActive && step >= M_SAILOR) return `${SAILOR_FAVOR}-talking-to-olaf-the-bard`;
     if (merchantActive && step >= M_STARTED) return flowerAsk("olaf");
     if (trialState(player, BARD) === 2) return V.olafDone;
     if (stage >= STAGE_STARTED) return trialState(player, BARD) >= 1 ? V.olafAgain : V.olafOffer;
@@ -559,10 +562,13 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (merchantActive && step === M_THORA) return swensenTalk("askeladden");
     if (merchantActive && step >= M_BOWSTRING) return bowAsk("askeladden");
     if (merchantActive && step >= M_STARTED) return flowerAsk("askeladden");
-    if (trialState(player, BARD) >= 1) {
-      return held(player, PET_ROCK) ? V.askeladdenOlafAgain : V.askeladdenOlaf;
-    }
-    return V.askeladdenBase;
+    return askeladdenTrialVariant(player);
+  }
+
+  /** Askeladden's own talk: the pet rock once Olaf's trial is under way. */
+  function askeladdenTrialVariant(player) {
+    if (trialState(player, BARD) < 1) return V.askeladdenBase;
+    return held(player, PET_ROCK) ? V.askeladdenOlafAgain : V.askeladdenOlaf;
   }
 
   function manniVariant(player, stage) {
@@ -857,8 +863,8 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (value.includes("another player's koschei")) return false;
     if (value.includes("prayer potion") || value.includes("nearly dead") || value.includes("phase")) return false;
 
-    if (value.includes("has items in their inventory")) return false;
-    if (value.includes("does not have any items in their inventory")) return true;
+    if (value.includes("does not have any items in their inventory")) return !carryingAnything(player);
+    if (value.includes("has items in their inventory")) return carryingAnything(player);
     if (value.includes("peer the seer's house on the east side")) return false;
     if (value.includes("peer the seer's house on the west side")) return false;
     if (value.includes("fails to solve the puzzle")) return false;
@@ -929,6 +935,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (THORVALD_IDS.has(npcId)) return V.thorvaldOffer;
     if (SIGLI_IDS.has(npcId)) return V.sigliOffer;
     if (MANNI_IDS.has(npcId)) return V.revellerOffer;
+    if (ASKELADDEN_IDS.has(npcId)) return askeladdenTrialVariant(player);
     return null;
   }
 
@@ -990,6 +997,29 @@ module.exports = function registerFremennikTrialsQuest(api) {
         give(player, HUNTERS_TALISMAN_2, 1);
       }
     }
+  }
+
+  /** The first-talk menu holding Peer's bank spell (its "Yes" runs deposit step -sJh9n). */
+  function peerBankMenu(steps) {
+    for (const step of steps ?? []) {
+      if (step.options?.some((option) => option.steps?.some((entry) => entry.id === "-sJh9n"))) return [step];
+      for (const option of step.options ?? []) {
+        const found = peerBankMenu(option.steps);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Talking to Peer again while carrying items: the dump lost the targets of the offer's
+   * Yes/No ({{tact|above}}, Peer's first-talk bank menu), so they fell back to Brundt's
+   * unrelated "Yes"/"No" and never banked anything. Replay that menu after the offer line.
+   */
+  function offerPeerBankAgain(event) {
+    if (!PEER_IDS.has(event.npcId) || !/perform this small spell upon you/i.test(String(event.text ?? ""))) return;
+    const { player, npcId } = event;
+    event.after = () => startTranscript(api, player, npcId, PAGE, V.peerTrial, peerBankMenu);
   }
 
   function handleDialogueLine(event) {
@@ -1888,7 +1918,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
         player.sendMessage("This door is locked tightly shut.");
         return;
       }
-      if (player.getInventory().getValidItems().length || player.getEquipment().getValidItems().length) {
+      if (carryingAnything(player)) {
         player.sendMessage("You must bank all your items and equipment before entering Peer's house.");
         return;
       }
@@ -1902,7 +1932,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
           player.sendMessage("You have failed to solve the riddle.");
           return;
         }
-        if (player.getInventory().getValidItems().length || player.getEquipment().getValidItems().length) return;
+        if (carryingAnything(player)) return;
         setFlag(player, FLAG_SEER_RIDDLE);
         player.sendMessage("You have solved the riddle!");
         player.moveTo(new Location(2631, 3666, 0));
@@ -2021,6 +2051,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleConditionStep);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("npc-dialogue:line", offerPeerBankAgain);
   api.onNpcInteraction(handleNpcInteraction);
   api.onNpcDeath(handleNpcDeath);
   api.onItemOnItem(handleItemOnItem);

@@ -17,6 +17,7 @@
  *   nineteen.
  */
 const Common = require("./Common.Vardorvis");
+const Scoreboard = require("./Scoreboard.Vardorvis");
 const Barrier = require("./Barrier.Vardorvis");
 const Axes = require("./Axes.Vardorvis");
 const Head = require("./Head.Vardorvis");
@@ -258,6 +259,7 @@ class Fight {
     } else {
       player.sendMessage(`Fight duration: <col=ff0000>${Common.formatTicks(ticks)}</col>. Personal best: ${Common.formatTicks(best)}`);
     }
+    Scoreboard.won(ticks, awakened);
     CombatAchievements.judge(this, ticks);
     session.awakened = false;
     session.setExit(false);

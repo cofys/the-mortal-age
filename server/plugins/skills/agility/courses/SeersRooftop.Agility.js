@@ -7,8 +7,14 @@ module.exports = {
   name: "Seers' Village Rooftop",
   lapXp: 570,
   petBase: 35205, // Giant squirrel base chance (Wiki)
+  // The Kandarin diary rerolls a miss: 5%, 10% or 15% for its easy, medium or hard tier (Wiki: Mark of Grace).
   marks: {
     level: 60,
+    rerolls: [
+      { diary: "kandarin", tier: "hard", chance: 0.15 },
+      { diary: "kandarin", tier: "medium", chance: 0.1 },
+      { diary: "kandarin", tier: "easy", chance: 0.05 },
+    ],
     tiles: [[2725, 3494, 3], [2708, 3492, 2], [2712, 3478, 2], [2702, 3473, 3], [2699, 3462, 2]],
   },
   obstacles: [

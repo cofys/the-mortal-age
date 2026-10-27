@@ -48,8 +48,11 @@ function ledger(player) {
   return Number(player.getAttribute(LEDGER_ATTRIBUTE)) || 0;
 }
 
+/** Tokens earned in a room, after "minigame:points" (a league's tier passive multiplies them). */
 function credit(player, amount) {
-  player.setAttribute(LEDGER_ATTRIBUTE, ledger(player) + amount);
+  const award = { player, minigame: "warriors-guild", points: amount };
+  pluginApi.emitCustomEvent("minigame:points", award);
+  player.setAttribute(LEDGER_ATTRIBUTE, ledger(player) + award.points);
 }
 
 /** Pays the ledger out as tokens; false when there is nowhere to put them. */

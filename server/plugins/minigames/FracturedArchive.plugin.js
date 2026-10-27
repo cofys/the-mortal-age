@@ -27,5 +27,6 @@ module.exports = {
     require("./tfa/Vault.FracturedArchive")(api);
     require("./tfa/Spectate.FracturedArchive")(api);
     require("./tfa/Commands.FracturedArchive")(api);
+    require("./tfa/Rewards.FracturedArchive")(api);
   },
 };

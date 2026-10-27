@@ -62,38 +62,47 @@ Not captured, and not built: the golem's "Investigate" and the stairs up to the 
 
 ### The fight
 
-- **Wake** (16306): the wake animation (3321) and graphic (4010), music 885. 3 ticks later it's the fighting angel (16305), and the HP HUD opens (the `BossHud` plugin, [boss-hud.md](boss-hud.md)). It attacks the tick after.
+- **Wake** (16306): the wake animation (3321) and graphic (4010), music 885. 3 ticks later it's the fighting angel (16305), and the HP HUD opens (the `BossHud` plugin, [boss-hud.md](boss-hud.md)). Its first swing comes the tick after.
 - **Its standard attack:** melee (4589, sound 2676) every 6 ticks, landing 2 later. Max 31; Protect from Melee lowers it to 5 rather than blocking it (Wiki).
 - **After three standard attacks, a special,** in turn: the sweep, the blast, the smite. The sweep and the smite hold its standard attacks; the blast doesn't.
+- **Never on a step:** the angel only moves while it blasts (following the player), and live it never starts a sweep or a smite on a tick it stepped. When ours would, it stands still and starts the special 2 ticks later (`specials.settleTicks`). The client holds a step that arrives with an animation like theirs until the animation ends, so a step taken with the sweep's wind-up kept the angel drawn a tile off for the whole enraged chain, its turns and dust offset with it.
 
 **Sweep:**
-- **The wind-up:** the sword drawn to one side (`*_01`).
+- **The wind-up:** the sword drawn to one side (`*_01`), turned to face the player along an axis.
+- **Facing:** it turns to the player with each cleave but the last. After the last it holds still and keeps its facing for 3 ticks, then turns back to the player (as captured).
 - **The cleaves:** 4, 6 ticks apart (enraged: 6, 4 ticks apart). Each animation names the swing and what the sword does next: `right_left` swings right and swaps to the left, `right_02` swings right again, `right_reset` is the last.
-- **Where a cleave hits:** the quarter of the arena between the way the angel faced at the step before (towards the player then) and the sword's side.
+- **Which way a cleave goes:** towards the diagonal between the way the angel faced at the step before (towards the player then) and the sword's side.
   - In the capture, the boss always faced along an axis.
   - Ten of ten captured cleaves fit this rule; the test checks each one.
-- **The tiles** are the captured dust (graphic 2184), stored per quarter as offsets from the angel's centre with their delays.
-- **Being caught:** up to 31, halved by Protect from Melee.
+- **The tiles** (dust, graphic 2184) are half the floor, worked out from where the angel stands:
+  - every arena tile on that diagonal's side of the line through the angel's centre, the angel's own tiles included;
+  - the line itself only at its counter-clockwise end, and the centre;
+  - the dust starts on the centre (delay 0), then 2 cycles under the angel and 2 more per tile out.
+  - All ten captured cleaves match tile for tile, delays included; the test checks their sizes.
+- **Being caught:** up to 31, halved by Protect from Melee. The tile is where the player stood before moving that tick.
 - **Dodging:** out of the quarter, beside the angel on the far side from the sword (not behind it), the player's next hit is sure to land for at least half their max hit (Wiki).
 
 **Blast:**
 - **The throw:** animation 14443 and graphic 4014. The ball (4015) flies to a tile 1–2 tiles from the player, never the player's own, its shadow (1448) on the tile. It lands 6 ticks later (enraged: 5).
-- **On the tile:** it bounces back (graphic 4017 on the player, sound 12056). 2 ticks later the angel takes 18–22, and it throws again, up to 3 throws.
+- **The first throw** turns the angel to the ball's tile until its next turn.
+- **On the tile:** it bounces back to the angel (sound 12056), its graphic (4017) playing on the angel as it arrives, each bounce in the next slot from 11. It throws again in the same tick, up to 3 throws, and 2 ticks later the angel takes 18–22.
 - **Missed:** it blows up over the whole floor (graphic 4016, each tile delayed 2 × its Manhattan distance from the ball; sound 12054). The player takes 30+, halved by Protect from Magic.
 
 **Smite:**
 - **The charge:** animation 4590 and graphic 4011 (enraged: 8543 and 4012).
 - **The strikes:** 5 ticks in (enraged: 5, 9 and 11, as captured). The impact graphic (4013) plays on the player, and the hit lands a tick later.
 - **Protect from Magic turned on in that tick** blocks it all, and makes the player's next hit a max hit. Already on, the player takes a quarter. Off, up to 31.
+- **Its turns:** the smite also holds the turn that falls on its last strike, so the next special comes 18 ticks after the enraged smite started.
+- **The prayer it reads:** the cleaves, the explosion and the smites land in the player's own turn (`onPlayerHitModify`), after that tick's clicks, so a prayer flicked on the tick counts as on live.
 
 **Enrage:**
-- **When:** at 350 hitpoints, at its next attack: "...!".
-- **Then:** the smite, the blast and the sweep in a row.
-- **From then on:** specials back to back, with standard attacks only during the blast (as in the capture, after the opening three).
+- **When:** at 350 hitpoints, at its next attack: "...!", a turn of 4 ticks.
+- **Then:** the smite, the blast and the sweep, over and over.
+- **From then on:** specials back to back, with standard attacks only during the blast. After a sweep its next turn comes 6 ticks after the last cleave, as before the enrage.
 
 ### The kill
 
-- **The death animation** (14448) plays for 7 ticks (`deathTicks` in `npc-combat-defs.json`).
+- **The death animation** (14448) plays for 7 ticks (`deathTicks` in `npc-combat-defs.json`). Whatever special it was in is called off at its last hitpoint.
 - **Then, together:** "Your Mad Angel kill count is: N." (varp 5712), "Fight duration: … Personal best: …" (or "(new personal best)"), the drop, and the corpse (16308). 4 ticks later the HUD fades out, and 4 after that it is cleared, as captured.
 - **The drop** is the Wiki's table (`npc-drops.json`), with four corrections in `NpcDrops`:
   - the sunstone crystal is Fallen From Grace's, so it's left out;
@@ -110,6 +119,8 @@ Not captured, and not built: the golem's "Investigate" and the stairs up to the 
 | --- | --- |
 | The left-handed sweep animations | Named by the cache (`*_left_*`), not seen |
 | The pre-enrage smite's timing | Like the enraged first strike (5 ticks in) |
+| The enrage cry's turn when it isn't during a blast | 4 ticks, as during the captured blast |
+| Bounce graphic slots past the fifth bounce | Back to 11 (the capture's five bounces used 11 to 15) |
 | The sweep's, the explosion's and the smite's damage | Up to 31, 32 and 31 (the Wiki gives 30+ for the explosion) |
 | The specials' order before the enrage | Sweep, blast, smite (the capture shows the first two) |
 | What happens after a kill | The corpse becomes the dormant angel after the respawn time |
@@ -120,8 +131,10 @@ Not captured, and not built: the golem's "Investigate" and the stairs up to the 
 
 The blast's shadow (graphic 1448) lies on a floor covered in flat decorations: marble patterns 1 unit up, and the window light rays (`wyrmscraig_cathedral_lightray01`) 4 units up and see-through.
 - **The real client** paints graphics on a tile after them, so the shadow shows on top.
-- **Ours depth-tests,** so `GfxRenderer` draws every graphic played on a tile 8 units up (6% of a tile) to keep it above them.
-- **The sweep's facing** is sent as face-coordinate turns (`npc.faceTile`), one per step, while the angel is out of combat; combat would otherwise keep it turning to follow the player.
+- **Ours depth-tests,** so both renderers (`GfxRenderer` for WebGL, `WebGPUActors` for WebGPU) draw every graphic played on a tile 8 units up (6% of a tile, `TILE_GFX_LIFT_UNITS`) to keep it above them.
+- **Back-to-back animations:** each sweep animation lasts exactly one cleave (180 or 120 cycles, plus the client's one). The client steps a sequence only through the cycles after the one it arrived in (`NpcEcs.hasSeqStartedBy`), as the real client does; charging it for the earlier cycles of a render frame's batch ended each swing early and showed the idle pose for a moment before the next.
+- **WebGPU's poses** are built by a worker. Until a new swing's first pose is ready (a frame or two), the angel keeps the pose it was showing (`AsyncNpcPoseCache`, up to 150 ms) instead of its unanimated base model, which flashed between swings.
+- **The sweep's facing** is sent as face-coordinate turns (`npc.faceTile`), one per step, while the angel is out of combat; combat would otherwise keep it turning to follow the player. The client offsets a face tile by the NPC's size, so the angel is sent the tile one down-left of the one it should face.
 
 ### Testing
 
@@ -134,3 +147,4 @@ The blast's shadow (graphic 1448) lies on a floor covered in flat decorations: m
   - the fight's rules (each captured cleave's quarter, the attack cycle, the sweep, the blast, the smite, the enrage).
 - **`tests/agility.test.cjs`:** every shortcut's object id is checked against the cache, so nameless multilocs count too.
 - **`::madangelhp <hitpoints>`** (developer): sets your angel's hitpoints, to see the enrage (360) or finish it off.
+- **`::madangelspecial <sweep|blast|smite>`** (developer): has your woken angel use that special now (enraged if it is).

@@ -44,7 +44,7 @@ function fixture(t,{magic=99,hp=100,claimed=false}={}) {
   });
   t.mock.method(TaskManager,'submit',task=>{task.setRunning(true);tasks.push(task);});
   const hooks=new Map();
-  Rewards({core:{},onNpcDialogueVariant(){},onNpcDialogueCondition(){},onItemAction(){},onCustomEvent:(name,fn)=>hooks.set(name,fn)});
+  Rewards({core:{},onBeforeNpcInteraction(){},onPlayerLogout(){},onNpcDialogueVariant(){},onNpcDialogueCondition(){},onItemAction(){},onCustomEvent:(name,fn)=>hooks.set(name,fn)});
   t.mock.method(PluginManager,'emitCustomEvent',(name,event)=>hooks.get(name)?.(event));
   if(claimed)Progress.setClaimed(p,{tier:5,index:4});
   const step=(n=1,apply=true)=>{for(let i=0;i<n;i++){World.processCycle++;for(const task of tasks)if(task.isRunning())task.tick();if(apply)combat.getHitQueue().process(World.getProcessCycle());}};

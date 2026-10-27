@@ -1091,8 +1091,7 @@ test('real Mining task yields normal Barronite deposit XP/message and canonical 
   assert.equal(rockTable.xp, 32);
   assert.equal(rockTable.respawnTicks, 100);
   assert.deepEqual(rockTable.objectIds, [41547, 41548, 41549, 41550]);
-  assert.equal(rockTable.successLow, 82);
-  assert.equal(rockTable.successHigh, 101);
+  assert.deepEqual(rockTable.chance, [80, 100], 'Wiki Barronite rocks skilling success chart');
   assert.deepEqual(rockTable.outcomes.map(outcome => [outcome.itemId, outcome.weight, outcome.xp]), [
     [I.BARRONITE_SHARDS, 76, 16],
     [I.BARRONITE_DEPOSIT, 24, 32],
@@ -1113,8 +1112,8 @@ test('real Mining task yields normal Barronite deposit XP/message and canonical 
   const originalRandom = Math.random;
   try {
     MapObjects.get = () => rockObject;
-    // success roll 0 (hit), outcome roll 0.8 -> deposit (76..99), quantity roll 0.
-    const rolls = [0, 0.8, 0];
+    // gem pre-roll 0 (miss), success roll 0 (hit), outcome roll 0.8 -> deposit (76..99), quantity roll 0.
+    const rolls = [0, 0, 0.8, 0];
     Math.random = () => rolls.shift() ?? 0;
     h.namedObjects.get('Barronite rocks').Mine({
       player: p, object: rockObject,

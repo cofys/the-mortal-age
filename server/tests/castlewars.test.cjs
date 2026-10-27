@@ -385,3 +385,92 @@ test('Castle Wars deaths keep player and bot gear, drop the flag and remove only
   deathPolicy(outside);
   assert.equal(outside.shouldDrop, null, 'ordinary deaths keep their existing rules');
 });
+
+test('the arena is multi-combat: several enemies may hit one player, the lobby and waiting rooms are not', (t) => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { AreaManager } = require('../dist/game/model/areas/AreaManager');
+  const { CombatFactory, CanAttackResponse } = require('../dist/game/content/combat/CombatFactory');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  t.mock.method(TaskManager, 'cancelTasks', () => {});
+  // The real area classes, attached to a copy of the game so the fakes the other tests rely on
+  // stay in place; the phase is pinned to a live match so the game area admits the players.
+  const island = { ...game, getPhase: () => game.PHASE.ACTIVE };
+  const registered = [];
+  Areas({
+    core, registerArea: (area) => registered.push(area), onServerStartup() {}, onPlayerLogin() {}, onCanEquip() {},
+    onCanUnequip() {}, onCustomEvent() {}, onShouldDropItemsOnDeath() {}, onPlayerDeath() {},
+  }, island);
+  AreaManager.areas.push(...registered);
+  t.after(() => {
+    for (const area of registered) AreaManager.areas.splice(AreaManager.areas.indexOf(area), 1);
+  });
+  const bounds = { gameArea: data.GAME_BOUNDS, lobbyArea: data.LOBBY_BOUNDS };
+  for (const [name, list] of Object.entries(bounds)) assert.equal(island[name].getBoundaries(), list, `${name} keeps its bounds`);
+
+  let index = 100;
+  const messages = new Map();
+  function fighter(location, teamId = null) {
+    const p = new Player(null, location);
+    p.setUsername(`cw_multi_${++index}`); p.setIndex(index); p.setRegistered(true);
+    t.mock.method(p, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+    t.mock.method(p, 'sendMessage', (message) => messages.set(p, message));
+    if (teamId) island.setTeamId(p, teamId);
+    AreaManager.process(p);
+    t.after(() => { p.setArea(null); island.setTeamId(p, null); p.setRegistered(false); });
+    return p;
+  }
+
+  // (a) + (c): inside the arena the multi flag and icon are on, in the lobby and waiting rooms off.
+  const field = [new core.Location(2400, 3104, 0), new core.Location(2401, 3104, 0), new core.Location(2402, 3104, 0)];
+  const [target, first, second] = [
+    fighter(field[0], TEAM.SARADOMIN), fighter(field[1], TEAM.ZAMORAK), fighter(field[2], TEAM.ZAMORAK),
+  ];
+  for (const p of [target, first, second]) {
+    assert.equal(p.getArea(), island.gameArea, 'the field tile resolves to the real game area');
+    assert.equal(AreaManager.inMulti(p), true, 'the arena is multi-combat');
+    assert.equal(p.getMultiIcon(), 1, 'the multi icon is sent after an area tick');
+  }
+  // A fresh moveTo leaves needsPlacement set, which validTarget refuses, so a separate player
+  // walks the castle floors and the tunnels. The game grants the spawn-room idle allowance on
+  // entry; without it the area tick ejects the probe from its own respawn room to the lobby.
+  const probe = fighter(new core.Location(2400, 3105, 0), TEAM.SARADOMIN);
+  island.resetIdleTicks(probe);
+  for (const [x, y, z] of [[2426, 3076, 1], [2429, 3074, 3], [2372, 3131, 1], [2385, 9510, 0], [2410, 9480, 0]]) {
+    probe.moveTo(new core.Location(x, y, z));
+    AreaManager.process(probe);
+    const stood = probe.getLocation();
+    assert.deepEqual([stood.getX(), stood.getY(), stood.getZ()], [x, y, z], `the probe still stands on ${x},${y},${z} after the area tick`);
+    assert.equal(probe.getArea(), island.gameArea, `${x},${y},${z} (castle floors and tunnels) is in the arena`);
+    assert.equal(AreaManager.inMulti(probe), true, `${x},${y},${z} is multi-combat`);
+  }
+  const lobby = fighter(new core.Location(2440, 3089, 0));
+  const waiting = fighter(new core.Location(2381, 9489, 0));
+  assert.equal(lobby.getArea(), island.lobbyArea);
+  assert.equal(waiting.getArea(), island.waitingAreas[TEAM.SARADOMIN]);
+  for (const p of [lobby, waiting]) {
+    assert.equal(AreaManager.inMulti(p), false, `${p.getArea().getName()} is not multi-combat`);
+    assert.equal(p.getMultiIcon(), 0);
+  }
+
+  // (b): the first Zamorak attacker engages; the second may still pile on, a teammate still may not.
+  assert.equal(CombatFactory.canAttackPermission(first, target), CanAttackResponse.CAN_ATTACK);
+  first.getCombat().attack(target);
+  target.getCombat().setUnderAttack(first);
+  target.getCombat().attack(first);
+  assert.equal(CombatFactory.canAttackPermission(second, target), CanAttackResponse.CAN_ATTACK,
+    'a second enemy is not refused with the single-combat verdict');
+  assert.equal(CombatFactory.canAttackPermission(second, first), CanAttackResponse.CANT_ATTACK_IN_AREA, 'friendly fire stays refused');
+  assert.equal(messages.get(second), "You can't attack your own team in Castle Wars.");
+  // The shipped world.json also lists the arena under its multi-combat zones, but a deployment's
+  // world.local.json replaces that list wholesale, so the area must carry the rule on its own.
+  const { Wilderness } = require('../dist/game/content/wilderness/Wilderness');
+  t.mock.method(Wilderness, 'isMulti', () => false);
+  for (const p of [target, first, second]) assert.equal(AreaManager.inMulti(p), true, 'the area alone keeps the arena multi-combat');
+  assert.equal(CombatFactory.canAttackPermission(second, target), CanAttackResponse.CAN_ATTACK,
+    'a second enemy still piles on with no world.json zone behind it');
+  const area = t.mock.method(island.gameArea, 'isMulti', () => false);
+  assert.equal(CombatFactory.canAttackPermission(second, target), CanAttackResponse.TARGET_IN_COMBAT,
+    'without the area rule and the zone the arena is single-way combat');
+  area.mock.restore();
+  assert.equal(CombatFactory.canAttackPermission(second, target), CanAttackResponse.CAN_ATTACK);
+});

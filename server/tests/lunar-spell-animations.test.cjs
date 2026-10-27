@@ -97,7 +97,7 @@ test("String Jewellery casts with its own animation and graphic", () => {
 });
 
 test("Vengeance Other: the caster pushes the magic, the target only shows the graphic", () => {
-  const player = caster();
+  const player = caster({ getVengeanceTimer: () => ({ finished: () => true, start() {} }) });
   const target = caster({
     hasVengeanceReturn: () => false,
     getVengeanceTimer: () => ({ finished: () => true, start() {} }),

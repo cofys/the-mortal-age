@@ -14,6 +14,7 @@
 const Common = require("./Common.SoulWars");
 const Match = require("./Match.SoulWars");
 const Control = require("./Control.SoulWars");
+const Scoreboard = require("./Scoreboard.SoulWars");
 
 /** Each player's ghost and immunity ends, in game ticks. */
 const ghosts = new Map();
@@ -94,6 +95,7 @@ function died(event) {
   if (killer?.isPlayer?.() && game.teamOf(killer) && game.teamOf(killer) !== team) {
     game.statsOf(killer).kills++;
     Common.addVarp(killer, "total_kills", 1);
+    Scoreboard.playerKilled(game, killer, player);
     game.active?.(killer);
   }
   player.moveTo(game.area.at(respawnTile(game, team)));

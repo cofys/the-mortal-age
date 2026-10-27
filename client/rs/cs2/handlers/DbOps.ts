@@ -1,9 +1,22 @@
 /**
  * Database operations
  */
-import { isReferenceType, isStringType } from "../../config/db/ScriptVarType";
+import { getDbRowOverride } from "../../../common/gamemode/GamemodeContentStore";
+import { isReferenceType, isStringType, ScriptVarTypeId } from "../../config/db/ScriptVarType";
 import { Opcodes } from "../Opcodes";
 import type { HandlerMap } from "./HandlerTypes";
+
+/**
+ * A server-sent row's column (GamemodeContentStore dbRowOverrides): its values, typed by the
+ * table's column definition when the cache knows the table, else by the values themselves.
+ */
+function overrideColumn(ctx: any, tableId: number, columnId: number, override: { columns: Record<string, any[]> }): { values: any[]; types: number[] } | null {
+    const values = override.columns[columnId] ?? override.columns[String(columnId)];
+    if (!Array.isArray(values) || values.length === 0) return null;
+    const defined = ctx.dbRepository?.getTables().get(tableId)?.getColumn(columnId)?.types;
+    const types = defined?.length ? defined : values.map((value) => (typeof value === "string" ? ScriptVarTypeId.STRING : ScriptVarTypeId.INTEGER));
+    return { values, types };
+}
 
 /**
  * Helper to get the effective value for a column in a row, considering table defaults.
@@ -194,7 +207,12 @@ export function registerDbOps(handlers: HandlerMap): void {
         const columnId = (tableColumnPacked >> 4) & 0x7f;
         const element = tupleElementOf(tableColumnPacked);
 
-        if (ctx.dbRepository) {
+        // A server-sent row stands in for the cache's (a league's tasks, say); a column it lacks takes the table's defaults.
+        const override = getDbRowOverride(rowId);
+        if (override) {
+            const col = overrideColumn(ctx, override.tableId, columnId, override);
+            if (col && pushTuple(ctx, col.types, col.values, subIndex, element)) return;
+        } else if (ctx.dbRepository) {
             const rows = ctx.dbRepository.getRows(tableId);
             const row = rows.find((r) => r.id === rowId);
             const col = row?.getColumn(columnId);
@@ -236,7 +254,11 @@ export function registerDbOps(handlers: HandlerMap): void {
 
         let count = 0;
 
-        if (ctx.dbRepository) {
+        const override = getDbRowOverride(rowId);
+        if (override) {
+            const col = overrideColumn(ctx, override.tableId, columnId, override);
+            if (col) count = Math.floor(col.values.length / col.types.length);
+        } else if (ctx.dbRepository) {
             const rows = ctx.dbRepository.getRows(tableId);
             const row = rows.find((r) => r.id === rowId);
             if (row) {
@@ -312,6 +334,11 @@ export function registerDbOps(handlers: HandlerMap): void {
 
     handlers.set(Opcodes.DB_GETROWTABLE, (ctx) => {
         const rowId = ctx.intStack[--ctx.intStackSize];
+        const override = getDbRowOverride(rowId);
+        if (override) {
+            ctx.pushInt(override.tableId | 0);
+            return;
+        }
         // Look up the row and return its table ID
         if (ctx.dbRepository) {
             const row = ctx.dbRepository.getRowById(rowId);

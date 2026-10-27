@@ -72,7 +72,7 @@ assert.equal(questListMenuEntries(read as any, rfd.map(q => ({ ...q, status: "FI
 const option = (text: string, childIndex: number): any => ({ text, childIndex, color: 0, textColor: 0, _absX: 0, _absY: childIndex * 20, _absWidth: 100, _absHeight: 20 });
 const options = [option("Select an option", 0), option("What's wrong?", 1), option("Bye.", 2)];
 const invalidated: any[] = [];
-const manager: any = { findWidget: (g: number, c: number) => (g === 219 && c === 1 ? { uid: 1 } : undefined), isEffectivelyHidden: () => false, getDynamicChildrenByParent: () => options, getStaticChildrenByParentUid: () => [], invalidateWidgetRender: (w: any) => invalidated.push(w) };
+const manager: any = { findLoadedWidget: (g: number, c: number) => (g === 219 && c === 1 ? { uid: 1 } : undefined), isEffectivelyHidden: () => false, getDynamicChildrenByParent: () => options, getStaticChildrenByParentUid: () => [], invalidateWidgetRender: (w: any) => invalidated.push(w) };
 applyChoiceRules(manager, step.choiceRules, 0xff0000ff, { x: 500, y: 500 });
 assert.equal(options[1].text, "[1] What's wrong?"); assert.equal(options[1].color, 0x0000ff);
 applyChoiceRules(manager, step.choiceRules, 0xff0000ff);

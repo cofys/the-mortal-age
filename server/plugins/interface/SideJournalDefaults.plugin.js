@@ -55,6 +55,8 @@ let pluginApi;
 function mountSideJournalContent(player, groupId, tabIndex) {
   player.getPacketSender().sendSubInterface(SIDE_JOURNAL_TAB_CONTAINER_UID, groupId);
   player.getPacketSender().sendVarbit(VARBIT_SIDE_JOURNAL_SELECTED_TAB, tabIndex);
+  // Other journal content (the Leagues tab) learns its panel was replaced.
+  pluginApi?.emitCustomEvent("journal:tab-mounted", { player, groupId, tabIndex });
   if (groupId === INTERFACE_QUEST_LIST_ID) {
     // The client renders the quest list only while 399 is mounted and purges the
     // row flags on unmount, so the quest runtime repopulates on every open.
@@ -72,6 +74,16 @@ function mountSideJournalContent(player, groupId, tabIndex) {
     player.getPacketSender().sendInterfaceFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ROW_COLLECTION_LOG, ROW_COLLECTION_LOG, FLAGS_OP1_2);
     player.getPacketSender().sendInterfaceFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ROW_PLAYTIME, ROW_PLAYTIME, FLAGS_OP1);
   }
+  pluginApi?.emitCustomEvent("side-journal:mounted", { player, groupId, tabIndex });
+}
+
+function mountRequested(event) {
+  const { player, groupId, tabIndex } = event;
+  const validGroup = Number.isInteger(groupId) && groupId >= 0 && groupId <= 65535;
+  const validTab = Number.isInteger(tabIndex) && tabIndex >= 0 && tabIndex <= 4;
+  if (!player || !validGroup || !validTab) return;
+  mountSideJournalContent(player, groupId, tabIndex);
+  event.mounted = true;
 }
 
 function sessionMinutes(player) {
@@ -83,6 +95,7 @@ module.exports = {
   name: "SideJournalDefaults",
   register(api) {
     pluginApi = api;
+    api.onCustomEvent("side-journal:mount", mountRequested);
     api.onPlayerLogin(({ player }) => {
       sessionStartByPlayer.set(player, Date.now());
     });

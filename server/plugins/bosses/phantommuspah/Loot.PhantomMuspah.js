@@ -12,6 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 const Common = require("./Common.PhantomMuspah");
+const Scoreboard = require("./Scoreboard.PhantomMuspah");
 
 const UNTRADEABLE_DROP = (name) => `<col=ef1020>Untradeable drop: ${name}</col>`;
 
@@ -43,6 +44,7 @@ function onMuspahDeath({ npc, killer }) {
   } else {
     player.sendMessage(`Fight duration: <col=ff0000>${formatTicks(ticks)}</col>. Personal best: ${formatTicks(best)}`);
   }
+  Scoreboard.won(ticks);
   fight.lootTicks = ticks;
   fight.finished();
 }

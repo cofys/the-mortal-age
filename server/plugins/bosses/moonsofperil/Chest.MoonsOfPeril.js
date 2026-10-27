@@ -13,13 +13,14 @@
  * any of the twelve pieces (no duplicate protection); sulphurous essence gives 50 Runecraft xp each.
  */
 const Common = require("./Common.MoonsOfPeril");
+const Scoreboard = require("./Scoreboard.MoonsOfPeril");
 
 /** What is waiting in the chest: [{ id, amount }]. */
 const CHEST_ATTRIBUTE = "moons-of-peril:chest";
 /** Each set's pieces already given since the set was last completed: { blood: [names], ... }. */
 const PIECES_ATTRIBUTE = "moons-of-peril:set-pieces";
 /** The player's own Lunar Chest count (Combat Achievements keeps its copy). */
-const COUNT_ATTRIBUTE = "moons-of-peril:chests";
+const COUNT_ATTRIBUTE = Scoreboard.CHESTS_ATTRIBUTE;
 
 const MONSTER = "Moons of Peril";
 
@@ -118,6 +119,7 @@ function unnoted(id) {
 function count(player) {
   const next = (Number(player.getAttribute(COUNT_ATTRIBUTE)) || 0) + 1;
   player.setAttribute(COUNT_ATTRIBUTE, next);
+  Scoreboard.chestOpened();
   const request = {
     player, monster: MONSTER, count: next,
     announce: (total) => player.sendMessage(chest().countMessage.replace("{count}", total)),
@@ -253,14 +255,15 @@ function allPieces() {
   return Object.values(chest().sets).flat();
 }
 
-function isEyatlalli(npc) {
+/** By the name `player` sees: the shrine's Eyatlalli is a nameless parent (pmoon_eyatlalli_postquest). */
+function isEyatlalli(npc, player) {
   return npc?.getDefinition?.()?.getName?.() === Common.data.eyatlalli.npc
-    || npc?.getCurrentDefinition?.()?.getName?.() === Common.data.eyatlalli.npc;
+    || npc?.getCurrentDefinition?.(player)?.getName?.() === Common.data.eyatlalli.npc;
 }
 
 function useOnEyatlalli(event) {
   const { player, target, itemId: used } = event;
-  if (!isEyatlalli(target)) return;
+  if (!isEyatlalli(target, player)) return;
   const { eyatlalli } = Common.data;
   if (used === itemId(eyatlalli.essence.item)) {
     event.handled = true;

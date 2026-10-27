@@ -13,6 +13,7 @@ const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../src/main/typescript/elvarg/game/task/TaskManager");
 const { FLAG_OP1, TYPE_GRAPHIC, TYPE_TEXT, createWidgetGroup } = require("../interface/widgetGroup");
 const { EQUIPMENT_SLOTS, addEquipmentWidgets } = require("../modes/pvp/PresetsWidget.PvpMode");
+const Scoreboard = require("./duelarena/Scoreboard.DuelArena");
 
 // Cache 237: confirmation group 756 and rule config varp 286.
 const ARENA = new Boundary(3326, 3383, 3197, 3295, 0);
@@ -320,6 +321,9 @@ function end(session, loser) {
   const fought = session.stage === "fight";
   // Remove both links before resetting players: death/close/disconnect may re-enter.
   for (const player of session.players) sessions.delete(player);
+  // A duel that reached the arena and has a loser: its record (the Emir's Arena scoreboards hear it).
+  const winner = fought && loser ? session.players.find(player => player !== loser) : null;
+  if (winner) pluginApi.emitCustomEvent("duelarena:duel-won", { winner, loser });
   for (const player of session.players) {
     if (fought && player.getHitpoints() <= 0) pendingSafeDeaths.add(player);
     resetState(player);
@@ -779,5 +783,8 @@ module.exports = {
     api.onCanEquip(canEquip);
     api.onCanUnequip(canUnequip);
     api.onServerShutdown(shutdown);
+    Scoreboard.attach(api);
   },
+  /** For server/tests/pvp-arena-scoreboard.test.cjs. */
+  _test: { end, sessions },
 };

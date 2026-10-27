@@ -121,6 +121,15 @@ module.exports = {
                 webpackConfig.cache.name = `${webpackConfig.mode}-${checkout}`;
             }
 
+            // Type errors come from the editor and tsc. In dev, CRA's forked type checker re-checks
+            // the whole client after every pull or branch switch: half a minute of CPU beside the
+            // build, and a terminal that looks hung until it finishes.
+            if (webpackConfig.mode === "development") {
+                webpackConfig.plugins = webpackConfig.plugins.filter(
+                    (plugin) => plugin.constructor.name !== "ForkTsCheckerWebpackPlugin",
+                );
+            }
+
             webpackConfig.module.rules.push({
                 resourceQuery: /url/,
                 type: "asset/resource",

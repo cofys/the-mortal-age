@@ -1,5 +1,5 @@
 {
-  "$comment": "Prayer's bones and the Ectofuntus bonemeal they grind into (docs/prayer-bones.md). Names are obj gamevals. xp: burying, from each bone's OSRS Wiki page (tsps experience is whole, so the Prayer plugin rounds up). restore: Prayer points given back when buried in the Catacombs of Kourend or with a dragonbone necklace (Wiki, Dragonbone necklace). bonemeal: what the Ectofuntus grinder makes of it (Wiki, Bonemeal). crush: false for bones the bonecrusher leaves (tertiary drops, Wiki). level: Prayer needed to bury or worship with it.",
+  "$comment": "Prayer's bones and the Ectofuntus bonemeal they grind into (docs/prayer-bones.md). Names are obj gamevals. xp: burying, from each bone's OSRS Wiki page (SkillManager retains fractional experience in tenths). restore: Prayer points given back when buried in the Catacombs of Kourend or with a dragonbone necklace (Wiki, Dragonbone necklace). bonemeal: what the Ectofuntus grinder makes of it (Wiki, Bonemeal). crush: false for bones the bonecrusher leaves (tertiary drops, Wiki). level: Prayer needed to bury or worship with it.",
   "bones": [
     { "obj": "bones", "xp": 4.5, "restore": 1, "bonemeal": "pot_bonemeal" },
     { "obj": "bones_burnt", "xp": 4.5, "restore": 1, "bonemeal": "pot_bonemeal_burnt" },

@@ -38,8 +38,23 @@ function getCore() {
   return core;
 }
 
+/** The Crafting level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
 function craftingLevel(player) {
-  return player.getSkillManager().getCurrentLevel(core.Skill.CRAFTING);
+  const request = { player, skill: core.Skill.CRAFTING, boost: 0 };
+  api.emitCustomEvent("skills:level-boost", request);
+  return player.getSkillManager().getCurrentLevel(core.Skill.CRAFTING) + Math.max(0, request.boost | 0);
+}
+
+/** How many items one cycle makes ("skills:actions-per-cycle", a league relic's all at once); 1 unless content says more. */
+function actionsPerCycle(player, kind) {
+  const request = { player, skill: core.Skill.CRAFTING, kind, actions: 1 };
+  api.emitCustomEvent("skills:actions-per-cycle", request);
+  return Math.max(1, request.actions | 0);
+}
+
+/** A product made, with its amount and XP ("skills:produced", for content that adds to it: a league relic's extra product). */
+function produced(player, itemId, amount, xp) {
+  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.CRAFTING, itemId, amount, xp });
 }
 
 function addCraftingXp(player, xp) {
@@ -106,7 +121,7 @@ function openMakeMenu(player, { title, mode, items, maxAmount, choose }) {
  */
 function startMaking(player, {
   amount, startTick = 0, firstTick, interval, animation = null, sound = null,
-  onAnimate = null, has, make, anchor = null, resetAnimation = false,
+  onAnimate = null, has, make, anchor = null, resetAnimation = false, kind = null,
 }) {
   stopCrafting(player);
   if (!has()) return;
@@ -133,7 +148,14 @@ function startMaking(player, {
       if (tick === startTick) play();
       if (tick < firstTick || (tick - firstTick) % interval !== 0) return;
       if (tick !== startTick) play();
-      if (!make() || --this.remaining <= 0 || !has()) this.stop();
+      // Content may make several items in the one cycle ("skills:actions-per-cycle", by the loop's `kind`).
+      const actions = actionsPerCycle(player, kind);
+      for (let done = 0; done < actions; done++) {
+        if (!make() || --this.remaining <= 0 || !has()) {
+          this.stop();
+          return;
+        }
+      }
     }
     stop() {
       super.stop();
@@ -158,6 +180,8 @@ module.exports = {
   getApi,
   getCore,
   craftingLevel,
+  actionsPerCycle,
+  produced,
   addCraftingXp,
   isMembersWorld,
   available,

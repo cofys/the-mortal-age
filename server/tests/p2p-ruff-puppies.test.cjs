@@ -189,7 +189,8 @@ test('all 36 cache puppy forms use their real items and native follower pickup/d
   assert.ok(encodedSounds(p).some(packet => packet.equals(encodeSound(2582, { loops: 1, delay: 20 }))));
   assert.equal(Pets.__internals.pickup(p, npc), false); assert.equal(p.items.get(PUPPY), 1);
   h.drop(p); h.hook('onPlayerLogout', { player: p });
-  assert.equal(p.items.get(PUPPY), 1); assert.equal(p.getAttribute('pets:current'), null);
+  assert.equal(p.items.get(PUPPY), 0); assert.equal(p.getAttribute('pets:current'), null);
+  assert.equal(p.getAttribute('pets:active-item'), PUPPY);
   h.hook('onPlayerLogin', { player: p });
   assert.equal(p.items.get(PUPPY), 0); assert.equal(p.getAttribute('pets:current').getId(), PUPPY_NPC);
   assert.deepEqual(Pets.__internals.getOwnedPetItems(p), []);

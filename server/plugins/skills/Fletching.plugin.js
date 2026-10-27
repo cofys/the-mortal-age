@@ -18,8 +18,21 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 
+const Shared = require("./fletching/Shared.Fletching");
+
+/** "fletching:shafts": the arrow shafts request.logId fletches into, how many and the XP, for content that fletches as it chops (a league relic); a log with no arrow-shaft recipe answers nothing. */
+function answerShafts(request) {
+  const shaft = Shared.getCore().ItemIdentifiers.ARROW_SHAFT;
+  const recipe = Shared.getRecipes().find((candidate) => candidate.outputId === shaft
+    && candidate.materials.some((material) => material.ids.includes(request.logId)));
+  if (!recipe) return;
+  request.itemId = recipe.outputId;
+  request.amount = recipe.amount;
+  request.xp = recipe.xp;
+}
+
 const UNITS = [
-  require("./fletching/Shared.Fletching"),
+  Shared,
   require("./fletching/Recipes.Fletching"),
   require("./fletching/Spool.Fletching"),
   require("./fletching/Diaries.Fletching"),
@@ -194,6 +207,7 @@ class FletchingBotTask extends Task {
 }
 
 module.exports = {
+  answerShafts,
   name: "Fletching",
   members: true,
   // Bot entry points + recipe table for citizen brains.
@@ -216,5 +230,6 @@ module.exports = {
         stopFletching(ACTIVE_FLETCHING_SESSIONS, player, false);
       }
     });
+    api.onCustomEvent("fletching:shafts", answerShafts);
   },
 };

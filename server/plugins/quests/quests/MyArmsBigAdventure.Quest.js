@@ -21,9 +21,10 @@
  *
  * Requirements (wiki): Eadgar's Ruse, Troll Stronghold (both implied by the
  * former) and Jungle Potion complete, 29 Farming (boostable), 10 Woodcutting,
- * and 60% Tai Bwo Wannai favour. The cleanup minigame is not implemented and
- * favour is not tracked elsewhere, so the quest grants 60% when it starts and
- * subtracts it at Murcaily (varbit 907 "favour_percentage"), matching the wiki.
+ * and 60% Tai Bwo Wannai favour. The favour is the cleanup minigame's
+ * (TaiBwoWannaiCleanup, asked through "tai-bwo-wannai-cleanup:favour"); Murcaily
+ * takes the 60% for the tubers, matching the wiki. Favour this quest granted
+ * itself before the minigame existed is handed over to it at login.
  * The Feud is also required by the wiki but has no plugin, so it is not gated.
  *
  * Source: https://oldschool.runescape.wiki/w/My_Arm%27s_Big_Adventure and
@@ -125,7 +126,6 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
   const VARBIT_FIRST_GIANT_ROC = 2797;
   const VARBIT_BARNABYSWAP = 2798;
   const VARBIT_FAKEPATCH = 2799;
-  const VARBIT_TAI_BWO_FAVOUR = 907; // favour_percentage (varp 535 bits 2-11)
 
   // Canonical stage values (see header).
   const STAGE_STARTED = 40;
@@ -433,7 +433,6 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
       // A fresh start clears a previous run's state (e.g. after ::quest reset).
       resetRunState(player);
       advanceTo(player, STAGE_STARTED);
-      if (!hasFavour(player)) setFavour(player, FAVOUR_REQUIRED);
     }
   }
 
@@ -461,7 +460,7 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
         return;
       case "zFrk_S": // Murcaily gives lots more (leave the message showing)
         give(player, HARDY_GOUT_TUBERS_ITEM_ID);
-        if (hasFavour(player)) setFavour(player, Math.max(0, favour(player) - FAVOUR_REQUIRED));
+        if (hasFavour(player)) api.emitCustomEvent("tai-bwo-wannai-cleanup:spend-favour", { player, percentage: FAVOUR_REQUIRED });
         advanceTo(player, STAGE_TUBERS);
         return;
       case "PU8zhD": // Baby Roc appears
@@ -825,6 +824,7 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
   }
 
   function handleLogin({ player }) {
+    handOverFavour(player);
     syncNpcs(player);
     syncVarbits(player);
     refreshQuestList(player);
@@ -999,12 +999,19 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
     player.getPacketSender().sendVarbit(VARBIT_FAKEPATCH, value);
   }
 
+  /** The Tai Bwo Wannai Cleanup favour percentage (0 without that plugin). */
   function favour(player) {
-    return Number(player.getAttribute(FAVOUR_ATTRIBUTE)) || 0;
+    const request = { player, percentage: 0 };
+    api.emitCustomEvent("tai-bwo-wannai-cleanup:favour", request);
+    return request.percentage;
   }
-  function setFavour(player, value) {
-    player.setAttribute(FAVOUR_ATTRIBUTE, value);
-    player.getPacketSender().sendVarbit(VARBIT_TAI_BWO_FAVOUR, value);
+  /** Favour granted here before the cleanup was implemented goes to the cleanup once. */
+  function handOverFavour(player) {
+    const granted = Number(player.getAttribute(FAVOUR_ATTRIBUTE)) || 0;
+    if (granted <= 0) return;
+    const request = { player, percentage: granted, handled: false };
+    api.emitCustomEvent("tai-bwo-wannai-cleanup:add-favour", request);
+    if (request.handled) player.setAttribute(FAVOUR_ATTRIBUTE, 0);
   }
   function hasFavour(player) {
     return favour(player) >= FAVOUR_REQUIRED;
@@ -1060,7 +1067,6 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
     sender.sendVarbit(VARBIT_FIRST_GIANT_ROC, firstGiantRoc(player) ? 1 : 0);
     sender.sendVarbit(VARBIT_BARNABYSWAP, plantCureGiven(player) ? 1 : 0);
     sender.sendVarbit(VARBIT_FAKEPATCH, fakePatch(player));
-    sender.sendVarbit(VARBIT_TAI_BWO_FAVOUR, favour(player));
     sender.sendVarbit(VARBIT_SHIPCHAT, 0);
   }
 

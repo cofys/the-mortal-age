@@ -26,6 +26,7 @@
  */
 const Data = require("./Data.Slayer");
 const State = require("./State.Slayer");
+const SlaughterBracelet = require("./SlaughterBracelet.Slayer");
 
 const COMPLETE = "<col=ef1020>You have completed your task! You killed</col> {amount} {name}<col=ef1020>. You gained</col> {xp} xp<col=ef1020>.";
 const FREE_TASK = "<col=ef1020>You've completed </col>{streak} {tasks}<col=ef1020> and will need </col>{more} more<col=ef1020> before you start receiving Slayer points; return to a Slayer master.</col>";
@@ -335,25 +336,48 @@ function countsForTarget(task, { id, name, location }) {
 }
 
 /**
- * "slayer:on-task": is this NPC the player's current assignment? Either { npc } (a live NPC) or
- * { npcId, location } for an NPC by id, such as a form it isn't in yet.
+ * "slayer:always-on-task" { player, npc?, npcId, name, onTask }: asked for a Slayer monster the
+ * player's task does not cover; content may count every one as on task (a league relic). Task
+ * credit then gives the monster's Slayer XP and its superior, without counting down the task.
+ */
+function alwaysOnTask(player, npc, npcId, name) {
+  if (!player || !Data.isTaskMonster(npcId, name)) return false;
+  if (npc) {
+    // An encounter's excluded NPC (an alternate mode) is never on task, as countsFor has it.
+    const query = { player, npc, eligible: true };
+    api.emitCustomEvent("slayer:target-eligible", query);
+    if (query.eligible === false) return false;
+  }
+  const request = { player, npc, npcId, name, onTask: false };
+  api.emitCustomEvent("slayer:always-on-task", request);
+  return request.onTask === true;
+}
+
+/**
+ * "slayer:on-task": is this NPC the player's current assignment (or counted as one,
+ * "slayer:always-on-task")? Either { npc } (a live NPC) or { npcId, location } for an NPC by id,
+ * such as a form it isn't in yet.
  */
 function onTaskEvent(request) {
   const task = current(request.player);
   if (Number.isInteger(request.npcId)) {
     const name = core.NpcDefinition.forId(request.npcId)?.getName?.() ?? "";
     const location = request.location ?? request.npc?.getLocation?.();
-    request.onTask = countsForTarget(task, { id: request.npcId, name, location });
+    request.onTask = countsForTarget(task, { id: request.npcId, name, location }) || alwaysOnTask(request.player, request.npc ?? null, request.npcId, name);
     return;
   }
-  request.onTask = countsFor(task, request.npc, request.player);
+  request.onTask = countsFor(task, request.npc, request.player)
+    || (!!request.npc && alwaysOnTask(request.player, request.npc, request.npc.getId(), npcName(request.npc)));
 }
 
 function npcKilled({ killer, npc }) {
   if (!killer?.isPlayer?.() || !npc) return;
   const player = killer;
   const task = current(player);
-  if (!countsFor(task, npc, player)) return;
+  if (!countsFor(task, npc, player)) {
+    offTaskKill(player, npc);
+    return;
+  }
   const hitpoints = (npc.getCurrentDefinition?.() ?? npc.getDefinition()).getHitpoints();
   // Superiors.Slayer.js may spawn a superior, or zero this for a superior's own XP.
   const kill = { player, npc, xp: hitpoints };
@@ -364,10 +388,20 @@ function npcKilled({ killer, npc }) {
   if (xp > 0) player.getSkillManager().addExperiences(core.Skill.SLAYER, xp);
   player.setAttribute(TASK_XP_ATTRIBUTE, (Number(player.getAttribute(TASK_XP_ATTRIBUTE)) || 0) + (kill.taskXp ?? kill.xp) * boost);
   if (task.modifier) killModifiers.set(npc, { player, modifier: task.modifier });
+  if (SlaughterBracelet.preventsDecrement(player, npc)) return;
   const remaining = task.count - 1;
   State.setVarp(player, "slayer_count", remaining);
   if (remaining > 0) return;
   complete(player, task);
+}
+
+/** A kill counted as on task with no task covering it ("slayer:always-on-task"): its XP and superior, no count. */
+function offTaskKill(player, npc) {
+  if (!alwaysOnTask(player, npc, npc.getId(), npcName(npc))) return;
+  const hitpoints = (npc.getCurrentDefinition?.() ?? npc.getDefinition()).getHitpoints();
+  const kill = { player, npc, xp: hitpoints, offTask: true };
+  api.emitCustomEvent("slayer:task-kill", kill);
+  if (kill.xp > 0) player.getSkillManager().addExperiences(core.Skill.SLAYER, kill.xp);
 }
 
 function complete(player, task) {
@@ -382,18 +416,18 @@ function complete(player, task) {
   const streakVarbit = task.masterId === KRYSTILIA ? "slayer_wilderness_tasks_completed" : "slayer_tasks_completed";
   const streak = State.varbit(player, streakVarbit) + 1;
   State.setVarbit(player, streakVarbit, streak);
-  const { freeTasks } = Data.config;
   const base = master?.points ?? 0;
   if (base === NO_POINTS) {
     player.sendMessage(fill(NO_POINTS_MASTER, { streak }));
     return;
   }
+  const reward = taskReward(player, task.masterId);
   const totalTasks = State.varbit(player, "slayer_tasks_completed") + State.varbit(player, "slayer_wilderness_tasks_completed");
-  if (totalTasks <= freeTasks) {
-    player.sendMessage(fill(FREE_TASK, { streak, tasks: streak === 1 ? "task" : "tasks", more: freeTasks + 1 - totalTasks }));
+  if (totalTasks <= reward.freeTasks) {
+    player.sendMessage(fill(FREE_TASK, { streak, tasks: streak === 1 ? "task" : "tasks", more: reward.freeTasks + 1 - totalTasks }));
     return;
   }
-  const points = base * multiplier(streak);
+  const points = base * multiplier(streak) * reward.multiplier;
   grantPoints(player, points);
   player.sendMessage(fill(POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
 }
@@ -413,8 +447,19 @@ function completeMortimer(player, taskModifier) {
     player.sendMessage(fill(MORTIMER_NO_POINTS, { streak }));
     return;
   }
-  grantPoints(player, taskModifier.value);
-  player.sendMessage(fill(MORTIMER_POINTS, { streak, points: taskModifier.value, total: State.varbit(player, "slayer_points") }));
+  const points = taskModifier.value * taskReward(player, MORTIMER).multiplier;
+  grantPoints(player, points);
+  player.sendMessage(fill(MORTIMER_POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
+}
+
+/**
+ * "slayer:task-reward" { player, master, freeTasks, multiplier }, asked as a task completes:
+ * plugins lower the tasks that pay nothing or multiply the points (a league's tier passive).
+ */
+function taskReward(player, master) {
+  const reward = { player, master, freeTasks: Data.config.freeTasks, multiplier: 1 };
+  api.emitCustomEvent("slayer:task-reward", reward);
+  return reward;
 }
 
 function multiplier(streak) {
@@ -466,6 +511,18 @@ function clueChance(request) {
   if (boost > 1) request.rules.push({ pattern: CLUE_SCROLL, multiplier: boost });
 }
 
+/**
+ * "slayer:leave-task-area" { player, npcId, message }: the player left a place where `npcId` is fought for
+ * good ("the fight cave"), so a task of that monster is cleared without resetting the streak
+ * (Wiki: TzTok-Jad, Slayer).
+ */
+function leaveTaskAreaEvent({ player, npcId, message }) {
+  const name = core.NpcDefinition.forId(npcId)?.getName?.() ?? "";
+  if (!player || !countsForTarget(current(player), { id: npcId, name, location: null })) return;
+  clear(player);
+  player.sendMessage(`You no longer have a slayer task as you left ${message ?? "the area"}.`);
+}
+
 /** "slayer:grant-points" { player, points }: a quest or reward adding points. */
 function grantPointsEvent({ player, points }) {
   if (player && Number.isFinite(points)) grantPoints(player, points);
@@ -480,6 +537,7 @@ function attach(pluginApi) {
   pluginApi.onCustomEvent("slayer:current-task", currentTaskEvent);
   pluginApi.onCustomEvent("slayer:has-unlock", hasUnlockEvent);
   pluginApi.onCustomEvent("npc-drops:tertiary-chance", clueChance);
+  pluginApi.onCustomEvent("slayer:leave-task-area", leaveTaskAreaEvent);
 }
 
 module.exports = {

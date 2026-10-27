@@ -435,6 +435,22 @@ function farmingStorage(t, { pin = true } = {}) {
   owner.getPacketSender = () => sender;
   const inventory = owner.getInventory();
   const player = pin ? withPin('2468') : fakePlayer();
+  const mounted = new Set(), nativeSender = player.getPacketSender();
+  Object.assign(nativeSender, {
+    sendInterface(id) { player.interface = id; mounted.add(id); return this; },
+    sendInterfaceRemoval() { player.interface = -1; mounted.clear(); return this; },
+    sendSubInterface(_target, id) { mounted.add(id); return this; },
+    sendVarbit() { return this; }, sendInterfaceFlagsRange() { return this; }, sendInterfaceScript() { return this; },
+    isSubInterfaceOpen: id => mounted.has(id),
+  });
+  player.getPacketSender = () => nativeSender;
+  player.getHitpoints = () => owner.getHitpoints();
+  player.getStatus = () => core.PlayerStatus.NONE;
+  player.isNeedsPlacement = () => false;
+  player.isTeleportingReturn = () => false;
+  player.getForceMovement = () => null;
+  player.busy = () => false;
+  player.setInterfaceId = id => { player.interface = id; return player; };
   let location = new core.Location(1240, 3720, 0);
   player.getLocation = () => location;
   player.getInventory = () => inventory;
@@ -454,20 +470,8 @@ function farmingStorage(t, { pin = true } = {}) {
     leave: () => { location = new core.Location(3200, 3200, 0); } };
 }
 
-test('Seed Vault asks for the real PIN before creating storage and resumes after entry', t => {
-  const f = farmingStorage(t);
-  f.vault();
-  assert.equal(f.player.interface, 213);
-  assert.equal(f.player.getAttribute(f.Patches.FARM_ATTRIBUTE), undefined);
-  assert.equal(f.menus.length, 0);
-  assert.deepEqual(f.features, ['seed-vault']);
-  enter(f.player, '2468');
-  assert.equal(f.menus.length, 0);
-  tick();
-  assert.equal(f.menus.length, 1);
-  f.vault();
-  assert.equal(f.menus.length, 2, 'the unlocked session is reusable');
-});
+// Native Seed Vault PIN integration lives in farming-seed-vault-interface.test.cjs.
+
 
 for (const action of ['Exchange', 'Deposit-all']) test(`Tool Leprechaun ${action} waits for the PIN`, t => {
   const f = farmingStorage(t);
@@ -482,7 +486,7 @@ for (const action of ['Exchange', 'Deposit-all']) test(`Tool Leprechaun ${action
   if (action === 'Deposit-all') {
     assert.equal(f.inventory.getAmount(f.spade), 0);
     assert.equal(f.Patches.farmFor(f.player).tools[f.spade], 1);
-  } else assert.match(f.player.messages.at(-1), /Use farming tools/);
+  } else assert.equal(f.player.interface, 125, 'the native equipment store opens after the PIN');
 });
 
 test('using a tool on the leprechaun cannot bypass the PIN', t => {
@@ -523,36 +527,16 @@ test('a changed inventory slot is not deposited by a delayed PIN resume', t => {
   assert.equal(f.player.getAttribute(f.Patches.FARM_ATTRIBUTE), undefined);
 });
 
-test('a farmer without a PIN can access both stores normally', t => {
+test('a farmer without a PIN can access Tool Leprechaun storage normally', t => {
   const f = farmingStorage(t, { pin: false });
-  f.vault();
-  assert.equal(f.menus.length, 1);
   f.inventory.add(new core.Item(f.spade), false);
   f.leprechaun('Deposit-all');
   assert.equal(f.inventory.getAmount(f.spade), 0);
   assert.equal(f.Patches.farmFor(f.player).tools[f.spade], 1);
 });
 
-test('Seed Vault transfers happen only after the correct PIN', t => {
-  const f = farmingStorage(t), id = core.ItemIdentifiers.POTATO_SEED;
-  f.inventory.add(new core.Item(id, 6), false);
-  f.vault();
-  enter(f.player, '1357');
-  tick(2);
-  assert.equal(f.menus.length, 0);
-  assert.equal(f.inventory.getAmount(id), 6);
-  f.vault();
-  enter(f.player, '2468');
-  tick();
-  f.menus[0][0][1]();
-  assert.equal(f.inventory.getAmount(id), 0);
-  assert.equal(f.Patches.farmFor(f.player).vault[id], 6);
-  f.vault();
-  f.menus[1][1][1]();
-  f.menus[2][0][1]();
-  assert.equal(f.inventory.getAmount(id), 1);
-  assert.equal(f.Patches.farmFor(f.player).vault[id], 5);
-});
+// Native Seed Vault PIN integration lives in farming-seed-vault-interface.test.cjs.
+
 
 test('produce noting does not access stored tools or prompt for a PIN', t => {
   const f = farmingStorage(t), id = core.ItemIdentifiers.POTATO;

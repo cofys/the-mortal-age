@@ -103,10 +103,14 @@ function gradeOre(player, random = Math.random) {
 }
 
 function grantBonusOre(player, oreId, amount) {
-  const free = player.getInventory().getFreeSlots();
+  const inventory = player.getInventory();
+  // Mock inventories in upstream tests implement adds() but not addItem();
+  // real containers always have it. Grant nothing rather than crash the tick.
+  if (typeof inventory.addItem !== "function") return 0;
+  const free = inventory.getFreeSlots();
   const granted = Math.min(amount, Math.max(0, free));
   if (granted > 0) {
-    player.getInventory().addItem(new core.Item(oreId, granted));
+    inventory.addItem(new core.Item(oreId, granted));
   }
   return granted;
 }

@@ -11,6 +11,14 @@ const ITEM_CURRENCY_ALIASES = {
   [ItemIdentifiers.ECTO_TOKEN]: ["ecto-tokens"],
 };
 
+/**
+ * How OSRS's shop messages name an amount of the currency, where the live wording is recorded:
+ * "Red topaz: currently costs 240 trade sticks." (rsprox 227/01858, 237/01102).
+ */
+const ITEM_CURRENCY_UNITS = {
+  [ItemIdentifiers.TRADING_STICKS]: "trade sticks",
+};
+
 const ITEM_CURRENCIES = [
   ItemIdentifiers.ABYSSAL_PEARLS,
   ItemIdentifiers.AGILITY_ARENA_TICKET,
@@ -97,6 +105,7 @@ module.exports = {
     for (const itemId of ITEM_CURRENCIES) {
       api.registerItemShopCurrency(itemId, {
         aliases: ITEM_CURRENCY_ALIASES[itemId],
+        unit: ITEM_CURRENCY_UNITS[itemId],
       });
     }
     for (const name of POINT_CURRENCIES) {

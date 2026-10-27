@@ -1022,6 +1022,11 @@ export class WidgetManager {
         }
     }
 
+    /** The component an interface is mounted in (an if_opensub target), if any. */
+    getContainerUidForGroup(groupId: number): number | undefined {
+        return this.groupToContainerUid.get(groupId);
+    }
+
     getGroup(groupId: number): WidgetGroupInstance | undefined {
         const existing = this.groups.get(groupId);
         if (existing) {
@@ -1064,6 +1069,11 @@ export class WidgetManager {
 
     findWidget(groupId: number, fileId: number): WidgetNode | undefined {
         return this.getGroup(groupId)?.widgetsByFileId.get(fileId);
+    }
+
+    /** findWidget without loading the group: undefined while it is closed (RuneLite's getWidget). */
+    findLoadedWidget(groupId: number, fileId: number): WidgetNode | undefined {
+        return this.groups.get(groupId)?.widgetsByFileId.get(fileId);
     }
 
     getWidgetByUid(uid: number): WidgetNode | undefined {
@@ -1497,15 +1507,36 @@ export class WidgetManager {
      * Explicitly unloads a widget group from memory, allowing it to be reloaded later
      */
     unloadGroup(groupId: number): void {
-        if (groupId === -1) return;
+        if (!this.unloadGroupWidgets(groupId)) return;
+        for (const listener of this.interfaceClosedListeners) listener(groupId, 0, true);
+    }
+
+    /**
+     * Widget.unloadInterface: forget the group's widgets and their runtime state, so the next
+     * load decodes it from the cache. Returns false when the group was not loaded.
+     */
+    private unloadGroupWidgets(groupId: number): boolean {
+        if (groupId === -1) return false;
 
         // Only unload if actually loaded
-        if (!this.loadedGroups[groupId]) return;
+        if (!this.loadedGroups[groupId]) return false;
 
         // Clear the group from our maps
         this.clearGroupIndex(groupId);
+        // CC_CREATE children are registered by uid only, outside the group's index.
+        for (const uid of this.widgetByUid.keys()) {
+            if ((uid >>> 16) !== groupId) continue;
+            this.widgetByUid.delete(uid);
+            this.dynamicChildrenByParent.delete(uid);
+        }
+        for (const uid of this.serverOwnedWidgets) {
+            if ((uid >>> 16) === groupId) this.serverOwnedWidgets.delete(uid);
+        }
+        this.dynamicUidNextByGroup.delete(groupId);
+        this.modelWidgets = undefined;
         this.groups.delete(groupId);
         this.clearWidgetFlagsOverridesForGroup(groupId);
+        this.loader.unloadGroup(groupId);
 
         // Clear meslayerContinueWidget if it belongs to this group
         if (this.meslayerContinueWidget) {
@@ -1517,7 +1548,7 @@ export class WidgetManager {
 
         // Mark as unloaded
         this.loadedGroups[groupId] = false;
-        for (const listener of this.interfaceClosedListeners) listener(groupId, 0, true);
+        return true;
     }
 
     private makeWidgetFlagsKey(id: number, childIndex: number): bigint {
@@ -1888,8 +1919,9 @@ export class WidgetManager {
             this.meslayerContinueWidget = null;
         }
 
-        // Close any existing interface mounted here
-        this.closeSubInterface(targetUid);
+        // Close any existing interface mounted here. Reopening the same group keeps it loaded.
+        const existing = this.interfaceParents.get(targetUid);
+        this.closeSubInterface(targetUid, existing?.group !== groupId);
 
         // Load the interface
         const instance = this.getGroup(groupId);
@@ -1988,9 +2020,11 @@ export class WidgetManager {
     }
 
     /**
-     * Close a sub-interface mounted at a widget
+     * Close a sub-interface mounted at a widget (closeInterface). With `unload`, the closed group
+     * is unloaded as well, so its next open starts again from the cache; the root interface and
+     * a group still mounted at another widget stay loaded.
      */
-    closeSubInterface(targetUid: number): void {
+    closeSubInterface(targetUid: number, unload: boolean = true): void {
         const parent = this.interfaceParents.get(targetUid);
         if (!parent) return;
 
@@ -2005,6 +2039,11 @@ export class WidgetManager {
         this.groupToContainerUid.delete(parent.group);
         // Clear any widget flag overrides for the closed interface group.
         this.clearWidgetFlagsOverridesForGroup(parent.group);
+        const unloaded =
+            unload &&
+            parent.group !== this.rootInterface &&
+            ![...this.interfaceParents.values()].some((other) => other.group === parent.group) &&
+            this.unloadGroupWidgets(parent.group);
 
         // Mark widgets dirty - sub-interface change requires redraw
         this.invalidateAll();
@@ -2022,7 +2061,7 @@ export class WidgetManager {
 
         // Notify listeners to clean up click targets for this interface
         this.onInterfaceClose?.(parent.group);
-        for (const listener of this.interfaceClosedListeners) listener(parent.group, parent.type, false);
+        for (const listener of this.interfaceClosedListeners) listener(parent.group, parent.type, unloaded);
     }
 
     /**

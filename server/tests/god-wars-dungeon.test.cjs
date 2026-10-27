@@ -52,3 +52,26 @@ test("essence sits on the god's varbit and stops at 4,000", () => {
   assert.equal(Common.getEssence(player, bandos), 0);
   assert.equal(player.varbits.get(3976), 0);
 });
+
+test("the Wiki's protection items count for their god, not for a god named inside them", () => {
+  const [armadyl, bandos, saradomin, zamorak] = ["armadyl", "bandos", "saradomin", "zamorak"].map(Common.factionByKey);
+  assert.equal(Common.isGodItem(armadyl, 12610, "Book of Law"), true);
+  assert.equal(Common.isGodItem(saradomin, 1718, "Holy symbol"), true);
+  assert.equal(Common.isGodItem(bandos, 20232, "War blessing"), true);
+  assert.equal(Common.isGodItem(armadyl, 22550, "Craw's bow (u)"), true);
+  assert.equal(Common.isGodItem(zamorak, 3842, "Unholy book"), true);
+  assert.equal(Common.isGodItem(saradomin, 3842, "Unholy book"), false);
+  assert.equal(Common.isGodItem(armadyl, 28537, "Corrupted armadyl godsword"), false);
+  assert.equal(Common.isGodItem(saradomin, 23332, "Rune scimitar"), true);
+  assert.equal(Common.isGodItem(saradomin, 1333, "Rune scimitar"), false);
+});
+
+test("the count is of worn protection items, and Staff of Light counts for Saradomin and Zamorak", () => {
+  const names = { 1718: "Holy symbol", 22296: "Staff of Light", 3842: "Unholy book", 20220: "Holy blessing" };
+  Common.init({ core: { ItemDefinition: { forId: (id) => ({ getName: () => names[id] }) } } });
+  const worn = [1718, 22296, 3842, 20220, -1].map((id) => ({ getId: () => id }));
+  const player = { getEquipment: () => ({ getItems: () => [...worn, null] }) };
+  assert.equal(Common.godItemCount(player, Common.factionByKey("saradomin")), 3);
+  assert.equal(Common.godItemCount(player, Common.factionByKey("zamorak")), 2);
+  assert.equal(Common.godItemCount(player, Common.factionByKey("armadyl")), 0);
+});

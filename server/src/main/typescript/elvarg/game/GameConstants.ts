@@ -1,5 +1,6 @@
 import { NullPlayerPersistence } from "./entity/impl/player/persistence/NullPlayerPersistence";
 import { PlayerPersistence } from "./entity/impl/player/persistence/PlayerPersistence";
+import { MAIN_PROFILE, type PlayerProfile } from "./entity/impl/player/persistence/PlayerProfile";
 import { getWorldDefinition, WORLD_SPAWN } from "./definition/WorldDefinition";
 import { PlayerRights } from "./model/rights/PlayerRights"
 
@@ -30,6 +31,12 @@ export class GameConstants {
     // so combat and skilling share a single rate here. Raise it for faster
     // progression; it is the only experience knob.
     public static EXPERIENCE_MULTIPLIER: number = getWorldDefinition().experienceMultiplier;
+    /**
+     * The character profile every login on this world gets (persistence/PlayerProfile): the main
+     * one unless a game mode with characters of its own (Leagues) claims the world through
+     * `setWorldProfile` from its plugin config.
+     */
+    public static WORLD_PROFILE: PlayerProfile = MAIN_PROFILE;
     public static readonly DEBUG_ATTACK_DISTANCE: boolean = false;
     // Verbose NPC face-change debug is expensive in large fights; keep off unless diagnosing.
     public static readonly DEBUG_NPC_FACE_POSITION_CHANGES: boolean = false;
@@ -81,6 +88,10 @@ export class GameConstants {
     public static SERVER_LOG_LEVELS: string[] = ["info", "warn", "error"];
     public static SERVER_LOG_ENABLED_TYPES: string[] = [];
     public static SERVER_LOG_DISABLED_TYPES: string[] = ["plugin", "npc.face", "Combat"];
+
+    public static setWorldProfile(profile: PlayerProfile): void {
+        this.WORLD_PROFILE = profile;
+    }
 
     public static setExperienceRate(rate: number): void {
         if (!Number.isFinite(rate) || rate <= 0) {

@@ -55,10 +55,12 @@ const LEFT_AT_ATTRIBUTE = "scurrius:left-at";
 const GRAVE_TILE = Object.freeze({ x: 3276, y: 9871, z: 0 });
 const DAMP_MESSAGE = "It's far too damp for you to light a fire here.";
 
-/** Captured: the first attack comes four ticks after the spawn. */
+/** Captured: the first attack (and the boss HUD) comes four ticks after the spawn. */
 const ARM_TICKS = 4;
-/** Wiki: respawn 30. */
-const RESPAWN_TICKS = 30;
+/** Captured (live, rev 241): the next Scurrius 29 ticks after the last one is gone, in 5 of 5 kills. */
+const RESPAWN_TICKS = 29;
+/** Captured: the HUD starts fading 4 ticks after he is gone (and clears 4 ticks after that). */
+const HUD_LINGER_TICKS = 4;
 /** Captured questions at the bars. */
 const ENTER_PROMPT = {
   normal: "Are you sure you want to climb through the broken bars? (normal)",
@@ -122,11 +124,15 @@ function hudValues(player, npc) {
 function syncHud(player) {
   const npc = bossFor(player);
   const shown = huds.get(player);
+  const now = core.World.getProcessCycle();
   const alive = npc != null && npc.isRegistered?.() !== false && !player.getMovementQueue().isMovementBlocked();
   if (!alive) {
-    if (shown) hideHud(player, true);
+    if (!shown) return;
+    shown.goneAt ??= now;
+    if (npc != null || now - shown.goneAt >= HUD_LINGER_TICKS) hideHud(player, true);
     return;
   }
+  if (now < (npc.__scurriusArmedAt ?? 0)) return;
   if (!shown || shown.npc !== npc) {
     const values = hudValues(player, npc);
     huds.set(player, { npc, current: values.current });
@@ -410,7 +416,7 @@ module.exports = {
   get publicBoss() { return publicBoss; },
   _test: {
     WARNING_VARBIT, SKIP_WARNING_ATTRIBUTE, INSTANCE_ATTRIBUTE, ENTER_PROMPT, huds,
-    REENTRY_TICKS, LEFT_AT_ATTRIBUTE, GRAVE_TILE, DAMP_MESSAGE, exhaustedText, refuseFire, graveBesideAldo,
+    REENTRY_TICKS, RESPAWN_TICKS, HUD_LINGER_TICKS, LEFT_AT_ATTRIBUTE, GRAVE_TILE, DAMP_MESSAGE, exhaustedText, refuseFire, graveBesideAldo,
     peekText, climbThrough, enter, cross, quickEscape, onLogin, onBossDeath, spawnPublicBoss, spawnBoss,
     syncHud, aggressive,
     instanceClass: () => InstanceArea,

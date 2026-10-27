@@ -96,6 +96,13 @@ function addPoints(player, type, amount) {
   return after - before;
 }
 
+/** A room's award: the points after "minigame:points" (a league's tier passive multiplies them), added. */
+function awardPoints(player, type, amount) {
+  const award = { player, minigame: "mage-training-arena", points: amount };
+  api.emitCustomEvent("minigame:points", award);
+  return addPoints(player, type, award.points);
+}
+
 /** The hat for these points: energised at 300 of each type, full at 600 (Wiki: Progress_hat). */
 function hatFor(player) {
   const lowest = Math.min(...POINT_TYPES.map((type) => points(player, type)));
@@ -175,7 +182,7 @@ function attach(api) {
 }
 
 module.exports = {
-  init, later, attach, registerRoom, message, toLocation, inBox, points, addPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
+  init, later, attach, registerRoom, message, toLocation, inBox, points, addPoints, awardPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
   POINT_TYPES, POINTS_ATTRIBUTE, HAT_GIVEN_ATTRIBUTE, PEACHES_UNLOCKED_ATTRIBUTE,
   get api() { return api; },
   get core() { return core; },

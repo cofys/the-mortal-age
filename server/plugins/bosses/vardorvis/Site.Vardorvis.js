@@ -12,6 +12,7 @@
  *   a grave).
  */
 const Common = require("./Common.Vardorvis");
+const Scoreboard = require("./Scoreboard.Vardorvis");
 
 const MINIMAP_STATE_VARBIT = 6719;
 const MINIMAP_OFF = 2;
@@ -235,6 +236,18 @@ function graveOutside(request) {
   request.tile = { x, y, z };
 }
 
+/**
+ * A death in the ritual site while his fight is on counts on the tablet, for that fight (as
+ * Site.Leviathan.js counts its deaths). It hears every death (onPlayerDefeated): onPlayerDeath
+ * stops at the first plugin that handles the respawn, as Death's Office does for a first grave.
+ */
+function diedAtSite({ victim: player }) {
+  const session = sessionOf(player);
+  const fight = session?.fight;
+  if (!fight || fight.over || fight.stopped || player.getPrivateArea() !== session.area) return;
+  Scoreboard.died(player, fight.awakened);
+}
+
 function attachSite(api) {
   const { site } = Common.data;
   api.persistAttribute(Common.INSIDE_ATTRIBUTE, false);
@@ -243,6 +256,7 @@ function attachSite(api) {
   api.onObjectSecondClick([site.exitLoc], leaveByRocks);
   api.onObjectInteraction("Tendril", { "Quick-escape": quickEscape });
   api.onCustomEvent("gravestones:grave-location", graveOutside);
+  api.onPlayerDefeated(diedAtSite);
 }
 
-module.exports = { attachSite, enter, leave, sessionOf, LOC_SHAPE };
+module.exports = { attachSite, enter, leave, sessionOf, diedAtSite, LOC_SHAPE };

@@ -42,10 +42,9 @@ const OBJECT = {
 /**
  * Varbit 4391 drives the boat multiloc (10068) and the priestess multinpc (2124): 3 is the
  * state after the High Priestess lets you be the sacrifice (boat 46242, priestess 2033 with
- * Collect). Access is open here, so everyone has it.
+ * Collect). Access.Zulrah.js owns the stage.
  */
 const ACCESS_VARBIT = 4391;
-const ACCESS_VALUE = 3;
 
 /** Wiki ("Zul-andra teleport" destination). */
 const ZUL_ANDRA = { x: 2196, y: 3056, z: 0 };
@@ -172,7 +171,7 @@ function fade(player, out) {
 
 module.exports = {
   bind, core, api,
-  NPC, FORM_IDS, OBJECT, ACCESS_VARBIT, ACCESS_VALUE,
+  NPC, FORM_IDS, OBJECT, ACCESS_VARBIT,
   ZUL_ANDRA, PIER, SHRINE, PLAYER_START, POSITION, ATTR, SOUND,
   loc, inShrine, isZulrah, later, repeat, sound, randomInt, statement, npcSay, options, fade,
 };

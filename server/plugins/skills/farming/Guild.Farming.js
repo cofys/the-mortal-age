@@ -3,6 +3,7 @@
 const core = require("./Core.Farming");
 const Data = require("./Data.Farming");
 const Patches = require("./Patches.Farming");
+const Vault = require("./Vault.Farming");
 // Native bank-side item op labelled by cache param 595, shared with StorageItems.
 const BANK_STORAGE_OP = 9;
 const CONTRACTS = [
@@ -118,6 +119,9 @@ function rewardItem(event) {
             if (bank.getAddableAmount(received) < reward.count) { event.player.sendMessage("Your bank is full."); break; }
             bank.addItem(received);
         } else if (!Patches.give(event.player, reward.id, reward.count)) break;
+        // No capture or Wiki quote of the live wording yet: one line per reward taken.
+        const received = `${reward.count} x ${core.CacheDefinitions.getItem(reward.id).name.toLowerCase()}`;
+        event.player.sendMessage(action === "bank-all" ? `You put ${received} into your bank.` : `You receive ${received}.`);
         rewards.shift();
     } while (rewards.length && ["take-all", "bank-all"].includes(action));
     if (!rewards.length) event.player.getInventory().deleteAtSlot(event.slot);
@@ -215,31 +219,13 @@ function withdrawalEntries(stored, kind) {
 function guildObject(event) {
     if (event.definition?.getName()?.toLowerCase() !== "seed vault") return;
     event.handled = true;
-    const { player, object } = event;
-    const near = () => player.getLocation().isWithinDistance(object.getLocation(), 5);
-    if (!near()) return;
-    const pin = { player, feature: "seed-vault", resume: () => guildObject(event) };
-    core.PluginManager.emitCustomEvent("bank-pin:guard", pin);
-    if (pin.locked) return;
-    const farm = Patches.farmFor(player), vault = farm.vault ??= {};
-    const entries = [["Deposit all seeds and saplings", () => {
-        if (!near()) return;
-        for (const item of [...player.getInventory().getValidItems()]) {
-            const def = core.CacheDefinitions.getItem(item.getId()), id = def.noteTemplate >= 0 ? def.note : item.getId();
-            if (![...Data.CROPS.values()].some(c => c.seed === id || c.sapling === id)) continue;
-            const amount = Math.min(item.getAmount(), 2147483647 - (vault[id] ?? 0));
-            if (amount > 0) { player.getInventory().deleteNumber(item.getId(), amount); vault[id] = (vault[id] ?? 0) + amount; }
-        }
-    }]];
-    for (const [id, count] of Object.entries(vault)) if (count > 0) entries.push([`${core.CacheDefinitions.getItem(+id).name} (${count})`, () => {
-        if (!near()) return;
-        Patches.choose(player, [1, 5, 10, 2147483647].map(requested => [`Withdraw ${requested === 2147483647 ? "all" : requested}`, () => {
-            if (!near()) return;
-            const amount = Math.min(vault[id] ?? 0, requested, core.CacheDefinitions.getItem(+id).stackability ? 2147483647 : player.getInventory().getFreeSlots());
-            if (amount && Patches.give(player, +id, amount)) vault[id] -= amount;
-        }]));
-    }]);
-    Patches.choose(player, entries);
+    Vault.open(event);
+}
+/** "farming:open-seed-vault": the seed vault from anywhere (content that carries it, a league relic's vault). */
+function openSeedVault(event) {
+    if (!event?.player || event.opened) return;
+    event.opened = true;
+    Vault.open({ player: event.player, object: null, anywhere: true });
 }
 
-Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject });
+Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject, openSeedVault });

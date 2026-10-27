@@ -1,5 +1,6 @@
 
 import { PendingHit } from "../hit/PendingHit";
+import { PluginManager } from "../../../../plugins/PluginManager";
 import { Mobile } from "../../../entity/impl/Mobile";
 import { Player } from "../../../entity/impl/player/Player";
 import { Animation } from "../../../model/Animation";
@@ -60,6 +61,13 @@ class TridentSpell extends CombatNormalSpell {
         }
 
         if (!del) {
+            return true;
+        }
+
+        // Content may spare the charge (a league relic): the same question every powered staff asks.
+        const consume = { player, itemId: weapon.getId(), skip: false };
+        PluginManager.emitCustomEvent("combat:consume-charge", consume);
+        if (consume.skip) {
             return true;
         }
 

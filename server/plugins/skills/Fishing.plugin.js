@@ -106,6 +106,8 @@ function rollInterval(tool) {
 // (bonus is a percentage of the chart's low/high). The inactive crystal harpoon works as
 // a dragon harpoon, and a barb-tail is a plain harpoon you can wield.
 const HARPOONS = Object.freeze([
+  // The league's Echo harpoon (Wiki): a crystal harpoon with no requirement and no charges.
+  { ids: [ItemIds.ECHO_HARPOON], level: 1, bonus: 135 },
   // Charged crystal harpoons consume one charge per fish (./fishing/CrystalHarpoon.Fishing.js).
   { ids: [ItemIds.CRYSTAL_HARPOON, ItemIds.CRYSTAL_HARPOON_3], level: 71, bonus: 135, crystal: true },
   // Charged infernal harpoons can cook what they catch (./fishing/InfernalHarpoon.Fishing.js).
@@ -392,7 +394,25 @@ function questAllows(player, name) {
 function findTool(player, tool) {
   const level = getFishingLevel(player);
   const has = (id) => player.getInventory().contains(id) || player.getEquipment?.()?.contains(id);
-  return tool.variants.find((variant) => variant.level <= level && variant.ids.some(has)) ?? null;
+  const found = tool.variants.find((variant) => variant.level <= level && variant.ids.some(has)) ?? null;
+  if (found) return found;
+  // Content may stand in for the tool ("fishing:tool", a league relic's harpoon that fishes as any of them).
+  const request = { player, variants: tool.variants, variant: null };
+  pluginApi?.emitCustomEvent("fishing:tool", request);
+  return request.variant;
+}
+
+/** Ticks to the next catch roll: the tool's, as content adjusts it ("fishing:interval", a league relic's faster harpoon). */
+function catchInterval(player, tool) {
+  const request = { player, ticks: rollInterval(tool) };
+  pluginApi?.emitCustomEvent("fishing:interval", request);
+  return Math.max(1, request.ticks | 0);
+}
+
+/** The best fish the player can land with this tool (the tool lists them highest first). */
+function bestCatch(player, tool) {
+  const fish = tool.fish.find((candidate) => getFishingLevel(player) >= candidate.level && meetsLevels(player, candidate.requires));
+  return fish ? [fish] : [];
 }
 
 /** Bait in the inventory first, then in a carried container (the tackle box, "storage:amount"). */
@@ -417,14 +437,15 @@ function useBait(player, bait) {
 
 /** Whether an open container (the fish barrel, "storage:room") would take this fish. */
 function storageRoom(player, itemId) {
-  const request = { player, itemId, room: false };
+  // `skill`: the skill gathering it, so content storing one skill's resources answers only for those.
+  const request = { player, itemId, skill: pluginApi?.core?.Skill?.FISHING, room: false };
   pluginApi?.emitCustomEvent("storage:room", request);
   return request.room;
 }
 
 /** An open container takes the catch first ("storage:gather"); the rest goes to the inventory. */
-function giveCatch(player, itemId, amount) {
-  const request = { player, itemId, amount, stored: 0 };
+function giveCatch(player, itemId, amount, xp = 0) {
+  const request = { player, itemId, amount, stored: 0, skill: Skill.FISHING, xp };
   pluginApi?.emitCustomEvent("storage:gather", request);
   if (amount > request.stored) {
     player.getInventory().addItem(new Item(itemId, amount - request.stored));
@@ -553,7 +574,7 @@ function landCatch(player, tool, variant, caught) {
     landed.push(fish);
     if (!variant.infernal || !InfernalHarpoon.tryCookFish(player, fish.id)) {
       const amount = fish.amount(player);
-      giveCatch(player, fish.id, amount);
+      giveCatch(player, fish.id, amount, fish.experience * xpMultiplier);
       player.sendMessage(fish.message(amount));
     }
     if (variant.crystal) {
@@ -607,7 +628,7 @@ function startFishing(player, npc, tool, activeSessions) {
     spotY: npc.getLocation().getY(),
     tool,
     nextAnimationTick: fishingTick + FISHING_ANIMATION_INTERVAL_TICKS,
-    nextCatchTick: fishingTick + rollInterval(tool),
+    nextCatchTick: fishingTick + catchInterval(player, tool),
   });
   tool.spot?.onStart(player, npc);
   tool.vessel?.onStart(player);
@@ -673,11 +694,15 @@ class FishingTask extends Task {
       if (this.cycle < session.nextCatchTick) {
         continue;
       }
-      session.nextCatchTick = this.cycle + rollInterval(session.tool);
+      session.nextCatchTick = this.cycle + catchInterval(player, session.tool);
 
-      const caught = rollCatch(player, session.tool, Math.random, variant.bonus, {
+      let caught = rollCatch(player, session.tool, Math.random, variant.bonus, {
         x: npc.getLocation().getX(), y: npc.getLocation().getY(), npcId: npc.getId(),
       });
+      // Content may turn a miss into a catch ("fishing:attempt", a league relic's second chance): the best fish the player can land.
+      const attempt = { player, success: caught.length > 0 };
+      pluginApi.emitCustomEvent("fishing:attempt", attempt);
+      if (caught.length === 0 && attempt.success) caught = bestCatch(player, session.tool);
       // A vessel's bait goes with every attempt, caught or not (Wiki: Raw karambwan).
       session.tool.vessel?.useBait(player);
       if (caught.length === 0) {

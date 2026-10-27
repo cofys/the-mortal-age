@@ -10,7 +10,8 @@
  * - Supplies: the tables, potions, bandages, bones and the activity bar;
  * - Bots: filling the queue on small worlds (world config `SoulWars:seedBots`), and playing;
  * - Rewards: the Nomad's Zeal shop (experience, imbues and the other rewards);
- * - Tutorial: the Nomad's demonstration, needed before a first game.
+ * - Tutorial: the Nomad's demonstration, needed before a first game;
+ * - Scoreboard: the lobby scoreboard's personal and global statistics.
  */
 const Common = require("./soulwars/Common.SoulWars");
 const Lobby = require("./soulwars/Lobby.SoulWars");
@@ -23,6 +24,7 @@ const Stats = require("./soulwars/Stats.SoulWars");
 const Bots = require("./soulwars/Bots.SoulWars");
 const Rewards = require("./soulwars/Rewards.SoulWars");
 const Tutorial = require("./soulwars/Tutorial.SoulWars");
+const Scoreboard = require("./soulwars/Scoreboard.SoulWars");
 
 module.exports = {
   name: "Soul Wars",
@@ -39,5 +41,6 @@ module.exports = {
     Bots.attachBots(api);
     Rewards.attachRewards(api);
     Tutorial.attachTutorial(api);
+    Scoreboard.attachScoreboard(api);
   },
 };

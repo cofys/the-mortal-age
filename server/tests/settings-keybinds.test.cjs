@@ -422,15 +422,14 @@ test('Chat timestamps: choosing an option sets varbit 12384 to it and runs the r
   assert.equal(varbit(CHAT_TIMESTAMPS_VARBIT), 0);
 });
 
-test('Chat timestamps: login sends the live default (server time) until the player chooses', () => {
+test('Chat timestamps: off for a fresh account, and a chosen option is restored at login', () => {
   const { player, logins } = allSettings(CHAT);
   const restore = logins.find((login) => login.name === 'restoreSettings');
   player.sent.length = 0;
   restore({ player });
-  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'fresh account: On (Server time)');
-  player.setAttribute('settings:values', { [`varbit:${CHAT_TIMESTAMPS_VARBIT}`]: 0 });
+  assert.ok(!player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'fresh account: Off');
+  player.setAttribute('settings:values', { [`varbit:${CHAT_TIMESTAMPS_VARBIT}`]: 2 });
   player.sent.length = 0;
   restore({ player });
-  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=0`), 'a chosen Off is restored');
-  assert.ok(!player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'the default does not override a choice');
+  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=2`), 'a chosen On (Local time) is restored');
 });

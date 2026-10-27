@@ -25,6 +25,7 @@ const resolvers = [];
 const itemActions = new Map();
 const hitResolved = [];
 Sanguinesti.register({
+    emitCustomEvent() {},
     core: PluginManager.getCoreApi(),
     registerCombatMethodResolver: (resolver) => resolvers.push(resolver),
     onItemAction: (name, actions) => itemActions.set(name, actions),

@@ -277,7 +277,9 @@ function talkToClient(event) {
   const left = remaining(contract);
   if (left) return say(player, npcId, [`There's still ${left === 1 ? "one thing" : `${left} things`} left to sort out.`]), true;
   const tier = TIERS[contract.tier];
-  const points = (player.getAttribute(POINTS_ATTRIBUTE) ?? 0) + tier.points;
+  const award = { player, minigame: "mahogany-homes", points: tier.points };
+  api.emitCustomEvent("minigame:points", award);
+  const points = (player.getAttribute(POINTS_ATTRIBUTE) ?? 0) + award.points;
   player.setAttribute(POINTS_ATTRIBUTE, points);
   player.setAttribute(COMPLETED_ATTRIBUTE, Math.min(COMPLETED_CAP, (player.getAttribute(COMPLETED_ATTRIBUTE) ?? 0) + 1));
   setContract(player, null);

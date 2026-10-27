@@ -103,8 +103,29 @@ archive's message log.
   into 5 shards.", "You crush your crystal shards down to a powdery form."
 - **Lava scale (Wiki):** 3 to 6 shards, and half as many again, rounded down, with the hard
   Wilderness Diary. The Wiki says higher levels average more; with no formula, tsps rolls evenly.
-- **Crystal shards (Wiki):** 10 crystal dust each; a stack is crushed at once. Live also says
-  "You crush some of your crystal shards down to a powdery form."; when is not known.
+- **Crystal shards:** recording 1618 opens "How many shards would you like to crush? (0 - 5)"
+  without changing inventory. Entering 5 produces 50 dust, the grind animation and sound,
+  and "You crush your crystal shards down to a powdery form." Recordings 3274 and 1107
+  show "You crush some of your crystal shards down to a powdery form." when shards remain.
+  Only the selected quantity is converted, in one batch; there is no auto-repeat. The
+  [Crystal dust Wiki page](https://oldschool.runescape.wiki/w/Crystal_dust) confirms ten
+  dust per selected shard. Zero cancels, and the callback rechecks both supplies. Capacity
+  is checked before spending shards, including a full inventory with existing dust or a
+  slot freed by consuming all shards.
+- **Nihil shards:** the [Nihil dust Wiki page](https://oldschool.runescape.wiki/w/Nihil_dust)
+  specifies one dust per shard and auto-crushing at 0, then 2, then every 3 ticks. Stackability
+  does not make this a bulk conversion. Walking or another action interrupts the loop.
+
+Regression coverage exercises the registered item-on-item handler for quantity selection,
+partial/all messages, zero/invalid input, supply removal, capacity/stack limits and nihil
+cadence/cancellation. Live checks cover selected/all/zero quantities, full-inventory
+preservation and nihil interruption. Grinding grants no XP.
+
+The lava scale level-dependent distribution remains unverified: the
+[Lava scale Wiki page](https://oldschool.runescape.wiki/w/Lava_scale) establishes the level
+advantage, but the exact outcome probabilities have not been established. The existing
+uniform roll predates these fixes; its introduction and tests document the approximation.
+No replacement probability formula is inferred from the expected-yield chart.
 
 ## Doses
 
@@ -159,7 +180,8 @@ These messages follow the captured pattern but have no recording of their own:
   once as "the aldarium"; which is which is a guess.
 
 Grinding: "You grind the kebbit teeth to dust." and "You grind the nihil shard into dust." have no
-capture, and nihil shards, a stack like crystal shards, are ground all at once.
+capture. Nihil shard cadence is established by the Wiki above; its exact message remains
+unchecked against live captures.
 
 ## Experience
 

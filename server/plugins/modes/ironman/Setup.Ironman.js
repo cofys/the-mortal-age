@@ -6,7 +6,9 @@
  * set a bank PIN there; this server has none, so the confirmation leaves it out. Adam's "Armour"
  * option hands out the mode's armour.
  *
- * Other plugins ask a player's mode with `ironman:mode` ({ player } -> mode, label).
+ * Other plugins ask a player's mode with `ironman:mode` ({ player } -> mode, label), and may lock
+ * it: every choice first asks `ironman:change-mode` ({ player, from, to, allowed, reason }), and
+ * one answered `allowed: false` is refused with its reason.
  */
 const Ironman = require("./Common.Ironman");
 
@@ -62,6 +64,12 @@ function choose(player, mode) {
   }
   if (mode === current) {
     player.sendMessage(Ironman.message("modeAlready", { mode: Ironman.data.modes[mode].label }));
+    return;
+  }
+  const change = { player, from: current, to: mode, allowed: true, reason: null };
+  Ironman.api.emitCustomEvent("ironman:change-mode", change);
+  if (change.allowed === false) {
+    if (change.reason) player.sendMessage(change.reason);
     return;
   }
   if (!upgrades && rank(mode) >= rank(current)) {

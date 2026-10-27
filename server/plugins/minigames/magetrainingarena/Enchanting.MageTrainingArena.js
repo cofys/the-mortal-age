@@ -142,7 +142,7 @@ function enchantShape(event) {
     count = (Number(player.getAttribute(ENCHANTED_ATTRIBUTE)) || 0) + 1;
     player.setAttribute(ENCHANTED_ATTRIBUTE, count);
   }
-  Common.addPoints(player, "enchantment", enchantPoints(spellLevel, { dragonstone, count, bonus: shape === chamber.bonus }));
+  Common.awardPoints(player, "enchantment", enchantPoints(spellLevel, { dragonstone, count, bonus: shape === chamber.bonus }));
   updateOverlay(player);
 }
 

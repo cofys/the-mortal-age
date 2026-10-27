@@ -26,6 +26,7 @@
  */
 
 const Common = require("./Common.PyramidPlunder");
+const Mural = require("./Mural.PyramidPlunder");
 
 const URN = { CLOSED: 0, SEARCHED: 1, SNAKE: 2, CHARMED: 3 };
 const SARCOPHAGUS = { CLOSED: 0, OPEN: 1, OPENING: 2 };
@@ -153,6 +154,7 @@ function searchChest(event, random = Math.random) {
   animate(player, Common.ids().anim.chest);
   Common.sound(player, Common.ids().sound.chest);
   Common.send(player, v.chest, 1);
+  Mural.chestPillaged(player, run.room);
   const room = Common.roomData(run.room);
   const swarm = !Common.roll(Common.chanceOf("chestNoSwarm", Common.thievingLevel(player), run.room), random);
   if (swarm) {

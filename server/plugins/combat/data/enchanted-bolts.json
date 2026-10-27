@@ -58,7 +58,7 @@
     },
     {
       "effect": "armour-piercing",
-      "names": ["Diamond bolts (e)", "Diamond dragon bolts (e)"],
+      "names": ["Diamond bolts (e)", "Diamond dragon bolts (e)", "Diamond ascension bolts (e)"],
       "spotanim": 758,
       "sound": 2913,
       "chance": { "npc": 0.1, "player": 0.05 },
@@ -74,7 +74,7 @@
     },
     {
       "effect": "life-leech",
-      "names": ["Onyx bolts (e)", "Onyx dragon bolts (e)"],
+      "names": ["Onyx bolts (e)", "Onyx dragon bolts (e)", "Onyx ascension bolts (e)"],
       "spotanim": 753,
       "sound": 2917,
       "chance": { "npc": 0.11, "player": 0.1 },

@@ -22,11 +22,14 @@ export class PlayerDeathTask extends Task {
     private loseItems = true;
     private itemsToKeep: Item[] = [];
     private ticks = 2;
+    /** False when a plugin says "Oh dear, you are dead!" itself (onPlayerBeforeDeath's announce). */
+    private announce: boolean;
 
 
-    constructor(player: Player) {
+    constructor(player: Player, announce = true) {
         super(1, false);
         this.player = player;
+        this.announce = announce;
         (this.player as any).__recentDeathDamagerEntries =
             this.player.getCombat().getRecentDamagerEntries();
         this.killer = player.getCombat().getKiller(true);
@@ -133,7 +136,7 @@ export class PlayerDeathTask extends Task {
                     this.player.getPacketSender().sendInterfaceRemoval();
 
                     // Send death message..
-                    this.player.sendMessage("Oh dear, you are dead!");
+                    if (this.announce) this.player.sendMessage("Oh dear, you are dead!");
 
                     // Perform death animation..
                     this.player.performAnimation(new Animation(836));

@@ -13,6 +13,9 @@ const KILLS_ATTRIBUTE = "nightmare:kills";
 const PHOSANI_KILLS_ATTRIBUTE = "nightmare:phosani-kills";
 const BEST_ATTRIBUTE = "nightmare:best-ticks";
 const PHOSANI_BEST_ATTRIBUTE = "nightmare:phosani-best-ticks";
+/** Deaths in a dream, per version, for the scoreboards. */
+const DEATHS_ATTRIBUTE = "nightmare:deaths";
+const PHOSANI_DEATHS_ATTRIBUTE = "nightmare:phosani-deaths";
 /** "Yes, and don't ask again." on the way in and out. */
 const SKIP_WARNING_ATTRIBUTE = "nightmare:skip-warning";
 const PHOSANI_SKIP_WARNING_ATTRIBUTE = "nightmare:phosani-skip-warning";
@@ -186,6 +189,7 @@ module.exports = {
   init, later, toLocation, randomInt, pick, shuffled, count, graphic, animation, fade, closeFade, sounds,
   tileGraphic, areaSound, projectile, styleMethod, protectedStyle, strike, damage, heal, formatTicks,
   INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, PHOSANI_KILLS_ATTRIBUTE, BEST_ATTRIBUTE, PHOSANI_BEST_ATTRIBUTE,
+  DEATHS_ATTRIBUTE, PHOSANI_DEATHS_ATTRIBUTE,
   SKIP_WARNING_ATTRIBUTE, PHOSANI_SKIP_WARNING_ATTRIBUTE, SKIP_LEAVE_WARNING_ATTRIBUTE, HELD_ITEMS_ATTRIBUTE, PHOSANI_INTRO_ATTRIBUTE, CHUNK,
   get api() { return api; },
   get core() { return core; },

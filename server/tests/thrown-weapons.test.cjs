@@ -327,6 +327,7 @@ test("Phantom Strike drains 50% once, uses one javelin and bleeds 75% of the hit
 function chinchompas() {
   const hooks = {};
   require("../plugins/items/Chinchompas.plugin").register({
+    emitCustomEvent: () => {},
     core,
     registerCombatMethodResolver: (resolver) => { hooks.resolver = resolver; },
     registerRangedCombatModifier: (modifier) => { hooks.modifier = modifier; },

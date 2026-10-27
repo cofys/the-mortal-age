@@ -43,11 +43,17 @@ Pets.register({
   getItemOnGroundManager: () => ({ registerNonGlobal() {}, registerLocation() {} }),
   persistAttribute() {},
   onCustomEvent: (name, handler) => events.set(name, handler),
-  emitCustomEvent: (name, request) => { if (name === "collection-log:obtain") collectionLogObtains.push(request); },
+  emitCustomEvent: (name, request) => {
+    if (name === "collection-log:obtain") collectionLogObtains.push(request);
+    // Stub the public diary query here; real service coverage is in chompy-pet-acquisition.
+    if (name === "diary:is-reward-claimed") request.claimed = request.player.getAttribute("achievement-diaries:rewards")?.western?.includes("elite") === true;
+  },
   onItemDropPolicy() {},
   onItemOnNpc() {},
   onAnyNpcInteraction() {},
+  onInterfaceActionClick() {},
   onNpcClick() {},
+  onNpcInteraction() {},
   onPlayerLogout: (handler) => logoutHooks.push(handler),
   onPlayerDisconnect() {},
   onPlayerLogin: (handler) => loginHooks.push(handler),
@@ -205,21 +211,8 @@ test("every owned pet reaches the collection log; only the new one announces its
   assert.ok(collectionLogObtains.every((request) => request.player === player));
 });
 
-test("Probita returns owned pets the player no longer has, once", () => {
-  const player = createPlayer();
-  player.setAttribute("pets.owned", [HELLPUPPY, GIANT_SQUIRREL]);
-  player.inventory.push(GIANT_SQUIRREL);
-  const reclaim = () => {
-    const event = { player, npcId: NpcIdentifiers.PROBITA, action: "open_interface", target: "Pet Insurance" };
-    events.get("npc-dialogue:action")(event);
-    return event;
-  };
-  assert.equal(reclaim().handled, true);
-  assert.deepEqual(player.inventory, [GIANT_SQUIRREL, HELLPUPPY]);
-  reclaim();
-  assert.deepEqual(player.inventory, [GIANT_SQUIRREL, HELLPUPPY]);
-  assert.equal(player.messages.at(-1), "You don't have any pets to reclaim.");
-});
+// Probita's old immediate-return shortcut is replaced by native selection/Confirm.
+// Its stronger real-object coverage lives in pet-recovery-interface.test.cjs.
 
 test("every skilling-pet collection log item has a roll source", () => {
   const ClogData = require("../plugins/achievements/collectionlog/Data.CollectionLog");
@@ -470,13 +463,14 @@ test("the Rift guardian needs its talisman, which is not consumed", () => {
   assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN]);
 });
 
-test("the Chompy chick waits for the Western Provinces elite diary flag", () => {
+test("the Chompy chick requires a claimed elite reward rather than the old synthetic flag", () => {
   const player = createPlayer();
+  player.setAttribute("achievement-diary:western-provinces:elite", true);
   events.get("npc-drops:roll")({ player, drops: [{ itemId: 13071, amount: 1 }] });
   assert.deepEqual(player.inventory, []);
   assert.equal(player.getAttribute("pets.owned"), undefined);
 
-  player.setAttribute("achievement-diary:western-provinces:elite", true);
+  player.setAttribute("achievement-diaries:rewards", { western: ["elite"] });
   events.get("npc-drops:roll")({ player, drops: [{ itemId: 13071, amount: 1 }] });
   assert.deepEqual(player.inventory, [13071]);
 });

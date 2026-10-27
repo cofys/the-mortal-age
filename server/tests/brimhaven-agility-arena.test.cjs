@@ -20,7 +20,7 @@ const {
   obstacleXp, familyAt, crossingTarget,
 } = plugin._test;
 
-init({ core: PluginManager.getCoreApi() });
+init({ core: PluginManager.getCoreApi(), emitCustomEvent() {} });
 
 const TICKET = ItemIds.AGILITY_ARENA_TICKET;
 const VOUCHER = ItemIds.BRIMHAVEN_VOUCHER;

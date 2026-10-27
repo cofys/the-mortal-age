@@ -195,8 +195,12 @@ export function _ecsUpdateNpcClient(host: WebGLOsrsRendererHost, map: WebGLMapSq
         if (ids.length === 0 || clientTicksElapsed <= 0) return;
         const ecs = host.osrsClient.npcEcs;
         const pe = host.osrsClient.playerEcs;
+        // The client cycle each step of this batch stands for, so a sequence that arrived partway
+        // through it only steps from its own start (NpcEcs.hasSeqStartedBy).
+        const batchEndCycle = getClientCycle() | 0;
 
         for (let t = 0; t < clientTicksElapsed; t++) {
+            const stepCycle = batchEndCycle - (clientTicksElapsed - 1 - t);
             for (let j = 0; j < ids.length; j++) {
                 const id = ids[j] | 0;
                 if (!ecs.isActive(id) || !ecs.isLinked(id)) continue;
@@ -357,7 +361,7 @@ export function _ecsUpdateNpcClient(host: WebGLOsrsRendererHost, map: WebGLMapSq
                     } catch {}
                 }
 
-                if (seqId >= 0 && seqDelay === 0) {
+                if (seqId >= 0 && seqDelay === 0 && ecs.hasSeqStartedBy(id, stepCycle)) {
                     let actionLengths = extraLenMap?.[seqId];
                     let actionFrameCount = 1;
                     let actionSeqType: any | undefined;

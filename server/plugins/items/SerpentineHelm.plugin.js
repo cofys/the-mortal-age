@@ -7,10 +7,6 @@
  * poisoned weapon, 100% with the toxic blowpipe, trident of the swamp or toxic
  * staff. It spends 10 scales on entering combat and 10 more every 90 ticks.
  */
-const Equipment = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment").Equipment;
-const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
-const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
-
 const MAX_CHARGES = 11000;
 const COMBAT_CHARGE = 10;
 const COMBAT_CHARGE_TICKS = 90;
@@ -22,7 +18,10 @@ let core = null;
 let chargedIds = new Set();
 let chargedByUncharged = new Map();
 let chargedFromUncharged = new Map();
-let guaranteedWeaponIds = new Set();
+const GUARANTEED_WEAPON_NAMES = new Set([
+  "toxic blowpipe", "toxic staff of the dead", "trident of the swamp",
+  "trident of the swamp (e)", "trident of the swamp (o)", "trident of the swamp (e) (o)",
+]);
 
 function charges(item) {
   const saved = Number(item.getMetaValue?.(CHARGES_META_KEY));
@@ -33,7 +32,7 @@ function wornHelm(player) {
   if (!player?.getEquipment) {
     return null;
   }
-  const item = player.getEquipment().get(Equipment.HEAD_SLOT);
+  const item = player.getEquipment().get(core.Equipment.HEAD_SLOT);
   return item && chargedIds.has(item.getId()) ? item : null;
 }
 
@@ -58,7 +57,8 @@ function processUpkeep(player) {
   // Poison/venom immunity: keep the shared immunity timer alive without curing.
   const immunity = player.getCombat?.()?.getPoisonImmunityTimer?.();
   immunity?.protectBriefly(2, true);
-  const inCombat = player.getCombat?.()?.getTarget?.() != null;
+  const combat = player.getCombat();
+  const inCombat = combat.getTarget() != null || combat.getAttacker?.() != null;
   if (!inCombat) {
     player.setAttribute(COMBAT_CHARGE_TICK_ATTRIBUTE, null);
     return;
@@ -77,15 +77,18 @@ function processUpkeep(player) {
   player.setAttribute(COMBAT_CHARGE_TICK_ATTRIBUTE, cycle);
 }
 
-function venomChance(player) {
-  const weaponId = Number(player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.() ?? -1);
-  if (guaranteedWeaponIds.has(weaponId)) {
-    return 1;
-  }
+function venomChance(player, combatType) {
+  const weaponId = Number(player.getEquipment().get(core.Equipment.WEAPON_SLOT)?.getId?.() ?? -1);
   const name = String(core.ItemDefinition.forId(weaponId)?.getName?.() ?? "").toLowerCase();
-  if (/\(p(?:\+\+?)?\)$/.test(name)) {
-    return 0.5;
+  if (GUARANTEED_WEAPON_NAMES.has(name)) return 1;
+  // Read the selected projectile, including quiver and self-ammo weapons.
+  if (combatType === core.CombatType.RANGED) {
+    const ammoId = player.getCombat().getAmmunition()?.getItemId();
+    const ammoName = String(core.ItemDefinition.forId(ammoId ?? -1)?.getName?.() ?? "").toLowerCase();
+    return /\(p(?:\+\+?)?\)$/.test(ammoName) ? 0.5 : 0;
   }
+  if (combatType !== core.CombatType.MELEE) return 0;
+  if (name === "noxious halberd" || /^abyssal tentacle(?: \(or\))?$/.test(name) || /\(p(?:\+\+?)?\)$/.test(name)) return 0.5;
   return 1 / 6;
 }
 
@@ -97,7 +100,7 @@ function onHitResolved({ attacker, target, hit }) {
   if (!wornHelm(player) || !target?.isNpc?.() || target.isVenomed?.()) {
     return;
   }
-  if (Math.random() >= venomChance(player)) {
+  if (Math.random() >= venomChance(player, hit.getCombatType())) {
     return;
   }
   core.CombatFactory.poisonEntity(target, VENOM_SEVERITY, 2);
@@ -129,7 +132,8 @@ function chargeHelm(event) {
     refresh(player);
   }
   helm.setMetaValue(CHARGES_META_KEY, charges(helm) + used);
-  player.sendMessage(`You add ${used} scales to your serpentine helm.`);
+  const total = charges(helm);
+  player.sendMessage(`Scales: <col=007f00>${total.toLocaleString("en-US")} (${(100 * total / MAX_CHARGES).toFixed(1)}%)</col>`);
   event.handled = true;
 }
 
@@ -139,16 +143,42 @@ function uncharge({ player, item }) {
     player.sendMessage("Your serpentine helm has no scales to remove.");
     return true;
   }
-  if (player.getInventory().getFreeSlots() < 1) {
+  const refund = new core.Item(core.ItemIdentifiers.ZULRAHS_SCALES, left);
+  if (player.getInventory().getAddableAmount(refund) < left) {
     player.sendMessage("You need a free inventory slot to uncharge your serpentine helm.");
     return true;
   }
   item.setId(chargedByUncharged.get(item.getId()) ?? item.getId());
   item.setMetaValue(CHARGES_META_KEY, undefined);
-  player.getInventory().addItem(new Item(core.ItemIdentifiers.ZULRAHS_SCALES, left));
+  player.getInventory().addItem(refund);
   refresh(player);
   player.sendMessage(`You remove ${left} scales from your serpentine helm.`);
   return true;
+}
+
+function processPlayer({ player }) {
+  if (!player?.isPlayerBot?.()) processUpkeep(player);
+}
+
+function attach(api) {
+  core = api.core;
+  const I = core.ItemIdentifiers;
+  const families = [
+    [I.SERPENTINE_HELM, I.SERPENTINE_HELM_2, I.SERPENTINE_HELM_UNCHARGED_],
+    [I.TANZANITE_HELM, I.TANZANITE_HELM_2, I.TANZANITE_HELM_UNCHARGED_],
+    [I.MAGMA_HELM, I.MAGMA_HELM_2, I.MAGMA_HELM_UNCHARGED_],
+  ];
+  chargedByUncharged = new Map(families.flatMap(([charged, alternate, empty]) => [[charged, empty], [alternate, empty]]));
+  chargedIds = new Set(chargedByUncharged.keys());
+  chargedFromUncharged = new Map(families.map(([charged, , empty]) => [empty, charged]));
+  api.persistAttribute(COMBAT_CHARGE_TICK_ATTRIBUTE, null);
+  for (const name of ["Serpentine helm", "Tanzanite helm", "Magma helm"]) {
+    api.onItemAction(name, { Check: checkCharges, Uncharge: uncharge });
+    api.onItemOnItem("Zulrah's scales", name, chargeHelm, { noted: false });
+    api.onItemOnItem("Zulrah's scales", `${name} (uncharged)`, chargeHelm, { noted: false });
+  }
+  api.onCombatHitResolved(onHitResolved);
+  api.onPlayerProcess(processPlayer);
 }
 
 module.exports = {
@@ -156,33 +186,6 @@ module.exports = {
   members: true,
   _test: { charges, wornHelm, processUpkeep, venomChance, onHitResolved, chargeHelm, uncharge, MAX_CHARGES },
   register(api) {
-    core = api.core;
-    const I = core.ItemIdentifiers;
-    const chargedIdsList = [I.SERPENTINE_HELM, I.SERPENTINE_HELM_2];
-    const unchargedId = I.SERPENTINE_HELM_UNCHARGED_;
-    chargedIds = new Set(chargedIdsList);
-    chargedByUncharged = new Map(chargedIdsList.map((id) => [id, unchargedId]));
-    chargedFromUncharged = new Map([[unchargedId, chargedIdsList[0]]]);
-    guaranteedWeaponIds = new Set([I.TOXIC_BLOWPIPE, I.TRIDENT_OF_THE_SWAMP, I.TOXIC_STAFF_OF_THE_DEAD]);
-
-    api.persistAttribute(COMBAT_CHARGE_TICK_ATTRIBUTE, null);
-    api.onItemAction((event) => {
-      if (chargedIds.has(event.itemId)) {
-        const option = String(event.option ?? "").toLowerCase();
-        if (option === "check") {
-          event.handled = true;
-          checkCharges(event);
-        } else if (option === "uncharge") {
-          event.handled = uncharge(event);
-        }
-      }
-    });
-    api.onItemOnItem(chargeHelm, { noted: false });
-    api.onCombatHitResolved(onHitResolved);
-    api.onPlayerProcess(({ player }) => {
-      if (!player?.isPlayerBot?.()) {
-        processUpkeep(player);
-      }
-    });
+    attach(api);
   },
 };

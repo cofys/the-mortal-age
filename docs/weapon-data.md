@@ -23,7 +23,7 @@ In the first run, 234 weapons got a type they didn't have and 112 had theirs cor
 - Arclight is a slash sword, not a two-handed sword;
 - the Elder maul's type was in the cache's "egg" category (32); it's blunt (2).
 
-New types for categories tsps had none for: `BLADED_STAFF`, `BULWARK`, `GUN`, `MULTI_MELEE` (Infernal tecpatl) and `SLASH_FLAIL` (Hallowed flail). `yarn dump:item-combat-styles` filled their styles from the cache.
+New types for categories tsps had none for: `BLADED_STAFF`, `BULWARK`, `GUN`, `MULTI_MELEE` (Infernal tecpatl), `SLASH_FLAIL` (Hallowed flail) and `EXTENDING_CHAINMACE` (Obligator, from the Wiki's "Extending Chain Mace"). `yarn dump:item-combat-styles` filled their styles from the cache.
 
 **Left without a type** (listed in the test):
 - **Nature's reprisal** ("Multi-style"): its attacks change combat method with the chosen style, which the combat engine can't do yet.
@@ -38,6 +38,40 @@ From the most specific source to the least:
 4. the type's default.
 
 So weapons whose speed differs from their type's are right without a per-item entry: the Scythe of Vitur is 5 (its type, scythe, is 4), the plain Scythe 7.
+
+## Two-handed weapons
+
+A weapon is two-handed when the cache also wears it in the shield slot (its second wear position is 5), so wielding it takes off a shield or defender. `item-gameplay.json`'s `doubleHanded` isn't read: the old export left newer weapons and variants one-handed (the Soulreaper axe, a Noxious halberd, Elder maul (or)) and had the Keris partisans two-handed.
+
+## Attack range
+
+How far a ranged weapon reaches, from the most specific source to the least:
+1. a profile registered for the item in `WeaponProfile.ts` (only the pre-2019 crystal bows, which have no range in the cache, and the Gauntlet's bows);
+2. **the cache's attack range for the item** (item param 13);
+3. the weapon type's profile;
+4. 6 tiles.
+
+The weapon's Longrange style (the style its type's profile names) adds 2 tiles, and nothing reaches past 10 ([Attack range](https://oldschool.runescape.wiki/w/Attack_range)). Param 13, capped at 10, agrees with every row of that page's table that was checked against it (all but the uncharged Tonalztics of Ralos, 6 on the Wiki), so a weapon needs no per-item entry. The table had been typed in by weapon type, which got these wrong:
+
+| Weapon | Wiki and cache param 13 (Longrange) | Was |
+| --- | --- | --- |
+| Longbows | 10 (10) | 9 (10) |
+| Webweaver bow | 9 (10) | 7 (9) |
+| Karil's, Armadyl, Zaryte and Hunters' crossbows | 8 (10) | 7 (9) |
+| Light and heavy ballista | 9 (10) | 7 (9) |
+| Toktz-xil-ul | 7 (9) | 5 (6) |
+| Morrigan's javelins ([Wiki](https://oldschool.runescape.wiki/w/Morrigan%27s_javelin): 5; Longrange by the page's +2 rule) | 5 (7) | 5 (6) |
+| Comp ogre bow ([Wiki](https://oldschool.runescape.wiki/w/Comp_ogre_bow)) | 5 (7) | 10, as a composite bow |
+| Crossbow (the plain one) | 10 (10) | 7 (9) |
+| Phoenix crossbow | 5 (7) | 7 (9) |
+| Dorgeshuun crossbow | 6 (8) | 7 (9) |
+| Seercull | 8 (10) | 7 (9) |
+| Cursed goblin bow, Eclipse atlatl | 6 (8) | 7 (9) |
+| Hunter's spear | 5 (7) | the dart's 3 (5) |
+
+The composite bows carry 12 in the cache; the 10-tile limit makes them 10, as the Wiki lists them.
+
+Melee reach is unchanged for melee weapons: halberds 2, everything else 1. Powered staves set their own range in their plugins: the Bone staff now adds the Longrange 2 as the others do (8, 10 on Longrange).
 
 ## Attack animations
 

@@ -70,6 +70,7 @@ function player(items = [], attrs = [], levels = {}) {
     isPlayer: () => true,
     isNpc: () => false,
     isRegistered: () => true,
+    busy: () => false,
     setPositionToFace: noop,
     items: inventory,
     attrs: attributes,
@@ -115,6 +116,7 @@ function questHarness() {
         getId: () => definition.id,
         getLocation: () => new core.Location(definition.x, definition.y, definition.z ?? 0),
         getOwner: () => definition.owner,
+        getPrivateArea: () => null,
         isRegistered: () => true,
       };
       spawned.push(npc);
@@ -429,6 +431,7 @@ test('stage 0 to completion: cave, bellows, toads, bow, chompy, ingredients and 
 
     const pluck = { player: p, npcId: core.NpcIdentifiers.CHOMPY_BIRD_2, clickType: 4, npc: dead,
       definition: { getActions: () => [null, null, null, 'Pluck', null] }, handled: false };
+    p.moveTo(new core.Location(2634, 2966, 0));
     hooks.onNpcInteraction[0](pluck);
     assert.equal(pluck.handled, true);
     assert.equal(p.items.get(I.RAW_CHOMPY), 1);
@@ -766,8 +769,12 @@ test('full inventory cannot lose the bow, reclaim coins, a toad charge or a carc
   assert.ok(toadHarness.removed.includes(secondToad));
 
   const pluckHarness = questHarness();
-  const pluck = dialoguePlayer();
+  const pluck = dialoguePlayer([[I.BLOATED_TOAD, 1]]);
   pluckHarness.quest.setStage(pluck, 50);
+  pluck.moveTo(new core.Location(2634, 2966, 0));
+  releaseToad(pluckHarness, pluck);
+  pluckHarness.hooks.onNpcDeath[0]({ killer: pluck, npcId: core.NpcIdentifiers.CHOMPY_BIRD,
+    npc: pluckHarness.spawned.at(-1), location: { x: 2635, y: 2966, z: 0 } });
   pluck.inventoryFull = true;
   const pluckAt = (npc) => {
     const event = { player: pluck, npcId: core.NpcIdentifiers.CHOMPY_BIRD_2, clickType: 4, npc,
@@ -775,16 +782,15 @@ test('full inventory cannot lose the bow, reclaim coins, a toad charge or a carc
     pluckHarness.hooks.onNpcInteraction[0](event);
     return event;
   };
-  const firstCarcass = { getId: () => core.NpcIdentifiers.CHOMPY_BIRD_2 };
+  const firstCarcass = pluckHarness.spawned.at(-1);
   const blockedPluck = pluckAt(firstCarcass);
   assert.equal(blockedPluck.handled, true);
   assert.equal(pluck.items.get(I.RAW_CHOMPY) ?? 0, 0);
   assert.ok(!pluckHarness.removed.includes(firstCarcass), 'carcass remains when the raw chompy cannot fit');
   pluck.inventoryFull = false;
-  const secondCarcass = { getId: () => core.NpcIdentifiers.CHOMPY_BIRD_2 };
-  pluckAt(secondCarcass);
+  pluckAt(firstCarcass);
   assert.equal(pluck.items.get(I.RAW_CHOMPY), 1);
-  assert.ok(pluckHarness.removed.includes(secondCarcass));
+  assert.ok(pluckHarness.removed.includes(firstCarcass));
 });
 
 test('replacement removes the prior chompy and raw/seasoned loss can be recovered', () => {
@@ -811,6 +817,7 @@ test('replacement removes the prior chompy and raw/seasoned loss can be recovere
   assert.equal(recoveryCarcass.id, core.NpcIdentifiers.CHOMPY_BIRD_2);
   const pluck = { player: raw, npcId: core.NpcIdentifiers.CHOMPY_BIRD_2, clickType: 4, npc: recoveryCarcass,
     definition: { getActions: () => [null, null, null, 'Pluck', null] }, handled: false };
+  raw.moveTo(new core.Location(2634, 2966, 0));
   rawHarness.hooks.onNpcInteraction[0](pluck);
   assert.equal(raw.items.get(I.RAW_CHOMPY), 1, 'raw chompy is recovered');
 

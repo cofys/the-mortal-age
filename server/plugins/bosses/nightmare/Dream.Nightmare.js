@@ -13,6 +13,7 @@
  * items stay with Shura or Sister Senga (Retrieval.Nightmare).
  */
 const Common = require("./Common.Nightmare");
+const Scoreboard = require("./Scoreboard.Nightmare");
 
 /** Every dream there is, and The Nightmare's shared one while it takes players. */
 const dreams = new Set();
@@ -326,6 +327,7 @@ function wakeByPool(event) {
   const dream = dreamOf(event.player);
   if (!dream) return;
   const { player } = event;
+  Scoreboard.died(player, dream.phosani);
   player.moveTo(Common.toLocation(Common.data.lobby.respawn));
   dream.removePlayer(player);
   require("./Retrieval.Nightmare").announce(player);

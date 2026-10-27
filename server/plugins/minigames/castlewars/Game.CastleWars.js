@@ -493,8 +493,13 @@ function rewardPlayer(player) {
   // OSRS Wiki, non-dedicated worlds: shut-out win 3, win 2, loss 1, 0-0 draw 1, scoring draw 2.
   const own = score[teamId];
   const other = score[opposingTeam(teamId)];
-  const tickets = own === other ? (own === 0 ? 1 : 2) : own < other ? 1 : other === 0 ? 3 : 2;
+  const award = { player, minigame: "castle-wars", points: own === other ? (own === 0 ? 1 : 2) : own < other ? 1 : other === 0 ? 3 : 2 };
+  api.emitCustomEvent("minigame:points", award);
+  const tickets = award.points;
   const result = own === other ? "Tie game!" : own > other ? "You won the game." : "You lost the game.";
+  if (player.getAttribute(BOT_KEY) !== true) {
+    api.emitCustomEvent("castlewars:player-result", { player, result: own === other ? "tie" : own > other ? "win" : "loss" });
+  }
   player.getInventory().adds(core.ItemIdentifiers.CASTLE_WARS_TICKET, tickets);
   player.sendMessage(`${result} You received ${tickets} Castle Wars ticket${tickets === 1 ? "" : "s"}.`);
 }
@@ -689,6 +694,7 @@ function endGame() {
   // Clear the flag arrows while everyone is still in the area: the hint task stops below
   // and would otherwise find no players left to clear.
   stopFlagHints();
+  recordWinner();
   for (const player of [...game.gameArea.getPlayers()]) {
     rewardPlayer(player);
     clearCastleWarsItems(player);
@@ -710,6 +716,21 @@ function endGame() {
   }
   resetMatchState();
   phase = PHASE.IDLE;
+}
+
+/**
+ * The scoreboard's team win: the side ahead, when a real (non-bot) player of that side is still
+ * in the game at the end. A bot-only game, or one whose leading side has left, is no team's win.
+ */
+function recordWinner() {
+  const { SARADOMIN, ZAMORAK } = data.TEAM;
+  if (score[SARADOMIN] === score[ZAMORAK]) {
+    return;
+  }
+  const team = score[SARADOMIN] > score[ZAMORAK] ? SARADOMIN : ZAMORAK;
+  if (getTeamMembersInGame(team).some((player) => player.getAttribute(BOT_KEY) !== true)) {
+    api.emitCustomEvent("castlewars:game-won", { team });
+  }
 }
 
 /** Ends the game once a side has nobody left in it. */

@@ -51,6 +51,7 @@ const loader = {
         return { root: group, widgets: new Map([[group.uid, group]]) };
     },
     getAvailableGroups: () => [900, 901, 902],
+    unloadGroup: () => undefined,
     clearCache: () => undefined,
 };
 const manager = new WidgetManager({} as never, loader as never);
@@ -91,6 +92,7 @@ assert.deepEqual(closedGroups.sort((a, b) => a - b), [900, 901]);
 
 closedGroups.length = 0;
 manager.clear();
-assert.deepEqual(closedGroups.sort((a, b) => a - b), [900, 901, 902]);
+// 902 was unloaded when it closed, so the reset has nothing left to report for it.
+assert.deepEqual(closedGroups.sort((a, b) => a - b), [900, 901]);
 
 console.log("Widget root onLoad race test passed");

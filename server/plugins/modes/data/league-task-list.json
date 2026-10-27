@@ -1,0 +1,33 @@
+{
+  "$comment": "The league task list (docs/leagues.md, Tasks), used by plugins/modes/LeagueTasks.plugin.js; the catalog itself is the generated league-tasks.json. From the rev 241 cache: the list interface league_tasks (657) draws its rows from enum `taskEnum` (position -> a row of DB table `table`, `action`, whose columns are listed), takes a tier's points from enum `pointsEnum`, and reads a task's completion as bit (position % 32) of the `completionVarps` (script 9470: 2616-2631 for positions 0-511, 2808-2835 for 512-1407, 3339-3342 for 1408-1535, 4036-4049 for 1536-1983); the recordings never carry those varps, the scripts read them, so we send them. A league's own catalog goes to the client as enumOverrides (the task enum, the points enum) and dbRowOverrides (rows `virtualRowBase` + league type x 10000 + position). From rsprox Leagues V recordings (osrs-captures 227/00070, 00067, 00068, 01710): View Tasks (656:36) opens 657 in the toplevel floater as an overlay with if_setevents OP1 on the five dropdowns' option lists, the task rows (0..task count) and the menu frame; a dropdown option slot N sets its filter varbit to N - 1 (captured for the tier and completed-style dropdowns; the rest follow their enums); a row click is answered with nothing (expand/collapse is the client's); the close button closes the floater; a completed task adds the game message in the league's colour after LeaguePoints' varps and popup. The recordings are revision 227, where the option lists were 657:35-39 and the rows 657:17; this cache (241) names them dropdown_tier 657:37, dropdown_type 38, dropdown_area 39, dropdown_skill 40, dropdown_completed 42 (the components the filter rows' scripts, 3207, build each list in) and the rows' Expand ops sit on tasks_background 657:18, so those take the events here (the cache wins on ids). league_reward_points_buffer (13341) animates the side panel's bar on live (10 then 0) and is not sent.",
+  "table": 118,
+  "columns": { "name": 0, "description": 1, "difficulty": 32, "inCurrentLeague": 34, "category": 35, "area": 36 },
+  "taskEnum": 5950,
+  "pointsEnum": 2671,
+  "virtualRowBase": 300000,
+  "completionVarps": [[2616, 2631], [2808, 2835], [3339, 3342], [4036, 4049]],
+  "interface": {
+    "group": 657,
+    "openButton": [656, 36],
+    "floater": [161, 18],
+    "overlay": 1,
+    "rows": 18,
+    "menuFrame": 6,
+    "menuFrameSlots": [10, 18],
+    "close": 3
+  },
+  "filters": {
+    "tier": { "varbit": 10033, "component": 37, "slots": [1, 7], "source": "captured on rev 227's component: slot 3 -> 2, slot 5 -> 4, slot 1 -> 0; enum 2676 (Tier)" },
+    "type": { "varbit": 11689, "component": 38, "slots": [1, 8], "source": "captured on rev 227's component: slot 2 -> 1; enum 3413 (Type)" },
+    "area": { "varbit": 11692, "component": 39, "slots": [1, 15], "source": "enum 3414 (Area; 13 is Unlocked) and the captured if_setevents range" },
+    "skill": { "varbit": 13340, "component": 40, "slots": [1, 7], "source": "enum 4105 (Skill) and the captured if_setevents range" },
+    "completed": { "varbit": 10034, "component": 42, "slots": [1, 4], "source": "enum 2677 (All/Incomplete/Complete) and the captured if_setevents range" }
+  },
+  "messages": {
+    "completed": { "text": "Congratulations, you've completed {article} {tier} task: <col={colour}>{name}</col>.", "source": "capture 227/00070: \"Congratulations, you've completed an easy task: <col=20C2FE>Fletch an Oak Shortbow</col>.\"" },
+    "searchUsage": { "text": "Use ::leaguetasks <search> to find a task by name or id.", "source": "ours" },
+    "searchNone": { "text": "No {league} task matches \"{search}\".", "source": "ours" },
+    "searchResult": { "text": "{id} - {name} ({tier}, {points} points{done})", "source": "ours" },
+    "searchMore": { "text": "...and {count} more.", "source": "ours" }
+  }
+}

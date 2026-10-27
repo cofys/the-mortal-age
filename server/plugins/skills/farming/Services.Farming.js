@@ -2,6 +2,7 @@ const core = require("./Core.Farming");
 const Data = require("./Data.Farming");
 const Model = require("./Model.Farming");
 const Patches = require("./Patches.Farming");
+const Tools = require("./Tools.Farming");
 
 // Every gardener stands within 7 tiles of its patch; Ceto (drift nets, 20 tiles from the
 // underwater seaweed) and Cap'n Izzy No-Beard (agility arena, 12) also advertise Pay.
@@ -101,11 +102,7 @@ function binAction(player, patch, action, usedId, usedSlot) {
         if (!superItem && !COMPOST.has(name) && !herb) {
             player.sendMessage("That cannot be composted."); return;
         }
-        inventory.deleteNumber(usedId, 1);
-        bin.count++;
-        if (superItem) bin.super++;
-        if (name === "Tomato") bin.tomatoes++;
-        bin.tier = bin.super === bin.count ? 2 : bin.tomatoes === bin.count ? 4 : 1;
+        Patches.startBinWork(player, patch, { id: usedId, superItem, tomato: name === "Tomato", bin });
         return;
     }
     player.sendMessage(`The compost bin contains ${bin.count}/${capacity} items${bin.closedAt && !bin.open ? ", rotting" : ""}.`);
@@ -246,36 +243,10 @@ function humidified({ player }) {
     // Assign the same persistent farming-clock deadline used for hand-watered seedlings.
     Patches.noteSeedling(player, growSeedlings(player, Date.now()));
 }
-function withdrawTools(player, npc) {
-    const stored = Patches.farmFor(player).tools;
-    const entries = Object.entries(stored).filter(([, count]) => count > 0).map(([id, count]) => [
-        `${core.CacheDefinitions.getItem(+id).name} (${count})`, () => {
-            if (!player.getLocation().isWithinDistance(npc.getLocation(), 5)) return;
-            const amount = Math.min(stored[id], player.getInventory().getFreeSlots(), 28);
-            if (!amount) return;
-            const meta = Patches.farmFor(player).toolMeta?.[id];
-            if (meta) {
-                player.getInventory().addItem(new core.Item(+id, 1, core.Item.cloneMeta(meta)));
-                stored[id]--; delete Patches.farmFor(player).toolMeta[id];
-            } else if (Patches.give(player, +id, amount)) stored[id] -= amount;
-        },
-]);
-    for (const [id, count] of Object.entries(stored)) {
-        const definition = core.CacheDefinitions.getItem(+id);
-        if (!count || definition.note < 0 || Patches.farmFor(player).toolMeta?.[id]) continue;
-        entries.push([`Withdraw noted ${definition.name} (${count})`, () => {
-            if (!player.getLocation().isWithinDistance(npc.getLocation(), 5)) return;
-            const amount = stored[id];
-            if (amount && Patches.give(player, definition.note, amount)) stored[id] -= amount;
-        }]);
-    }
-    if (!entries.length) { player.sendMessage("Use farming tools or compost on me to store them."); return; }
-    Patches.choose(player, entries);
-}
 function toolCapacity(name) {
     return TOOL_CAPACITY[name] ?? (/^Watering can|^Gricoller's can$/.test(name) ? 1 : 0);
 }
-function storeTool(player, slot) {
+function storeTool(player, slot, maximum = Infinity) {
     const inventory = player.getInventory(), item = inventory.forSlot(slot);
     if (!item || item.getId() < 0) return false;
     const definition = core.CacheDefinitions.getItem(item.getId());
@@ -294,7 +265,7 @@ function storeTool(player, slot) {
         return sum + (watering ? /^Watering can|^Gricoller's can$/.test(other) ? count : 0
             : /secateurs/i.test(name) ? /secateurs/i.test(other) ? count : 0 : other === name ? count : 0);
     }, 0);
-    const amount = Math.min(inventory.getAmount(item.getId()), capacity - used);
+    const amount = Math.min(inventory.getAmount(item.getId()), capacity - used, maximum);
     if (amount <= 0) { player.sendMessage("I cannot store any more of those."); return true; }
     if (capacity === 1) {
         (farm.toolMeta ??= {})[id] = core.Item.cloneMeta(item.getMeta());
@@ -392,7 +363,7 @@ function farmingNpc(event) {
             for (let slot = 0; slot < player.getInventory().capacity(); slot++) storeTool(player, slot);
             return;
         }
-        withdrawTools(player, npc);
+        Tools.open(player, npc);
         return;
     }
     if (action !== "pay" && action !== "pay-fare" && action !== "talk-to") return;
@@ -511,4 +482,4 @@ function farmingItemAction(event) {
     }
 }
 
-Object.assign(module.exports, { cropRewards, binValue, binAction, useBottomless, farmingItemPair, growSeedlings, waterContainers, humidified, farmingItemOnNpc, farmingNpc, farmingItemAction });
+Object.assign(module.exports, { cropRewards, binValue, binAction, useBottomless, farmingItemPair, growSeedlings, waterContainers, humidified, farmingItemOnNpc, farmingNpc, farmingItemAction, storeTool });

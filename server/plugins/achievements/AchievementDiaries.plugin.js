@@ -8,8 +8,12 @@
  *     -> sets `completed` true when the task was newly done
  *   api.emitCustomEvent("diary:is-complete", { player, diary: "ardougne", tier: "hard" })
  *     -> sets `complete`
+ *   api.emitCustomEvent("diary:is-reward-claimed", { player, diary: "western", tier: "elite" })
+ *     -> sets `claimed` from the canonical claimed-tier record, not task completion
  *   api.emitCustomEvent("diary:all-complete", { player })
  *     -> sets `complete` when every tier of every diary is done
+ *   api.emitCustomEvent("diary:tokkul", { player, amount })
+ *     -> doubles `amount` for the Elite Karamja Diary (TzHaar Fight Cave, Inferno, Ket-Rak's Challenges)
  *
  *   ::diary <name>                          each tier's progress
  *   ::diary <name> <tier|all> complete      complete the tier(s) task by task
@@ -44,6 +48,18 @@ function onIsComplete(request) {
   if (diary && request.player && TIERS.includes(request.tier)) {
     request.complete = Progress.isTierComplete(request.player, diary, request.tier);
   }
+}
+/** Claimed rewards are distinct from completed tasks (e.g. pet eligibility). */
+function onIsRewardClaimed(request) {
+  const diary = BY_KEY.get(request.diary);
+  if (diary && request.player && TIERS.includes(request.tier))
+    request.claimed = Progress.claimedTiers(request.player, diary).has(request.tier);
+}
+
+/** The Elite Karamja Diary doubles the Tokkul from the Fight Cave, the Inferno and Ket-Rak's Challenges. */
+function onTokkul(request) {
+  const diary = BY_KEY.get("karamja");
+  if (diary && request.player && Progress.isTierComplete(request.player, diary, "elite")) request.amount *= 2;
 }
 
 function onAllComplete(request) {
@@ -94,8 +110,10 @@ module.exports = {
     Lamps(api);
     api.onCustomEvent("diary:task", onTask);
     api.onCustomEvent("diary:is-complete", onIsComplete);
+    api.onCustomEvent("diary:is-reward-claimed", onIsRewardClaimed);
     api.onCustomEvent("diary:all-complete", onAllComplete);
+    api.onCustomEvent("diary:tokkul", onTokkul);
     api.registerCommand("diary", diaryCommand, api.core.PlayerRights.ADMINISTRATOR, "Show or set achievement diary progress: ::diary <name> [tier|all] [complete|reset]");
   },
-  _test: { diaryCommand, findDiaries, onTask, onIsComplete, onAllComplete },
+  _test: { diaryCommand, findDiaries, onTask, onIsComplete, onAllComplete, onTokkul },
 };

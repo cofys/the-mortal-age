@@ -1,22 +1,10 @@
-// TODO: base implementation — guaranteed accuracy when the target was never hit / last hit by someone else needs live engagement state. Ported from xrsps-typescript; untested.
-module.exports = function registerDorgeshuunCrossbowSpecialAttack(api) {
-  const { CombatSpecial, ItemIdentifiers, RangedCombatMethod, Skill } = api.core;
+// Snipe (https://oldschool.runescape.wiki/w/Dorgeshuun_crossbow): never misses a target nobody,
+// or another player, damaged last, and lowers the Defence of a player or NPC by the damage dealt
+// when it is at (or above) its base level.
+function buildSpecial(core) {
+  const { CombatSpecial, ItemIdentifiers, RangedCombatMethod, Skill } = core;
 
   const DRAIN = 75;
-
-  function snipe(target, damage) {
-    if (damage <= 0 || !target.isPlayer()) {
-      return;
-    }
-    const skillManager = target.getAsPlayer().getSkillManager();
-    const current = skillManager.getCurrentLevel(Skill.DEFENCE);
-    const max = skillManager.getMaxLevel(Skill.DEFENCE);
-    // Only drains while Defence has not already been reduced.
-    if (current < max) {
-      return;
-    }
-    skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(1, current - damage));
-  }
 
   class DorgeshuunCrossbowCombatMethod extends RangedCombatMethod {
     start(character, target) {
@@ -28,16 +16,29 @@ module.exports = function registerDorgeshuunCrossbowSpecialAttack(api) {
       if (!hit.isAccurate()) {
         return;
       }
-      snipe(hit.getTarget(), Math.floor(hit.getTotalDamage()));
+      const damage = Math.max(0, Math.floor(hit.getTotalDamage()));
+      if (damage <= 0) {
+        return;
+      }
+      const target = hit.getTarget();
+      const skillManager = target.isPlayer() ? target.getAsPlayer().getSkillManager() : target.getAsNpc();
+      const current = skillManager.getCurrentLevel(Skill.DEFENCE);
+      if (current < skillManager.getMaxLevel(Skill.DEFENCE)) return;
+      skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(target.isPlayer() ? 1 : 0, current - damage));
     }
   }
 
-  api.registerCombatSpecial({
+  return {
     id: "dorgeshuun_crossbow",
     itemIds: [ItemIdentifiers.DORGESHUUN_CROSSBOW],
     drainAmount: DRAIN,
     strengthMultiplier: 1,
     accuracyMultiplier: 1,
+    traits: { guaranteedHitOnUnsuspectingTarget: true },
     combatMethod: new DorgeshuunCrossbowCombatMethod(),
-  });
+  };
+}
+
+module.exports = function registerDorgeshuunCrossbowSpecialAttack(api) {
+  api.registerCombatSpecial(buildSpecial(api.core));
 };

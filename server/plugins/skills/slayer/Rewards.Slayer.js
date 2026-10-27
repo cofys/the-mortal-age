@@ -76,6 +76,17 @@ function points(player) {
   return State.varbit(player, "slayer_points");
 }
 
+/**
+ * What a reward costs this player: content may lower it ("slayer:reward-cost" { player, kind, cost,
+ * ... }, a league relic's free rewards); `kind` is "unlock" (with `bit`), "extend", "cancel",
+ * "block" or "buy" (with `itemId`). Never below 0.
+ */
+function costOf(player, kind, cost, detail = {}) {
+  const request = { player, kind, cost, ...detail };
+  api.emitCustomEvent("slayer:reward-cost", request);
+  return Number.isSafeInteger(request.cost) && request.cost >= 0 ? request.cost : cost;
+}
+
 function spend(player, cost, what) {
   if (points(player) < cost) {
     player.sendMessage(NOT_ENOUGH.replace("{cost}", String(cost)).replace("{what}", what));
@@ -138,7 +149,7 @@ function unlock(player, bit) {
     setUnlockBit(player, bit, false);
     return;
   }
-  if (!spend(player, entry.cost, "unlock this")) return;
+  if (!spend(player, costOf(player, "unlock", entry.cost, { bit, name: entry.name }), "unlock this")) return;
   setUnlockBit(player, bit, true);
   api.emitCustomEvent("slayer:unlocked", { player, bit, name: entry.name });
 }
@@ -147,7 +158,7 @@ function unlock(player, bit) {
 function extendAll(player) {
   const locked = [...Data.get().unlocks.values()].filter((entry) => entry.tab === 1 && !Tasks.hasUnlockBit(player, entry.bit));
   if (locked.length === 0) return;
-  const cost = locked.reduce((sum, entry) => sum + entry.cost, 0);
+  const cost = locked.reduce((sum, entry) => sum + costOf(player, "extend", entry.cost, { bit: entry.bit, name: entry.name }), 0);
   if (!spend(player, cost, "extend everything")) return;
   for (const entry of locked) setUnlockBit(player, entry.bit, true);
 }
@@ -160,7 +171,7 @@ function cancelCost(player) {
 
 function cancel(player) {
   if (!Tasks.current(player)) return;
-  if (!spend(player, cancelCost(player), "cancel your task")) return;
+  if (!spend(player, costOf(player, "cancel", cancelCost(player)), "cancel your task")) return;
   Tasks.clear(player);
   refreshTask(player);
   player.sendMessage("Your task has been cancelled.");
@@ -205,7 +216,7 @@ function blockNow(player, master, task) {
     player.sendMessage("You don't have a free block slot with this master.");
     return;
   }
-  if (!spend(player, master.blockCost, "block your task")) return;
+  if (!spend(player, costOf(player, "block", master.blockCost), "block your task")) return;
   State.setVarbit(player, blockVarbit(master, slot), task.taskId);
   Tasks.clear(player);
   refreshTask(player);
@@ -259,7 +270,7 @@ function buy({ player, slot, opId, action }) {
   const item = core.CacheDefinitions.getEnumValues(BUY_ITEMS_ENUM).get(slot);
   if (typeof item !== "number" || item < 0) return true;
   const each = Number(core.CacheDefinitions.getEnumValues(BUY_AMOUNTS_ENUM).get(item)) || 1;
-  const price = Number(core.CacheDefinitions.getEnumValues(BUY_PRICES_ENUM).get(item)) || 0;
+  const price = costOf(player, "buy", Number(core.CacheDefinitions.getEnumValues(BUY_PRICES_ENUM).get(item)) || 0, { itemId: item });
   const inventory = player.getInventory();
   const stackable = core.ItemDefinition.forId(item)?.isStackable?.() === true;
   let bought = 0;

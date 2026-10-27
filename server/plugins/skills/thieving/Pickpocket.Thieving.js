@@ -235,9 +235,12 @@ function dodgyNecklaceProtects(player, random = Math.random) {
   return true;
 }
 
-function succeed(player, target, name) {
+function succeed(player, npc, target, name) {
   player.performAnimation(new core.Animation(target.pickpocketAnimation ?? THIEVING_ANIMATION));
-  giveLoot(player, target, rollLoot(player, target));
+  // Content may change the loot before it is handed over ("thieving:loot", a league relic's doubled or noted loot).
+  const loot = { player, npc, target: target.name, loot: rollLoot(player, target) };
+  pluginApi.emitCustomEvent("thieving:loot", loot);
+  giveLoot(player, target, loot.loot);
   player.sendMessage(`You pick ${name}'s pocket.`);
   core.Sounds.sendSound(player, core.Sound.THIEVING_PICKPOCKET);
   player.getSkillManager().addExperiences(core.Skill.THIEVING, target.xp);
@@ -303,8 +306,8 @@ function caughtTask(player, npc, target) { return new (class extends core.Task {
 })(player, npc, target); }
 
 /** The attempt message goes out on the click; the outcome follows a tick later. */
-function pickpocketTask(player, npc, target, name) { return new (class extends core.Task {
-  constructor(player, npc, target, name) {
+function pickpocketTask(player, npc, target, name, event) { return new (class extends core.Task {
+  constructor(player, npc, target, name, event) {
     // Not keyed to the player: a new click cancels the player's keyed tasks, but OSRS still
     // resolves an attempt (and its stun) while the player clicks on.
     super(1);
@@ -312,31 +315,55 @@ function pickpocketTask(player, npc, target, name) { return new (class extends c
     this.npc = npc;
     this.target = target;
     this.name = name;
+    this.event = event;
   }
 
   execute() {
     this.stop();
-    const { player, npc, target, name } = this;
+    const { player, npc, target, name, event } = this;
     if (!player.isRegistered() || !npc.isRegistered() || player.getHitpoints() <= 0) return;
     // Capture (a hero): with the outcome the player stops tracking the NPC and keeps facing the
     // tile it stood on, so a walking NPC isn't followed round.
     if (player.getInteractingMobile?.() === npc) player.setMobileInteraction(null);
     player.setPositionToFace(npc.getLocation());
-    if (Math.random() < successChance(player, target)) succeed(player, target, name);
+    const succeeded = Math.random() < successChance(player, target);
+    if (succeeded) succeed(player, npc, target, name);
     else fail(player, npc, target, name);
+    // Content may ask for another go ("thieving:done", a league relic that keeps pickpocketing): the same click, a tick later.
+    const done = { player, kind: "pickpocket", npc, succeeded, again: false };
+    pluginApi.emitCustomEvent("thieving:done", done);
+    // A repeat only while neither has moved: the player on the tile they pickpocketed from, the NPC still within reach.
+    const inReach = event && samePlace(player.getLocation(), event.from) && npc.getLocation().getDistance?.(player.getLocation()) <= Math.max(1, npc.getSize?.() ?? 1);
+    // Keyed by the player's index, as their other actions: walking off (MovementQueue.walkToReset) cancels it; and
+    // checked again when it fires, in case they moved another way.
+    if (done.again && inReach) core.TaskManager.submit(new core.CountdownTask(player.getIndex(), 1, () => {
+      const stillThere = samePlace(player.getLocation(), event.from) && npc.isRegistered()
+        && npc.getLocation().getDistance?.(player.getLocation()) <= Math.max(1, npc.getSize?.() ?? 1);
+      if (stillThere && player.getMovementQueue?.()?.isMovings?.() !== true) pickpocket({ ...event, repeat: true });
+    }));
   }
-})(player, npc, target, name); }
+})(player, npc, target, name, event); }
+
+/** Where something stands, as plain coordinates. */
+function tile(location) {
+  return { x: location?.getX?.(), y: location?.getY?.(), z: location?.getZ?.() };
+}
+
+function samePlace(location, from) {
+  const here = tile(location);
+  return !!from && here.x !== undefined && here.x === from.x && here.y === from.y && here.z === from.z;
+}
 
 function pickpocket(event) {
   const { player, npc } = event;
   const npcName = event.definition.getName();
-  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false };
+  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false, alwaysSucceeds: false, pouchLimit: MAX_COIN_POUCHES };
   pluginApi.emitCustomEvent("thieving:pickpocket-target", request);
   const target = request.target;
   if (!target) return false;
   event.handled = true;
 
-  if (!player.getClickDelay().elapsedTime(PICKPOCKET_COOLDOWN_MS)) return;
+  if (!event.repeat && !player.getClickDelay().elapsedTime(PICKPOCKET_COOLDOWN_MS)) return;
   if (player.getSkillManager().getCurrentLevel(core.Skill.THIEVING) < target.level) {
     player.sendMessage(`You need a Thieving level of at least ${target.level} to do this.`);
     return;
@@ -357,7 +384,7 @@ function pickpocket(event) {
     return;
   }
   const pouches = target.coinPouch ? player.getInventory().getAmount(target.coinPouch.id) : 0;
-  if (!request.unconscious && pouches >= MAX_COIN_POUCHES) {
+  if (!request.unconscious && pouches >= Math.max(1, request.pouchLimit | 0)) {
     player.sendMessage("You need to empty your coin pouches before you can continue pickpocketing.");
     return;
   }
@@ -373,7 +400,9 @@ function pickpocket(event) {
   player.sendMessage(`You attempt to pick ${name}'s pocket.`);
   player.getClickDelay().reset();
   npc.getTimers().registers(core.TimerKey.ATTACK_IMMUNITY, 10);
-  core.TaskManager.submit(pickpocketTask(player, npc, request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : target, name));
+  // `alwaysSucceeds` (a league relic) lands every attempt as an unconscious target does, coin pouches kept.
+  const rolled = request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : request.alwaysSucceeds ? { ...target, low: 256, high: 256 } : target;
+  core.TaskManager.submit(pickpocketTask(player, npc, rolled, name, { ...event, from: event.from ?? tile(player.getLocation()) }));
 }
 
 /** Coins in one pouch of this kind (a range rolls per pouch). */

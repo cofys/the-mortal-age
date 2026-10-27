@@ -14,6 +14,11 @@ Agree these before touching an account. They stop most time loss.
 
 - **One account, one actor.** You own a single test account and its one MCP client. Do not run a
   second driver, drain its `messages`, or poll `observe` from another loop.
+- **User-approved community completion exemptions.** Before choosing a new full playthrough,
+  check [the issue #1257 exclusions](../quest-helper-728-community-completions.md). The user
+  accepts these 21 reported completions as sufficient to skip repeat manual runs. Preserve
+  their caveats; use bounded checks for known regressions instead of restarting a listed
+  quest. Do not treat this as full Quest Helper parity or extend it to unlisted quests.
 - **One scope.** Either source review, focused test, or live playthrough per owner. Do not
   rewrite a quest while someone is proving it; batch source fixes, then reload once.
 - **Fresh or checkpoint, stated.** Record whether the run starts fresh or from an exported save
@@ -716,3 +721,10 @@ requested action.
 Quest Helper is a route guide, not a verifier. Source tests, native MCP routes, negative
 predicate checks and the live client overlay prove different things; no one of them guarantees
 a 1:1 match on every branch. State which one you actually ran.
+
+Named interaction callbacks must return `false` when they do not own the target's
+actual id/location. A bare `return` produces `undefined`, which the named dispatcher
+treats as a claim. Register competing owners in their production order in regressions;
+calling a quest handler alone misses this class. The Tourist Trap Chest callback, for
+example, previously swallowed Tribal Totem's mansion chest before its owner could run.
+Check the same rule for shared gates, bookcases, carts and NPC names.

@@ -28,7 +28,7 @@ const DESTINATIONS = BOX_DATA.destinations.map(({ jewellery, label }) => {
   const destination = TILES_BY_JEWELLERY.get(jewellery)
     ?.find(entry => label.startsWith(entry.label) || entry.aliases?.includes(label));
   if (!destination) throw new Error(`Jewellery box: no ${jewellery} destination for ${label}`);
-  return { label, tile: destination.tile };
+  return { label, tile: destination.tile, jewellery };
 });
 // The quick-teleport op is named after the last destination, so every label leads to it.
 const BOX_OPTIONS = {
@@ -99,8 +99,26 @@ function restoreLastDestination({ player }) {
   if (last) player.getPacketSender().sendVarbit(LAST_DESTINATION_VARBIT, last);
 }
 
+/** The Wilderness level a box destination's own jewellery teleports from (dragonstone pieces 30, Wiki). */
+function wildernessLevelOf(jewellery) {
+  const piece = JEWELLERY.find((entry) => entry.key === jewellery);
+  return piece?.wildernessLevel ?? (jewellery === "wealth" ? JEWELLERY.find((entry) => entry.key === "glory")?.wildernessLevel : null) ?? DEFAULT_WILDERNESS_LEVEL;
+}
+
+/**
+ * "construction:jewellery-box-destinations" { player, list }: the ornate box's destinations, as
+ * { label, location, wildernessLevel } (a league relic's pendant).
+ */
+function destinationsEvent(request) {
+  if (!request?.player || !Array.isArray(request.list)) return;
+  DESTINATIONS.forEach((destination, slot) => request.list.push({
+    label: destination.label, location: destinationTile(request.player, slot), wildernessLevel: wildernessLevelOf(destination.jewellery),
+  }));
+}
+
 function attachJewelleryBoxes(api) {
   api.persistAttribute(LAST_DESTINATION_ATTRIBUTE, 0);
+  api.onCustomEvent("construction:jewellery-box-destinations", destinationsEvent);
   for (const name of Object.keys(BOX_DATA.boxes)) api.onObjectInteraction(name, BOX_OPTIONS);
   api.onInterfaceActionClick(chooseDestination);
   api.onCustomEvent("interface:close", closeMenu);

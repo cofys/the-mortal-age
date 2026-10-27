@@ -6,10 +6,18 @@ type PoseRequest = ReturnType<DynamicNpcAnimLoader["getAsyncPoseRequest"]>;
 type Job = { input: NpcPoseInput; priority: number; touched: number; created: number; order: number; owners: Set<number> };
 type ActorRequest = { key: string; appearance: string; sequence: number; overlay: number; waitingSince: number; lastPublishedOrder: number };
 
+/**
+ * How long after an actor's last real pose a new sequence may keep showing it while its own first
+ * pose builds (a couple of frames, usually). Longer than this, it shows its neutral base instead,
+ * so a slow build never leaves it frozen in an obsolete action.
+ */
+const SHOWN_POSE_GRACE_MS = 150;
+
 /** Bounded current-first CPU fallback. No model lighting, animation or geometry packing runs here. */
 export class AsyncNpcPoseCache {
     private readonly queued = new Map<string, Job>();
     private readonly previous = new Map<string, string>();
+    private readonly shownAt = new Map<string, number>();
     private readonly retryAt = new Map<string, number>();
     private context = "";
     private generation = 0;
@@ -60,6 +68,7 @@ export class AsyncNpcPoseCache {
             const actor = this.actorRequests.get(actorIdentity);
             if (actor) { actor.waitingSince = performance.now(); actor.lastPublishedOrder = ++this.requestOrder; }
             this.remember(this.fallbackIdentity(pose!, actorIdentity), key);
+            this.rememberShown(pose!, actorIdentity, key);
         }
         return key;
     }
@@ -72,6 +81,8 @@ export class AsyncNpcPoseCache {
         if (!pose) return undefined;
         const previous = this.previous.get(this.fallbackIdentity(pose, actorIdentity));
         if (previous && (!this.gpuResident || this.gpuResident(previous))) return previous;
+        const shown = this.recentlyShown(pose, actorIdentity);
+        if (shown && (!this.gpuResident || this.gpuResident(shown))) return shown;
         const ownedBase = this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`);
         if (ownedBase && (!this.gpuResident || this.gpuResident(ownedBase))) return ownedBase;
         const base = this.resolve([pose.request[0], -1, 0]);
@@ -97,18 +108,31 @@ export class AsyncNpcPoseCache {
             this.stats.displayedFrame = cached.frameId;
             this.stats.poseAgeMs = 0;
             this.remember(fallbackIdentity, key);
+            this.rememberShown(pose, actorIdentity, key);
             this.prefetch(pose);
             return cached;
         }
-        const previous = this.previous.get(fallbackIdentity) ?? this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`);
-        const fallback = (previous ? this.loader.getCachedGeometry(previous) : undefined) ??
-            (base ? this.loader.getCachedGeometry(this.key(base.key, base.appearance)) : undefined);
+        // Until the pose is built: this sequence's last pose, else the last pose the actor showed
+        // (a new sequence's first frame, while the one before it just ended), else its base model.
+        // Falling straight back to the base model flashed it between two sequences sent back to back.
+        const candidates = [this.previous.get(fallbackIdentity), this.recentlyShown(pose, actorIdentity),
+            this.previous.get(`${actorIdentity ?? "shared"}:${pose.appearance}:base`)].filter((candidate): candidate is string => !!candidate);
+        const previous = candidates[0];
+        let fallback: DynamicNpcFrameGeometry | undefined;
+        // A candidate whose CPU copy was evicted may still be on the GPU: return nothing then, so
+        // the caller draws it through getFallbackKey rather than this falling on to the base model.
+        let resident = false;
+        for (const candidate of candidates) {
+            if ((fallback = this.loader.getCachedGeometry(candidate))) break;
+            if ((resident = !!this.gpuResident?.(candidate))) break;
+        }
+        if (!fallback && !resident) fallback = base ? this.loader.getCachedGeometry(this.key(base.key, base.appearance)) : undefined;
         if (fallback) {
             this.stats.fallbacks++;
             this.stats.displayedFrame = fallback.frameId;
             this.stats.poseAgeMs = performance.now() - (this.requestedAt.get(fallback) ?? performance.now());
             this.stats.maxPoseAgeMs = Math.max(this.stats.maxPoseAgeMs, this.stats.poseAgeMs);
-        } else this.stats.absent++;
+        } else if (!resident) this.stats.absent++;
         if (!fallback && !(previous && this.gpuResident?.(previous)) && pose.request[1] >= 0) {
             if (base) this.enqueue(base, -1, actorIdentity);
         }
@@ -148,6 +172,27 @@ export class AsyncNpcPoseCache {
 
     private fallbackIdentity(pose: NonNullable<PoseRequest>, actor?: number): string {
         return `${actor ?? "shared"}:${pose.appearance}:${pose.request[1]}:${pose.request[3] ?? -1}`;
+    }
+
+    /** The last pose an actor was drawn with, whatever its sequence. */
+    private shownIdentity(pose: NonNullable<PoseRequest>, actor?: number): string {
+        return `${actor ?? "shared"}:${pose.appearance}:shown`;
+    }
+
+    private rememberShown(pose: NonNullable<PoseRequest>, actor: number | undefined, key: string): void {
+        const identity = this.shownIdentity(pose, actor);
+        this.remember(identity, key);
+        this.shownAt.delete(identity);
+        this.shownAt.set(identity, performance.now());
+        if (this.shownAt.size > 512) this.shownAt.delete(this.shownAt.keys().next().value!);
+    }
+
+    /** The actor's last real pose, while it is recent enough to bridge a new sequence (SHOWN_POSE_GRACE_MS). */
+    private recentlyShown(pose: NonNullable<PoseRequest>, actor?: number): string | undefined {
+        const identity = this.shownIdentity(pose, actor);
+        const at = this.shownAt.get(identity);
+        if (at === undefined || performance.now() - at > SHOWN_POSE_GRACE_MS) return undefined;
+        return this.previous.get(identity);
     }
 
     private remember(identity: string, key: string): void {
@@ -250,7 +295,7 @@ export class AsyncNpcPoseCache {
         this.active.clear();
         clearTimeout(this.timer);
         this.timer = undefined;
-        this.queued.clear(); this.previous.clear(); this.retryAt.clear(); this.actorRequests.clear();
+        this.queued.clear(); this.previous.clear(); this.shownAt.clear(); this.retryAt.clear(); this.actorRequests.clear();
     }
 
     forgetActor(actorIdentity: number): void {
@@ -260,6 +305,7 @@ export class AsyncNpcPoseCache {
             if (job.owners.delete(actorIdentity) && !job.owners.size && job.priority <= 0) this.queued.delete(key);
         }
         for (const key of this.previous.keys()) if (key.startsWith(`${actorIdentity}:`)) this.previous.delete(key);
+        for (const key of this.shownAt.keys()) if (key.startsWith(`${actorIdentity}:`)) this.shownAt.delete(key);
     }
 
     dispose(): void { this.disposed = true; this.cancel(); }

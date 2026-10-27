@@ -32,6 +32,11 @@ function areaClass() {
       return false;
     }
 
+    /** In the player's own turn, after their clicks: the prayer the fight's next smite compares. */
+    process(mobile) {
+      if (mobile.isPlayer?.() && this.session?.player === mobile.getAsPlayer()) this.session.fight?.samplePrayer();
+    }
+
     /** The angel and its corpse go with it. */
     destroy() {
       if (this.isDestroyed()) return;

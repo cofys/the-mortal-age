@@ -240,6 +240,12 @@ function advanceTime(event) {
   event.handledBy?.push?.("BankPin");
 }
 
+/** bank-pin:status `{ player, set }`: whether the player's PIN is in effect (one still coming is not). */
+function status(query) {
+  Common.settle(query.player);
+  query.set = Common.hasPin(query.player);
+}
+
 function closed({ player, interfaceId }) {
   if (interfaceId === Common.ids.groups.settings) confirming.delete(player);
 }
@@ -258,6 +264,7 @@ function attach(api) {
   api.onCustomEvent("npc-dialogue:action", onAction);
   api.onInterfaceActionClick(onClick);
   api.onCustomEvent("interface:closed", closed);
+  api.onCustomEvent("bank-pin:status", status);
   api.onCanBank(canBank);
   api.onPlayerLogin(login);
   api.onPlayerLogout(logout);

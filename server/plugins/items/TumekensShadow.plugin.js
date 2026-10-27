@@ -107,6 +107,10 @@ function spellFor(player) {
 function useCharge(player) {
   const { Flag } = core();
   const staff = weaponOf(player);
+  // Content may spare the charge (a league relic): the same question every powered staff asks.
+  const consume = { player, itemId: staff.getId(), skip: false };
+  api.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) return;
   const left = chargesOf(staff) - 1;
   staff.setMetaValue(CHARGES_KEY, Math.max(0, left));
   if (left > 0) return;

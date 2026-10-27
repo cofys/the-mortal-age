@@ -18,7 +18,8 @@ const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
 const Godswords = require("./Godswords.Smithing");
 const DragonShields = require("./DragonShields.Smithing");
-const { hasHammer, messageBox, varbit, varp, hammering, smithsUniformChance } = require("./Common.Smithing");
+const Common = require("./Common.Smithing");
+const { hasHammer, messageBox, varbit, varp, hammering, smithsUniformChance } = Common;
 
 const MAIN_MODAL = "toplevel_osrs_stretch:mainmodal";
 const SMITHING_INTERVAL_TICKS = 5;
@@ -45,7 +46,7 @@ const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from
 const selectedQuantity = (player) => SELECTED_QUANTITY.get(player) ?? "all";
 
 function smithingLevel(player) {
-  return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING);
+  return Common.smithingLevel(player);
 }
 
 /** Members products on a free world, and products behind a quest the client greys out. */
@@ -96,6 +97,7 @@ function smithOnce(player, product) {
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, product.xp);
   player.sendMessage(`You hammer the ${product.metal} and make ${product.phrase}.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: product.itemId });
+  Common.produced(player, Core.Skill.SMITHING, product.itemId, product.amount, product.xp);
   return true;
 }
 

@@ -7,6 +7,7 @@ Server.installProductionPathResolver();
 
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { Item } = require("../dist/game/model/Item");
+const { Bank } = require("../dist/game/model/container/impl/Bank");
 
 const TRADEABLE_BOND = 13190;
 const UNTRADEABLE_BOND = 13192;
@@ -69,8 +70,12 @@ function makeContainer(capacity) {
       return this;
     },
     adds(id, amount) {
-      return this.add(id, amount);
+      // Bonds take a slot each; everything else here stacks.
+      if (id !== TRADEABLE_BOND && id !== UNTRADEABLE_BOND) return this.add(id, amount);
+      for (let i = 0; i < amount; i++) this.add(id, 1);
+      return this;
     },
+    getAddableAmount: (item) => Math.min(item.getAmount(), items.filter((held) => held.getId() <= 0).length),
   };
 }
 
@@ -87,6 +92,34 @@ function makePlayer(name) {
     getInventory: () => inventory,
     getBank: () => bank,
     getCurrentBankTab: () => 0,
+    sent: [],
+    interfaceId: -1,
+    getInterfaceId() {
+      return this.interfaceId;
+    },
+    setInterfaceId(interfaceId) {
+      this.interfaceId = interfaceId;
+    },
+    getPacketSender() {
+      const record = (kind) => (...args) => {
+        this.sent.push([kind, ...args]);
+        if (kind === "interface") this.interfaceId = args[0];
+        return sender;
+      };
+      const sender = {
+        sendConfig: record("config"),
+        sendVarbit: record("varbit"),
+        sendInventory: record("inventory"),
+        sendInterface: record("interface"),
+        sendSubInterface: record("sub"),
+        closeInterface: record("close"),
+        sendEnterAmountPrompt: record("prompt"),
+      };
+      return sender;
+    },
+    setEnteredAmountAction(action) {
+      this.amountAction = action;
+    },
     getAttribute(key) {
       return this.attributes.get(key);
     },
@@ -106,8 +139,13 @@ function mockApi() {
     custom: new Map(),
     prompts: [],
     persisted: [],
+    buttons: new Map(),
   };
   const api = {
+    core: { Item, Bank, ItemDefinition },
+    onInterfaceActionButton: (ids, handler) => {
+      for (const id of [].concat(ids)) handlers.buttons.set(id, handler);
+    },
     persistAttribute: (key) => handlers.persisted.push(key),
     onItemAction: (name, actions) => handlers.itemActions.set(name, actions),
     onItemDropPolicy: (handler) => handlers.dropPolicy.push(handler),
@@ -139,7 +177,7 @@ function registerBonds() {
 
 test("Bonds plugin registers its hooks and persists the membership expiry", () => {
   const handlers = registerBonds();
-  assert.deepEqual(handlers.persisted, ["bond-membership-expiry"]);
+  assert.deepEqual(handlers.persisted, ["bond-membership-expiry", "bonds:pouch-tradeable", "bonds:pouch-untradeable"]);
   assert.ok(handlers.itemActions.has("Old school bond"));
   assert.ok(handlers.itemActions.has("Old school bond (untradeable)"));
   assert.equal(handlers.tradeCompleted.length, 1);
@@ -371,4 +409,119 @@ test("the Grand Exchange refuses untradeable bond sales and delivers bought bond
 
   assert.equal(inventory.getAmount(TRADEABLE_BOND), 0);
   assert.equal(inventory.getAmount(UNTRADEABLE_BOND), 1);
+});
+
+const uid = (group, child) => (group << 16) | child;
+const POUCH_FULL = "Your bonds pouch is full. Please empty it before buying more.";
+
+test("the pouch deposits and withdraws, shows its counts and stops at 100 bonds", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  const press = (button) => handlers.buttons.get(uid(863, button))({ player, buttonId: uid(863, button) });
+  const pouch = (id) => player.getAttribute(id === TRADEABLE_BOND ? "bonds:pouch-tradeable" : "bonds:pouch-untradeable") || 0;
+
+  handlers.buttons.get(uid(109, 37))({ player });
+  assert.deepEqual(player.sent.find(([kind]) => kind === "interface"), ["interface", 861]);
+  handlers.buttons.get(uid(861, 7))({ player });
+  assert.deepEqual(player.sent.filter(([kind]) => kind === "interface").at(-1), ["interface", 863]);
+
+  for (let i = 0; i < 6; i++) player.getInventory().add(TRADEABLE_BOND, 1);
+  press(12); // Move to Pouch, quantity 1
+  assert.equal(pouch(TRADEABLE_BOND), 1);
+  press(18); // quantity 5
+  press(12);
+  assert.equal(pouch(TRADEABLE_BOND), 6);
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 0);
+  const counts = player.sent.filter(([kind, id]) => kind === "config" && id === 261).at(-1);
+  assert.equal(counts[2], 6, "varp 261 totals inventory, bank and pouch");
+
+  press(20); // All
+  press(11); // Move to Inventory
+  assert.equal(pouch(TRADEABLE_BOND), 0);
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 6);
+
+  player.setInterfaceId(863);
+  press(19); // X
+  press(12);
+  player.amountAction.execute(2);
+  assert.equal(pouch(TRADEABLE_BOND), 2);
+
+  player.attributes.set("bonds:pouch-untradeable", 97);
+  press(20);
+  press(12); // All: only one more fits
+  assert.equal(pouch(TRADEABLE_BOND), 3);
+  press(12);
+  assert.ok(player.messages.includes(POUCH_FULL));
+});
+
+test("Deposit puts a bond in the pouch and Convert pays from the pouch dialog's count", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  const bond = new Item(UNTRADEABLE_BOND, 1);
+  player.getInventory().setItem(0, bond);
+  player.getInventory().add(UNTRADEABLE_BOND, 1);
+  handlers.itemActions.get("Old school bond (untradeable)").Deposit({ player, item: bond, slot: 0 });
+  assert.equal(player.getAttribute("bonds:pouch-untradeable"), 1);
+
+  player.getInventory().adds(COINS, CONVERT_FEE);
+  handlers.buttons.get(uid(863, 23))({ player });
+  assert.ok(player.sent.some(([kind, , group]) => kind === "sub" && group === 862));
+  player.getInterfaceId = () => 863;
+  player.amountAction.execute(3);
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 1, "only the one affordable inventory bond converts");
+  assert.equal(player.getInventory().getAmount(COINS), 0);
+});
+
+test("a stale convert dialog action does nothing once the pouch is closed", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  player.getInventory().add(UNTRADEABLE_BOND, 1);
+  player.getInventory().adds(COINS, CONVERT_FEE);
+  handlers.buttons.get(uid(863, 23))({ player });
+  player.getInterfaceId = () => -1;
+  player.amountAction.execute(1);
+  assert.equal(player.getInventory().getAmount(UNTRADEABLE_BOND), 1);
+  assert.equal(player.getInventory().getAmount(COINS), CONVERT_FEE);
+});
+
+test("a stale Move-X amount does nothing after Back leaves the bond pouch", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  player.getInventory().adds(TRADEABLE_BOND, 3);
+  const press = (group, child) => handlers.buttons.get(uid(group, child))({ player, buttonId: uid(group, child) });
+
+  press(109, 37); // Account tab: Bond Pouch
+  press(861, 7); // View Your Bonds
+  press(863, 19); // X
+  press(863, 12); // Move to Pouch
+  const stale = player.amountAction;
+  assert.equal(player.getInterfaceId(), 863);
+
+  press(863, 2); // Back to bond_main
+  assert.equal(player.getInterfaceId(), 861);
+  stale.execute(1);
+
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 3);
+  assert.equal(player.getAttribute("bonds:pouch-tradeable") ?? 0, 0);
+});
+
+test("withdrawing into a full inventory keeps the bonds in the pouch; a full pouch refuses deposits", () => {
+  const handlers = registerBonds();
+  const player = makePlayer("alice");
+  const press = (button) => handlers.buttons.get(uid(863, button))({ player, buttonId: uid(863, button) });
+  player.setAttribute("bonds:pouch-tradeable", 5);
+  for (let i = 0; i < 28; i++) player.getInventory().add(LOBSTER, 1);
+  press(20); // All
+  press(11); // Move to Inventory
+  assert.equal(player.getAttribute("bonds:pouch-tradeable"), 5);
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 0);
+  assert.ok(player.messages.some((m) => m.includes("enough inventory space")));
+
+  player.setAttribute("bonds:pouch-tradeable", 100);
+  player.getInventory().deleteNumber(LOBSTER, 1);
+  player.getInventory().add(TRADEABLE_BOND, 1);
+  press(12);
+  assert.equal(player.getAttribute("bonds:pouch-tradeable"), 100);
+  assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 1);
+  assert.ok(player.messages.includes(POUCH_FULL));
 });

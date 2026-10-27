@@ -34,7 +34,7 @@ The client only reports the click. The server sets the variable and sends it bac
 | Update clan 'last seen' records | 431 | varbit 16118 `clan_disable_lastseen` |
 | Show chat effects | 34 | varp 171 `option_chat` |
 | Split friends private chat | 35 | varp 287 `option_pm`, then script 83 `splitpm_changed` |
-| Chat timestamps (dropdown: Off, On (Server time), On (Local time)) | 119 | varbit 12384 `settings_chat_timestamps` = option, then script 4586 `settings_chat_timestamps`; a fresh account starts on 1 (server time), as live sends at login in 532 of 540 rsprox recordings |
+| Chat timestamps (dropdown: Off, On (Server time), On (Local time)) | 119 | varbit 12384 `settings_chat_timestamps` = option, then script 4586 `settings_chat_timestamps`; a fresh account starts Off (live sends 1, server time, at login in 532 of 540 rsprox recordings) |
 | Enable precise timing | 82 | varbit 11866 `option_precise_timing` |
 | Combat Achievement Tasks - Repeat completion | 160 | varbit 12456 |
 | Player Trade options | 312 | varbit 6580 `tradeoption_disabled` |

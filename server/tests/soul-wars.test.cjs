@@ -16,7 +16,8 @@ const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/Npc
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 
-let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, Bots, Rewards, Tutorial, hooks, core;
+let Common, Lobby, Match, Avatars, Control, Souls, Death, Supplies, Bots, Rewards, Tutorial, Scoreboard, hooks, core;
+const scoreboardDir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'soul-wars-scoreboard-'));
 const online = [];
 const walks = [];
 let config = {};
@@ -52,6 +53,7 @@ before(() => {
     onPlayerLogin() {},
     onPlayerLogout() {},
     onCustomEvent: (name, fn) => { const events = (hooks.events ??= {}); const prior = events[name]; events[name] = prior ? (e) => { prior(e); fn(e); } : fn; },
+    emitCustomEvent() {},
     onCanShop: (fn) => { hooks.canShop = fn; },
     onInterfaceActionButton: (ids, fn) => { for (const id of [].concat(ids)) (hooks.buttons ??= new Map()).set(id, fn); },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
@@ -70,6 +72,8 @@ before(() => {
   Bots = require('../plugins/minigames/soulwars/Bots.SoulWars');
   Rewards = require('../plugins/minigames/soulwars/Rewards.SoulWars');
   Tutorial = require('../plugins/minigames/soulwars/Tutorial.SoulWars');
+  Scoreboard = require('../plugins/minigames/soulwars/Scoreboard.SoulWars');
+  Scoreboard._useFile(require('node:path').join(scoreboardDir, 'world.json'));
   Tutorial.engine.walk = (player, to) => { player.walkedTo = to; };
   Tutorial.engine.projectile = (from, to, target, id) => { target.blasted = id; };
   Tutorial.engine.drop = (player, id, tile) => { (player.dropped ??= []).push([id, tile]); };
@@ -140,6 +144,7 @@ function fakePlayer({ combat = 100, total = 1500, at = new Location(2192, 2842, 
         sendVarbit: (vid, value) => { p.varbits.set(vid, value); return sender; },
         sendConfig: (vid, value) => { p.varps.set(vid, value); return sender; },
         sendString: (text, cid) => { p.texts.set(cid, text); return sender; },
+        sendInterface: (iid) => { (p.interfaces ??= []).push(iid); return sender; },
         sendSubInterface: (uid, iid) => { p.subs.push(iid); return sender; },
         closeSubInterface: () => sender,
         sendInterfaceScript: (sid, args) => { p.scripts.push([sid, args]); return sender; },
@@ -195,6 +200,24 @@ function startGame(count = 4) {
   game.start();
   return { game, players };
 }
+
+test('Bounty Hunter weapons work in the same live Soul Wars match, never in its lobby', () => {
+  const { game, players: [attacker, target] } = startGame(2);
+  attacker.getPrivateArea = target.getPrivateArea = () => game.area;
+  const permission = hooks.events['bounty-hunter:weapon-area'];
+  assert.equal(typeof permission, 'function');
+  const event = { attacker, target, allowed: false };
+  permission(event);
+  assert.equal(event.allowed, true);
+  target.getPrivateArea = () => null;
+  const outside = { attacker, target, allowed: false };
+  permission(outside);
+  assert.equal(outside.allowed, false);
+  game.over = true;
+  const finished = { attacker, target: attacker, allowed: false };
+  permission(finished);
+  assert.equal(finished.allowed, false);
+});
 
 /** Puts `player` on template tile [x, y] in the game's arena. */
 function place(game, player, x, y) {
@@ -1035,4 +1058,62 @@ test('tutorial: a cape put on during the entry fade stops the entry, and the cap
   assert.equal(Tutorial.inTutorial(p), false);
   assert.equal(p.worn[1]?.getId(), 6570, 'the cape is still worn');
   assert.ok(p.messages.includes(Common.message('restricted')));
+});
+
+// ------------------------------------------------------------------ the scoreboard
+
+const boardText = (p) => p.texts.get(Common.component('soul_wars_stats:scroll_text'));
+const viewBoard = (p, objectId = core.CacheDefinitions.getLocId('soul_wars_scoreboard')) =>
+  hooks.objects.get('Scoreboard:View')({ player: p, objectId, option: 'view', clickType: 1, handled: false });
+
+test('the scoreboard: a real game counts its kills, Avatar kills and itself for the world; the reader sees their own', () => {
+  Scoreboard._useFile(require('node:path').join(scoreboardDir, `${Math.random()}.json`));
+  const { game, players } = startGame(2);
+  const red = players.find((p) => game.teamOf(p) === 'red');
+  const blue = players.find((p) => game.teamOf(p) === 'blue');
+  for (const fn of hooks.death) fn({ player: blue, killer: red, handled: false });
+  for (const fn of hooks.death) fn({ player: red, killer: null, handled: false }); // no killer: a death, no kill
+  ticks(17);
+  for (let i = 0; i < 5; i++) {
+    const npc = game.avatars.blue.npc;
+    for (const fn of hooks.npcDeath) fn({ npc, killer: red, location: { x: 0, y: 0, z: 0 } });
+    ticks(35);
+  }
+  ticks(2);
+  assert.equal(game.over, true);
+  assert.equal(viewBoard(red), true);
+  assert.equal(boardText(red), [
+    'Your Soul Wars statistics', 'Games played: 1', 'Games won: 1', 'Players killed: 1', 'Deaths: 1', '',
+    'Global statistics', 'Games played: 1', 'Players killed: 1', 'Avatars killed: 5',
+  ].join('<br>'));
+  viewBoard(blue);
+  assert.match(boardText(blue), /^Your Soul Wars statistics<br>Games played: 1<br>Games won: 0<br>Players killed: 0<br>Deaths: 1<br>/);
+});
+
+test('the scoreboard: a game with an empty side is no game for the world, and other Scoreboards are left alone', () => {
+  Scoreboard._useFile(require('node:path').join(scoreboardDir, `${Math.random()}.json`));
+  const lone = fakePlayer();
+  const game = new Match.Game([lone]);
+  game.start();
+  game.finish(null);
+  viewBoard(lone);
+  assert.match(boardText(lone), /Global statistics<br>Games played: 0<br>/);
+  const other = fakePlayer();
+  assert.equal(viewBoard(other, core.CacheDefinitions.getLocId('castlewars_scoreboard')), false);
+  assert.equal(boardText(other), undefined);
+});
+
+test('the scoreboard: a game with bots alone on one side is no game for the world', () => {
+  Scoreboard._useFile(require('node:path').join(scoreboardDir, `${Math.random()}.json`));
+  const human = fakePlayer();
+  const bot = fakePlayer();
+  bot.isPlayerBot = () => true;
+  const game = new Match.Game([human, bot]);
+  game.start();
+  const victim = game.teamOf(human) === game.teamOf(bot) ? null : bot;
+  if (victim) for (const fn of hooks.death) fn({ player: bot, killer: human, handled: false });
+  game.finish(game.teamOf(human));
+  viewBoard(human);
+  assert.match(boardText(human), /Global statistics<br>Games played: 0<br>Players killed: 0<br>Avatars killed: 0$/);
+  assert.match(boardText(human), /^Your Soul Wars statistics<br>Games played: 1<br>/, 'the player still counts their own game');
 });

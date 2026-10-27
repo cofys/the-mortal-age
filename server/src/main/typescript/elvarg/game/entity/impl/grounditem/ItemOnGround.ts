@@ -25,6 +25,8 @@ export class ItemOnGround {
     staticSpawn: boolean;
     /** Ticks this stack lasts on the floor; null keeps {@link ItemOnGroundManager.DESPAWN_DELAY}. */
     despawnDelay: number | null = null;
+    /** While set, the stack neither ages nor goes public (a mark of grace while its owner is logged out). */
+    agingPaused: boolean = false;
 
     constructor(state: State, owner: string | undefined, position: Location, item: Item, goesGlobal: boolean, respawnTimer: number, privateArea: PrivateArea, staticSpawn: boolean = false) {
         this.state = state;
@@ -42,6 +44,9 @@ export class ItemOnGround {
 
     process() {
         this.agedCycle = World.getProcessCycle();
+        if (this.agingPaused) {
+            return;
+        }
         this.incrementTick();
         switch (this.state) {
             case State.SEEN_BY_EVERYONE:
@@ -154,6 +159,13 @@ export class ItemOnGround {
         return this;
     }
 
+    public isAgingPaused(): boolean {
+        return this.agingPaused;
+    }
+    public setAgingPaused(paused: boolean): ItemOnGround {
+        this.agingPaused = paused;
+        return this;
+    }
     public isStaticSpawn(): boolean {
         return this.staticSpawn;
     }

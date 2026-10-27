@@ -240,3 +240,20 @@ for (const name of questFiles()) {
     }
   });
 }
+
+test('FremennikTrials: Olaf repeats the boots request after the Sailor until he has them', () => {
+  const quest = loadQuest('FremennikTrials');
+  const { NpcIdentifiers } = PluginManager.getCoreApi();
+  const attributes = { 'quest.fremennik_trials.merchant': 1 }; // Sigmund's task accepted
+  const player = fakePlayer(1, attributes);
+  player.setAttribute = (key, value) => { attributes[key] = value; };
+  const talk = (npcId) => quest.selectVariant({ npcId, player });
+  const sailorFavor = 'the-council-members-sigmund-the-merchant-s-small-favour-the-sailor-s-favor-';
+
+  assert.equal(talk(NpcIdentifiers.SAILOR_2), `${sailorFavor}talking-to-the-sailor`);
+  // The first talk can close without the player hearing it; the request must survive.
+  assert.equal(talk(NpcIdentifiers.OLAF_THE_BARD), `${sailorFavor}talking-to-olaf-the-bard`);
+  assert.equal(talk(NpcIdentifiers.OLAF_THE_BARD), `${sailorFavor}talking-to-olaf-the-bard`);
+  assert.equal(talk(NpcIdentifiers.YRSA_2), `${sailorFavor}talking-to-yrsa`);
+  assert.equal(talk(NpcIdentifiers.OLAF_THE_BARD), `${sailorFavor}talking-to-olaf-the-bard`);
+});

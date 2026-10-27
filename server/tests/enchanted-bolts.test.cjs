@@ -33,7 +33,7 @@ const ZARYTE = { name: "zaryte crossbow" };
 const RUNE_CROSSBOW = { name: "rune crossbow" };
 const MAX_HIT = 40;
 
-const world = { traits: null, kandarin: false, staffRunes: new Map(), boltEffects: true };
+const world = { boltMultiplier: undefined, traits: null, kandarin: false, staffRunes: new Map(), boltEffects: true };
 const calls = { poison: [], stun: [], rerolls: [] };
 
 EnchantedBolts._test.attach({
@@ -46,7 +46,7 @@ EnchantedBolts._test.attach({
     Equipment,
     ItemIdentifiers: Items,
     RangedWeapon: { ZARYTE_CROSSBOW: ZARYTE },
-    WeaponProfiles: { get: () => (world.boltEffects ? { boltEffects: true } : {}) },
+    WeaponProfiles: { get: () => (world.boltEffects ? { boltEffects: true, boltEffectChanceMultiplier: world.boltMultiplier } : {}) },
     CombatSpecial: { activeTraitsFor: () => world.traits },
     ItemDefinition: { forId: (id) => ({ getName: () => NAMES[id] }) },
     DamageFormulas: { sourceMaxHit: () => MAX_HIT },
@@ -147,6 +147,7 @@ function rollRandom(value) {
 beforeEach(() => {
   random = Math.random;
   world.traits = null;
+  world.boltMultiplier = undefined;
   world.kandarin = false;
   world.boltEffects = true;
   world.staffRunes.clear();
@@ -198,6 +199,17 @@ test("chances: ruby is 6% against monsters, 11% against players, x1.1 with the H
   world.kandarin = false;
   world.traits = { enchantedBoltEffectChanceMultiplier: 2 };
   assert.equal(procs(0.1199, createNpc()), true);
+});
+
+test("a weapon's boltEffectChanceMultiplier scales the chance (Ascension crossbows: x0.5)", () => {
+  const player = createPlayer({ ammo: Items.RUBY_BOLTS_E_ });
+  world.boltMultiplier = 0.5;
+  const procs = (value) => {
+    rollRandom(value);
+    return shoot(player, createNpc(), { damage: 3 }).event.damage.getDamage() !== 3;
+  };
+  assert.equal(procs(0.0299), true);
+  assert.equal(procs(0.0301), false);
 });
 
 test("the Zaryte crossbow special guarantees the effect only on a successful hit", () => {

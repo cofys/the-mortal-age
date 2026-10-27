@@ -16,8 +16,8 @@ const LEVEL = 35;
 const EXPERIENCE = 300;
 const ALDO_FEE = 50000;
 const ALDO = "Historian Aldo";
-/** Cache rat_boss_biologist_op2, the Aldo outside the lair. */
-const ALDO_NPC = 7615;
+/** Cache rat_boss_biologist, the Aldo outside the lair. */
+const ALDO_NPC = 12606;
 const NO_MATERIALS = /^If the player does not have the materials in their inventory:$/i;
 const HAS_MATERIALS = /^If the player does have the materials in their inventory:$/i;
 const HANDED = /^Aldo handed the (Bone mace|Bone shortbow|Bone staff) to you\.$/;

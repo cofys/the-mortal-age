@@ -164,3 +164,13 @@ test("the bone staff's spell and charges", () => {
   uncharge({ player, item: staff });
   assert.ok(player.log.includes("message Your Bone staff has no charges to remove."));
 });
+
+test("the bone staff reaches 8 tiles, 10 on Longrange (Wiki: Attack range)", () => {
+  const player = createPlayer({ weapon: I.BONE_STAFF });
+  const method = Staff._test.resolveStaff(player);
+  // The powered staff styles: Accurate, Accurate, Longrange.
+  const [accurate, , longrange] = core.WeaponInterfaces.POWERED_STAFF.getFightType();
+  const style = (fightType) => { player.getFightType = () => fightType; return method.attackDistance(player); };
+  assert.equal(style(accurate), 8);
+  assert.equal(style(longrange), 10);
+});

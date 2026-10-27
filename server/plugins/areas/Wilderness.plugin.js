@@ -72,6 +72,19 @@ const PVPW_SAFE_UID = (90 << 16) | 47;
 const PVP_LEVEL_UID = (90 << 16) | 50;
 const VARP_MAP_FLAGS_CACHED = 3717;
 const MAP_FLAGS_PVP_WORLD = 1 << 2;
+
+let pluginApi = null;
+
+/**
+ * The world flags the client caches in map_flags_cached: this world's PvP bit, plus whatever other
+ * plugins add through "world:map-flags" { player, flags } (LeagueMode sets the league-world bit the
+ * client's league checks read).
+ */
+function mapFlags(player) {
+  const request = { player, flags: hasGlobalWorldTag("pvp") ? MAP_FLAGS_PVP_WORLD : 0 };
+  pluginApi?.emitCustomEvent("world:map-flags", request);
+  return request.flags | 0;
+}
 const PVP_WORLD_ATTACK_RANGE = 15;
 const VARBIT_IN_WILDERNESS = 5963;
 const PVP_LAYOUT_SCRIPT = 386;
@@ -211,7 +224,7 @@ function mountPvpIcons(player) {
   }
   const sender = player.getPacketSender();
   // Cache script 387 adds 15 to the displayed range when bit 2 marks a PvP world.
-  sender.sendConfig(VARP_MAP_FLAGS_CACHED, hasGlobalWorldTag("pvp") ? MAP_FLAGS_PVP_WORLD : 0);
+  sender.sendConfig(VARP_MAP_FLAGS_CACHED, mapFlags(player));
   sender.sendSubInterface(PVP_ICONS_TARGET_UID, PVP_ICONS_INTERFACE, 1);
   // The cache leaves this badge visible by default. It is only valid inside Ferox.
   sender.sendInterfaceDisplayState(PVPW_SAFE_UID, true);
@@ -297,7 +310,7 @@ function syncPvpLayout(player, facts, force = false) {
   // The webclient supplies the missing enhanced-client range row after script 386 runs.
   // Script 388 fills the level and range, including the PvP-world bonus.
   const sender = player.getPacketSender();
-  sender.sendConfig(VARP_MAP_FLAGS_CACHED, hasGlobalWorldTag("pvp") ? MAP_FLAGS_PVP_WORLD : 0);
+  sender.sendConfig(VARP_MAP_FLAGS_CACHED, mapFlags(player));
   sender.sendClientScript(PVP_LAYOUT_SCRIPT);
   sender.sendClientScript(PVP_LEVEL_SCRIPT, PVP_LEVEL_UID);
 }
@@ -678,6 +691,7 @@ module.exports = {
   name: "Wilderness",
   _test: { canAttack, webCutChance, webTool, webSlashAnimation, slashWeb, websBeingSlashed },
   register(api) {
+    pluginApi = api;
     const state = createState();
 
     api.onServerStartup(() => registerWildernessArea(api, state));

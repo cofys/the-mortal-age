@@ -139,6 +139,22 @@ test("Tumeken's shadow is held two-handed, all four variants", () => {
     assert.equal(shadow.standAnim, 9494, `${id} toa_sot_ready`);
     assert.equal(shadow.walkAnim, 1146, `${id} staff walk`);
     assert.equal(shadow.runAnim, 1210, `${id} staff run`);
-    assert.equal(shadow.doubleHanded, true, `${id} two-handed`);
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), true, `${id} two-handed`);
+  }
+});
+
+test("a weapon is two-handed when the cache also wears it in the shield slot", () => {
+  for (let id = 0; id < CacheDefinitions.getCounts().items; id++) {
+    const cached = CacheDefinitions.getItem(id);
+    if (cached.wearPos !== WEAPON_SLOT) continue;
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), cached.wearPos2 === Equipment.SHIELD_SLOT, `${id} ${cached.name}`);
+  }
+  // Reported in-game: the Soulreaper axe and a Noxious halberd were worn with an Avernic defender.
+  for (const id of [25484, 28338, 33335, 29796, 33178]) {
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), true, `${id} ${ItemDefinition.forId(id).getName()}`);
+  }
+  // The Keris partisans are one-handed (Wiki), though the old export had them two-handed.
+  for (const id of [27287, 27291, 22322]) {
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), false, `${id} ${ItemDefinition.forId(id).getName()}`);
   }
 });

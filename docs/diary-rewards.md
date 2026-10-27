@@ -107,3 +107,15 @@ The Ardougne farm count is split. Only its low bit has a name (`ardougne_cloak_l
   - The Falador shield's messages: restored, full, spent and Check.
   - The Explorer's ring's energy messages, and the extra teleports line on ring 2's Check.
 - **Explorer's ring recharge:** the Wiki says the ring's charges only come back after logging out and in. Here they reset at midnight like the others.
+
+## Explorer’s ring daily allowances
+
+The ring’s limited run-energy/free-alchemy counters are now owned by a separate persisted record. The Wiki specifies replenishing after logging out/back in; staying online across midnight does not restore uses. The existing shared diary daily record can advance when another reward is used, so its current spent counts migrate eagerly at login before any player actions. After migration, other diary rewards cannot reset the ring.
+
+Counts remain shared across ring tiers, including four energy restores used on ring3 followed by upgrading to ring4 (which allows three). Same-day relog and real PlayerSave round trips retain spent uses; a qualifying next-day login resets both counters and transmits zero. Every use/reset/migration requests a save. Seven real-object tests cover these cases, including a real spellbook refresh preserving the ring counter. No alchemy casting or interface is added by this prerequisite fix.
+
+Source: [Explorer’s ring4](https://oldschool.runescape.wiki/w/Explorer%27s_ring_4), Benefits: daily energy and alchemy charges replenish on logging back in. The shipped cache supplies the named energy/alchemy varbits and each ring tier’s menu/submenus. The local RSProx index contains ring mentions but no indexed lumbridge_alchemy interface/actions; reset/migration behavior comes from the Wiki and the migration safety design, not a captured midnight session.
+
+Native QA exposed an additional overwrite: PacketSender’s spell-unlock defaults incorrectly labelled varbit4554 as Bones to Peaches and set it to30 whenever the magic tab refreshed. The active cache identifies4554 as lumbridge_free_alchs. Removing that one incorrect default preserves the ring’s saved counter; the separate legitimate Bones to Peaches default1505 is unchanged. A real PacketSender regression reproduces30 instead of the saved17 before this removal.
+
+Final verification: fresh build and32/32 focused diary/alchemy/gameframe checks. Full suite8,772/8,773 with only minigame-teleports.test.cjs:204 failing when a real minute rolled over (19 versus20 remaining); its complete file passes8/8 on rerun, and clean baseline7cbfc71dc reproduces the clock-boundary failure with a controlled rollover. No teleport source/tests changed. Native final server retains counters4553=1/4554=17 through login, then a prepared previous-day login resets both0 and Check reports30/30 alchemy and2/2 energy. Owned slot88 server saved and shut down.

@@ -1055,6 +1055,16 @@ module.exports = {
       const pages = entries
         .map((entry) => ({ page: String(entry.page ?? "").replace(/^Transcript:/, ""), variants: Array.isArray(entry.variants) ? entry.variants : [] }))
         .filter((entry) => Object.hasOwn(data, entry.page));
+      // A named transform missing from the id index still needs variant selectors.
+      // Use the same resolution path as an indexed page rather than silently taking its default.
+      if (!pages.length) {
+        const name = event.definition.getName();
+        let page = Object.hasOwn(data, name) ? name : undefined;
+        if (!pickVariant(data[page]) && aliases.has(name)) page = aliases.get(name);
+        if (page && pickVariant(data[page])) {
+          pages.push({ page, variants: Object.keys(data[page]?.variants ?? {}) });
+        }
+      }
       const context = { player: event.player, npc: event.npc, npcId, definition: event.definition, pages, speakerIdByName };
 
       // "Same as above" option bodies ({{tact|above}}) reference an option defined

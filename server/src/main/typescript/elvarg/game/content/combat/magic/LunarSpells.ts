@@ -6,7 +6,6 @@ import { GraphicHeight } from "../../../model/GraphicHeight";
 import { Item } from "../../../model/Item";
 import { Location } from "../../../model/Location";
 import { MagicSpellbook } from "../../../model/MagicSpellbook";
-import { EffectTimer } from "../../../model/EffectTimer";
 import { Skill } from "../../../model/Skill";
 import { TeleportHandler } from "../../../model/teleportation/TeleportHandler";
 import { TeleportType } from "../../../model/teleportation/TeleportType";
@@ -278,16 +277,17 @@ export class LunarSpells {
                 player.sendMessage("Drink a matching potion within 30 seconds to share its effect.");
             });
         }
-        if (target.hasVengeanceReturn() || !target.getVengeanceTimer().finished()) {
+        // The cooldown is the caster's, shared with Vengeance; the target's own doesn't matter (Wiki: Vengeance_Other).
+        if (EffectSpells.vengeanceOnCooldown(player)) return true;
+        if (target.hasVengeanceReturn()) {
             player.sendMessage("That player cannot receive Vengeance right now.");
             return true;
         }
         return spell.cast(player, () => {
             target.setHasVengeance(true);
-            target.getVengeanceTimer().start(30);
+            EffectSpells.startVengeanceCooldown(player);
             target.performGraphic(new Graphic(725, GraphicHeight.HIGH));
-            target.getPacketSender().sendEffectTimer(30, EffectTimer.VENGEANCE)
-                .sendMessage("You now have Vengeance's effect.");
+            target.sendMessage("You have the power of vengeance!");
         });
     }
 

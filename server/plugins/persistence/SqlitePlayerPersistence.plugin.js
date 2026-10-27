@@ -5,6 +5,7 @@ const { Worker } = require("worker_threads");
 const { PrayerData } = require("../../src/main/typescript/elvarg/game/content/PrayerHandler");
 const { Skills } = require("../../src/main/typescript/elvarg/game/content/skill/SkillManager");
 const { PlayerPersistence } = require("../../src/main/typescript/elvarg/game/entity/impl/player/persistence/PlayerPersistence");
+const { MAIN_PROFILE, profileStorageKey } = PlayerPersistence;
 const { PlayerSave } = require("../../src/main/typescript/elvarg/game/entity/impl/player/persistence/PlayerSave");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
@@ -202,10 +203,15 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     return this.unwritten.get(username)?.json ?? this.findSave.get(username)?.saveJson;
   }
 
-  load(username) {
+  /** The row key: the normalised name, prefixed for any profile but the main one (`league:bob`). */
+  saveKey(username, profile = MAIN_PROFILE) {
+    return profileStorageKey(this.normalizeUsername(username), profile);
+  }
+
+  load(username, profile = MAIN_PROFILE) {
     // Logging back in after a rollback: the restored save is in place.
-    this.pendingRestores.delete(this.normalizeUsername(username));
-    const json = this.currentJson(this.normalizeUsername(username));
+    this.pendingRestores.delete(this.saveKey(username, profile));
+    const json = this.currentJson(this.saveKey(username, profile));
     if (typeof json !== "string") {
       return null;
     }
@@ -224,7 +230,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
       return;
     }
 
-    const username = this.normalizeUsername(player.getUsername());
+    const username = this.saveKey(player.getUsername(), player.getProfile?.() ?? MAIN_PROFILE);
     const save = PlayerSave.fromPlayer(player);
     const serialized = JSON.stringify(save, this.replacer.bind(this));
     const pending = this.pendingRestores.get(username);
@@ -238,9 +244,9 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     this.enqueue(username, [{ kind: "row", json: serialized }, ...(keepHistory ? [{ kind: "history", json: serialized, reason }] : [])]);
   }
 
-  saveOffline(username, save, reason) {
+  saveOffline(username, save, reason, profile = MAIN_PROFILE) {
     const serialized = JSON.stringify(save, this.replacer.bind(this));
-    this.enqueue(this.normalizeUsername(username), [
+    this.enqueue(this.saveKey(username, profile), [
       { kind: "row", json: serialized }, { kind: "history", json: serialized, reason },
     ]);
   }
@@ -265,13 +271,13 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     return true;
   }
 
-  listSnapshots(username, limit = 15) {
-    return this.history.list(this.normalizeUsername(username), limit);
+  listSnapshots(username, limit = 15, profile = MAIN_PROFILE) {
+    return this.history.list(this.saveKey(username, profile), limit);
   }
 
   /** See PlayerPersistence.restoreSnapshot. An offline player's current save goes in the history first. */
-  restoreSnapshot(username, id, { online = false } = {}) {
-    const name = this.normalizeUsername(username);
+  restoreSnapshot(username, id, { online = false } = {}, profile = MAIN_PROFILE) {
+    const name = this.saveKey(username, profile);
     const copy = this.history.get(name, id);
     if (!copy) return null;
     if (online) {
@@ -287,8 +293,8 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     return { snapshot: copy.snapshot, pending: false };
   }
 
-  exists(username) {
-    const name = this.normalizeUsername(username);
+  exists(username, profile = MAIN_PROFILE) {
+    const name = this.saveKey(username, profile);
     return this.unwritten.has(name) || this.findSave.get(name) !== undefined;
   }
 
@@ -754,4 +760,5 @@ module.exports = {
       legacyJsonImportEnabled: SqlitePlayerPersistence.IMPORT_LEGACY_JSON,
     });
   },
+  SqlitePlayerPersistence,
 };

@@ -1,0 +1,41 @@
+{
+  "$comment": "League ranks (docs/leagues.md), used by plugins/modes/league/Rank.LeagueMode.js. Seven ranks a league, Bronze to Dragon, each at a League Points threshold; the rank earns the league's trophy of that tier. The rank interface (league_rank, 64; script 730) reads the league struct's threshold enum (param 1857) and trophy enum (param 2041) against league_points_completed (2614), and the rank names from enum 5201. The cache carries both enums for Leagues IV-VI; Leagues I-III's structs have neither, so their rows here are sent as overrides (the Wiki's thresholds, the cache's trophy items by name). `wiki` lists every league's thresholds from the Wiki's League_trophy page for the audit test against the cache's enums. As captured (227/00075 sub 13211, 227/00579, 227/00090, 227/01710 ...): varbit league_rank_notification (17299) = the number of ranks reached, sent at login and on the award that crosses a threshold, with the game message below; no popup.",
+  "varbit": 17299,
+  "names": ["Bronze", "Iron", "Steel", "Mithril", "Adamant", "Rune", "Dragon"],
+  "namesEnum": 5201,
+  "params": { "thresholdsEnum": 1857, "trophiesEnum": 2041 },
+  "virtualIdOffsets": { "thresholdsEnum": 900, "trophiesEnum": 901 },
+  "message": {
+    "text": "<col=229628>You've obtained {rank} rank! You can claim your trophy from the Leagues Tutor in the main game.",
+    "source": "capture 227/00075 (Iron), 227/00090 (Bronze), 227/01710 (Steel, Mithril), 227/01735, 227/01762, 227/01854 (Adamant, Rune, Dragon): the same line for every rank"
+  },
+  "leagues": {
+    "1": {
+      "source": "Wiki League_trophy, Twisted League trophies (the final HiScores' brackets)",
+      "wiki": [10, 80, 510, 1770, 5270, 10820, 20830],
+      "trophies": ["TWISTED_BRONZE_TROPHY", "TWISTED_IRON_TROPHY", "TWISTED_STEEL_TROPHY", "TWISTED_MITHRIL_TROPHY", "TWISTED_ADAMANT_TROPHY", "TWISTED_RUNE_TROPHY", "TWISTED_DRAGON_TROPHY"]
+    },
+    "2": {
+      "source": "Wiki League_trophy, Trailblazer League trophies",
+      "wiki": [100, 510, 2000, 6480, 18720, 35680, 56310],
+      "trophies": ["TRAILBLAZER_BRONZE_TROPHY", "TRAILBLAZER_IRON_TROPHY", "TRAILBLAZER_STEEL_TROPHY", "TRAILBLAZER_MITHRIL_TROPHY", "TRAILBLAZER_ADAMANT_TROPHY", "TRAILBLAZER_RUNE_TROPHY", "TRAILBLAZER_DRAGON_TROPHY"]
+    },
+    "3": {
+      "source": "Wiki League_trophy, Shattered Relics League trophies",
+      "wiki": [100, 480, 1660, 5475, 15575, 31980, 52545],
+      "trophies": ["SHATTERED_RELICS_BRONZE_TROPHY", "SHATTERED_RELICS_IRON_TROPHY", "SHATTERED_RELICS_STEEL_TROPHY", "SHATTERED_RELICS_MITHRIL_TROPHY", "SHATTERED_RELICS_ADAMANT_TROPHY", "SHATTERED_RELICS_RUNE_TROPHY", "SHATTERED_RELICS_DRAGON_TROPHY"]
+    },
+    "4": {
+      "source": "the cache's enums 5237 and 5238 (struct 4699); Wiki League_trophy, Trailblazer Reloaded League trophies agrees",
+      "wiki": [2500, 5000, 10000, 18000, 28000, 42000, 56000]
+    },
+    "5": {
+      "source": "the cache's enums 5719 and 5720 (struct 6211); Wiki League_trophy, Raging Echoes League trophies agrees",
+      "wiki": [2000, 4000, 10000, 20000, 30000, 45000, 60000]
+    },
+    "6": {
+      "source": "the cache's enums 5979 and 5976 (struct 6436); Wiki League_trophy, Demonic Pacts League trophies agrees",
+      "wiki": [2000, 4000, 10000, 22000, 32000, 47500, 65000]
+    }
+  }
+}

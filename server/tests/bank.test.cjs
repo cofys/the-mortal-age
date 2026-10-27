@@ -179,7 +179,7 @@ test("withdrawing an item keeps its metadata", () => {
 test("a full bank tab refuses the item instead of throwing", () => {
   const player = createPlayer();
   const bank = player.getBank(0);
-  for (let slot = 0; slot < bank.capacity(); slot++) bank.add(new Item(20000 + slot, 1), false);
+  for (let slot = 0; slot < Bank.MAX_SLOTS; slot++) bank.add(new Item(20000 + slot, 1), false);
   player.getInventory().add(new Item(TRIDENT, 1), false);
 
   assert.doesNotThrow(() => player.getInventory().switchItem(bank, new Item(TRIDENT, 1), false, 0, false));

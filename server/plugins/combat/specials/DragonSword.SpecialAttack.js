@@ -1,5 +1,23 @@
-// TODO: ported from xrsps-typescript; untested.
+// TODO: ported from xrsps-typescript; untested apart from its prayer piercing.
+// Wild Stab (Wiki: Dragon sword) ignores Protect from Melee, and since the 22 October 2025
+// update NPC melee prayers too.
+const ID = "dragon_sword";
+
+let core;
+
+/** NPC prayers only yield to a hit its roll hook marked; the trait covers players. */
+function pierceNpcMeleePrayer(roll) {
+  const attacker = roll.attacker;
+  if (roll.combatType === core.CombatType.MELEE
+    && attacker?.isPlayer?.() === true
+    && attacker.getAsPlayer().isSpecialActivated()
+    && attacker.getAsPlayer().getCombatSpecial()?.getId() === ID) {
+    roll.bypassProtectionPrayer = true;
+  }
+}
+
 module.exports = function registerDragonSwordSpecialAttack(api) {
+  core = api.core;
   const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod } = api.core;
 
   const DRAIN = 40;
@@ -16,7 +34,7 @@ module.exports = function registerDragonSwordSpecialAttack(api) {
   }
 
   api.registerCombatSpecial({
-    id: "dragon_sword",
+    id: ID,
     itemIds: [ItemIdentifiers.DRAGON_SWORD, ItemIdentifiers.DRAGON_SWORD_CR_],
     drainAmount: DRAIN,
     strengthMultiplier: 1,
@@ -30,4 +48,5 @@ module.exports = function registerDragonSwordSpecialAttack(api) {
     },
     combatMethod: new DragonSwordCombatMethod(),
   });
+  api.onCombatHitRoll(pierceNpcMeleePrayer);
 };

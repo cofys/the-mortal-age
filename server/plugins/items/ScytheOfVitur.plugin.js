@@ -21,6 +21,7 @@ const MAX_HITS = 3;
 const SCYTHES = new Set(["scythe of vitur", "holy scythe of vitur", "sanguine scythe of vitur"]);
 
 let core;
+let pluginApi;
 /** The area registry, for multicombat (api.getAreaManager(): api.core has no AreaManager). */
 let areas;
 let scytheMethod = null;
@@ -86,6 +87,12 @@ function consumeSwingCharge(player, hits) {
   }
   const dealtDamage = Array.isArray(hits) && hits.some((hit) => Number(hit?.getTotalDamage?.() ?? 0) > 0);
   if (!dealtDamage) {
+    return;
+  }
+  // Content may spare the charge (a league relic): the question every charged weapon asks.
+  const consume = { player, itemId: item.getId(), skip: false };
+  pluginApi.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) {
     return;
   }
   const left = charges(item) - 1;
@@ -226,6 +233,7 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
+    pluginApi = api;
     areas = api.getAreaManager();
     api.onServerStartup(initializeIds);
     api.onItemAction("Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });

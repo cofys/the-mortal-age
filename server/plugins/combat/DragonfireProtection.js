@@ -30,10 +30,12 @@ const ANTIFIRE_MESSAGE = "Your antifire potion helps to protect you from the dra
 const SUPER_ANTIFIRE_MESSAGE = "Your super antifire potion completely protects you from the dragon fire!";
 
 let core;
+let pluginApi;
 
 /** Called from each plugin that uses this module, before any dragonfire logic runs. */
 function initDragonfireProtectionCoreAccess(api) {
   core = api.core;
+  pluginApi = api;
 }
 
 /**
@@ -125,7 +127,18 @@ function processDragonfireProtection(player) {
   }
 }
 
+/**
+ * The player's protection tier: their potion's, or full protection when content makes them immune
+ * to dragonfire outright (a league relic answers `combat:status-apply` for it as for poison).
+ */
 function getDragonfireProtectionTier(player) {
+  const status = { target: player, kind: "dragonfire", allow: true };
+  // Through the plugin api this module was given; a caller that only handed it `core` goes through core.
+  const emitter = pluginApi?.emitCustomEvent ? pluginApi : core?.PluginManager;
+  emitter?.emitCustomEvent?.("combat:status-apply", status);
+  if (status.allow === false) {
+    return DragonfireProtectionTier.SUPER_ANTIFIRE;
+  }
   return normalizeState(player)?.tier ?? DragonfireProtectionTier.NONE;
 }
 
@@ -140,7 +153,9 @@ function resolveChromaticDragonfireDamage(attacker, player, options = {}) {
   const tier = getDragonfireProtectionTier(player);
 
   if (tier >= DragonfireProtectionTier.SUPER_ANTIFIRE) {
-    return { damage: 0, accurate: true, messages: [spam(SUPER_ANTIFIRE_MESSAGE)] };
+    // The potion's message is the potion's; an immunity granted by content says nothing.
+    const potion = (normalizeState(player)?.tier ?? DragonfireProtectionTier.NONE) >= DragonfireProtectionTier.SUPER_ANTIFIRE;
+    return { damage: 0, accurate: true, messages: potion ? [spam(SUPER_ANTIFIRE_MESSAGE)] : [] };
   }
 
   let accurate = true;

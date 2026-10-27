@@ -135,7 +135,7 @@ const JEWELLERY = [
     ],
     spent: ItemIds.SKILLS_NECKLACE,
     rechargeable: true,
-    // Legends' Guild totem pole: 6 charges once Legends' Quest is complete (Wiki). Recharge
+    // Legends' Guild totem pole: 4 charges once Legends' Quest is complete (Wiki). Recharge
     // Dragonstone needs the quest too, unlike for glories.
     recharge: { totem: true, quest: "Legends' Quest", spellNeedsQuest: true },
     wildernessLevel: DRAGONSTONE_WILDERNESS_LEVEL,

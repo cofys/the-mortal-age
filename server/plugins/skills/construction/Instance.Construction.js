@@ -417,6 +417,8 @@ class PlayerHouseInstance extends PrivateArea {
     const previousArea = player.getArea();
     if (previousArea && previousArea !== this) previousArea.leave(player, false);
     this.enter(player);
+    // Entering a house ends Vengeance's effect (Wiki: Vengeance).
+    player.setHasVengeance(false);
     player.moveTo(this.getEntryLocation());
     const sent = this.rebuild(player, buildingMode);
     if (sent) Servants.enterServantHouse(player, this);

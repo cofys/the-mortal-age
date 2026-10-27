@@ -1,4 +1,5 @@
 const Common = require('./Common.ElementalSpells');
+const Fragments = require('./Fragments.ElementalSpells');
 function baseMaximum(request) {
   const player = request.attacker;
   if (!player?.isPlayer?.()) return;
@@ -8,6 +9,7 @@ function baseMaximum(request) {
   // Add the scaling delta so other base additions commute with this handler.
   request.maxHit += Common.familyMaximum(entry, level) - request.originalMaxHit;
   if (Common.matchingAmulet(player, entry.element)) request.maxHit += 2;
+  request.maxHit += Fragments.bonus(player, entry.element);
 }
 function attach(api) { api.onCustomEvent('combat:magic-base-max-hit', baseMaximum); }
 module.exports = { attach };

@@ -18,8 +18,11 @@ module.exports = {
   name: "Canifis Rooftop",
   lapXp: 240,
   petBase: 36842, // Giant squirrel base chance (Wiki)
+  // 2/3 a lap, and no overlevel cut: a coding error in the game (Wiki: Mark of Grace).
   marks: {
     level: 40,
+    chance: 2 / 3,
+    overlevelPenalty: false,
     tiles: [[3499, 3505, 2], [3488, 3500, 2], [3476, 3494, 3], [3478, 3483, 2], [3497, 3471, 3], [3514, 3478, 2]],
   },
   obstacles: [

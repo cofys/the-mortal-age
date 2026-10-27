@@ -128,13 +128,14 @@ export class SkillManager {
         if (!Number.isFinite(experience) || experience <= 0) {
             return this;
         }
-        if (PluginManager.emitCanGainExperience(this.player, skill, experience) === false) {
+        const gate = PluginManager.emitCanGainExperience(this.player, skill, experience);
+        if (gate.allow === false) {
             return this;
         }
 
-        // Multipliers...
+        // Multipliers: the world's rate, then the player's own (a league profile's rate).
         if (multipliers) {
-            experience *= GameConstants.EXPERIENCE_MULTIPLIER;
+            experience *= GameConstants.EXPERIENCE_MULTIPLIER * gate.multiplier;
         }
         // OSRS counts experience in tenths: a gain keeps its tenths and drops the rest
         // (4/3 per damage is 1.3 for one damage). The epsilon keeps 3.3 from reading as 3.29999.
@@ -185,6 +186,9 @@ export class SkillManager {
             this.player.getUpdateFlag().flag(Flag.APPEARANCE);
         }
         if (newLevel <= startingLevel) this.updateSkill(skill);
+        // The gain as it was added (after the rates and the tenths), for content that reacts to
+        // experience itself (a league relic's bonus XP). `multiplied` says whether the rates applied.
+        PluginManager.emitCustomEvent("skills:experience-gained", { player: this.player, skill, experience, multiplied: multipliers });
         return this;
     }
 
@@ -566,6 +570,13 @@ export class SkillManager {
     }
 
     increaseCurrentLevel(skill: Skill, amount: number, max: number) {
+        if (amount > 0) {
+            // A restore or boost, whatever its source: plugins may change `amount` (a league
+            // passive's Prayer gain); `max` stays the caller's cap.
+            const restore = { player: this.player, skill, amount, max };
+            PluginManager.emitCustomEvent("skills:restore", restore);
+            if (restore.amount !== amount && Number.isFinite(restore.amount) && restore.amount >= 0) amount = Math.floor(restore.amount);
+        }
         const curr = this.getCurrentLevel(skill);
         if ((curr + amount) > max) {
             this.setCurrentLevels(skill, max);

@@ -88,6 +88,9 @@ const SCRIPT = {
   TEXT_POPUP: 4212,
   CAMERA_RESET: 626,
   FADE: 948,
+  /** toplevel_mainmodal_open, and the raid summary's member row (Summary.*). */
+  MAINMODAL_OPEN: 2524,
+  SUMMARY_MEMBER_ROW: 6590,
 };
 
 const OVERLAY_HUD_UID = (161 << 16) | 8;
@@ -379,6 +382,11 @@ function damage(target, amount) {
   target.getCombat().getHitQueue().addPendingDamage([new HitDamage(Math.trunc(amount), HitMask.RED)]);
 }
 
+/** formatTicks with hundredths, as the raid summary prints times ("20:00.60", "1:02:03.00"). */
+function formatTicksHundredths(ticks) {
+  return `${formatTicks(ticks)}.${String((ticks * 60) % 100).padStart(2, "0")}`;
+}
+
 function formatTicks(ticks) {
   if (ticks < 0) return "0:00";
   const seconds = Math.floor((ticks * 600) / 1000);
@@ -528,6 +536,7 @@ module.exports = {
   graphicAt,
   damage,
   formatTicks,
+  formatTicksHundredths,
   displayName,
   isProtected,
   onObject,

@@ -63,6 +63,8 @@ module.exports = {
         }
         visible.add(player);
         showWelcomeScreen(player);
+        // Content that opens after the welcome screen (a league tutorial) or writes on it waits on this.
+        api.emitCustomEvent("welcome-screen:shown", { player });
       });
     });
 
@@ -72,6 +74,7 @@ module.exports = {
       }
       visible.delete(player);
       showGameframe(player);
+      api.emitCustomEvent("gameframe:ready", { player });
       // Let post-welcome content react after the normal gameframe is restored.
       return false;
     });

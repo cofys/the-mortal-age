@@ -3,6 +3,14 @@ import { getClientCycle } from "../../network/ServerConnection";
 import type { WebGLMapSquare } from "../WebGLMapSquare";
 import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
 
+/**
+ * How far a graphic played on a tile is drawn above it, in model units (a tile is 128). The game
+ * paints those after the floor's flat decorations - marble patterns (1 unit up), the light rays
+ * falling through a window (4 up) - so a falling rock's shadow always shows on top of them; with
+ * depth testing it would sink under them instead. Both renderers lift tile graphics by it.
+ */
+export const TILE_GFX_LIFT_UNITS = 8;
+
 export type GfxAnchor = "ground" | "offset";
 
 export interface GfxInstance {

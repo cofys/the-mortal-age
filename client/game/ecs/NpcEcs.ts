@@ -104,6 +104,7 @@ export class NpcEcs {
     private baseSpeed: Uint8Array; // sub-tile units per client tick
     private animTick: Uint16Array; // accumulator for frame stepping
     private loopCount: Uint16Array; // loop counter for current animation
+    private seqStartCycle: Int32Array; // client cycle the current action sequence (re)started in
     private stepQueueX: Int16Array;
     private stepQueueY: Int16Array;
     private stepQueueSpeed: Uint8Array;
@@ -207,6 +208,7 @@ export class NpcEcs {
         this.baseSpeed = new Uint8Array(this.capacity);
         this.animTick = new Uint16Array(this.capacity);
         this.loopCount = new Uint16Array(this.capacity);
+        this.seqStartCycle = new Int32Array(this.capacity);
         this.stepQueueX = new Int16Array(this.capacity * NpcEcs.MAX_SERVER_PATH);
         this.stepQueueY = new Int16Array(this.capacity * NpcEcs.MAX_SERVER_PATH);
         this.stepQueueSpeed = new Uint8Array(this.capacity * NpcEcs.MAX_SERVER_PATH);
@@ -297,6 +299,7 @@ export class NpcEcs {
         this.baseSpeed = grow(this.baseSpeed, newCap);
         this.animTick = grow(this.animTick, newCap);
         this.loopCount = grow(this.loopCount, newCap);
+        this.seqStartCycle = grow(this.seqStartCycle, newCap);
         const newStepQueueX = new Int16Array(newCap * NpcEcs.MAX_SERVER_PATH);
         const newStepQueueY = new Int16Array(newCap * NpcEcs.MAX_SERVER_PATH);
         const newStepQueueSpeed = new Uint8Array(newCap * NpcEcs.MAX_SERVER_PATH);
@@ -390,6 +393,7 @@ export class NpcEcs {
         this.baseSpeed[id] = 4; // default walk speed (pixels per client tick)
         this.animTick[id] = 0;
         this.loopCount[id] = 0;
+        this.seqStartCycle[id] = 0;
         this.seqId[id] = -1;
         this.seqDelay[id] = 0;
         this.seqPathLength[id] = 0;
@@ -1065,7 +1069,14 @@ export class NpcEcs {
     setMovementFrameIndex(id: number, idx: number): void {
         this.movementFrameIndex[id] = (idx | 0) & 0xffff;
     }
-    handleServerSequence(id: number, seqId: number, delay: number = 0): void {
+    /**
+     * Starts (or restarts) an action sequence from the server. `startCycle` is the client cycle it
+     * arrived in: the frame loop only steps it through cycles after that one, as the real client
+     * does, so a sequence that arrives partway through a render frame's batch of cycles isn't
+     * charged for the time before it arrived (and doesn't end early, flashing the idle pose
+     * between sequences sent back to back).
+     */
+    handleServerSequence(id: number, seqId: number, delay: number = 0, startCycle: number = 0): void {
         const nextSeq = seqId | 0;
         const nextDelay = Math.max(0, delay | 0) & 0xff;
         const currentSeq = this.seqId[id] | 0;
@@ -1074,6 +1085,7 @@ export class NpcEcs {
             const restartMode = this.getSeqRestartMode(nextSeq);
             if (restartMode === 1) {
                 this.seqDelay[id] = nextDelay;
+                this.seqStartCycle[id] = startCycle | 0;
                 this.animTick[id] = 0;
                 this.frameIndex[id] = 0;
                 this.loopCount[id] = 0;
@@ -1095,11 +1107,20 @@ export class NpcEcs {
             this.seqId[id] = nextSeq;
             this.notifyMutation({ kind: "animation", index: id });
             this.seqDelay[id] = nextDelay;
+            this.seqStartCycle[id] = startCycle | 0;
             this.seqPathLength[id] = Math.min(255, this.getPathLengthLike(id)) & 0xff;
             this.animTick[id] = 0;
             this.frameIndex[id] = 0;
             this.loopCount[id] = 0;
         }
+    }
+    /**
+     * Whether the action sequence had started by client cycle `cycle` (it steps from the next one).
+     * A sequence with no recorded start (0: client cycles start at 1) always steps.
+     */
+    hasSeqStartedBy(id: number, cycle: number): boolean {
+        const start = this.seqStartCycle[id] | 0;
+        return start === 0 || (cycle | 0) > start;
     }
     clearSeq(id: number): void {
         const changed = this.seqId[id] !== -1;

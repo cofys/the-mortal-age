@@ -78,6 +78,7 @@ import { CombatSpells } from "../game/content/combat/magic/CombatSpells";
 import { TeleportHandler } from "../game/model/teleportation/TeleportHandler";
 import { ArceuusSpells } from "../game/content/combat/magic/ArceuusSpells";
 import { SpellTeleports } from "../game/content/combat/magic/SpellTeleports";
+import { LEAGUE_PROFILE, MAIN_PROFILE, type PlayerProfile } from "../game/entity/impl/player/persistence/PlayerProfile";
 import {
   LOGIN_FLAG_REMEMBER,
   LOGIN_FLAG_TOKEN,
@@ -115,11 +116,12 @@ export async function connectHeadlessClient(username: string, password: string):
   return player ? { player } : { error: connection.getLoginFailure() ?? "Login did not complete." };
 }
 
-/** "Log out" on the remembered-account screen: the server drops that browser's token. */
+/** "Log out" on the remembered-account screen: the server drops that browser's token from this world's character's save. */
 async function forgetLoginToken(rawUsername: string, token: string): Promise<void> {
   const username = Misc.formatDisplayName(rawUsername);
   const protocolName = Misc.formatNameForProtocol(username);
   if (protocolName.length < 1 || protocolName.length > 12 || !Misc.isValidName(protocolName)) return;
+  const profile = GameConstants.WORLD_PROFILE;
   const online = World.getPlayerByName(username);
   if (online) {
     const entries = readLoginTokens(online.getAttribute(LOGIN_TOKENS_ATTRIBUTE), Date.now());
@@ -129,14 +131,14 @@ async function forgetLoginToken(rawUsername: string, token: string): Promise<voi
   }
   try {
     // Only a token the account holds causes a write, so made-up requests cost nothing.
-    const save = GameConstants.PLAYER_PERSISTENCE.load(username);
+    const save = GameConstants.PLAYER_PERSISTENCE.load(username, profile);
     if (!save || checkLoginToken(readLoginTokens(save.attributes?.[LOGIN_TOKENS_ATTRIBUTE], Date.now()), token).kind !== "valid") return;
     await GameConstants.PLAYER_PERSISTENCE.updateOffline(username, (stored) => {
       const entries = readLoginTokens(stored.attributes?.[LOGIN_TOKENS_ATTRIBUTE], Date.now());
       const check = checkLoginToken(entries, token);
       if (check.kind !== "valid") return;
       stored.attributes = { ...(stored.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: revokeLoginToken(entries, check.index) };
-    }, "login-token");
+    }, "login-token", profile);
   } catch (error) {
     console.warn(`[login] could not forget a login token for ${username}`, error);
   }
@@ -201,6 +203,8 @@ const NON_INPUT_PACKETS = new Set([
 
 type PendingLogin = {
   username: string;
+  /** Which of the account's characters is logging in: the league one on a league world. */
+  profile: PlayerProfile;
   passwordHash: string;
   save: any | null;
   /** The account's remembered logins after this one, or null when they didn't change. */
@@ -822,6 +826,9 @@ export class ClientConnection {
           continue;
         case "varp_transmit":
           if (this.player) {
+            const transmission = { player: this.player, varpId: packet.varpId, value: packet.value, handled: false };
+            PluginManager.emitCustomEvent("player:varp-transmit", transmission);
+            if (transmission.handled) continue;
             if (packet.varpId === 43) {
               WeaponInterfaceManager.changeCombatStyle(this.player, packet.value);
               BonusManager.update(this.player);
@@ -1036,6 +1043,8 @@ export class ClientConnection {
 
   private async login(rawUsername: string, password: string, revision: number, flags = 0): Promise<void> {
     const tokenLogin = (flags & LOGIN_FLAG_TOKEN) !== 0;
+    // A league world logs the account's league character in: a separate save under the same name.
+    const profile = GameConstants.WORLD_PROFILE;
     this.releasePendingName();
     const typedName = Misc.formatDisplayName(rawUsername);
     const protocolName = Misc.formatNameForProtocol(typedName);
@@ -1078,8 +1087,15 @@ export class ClientConnection {
     this.reservedName = key;
 
     let save: any | null = null;
+    // The account's credential is its main character's save; a league character's own hash only
+    // stands in while no main character exists (an account first made on a league world), on
+    // either world. So a name can't be claimed on either world with a password of one's own, and
+    // a password change (PlayerPersistence.changePassword) reaches both characters.
+    let credentials: any | null = null;
     try {
-      save = GameConstants.PLAYER_PERSISTENCE.load(typedName);
+      save = GameConstants.PLAYER_PERSISTENCE.load(typedName, profile);
+      const main = profile === MAIN_PROFILE ? save : GameConstants.PLAYER_PERSISTENCE.load(typedName, MAIN_PROFILE);
+      credentials = main ?? save ?? (profile === MAIN_PROFILE ? GameConstants.PLAYER_PERSISTENCE.load(typedName, LEAGUE_PROFILE) : null);
     } catch (error) {
       console.error(`[login] failed to load ${typedName}`, error);
       this.releasePendingName();
@@ -1087,7 +1103,7 @@ export class ClientConnection {
       return;
     }
 
-    // A remembered login only signs in to an account that exists.
+    // A remembered login only signs in to a character that exists (its tokens live in its own save).
     if (tokenLogin && !save) {
       this.releasePendingName();
       this.failLogin(3, "Invalid username or password.");
@@ -1105,23 +1121,23 @@ export class ClientConnection {
         if (check.kind !== "valid") {
           if (check.kind === "reused") {
             console.warn(`[login] ${typedName}: a replaced login token was used again; revoking it`);
-            await this.saveLoginTokens(typedName, save, revokeLoginToken(entries, check.index));
+            await this.saveLoginTokens(typedName, profile, save, revokeLoginToken(entries, check.index));
           }
           this.releasePendingName();
           this.failLogin(3, "Invalid username or password.");
           return;
         }
         ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now, check.index));
-        await this.saveLoginTokens(typedName, save, loginTokens);
+        await this.saveLoginTokens(typedName, profile, save, loginTokens);
         passwordHash = String(save.getPasswordHashWithSalt?.() ?? "");
-      } else if (save) {
-        const stored = String(save.getPasswordHashWithSalt?.() ?? "");
+      } else if (credentials) {
+        const stored = String(credentials.getPasswordHashWithSalt?.() ?? "");
         // Only a save from before hashing holds the plain password. A hash must never match
         // the typed text, even though the 64-character limit happens to rule out real ones.
         let valid = !!stored && !stored.includes(":") && stored === password;
         if (!valid && stored.includes(":")) {
           try {
-            valid = await GameConstants.PLAYER_PERSISTENCE.checkPassword(password, save);
+            valid = await GameConstants.PLAYER_PERSISTENCE.checkPassword(password, credentials);
           } catch {
             valid = false;
           }
@@ -1141,7 +1157,7 @@ export class ClientConnection {
         const now = Date.now();
         const entries = readLoginTokens(save?.attributes?.[LOGIN_TOKENS_ATTRIBUTE], now);
         ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now));
-        if (save) await this.saveLoginTokens(typedName, save, loginTokens);
+        if (save) await this.saveLoginTokens(typedName, profile, save, loginTokens);
       }
     } catch (error) {
       console.error(`[login] failed to authenticate ${typedName}`, error);
@@ -1156,10 +1172,10 @@ export class ClientConnection {
       this.releasePendingName();
       return;
     }
-    // An account keeps the name it was first saved with; the typed one only names a new account.
-    const savedName = String(save?.getDisplayName?.() ?? "");
+    // An account keeps the name it was first saved with (either character's); the typed one only names a new account.
+    const savedName = String((save ?? credentials)?.getDisplayName?.() ?? "");
     const username = Misc.formatNameForProtocol(savedName) === protocolName ? savedName : typedName;
-    this.pending = { username, passwordHash, save, loginTokens };
+    this.pending = { username, profile, passwordHash, save, loginTokens };
     this.send(encodeLoginResponse(true, -1, "", username, loginToken));
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
   }
@@ -1176,6 +1192,7 @@ export class ClientConnection {
     const player = new Player(session, GameConstants.DEFAULT_LOCATION.clone());
     session.setPlayer(player);
     player.setUsername(pending.username);
+    player.setProfile(pending.profile);
     player.setLongUsername(Misc.stringToLongBigInt(pending.username));
     player.setHostAddress(this.channel.remoteAddress);
     // Transient (not persisted) so a mobile login never overwrites the layout
@@ -1205,6 +1222,7 @@ export class ClientConnection {
       player,
       username: player.getUsername(),
       isNewAccount: pending.save == null,
+      profile: pending.profile,
     });
     this.send(
       encodeHandshake(
@@ -1391,13 +1409,13 @@ export class ClientConnection {
    * Writes the account's remembered logins before answering, so a swapped token is on disk
    * even if the player never finishes logging in. The live player's copy follows in enterWorld.
    */
-  private async saveLoginTokens(username: string, save: any, entries: LoginTokenEntry[]): Promise<void> {
+  private async saveLoginTokens(username: string, profile: PlayerProfile, save: any, entries: LoginTokenEntry[]): Promise<void> {
     if (!save) return;
     save.attributes = { ...(save.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: entries };
     try {
       await GameConstants.PLAYER_PERSISTENCE.updateOffline(username, (stored) => {
         stored.attributes = { ...(stored.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: entries };
-      }, "login-token");
+      }, "login-token", profile);
     } catch (error) {
       console.warn(`[login] could not save login tokens for ${username}`, error);
     }

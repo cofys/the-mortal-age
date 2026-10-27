@@ -1,5 +1,5 @@
 // Run after `yarn build`: node --test tests/melee-weapon-specials.test.cjs
-// Specials of the battleaxe, two-handed sword, mace, warhammer, axe and harpoon families.
+// Specials of the battleaxe, two-handed sword, mace, warhammer, axe and harpoon families, and Excalibur.
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 
@@ -32,7 +32,7 @@ function load(file, overrides) {
 const FILES = [
   "DragonBattleaxe", "Dragon2hSword", "DragonMace", "BarrelchestAnchor", "DragonWarhammer",
   "StatiusWarhammer", "ArmadylGodsword", "BandosGodsword", "SaradominGodsword", "ZamorakGodsword",
-  "DragonAxe", "DragonHarpoon",
+  "DragonAxe", "DragonHarpoon", "Excalibur",
 ];
 for (const file of FILES) load(file);
 const tasks = [];
@@ -66,6 +66,7 @@ function fakePlayer({ weaponId, energy = 100, levels = {} }) {
     energy,
     isPlayer: () => true,
     isPlayerBot: () => false,
+    getLocation: () => ({ getX: () => 3200, getY: () => 3200, getZ: () => 0 }),
     getAsPlayer() { return this; },
     getCombatSpecial() { return this.special; },
     isSpecialActivated() { return this.activated; },
@@ -228,6 +229,44 @@ test("an instant special without enough energy changes nothing", () => {
   assert.equal(player.skillManager.level("STRENGTH"), 90);
   assert.equal(player.skillManager.level("ATTACK"), 90);
   assert.deepEqual(player.calls.chat, []);
+  assert.deepEqual(player.calls.messages, ["You do not have enough special attack energy left!"]);
+});
+
+// Wiki: Excalibur gives a visible +8 Defence boost; visible boosts do not stack.
+test("Sanctuary boosts Defence immediately without a target and spends 100% energy", () => {
+  const player = fakePlayer({ weaponId: ItemIdentifiers.EXCALIBUR, levels: { DEFENCE: 50 } });
+  CombatSpecial.activate(player);
+  assert.equal(player.skillManager.level("DEFENCE"), 58);
+  assert.equal(player.energy, 0);
+  assert.equal(player.activated, false);
+  assert.equal(special("excalibur").getCombatMethod().hits(player, null), null);
+});
+
+test("Sanctuary refreshes its boost without stacking repeated uses", () => {
+  const player = fakePlayer({ weaponId: ItemIdentifiers.EXCALIBUR, levels: { DEFENCE: 99 } });
+  CombatSpecial.activate(player);
+  assert.equal(player.skillManager.level("DEFENCE"), 107);
+  player.energy = 100;
+  CombatSpecial.activate(player);
+  assert.equal(player.skillManager.level("DEFENCE"), 107);
+  assert.equal(player.energy, 0);
+});
+
+for (const [current, expected] of [[54, 58], [58, 58], [62, 62]]) {
+  test(`Sanctuary at ${current}/50 Defence leaves ${expected}/50`, () => {
+    const player = fakePlayer({ weaponId: ItemIdentifiers.EXCALIBUR, levels: { DEFENCE: 50 } });
+    player.skillManager.setLevel("DEFENCE", current);
+    CombatSpecial.activate(player);
+    assert.equal(player.skillManager.level("DEFENCE"), expected);
+    assert.equal(player.energy, 0, "even a stronger existing boost still spends the energy");
+  });
+}
+
+test("Sanctuary below 100% energy leaves Defence and energy unchanged", () => {
+  const player = fakePlayer({ weaponId: ItemIdentifiers.EXCALIBUR, energy: 99, levels: { DEFENCE: 50 } });
+  CombatSpecial.activate(player);
+  assert.equal(player.skillManager.level("DEFENCE"), 50);
+  assert.equal(player.energy, 99);
   assert.deepEqual(player.calls.messages, ["You do not have enough special attack energy left!"]);
 });
 

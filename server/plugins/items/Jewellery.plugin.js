@@ -7,7 +7,6 @@ const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wi
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Flag } = require("../../src/main/typescript/elvarg/game/model/Flag");
 const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL } = require("./Teleports.Jewellery");
-const QuestRuntime = require("../quests/QuestRuntime");
 const { castRechargeDragonstone } = require("./RechargeDragonstone.Jewellery");
 
 /** Item param holding a worn item's first equipment option (RuneLite: OC_ITEM_OP1). */
@@ -19,8 +18,6 @@ const PROMPT_PAGE_SIZE = 5;
 const CHARGE_COLOUR = "7f007f";
 // Charges left are spelled out: "Your ring of dueling has seven uses left." (rsprox captures).
 const COUNT_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-const FOUNTAIN_OF_RUNE_CHARGES = 6;
-const FOUNTAIN_OF_HEROES_CHARGES = 4;
 
 /**
  * itemId -> { piece, charges }. Eternal pieces have Infinity charges; uncharged
@@ -299,64 +296,6 @@ function handleJewelleryAction(event) {
   }
 }
 
-function questComplete(player, name) {
-  return QuestRuntime.getRegisteredQuests().find((quest) => quest.name === name)?.isComplete(player) ?? false;
-}
-
-/**
- * Using jewellery on the Fountain of Rune (6 charges), the Fountain of Heroes
- * (glory only, 4 charges) or the Legends' Guild totem pole (skills necklace and
- * combat bracelet, 6 charges) recharges every applicable piece carried or worn.
- */
-function rechargeAtFountain(event) {
-  const { player } = event;
-  const { ObjectIdentifiers, ItemIdentifiers } = pluginApi.core;
-  const rune = [ObjectIdentifiers.FOUNTAIN_OF_RUNE, ObjectIdentifiers.FOUNTAIN_OF_RUNE_2].includes(event.objectId);
-  const heroes = [ObjectIdentifiers.FOUNTAIN_OF_HEROES, ObjectIdentifiers.FOUNTAIN_OF_HEROES_2].includes(event.objectId);
-  const totem = [
-    ObjectIdentifiers.TOTEM_POLE_2, ObjectIdentifiers.TOTEM_POLE_3, ObjectIdentifiers.TOTEM_POLE_4,
-    ObjectIdentifiers.TOTEM_POLE_5, ObjectIdentifiers.TOTEM_POLE_7,
-  ].includes(event.objectId);
-  const used = JEWELLERY_BY_ITEM.get(event.itemId);
-  if ((!rune && !heroes && !totem) || !used?.piece.recharge || used.charges === Infinity) return;
-  const fits = (piece) => {
-    if (!piece.recharge || !questComplete(player, piece.recharge.quest)) return false;
-    if (totem) return piece.recharge.totem === true;
-    if (piece.recharge.totem) return false;
-    return rune || piece.recharge.heroes;
-  };
-  event.handled = true;
-  if (!fits(used.piece)) {
-    player.sendMessage("Nothing interesting happens.");
-    return;
-  }
-  const target = totem || rune ? FOUNTAIN_OF_RUNE_CHARGES : FOUNTAIN_OF_HEROES_CHARGES;
-  let eternal = false;
-  for (const container of [player.getInventory(), player.getEquipment()]) {
-    for (const item of container.getItems()) {
-      const entry = item ? JEWELLERY_BY_ITEM.get(item.getId()) : null;
-      if (!entry || entry.charges === Infinity || entry.charges >= target || !fits(entry.piece)) continue;
-      const chance = rune ? entry.piece.recharge.eternalChance : 0;
-      if (chance && Math.random() < 1 / chance) {
-        item.setId(ItemIdentifiers.AMULET_OF_ETERNAL_GLORY);
-        eternal = true;
-      } else {
-        item.setId(entry.piece.charged.find(([, charges]) => charges === target)[0]);
-      }
-    }
-    container.refreshItems();
-  }
-  BonusManager.update(player);
-  player.getUpdateFlag().flag(Flag.APPEARANCE);
-  player.sendMessage(
-    eternal
-      ? "The power of the fountain is transferred into an amulet of eternal glory. It will now have unlimited charges."
-      : totem
-        ? "The totem pole recharges your jewellery."
-        : "You feel a power emanating from the fountain as it recharges your jewellery."
-  );
-}
-
 module.exports = {
   name: "Jewellery",
   members: true,
@@ -364,7 +303,7 @@ module.exports = {
     pluginApi = api;
     BonusManager = api.getBonusManager();
     api.onItemAction(handleJewelleryAction);
-    api.onItemOnObject(rechargeAtFountain, { noted: false });
+    require("./Recharge.Jewellery")(api);
     api.onSpellCast(castRechargeDragonstone.bind(null, api));
   },
   _test: { JEWELLERY_BY_ITEM, chargeMessage, nextItemId, useCharge },

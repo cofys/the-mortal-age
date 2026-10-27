@@ -29,6 +29,12 @@ export interface ShopCurrencyHandler {
     name: string;
     /** The inventory item the currency is paid in, if it is one. */
     itemId?: number;
+    /**
+     * How live shop messages name an amount of it ("trade sticks"). When set, price checks and
+     * refusals use OSRS's wording: "Red topaz: currently costs 240 trade sticks.", "... shop will
+     * buy for 120 trade sticks.", "You don't have enough trade sticks.".
+     */
+    unit?: string;
 }
 
 interface RuntimeShop {
@@ -97,7 +103,7 @@ export class ShopManager {
 
     public static registerItemCurrency(
         itemId: number,
-        options?: { name?: string; aliases?: string[] }
+        options?: { name?: string; aliases?: string[]; unit?: string }
     ): void {
         if (!Number.isInteger(itemId) || itemId <= 0) {
             throw new Error(`Invalid item shop currency: ${itemId}`);
@@ -109,6 +115,7 @@ export class ShopManager {
         const handler: ShopCurrencyHandler = {
             name,
             itemId,
+            unit: options?.unit,
             amount: (player) =>
                 Number(player?.getInventory?.()?.getAmount?.(itemId) ?? 0),
             add: (player, amount) => player?.getInventory?.()?.adds?.(itemId, amount),
@@ -335,7 +342,7 @@ export class ShopManager {
             name: shop.definition.getName(),
             currency: this.currencyName(shop.definition.getCurrency()),
             stock: this.displayEntries(shop).map((entry) => ({
-                ...entry, price: this.itemPrice(shop, ItemDefinition.forId(entry.itemId), player),
+                ...entry, price: this.buyPrice(player, shop, ItemDefinition.forId(entry.itemId)),
             })),
         };
     }
@@ -449,7 +456,7 @@ export class ShopManager {
 
         const stock = this.displayEntries(shop).map((entry, slot) => {
             const definition = ItemDefinition.forId(entry.itemId);
-            const price = definition ? this.itemPrice(shop, definition, player) : 0;
+            const price = definition ? this.buyPrice(player, shop, definition) : 0;
             return {
                 slot, itemId: entry.itemId, quantity: entry.amount,
                 defaultQuantity: shop.originalAmounts.get(entry.itemId) ?? 0,
@@ -543,15 +550,23 @@ export class ShopManager {
             return;
         }
         const definition = ItemDefinition.forId(itemId);
-        if (!fromShop && !this.canSell(shop, item)) {
+        if (!fromShop && !this.canSell(shop, item, player)) {
             player.sendMessage(
                 "This item cannot be sold to a shop."
             );
             return;
         }
-        const price = fromShop ? this.itemPrice(shop, definition, player) : this.sellPrice(shop, definition, player);
-        if (price <= 0) {
+        const price = fromShop ? this.buyPrice(player, shop, definition) : this.sellPrice(shop, definition, player);
+        if (price <= 0 && !(fromShop && this.itemPrice(shop, definition, player) > 0)) {
             player.sendMessage("This item has no value.");
+            return;
+        }
+        const unit = this.currencyUnit(shop.definition.getCurrency());
+        if (unit) {
+            player.sendMessage(
+                `${definition.getName()}: ${fromShop ? "currently costs" : "shop will buy for"} ` +
+                `${Misc.insertCommasToNumber(String(price))} ${unit}.`
+            );
             return;
         }
         player.sendMessage(
@@ -574,10 +589,11 @@ export class ShopManager {
             player.sendMessage("The shopkeeper waves you off — \"We don't serve your kind here.\"");
             return;
         }
-        const price = this.itemPrice(shop, definition, player);
-        if (price <= 0) {
+        // An item with no price of its own is never sold; content may still make a priced one free ("shop:buy-price").
+        if (this.itemPrice(shop, definition, player) <= 0) {
             return;
         }
+        const price = this.buyPrice(player, shop, definition);
 
         let quantity = Math.min(this.normalizeAmount(amount), this.MAX_ACTION_AMOUNT);
         if (quantity <= 0) {
@@ -606,19 +622,23 @@ export class ShopManager {
         }
         quantity = Math.min(
             quantity,
-            Math.floor(
-                this.currencyAmount(player, shop.definition.getCurrency()) / price
-            ),
+            price > 0 ? Math.floor(this.currencyAmount(player, shop.definition.getCurrency()) / price) : quantity,
             available
         );
         if (quantity <= 0) {
-            player.sendMessage("You can't afford that.");
+            const unit = this.currencyUnit(shop.definition.getCurrency());
+            player.sendMessage(unit ? `You don't have enough ${unit}.` : "You can't afford that.");
             return;
         }
 
+        // Content may hand the purchase over as another item ("shop:delivery", a league relic's noted purchases).
+        const delivery = { player, shopId: shop.definition.getId(), currency: shop.definition.getCurrency(), itemId, deliverId: itemId };
+        PluginManager.emitCustomEvent("shop:delivery", delivery);
+        const deliverId = Number.isInteger(delivery.deliverId) && delivery.deliverId > 0 ? delivery.deliverId : itemId;
+        const delivered = ItemDefinition.forId(deliverId);
         const inventory = player.getInventory();
-        if (definition.isStackable?.()) {
-            if (!inventory.containsNumber(itemId) && inventory.getFreeSlots() <= 0) {
+        if (delivered.isStackable?.()) {
+            if (!inventory.containsNumber(deliverId) && inventory.getFreeSlots() <= 0) {
                 inventory.full();
                 return;
             }
@@ -639,7 +659,7 @@ export class ShopManager {
             shop.definition.getCurrency(),
             removed * price
         );
-        inventory.adds(itemId, removed);
+        inventory.adds(deliverId, removed);
         PluginManager.emitCustomEvent("shop:purchase", {
             player, shopId: shop.definition.getId(), shopName: shop.definition.getName(),
             itemId, amount: removed, originalStock: (shop.originalAmounts.get(itemId) ?? 0) > 0,
@@ -673,7 +693,7 @@ export class ShopManager {
             return;
         }
         const definition = ItemDefinition.forId(stockId);
-        if (!this.canSell(shop, item)) {
+        if (!this.canSell(shop, item, player)) {
             player.sendMessage("This item cannot be sold.");
             return;
         }
@@ -690,7 +710,7 @@ export class ShopManager {
             : [slot, ...inventory.getItems().map((_, index) => index).filter((index) => index !== slot)];
         const sellable = slots.filter((index) => {
             const held = inventory.getItems()[index];
-            return held?.getId() === itemId && this.canSell(shop, held);
+            return held?.getId() === itemId && this.canSell(shop, held, player);
         });
         const held = sellable.reduce((total, index) => total + inventory.getItems()[index].getAmount(), 0);
         let quantity = Math.min(this.normalizeAmount(amount), this.MAX_ACTION_AMOUNT, held);
@@ -851,14 +871,29 @@ export class ShopManager {
             /general store/i.test(shop.definition.getName());
     }
 
-    private static canSell(shop: RuntimeShop, item: Item): boolean {
+    /** `player` (when known) and `currency` let content refuse a sale for one player (a league relic's shops that buy nothing for gold). */
+    private static canSell(shop: RuntimeShop, item: Item, player: any = null): boolean {
         if (!item || item.isUntradeable()) return false;
         const request = {
-            shopId: shop.definition.getId(), shopName: shop.definition.getName(),
+            player, shopId: shop.definition.getId(), shopName: shop.definition.getName(), currency: shop.definition.getCurrency(),
             itemId: item.getId(), sellable: item.isSellable(),
         };
         PluginManager.emitCustomEvent("shop:can-sell", request);
         return request.sellable === true;
+    }
+
+    /**
+     * What this player pays for one: the item's price, as content may change it ("shop:buy-price",
+     * a league relic's free coin shops). Never below 0.
+     */
+    private static buyPrice(player: any, shop: RuntimeShop, definition: ItemDefinition): number {
+        const price = this.itemPrice(shop, definition, player);
+        const request = {
+            player, shopId: shop.definition.getId(), shopName: shop.definition.getName(), currency: shop.definition.getCurrency(),
+            itemId: definition.getId(), price,
+        };
+        PluginManager.emitCustomEvent("shop:buy-price", request);
+        return Number.isSafeInteger(request.price) && request.price >= 0 ? request.price : price;
     }
 
     private static sellPrice(shop: RuntimeShop, definition: ItemDefinition, player?: any): number {
@@ -870,7 +905,7 @@ export class ShopManager {
         const livePrice = this.itemPrice(shop, definition, player);
         const price = livePrice > 1 ? Math.floor(livePrice * this.SALES_TAX) : livePrice;
         const request = {
-            shopId: shop.definition.getId(), shopName: shop.definition.getName(),
+            player, shopId: shop.definition.getId(), shopName: shop.definition.getName(), currency: shop.definition.getCurrency(),
             itemId: definition.getId(), buyPrice: this.basePrice(shop, definition), price,
         };
         PluginManager.emitCustomEvent("shop:sell-price", request);
@@ -915,6 +950,10 @@ export class ShopManager {
             hatredTierForShop(player, shop.definition.getKingdomId())
         );
         return Math.max(1, Math.floor(base * scarcity * bias));
+    }
+
+    private static currencyUnit(currency: ShopCurrency): string | null {
+        return this.currencyHandlers.get(currency)?.unit ?? null;
     }
 
     private static currencyAmount(player: any, currency: ShopCurrency): number {

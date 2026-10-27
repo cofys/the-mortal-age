@@ -1,12 +1,13 @@
 /**
  * A pestle and mortar on a Herblore secondary (rsprox captures): `human_herbing_grind` with synth
  * 2608 and the item's message, at once, then two ticks later, then every three ticks until none
- * are left or the player does something else. A stack (crystal shards) is ground all at once,
- * each item rolled on its own.
+ * are left or the player does something else. Crystal shards prompt for a quantity and crush
+ * that many at once.
  */
 const Common = require("./Common.Herblore");
 
 const GRIND_ANIMATION = "human_herbing_grind";
+const MAX_ITEM_AMOUNT = 2 ** 31 - 1;
 
 /**
  * How many one grind makes, rolled evenly in its range; a `diaryBonus` diary (lava scales, Wiki:
@@ -22,20 +23,28 @@ function amount(player, grind) {
   return diary.complete === true ? Math.floor(rolled * 1.5) : rolled;
 }
 
-function grindOne(player, grind) {
+function grindOne(player, grind, requested = 1) {
   const inventory = player.getInventory();
   const pestle = Common.gameval("obj", "pestle_and_mortar");
   const held = inventory.getAmount(grind.itemId);
   if (held <= 0 || inventory.getAmount(pestle) <= 0) return false;
   const stack = Common.core.ItemDefinition.forId(grind.itemId).isStackable();
-  const used = stack ? held : 1;
+  const used = Math.min(held, requested);
   let made = 0;
-  for (let n = 0; n < used; n++) made += amount(player, grind);
+  if (grind.amount[0] === grind.amount[1]) made = used * amount(player, grind);
+  else for (let n = 0; n < used; n++) made += amount(player, grind);
+  const product = new Common.core.Item(grind.productId, made);
+  const freesSlot = !stack || used === held;
+  if (inventory.getAddableAmount(product) < made
+      && !(freesSlot && inventory.getAmount(grind.productId) === 0 && made <= MAX_ITEM_AMOUNT)) {
+    inventory.full();
+    return false;
+  }
   inventory.deleteNumber(grind.itemId, used);
-  inventory.addItem(new Common.core.Item(grind.productId, made));
+  inventory.addItem(product);
   Common.animate(player, GRIND_ANIMATION);
   Common.sound(player, Common.MIX_SOUND);
-  Common.spam(player, grind.message.replace("{count}", String(made)));
+  Common.spam(player, (used < held && grind.partialMessage ? grind.partialMessage : grind.message).replace("{count}", String(made)));
   return true;
 }
 
@@ -47,6 +56,17 @@ function grind(event) {
   if (!found) return;
   event.handled = true;
   Common.core.TaskManager.cancelTasks(player.getIndex());
+  if (found.quantityPrompt) {
+    const held = player.getInventory().getAmount(found.itemId);
+    player.setEnteredAmountAction({
+      execute(quantity) {
+        if (!Number.isInteger(quantity) || quantity <= 0) return;
+        grindOne(player, found, Math.min(quantity, held));
+      },
+    });
+    player.getPacketSender().sendEnterAmountPrompt(found.quantityPrompt.replace("{count}", String(held)));
+    return;
+  }
   if (!grindOne(player, found)) return;
   let wait = 3;
   Common.run(player, () => {

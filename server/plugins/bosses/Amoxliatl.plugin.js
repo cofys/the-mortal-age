@@ -9,6 +9,7 @@ const Chamber = require("./amoxliatl/Chamber.Amoxliatl");
 const Fight = require("./amoxliatl/Fight.Amoxliatl");
 const UnstableIce = require("./amoxliatl/UnstableIce.Amoxliatl");
 const CombatAchievements = require("./amoxliatl/CombatAchievements.Amoxliatl");
+const Scoreboard = require("./amoxliatl/Scoreboard.Amoxliatl");
 
 module.exports = {
   name: "Amoxliatl",
@@ -20,6 +21,7 @@ module.exports = {
     UnstableIce.attachUnstableIce(api);
     require("./amoxliatl/Kills.Amoxliatl")(api);
     CombatAchievements.attachCombatAchievements(api);
+    Scoreboard.attachScoreboard(api);
     require("./amoxliatl/Commands.Amoxliatl")(api);
   },
 };

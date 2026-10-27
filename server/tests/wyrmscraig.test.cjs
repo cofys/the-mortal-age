@@ -22,7 +22,7 @@ const Wyrmscraig = require("../plugins/areas/Wyrmscraig.plugin");
 const AreaCommon = require("../plugins/areas/wyrmscraig/Common.Wyrmscraig");
 const MadAngel = require("../plugins/bosses/MadAngel.plugin");
 const Common = require("../plugins/bosses/madangel/Common.MadAngel");
-const { Fight, quarter } = require("../plugins/bosses/madangel/Fight.MadAngel");
+const { Fight, quarter, sweepTiles } = require("../plugins/bosses/madangel/Fight.MadAngel");
 const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts/Shortcuts.Agility");
 
 const core = PluginManager.getCoreApi();
@@ -304,8 +304,9 @@ function fightAt(player, { hitpoints = 755, maxHitpoints = 755, npcs = Common.da
     getDefinition: () => ({ getHitpoints: () => 755 }),
     setNpcTransformationId: (id) => npcLog.push(`transform ${id}`),
     performAnimation: (animation) => npcLog.push(`anim ${animation.getId?.() ?? animation.id}`),
-    performGraphicInSlot: (slot, graphic) => npcLog.push(`gfx ${graphic.id}`),
+    performGraphicInSlot: (slot, graphic) => npcLog.push(`gfx ${graphic.id} slot ${slot}`),
     setPositionToFace: () => {},
+    setMobileInteraction: () => {},
     faceTile: (tile) => npcLog.push(`face ${tile.getX()} ${tile.getY()}`),
     forceChat: (text) => npcLog.push(`say ${text}`),
     setFlag: (flag, enabled = true) => npcLog.push(`flag ${flag} ${enabled}`),
@@ -328,7 +329,24 @@ function fightAt(player, { hitpoints = 755, maxHitpoints = 755, npcs = Common.da
   const fight = new Fight(session, npc);
   fight.melee = () => { npcLog.push("melee"); fight.attacks++; return []; };
   fight.startTick = 0;
-  return { fight, npc, npcLog, bossHits, step: (n = 1) => { for (let i = 0; i < n; i++) fight.process(); } };
+  // Its blows land in the player's turn, after their clicks; then the area samples the prayer.
+  const blows = [];
+  fight.blow = (kind) => blows.push(kind);
+  const playerTurn = () => {
+    for (const kind of blows.splice(0)) {
+      let damage = 0;
+      fight.resolveBlow({ setTotalDamage: (value) => { damage = value; } }, kind);
+      player.hits.push(damage);
+    }
+    fight.samplePrayer();
+  };
+  const step = (n = 1) => {
+    for (let i = 0; i < n; i++) {
+      fight.process();
+      playerTurn();
+    }
+  };
+  return { fight, npc, npcLog, bossHits, step, setHitpoints: (value) => { hp = value; } };
 }
 
 test("the attack cycle: three swings, then a special in turn; the sweep holds its swings", () => {
@@ -343,7 +361,7 @@ test("the attack cycle: three swings, then a special in turn; the sweep holds it
   assert.equal(npcLog.filter((line) => line === "melee").length, 3, "no swing during the sweep");
   assert.ok(npcLog.includes("out of combat") && npcLog.includes("flag combat:no-retaliate true"),
     "it holds its facing: out of combat, hits included, until the sweep is over");
-  assert.ok(npcLog.includes("face 2538 2216"), "turned to face the player (east), as a face-coordinate turn");
+  assert.ok(npcLog.includes("face 2537 2215"), "turned to face the player (east), as a face-coordinate turn (sent a tile down-left: the client offsets it by the angel's size)");
 });
 
 test("the sweep: in the quarter it hurts; out of it, beside the angel, the next hit is sure", () => {
@@ -409,4 +427,138 @@ test("the enrage: at 350 hitpoints, '...!' at its next turn, then the smite, the
   fight.attack(player);
   assert.equal(fight.special.kind, "smite");
   assert.ok(npcLog.includes("anim 8543"), "the enraged smite");
+});
+
+test("as captured: each cleave covers its diagonal's half of the floor, the angel's own tiles too", () => {
+  const rows = Common.data.arena.rows;
+  // Every captured cleave: its half, the angel's south-west tile, and how many tiles its dust covered.
+  const cleaves = [["ES", 2532, 2215, 55], ["WS", 2532, 2215, 56], ["ES", 2532, 2215, 55], ["ES", 2532, 2215, 55], ["WN", 2531, 2217, 25],
+    ["WN", 2531, 2217, 25], ["WS", 2531, 2217, 66], ["EN", 2531, 2217, 37], ["ES", 2531, 2217, 78], ["WS", 2531, 2217, 66]];
+  for (const [key, x, y, count] of cleaves) assert.equal(sweepTiles(key, [x + 1, y + 1], rows).length, count, `${key} at ${x},${y}`);
+
+  const first = new Map(sweepTiles("ES", [2533, 2216], rows).map(([x, y, delay]) => [`${x},${y}`, delay]));
+  assert.equal(first.get("2533,2216"), 0, "the dust starts on the angel's centre");
+  assert.equal(first.get("2534,2215"), 2, "then under the angel");
+  assert.equal(first.get("2535,2215"), 4, "and a tile every 2 cycles");
+  assert.equal(first.get("2537,2210"), undefined, "never off the floor");
+  assert.ok(first.has("2536,2219") && !first.has("2531,2214"), "the dividing diagonal only at its counter-clockwise end");
+
+  // In the middle of the floor the north-west half reaches the far corner (its captured dust was cut off by the walls).
+  const middle = new Set(sweepTiles("WN", [2533, 2215], rows).map(([x, y]) => `${x},${y}`));
+  assert.ok(middle.has("2529,2221") && middle.has("2529,2213") && !middle.has("2537,2215"));
+});
+
+test("as captured: the enrage cry is a 4-tick turn, then smite, blast, sweep and the smite again", () => {
+  const player = createPlayer({ x: 2535, y: 2215 });
+  const { fight, npcLog, step } = fightAt(player);
+  fight.rotation = 2; // a sweep and a blast before it, as captured
+  fight.enragePending = true;
+  fight.attack(player);
+  assert.ok(npcLog.includes("say ...!") && npcLog.includes("delay 4"));
+  const kinds = [];
+  for (let i = 0; i < 4; i++) {
+    fight.attack(player);
+    kinds.push(fight.special.kind);
+    fight.special = null;
+  }
+  assert.deepEqual(kinds, ["smite", "blast", "sweep", "smite"]);
+  step(1);
+});
+
+test("as captured: the smite holds the turn its last strike lands on; the sweep gives a swing's length back, enraged too", () => {
+  const player = createPlayer({ x: 2535, y: 2215 });
+  const one = fightAt(player);
+  one.fight.startSmite();
+  one.step(6);
+  assert.equal(player.hits.length, 1, "struck");
+  assert.equal(one.fight.special?.kind, "smite", "its turn on the strike's tick still waits");
+  assert.deepEqual(one.fight.attack(player), []);
+  one.step(1);
+  assert.equal(one.fight.special, null);
+
+  const two = fightAt(createPlayer({ x: 2535, y: 2215 }));
+  two.fight.enraged = true;
+  two.fight.startSweep();
+  two.step(4 * 6);
+  assert.equal(two.fight.special, null);
+  const faces = two.npcLog.filter((line) => line.startsWith("face")).length;
+  assert.equal(faces, 6, "a turn with the wind-up and each cleave but the last");
+  assert.ok(!two.npcLog.includes("attack"), "it holds still after the last cleave");
+  two.step(3);
+  assert.ok(two.npcLog.includes("attack") && two.npcLog.includes("delay 3"), "back on the player 3 ticks later, its swing 6 after the last cleave");
+});
+
+test("as captured: woken, its first swing comes a tick after it turns; a bounce lights up the angel", () => {
+  const player = createPlayer({ x: 2535, y: 2215 });
+  const { fight, npcLog, step } = fightAt(player);
+  fight.startTick = -1;
+  fight.wake();
+  step(3);
+  assert.ok(npcLog.includes("transform 16305") && npcLog.includes("attack") && npcLog.includes("delay 1"));
+
+  fight.startBlast();
+  assert.ok(npcLog.includes(`face ${fight.special.target.getX() - 1} ${fight.special.target.getY() - 1}`), "turned to the ball's tile");
+  player.setLocation(fight.special.target);
+  step(6);
+  assert.ok(npcLog.includes("gfx 4017 slot 11"), "the bounce's graphic on the angel");
+  assert.ok(!player.log.includes("gfx 4017"));
+});
+
+test("dying, it calls off what it started: no cleave, smite or explosion lands after its last hitpoint", () => {
+  const player = createPlayer({ x: 2535, y: 2215 });
+  const { fight, step, setHitpoints } = fightAt(player);
+  fight.startSmite();
+  fight.startSweep();
+  step(2);
+  setHitpoints(0);
+  step(12);
+  assert.deepEqual(player.hits, []);
+  assert.equal(fight.special, null);
+  assert.equal(fight.tick, 14, "its clock runs on to the kill, for the fight's duration");
+});
+
+test("a sweep or smite never starts on a step: it stands still and starts 2 ticks later", () => {
+  const player = createPlayer({ x: 2535, y: 2215 });
+  const { fight, npc, step } = fightAt(player);
+  fight.attacks = 3;
+  let walking = { id: 2 };
+  npc.getWalkingDirection = () => walking;
+  assert.deepEqual(fight.attack(player), []);
+  assert.equal(fight.special.kind, "settle", "it stepped this tick: it waits, holding its turns");
+  walking = { id: -1 };
+  assert.deepEqual(fight.attack(player), [], "no swing while it settles");
+  step(2);
+  assert.equal(fight.special.kind, "sweep", "then the sweep it was due");
+  assert.equal(fight.rotation, 1);
+
+  const blaster = fightAt(createPlayer({ x: 2535, y: 2215 }));
+  blaster.fight.attacks = 3;
+  blaster.fight.rotation = 1;
+  blaster.npc.getWalkingDirection = () => ({ id: 2 });
+  blaster.fight.attack(player);
+  assert.equal(blaster.fight.special.kind, "blast", "the blast lets it move, so it goes ahead");
+});
+
+test("a flicked smite is queued at 0: the player's Ring of life isn't spent on a dummy roll", (t) => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const { NPC } = require("../dist/game/entity/impl/npc/NPC");
+  const { Equipment } = require("../dist/game/model/container/impl/Equipment");
+  const { Skill } = require("../dist/game/model/Skill");
+  require("../plugins/items/RingOfLife.plugin").register(PluginManager.createApi("RingOfLifeMadAngelTest"));
+  const teleports = [];
+  t.mock.method(core.TeleportHandler, "checkReqs", () => true);
+  t.mock.method(core.TeleportHandler, "teleport", (...args) => teleports.push(args));
+
+  const player = new Player(null);
+  t.mock.method(player, "getSession", () => ({ sendClientPacket: () => true }));
+  player.setLocation(new Location(2530, 2205, 0));
+  player.getSkillManager().setMaxLevel(Skill.HITPOINTS, 99);
+  player.getSkillManager().setCurrentLevel(Skill.HITPOINTS, 10, false);
+  player.getEquipment().getItems()[Equipment.RING_SLOT] = new core.Item(core.ItemIdentifiers.RING_OF_LIFE);
+  const npc = new NPC(Common.data.npcs.fighting, new Location(2532, 2215, 0));
+
+  new Fight({ player }, npc).blow("smite");
+
+  assert.equal(player.getEquipment().getItems()[Equipment.RING_SLOT].getId(), core.ItemIdentifiers.RING_OF_LIFE, "the ring is kept");
+  assert.equal(teleports.length, 0, "no teleport");
 });

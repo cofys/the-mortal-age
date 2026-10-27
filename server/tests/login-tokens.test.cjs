@@ -203,3 +203,181 @@ test('the forget packet round-trips', () => {
     type: 'login_forget', username: 'Zezima', token: 'tok',
   });
 });
+
+/** An account with a main save and a league save; the login path picks by profile. */
+function profileStore(passwordHash) {
+  const saves = {
+    main: { attributes: {}, getPasswordHashWithSalt: () => passwordHash, applyToPlayer() {} },
+    league: { attributes: {}, getPasswordHashWithSalt: () => passwordHash, applyToPlayer() {} },
+  };
+  const calls = [];
+  GameConstants.PLAYER_PERSISTENCE = {
+    load: (_username, profile = 'main') => { calls.push(['load', profile]); return saves[profile]; },
+    exists: () => true,
+    save: () => {},
+    flush: async () => {},
+    checkPassword: (password, playerSave) => PasswordUtil.passwordsMatch(password, playerSave.getPasswordHashWithSalt()),
+    encryptPassword: (password) => PasswordUtil.generatePasswordHashWithSalt(password),
+    updateOffline: async (_username, update, _reason, profile = 'main') => { calls.push(['update', profile]); update(saves[profile]); return true; },
+  };
+  return { saves, calls };
+}
+
+/** Both characters of one account, with the hash each save holds and the real persistence base class's account methods. */
+function accountWithBothCharacters(hash) {
+  const { PlayerPersistence } = require('../dist/game/entity/impl/player/persistence/PlayerPersistence');
+  const hashes = { main: hash, league: hash };
+  const save = (profile) => ({
+    attributes: {},
+    getPasswordHashWithSalt: () => hashes[profile],
+    setPasswordHashWithSalt(value) { hashes[profile] = value; },
+    getDisplayName: () => 'tokenuser',
+    applyToPlayer() {},
+  });
+  const saves = { main: save('main'), league: save('league') };
+  const store = Object.assign(Object.create(PlayerPersistence.prototype), {
+    load: (_username, profile = 'main') => saves[profile],
+    exists: (_username, profile = 'main') => saves[profile] != null,
+    save: () => {},
+    saveOffline: () => {},
+    flush: async () => {},
+    checkPassword: (password, playerSave) => PasswordUtil.passwordsMatch(password, playerSave.getPasswordHashWithSalt()),
+    encryptPassword: (password) => PasswordUtil.generatePasswordHashWithSalt(password),
+  });
+  GameConstants.PLAYER_PERSISTENCE = store;
+  return { saves, hashes, store };
+}
+
+test('changing the password reaches both characters, and signs out every remembered login on both', async () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { World } = require('../dist/game/World');
+  const hashA = await PasswordUtil.generatePasswordHashWithSalt('passwordA');
+  const { saves, hashes, store } = accountWithBothCharacters(hashA);
+  saves.main.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE] = [{ hash: 'a'.repeat(64), lastUsed: Date.now() }];
+  saves.league.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE] = [{ hash: 'b'.repeat(64), lastUsed: Date.now() }];
+  GameConstants.setWorldProfile('league');
+  try {
+    assert.equal((await login('tokenuser', 'passwordA', 0)).success, true, 'the league character opens with A');
+    // The main character is online on a plain world and changes the password.
+    const online = new Player(null);
+    online.setUsername('tokenuser');
+    online.setProfile('main');
+    online.setPasswordHashWithSalt(hashA);
+    online.setAttribute(tokens.LOGIN_TOKENS_ATTRIBUTE, saves.main.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE]);
+    const byName = World.getPlayerByName;
+    World.getPlayerByName = (name) => (name === 'tokenuser' ? online : undefined);
+    let saved = 0;
+    store.requestSave = () => { saved++; };
+    const messages = [];
+    online.sendMessage = (text) => messages.push(text);
+    try {
+      // Through the registered command, as a player would.
+      const commands = {};
+      const { PluginManager } = require('../dist/plugins/PluginManager');
+      const api = new Proxy({ core: PluginManager.getCoreApi(), registerCommand: (name, handler) => (commands[name] = handler) },
+        { get: (target, key) => (key in target ? target[key] : () => {}) });
+      require('../plugins/commands/PlayerCommands.plugin').register(api);
+      await commands.changepassword({ player: online, raw: 'changepassword passwordB', parts: ['changepassword', 'passwordB'] });
+    } finally {
+      World.getPlayerByName = byName;
+    }
+    assert.ok(messages.some((text) => /password/i.test(text)), `the command answered: ${messages.join(' | ')}`);
+    assert.equal(saved, 1, 'the live character is saved');
+    assert.deepEqual(online.getAttribute(tokens.LOGIN_TOKENS_ATTRIBUTE), [], 'its remembered logins are gone');
+    assert.deepEqual(saves.league.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE], [], 'and the league character\'s too');
+    assert.ok(await PasswordUtil.passwordsMatch('passwordB', hashes.league), 'the league save holds the new hash');
+    // The main save's hash is what its logout save would write; here the stub keeps the old one, so point it at the live player's.
+    hashes.main = online.getPasswordHashWithSalt();
+    assert.equal((await login('tokenuser', 'passwordA', 0)).success, false, 'the old password opens neither character');
+    assert.equal((await login('tokenuser', 'passwordB', 0)).success, true, 'the new one opens the league character');
+    GameConstants.setWorldProfile('main');
+    assert.equal((await login('tokenuser', 'passwordA', 0)).success, false);
+    assert.equal((await login('tokenuser', 'passwordB', 0)).success, true);
+  } finally {
+    GameConstants.setWorldProfile('main');
+  }
+});
+
+test('the main character\'s credential rules once both exist', async () => {
+  const hashA = await PasswordUtil.generatePasswordHashWithSalt('passwordA');
+  const { hashes } = accountWithBothCharacters(hashA);
+  hashes.league = await PasswordUtil.generatePasswordHashWithSalt('stale');
+  GameConstants.setWorldProfile('league');
+  try {
+    assert.equal((await login('tokenuser', 'stale', 0)).success, false, 'a hash left in the league save is not a credential');
+    assert.equal((await login('tokenuser', 'passwordA', 0)).success, true, 'the main character\'s password is');
+  } finally {
+    GameConstants.setWorldProfile('main');
+  }
+});
+
+test("on a league world a character not made yet needs the main character's password, and takes its hash", async () => {
+  const hash = await PasswordUtil.generatePasswordHashWithSalt('hunter22');
+  const { saves, calls } = profileStore(hash);
+  GameConstants.setWorldProfile('league');
+  try {
+    saves.league = null;
+    const stolen = await login('tokenuser', 'letmein', 0);
+    assert.equal(stolen.success, false, 'the name has a main character: its password is required');
+    assert.equal(stolen.code, 3);
+    assert.ok(calls.some(([kind, profile]) => kind === 'load' && profile === 'main'), 'the main save was consulted');
+    const owner = await login('tokenuser', 'hunter22', 0);
+    assert.equal(owner.success, true, 'the owner may start the league character');
+    assert.equal(owner.displayName, 'tokenuser');
+
+    saves.league = null;
+    saves.main = null;
+    assert.equal((await login('newname', 'anything', 0)).success, true, 'a name nobody has can start as a league character');
+  } finally {
+    GameConstants.setWorldProfile('main');
+  }
+});
+
+test("on a plain world a name made first on a league world needs that character's password", async () => {
+  const hash = await PasswordUtil.generatePasswordHashWithSalt('hunter22');
+  const { saves, calls } = profileStore(hash);
+  saves.main = null;
+  const stolen = await login('tokenuser', 'letmein', 0);
+  assert.equal(stolen.success, false, 'the name has a league character: its password is required');
+  assert.equal(stolen.code, 3);
+  assert.ok(calls.some(([kind, profile]) => kind === 'load' && profile === 'league'), 'the league save was consulted');
+  const owner = await login('tokenuser', 'hunter22', 0);
+  assert.equal(owner.success, true, 'the owner may start the main character');
+  assert.equal(owner.displayName, 'tokenuser');
+});
+
+test('a league world logs the league character in, and its tokens stay in the league save', async () => {
+  const hash = await PasswordUtil.generatePasswordHashWithSalt('hunter22');
+  const { saves, calls } = profileStore(hash);
+
+  const main = await login('tokenuser', 'hunter22', 0);
+  assert.equal(main.success, true, 'a plain world: the main character');
+  assert.deepEqual(calls.at(-1), ['load', 'main']);
+
+  GameConstants.setWorldProfile('league');
+  try {
+    const league = await login('tokenuser', 'hunter22', tokens.LOGIN_FLAG_REMEMBER);
+    assert.equal(league.success, true);
+    assert.ok(calls.some(([kind, profile]) => kind === 'load' && profile === 'league'), 'the league save is read');
+    assert.equal(saves.league.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE].length, 1, 'the token lives in the league save');
+    assert.equal(saves.main.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE], undefined, 'and not in the main one');
+    assert.ok(calls.some(([kind, profile]) => kind === 'update' && profile === 'league'), 'written through the league profile');
+
+    const resumed = await login('tokenuser', league.token, tokens.LOGIN_FLAG_TOKEN);
+    assert.equal(resumed.success, true, 'the token resumes the league character on the league world');
+
+    GameConstants.setWorldProfile('main');
+    const elsewhere = await login('tokenuser', resumed.token, tokens.LOGIN_FLAG_TOKEN);
+    assert.equal(elsewhere.success, false, 'a league token is no good for the main character on a plain world');
+    GameConstants.setWorldProfile('league');
+
+    calls.length = 0;
+    const connection = new net.ClientConnection(stubChannel());
+    connection.inject([{ type: 'login_forget', username: 'tokenuser', token: resumed.token }]);
+    await connection.idle();
+    assert.deepEqual(calls.filter(([kind]) => kind === 'update'), [['update', 'league']], 'forgetting goes to the league save');
+    assert.deepEqual(saves.league.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE], []);
+  } finally {
+    GameConstants.setWorldProfile('main');
+  }
+});

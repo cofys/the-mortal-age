@@ -6,7 +6,9 @@
  */
 module.exports = {
   name: "Zulrah",
+  members: true,
   register(api) {
+    require("./zulrah/Access.Zulrah").attach(api);
     require("./zulrah/Shrine.Zulrah")(api);
     require("./zulrah/Commands.Zulrah")(api);
     require("./zulrah/CombatAchievements.Zulrah")(api);

@@ -8,6 +8,7 @@
  */
 const Common = require("./Common.Amoxliatl");
 const CombatAchievements = require("./CombatAchievements.Amoxliatl");
+const Scoreboard = require("./Scoreboard.Amoxliatl");
 
 const HUD_FADE_AFTER_REMOVAL_TICKS = 4;
 
@@ -42,6 +43,7 @@ function bossDeath(event) {
   player.setAttribute(Common.KILLS_ATTRIBUTE, Math.max(own, total ?? 0));
   if (total == null) player.getPacketSender().sendConfig(Common.data.kill.killCountVarp, own);
   session.kills++;
+  Scoreboard.won(ticks);
   CombatAchievements.judge(fight, ticks);
 
   Common.later(HUD_FADE_AFTER_REMOVAL_TICKS, () => {

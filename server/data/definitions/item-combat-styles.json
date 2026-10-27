@@ -159,7 +159,10 @@
     "MULTI_MELEE_BLOCK": {"animation":13763,"sound":"WEAPON_INFERNAL_TECPATL","name":"Block","childId":3,"style":"DEFENSIVE","attackType":"SLASH"},
     "SLASH_FLAIL_CHOP": {"animation":14244,"sound":"WEAPON_HALLOWED_FLAIL","name":"Chop","childId":0,"style":"ACCURATE","attackType":"SLASH"},
     "SLASH_FLAIL_SLASH": {"animation":14244,"sound":"WEAPON_HALLOWED_FLAIL","name":"Slash","childId":1,"style":"AGGRESSIVE","attackType":"SLASH"},
-    "SLASH_FLAIL_BLOCK": {"animation":14244,"sound":"WEAPON_HALLOWED_FLAIL","name":"Block","childId":3,"style":"DEFENSIVE","attackType":"SLASH"}
+    "SLASH_FLAIL_BLOCK": {"animation":14244,"sound":"WEAPON_HALLOWED_FLAIL","name":"Block","childId":3,"style":"DEFENSIVE","attackType":"SLASH"},
+    "EXTENDING_CHAINMACE_THRUST_ACCURATE": {"animation":15123,"sound":"WEAPON","name":"Thrust","childId":0,"style":"ACCURATE","attackType":"CRUSH"},
+    "EXTENDING_CHAINMACE_THRUST_AGGRESSIVE": {"animation":15123,"sound":"WEAPON","name":"Thrust","childId":1,"style":"AGGRESSIVE","attackType":"CRUSH"},
+    "EXTENDING_CHAINMACE_SMASH": {"animation":15122,"sound":"WEAPON","name":"Smash","childId":2,"style":"AGGRESSIVE","attackType":"CRUSH"}
   },
   "weaponInterfaces": {
     "STAFF": {"interfaceId":328,"nameLineId":355,"speed":5,"category":18,"specialBar":-1,"specialMeter":-1,"fightTypes":["STAFF_BASH","STAFF_POUND","STAFF_FOCUS"]},
@@ -213,6 +216,7 @@
     "BULWARK": {"interfaceId":4705,"nameLineId":4708,"speed":7,"category":28,"specialBar":7699,"specialMeter":7711,"fightTypes":["BULWARK_PUMMEL","BULWARK_BLOCK"]},
     "GUN": {"interfaceId":5855,"nameLineId":5857,"speed":4,"category":8,"specialBar":-1,"specialMeter":-1,"fightTypes":["GUN_AIM_AND_FIRE","GUN_KICK"]},
     "MULTI_MELEE": {"interfaceId":2423,"nameLineId":2426,"speed":4,"category":34,"specialBar":7599,"specialMeter":7611,"fightTypes":["MULTI_MELEE_POKE","MULTI_MELEE_SLASH","MULTI_MELEE_POUND","MULTI_MELEE_BLOCK"]},
-    "SLASH_FLAIL": {"interfaceId":2423,"nameLineId":2426,"speed":4,"category":35,"specialBar":7599,"specialMeter":7611,"fightTypes":["SLASH_FLAIL_CHOP","SLASH_FLAIL_SLASH","SLASH_FLAIL_BLOCK"]}
+    "SLASH_FLAIL": {"interfaceId":2423,"nameLineId":2426,"speed":4,"category":35,"specialBar":7599,"specialMeter":7611,"fightTypes":["SLASH_FLAIL_CHOP","SLASH_FLAIL_SLASH","SLASH_FLAIL_BLOCK"]},
+    "EXTENDING_CHAINMACE": {"interfaceId":425,"nameLineId":428,"speed":5,"category":36,"specialBar":-1,"specialMeter":-1,"fightTypes":["EXTENDING_CHAINMACE_THRUST_ACCURATE","EXTENDING_CHAINMACE_THRUST_AGGRESSIVE","EXTENDING_CHAINMACE_SMASH"]}
   }
 }

@@ -205,9 +205,13 @@ function rewards(player, count) {
     [80, I.RAW_SEA_TURTLE], [90, I.RAW_MANTA_RAY]]) if (l >= min) fish.push(id);
   const result = [];
   const clueId = I[`${C.questComplete(player, "x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_BOTTLE"}_MEDIUM_`];
+  // Content may make clue bottles commoner ("treasure-trails:vessel-chance", a league relic).
+  const boost = { player, vessel: "bottle", tier: "medium", multiplier: 1 };
+  H.api.emitCustomEvent("treasure-trails:vessel-chance", boost);
+  const bottleOneIn = Math.max(1, Math.floor(600 / (boost.multiplier > 1 ? boost.multiplier : 1)));
   for (let i = 0; i < count; i++) {
     if (C.roll(1, 25) === 1) { const f = fossil(); if (f) result.push(f); }
-    else if (C.roll(1, 600) === 1 && !C.ownsClue(player, "MEDIUM") && !result.some(([id]) => id === clueId)) result.push([clueId, 1]);
+    else if (C.roll(1, bottleOneIn) === 1 && !C.ownsClue(player, "MEDIUM") && !result.some(([id]) => id === clueId)) result.push([clueId, 1]);
     else result.push([fish[C.roll(0, fish.length - 1)], 1]);
   }
   return result;

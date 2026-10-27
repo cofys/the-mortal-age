@@ -23,6 +23,14 @@ export class WidgetLoader {
         this.loadedWidgets.clear();
     }
 
+    /**
+     * Drop one group's decoded widgets, so its next load decodes it from the cache again
+     * (Widget_archive.clearFilesGroup in unloadInterface).
+     */
+    unloadGroup(groupId: number): void {
+        this.loadedWidgets.delete(groupId << 16);
+    }
+
     constructor(cache: CacheSystem) {
         this.cache = cache;
         try {

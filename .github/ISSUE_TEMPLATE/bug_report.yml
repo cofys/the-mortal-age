@@ -1,0 +1,28 @@
+name: Bug report
+description: Something in the game went wrong. Filed from the in-game Report a Bug button.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What went wrong?
+      description: What happened, and what did you expect? Steps to make it happen again help most.
+      placeholder: The door won't open when I click it…
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Prefilled by the game (player, world, client, recent errors). Leave it in.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: In the game panel, press "Copy game screenshot to clipboard", then paste it here with Ctrl+V.
+    validations:
+      required: false

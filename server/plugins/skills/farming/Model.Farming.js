@@ -95,7 +95,7 @@ function kronosGrowth(farm, at, minutes, random, skips) {
 }
 function diseaseFree(farm, patch, state, at) {
     const crop = Data.CROPS.get(state.crop);
-    if (state.protected || ["POISON_IVY", "HESPORI", "CRYSTAL_TREE"].includes(crop.key) || ["ANIMA", "GRAPES"].includes(crop.type)) return true;
+    if (state.protected || state.diseaseFree || ["POISON_IVY", "HESPORI", "CRYSTAL_TREE"].includes(crop.key) || ["ANIMA", "GRAPES"].includes(crop.type)) return true;
     // Troll Stronghold and Weiss use the same herb growth states, with permanent immunity.
     if (crop.type === "HERB" && ((patch.x >= 2800 && patch.x <= 2840 && patch.y >= 3670 && patch.y <= 3710)
         || (patch.x >= 2830 && patch.x <= 2870 && patch.y >= 3920 && patch.y <= 3950))) return true;
@@ -130,7 +130,8 @@ function* patchStates(farm) {
 
 /** Whether advanceFarm still has growth to apply to this planted state. */
 function growing(state) {
-    if (!state?.crop || state.status === "dead") return false;
+    // An undying crop's disease waits for a cure ("farming:plant-rules").
+    if (!state?.crop || state.status === "dead" || (state.status === "diseased" && state.undying)) return false;
     return !(state.status === "grown" && !Data.CROPS.get(state.crop)?.regrow && !state.stump);
 }
 /** Whether advanceFarm still regrows weeds on this unplanted state. */
@@ -158,7 +159,7 @@ function advanceFarm(farm, now, random = Math.random) {
         for (const entry of planted) {
             const { state } = entry;
             const crop = Data.CROPS.get(state.crop);
-            if (state.status === "dead" || (state.status === "grown" && !crop.regrow && !state.stump)) continue;
+            if (state.status === "dead" || (state.status === "diseased" && state.undying) || (state.status === "grown" && !crop.regrow && !state.stump)) continue;
             if (state.nextAt <= now && (!due || state.nextAt < due.state.nextAt)) due = entry;
         }
         if (!due) break;
@@ -234,4 +235,4 @@ function patchValue(patch, state) {
     return (state.watered ? visual.WATERED?.[state.stage] : undefined) ?? visual.GROWING[state.stage];
 }
 
-Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, nextDue, patchValue });
+Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, diseaseFree, nextDue, patchValue });

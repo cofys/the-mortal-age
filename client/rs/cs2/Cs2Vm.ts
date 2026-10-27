@@ -545,7 +545,6 @@ export class Cs2Vm {
     private cachedHandlerContext: HandlerContext | null = null;
 
     // Symbols used for caches attached to handler context
-    private static readonly WIDGET_CACHE_KEY = Symbol("__widgetLookupCache");
     private static readonly SET_OBJECT_QTY_MODE_CACHE_KEY = "__setObjectQtyModeCache";
 
     // PERF: Object pool for local arrays to reduce allocations
@@ -670,15 +669,6 @@ export class Cs2Vm {
         if (!this.cachedHandlerContext) return;
 
         const ctx = this.cachedHandlerContext as any;
-
-        // Clear widget lookup cache
-        const widgetCache = ctx[Cs2Vm.WIDGET_CACHE_KEY];
-        if (widgetCache) {
-            widgetCache.map?.clear();
-            if (widgetCache.accessOrder) {
-                widgetCache.accessOrder.length = 0;
-            }
-        }
 
         // Clear object quantity mode cache
         const qtyModeCache = ctx[Cs2Vm.SET_OBJECT_QTY_MODE_CACHE_KEY];

@@ -209,7 +209,10 @@ function loot(player, state) {
     if (!clueGiven) {
       let clue = null;
       for (const [tier, numerator] of [["ELITE",1],["HARD",2],["MEDIUM",3],["EASY",4],["BEGINNER",30]]) {
-        if (!require("./Context.Hunter").ownsClue(player,tier) && roll(1,1500) <= numerator) { clue = tier; break; }
+        // Content may make clue nests commoner ("treasure-trails:vessel-chance", a league relic).
+        const boost = { player, vessel: "nest", tier: tier.toLowerCase(), multiplier: 1 };
+        H.api.emitCustomEvent("treasure-trails:vessel-chance", boost);
+        if (!require("./Context.Hunter").ownsClue(player,tier) && roll(1,1500) <= numerator * (boost.multiplier > 1 ? boost.multiplier : 1)) { clue = tier; break; }
       }
       if (clue) {
         const boxes = require("./Context.Hunter").questComplete(player,"x_marks_the_spot");

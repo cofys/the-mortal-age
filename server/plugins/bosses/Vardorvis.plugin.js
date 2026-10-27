@@ -11,6 +11,7 @@ const Fight = require("./vardorvis/Fight.Vardorvis");
 const Head = require("./vardorvis/Head.Vardorvis");
 const Strangle = require("./vardorvis/Strangle.Vardorvis");
 const CombatAchievements = require("./vardorvis/CombatAchievements.Vardorvis");
+const Scoreboard = require("./vardorvis/Scoreboard.Vardorvis");
 
 module.exports = {
   name: "Vardorvis",
@@ -22,6 +23,7 @@ module.exports = {
     Head.attachHead(api);
     Strangle.attachStrangle(api);
     CombatAchievements.attachCombatAchievements(api);
+    Scoreboard.attachScoreboard(api);
     require("./vardorvis/Commands.Vardorvis")(api);
   },
 };

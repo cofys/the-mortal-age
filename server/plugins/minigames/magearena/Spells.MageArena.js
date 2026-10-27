@@ -88,11 +88,18 @@ function spellDisabled(event) {
   const god = GOD_BY_SPELL.get(event.spellId);
   if (!god || !event.player) return;
   if (inArena(event.player) || isUnlocked(event.player, god)) return;
+  // Content may lift the requirement ("magic:spell-unlocked", a league relic that unlocks every spell).
+  const unlock = { player: event.player, spellId: event.spellId, unlocked: false };
+  api?.emitCustomEvent?.("magic:spell-unlocked", unlock);
+  if (unlock.unlocked === true) return;
   event.disabled = true;
   sendLockedMessage(event.player, god);
 }
 
-module.exports = function registerSpells(api) {
+let api = null;
+
+module.exports = function registerSpells(pluginApi) {
+  api = pluginApi;
   api.persistAttribute(GODS[0].counter);
   api.persistAttribute(GODS[1].counter);
   api.persistAttribute(GODS[2].counter);

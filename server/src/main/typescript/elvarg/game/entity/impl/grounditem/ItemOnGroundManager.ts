@@ -359,6 +359,11 @@ export class ItemOnGroundManager {
         ) ?? null;
     }
 
+    /** The stacks on the floor that belong to `username`, private or not. */
+    public static ownedBy(username: string): ItemOnGround[] {
+        return World.getItems().filter((item) => item != null && !item.isPendingRemoval() && this.isOwner(username, item));
+    }
+
     private static isOwner(username: string, item: ItemOnGround): boolean {
         const owner = item.getOwner();
         return !!owner && Misc.formatNameForProtocol(owner) === Misc.formatNameForProtocol(username);

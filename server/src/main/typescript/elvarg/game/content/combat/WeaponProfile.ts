@@ -1,3 +1,4 @@
+import { ItemAliases } from "../../model/ItemAliases";
 import { Sound } from "../../Sound";
 import type { Player } from "../../entity/impl/player/Player";
 import { Equipment } from "../../model/container/impl/Equipment";
@@ -21,8 +22,9 @@ export interface WeaponCombatProfile {
     /** The cache's separate animation against NPCs ("..._pvn"), where it has one. */
     npcAttackAnimation?: number;
     attackSpeed?: number;
+    /** Tiles it reaches; ranged weapons take the cache's (ItemDefinition.ATTACK_RANGE_PARAM) first. */
     attackDistance?: number;
-    longRangeDistance?: number;
+    /** The style that adds 2 tiles (Longrange). */
     longRangeFightType?: FightType;
     hitDelays?: HitDelayProfile[];
     projectiles?: ProjectileProfile[];
@@ -37,6 +39,8 @@ export interface WeaponCombatProfile {
     fireSound?: Sound;
     ammoRequired?: number;
     boltEffects?: boolean;
+    /** Scales the enchanted bolt effects' chance (the Ascension crossbows halve it). */
+    boltEffectChanceMultiplier?: number;
     rangedDefenceType?: "light" | "standard" | "heavy";
 }
 
@@ -44,6 +48,9 @@ export interface WeaponCombatProfile {
 // stepMultiplier * distance client cycles after the shot.
 const DEFAULT_PROJECTILE: ProjectileProfile = { delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 43, endHeight: 31 };
 const THROWN_PROJECTILE: ProjectileProfile = { delay: 32, lengthAdjustment: 0, stepMultiplier: 5, startHeight: 43, endHeight: 31 };
+/** Wiki (Attack range): Longrange reaches 2 tiles further, and no weapon reaches past 10. */
+const LONGRANGE_EXTRA_TILES = 2;
+const MAX_ATTACK_RANGE = 10;
 const STANDARD_HIT: HitDelayProfile = { base: 1, distanceOffset: 3, divisor: 6 };
 const DEFAULT_RANGED: WeaponCombatProfile = {
     attackDistance: 6,
@@ -67,7 +74,7 @@ export class WeaponProfiles {
     public static get(player: Player): WeaponCombatProfile | undefined {
         const itemId = player.getEquipment().getItems()[Equipment.WEAPON_SLOT].getId();
         const weaponProfile = this.byWeapon.get(player.getWeapon());
-        const itemProfile = this.byItem.get(itemId);
+        const itemProfile = ItemAliases.lookup(this.byItem, itemId);
         return itemProfile ? { ...weaponProfile, ...itemProfile } : weaponProfile;
     }
 
@@ -86,7 +93,7 @@ export class WeaponProfiles {
         const itemAnimation = weapon.getId() > 0 ? weapon.getDefinition().getAttackAnim(attackType) : -1;
         const fromProfile = (profile: WeaponCombatProfile | undefined) =>
             (againstNpc ? profile?.npcAttackAnimation : undefined) ?? profile?.attackAnimation;
-        return fromProfile(this.byItem.get(weapon.getId()))
+        return fromProfile(ItemAliases.lookup(this.byItem, weapon.getId()))
             ?? (itemAnimation > 0 ? itemAnimation : undefined)
             ?? fromProfile(this.byWeapon.get(player.getWeapon()))
             ?? fallback;
@@ -99,7 +106,7 @@ export class WeaponProfiles {
     public static attackSpeed(player: Player, fallback: number): number {
         const weapon = this.equippedWeapon(player);
         const cacheSpeed = weapon.getId() > 0 ? weapon.getDefinition().getAttackSpeed() : -1;
-        return this.byItem.get(weapon.getId())?.attackSpeed
+        return ItemAliases.lookup(this.byItem, weapon.getId())?.attackSpeed
             ?? (cacheSpeed > 0 ? cacheSpeed : undefined)
             ?? this.byWeapon.get(player.getWeapon())?.attackSpeed
             ?? fallback;
@@ -109,12 +116,25 @@ export class WeaponProfiles {
         return player.getEquipment().getItems()[Equipment.WEAPON_SLOT];
     }
 
+    /**
+     * Ranged reach: a profile registered for the item, then the cache's range for the item
+     * (ItemDefinition.ATTACK_RANGE_PARAM), then its weapon type's profile, then `fallback`. The
+     * weapon's Longrange style adds 2 tiles, and nothing reaches past 10 (Wiki: Attack range).
+     */
     public static attackDistance(player: Player, fallback: number): number {
-        const profile = this.get(player);
-        if (!profile?.attackDistance) {
-            return fallback;
-        }
-        return this.isLongRange(player, profile) ? profile.longRangeDistance ?? profile.attackDistance : profile.attackDistance;
+        const weapon = this.equippedWeapon(player);
+        const cacheRange = weapon.getId() > 0 ? weapon.getDefinition().getAttackRange() : -1;
+        const range = ItemAliases.lookup(this.byItem, weapon.getId())?.attackDistance
+            ?? (cacheRange > 0 ? cacheRange : undefined)
+            ?? this.byWeapon.get(player.getWeapon())?.attackDistance
+            ?? fallback;
+        const longRange = this.isLongRange(player, this.get(player));
+        return Math.min(MAX_ATTACK_RANGE, range + (longRange ? LONGRANGE_EXTRA_TILES : 0));
+    }
+
+    /** Melee reach: a profile's (halberds), or `fallback`. */
+    public static meleeAttackDistance(player: Player, fallback: number): number {
+        return this.get(player)?.attackDistance ?? fallback;
     }
 
     public static hitDelays(player: Player, distance: number): number[] {
@@ -124,8 +144,8 @@ export class WeaponProfiles {
         return delays.map(({ base, distanceOffset, divisor }) => base + Math.floor((distanceOffset + normalizedDistance) / divisor));
     }
 
-    public static isLongRange(player: Player, profile: WeaponCombatProfile): boolean {
-        return !profile.longRangeFightType || player.getFightType() === profile.longRangeFightType;
+    public static isLongRange(player: Player, profile: WeaponCombatProfile | undefined): boolean {
+        return profile?.longRangeFightType != null && player.getFightType() === profile.longRangeFightType;
     }
 
     private static add(weapon: WeaponInterfaces, profile: WeaponCombatProfile): void {
@@ -137,7 +157,6 @@ export class WeaponProfiles {
             attackAnimation: 426,
             attackSpeed: 4,
             attackDistance: 7,
-            longRangeDistance: 9,
             longRangeFightType: FightType.SHORTBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
@@ -147,8 +166,7 @@ export class WeaponProfiles {
         this.add(WeaponInterfaces.LONGBOW, {
             ...bow,
             attackSpeed: 6,
-            attackDistance: 9,
-            longRangeDistance: 10,
+            attackDistance: 10,
             longRangeFightType: FightType.LONGBOW_LONGRANGE,
             fireSound: Sound.SHOOT_BOW_QUIET,
         });
@@ -158,7 +176,6 @@ export class WeaponProfiles {
             npcAttackAnimation: 7552,
             attackSpeed: 6,
             attackDistance: 7,
-            longRangeDistance: 9,
             longRangeFightType: FightType.CROSSBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT],
             projectiles: [{ delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 44, endHeight: 35 }],
@@ -168,8 +185,7 @@ export class WeaponProfiles {
         this.add(WeaponInterfaces.KARILS_CROSSBOW, {
             rangedDefenceType: "heavy",
             attackSpeed: 4,
-            attackDistance: 7,
-            longRangeDistance: 9,
+            attackDistance: 8,
             longRangeFightType: FightType.KARILS_CROSSBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT],
             projectiles: [{ delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 44, endHeight: 35 }],
@@ -180,7 +196,6 @@ export class WeaponProfiles {
             attackAnimation: 5061,
             attackSpeed: 3,
             attackDistance: 5,
-            longRangeDistance: 7,
             longRangeFightType: FightType.BLOWPIPE_LONGRANGE,
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [{ delay: 32, lengthAdjustment: 0, stepMultiplier: 5, startHeight: 40, endHeight: 35 }],
@@ -192,7 +207,6 @@ export class WeaponProfiles {
             attackAnimation: 806,
             attackSpeed: 3,
             attackDistance: 4,
-            longRangeDistance: 6,
             longRangeFightType: FightType.KNIFE_LONGRANGE,
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [THROWN_PROJECTILE],
@@ -203,7 +217,6 @@ export class WeaponProfiles {
             attackAnimation: 806,
             attackSpeed: 3,
             attackDistance: 3,
-            longRangeDistance: 5,
             longRangeFightType: FightType.DART_LONGRANGE,
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [THROWN_PROJECTILE],
@@ -214,7 +227,6 @@ export class WeaponProfiles {
             attackAnimation: 929,
             attackSpeed: 6,
             attackDistance: 5,
-            longRangeDistance: 6,
             longRangeFightType: FightType.JAVELIN_LONGRANGE,
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [THROWN_PROJECTILE],
@@ -222,8 +234,7 @@ export class WeaponProfiles {
         });
         this.add(WeaponInterfaces.OBBY_RINGS, {
             attackSpeed: 4,
-            attackDistance: 5,
-            longRangeDistance: 6,
+            attackDistance: 7,
             longRangeFightType: FightType.OBBY_RING_LONGRANGE,
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [{ delay: 32, lengthAdjustment: 0, stepMultiplier: 5, startHeight: 43, endHeight: 31 }],
@@ -231,7 +242,6 @@ export class WeaponProfiles {
         });
         this.add(WeaponInterfaces.THROWNAXE, {
             attackDistance: 4,
-            longRangeDistance: 6,
             longRangeFightType: FightType.THROWNAXE_LONGRANGE,
             rangedDefenceType: "light",
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
@@ -242,8 +252,7 @@ export class WeaponProfiles {
         this.add(WeaponInterfaces.BALLISTA, {
             rangedDefenceType: "heavy",
             attackSpeed: 7,
-            attackDistance: 7,
-            longRangeDistance: 9,
+            attackDistance: 9,
             longRangeFightType: FightType.BALLISTA_LONGRANGE,
             hitDelays: [{ base: 2, distanceOffset: 1, divisor: 6 }],
             projectiles: [{ delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 44, endHeight: 35 }],
@@ -253,7 +262,6 @@ export class WeaponProfiles {
             attackAnimation: 426,
             attackSpeed: 9,
             attackDistance: 10,
-            longRangeDistance: 10,
             longRangeFightType: FightType.LONGBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT, { base: 1, distanceOffset: 2, divisor: 3 }],
             projectiles: [DEFAULT_PROJECTILE, { delay: 41, lengthAdjustment: 14, stepMultiplier: 10, startHeight: 48, endHeight: 31 }],
@@ -266,7 +274,6 @@ export class WeaponProfiles {
             attackAnimation: 426,
             attackSpeed: 5,
             attackDistance: 10,
-            longRangeDistance: 10,
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_ARROW,
@@ -275,8 +282,6 @@ export class WeaponProfiles {
             itemIds: BOW_OF_FAERDHINEN_IDS,
             attackAnimation: 426,
             attackSpeed: 5,
-            attackDistance: 10,
-            longRangeDistance: 10,
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_ARROW,
@@ -285,13 +290,11 @@ export class WeaponProfiles {
             itemIds: [ItemIdentifiers.TWISTED_BOW],
             attackAnimation: 426,
             attackSpeed: 5,
-            attackDistance: 10,
-            longRangeDistance: 10,
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_ARROW,
         });
-        // Wiki: range 6, 8 on Longrange; speed from cache param 14 (5). Captures (rsprox): every
+        // Wiki: range 6, 8 on Longrange (cache param 13); speed from cache param 14 (5). Captures (rsprox): every
         // arrow flies as arrow_venator01_travel01 (2291) from arrow_venator01_launch01 (2289), at
         // starttime 31 and endtime 46 + 2 per tile, heights 39 -> 36, angle 255, progress 11, with
         // synth 6797. The hit lands on the tick the arrow does, floor(end / 30) - as the standard
@@ -299,8 +302,6 @@ export class WeaponProfiles {
         // 1 up to 6 tiles (captured: the NPC's hitsplat 2 ticks after the shot at 1-6 tiles), 2 beyond.
         this.register({
             itemIds: [ItemIdentifiers.VENATOR_BOW, ItemIdentifiers.VENATOR_BOW_UNCHARGED_],
-            attackDistance: 6,
-            longRangeDistance: 8,
             longRangeFightType: FightType.SHORTBOW_LONGRANGE,
             hitDelays: [{ base: 0, distanceOffset: 23, divisor: 15 }],
             projectiles: [{ delay: 31, lengthAdjustment: 15, stepMultiplier: 2, startHeight: 39, endHeight: 36, angle: 255, progress: 11 }],
@@ -308,13 +309,11 @@ export class WeaponProfiles {
             launchGraphic: 2289,
             fireSound: Sound.VENATOR_BOW_SHOOT,
         });
-        // Wiki (and cache params 13/14): attack range 10, speed 5.
+        // Wiki (and cache params 13/14): attack range 10, speed 5; the range comes from the cache.
         this.register({
             itemIds: [ItemIdentifiers.SCORCHING_BOW],
             attackAnimation: 426,
             attackSpeed: 5,
-            attackDistance: 10,
-            longRangeDistance: 10,
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_ARROW,
@@ -324,13 +323,27 @@ export class WeaponProfiles {
             attackAnimation: 4230,
             npcAttackAnimation: 7552,
             attackSpeed: 6,
-            attackDistance: 7,
-            longRangeDistance: 9,
             longRangeFightType: FightType.CROSSBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT],
             projectiles: [{ delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 44, endHeight: 35 }],
             fireSound: Sound.SHOOT_CROSSBOW,
             boltEffects: true,
+        });
+        // Wiki (Ascension crossbows): 3 ticks (cache param 14), range 6, 8 on Longrange. The shot alternates
+        // tfa_human_ascension_crossbow_fire_left/right (15113/15115, _pvn 15114/15116); the plugin flips
+        // sides, this is the left one. Projectile heights are the standard crossbow's (an estimate).
+        this.register({
+            itemIds: [ItemIdentifiers.ASCENSION_CROSSBOWS],
+            attackAnimation: 15113,
+            npcAttackAnimation: 15114,
+            attackDistance: 6,
+            longRangeFightType: FightType.CROSSBOW_LONGRANGE,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_CROSSBOW,
+            boltEffects: true,
+            // Wiki (Ascension crossbows): the chance to trigger enchanted bolt effects is reduced by 50%.
+            boltEffectChanceMultiplier: 0.5,
         });
         // Machetes, sickles and canes share the slash-sword/mace interfaces but swing one tick slower.
         this.register({
@@ -351,36 +364,31 @@ export class WeaponProfiles {
             ],
             attackSpeed: 4,
         });
-        // Composite bows (Wiki): 5-tick standard, 4-tick rapid, 10-tile range.
+        // Comp ogre bow and composite bows (Wiki): 5-tick standard, 4-tick rapid. Range from the cache: 5 for
+        // the comp ogre bow, 12 for the composite bows, which the 10-tile limit cuts to 10.
         this.register({
             itemIds: [4827, 10280, 10282, 10284],
             attackAnimation: 426,
             attackSpeed: 5,
-            attackDistance: 10,
-            longRangeDistance: 10,
             longRangeFightType: FightType.SHORTBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_BOW_QUIET,
         });
-        // 3rd Age bow (Wiki): shortbow speed with a 9-tile range.
+        // 3rd Age bow (Wiki): shortbow speed; its 9-tile range (10 on Longrange) is the cache's.
         this.register({
             itemIds: [ItemIdentifiers._3RD_AGE_BOW],
             attackAnimation: 426,
             attackSpeed: 4,
-            attackDistance: 9,
-            longRangeDistance: 9,
             longRangeFightType: FightType.SHORTBOW_LONGRANGE,
             hitDelays: [STANDARD_HIT],
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_BOW_QUIET,
         });
-        // Chinchompas (Wiki): thrown, 3-tick medium fuse / 4-tick otherwise, 9-tile range (10 on the long fuse).
+        // Chinchompas (Wiki): thrown, 3-tick medium fuse / 4-tick otherwise; the cache's 9-tile range (10 on the long fuse).
         const chinchompa = {
             rangedDefenceType: "heavy" as const,
             attackSpeed: 4,
-            attackDistance: 9,
-            longRangeDistance: 10,
             longRangeFightType: FightType.CHINCHOMPA_LONG_FUSE,
             hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
             projectiles: [THROWN_PROJECTILE],
@@ -392,14 +400,12 @@ export class WeaponProfiles {
         this.register({ itemIds: [ItemIdentifiers.BLACK_CHINCHOMPA], ...chinchompa, attackAnimation: 7618 });
         // Salamanders (Wiki): every style, flare included, reaches 1 tile; speed comes from the SALAMANDER interface.
         this.add(WeaponInterfaces.SALAMANDER, { attackDistance: 1 });
-        // Wiki: Blisterwood stakes have 6-tile range (8 on Longrange); the cache
+        // Wiki: Blisterwood stakes have 6-tile range (8 on Longrange), the cache's; the cache
         // capture records their NPC attack animation and projectile.
         this.register({
             itemIds: [ItemIdentifiers.BLISTERWOOD_STAKE],
             attackAnimation: 7617,
             npcAttackAnimation: 7617,
-            attackDistance: 6,
-            longRangeDistance: 8,
             longRangeFightType: FightType.DART_LONGRANGE,
             hitDelays: [STANDARD_HIT],
             projectiles: [THROWN_PROJECTILE],

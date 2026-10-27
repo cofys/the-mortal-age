@@ -50,6 +50,7 @@ class PendingHit {
     setTotalDamage(value) { this.damage = value; }
 }
 Scythe.register({
+    emitCustomEvent: () => {},
     core: {
         Equipment,
         ItemDefinition,

@@ -69,7 +69,10 @@ function fish({ player, npc, npcId }) {
     if (Math.random() < 1.5 / denominator && !exchange(player, [], [[I.MOLCH_PEARL, 1]])) require("./Context.Hunter").drop(player, [[I.MOLCH_PEARL, 1]], player.getLocation());
     for (const [tier, modifier] of [["BEGINNER",0.2],["EASY",1.7],["MEDIUM",2],["HARD",3.3],["ELITE",10]]) {
       if (require("./Context.Hunter").ownsClue(player,tier)) continue;
-      const denominator = Math.floor(636833 / (100 + level(player,H.core.Skill.FISHING)) * modifier);
+      // Content may make clue bottles commoner ("treasure-trails:vessel-chance", a league relic).
+      const boost = { player, vessel: "bottle", tier: tier.toLowerCase(), multiplier: 1 };
+      H.api.emitCustomEvent("treasure-trails:vessel-chance", boost);
+      const denominator = Math.max(1, Math.floor(636833 / (100 + level(player,H.core.Skill.FISHING)) * modifier / (boost.multiplier > 1 ? boost.multiplier : 1)));
       if (roll(1,denominator) !== 1) continue;
       const id = I[`${require("./Context.Hunter").questComplete(player,"x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_BOTTLE"}_${tier}_`];
       if (!exchange(player,[],[[id,1]])) require("./Context.Hunter").drop(player,[[id,1]],player.getLocation());

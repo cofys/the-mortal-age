@@ -383,7 +383,7 @@ test('Longhall door leaves use the cache open locs and unseal Atlas through real
   require('../plugins/objects/Doors.plugin.js').register({
     core: doorCore,
     onObjectInteraction: (name, handlers) => { if (name === 'Longhall door') Object.assign(actions, handlers); },
-    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, emitCustomEvent() {},
+    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, onCustomEvent() {}, emitCustomEvent() {},
   });
   assert.equal(typeof actions.Open, 'function', 'Longhall door must reach the Doors dispatch');
   assert.equal(typeof actions.Close, 'function');

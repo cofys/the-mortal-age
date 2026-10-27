@@ -88,6 +88,8 @@ export interface WeaponSpecialTraits {
     readonly guaranteedHit?: boolean;
     /** Guarantees only the first accuracy roll of the first hitsplat. */
     readonly guaranteedFirstAccuracyRoll?: boolean;
+    /** Guarantees the hit unless the attacker is the player who last damaged the target. */
+    readonly guaranteedHitOnUnsuspectingTarget?: boolean;
     /**
      * When the target's current hitpoints are at or below this hit's maximum
      * damage, resolves accuracy with one fixed percentage of the max attack roll.

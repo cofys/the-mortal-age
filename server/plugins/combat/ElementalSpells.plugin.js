@@ -4,5 +4,6 @@ module.exports = {
     require('./elementalspells/Common.ElementalSpells').init(api);
     require('./elementalspells/Base.ElementalSpells').attach(api);
     require('./elementalspells/Weakness.ElementalSpells').attach(api);
+    require('./elementalspells/Fragments.ElementalSpells').attach(api);
   },
 };

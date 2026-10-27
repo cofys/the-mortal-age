@@ -299,7 +299,9 @@ module.exports = {
     require("./herblore/Grinding.Herblore")(api);
 
     // Fork bot session task + cleanup (upstream units manage their own).
-    api.getTaskManager().submit(new HerbloreTask(ACTIVE_HERBLORE_SESSIONS));
+    // Guarded: lean test harnesses may not provide a task manager (real api always does).
+    const taskManager = api.getTaskManager?.();
+    taskManager?.submit(new HerbloreTask(ACTIVE_HERBLORE_SESSIONS));
     api.onPlayerDisconnect(({ player }) => {
       stopHerblore(ACTIVE_HERBLORE_SESSIONS, player, false);
     });

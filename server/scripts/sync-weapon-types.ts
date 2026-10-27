@@ -45,7 +45,7 @@ const WIKI_STYLE_CATEGORY: Record<string, string> = {
     "stab sword": "stabsword", "staff": "staff", "bladed staff": "staff_bladed", "thrown": "thrown",
     "whip": "whip", "powered staff": "staff_selfpowering", "powered wand": "wand_selfpowering",
     "bulwark": "bulwark", "partisan": "partisan", "multi-style": "tribrid", "multi-melee": "multi_melee",
-    "flail": "slashflail",
+    "flail": "slashflail", "extending chain mace": "extending_chainmace",
 };
 
 /** Within a category with several weapon types, the first matching name wins; else the last entry. */

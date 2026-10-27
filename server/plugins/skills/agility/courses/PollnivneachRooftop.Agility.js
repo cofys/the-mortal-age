@@ -7,8 +7,10 @@ module.exports = {
   name: "Pollnivneach Rooftop",
   lapXp: 890,
   petBase: 33422, // Giant squirrel base chance (Wiki)
+  // The hard Desert diary makes 1 cooldown in 3 two minutes (Wiki: Mark of Grace).
   marks: {
     level: 70,
+    shortCooldown: [{ diary: "desert", tier: "hard", chance: 1 / 3 }],
     tiles: [[3346, 2968, 1], [3354, 2974, 1], [3361, 2993, 2]],
   },
   obstacles: [

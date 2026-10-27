@@ -170,6 +170,19 @@ Loot is the Wiki table in `npc-drops.json`, plus:
   Venator shard), with "You open the frozen cache and find... another frozen cache inside! How
   peculiar." for a cache.
 
+## The scoreboard
+
+`muspah_scoreboard_multi` (46901) by the crevice shows as `muspah_scoreboard` (46700, "Scoreboard":
+Read) once varbit `sotn` is 90. Read opens interface `muspah_scoreboard` (817): the reader's kill
+count, deaths and best time, then the world's (Wiki, Scoreboard (Phantom Muspah); the row labels
+and the "Phantom Muspah Statistics" title are the cache's). The personal kill count and best time
+are the kill messages' own; a death in the lair counts. The world's numbers are kept in
+`data/saves/phantom-muspah-scoreboard.json`. No recording reads this board, so the number and time
+formats follow the Araxxor board's recording ("1,234", "0:52.80", "-" with none).
+
+The board is a straight wall decoration (shape 4, rotation 0) on rock, so the shared wall-decoration
+reach finds no tile to stand on; the route goes to the open tile west of it.
+
 ## Checked in game
 
 With the agent MCP (`::muspah`, `::muspahhp`, `::muspahshield`, `::muspahkill`):
@@ -186,6 +199,10 @@ With the agent MCP (`::muspah`, `::muspahhp`, `::muspahshield`, `::muspahkill`):
 - The kill: kill count, fight duration, Charged ice with its message, loot on its centre tile,
   the next Muspah 30 seconds later; the escape crevice; a death ending the lair, with the supply
   pile carried out to the crevice.
+- The scoreboard: Read from the open floor, 817 opened; a death and a kill (0:52.80) reached the
+  world records file; the board reads again after a relog.
+- `tests/phantom-muspah-scoreboard.test.cjs`: the board's rows from the real kill hook, deaths,
+  world records across players and a restart, the route to its front tile.
 - `tests/phantom-muspah.test.cjs`: the arena, instance tiles, durations, the frozen cache, Charged
   ice, the Venator shard rule, the shockwave's shelter, corruption's ticks and drains.
 
@@ -193,7 +210,6 @@ How it all looks (graphics, the overlay, spikes rising and moving) is left to pl
 
 ## Not in yet
 
-- The scoreboard (46700) and its interface.
 - Sergeant Raymond's warning at the crevice.
 - Enchanted sapphire bolts and corruption spells draining the shield.
 - The defence drain floor (125) and its reset when the shield goes up.

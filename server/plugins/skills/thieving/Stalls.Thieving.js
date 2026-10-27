@@ -209,6 +209,16 @@ function merchantInteraction(event) {
   event.handled = true;
 }
 
+/** Where something stands, as plain coordinates. */
+function tile(location) {
+  return { x: location?.getX?.(), y: location?.getY?.(), z: location?.getZ?.() };
+}
+
+function samePlace(location, from) {
+  const here = tile(location);
+  return !!from && here.x !== undefined && here.x === from.x && here.y === from.y && here.z === from.z;
+}
+
 function finishTheft(event, stall) {
   const { player, object } = event;
   if (object.getPrivateArea()?.isDestroyed()) return;
@@ -224,7 +234,17 @@ function finishTheft(event, stall) {
   pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: stall.petBase, method: "stall",
     stall: event.definition.getName(), itemId: reward.getId(), location: object.getLocation() });
   const ticks = object.getId() === core.ObjectIdentifiers.BAKERY_STALL_2 ? 16 : stall.respawnTicks;
-  depleteStall(object, ticks);
+  // Content may keep the stall stocked ("thieving:deplete-stall", a league relic) and ask for another go ("thieving:done").
+  const depletion = { player, object, handled: false };
+  pluginApi.emitCustomEvent("thieving:deplete-stall", depletion);
+  if (!depletion.handled) depleteStall(object, ticks);
+  const done = { player, kind: "stall", object, succeeded: true, again: false };
+  pluginApi.emitCustomEvent("thieving:done", done);
+  // A repeat only while the player stands where they stole from.
+  // Keyed by the player's index, as their other actions: walking off cancels it; and checked again when it fires.
+  if (done.again && samePlace(player.getLocation(), event.from)) core.TaskManager.submit(new core.CountdownTask(player.getIndex(), 1, () => {
+    if (samePlace(player.getLocation(), event.from) && player.getMovementQueue?.()?.isMovings?.() !== true) handleStealFromStall({ ...event, repeat: true });
+  }));
 }
 
 function handleStealFromStall(event) {
@@ -244,7 +264,7 @@ function handleStealFromStall(event) {
     event.handled = true;
     return;
   }
-  if (!player.getClickDelay().elapsedTime(1000)) {
+  if (!event.repeat && !player.getClickDelay().elapsedTime(1000)) {
     event.handled = true;
     return;
   }
@@ -261,7 +281,8 @@ function handleStealFromStall(event) {
   player.getClickDelay().reset();
   player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId("human_pickuptable")));
   player.getPacketSender().sendSound(THIEVING_SOUND, 10, 0);
-  core.TaskManager.submit(new core.CountdownTask(player, 1, () => finishTheft(event, stall)));
+  const from = event.from ?? tile(player.getLocation());
+  core.TaskManager.submit(new core.CountdownTask(player, 1, () => finishTheft({ ...event, from }, stall)));
   event.handled = true;
 }
 

@@ -233,10 +233,25 @@ function generate(raid, inTime) {
 /** raids_client_needsrewardbook: set as the chest is searched. */
 const VARBIT_NEEDS_REWARD_BOOK = 5457;
 
+/** Pet ownership/delivery belongs to Pets, never the chest's bank/inventory/ground paths. */
+function claimPetLoot(player, raid) {
+  const items = rewardsOf(raid).get(player.getUsername()) ?? [];
+  for (let index = items.length - 1; index >= 0; index--) {
+    const entry = items[index];
+    if (entry?.id !== ITEM.OLMLET) continue;
+    const drops = [{ itemId: ITEM.OLMLET, amount: 1 }];
+    Shared.api().emitCustomEvent("npc-drops:roll", { player, drops });
+    // An unconsumed row means Pets is disabled: retain the ordinary-loot fallback.
+    const remaining = items.indexOf(entry);
+    if (drops.length === 0 && remaining !== -1) items.splice(remaining, 1);
+  }
+}
+
 function openChest(event) {
   const { player } = event;
   const raid = Raid.raidOf(player);
   if (!raid) return false;
+  claimPetLoot(player, raid);
   const items = rewardsOf(raid).get(player.getUsername()) ?? [];
   if (items.length === 0) {
     Shared.statement(player, "The chest is empty.");
@@ -263,6 +278,10 @@ function takeItem(player, raid, index) {
   const items = rewardsOf(raid).get(player.getUsername()) ?? [];
   const entry = items[index];
   if (!entry) return false;
+  if (entry.id === ITEM.OLMLET) {
+    claimPetLoot(player, raid);
+    if (!items.includes(entry)) return true;
+  }
   const { Item, ItemDefinition } = Shared.core();
   const stackable = ItemDefinition.forId(entry.id)?.isStackable?.() === true;
   const inventory = player.getInventory();
@@ -305,6 +324,7 @@ function takeAll({ player }) {
 function bankAll({ player }) {
   const raid = Raid.raidOf(player);
   if (!raid) return true;
+  claimPetLoot(player, raid);
   const { Item, Bank } = Shared.core();
   const items = rewardsOf(raid).get(player.getUsername()) ?? [];
   for (let index = items.length - 1; index >= 0; index--) {
@@ -323,6 +343,7 @@ function bankAll({ player }) {
 function discardAll({ player }) {
   const raid = Raid.raidOf(player);
   if (!raid) return true;
+  claimPetLoot(player, raid);
   Shared.options(player, "Discard all the remaining loot?",
     "Yes, discard it all.", () => {
       rewardsOf(raid).set(player.getUsername(), []);
@@ -335,7 +356,9 @@ function discardAll({ player }) {
 
 /** Wiki: unclaimed loot is placed on the ground on leaving (outside the raid). */
 function unclaimedLoot(raid, player, logout) {
-  if (logout || !raid.rewards) return;
+  if (!raid.rewards) return;
+  claimPetLoot(player, raid);
+  if (logout) return;
   const items = raid.rewards.get(player.getUsername()) ?? [];
   if (items.length === 0) return;
   raid.rewards.delete(player.getUsername());

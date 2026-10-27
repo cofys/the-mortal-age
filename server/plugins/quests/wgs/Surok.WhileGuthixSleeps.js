@@ -112,7 +112,7 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
  function hitRoll(e){const t=targets.get(e.target),s=spell(e.attacker);if(t&&((e.target.getId()===STRONG?WEAKEN:BIND).includes(s)||t.surge&&ELEMENTS.some(list=>list.includes(s))))e.forceAccurate=true;}
  function pickup(e){const f=fights.get(e.player);if(!f?.explosive||e.groundItemId!==LIT_EXPLOSIVE||e.groundItem!==f.explosive.ground)return false;e.handled=true;explode(f);return true;}
  function telegrab({player,itemId,position}){const f=fights.get(player);if(itemId===LIT_EXPLOSIVE&&f?.explosive&&f.explosive.position.equals(position)){f.explosive.grabbed=true;f.explosive.ground=null;}}
- function alchemy(e){const f=fights.get(e.player);if(e.itemId===LIT_EXPLOSIVE&&f?.explosive?.grabbed){e.allowed=true;e.coins=0;e.confirm=false;}}
+ function alchemy(e){const f=fights.get(e.player);if(e.itemId===LIT_EXPLOSIVE&&f?.explosive?.grabbed){e.allowed=true;e.coins=0;e.confirm=false;e.keepItem=false;e.recast=false;}}
  function alchemised({player,itemId}){const f=fights.get(player);if(itemId===LIT_EXPLOSIVE&&f?.explosive?.grabbed){f.explosive=null;player.sendMessage('The lit explosive is safely neutralised.');}}
  function death({npc}){
   const p=npc.getOwner(),f=p&&fights.get(p);if(!f)return;

@@ -45,7 +45,7 @@ function pendingFor(player, kingdom) {
   const key = rollKey(kingdom);
   const held = pending.get(player);
   if (held && held.key === key) return held.items;
-  const items = Common.gather(kingdom);
+  const items = Common.gather(kingdom, Math.random, Common.rules(player).outputMultiplier);
   pending.set(player, { key, items });
   return items;
 }
@@ -59,10 +59,8 @@ function spaceShort(player, collected) {
   const { Bank, Item } = Common.getCore();
   let needed = 0;
   let capped = 0;
-  let free = 0;
-  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
-    if (tab !== Bank.BANK_SEARCH_TAB_INDEX) free += player.getBank(tab).getFreeSlots();
-  }
+  // The tabs share one capacity, so the main tab's free slots are the bank's.
+  const free = player.getBank(0).getFreeSlots();
   for (const [key, count] of collected) {
     const itemId = key === "clue" ? clueItemId(player) : key;
     if (itemId == null) continue;
@@ -226,6 +224,25 @@ function collectOption({ player }) {
   return true;
 }
 
+/**
+ * "miscellania:collect" and "miscellania:check": Ghrim's collection, and the kingdom's approval and
+ * coffers, asked from elsewhere (content that manages the kingdom remotely, a league relic's item).
+ * The check's wording is ours.
+ */
+function collectRequest(request) {
+  if (!request?.player || request.handled) return;
+  request.handled = collectOption({ player: request.player }) === true;
+}
+
+function checkRequest(request) {
+  if (!request?.player || request.handled) return;
+  const kingdom = Common.catchUp(request.player);
+  if (!kingdom) return;
+  request.handled = true;
+  request.player.sendMessage(`Your kingdom's approval rating is ${Common.approvalPercent(Common.favour(request.player))}%`
+    + ` and its coffers hold ${kingdom.coffer.toLocaleString("en-GB")} coins.`);
+}
+
 module.exports = function registerGhrim(api) {
   Common.bind(api);
   api.onNpcDialogueCondition(onDialogueCondition);
@@ -233,7 +250,9 @@ module.exports = function registerGhrim(api) {
   api.onCustomEvent("npc-dialogue:action", onDialogueAction);
   api.onCustomEvent("npc-dialogue:choice", onDialogueChoice);
   api.onNpcInteraction(PAGE, { Collect: collectOption });
+  api.onCustomEvent("miscellania:collect", collectRequest);
+  api.onCustomEvent("miscellania:check", checkRequest);
   api.onPlayerLogout(onLogout);
 };
 
-module.exports._test = { COND, ACTION, pending, pendingFor, spaceShort, collect, onDialogueCondition, onDialogueLine, onDialogueAction, onDialogueChoice, answerKingdomQuestion, collectOption };
+module.exports._test = { COND, ACTION, pending, pendingFor, spaceShort, collect, onDialogueCondition, onDialogueLine, onDialogueAction, onDialogueChoice, answerKingdomQuestion, collectOption, collectRequest, checkRequest };

@@ -32,6 +32,7 @@ test('a skilling seq started on a step is held a tick; combat seqs are not', asy
   assert.equal(player.arrivalAnimation, null, 'a newer animation replaces the held one');
 
   stepped = false;
+  player.animation = null; // a later tick: this one's punch would keep its place (interrupt priority)
   player.performAnimation(new Animation(621));
   assert.deepEqual(played, [422, 621], 'standing still plays at once');
 });

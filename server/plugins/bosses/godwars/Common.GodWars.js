@@ -18,9 +18,18 @@ const CHAMBER_ATTRIBUTE = "godwars:private-chamber";
 const ENTRANCE_ROPE_ATTRIBUTE = "godwars:entrance-rope";
 const ropeAttribute = (varbit) => `godwars:rope-${varbit}`;
 
-const factions = Object.entries(data.factions).map(([key, faction]) => ({ key, ...faction }));
+/**
+ * A god's protection items from the Wiki's table: cache names, compared without case, and ids for the painted
+ * heraldic and scimitar items that share their name with every other crest's.
+ */
+const protectionOf = (god) => ({
+  names: new Set(god.protectionItems.map((name) => name.toLowerCase())),
+  ids: new Set(god.protectionItemIds ?? []),
+});
+
+const factions = Object.entries(data.factions).map(([key, faction]) => ({ key, ...faction, protection: protectionOf(faction) }));
 /** Every god whose essence the dungeon keeps: the four factions and Zaros (the Ancient Prison's). */
-const essenceGods = [...factions, { key: "ancient", ...data.ancient }];
+const essenceGods = [...factions, { key: "ancient", ...data.ancient, protection: protectionOf(data.ancient) }];
 
 let api = null;
 let core = null;
@@ -73,13 +82,23 @@ function resetEssence(player) {
   for (const faction of essenceGods) setEssence(player, faction, 0);
 }
 
-/** Wearing anything of the god's (by the cache's item name, so every variant counts). */
+/**
+ * Whether an item is one of the god's. A variant named after its base item with a suffix ("Armadyl godsword (or)",
+ * "Craw's bow (u)", "Holy Scythe of Vitur (uncharged)") counts as that item, as the Wiki's item pages say.
+ */
+function isGodItem(faction, id, name) {
+  if (faction.protection.ids.has(id)) return true;
+  const lower = name.toLowerCase();
+  return faction.protection.names.has(lower) || faction.protection.names.has(lower.replace(/ \([^()]*\)$/, ""));
+}
+
+/** How many of the god's items the player wears. */
 function godItemCount(player, faction) {
   let count = 0;
   for (const item of player.getEquipment().getItems()) {
     if (!item || item.getId() <= 0) continue;
-    const name = core.ItemDefinition.forId(item.getId())?.getName?.()?.toLowerCase?.() ?? "";
-    if (faction.itemKeywords.some((keyword) => name.includes(keyword))) count++;
+    const name = core.ItemDefinition.forId(item.getId())?.getName?.() ?? "";
+    if (isGodItem(faction, item.getId(), name)) count++;
   }
   return count;
 }
@@ -176,6 +195,7 @@ module.exports = {
   setEssence,
   syncEssence,
   resetEssence,
+  isGodItem,
   godItemCount,
   addGeneralKill,
   syncKills,

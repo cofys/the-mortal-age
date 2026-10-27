@@ -12,8 +12,13 @@ module.exports = {
   name: "Ardougne Rooftop",
   lapXp: 889,
   petBase: 34440, // Giant squirrel base chance (Wiki)
+  // 2/3 a lap; the elite diary rerolls a miss at 25%, and half its cooldowns are 2 minutes
+  // (Wiki: Mark of Grace).
   marks: {
     level: 90,
+    chance: 2 / 3,
+    rerolls: [{ diary: "ardougne", tier: "elite", chance: 0.25 }],
+    shortCooldown: [{ diary: "ardougne", tier: "elite", chance: 0.5 }],
     tiles: [[2657, 3318, 3]],
   },
   obstacles: [

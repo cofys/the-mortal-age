@@ -126,7 +126,9 @@ function countDownBonus(player) {
 function giveDust(player) {
   const { core } = Common;
   const bonus = Common.bonusDust(player) > 0;
-  player.getInventory().adds(core.ItemIdentifiers.STARDUST, bonus ? 2 : 1);
+  const award = { player, minigame: "shooting-stars", points: bonus ? 2 : 1 };
+  Common.api.emitCustomEvent("minigame:points", award);
+  player.getInventory().adds(core.ItemIdentifiers.STARDUST, award.points);
   player.getPacketSender().sendSound(DATA.sounds.dust, 1, 0);
   const xp = Common.isMembersWorld() ? DATA.mining.xp : DATA.mining.freeToPlayXp;
   player.getSkillManager().addExperiences(core.Skill.MINING, xp);

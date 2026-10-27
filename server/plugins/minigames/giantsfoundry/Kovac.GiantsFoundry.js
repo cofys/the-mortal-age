@@ -170,7 +170,9 @@ function handOver(player) {
   const xp = ruined ? RUINED_REWARD.xp : swordXp(quality);
   const coins = ruined ? RUINED_REWARD.coins : xp * 2;
   pay(player, coins);
-  Shared.setReputation(player, Shared.reputation(player) + quality);
+  const award = { player, minigame: "giants-foundry", points: quality };
+  Shared.api().emitCustomEvent("minigame:points", award);
+  Shared.setReputation(player, Shared.reputation(player) + award.points);
   clearPreform(player);
   Shared.addXp(player, "SMITHING", xp);
   player.setRunEnergy(Math.min(100, player.getRunEnergy() + RUN_ENERGY_BACK));

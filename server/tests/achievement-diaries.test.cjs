@@ -264,3 +264,21 @@ test("::diary shows, completes and resets, matching names like ::quest", () => {
   run("diary varrock complete");
   assert.match(player.log.at(-1), /^Usage/);
 });
+
+test("the Elite Karamja Diary doubles Tokkul, and only that diary's elite tier does", () => {
+  const player = createPlayer();
+  const run = (command) => Diaries._test.diaryCommand({ player, parts: command.split(" ") });
+  const tokkul = (amount) => {
+    const request = { player, amount };
+    Diaries._test.onTokkul(request);
+    return request.amount;
+  };
+  assert.equal(tokkul(8032), 8032);
+  run("diary karamja hard complete");
+  assert.equal(tokkul(8032), 8032, "the hard tier is not enough");
+  run("diary ardougne elite complete");
+  assert.equal(tokkul(8032), 8032, "another diary's elite tier is not enough");
+  run("diary karamja elite complete");
+  assert.equal(tokkul(8032), 16064);
+  assert.equal(tokkul(0), 0);
+});

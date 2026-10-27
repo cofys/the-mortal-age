@@ -1,7 +1,8 @@
 // Run after `yarn build`: node --test tests/melee-special-weapons.test.cjs
-// Swords, longswords, claws, spears, hastas and halberds: the registered specials (energy, rolls,
-// variants), their one-shot drain, Shove's immunity rules, the claws' roll order, Sweep's
-// large-target double hit, and that hastas use no ammunition or charges.
+// Swords, longswords, claws, spears, hastas, halberds and the ancient mace: the registered specials
+// (energy, rolls, variants), their one-shot drain, Shove's immunity rules, the claws' roll order,
+// Sweep's large-target double hit, the specials that pierce NPC melee prayers, Favour's prayer
+// transfer, and that hastas use no ammunition or charges.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -28,12 +29,13 @@ const items = JSON.parse(
   fs.readFileSync(path.join(__dirname, "..", "data", "definitions", "item-gameplay.json"), "utf8"),
 );
 
-/** Death and logout handlers the specials register, by hook name. */
+/** Death, logout and hit-roll handlers the specials register, by hook name. */
 const hooks = {};
 
 before(() => {
-  // Only the specials registry and the death/logout hooks matter here; other hooks are no-ops.
+  // Only the specials registry and the death/logout/hit-roll hooks matter here; other hooks are no-ops.
   const api = {
+    onCombatHitRoll: (handler) => (hooks.onCombatHitRoll ??= []).push(handler),
     onPlayerDefeated: (handler) => (hooks.onPlayerDefeated ??= []).push(handler),
     onPlayerLogout: (handler) => (hooks.onPlayerLogout ??= []).push(handler),
     onNpcDeath: (handler) => (hooks.onNpcDeath ??= []).push(handler),
@@ -183,6 +185,85 @@ test("ornament and (cr) variants share their base weapon's special", () => {
       assert.equal(CombatSpecial.getForWeaponId(itemId), special(id), `item ${itemId} has ${id}`);
     }
   }
+});
+
+// --- specials that hit through melee protection prayers ------------------------------------
+
+/** Runs the registered hit-roll hooks for an attack, as PendingHit does before rolling. */
+function hitRoll(attacker, combatType = CombatType.MELEE) {
+  const roll = { attacker, target: fakeTarget(), combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false };
+  for (const handler of hooks.onCombatHitRoll ?? []) handler(roll);
+  return roll.bypassProtectionPrayer;
+}
+
+/** A fighter holding the given weapon, its special on or off. */
+function wielding(itemId, activated = true) {
+  const fighter = fakeFighter();
+  fighter.activated = activated;
+  fighter.getCombatSpecial = () => CombatSpecial.getForWeaponId(itemId);
+  return fighter;
+}
+
+test("Favour costs all the energy, rolls against crush defence and hits through Protect from Melee", () => {
+  const favour = special("ancient_mace");
+  assert.equal(CombatSpecial.getForWeaponId(ItemIdentifiers.ANCIENT_MACE), favour);
+  assert.equal(favour.getDrainAmount(), 100);
+  assert.equal(favour.getTraits().meleeDefenceBonusIndex, 2, "crush defence whatever the style (Spike is stab)");
+  assert.equal(favour.getTraits().ignoreProtectionPrayer, true);
+});
+
+test("Favour plays the mace's special animation and graphic", () => {
+  const animations = [];
+  const graphics = [];
+  const attacker = fakeFighter();
+  attacker.performAnimation = (animation) => animations.push(animation.getId());
+  attacker.performGraphic = (graphic) => graphics.push(graphic.getId());
+  special("ancient_mace").getCombatMethod().start(attacker, fakeTarget());
+  assert.deepEqual(animations, [6147], "slice_player_mace_special_attack");
+  assert.deepEqual(graphics, [1052], "slice_player_mace_special_attack_spotanim");
+  assert.deepEqual(attacker.log.drains, [100]);
+});
+
+test("the ancient mace and dragon sword specials pierce NPC melee prayers; the hasta's doesn't", () => {
+  assert.equal(hitRoll(wielding(ItemIdentifiers.ANCIENT_MACE)), true, "Favour");
+  assert.equal(hitRoll(wielding(ItemIdentifiers.DRAGON_SWORD)), true, "Wild Stab");
+  assert.equal(hitRoll(wielding(ItemIdentifiers.DRAGON_SWORD_CR_)), true, "Wild Stab (cr)");
+  assert.equal(hitRoll(wielding(ItemIdentifiers.DRAGON_HASTA)), false, "Unleash only ignores player prayers");
+  assert.equal(hitRoll(wielding(ItemIdentifiers.ANCIENT_MACE, false)), false, "a normal mace hit");
+  assert.equal(hitRoll(wielding(ItemIdentifiers.DRAGON_SWORD, false)), false, "a normal sword hit");
+  assert.equal(hitRoll(wielding(ItemIdentifiers.ANCIENT_MACE), CombatType.RANGED), false, "melee only");
+  assert.equal(hitRoll(fakeTarget()), false, "an NPC attacker");
+});
+
+test("Favour drains the target's Prayer by the damage and gives it to the user, above maximum by up to the damage", () => {
+  const { Skill } = PluginManager.getCoreApi();
+  const levels = (prayer, max) => {
+    const state = { current: prayer };
+    return {
+      state,
+      getCurrentLevel: (skill) => (skill === Skill.PRAYER ? state.current : 99),
+      getMaxLevel: (skill) => (skill === Skill.PRAYER ? max : 99),
+      setCurrentLevels: (skill, level) => { if (skill === Skill.PRAYER) state.current = level; },
+    };
+  };
+  const person = (skills) => ({ isPlayer: () => true, getAsPlayer() { return this; }, getSkillManager: () => skills });
+  const user = levels(90, 99);
+  const victim = levels(20, 70);
+  const landed = (damage, accurate = true) => ({
+    isAccurate: () => accurate,
+    getTotalDamage: () => damage,
+    getTarget: () => person(victim),
+    getAttacker: () => person(user),
+  });
+  const favour = special("ancient_mace").getCombatMethod();
+
+  favour.handleAfterHitEffects(landed(30));
+  assert.equal(victim.state.current, 0, "drained to 0, not below");
+  assert.equal(user.state.current, 120, "90 + 30, above the 99 maximum");
+  favour.handleAfterHitEffects(landed(25));
+  assert.equal(user.state.current, 124, "capped at the maximum plus this hit's damage");
+  favour.handleAfterHitEffects(landed(25, false));
+  assert.equal(user.state.current, 124, "a miss transfers nothing");
 });
 
 // --- energy drains exactly once, the bar follows, toggling off cancels ---------------------

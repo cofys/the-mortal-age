@@ -67,14 +67,15 @@ let pluginApi;
 /** A full inventory stops chopping unless an open log basket has room ("storage:room"). */
 function inventoryBlocks(player, logId) {
   if (!player.getInventory().isFull()) return false;
-  const request = { player, itemId: logId, room: false };
+  // `skill`: the skill gathering it, so content storing one skill's resources answers only for those.
+  const request = { player, itemId: logId, skill: pluginApi.core.Skill.WOODCUTTING, room: false };
   pluginApi.emitCustomEvent("storage:room", request);
   return !request.room;
 }
 
 /** An open log basket takes the log first ("storage:gather"); otherwise it goes to the inventory. */
-function giveLog(player, logId) {
-  const request = { player, itemId: logId, amount: 1, stored: 0 };
+function giveLog(player, logId, xp = 0) {
+  const request = { player, itemId: logId, amount: 1, stored: 0, skill: Skill.WOODCUTTING, xp };
   pluginApi.emitCustomEvent("storage:gather", request);
   if (request.stored === 0) player.getInventory().adds(logId, 1);
 }
@@ -180,6 +181,8 @@ const AXES = [
   axe(ItemIds.INFERNAL_AXE, 61, 7, 2117, { requiredFiremaking: 85, speed: 0.3 }),
   axe(ItemIds.INFERNAL_AXE_OR_, 61, 7, 8778, { requiredFiremaking: 85, speed: 0.3 }),
   axe(ItemIds.INFERNAL_AXE_OR__3, 61, 7, 8778, { requiredFiremaking: 85, speed: 0.3 }),
+  // The league's Echo axe (Wiki): a crystal axe with no requirement.
+  axe(ItemIds.ECHO_AXE, 1, 7, 8324),
 ];
 
 // OSRS Wiki "cut chance" charts: [low, high] per axe tier (bronze, iron, steel, black, mithril,
@@ -1097,21 +1100,22 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       continue;
     }
     state.nextActionTick = currentTick + WOODCUTTING_ACTION_INTERVAL_TICKS;
-    if (
-      !rollLog(player, state.tree, state.axe, {
+    // Content may turn a miss into a hit ("woodcutting:attempt", a league relic's second chance).
+    const attempt = { player, object: activeTree, logId: state.tree.logId, success: rollLog(player, state.tree, state.axe, {
         location: {
           x: state.location.getX(),
           y: state.location.getY(),
           z: state.location.getZ(),
         },
-      })
-    ) {
+      }) };
+    pluginApi.emitCustomEvent("woodcutting:attempt", attempt);
+    if (!attempt.success) {
       continue;
     }
 
     if (state.tree.logId >= 0) {
       if (!InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
-        giveLog(player, state.tree.logId);
+        giveLog(player, state.tree.logId, state.tree.xpReward * lumberjackXpMultiplier(player));
         player.sendMessage(logMessage(state.tree));
       }
       CrystalAxe.tryUseCharge(player);

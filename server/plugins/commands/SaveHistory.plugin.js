@@ -3,6 +3,8 @@
  * - ::snapshots <name> - their newest saved copies;
  * - ::rollback <name> <#id | 30m | 2h | 1d> - puts back that copy, or the newest at least that
  *   old. An online player is logged out, and their logout save writes the copy.
+ * A name means the character this world logs in: the league character on a league world
+ * (docs/leagues.md), the main one elsewhere.
  */
 const LIST_LIMIT = 15;
 /** How far back a rollback by age looks. */
@@ -13,6 +15,11 @@ let core = null;
 
 function persistence() {
   return core.GameConstants.PLAYER_PERSISTENCE;
+}
+
+/** The profile a name addresses on this world: the one every login here gets. */
+function worldProfile() {
+  return core.GameConstants.WORLD_PROFILE;
 }
 
 function formatTime(iso) {
@@ -34,7 +41,7 @@ function parseTarget(text) {
 
 /** The snapshot a target means: by id, or the newest at least `ageMs` old. */
 function findSnapshot(username, target, nowMs = Date.now()) {
-  const snapshots = persistence().listSnapshots(username, SEARCH_LIMIT);
+  const snapshots = persistence().listSnapshots(username, SEARCH_LIMIT, worldProfile());
   if (target.id != null) return snapshots.find((snapshot) => snapshot.id === target.id) ?? null;
   return snapshots.find((snapshot) => Date.parse(snapshot.savedAt) <= nowMs - target.ageMs) ?? null;
 }
@@ -52,7 +59,7 @@ function listSnapshots({ player, parts }) {
     player.sendMessage("Use ::snapshots <name>.");
     return true;
   }
-  const snapshots = persistence().listSnapshots(name, LIST_LIMIT);
+  const snapshots = persistence().listSnapshots(name, LIST_LIMIT, worldProfile());
   if (snapshots.length === 0) {
     player.sendMessage(`No saved copies for ${name}.`);
     return true;
@@ -76,7 +83,7 @@ function rollback({ player, parts }) {
     return true;
   }
   const online = core.World.getPlayerByName(name);
-  const restored = persistence().restoreSnapshot(name, snapshot.id, { online: Boolean(online) });
+  const restored = persistence().restoreSnapshot(name, snapshot.id, { online: Boolean(online) }, worldProfile());
   if (!restored) {
     player.sendMessage(`Could not restore ${describe(snapshot)}.`);
     return true;

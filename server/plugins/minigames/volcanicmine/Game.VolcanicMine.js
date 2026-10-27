@@ -189,7 +189,9 @@ class Game {
       const reward = Math.round((points * Common.maxLevel(player, "MINING")) / data.xp.rewardDivisor);
       Common.xp(player, "MINING", reward);
       const attribute = data.attributes.shopPoints;
-      player.setAttribute(attribute, (Number(player.getAttribute(attribute)) || 0) + points);
+      const award = { player, minigame: "volcanic-mine", points };
+      Common.api.emitCustomEvent("minigame:points", award);
+      player.setAttribute(attribute, (Number(player.getAttribute(attribute)) || 0) + award.points);
       Common.chat(player, [["npc", Common.message("reward")]]);
       this.leaving.delete(player);
     });

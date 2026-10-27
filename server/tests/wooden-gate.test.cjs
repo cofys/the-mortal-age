@@ -60,6 +60,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
   const startup = [];
   let regionLoaded;
   let doorToggleHandler = null;
+  const customHandlers = new Map();
   const visibleObjectIds = new Map();
   const objectManager = suppliedObjectManager ?? {
     register: (o) => ops.push(['register', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
@@ -72,7 +73,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
     core: {
       CacheDefinitions, GameObject, Location, MapObjects, RegionManager, Sounds, World,
       ObjectIdentifiers: require('../dist/util/ObjectIdentifiers').ObjectIdentifiers,
-      ObjectDefinition: { forPlayer: (id) => ({ id: visibleObjectIds.get(id) ?? id }) },
+      ObjectDefinition: { forPlayer: (id) => ({ id: visibleObjectIds.get(id) ?? id, getInteractions: () => CacheDefinitions.getObject(visibleObjectIds.get(id) ?? id)?.actions ?? [] }) },
       Sound: require('../dist/game/Sound').Sound,
       Task: require('../dist/game/task/Task').Task,
       ObjectManager: objectManager,
@@ -82,7 +83,9 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
     getTaskManager: () => taskManager,
     emitCustomEvent: (name, event) => {
       if (name === 'door:toggle') doorToggleHandler?.(event);
+      customHandlers.get(name)?.(event);
     },
+    onCustomEvent: (name, handler) => customHandlers.set(name, handler),
     onObjectInteraction: (name, actions) => handlers.set(name, actions),
     onRegionLoaded: (handler) => { regionLoaded = handler; },
     onObjectRoute: (handler) => routes.push(handler),
@@ -125,7 +128,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, handlers, routes, internals: plugin.__internals, regionLoaded: (regionId) => regionLoaded({ regionId }), visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
+  return { place, click, sounds, ops, submitted, handlers, routes, customHandlers, internals: plugin.__internals, regionLoaded: (regionId) => regionLoaded({ regionId }), visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
 }
 
 test('shared wall-door reach masks cover every operation and preserve other object routing', () => {
@@ -2001,4 +2004,30 @@ test('Murder Mystery mansion Large doors 25748/25750 open their real north thres
     ObjectManager.register(new GameObject(25750, new Location(2741, 3572, 0), 0, 1, null), true);
     h.restore();
   }
+});
+
+test('public door:open requests keep lock checks and never toggle an already-open door shut', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([1535, 1536].map(id => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions });
+  try {
+    const player = { getPrivateArea: () => null, getLocation: () => new Location(101, 200, 0) };
+    const object = new GameObject(1535, new Location(100, 200, 0), 0, 0, null);
+    const request = target => ({ player, object: target, handled: false });
+    const handler = h.customHandlers.get('door:open');
+    assert.equal(typeof handler, 'function');
+    h.setDoorToggleHandler(event => { event.handled = true; });
+    const locked = request(object); handler(locked);
+    assert.equal(locked.handled, true);
+    assert.equal(h.ops.length, 0, 'existing public key/lock guards can reject an open request');
+    h.setDoorToggleHandler(null);
+    const allowed = request(object); handler(allowed);
+    assert.equal(allowed.handled, true);
+    assert.deepEqual(h.ops, [['deregister', 1535, 100, 200, 0], ['register', 1536, 99, 200, 1]]);
+    h.ops.length = 0;
+    const again = request(new GameObject(1536, new Location(99, 200, 0), 0, 1, null));
+    handler(again);
+    assert.equal(again.handled, true);
+    assert.equal(h.ops.length, 0, 'a repeated Open request cannot close the panel');
+  } finally { h.restore(); }
 });

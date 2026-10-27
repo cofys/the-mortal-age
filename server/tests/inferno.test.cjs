@@ -217,7 +217,7 @@ function createWorld() {
     registerNpcCombatMethodProvider: (ids, ctor) => { for (const id of [ids].flat()) world.providers.set(id, ctor); },
     persistAttribute: hook('persist'),
     sendMultiChatboxPrompt: (player, title, ...pairs) => { world.prompt = { title, pairs }; return true; },
-    emitCustomEvent: () => {},
+    emitCustomEvent: (name, event) => { if (name === 'diary:tokkul' && world.eliteKaramja) event.amount *= 2; },
   };
   for (const name of ['onNpcDialogueCondition', 'onCustomEvent', 'onObjectFirstClick', 'onObjectSecondClick', 'onObjectRoute', 'onPlayerLogin', 'onPlayerLogout', 'onPlayerProcess',
     'onPlayerDeath', 'onShouldDropItemsOnDeath', 'onCanTeleport', 'onCanAttack', 'onNpcBeforeDeath', 'onCombatHitResolved',
@@ -470,6 +470,17 @@ test('TzKal-Zuk: the glyph shields, summons arrive on cue and his death wins the
   assert.equal(run.completions(player), 1);
   assert.equal(player.getAttribute(run.ATTR_WAVE), null);
   assert.equal(player.getLocation().getX(), 2495);
+});
+
+test('the Elite Karamja Diary doubles the TokKul a run pays', () => {
+  world.eliteKaramja = true;
+  try {
+    const { player } = startAt(3);
+    run.runDeath({ player, handled: false });
+    assert.equal(player.items.get(Items.TOKKUL), 2 * Math.floor((25 * 3) / 2));
+  } finally {
+    world.eliteKaramja = false;
+  }
 });
 
 test('dying keeps the items and pays half the hitpoints of the waves cleared in TokKul', () => {

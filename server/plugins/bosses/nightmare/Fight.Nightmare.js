@@ -12,6 +12,7 @@
  *   Phosani's survives it, lashes out for 150 more hitpoints, then dies and reawakens by herself.
  */
 const Common = require("./Common.Nightmare");
+const Scoreboard = require("./Scoreboard.Nightmare");
 const Attacks = require("./Attacks.Nightmare");
 const Specials = require("./Specials.Nightmare");
 const Totems = require("./Totems.Nightmare");
@@ -414,6 +415,7 @@ class Fight {
     this.boss.setNpcTransformationId(this.phosani ? npcs.phosani.dead : npcs.dead);
     this.placeBarriers(Common.data.awaken.barriers.open);
     Loot.reward(this, players);
+    Scoreboard.won(this.phosani, ticks, players.length);
     for (const player of players) {
       this.count(player, ticks, players.length);
       const sender = player.getPacketSender();

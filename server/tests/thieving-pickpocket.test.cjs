@@ -17,6 +17,8 @@ const DATA = require('../plugins/skills/data/pickpocketing.json');
 
 const log = [];
 const submitted = [];
+/** Whether content asks for another pickpocket ("thieving:done", a league relic's repeat). */
+let repeatAgain = false;
 const interactions = [];
 const combat = {
     inCombat: () => false,
@@ -33,6 +35,7 @@ Thieving.register({
     onItemAction: () => {},
     emitCustomEvent: (name, request) => {
         if (name === 'thieving:success') log.push(name);
+        if (name === 'thieving:done' && repeatAgain) request.again = true;
         // The Skillcapes plugin answers this; a worn Thieving cape is all these tests need.
         if (name === 'skillcape:has-perk' && request.skill === 'THIEVING') {
             request.result = request.player.getEquipment().get(Equipment.CAPE_SLOT)?.getId() === I.THIEVING_CAPE;
@@ -375,4 +378,29 @@ test('stunTicks lasts exactly its ticks; stun in seconds is unchanged', () => {
     CombatFactory.stunTicks(playerMobile, 9, true);
     CombatFactory.stunTicks(playerMobile, 9, true, { graphic: new Graphic(245, 0, 124), message: false });
     assert.deepEqual(shown, ['graphic 348/100', "You've been stunned!", 'graphic 245/124'], 'defaults unchanged; options replace them');
+});
+
+test("a repeat asked for after the outcome is the player's action: walking cancels it, and it checks the place again", (t) => {
+    const original = Math.random;
+    Math.random = () => 0;
+    repeatAgain = true;
+    t.after(() => { Math.random = original; repeatAgain = false; });
+    let at = { x: 3200, y: 3200, z: 0 };
+    const place = () => ({ getX: () => at.x, getY: () => at.y, getZ: () => at.z, getDistance: () => 1 });
+    const who = player({ level: 1 });
+    who.getLocation = place;
+    const target = { ...npc(), getLocation: () => ({ ...place(), getDistance: () => 1 }) };
+    submitted.length = 0;
+    Thieving._test.pickpocket({ player: who, npc: target, npcId: 0, definition: { getName: () => 'Man' } });
+    submitted[0].execute();
+    const repeat = submitted[1];
+    assert.ok(repeat, 'the repeat waits a tick');
+    assert.equal(repeat.key, who.getIndex(), "keyed by the player's index, which MovementQueue.walkToReset cancels");
+    // The player walked off before it fired: it checks again and does nothing.
+    at = { x: 3201, y: 3200, z: 0 };
+    log.length = 0;
+    submitted.length = 0;
+    repeat.execute();
+    assert.deepEqual(log, [], 'no new pickpocket from the old place');
+    assert.equal(submitted.length, 0);
 });

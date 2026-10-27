@@ -44,6 +44,7 @@ and say what is still a guess in `unverified`.
 | Strange floor (Fremennik Slayer Dungeon) | a 2-tile run-up (1995) with sound 2464, the 2-tile hurdle (1603) a tick later, both cycles 8-50 |
 | Stepping stones (Karamja) | a stone a click: 769 with delay 20, cycles 48-60, sound 2461; "You attempt to balance on the stepping stone." and "You manage to make the jump." |
 | Stepping stone (Pollnivneach) | onto the stone and a diagonal jump to the far bank, a jump every 2 ticks (741), sound 2461 |
+| Obstacles, tunnel, plant door and holes (Fossil Island sea floor) | a face, then a 60-cycle exact move past it the tick after with 7702 (`human_swim_cavewall`) or 7704 (`human_swim_shipwall`), no message; holes: a step onto the hole, 7705 (`human_swim_hole_enter`), and two ticks later a teleport to its paired hole with 7706 (`human_swim_hole_leave`). The `loc_merge` the obstacles send is not done |
 | Rocks (Shilo Village) | rock tile to rock tile, 1148 over 90 cycles facing south |
 | Rock slide (Cairn Isle) | 740 over 120 cycles, delay 15, facing west (only eastward recorded) |
 | Climbing rocks (Yanille, Taverley), log balance (Fremennik) | only the sound and messages: walks and their animations are not in the recordings, so the movement stays a guess |

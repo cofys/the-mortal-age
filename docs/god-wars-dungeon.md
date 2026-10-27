@@ -29,7 +29,15 @@ OSRS calls the kill count "Essence" in the dungeon, and so does tsps.
 
 ## Aggression
 
-Every monster in the dungeon attacks on sight, whatever the player's combat level, unless the player wears something of its god; one item per god is enough (Wiki). God items are matched by name (`itemKeywords` in the data file). The generals and bodyguards ignore god items and attack anyone who comes into their chamber.
+Every monster in the dungeon attacks on sight, whatever the player's combat level, unless the player wears something of its god; one item per god is enough (Wiki). The generals and bodyguards ignore god items and attack anyone who comes into their chamber.
+
+### God items
+
+Each god's `protectionItems` in the data file is the Wiki's protection table for it ([God Wars Dungeon](https://oldschool.runescape.wiki/w/God_Wars_Dungeon), "God equipment", read 26 October 2026), written as the cache's item names and compared without case. Zaros's list (`ancient`) is there too. The same list drives aggression, the altar's Prayer boost, `godwars:kill`'s `godItems` and anything else that calls `godItemCount`.
+
+- **Variants:** a cache name that is a listed name plus a bracketed suffix counts as that item: `(or)`, `(l)`, `(u)`, `(uncharged)`, `(Deadman)`, `(g)`, `(t)`. The Wiki sends these pages to the base item's page, and those pages say the item counts (Craw's bow, Thammaron's sceptre, the Holy Scythe of Vitur, the halos, Monk's robe (t)).
+- **Ids:** the painted heraldic helm and kiteshield and the god rune scimitars are called "Rune heraldic helm", "Rune kiteshield" and "Rune scimitar" in the cache, the same names as the other crests' copies and the plain scimitar. These go in `protectionItemIds`: `poh_helmet_saradomin_rune` 8488, `poh_shield_saradomin_rune` 8738, `rune_scimitar_saradomin` 23332, and 8494, 8744 and 23334 for Zamorak. The table names only the rune helm and kiteshield, so the steel and adamant painted copies are not listed.
+- **No keywords:** the Wiki has no "anything with the god's name" rule, so names aren't matched by keyword. The name keywords used before missed the books, symbols, blessings and the god's other items. They also counted items the table leaves out: the Corrupted armadyl godsword and the Saradomin and Zamorak banners.
 
 This needs a generic core hook: `Area.npcAggression(player, npc)` returns false (never), true (always, past the level and tolerance checks) or null (the usual rules).
 

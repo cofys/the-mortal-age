@@ -319,7 +319,7 @@ function openChest(event) {
     player.sendMessage(lair.messages.spill);
     player.sendMessage(lair.messages.count.replace("{count}", String(opened)));
     CombatAchievements.chestOpened(player, lair, opened);
-    const request = { player, table: lair.chestTable, drops: [] };
+    const request = { player, table: lair.chestTable, source: lair.name, drops: [] };
     api.emitCustomEvent("npc-drops:roll-table", request);
     dropLoot(session, request.drops);
     setChest(session, true);

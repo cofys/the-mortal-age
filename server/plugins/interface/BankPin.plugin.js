@@ -1,8 +1,8 @@
 /**
  * The Bank PIN (https://oldschool.runescape.wiki/w/Bank_PIN), from plugins/interface/data/
  * bank-pin.json: the settings a Banker opens, the keypad, the bank's lock, and the lock on the
- * other things the PIN protects ("bank-pin:guard"). Each lives in
- * ./bankpin/.
+ * other things the PIN protects ("bank-pin:guard"), and whether one is set ("bank-pin:status").
+ * Each lives in ./bankpin/.
  */
 const Common = require("./bankpin/Common.BankPin");
 const Keypad = require("./bankpin/Keypad.BankPin");

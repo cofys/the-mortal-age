@@ -1,0 +1,1265 @@
+{
+  "$comment": [
+    "Last Man Standing (docs/last-man-standing.md). Read by plugins/minigames/lms/.",
+    "Captured: rsprox recording 20261026T161730 (rev 241, world 559 LMS Competitive): the lobby, Lisa, the loadout chest, the coffer, Justine's shop, eight competitive games and a win.",
+    "Wiki: the builds' levels, the loot tables, the points and rank rules, the supply limits and the fog's damage."
+  ],
+  "minPlayers": 24,
+  "minPlayersFloor": 1,
+  "lobby": {
+    "bounds": [
+      3123,
+      3626,
+      3150,
+      3650
+    ],
+    "afterGame": [
+      [
+        3140,
+        3633
+      ],
+      [
+        3141,
+        3635
+      ],
+      [
+        3142,
+        3637
+      ],
+      [
+        3143,
+        3635
+      ],
+      [
+        3140,
+        3636
+      ],
+      [
+        3143,
+        3633
+      ]
+    ],
+    "overlayEvery": 5,
+    "shoutEvery": 30,
+    "entryX": [
+      3140,
+      3143
+    ]
+  },
+  "music": {
+    "lobby": 680,
+    "game": 474,
+    "death": 147
+  },
+  "jingles": {
+    "death": 90
+  },
+  "sounds": {
+    "discard": 2381,
+    "bought": 2304
+  },
+  "builds": [
+    {
+      "name": "Max/Med",
+      "letter": "a",
+      "enum": 4629,
+      "levels": {
+        "ATTACK": 99,
+        "STRENGTH": 99,
+        "DEFENCE": 85,
+        "RANGED": 99,
+        "MAGIC": 99,
+        "HITPOINTS": 99,
+        "PRAYER": 99
+      },
+      "default": {
+        "spellbook": 0,
+        "worn": {
+          "hat": 4,
+          "front": 3,
+          "torso": 12,
+          "rhand": 7,
+          "lhand": 9,
+          "legs": 2,
+          "feet": 6,
+          "hands": 5,
+          "back": 8,
+          "ring": 10,
+          "quiver": 11
+        },
+        "inventory": [
+          21,
+          22,
+          20,
+          20,
+          24,
+          24,
+          18,
+          18,
+          18,
+          23,
+          23,
+          23,
+          1,
+          15,
+          23,
+          0,
+          13,
+          14,
+          23,
+          23,
+          16,
+          17,
+          23,
+          23,
+          23,
+          23,
+          0,
+          25
+        ]
+      }
+    },
+    {
+      "name": "Zerker",
+      "letter": "b",
+      "enum": 4630,
+      "levels": {
+        "ATTACK": 80,
+        "STRENGTH": 99,
+        "DEFENCE": 50,
+        "RANGED": 99,
+        "MAGIC": 99,
+        "HITPOINTS": 99,
+        "PRAYER": 99
+      },
+      "default": {
+        "spellbook": 0,
+        "worn": {
+          "hat": 27,
+          "front": 3,
+          "torso": 1,
+          "rhand": 16,
+          "lhand": 14,
+          "legs": 13,
+          "feet": 5,
+          "hands": 4,
+          "back": 7,
+          "ring": 10,
+          "quiver": 11
+        },
+        "inventory": [
+          12,
+          6,
+          21,
+          21,
+          2,
+          28,
+          23,
+          22,
+          17,
+          18,
+          19,
+          19,
+          25,
+          25,
+          0,
+          19,
+          24,
+          24,
+          24,
+          24,
+          24,
+          24,
+          24,
+          24,
+          24,
+          24,
+          0,
+          26
+        ]
+      }
+    },
+    {
+      "name": "1 Def Pure",
+      "letter": "c",
+      "enum": 4631,
+      "levels": {
+        "ATTACK": 75,
+        "STRENGTH": 99,
+        "DEFENCE": 1,
+        "RANGED": 99,
+        "MAGIC": 99,
+        "HITPOINTS": 99,
+        "PRAYER": 99
+      },
+      "default": {
+        "spellbook": 0,
+        "worn": {
+          "hat": 10,
+          "front": 26,
+          "torso": 11,
+          "rhand": 24,
+          "lhand": 21,
+          "legs": 12,
+          "feet": 2,
+          "hands": 25,
+          "back": 3,
+          "ring": 6,
+          "quiver": 7
+        },
+        "inventory": [
+          16,
+          17,
+          15,
+          15,
+          19,
+          19,
+          13,
+          13,
+          0,
+          0,
+          18,
+          13,
+          8,
+          1,
+          18,
+          18,
+          23,
+          22,
+          18,
+          18,
+          9,
+          18,
+          18,
+          18,
+          18,
+          18,
+          0,
+          20
+        ]
+      }
+    }
+  ],
+  "$builds": "Captured defaults: the varbits Lisa sets on a first game (rsprox [59]). The values index each build's enum (4629-4631); enum 4633-4635 maps a worn slot to its component.",
+  "wornSlots": {
+    "hat": 0,
+    "back": 1,
+    "front": 2,
+    "rhand": 3,
+    "torso": 4,
+    "lhand": 5,
+    "legs": 7,
+    "hands": 9,
+    "feet": 10,
+    "ring": 12,
+    "quiver": 13
+  },
+  "ammoAmount": 5000,
+  "spellbooks": {
+    "$comment": "Loadout value -> spellbook (enum 4389: 0 Ancient, 1 Standard, 2 Lunar); the menu's sub is the value + 1.",
+    "values": [
+      "ANCIENT",
+      "NORMAL",
+      "LUNAR"
+    ]
+  },
+  "supplyLimits": {
+    "Shark": 10,
+    "Saradomin brew(4)": 3,
+    "Sanfew serum(4)": 2,
+    "Cooked karambwan": 2,
+    "potion": 1
+  },
+  "maps": [
+    {
+      "id": 1,
+      "name": "Desert Island",
+      "chunk": [
+        424,
+        720
+      ],
+      "size": [
+        16,
+        16
+      ],
+      "planes": 3,
+      "safezones": [
+        {
+          "name": "the Mountain",
+          "centre": [
+            3431,
+            5843
+          ]
+        }
+      ],
+      "cratesNearZone": false
+    },
+    {
+      "id": 2,
+      "name": "Wild Varrock",
+      "chunk": [
+        432,
+        752
+      ],
+      "size": [
+        24,
+        24
+      ],
+      "planes": 3,
+      "safezones": [
+        {
+          "name": "the Trading Post",
+          "centre": [
+            3509,
+            6161
+          ]
+        },
+        {
+          "name": "the Old Manor",
+          "centre": [
+            3497,
+            6117
+          ]
+        }
+      ],
+      "cratesNearZone": true
+    }
+  ],
+  "$maps": "Chunks as the captured rebuilds copy them (rotation 0, planes 0-2). Safe zones: the centre of the captured 13x13 square of br_safezone_indicator locs. The Trinity Outpost (Desert Island) was broadcast but its markers were never in view, so it is left out.",
+  "timing": {
+    "countdownFrom": 12,
+    "countdownEvery": 2,
+    "fogWarning": 100,
+    "fogStart": 250,
+    "fogStartRadius": 100,
+    "fogShrinkEvery": [
+      4,
+      6
+    ],
+    "dangerAt": 625,
+    "dangerRadius": 16,
+    "finalRadius": 6,
+    "timeDisplayEvery": 50,
+    "crateFirst": 300,
+    "crateEvery": 200,
+    "crateLife": 200,
+    "chestReset": 100,
+    "unattackableAfterKill": 33,
+    "gameTicks": 2000,
+    "minTicksForPoints": 100,
+    "dropReveal": 100,
+    "dropDespawn": 200
+  },
+  "$timing": "Captured from the start ('The fight for survival has begun!'): the warning at +100 (markers, arrow), fog from +250 with radius 100 shrinking 1 every 4 or 6 ticks, 'Danger' at +625 (26 -> 16), final radius 6, crates at +300 and every 200, chests closed again 100 ticks after looting, drops shown to the killer for 100 ticks. Wiki: 20 seconds unattackable after a kill, a 20 minute game. Inferred: no points under a minute.",
+  "fog": {
+    "damageEvery": 2,
+    "rampTo": 6,
+    "greaterDepth": 16,
+    "greaterDamage": [
+      5,
+      10
+    ],
+    "dangerDamageStart": 1,
+    "dangerDamageMax": 10,
+    "dangerRampEvery": 4
+  },
+  "$fog": "Captured: br_fog_damagecount climbs 1 every 2 ticks to 6 in the fog and falls 6 -> 3 -> 0 out of it; the hits run 1,1,1,1,2,2,3. Wiki: 16+ tiles in, up to 10 every other tick; outside the zone once 'Danger', 1 a tick rising to 10.",
+  "keys": {
+    "bloody": "br_bloody_key",
+    "bloodier": "br_bloodier_key",
+    "bloodierAtOrBelow": 5
+  },
+  "loot": {
+    "Max/Med": {
+      "offensive": [
+        [
+          "br_acb",
+          [
+            "br_dragon_bolts_enchanted_opal",
+            100
+          ]
+        ],
+        [
+          "br_ags"
+        ],
+        [
+          "br_bow_of_faerdhinen",
+          "br_crystal_helmet",
+          "br_crystal_chestplate",
+          "br_crystal_platelegs"
+        ],
+        [
+          "br_dragon_claws"
+        ],
+        [
+          "br_heavy_ballista",
+          [
+            "br_dragon_javelin",
+            100
+          ]
+        ],
+        [
+          "br_magus_ring"
+        ],
+        [
+          "br_noxious_halberd"
+        ],
+        [
+          "br_occult_necklace"
+        ],
+        [
+          "br_osmumtens_fang"
+        ],
+        [
+          "br_purging_staff"
+        ],
+        [
+          "br_ultor_ring"
+        ],
+        [
+          "br_nightmare_staff_volatile"
+        ]
+      ],
+      "defensive": [
+        [
+          "br_enchanted_onyx_amulet"
+        ],
+        [
+          "br_blessed_spirit_shield"
+        ],
+        [
+          "br_barrows_dharok_head",
+          "br_barrows_dharok_body",
+          "br_barrows_dharok_legs",
+          "br_barrows_dharok_weapon"
+        ],
+        [
+          "br_dragonfire_shield"
+        ],
+        [
+          "br_elidinis_ward_fortified"
+        ],
+        [
+          "br_infernal_cape"
+        ],
+        [
+          "br_masori_body_fortified"
+        ],
+        [
+          "br_masori_chaps_fortified"
+        ],
+        [
+          "br_mithril_seed"
+        ],
+        [
+          "br_oathplate_helm"
+        ],
+        [
+          "br_torva_legs"
+        ],
+        [
+          "br_twisted_buckler"
+        ],
+        [
+          "br_virtus_top"
+        ],
+        [
+          "br_virtus_legs"
+        ]
+      ],
+      "upgraded": [
+        [
+          "br_lightbearer"
+        ],
+        [
+          [
+            "br_morrigans_javelin",
+            1000
+          ]
+        ],
+        [
+          "br_statius_warhammer"
+        ],
+        [
+          "br_vestas_longsword"
+        ],
+        [
+          "br_voidwaker"
+        ],
+        [
+          "br_zuriels_staff"
+        ],
+        [
+          "br_ancient_godsword"
+        ],
+        [
+          "br_zaryte_xbow",
+          [
+            "br_dragon_bolts_enchanted_opal",
+            100
+          ]
+        ]
+      ]
+    },
+    "Zerker": {
+      "offensive": [
+        [
+          "br_acb",
+          [
+            "br_dragon_bolts_enchanted_opal",
+            100
+          ]
+        ],
+        [
+          "br_ags"
+        ],
+        [
+          "br_bone_claws"
+        ],
+        [
+          "br_darkbow",
+          [
+            "fake_dragon_arrow",
+            100
+          ]
+        ],
+        [
+          "br_dragon_claws"
+        ],
+        [
+          "br_eclipse_moon_helm",
+          "br_eclipse_moon_chestplate",
+          "br_eclipse_moon_tassets",
+          "br_eclipse_atlatl",
+          [
+            "br_atlatl_dart",
+            100
+          ]
+        ],
+        [
+          "br_elder_maul"
+        ],
+        [
+          "br_granite_maul"
+        ],
+        [
+          "br_heavy_ballista",
+          [
+            "br_dragon_javelin",
+            100
+          ]
+        ],
+        [
+          "br_kodai_wand"
+        ],
+        [
+          "br_sotd"
+        ],
+        [
+          "br_magus_ring"
+        ],
+        [
+          "br_noxious_halberd"
+        ],
+        [
+          "br_ultor_ring"
+        ],
+        [
+          "br_nightmare_staff_volatile"
+        ]
+      ],
+      "defensive": [
+        [
+          "br_torture_amulet"
+        ],
+        [
+          "br_mithril_seed"
+        ],
+        [
+          "br_anguish_necklace"
+        ],
+        [
+          "br_tormented_bracelet"
+        ],
+        [
+          "br_enchanted_onyx_amulet"
+        ],
+        [
+          "br_eclipse_moon_helm",
+          "br_eclipse_moon_chestplate",
+          "br_eclipse_moon_tassets",
+          "br_eclipse_atlatl",
+          [
+            "br_atlatl_dart",
+            100
+          ]
+        ],
+        [
+          "br_frost_moon_helm",
+          "br_frost_moon_chestplate",
+          "br_frost_moon_tassets",
+          "br_frostmoon_spear"
+        ],
+        [
+          "br_blood_moon_helm",
+          "br_blood_moon_chestplate",
+          "br_blood_moon_tassets",
+          "br_dual_macuahuitl"
+        ],
+        [
+          "br_aranea_boots"
+        ],
+        [
+          "br_magesbook"
+        ],
+        [
+          "br_occult_necklace"
+        ],
+        [
+          "br_infernal_cape"
+        ]
+      ],
+      "upgraded": [
+        [
+          "br_lightbearer"
+        ],
+        [
+          [
+            "br_morrigans_javelin",
+            1000
+          ]
+        ],
+        [
+          "br_vestas_longsword"
+        ],
+        [
+          "br_voidwaker"
+        ],
+        [
+          "br_zuriels_staff"
+        ],
+        [
+          "br_dragon_claws"
+        ],
+        [
+          "br_acb",
+          [
+            "br_dragon_bolts_enchanted_opal",
+            100
+          ]
+        ],
+        [
+          "br_ags"
+        ],
+        [
+          "br_kodai_wand"
+        ]
+      ]
+    },
+    "1 Def Pure": {
+      "offensive": [
+        [
+          "br_acb",
+          [
+            "br_dragon_bolts_enchanted_opal",
+            100
+          ]
+        ],
+        [
+          "br_ags"
+        ],
+        [
+          "br_bone_claws"
+        ],
+        [
+          "br_darkbow",
+          [
+            "fake_dragon_arrow",
+            100
+          ]
+        ],
+        [
+          "br_dragon_claws"
+        ],
+        [
+          "br_elder_maul"
+        ],
+        [
+          "br_granite_maul"
+        ],
+        [
+          "br_kodai_wand"
+        ],
+        [
+          "br_light_ballista",
+          [
+            "br_dragon_javelin",
+            100
+          ]
+        ],
+        [
+          "br_magus_ring"
+        ],
+        [
+          "br_sotd"
+        ],
+        [
+          "br_ultor_ring"
+        ],
+        [
+          "br_nightmare_staff_volatile"
+        ]
+      ],
+      "defensive": [
+        [
+          "br_torture_amulet"
+        ],
+        [
+          "br_aranea_boots"
+        ],
+        [
+          "br_elderchaos_hood",
+          "br_elderchaos_top",
+          "br_elderchaos_bottom"
+        ],
+        [
+          "br_guthix_chaps"
+        ],
+        [
+          "br_infernal_cape"
+        ],
+        [
+          "br_lightbearer"
+        ],
+        [
+          "br_magesbook"
+        ],
+        [
+          "br_anguish_necklace"
+        ],
+        [
+          "br_tormented_bracelet"
+        ]
+      ],
+      "upgraded": [
+        [
+          "br_acb",
+          [
+            "br_dragon_bolts_enchanted_opal",
+            100
+          ]
+        ],
+        [
+          "br_ags"
+        ],
+        [
+          "br_dragon_claws"
+        ],
+        [
+          [
+            "br_dragon_knife",
+            1000
+          ]
+        ],
+        [
+          "br_granite_maul"
+        ],
+        [
+          "br_kodai_wand"
+        ],
+        [
+          [
+            "br_morrigans_javelin",
+            1000
+          ]
+        ],
+        [
+          "br_sotd"
+        ],
+        [
+          "br_vestas_longsword"
+        ],
+        [
+          "br_voidwaker"
+        ],
+        [
+          "br_zuriels_staff"
+        ]
+      ]
+    }
+  },
+  "$loot": "Wiki (Chest (Last Man Standing)/Loot table): a bloody key rolls one offensive and one defensive entry, a bloodier key and a crate one upgraded entry (captured: chests give two lines' worth, a crate one). Entries are gameval names, [name, amount] for stacks. Ammo amounts are not on the Wiki: 100 is inferred.",
+  "rank": {
+    "start": 500,
+    "titles": [
+      [
+        1000,
+        "Legend"
+      ],
+      [
+        750,
+        "Master"
+      ],
+      [
+        600,
+        "Veteran"
+      ],
+      [
+        0,
+        "Novice"
+      ]
+    ],
+    "gainUpTo": 9,
+    "gainFrom": 10,
+    "loseFrom": 17
+  },
+  "points": {
+    "places": [
+      [
+        1,
+        6
+      ],
+      [
+        2,
+        5
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        9,
+        3
+      ],
+      [
+        19,
+        1
+      ]
+    ],
+    "kills": [
+      [
+        5,
+        3
+      ],
+      [
+        3,
+        2
+      ]
+    ]
+  },
+  "$points": "Wiki: points by place for a player with a kill (6, 5, 4, 3, 1), plus 2 for 3 kills or 3 for 5 (not both); rank +10-place for 1st-9th, none for 10th-16th, -(place-16) for 17th-24th. Captured: a win from 499 -> 508 and 6 points; 5th with one kill 495 -> 500 and 3 points.",
+  "shop": {
+    "inventory": "skill_guide_strength_shortcuts",
+    "pointsVarp": 261,
+    "winsVarp": 262,
+    "stock": [
+      [
+        "br_deadman_body",
+        160
+      ],
+      [
+        "br_deadman_legs",
+        160
+      ],
+      [
+        "br_deadman_cape",
+        160
+      ],
+      [
+        "trouver_parchment",
+        18
+      ],
+      [
+        "armadyl_halo",
+        450
+      ],
+      [
+        "bandos_halo",
+        450
+      ],
+      [
+        "seren_halo",
+        450
+      ],
+      [
+        "zaros_halo",
+        450
+      ],
+      [
+        "brassica_halo",
+        450
+      ],
+      [
+        "icon_of_guthix",
+        500
+      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      [
+        "swift_blade",
+        350
+      ],
+      [
+        "tablet_wildycrabs",
+        1
+      ],
+      [
+        "bh_imbue_ringofwealth",
+        5
+      ],
+      [
+        "bh_imbue_magicshortbow",
+        5
+      ],
+      [
+        "bh_clue_box",
+        5
+      ],
+      [
+        "granite_maul_upgrade",
+        15
+      ],
+      [
+        "tear_of_saradomin",
+        150
+      ],
+      [
+        "adamant_arrow",
+        1,
+        350
+      ],
+      [
+        "blighted_sack_entangle",
+        1,
+        70
+      ],
+      [
+        "blighted_sack_teleblock",
+        1,
+        50
+      ],
+      [
+        "blighted_sack_vengeance",
+        1,
+        50
+      ],
+      [
+        "barrows_karil_ammo",
+        1,
+        200
+      ],
+      [
+        "blighted_sack_icebarrage",
+        1,
+        30
+      ],
+      [
+        "rune_arrow",
+        3,
+        300
+      ],
+      [
+        "cert_blighted_mantaray",
+        1,
+        15
+      ],
+      [
+        "cert_blighted_anglerfish",
+        1,
+        15
+      ],
+      [
+        "cert_blighted_karambwan",
+        1,
+        12
+      ],
+      [
+        "xbows_crossbow_bolts_runite_tipped_dragonstone_enchanted",
+        3,
+        20
+      ],
+      [
+        "cert_blighted_4dose2restore",
+        1,
+        4
+      ],
+      [
+        "cert_death_climbingboots",
+        1,
+        20
+      ],
+      [
+        "looting_bag",
+        1
+      ],
+      [
+        "promissory_note_lootingbag",
+        1
+      ],
+      [
+        "tablet_paddewa",
+        1,
+        2
+      ],
+      [
+        "tablet_senntisten",
+        1,
+        2
+      ],
+      [
+        "tablet_annakarl",
+        1,
+        2
+      ],
+      [
+        "tablet_carrallangar",
+        1,
+        2
+      ],
+      [
+        "tablet_dareeyak",
+        1,
+        2
+      ],
+      [
+        "tablet_ghorrock",
+        1,
+        2
+      ],
+      [
+        "tablet_kharyll",
+        1,
+        2
+      ],
+      [
+        "tablet_lassar",
+        1,
+        2
+      ],
+      [
+        "tablet_target",
+        1
+      ],
+      [
+        "granite_clamp",
+        25
+      ],
+      [
+        "steam_staff_upgrade_kit",
+        13
+      ],
+      [
+        "lava_staff_upgrade_kit",
+        13
+      ],
+      [
+        "dragon_pickaxe_upgrade_kit",
+        14
+      ],
+      [
+        "ward_upgrade_kit",
+        20
+      ],
+      [
+        "bh_green_paint",
+        25
+      ],
+      [
+        "bh_yellow_paint",
+        25
+      ],
+      [
+        "bh_white_paint",
+        25
+      ],
+      [
+        "bh_blue_paint",
+        25
+      ],
+      [
+        "bh_lava_paint",
+        25
+      ],
+      [
+        "bh_ice_paint",
+        25
+      ],
+      [
+        "crystal_seed_old",
+        12
+      ],
+      [
+        "bh_rune_pouch",
+        75
+      ],
+      [
+        "promissory_note_runepouch",
+        75
+      ],
+      [
+        "bh_vestas_longsword_inactive",
+        300
+      ],
+      [
+        "bh_decorative_emblem_10",
+        100
+      ],
+      [
+        "bounty_teleport_scroll",
+        250
+      ],
+      [
+        "bh_ags_spec",
+        75
+      ],
+      [
+        "bh_bgs_spec",
+        75
+      ],
+      [
+        "bh_sgs_spec",
+        75
+      ],
+      [
+        "bh_zgs_spec",
+        75
+      ]
+    ]
+  },
+  "$shop": "Captured: inventory 422 carries the stock with each slot's price as its count; points on varp 261, wins on varp 262; the confirm button's sub is the slot. A [name, price, set] entry sells in sets ('How many sets of 50 would you like? (0 - 13)'; captured: 1 set of 50 teleblock sacks for 1 point); sets are the Wiki's (Justine's stuff for the Last Shopper Standing). Wiki: tradeable rewards need a win.",
+  "messages": {
+    "introNeeded": "You haven't completed the Last Man Standing introduction, please talk to Lisa before entering a game.",
+    "mode": "Last Man Standing mode: <col=ef1020>{build}</col>",
+    "notStarted": "The game has not started yet!",
+    "roundNotStarted": "The round has not started yet!",
+    "begun": "The fight for survival has begun!",
+    "fogWarning": "Lethal fog will soon fill the island! The safezone is <col=ef1020>{zone}</col>.",
+    "crate": "A magical loot crate has appeared near {zone}!",
+    "frozenPrefix": "",
+    "loot": "You find some loot: {items}",
+    "needKey": "You require a key to claim the loot.",
+    "dead": "Oh dear, you are dead!",
+    "goodEffort": "Good effort!",
+    "valiant": "You must make a more valiant effort for a reward.",
+    "victorious": "You are victorious!",
+    "rankUp": "Your rank has increased!",
+    "rankDown": "Your rank has decreased!",
+    "earned": "You have earned <col=ef1020>{points} point{s}</col>. Total: <col=ef1020>{total}</col>.",
+    "noPoints": "You earned no points. Total: <col=ef1020>{total}</col>.",
+    "tooShort": "You earned no points because you were not in the game for long enough. Total: <col=ef1020>{total}</col>.",
+    "forfeit": "Forfeit - Are you sure?",
+    "nothingToClaim": "You have nothing to claim.",
+    "cofferEmpty": "The coffer is empty.",
+    "cofferEmptyDeposit": "The coffer is empty. You need at least 1,000 coins to make a deposit.",
+    "cofferHas": "You have {amount} coins stored in the coffer.",
+    "cofferHasDeposit": "You have {amount} coins stored in the coffer. You need at least 1,000 coins to make a deposit.",
+    "deposit": "How much do you wish to deposit? ({max})",
+    "withdraw": "How much do you wish to withdraw? ({max} coins)",
+    "needWin": "Before I show you the rewards, I'll grant access to further rewards once you've been the Last Man Standing at least once.",
+    "sets": "How many sets of {set} would you like? (0 - {max})",
+    "howMany": "How many would you like? (0 - {max})",
+    "noRoom": "You don't have enough inventory space.",
+    "tradeableNeedsWin": "You need to win a game of Last Man Standing before you can buy tradeable rewards.",
+    "wizardNeed": "Come on, we need {n} more {mode} participants!",
+    "prayerDisabled": "<col=000080>{prayer}</col> is currently disabled here.",
+    "requirements": "You need a total level of 750 and 30 quest points, or a total level of 1,500, to play {mode} games.",
+    "membersOnly": "You need to be on a members' world to play Competitive games.",
+    "ironman": "Ironmen can't play High Stakes games.",
+    "needFee": "You need 500,000 coins in the coffer to play High Stakes games.",
+    "freeEntry": "Your next High Stakes game is free.",
+    "highStakesClosed": "High Stakes games aren't running at the moment.",
+    "forfeited": "You have forfeited too many games today to play {mode} games.",
+    "claimed": "You claim {amount} coins.",
+    "prize": "{amount} coins have been put into the reward chest for you.",
+    "noRoomCoins": "You don't have enough inventory space to claim your coins.",
+    "useDoor": "Please use the door if you need to leave."
+  },
+  "modes": [
+    {
+      "key": "casual",
+      "name": "Casual",
+      "entrance": "br_casual_entrance",
+      "wizard": "br_wizard_casual",
+      "overlay": "casual",
+      "plane": 1,
+      "insideY": 3639,
+      "outsideY": 3637,
+      "waiting": [
+        3139,
+        3639,
+        3144,
+        3644
+      ],
+      "minPlayers": 4,
+      "maxPlayers": 24,
+      "ranked": false,
+      "menu": "Casual",
+      "shout": "casual"
+    },
+    {
+      "key": "competitive",
+      "name": "Competitive",
+      "entrance": "br_competitive_entrance",
+      "wizard": "br_wizard_competitive",
+      "overlay": "competitive",
+      "plane": 0,
+      "insideY": 3640,
+      "outsideY": 3638,
+      "waiting": [
+        3138,
+        3639,
+        3145,
+        3645
+      ],
+      "minPlayers": 24,
+      "maxPlayers": 24,
+      "ranked": true,
+      "selected": 1,
+      "menu": "Competitive (free entry)",
+      "shout": "competitive"
+    },
+    {
+      "key": "highstakes",
+      "name": "High Stakes",
+      "entrance": "br_highstake_entrance",
+      "wizard": "br_wizard_highstakes",
+      "overlay": "highstakes",
+      "plane": 2,
+      "insideY": 3640,
+      "outsideY": 3638,
+      "waiting": [
+        3138,
+        3639,
+        3145,
+        3645
+      ],
+      "minPlayers": 24,
+      "maxPlayers": 24,
+      "ranked": true,
+      "fee": 500000,
+      "prizes": [
+        7500000,
+        2500000
+      ],
+      "freeEntryPlaces": [
+        3,
+        5
+      ],
+      "menu": "High Stakes (500,000 coins)",
+      "shout": "High Stakes"
+    }
+  ],
+  "$modes": "Captured: Competitive's barrier at y 3639 (in to 3640, out to 3638), varbit br_mode_selected 1, the lobby overlay's '(n/24)'. Cache: Casual's barrier is on plane 1 at y 3638 and High Stakes' on plane 2 at y 3639, each with its own wizard. Wiki: Casual starts with 4 and gives no rewards; High Stakes costs 500,000 from the coffer, pays 7,500,000 and 2,500,000 to the reward chest and a free next game to 3rd-5th. The waiting areas: each room's floor inside its barrier (the collision's flood fill: the row beside the barrier, y 3639, is inside). Inferred: High Stakes' room matches Competitive's.",
+  "requirements": {
+    "totalLevel": 750,
+    "questPoints": 30,
+    "totalLevelAlone": 1500
+  },
+  "$requirements": "Wiki: Competitive and High Stakes need a total level of 750 and 30 quest points, or a total level of 1,500; Competitive only on members' worlds; no High Stakes for Ironmen; three forfeits in a day bar both for the rest of the day.",
+  "forfeitsPerDay": 3,
+  "$messages": "Captured unless listed here. Inferred (no capture, no Wiki quote): requirements, membersOnly, ironman, needFee, freeEntry, highStakesClosed, forfeited, claimed, prize, noRoomCoins, and the casual/high stakes wizard lines."
+}

@@ -16,9 +16,10 @@ const Rotations = require('../plugins/bosses/zulrah/Rotations.Zulrah');
 const Fight = require('../plugins/bosses/zulrah/Fight.Zulrah');
 const Hazards = require('../plugins/bosses/zulrah/Hazards.Zulrah');
 const Shrine = require('../plugins/bosses/zulrah/Shrine.Zulrah');
+const Access = require('../plugins/bosses/zulrah/Access.Zulrah');
 const NpcDrops = require('../plugins/npcs/NpcDrops.plugin');
 
-const hooks = { objects: {}, npcs: {}, prompts: [], custom: {}, attack: [], drops: [], death: [], npcDeath: [] };
+const hooks = { objects: {}, npcs: {}, prompts: [], custom: {}, attack: [], drops: [], death: [], npcDeath: [], emitted: [] };
 let nextIndex = 1;
 
 function fakeNpc(id, x, y) {
@@ -70,6 +71,8 @@ function fakeApi() {
     onItemAction: () => {},
     onNpcDeath: (handler) => hooks.npcDeath.push(handler),
     onCustomEvent: (name, handler) => (hooks.custom[name] ??= []).push(handler),
+    emitCustomEvent: (name, payload) => { hooks.emitted.push([name, payload]); for (const fn of hooks.custom[name] ?? []) fn(payload); },
+    onNpcDialogueCondition: (fn) => { hooks.condition = fn; },
     onNpcHitModify() {},
     onCanAttack: (handler) => hooks.attack.push(handler),
     onPlayerDeathItemDrop: (handler) => hooks.drops.push(handler),
@@ -149,6 +152,7 @@ before(() => {
   RegionManager.init();
   ObjectDefinition.init();
   const api = fakeApi();
+  Access.attach(api);
   Shrine(api);
 });
 
@@ -489,6 +493,7 @@ test('after 50 kills reclaiming costs 100,000 coins; dying elsewhere first loses
 
 test('the boat asks first; Quick-Board goes straight to the shrine', () => {
   const player = fakePlayer();
+  player.setAttribute('zulrah:access', 3);
   hooks.prompts.length = 0;
   Shrine.board({ player });
   assert.equal(hooks.prompts.at(-1).title, "Return to Zulrah's shrine?");
@@ -504,7 +509,7 @@ test('the pier boat and priestess show their full options with the access varbit
   const player = fakePlayer();
   const sender = player.getPacketSender();
   assert.equal(ObjectDefinition.forPlayer(10068, player).getName(), 'Sacrificial boat');
-  sender.sendVarbit(Shared.ACCESS_VARBIT, Shared.ACCESS_VALUE);
+  sender.sendVarbit(Shared.ACCESS_VARBIT, 3);
   assert.deepEqual(ObjectDefinition.forPlayer(10068, player).getInteractions().filter(Boolean), ['Board', 'Quick-Board']);
 });
 
@@ -534,7 +539,7 @@ test('logging in on the shrine with no fight left puts the player back at the pi
 
 test('Zul-Gwenwynig hands held items back on Talk-to; otherwise her transcript plays', () => {
   const player = fakePlayer();
-  assert.equal(Shrine.talkTo({ player }), false, 'falls through to her transcript');
+  assert.equal(Shrine.talkTo({ player }), false, 'nothing held: handed to her transcript (no dialogue plugin here to play it)');
   player.setAttribute(Shared.ATTR.RETRIEVAL, { items: [[4151, 1]], paid: false });
   assert.equal(Shrine.talkTo({ player }), true);
   assert.equal(player.statements.length, 1);
@@ -553,4 +558,108 @@ test('Zulrah rolls its table twice a kill, and its scales always', () => {
     if (drops.length >= 3) twoRolls++;
   }
   assert.ok(twoRolls > 180, `two main-table drops on most kills (${twoRolls}/200)`);
+});
+
+// ------------------------------------------------------------------ access (rsprox 234/03276)
+
+const named = (name) => ({ getName: () => name });
+/** A line as NpcDialogues emits it while building the chain; `before` runs when its page is reached. */
+const line = (player, speaker, text) => {
+  const request = { player, definition: named(speaker), text };
+  for (const fn of hooks.custom['npc-dialogue:line'] ?? []) fn(request);
+  request.before?.();
+  return request;
+};
+const choose = (player, speaker, option) => { for (const fn of hooks.custom['npc-dialogue:choice'] ?? []) fn({ player, definition: named(speaker), option }); };
+
+test("access starts at 0: the boat is refused with the priestess's own transcript, and the varbit is 0", () => {
+  const player = fakePlayer();
+  hooks.emitted.length = 0;
+  assert.equal(Shrine.board({ player }), true);
+  const start = hooks.emitted.find(([name]) => name === 'npc-dialogue:start');
+  assert.ok(start, 'her transcript plays');
+  assert.equal(start[1].variant, Access.VARIANT.priestess.board);
+  assert.equal(Fight.fightOf(player) ?? null, null, 'not rowed out');
+  assert.equal(Access.stageOf(player), 0);
+});
+
+test("the recorded lines move the stage: told 1, accepted 2, and the ritual's last line rows the player out (3)", () => {
+  const player = fakePlayer();
+  assert.equal(Access.chooseVariant({ player, definition: named('High Priestess Zul-Harcinqa') }), Access.VARIANT.highPriestess.first, 'first meeting: the recorded opening');
+  line(player, 'High Priestess Zul-Harcinqa', 'All he asks in return is a periodic sacrifice at his sacred shrine.');
+  assert.equal(Access.stageOf(player), 1);
+  assert.equal(Access.chooseVariant({ player, definition: named('High Priestess Zul-Harcinqa') }), Access.VARIANT.highPriestess.before);
+  line(player, 'High Priestess Zul-Harcinqa', '... and I accept. You shall be our next sacrifice. Board the boat when you are ready.');
+  assert.equal(Access.stageOf(player), 2);
+  assert.equal(Access.chooseVariant({ player, definition: named('High Priestess Zul-Harcinqa') }), Access.VARIANT.highPriestess.accepted);
+  assert.equal(Access.chooseVariant({ player, definition: named('Priestess Zul-Gwenwynig') }), Access.VARIANT.priestess.accepted);
+  line(player, 'Priestess Zul-Gwenwynig', "I shall now transport you to Zulrah's shrine and offer your life on behalf of our tribe.");
+  assert.equal(Access.stageOf(player), 3);
+  player.dialogueActive = true;
+  ticks(6);
+  assert.equal(Fight.fightOf(player) ?? null, null, 'not while her last line is still showing');
+  player.dialogueActive = false;
+  ticks(6);
+  const fight = Fight.fightOf(player);
+  assert.ok(fight, 'rowed out to the shrine once it is read');
+  fight.end();
+  assert.equal(Access.chooseVariant({ player, definition: named('High Priestess Zul-Harcinqa') }), Access.VARIANT.highPriestess.after);
+});
+
+test("a player who has killed Zulrah is past it; the High Priestess's kill and shrine branches answer from the save", () => {
+  const player = fakePlayer();
+  player.setAttribute(Shared.ATTR.KILLS, 4);
+  assert.equal(Access.stageOf(player), 3);
+  assert.equal(hooks.condition({ player, definition: named('High Priestess Zul-Harcinqa'), text: 'If the player has killed Zulrah:' }), true);
+  const visited = fakePlayer();
+  visited.setAttribute('zulrah:access', 3);
+  assert.equal(hooks.condition({ player: visited, definition: named('High Priestess Zul-Harcinqa'), text: 'If the player has visited the shrine but not killed Zulrah:' }), true);
+  assert.equal(hooks.condition({ player: visited, definition: named('High Priestess Zul-Harcinqa'), text: 'If the player has killed Zulrah:' }), false);
+});
+
+test('choosing "Tell me about Zulrah." is told (varbit 1) even where the transcript skips the story', () => {
+  const player = fakePlayer();
+  for (const fn of hooks.custom['npc-dialogue:choice'] ?? []) fn({ player, definition: named('High Priestess Zul-Harcinqa'), option: 'Tell me about Zulrah.' });
+  assert.equal(Access.stageOf(player), 1);
+  assert.equal(Access.chooseVariant({ player, definition: named('High Priestess Zul-Harcinqa') }), Access.VARIANT.highPriestess.before);
+});
+
+test("a stage line moves the player on only once its page is reached, not when the dialogue is built", () => {
+  const player = fakePlayer();
+  player.setAttribute('zulrah:access', 2);
+  const request = { player, definition: named('Priestess Zul-Gwenwynig'), text: "I shall now transport you to Zulrah's shrine and offer your life on behalf of our tribe." };
+  for (const fn of hooks.custom['npc-dialogue:line'] ?? []) fn(request);
+  assert.equal(Access.stageOf(player), 2, 'not yet: the page is only built');
+  assert.equal(typeof request.before, 'function');
+  request.before();
+  assert.equal(Access.stageOf(player), 3);
+  ticks(6);
+  Fight.fightOf(player)?.end();
+});
+
+test("stage 3: \"I've been there, but I left.\" then \"Yes.\" rows the player out; Yes elsewhere doesn't", () => {
+  const player = fakePlayer();
+  player.setAttribute('zulrah:access', 3);
+  choose(player, 'Priestess Zul-Gwenwynig', 'Yes.');
+  ticks(6);
+  assert.equal(Fight.fightOf(player) ?? null, null, 'a Yes on its own is not this menu');
+  choose(player, 'Priestess Zul-Gwenwynig', "I've been there, but I left.");
+  choose(player, 'Priestess Zul-Gwenwynig', 'Yes.');
+  player.dialogueActive = false;
+  ticks(6);
+  const fight = Fight.fightOf(player);
+  assert.ok(fight, 'rowed back out');
+  fight.end();
+});
+
+test('past the High Priestess: held retrieval items or a login on the shrine; with a kill the priestess plays her default', () => {
+  const holding = fakePlayer();
+  holding.setAttribute(Shared.ATTR.RETRIEVAL, { items: [[4151, 1]] });
+  assert.equal(Access.stageOf(holding), 3);
+  const killer = fakePlayer();
+  killer.setAttribute(Shared.ATTR.KILLS, 1);
+  assert.equal(Access.chooseVariant({ player: killer, definition: named('Priestess Zul-Gwenwynig') }), Access.VARIANT.priestess.killed);
+  const visited = fakePlayer();
+  visited.setAttribute('zulrah:access', 3);
+  assert.equal(Access.chooseVariant({ player: visited, definition: named('Priestess Zul-Gwenwynig') }), Access.VARIANT.priestess.after);
 });

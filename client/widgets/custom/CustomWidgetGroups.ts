@@ -12,7 +12,9 @@ export function loadCustomWidgetGroup(groupId: number): WidgetGroupLoadResult | 
     // Check dynamically loaded widgets (from GAMEMODE_DATA)
     const dynamic = getDynamicWidgetGroup(groupId);
     if (dynamic) {
-        return dynamic as WidgetGroupLoadResult;
+        // A copy: the loaded widgets change while open, and a reopened group starts again
+        // from its definition, as a cache group does from the cache.
+        return structuredClone(dynamic) as WidgetGroupLoadResult;
     }
     return undefined;
 }

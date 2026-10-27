@@ -22,6 +22,20 @@ const TELEPORT_TICK = 3;
 const KNEEL_TICK = 4;
 const REFILL_TICK = 5;
 const REFILL_SOUND = 1132;
+const POUR_SOUND_RADIUS = 5;
+const REFILL_ANIMATION_DELAY = 10;
+const REFILL_SOUND_DELAY = 30;
+const refilling = new WeakSet();
+
+/** The Wiki's refill immunity applies at impact, after attackers have earned their XP. */
+function protectRefill({ player, hit }) {
+  if (refilling.has(player)) hit.setTotalDamage(0);
+}
+
+/** Direct hits, including an existing poison/venom pulse, use the final damage boundary. */
+function protectDirectDamage({ target, hit }) {
+  if (refilling.has(target)) hit.setDamage(0);
+}
 
 function landing() {
   const x = LANDING_XS[Math.floor(Math.random() * LANDING_XS.length)];
@@ -29,11 +43,12 @@ function landing() {
 }
 
 /** Face the Ectofuntus and kneel; the refill follows a tick later. */
-function kneel(player) {
+function kneel(player, automatic = false) {
   const { core } = Common;
   player.setPositionToFace(new core.Location(FACE_TILE[0], FACE_TILE[1], 0));
-  Common.animate(player, "human_pickupfloor");
-  Common.sound(player, REFILL_SOUND);
+  player.performAnimation(new core.Animation(Common.gameval("seq", "human_pickupfloor"),
+    automatic ? REFILL_ANIMATION_DELAY : 0));
+  player.getPacketSender().sendSound(REFILL_SOUND, 1, automatic ? REFILL_SOUND_DELAY : 0);
 }
 
 function refill(player) {
@@ -53,8 +68,11 @@ function empty({ player, slot }) {
   inventory.setItem(slot, new core.Item(core.ItemIdentifiers.ECTOPHIAL_2, 1)).refreshItems();
   const movement = player.getMovementQueue();
   movement.setBlockMovement(true).reset();
+  player.getPacketSender().sendVarbit(Common.gameval("varbit", "busy"), 1);
   Common.animate(player, "ahoy_ecto_teleport");
   player.performGraphic(new core.Graphic(Common.gameval("spotanim", "ectophial_pour_spotanim")));
+  const at = player.getLocation();
+  core.Sounds.playAreaSound({ soundId: core.Sound.DRINK.getId(), x: at.getX(), y: at.getY(), level: at.getZ(), radius: POUR_SOUND_RADIUS });
   Common.spam(player, "You empty the ectoplasm onto the ground around your feet...");
   let tick = 0;
   // Keyed to the player object, not their index, so a walk or click doesn't cancel it.
@@ -67,18 +85,21 @@ function empty({ player, slot }) {
         return;
       }
       if (tick === TELEPORT_TICK) {
+        refilling.add(player);
         player.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
         player.moveTo(destination);
         Common.spam(player, "...and the world changes around you.");
       } else if (tick === KNEEL_TICK) {
-        kneel(player);
+        kneel(player, true);
       } else if (tick === REFILL_TICK) {
         refill(player);
         this.stop();
       }
     }
     stop() {
+      refilling.delete(player);
       movement.setBlockMovement(false);
+      player.getPacketSender().sendVarbit(Common.gameval("varbit", "busy"), 0);
       super.stop();
     }
   })());
@@ -99,4 +120,6 @@ function refillAtEctofuntus({ player, itemId }) {
 module.exports = function attachEctophial(api) {
   api.onItemAction("Ectophial", { Empty: empty });
   api.onItemOnObject("Ectophial", "Ectofuntus", refillAtEctofuntus);
+  api.onPlayerHitModify(protectRefill);
+  api.onCustomEvent("combat:damage-apply", protectDirectDamage);
 };

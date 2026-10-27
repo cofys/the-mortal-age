@@ -32,6 +32,11 @@ checks the names still match the cache. A bare item name (`EMERALD_AMULET`) is a
 its bank placeholder and noted copy get numbered names, so check the definition before using a
 `_2`-style constant.
 
+For readable CS2 and interface dumps matching `osrs-241_2026-10-20`, use the
+[pinned osrs-dumps reference](sources.md#pinned-cache-research-reference). Keep its
+full commit SHA in citations and verify findings with the active cache dump commands
+above; recheck the pin whenever `server/target.txt` changes.
+
 ## Gamevals
 
 The OSRS cache carries Jagex's own names for its ids in index 24 (one archive per kind: objs,

@@ -76,7 +76,7 @@
 - **Announcements:** every participant sees each drop: "<col=005f00>{name} received a drop: {2 x }{item}</col> <col=106f10>(Revenant maledictus)</col>".
 
 **Amulet of avarice and Forinthry surge** (`Avarice.Revenants.js`, Wiki):
-- **Amulet:** +20% accuracy and damage against revenants in the caves, and the wearer stays skulled.
+- **Amulet:** +20% accuracy and damage against revenants in the caves. Worn anywhere, it keeps the wearer skulled until 20 minutes after it comes off ([Skulling](skulling.md)).
 - **Forinthry surge:** the top damage dealer, if wearing the amulet, gets 15% more for 30 minutes. Applied one after the other (**ours**; the Wiki doesn't say how they combine).
 - **Our wording:** "You are empowered by the Forinthry surge."
 - **Missing:** the surge's own skull icon.

@@ -1,0 +1,7 @@
+# Explorer’s ring daily allowances
+
+The user authorized completing the Clues, achievements & collections section with isolated reviewed PRs. Before adding the missing free alchemy, correct its shared prerequisite: the ring’s limited energy and alchemy allowances replenish on login after midnight, not while an account stays logged in. This behavior is explicit on the current Explorer’s ring4 Wiki page; the existing shared daily counter resets on every read and can be reset by another diary reward.
+
+Keep this PR separate from the alchemy interface/casting feature. Introduce a ring-owned persisted daily record for energy/alchemy counts, migrating existing shared diary-rewards:daily counts without restoring spent allowances. Existing ring items/upgrades share the same record. Reset only through login when the date changed, resend both native counter varbits including zero, and request saves after changes. Other diary rewards keep their current reset policy. Reuse existing restore/Check paths and named cache IDs; no generated data or Claude-owned modules.
+
+Use real Player/Inventory/PacketSender/PlayerSave with all plugins, a controlled Date clock and native item hooks. Reproduce remaining-online midnight restoration, another diary reward resetting the shared record, relog restoration, same-day relog, upgrades, legacy migration and save/load. Build/full suite, own MCP walkthrough and independent Codex review precede a separate ready PR. Free alchemy implementation follows on its own branch.

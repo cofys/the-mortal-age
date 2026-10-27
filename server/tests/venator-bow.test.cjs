@@ -67,6 +67,7 @@ class PendingHit {
     }
 }
 VenatorBow.register({
+    emitCustomEvent: () => {},
     core: {
         Equipment,
         ItemIdentifiers,

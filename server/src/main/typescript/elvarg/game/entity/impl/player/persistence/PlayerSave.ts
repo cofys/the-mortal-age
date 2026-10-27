@@ -659,7 +659,8 @@ export class PlayerSave {
             }
             let bankItems = this.banks.get(i);
             if (bankItems != null) {
-                player.setBank(i, new Bank(player)).getBank(i).addItems(bankItems, false);
+                // A save holding more than the player's space still loads whole.
+                Bank.withoutLimit(player, () => player.setBank(i, new Bank(player)).getBank(i).addItems(bankItems, false));
             }
         }
     }

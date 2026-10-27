@@ -13,6 +13,7 @@ const CrystalHalberd = require("../plugins/items/CrystalHalberd.plugin");
 let cycle = 1;
 const itemActions = new Map();
 CrystalHalberd.attach({
+  emitCustomEvent() {},
   core: {
     Equipment,
     ItemIds,

@@ -48,6 +48,14 @@ function inventory(contents) {
   const slots = Array(28).fill(null);
   contents.forEach(([name, amount = 1], index) => { slots[index] = new core.Item(obj(name), amount); });
   const self = {
+    getFreeSlots: () => slots.filter((item) => !item).length,
+    getAddableAmount(item) {
+      const held = self.getAmount(item.getId());
+      return held > 0 && core.ItemDefinition.forId(item.getId()).isStackable()
+        ? Math.min(item.getAmount(), 2 ** 31 - 1 - held)
+        : self.getFreeSlots() > 0 ? item.getAmount() : 0;
+    },
+    full() { return self; },
     getItems: () => slots.map((item) => item ?? new core.Item(-1, 0)),
     getAmount: (id) => slots.filter((item) => item?.getId() === id).reduce((sum, item) => sum + item.getAmount(), 0),
     setItem(slot, item) { slots[slot] = item; return self; },
@@ -82,9 +90,11 @@ function player(contents, level = 99) {
     sendCreationMenu(menu) { sent.menu = menu; return sender; },
     sendTypedMessage(type, text) { sent.spam.push(text); return sender; },
     sendSound(id) { sent.sounds.push(id); return sender; },
+    sendEnterAmountPrompt(title) { sent.amountPrompt = title; return sender; },
   }, { get: (target, key) => key in target ? target[key] : () => sender });
   return {
     sent, inv,
+    setEnteredAmountAction(action) { sent.amountAction = action; },
     getInventory: () => inv,
     getPacketSender: () => sender,
     getSkillManager: () => ({
@@ -391,11 +401,113 @@ test("lava scales grind into 3 to 6 shards, half as many again with the hard Wil
   assert.ok([4, 6, 7, 9].includes(diary.inv.count("lava_shard")));
 });
 
-test("a stack of crystal shards is crushed at once, ten dust each", () => {
-  const who = player([["pestle_and_mortar"], ["prif_crystal_shard", 3]]);
-  use(who, "pestle_and_mortar", "prif_crystal_shard");
-  assert.equal(who.inv.count("prif_crystal_shard_crushed"), 30);
+test("crystal shards wait for a quantity, then crush only that many immediately", () => {
+  const who = player([["pestle_and_mortar"], ["prif_crystal_shard", 5]]);
+  assert.equal(use(who, "pestle_and_mortar", "prif_crystal_shard"), true);
+  assert.equal(who.sent.amountPrompt, "How many shards would you like to crush? (0 - 5)");
+  assert.equal(who.inv.count("prif_crystal_shard"), 5);
+  assert.equal(who.inv.count("prif_crystal_shard_crushed"), 0);
+  assert.deepEqual(who.sent.animations, []);
+  assert.deepEqual(who.sent.sounds, []);
+  assert.deepEqual(who.sent.spam, []);
+  who.sent.amountAction.execute(2);
+  assert.equal(who.inv.count("prif_crystal_shard"), 3);
+  assert.equal(who.inv.count("prif_crystal_shard_crushed"), 20);
+  assert.deepEqual(who.sent.spam, ["You crush some of your crystal shards down to a powdery form."]);
+  assert.deepEqual(who.sent.animations, [core.CacheDefinitions.getSeqId("human_herbing_grind")]);
+  assert.deepEqual(who.sent.sounds, [2608]);
+  ticks(10);
+  assert.equal(who.inv.count("prif_crystal_shard"), 3, "no auto-repeat after a quantity selection");
+  assert.equal(who.sent.xp, 0);
+});
+
+test("crystal grinding accepts reverse use and caps the quantity to the held stack", () => {
+  const who = player([["pestle_and_mortar"], ["prif_crystal_shard", 5]]);
+  use(who, "prif_crystal_shard", "pestle_and_mortar");
+  who.sent.amountAction.execute(50);
+  assert.equal(who.inv.count("prif_crystal_shard_crushed"), 50);
   assert.equal(who.inv.count("prif_crystal_shard"), 0);
+  assert.deepEqual(who.sent.spam, ["You crush your crystal shards down to a powdery form."]);
+});
+
+test("zero or invalid crystal quantities preserve the shards", () => {
+  for (const amount of [0, -1, NaN, Infinity, 1.5]) {
+    const who = player([["pestle_and_mortar"], ["prif_crystal_shard", 5]]);
+    use(who, "pestle_and_mortar", "prif_crystal_shard");
+    who.sent.amountAction.execute(amount);
+    assert.equal(who.inv.count("prif_crystal_shard"), 5);
+    assert.equal(who.inv.count("prif_crystal_shard_crushed"), 0);
+  }
+});
+
+test("crystal quantity callbacks recheck supplies before spending anything", () => {
+  for (const removed of ["pestle_and_mortar", "prif_crystal_shard"]) {
+    const who = player([["pestle_and_mortar"], ["prif_crystal_shard", 5]]);
+    use(who, "pestle_and_mortar", "prif_crystal_shard");
+    who.inv.deleteNumber(obj(removed), 5);
+    who.sent.amountAction.execute(2);
+    assert.equal(who.inv.count("prif_crystal_shard_crushed"), 0);
+  }
+});
+
+test("nihil shards grind one at a time: at once, two ticks later, then every three", () => {
+  const who = player([["pestle_and_mortar"], ["nihil_shard", 4]]);
+  use(who, "pestle_and_mortar", "nihil_shard");
+  assert.equal(who.inv.count("nihil_dust"), 1);
+  assert.equal(who.inv.count("nihil_shard"), 3);
+  ticks(2);
+  assert.equal(who.inv.count("nihil_dust"), 1);
+  ticks(1);
+  assert.equal(who.inv.count("nihil_dust"), 2);
+  ticks(2);
+  assert.equal(who.inv.count("nihil_dust"), 2);
+  ticks(1);
+  assert.equal(who.inv.count("nihil_dust"), 3);
+  core.TaskManager.cancelTasks(who.getIndex());
+  ticks(6);
+  assert.equal(who.inv.count("nihil_shard"), 1);
+  assert.equal(who.sent.xp, 0);
+});
+
+test("partial stack grinding preserves ingredients when a full inventory cannot accept the dust", () => {
+  for (const ingredient of ["prif_crystal_shard", "nihil_shard"]) {
+    const who = player([["pestle_and_mortar"], [ingredient, 5], ...Array(26).fill(["unicorn_horn"])]);
+    use(who, "pestle_and_mortar", ingredient);
+    if (ingredient === "prif_crystal_shard") who.sent.amountAction.execute(2);
+    assert.equal(who.inv.count(ingredient), 5);
+    assert.deepEqual(who.sent.animations, []);
+    ticks(6);
+    assert.equal(who.inv.count(ingredient), 5);
+  }
+});
+
+test("crystal grinding can reuse the consumed shard slot or an existing dust stack in a full inventory", () => {
+  for (const existingDust of [false, true]) {
+    const contents = [["pestle_and_mortar"], ["prif_crystal_shard", 5], ...Array(existingDust ? 25 : 26).fill(["unicorn_horn"])];
+    if (existingDust) contents.push(["prif_crystal_shard_crushed", 10]);
+    const who = player(contents);
+    use(who, "pestle_and_mortar", "prif_crystal_shard");
+    who.sent.amountAction.execute(existingDust ? 2 : 5);
+    assert.equal(who.inv.count("prif_crystal_shard_crushed"), existingDust ? 30 : 50);
+    assert.equal(who.inv.count("prif_crystal_shard"), existingDust ? 3 : 0);
+  }
+});
+
+test("grinding does not spend shards when the dust would overflow its stack", () => {
+  const who = player([["pestle_and_mortar"], ["prif_crystal_shard", 5], ["prif_crystal_shard_crushed", 2 ** 31 - 6]]);
+  use(who, "pestle_and_mortar", "prif_crystal_shard");
+  who.sent.amountAction.execute(2);
+  assert.equal(who.inv.count("prif_crystal_shard"), 5);
+  assert.equal(who.inv.count("prif_crystal_shard_crushed"), 2 ** 31 - 6);
+});
+
+test("nihil auto-grinding stops when the pestle is removed", () => {
+  const who = player([["pestle_and_mortar"], ["nihil_shard", 4]]);
+  use(who, "pestle_and_mortar", "nihil_shard");
+  who.inv.deleteNumber(obj("pestle_and_mortar"), 1);
+  ticks(10);
+  assert.equal(who.inv.count("nihil_dust"), 1);
+  assert.equal(who.inv.count("nihil_shard"), 3);
 });
 
 test("a pestle and mortar on anything else is left to other plugins", () => {

@@ -9,6 +9,7 @@ import {
 } from "../Cs2ArrayObject";
 import { Opcodes } from "../Opcodes";
 import { javaRandom } from "../JavaRandom";
+import { getEnumOverride } from "../../../common/gamemode/GamemodeContentStore";
 import type { HandlerMap } from "./HandlerTypes";
 
 export function registerVarOps(handlers: HandlerMap): void {
@@ -223,7 +224,8 @@ export function registerVarOps(handlers: HandlerMap): void {
     handlers.set(Opcodes.ENUM_GETINPUTS, (ctx) => {
         const enumId = ctx.intStack[--ctx.intStackSize];
         const inputType = ctx.intStack[--ctx.intStackSize];
-        const keys = ctx.enumTypeLoader?.load(enumId)?.keys ?? [];
+        // A server-sent enum (GamemodeContentStore) stands in for the cache's here too.
+        const keys = getEnumOverride(enumId)?.keys ?? ctx.enumTypeLoader?.load(enumId)?.keys ?? [];
         const array = createTypedArrayFromCode(inputType, keys.length);
         keys.forEach((key, index) => array.setAt(index, key));
         ctx.pushString(array);

@@ -43,8 +43,23 @@ function smithsUniformChance(player) {
   return pieces === 4 ? 1 : pieces * 0.2;
 }
 
+/** The Smithing level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
 function smithingLevel(player) {
-  return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING);
+  const request = { player, skill: Core.Skill.SMITHING, boost: 0 };
+  Core.api.emitCustomEvent("skills:level-boost", request);
+  return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING) + Math.max(0, request.boost | 0);
+}
+
+/** How many items one cycle of a make-X loop makes ("skills:actions-per-cycle", a league relic's all at once); 1 unless content says more. */
+function actionsPerCycle(player, skill, kind) {
+  const request = { player, skill, kind, actions: 1 };
+  Core.api.emitCustomEvent("skills:actions-per-cycle", request);
+  return Math.max(1, request.actions | 0);
+}
+
+/** A product made, with its amount and XP ("skills:produced", for content that adds to it: a league relic's extra product). */
+function produced(player, skill, itemId, amount, xp) {
+  Core.api.emitCustomEvent("skills:produced", { player, skill, itemId, amount, xp });
 }
 
 function required(kind, name, id) {
@@ -75,4 +90,4 @@ function hammering() {
   return animation("human_smithing");
 }
 
-module.exports = { messageBox, itemBox, hasHammer, smithsUniformChance, smithingLevel, obj, varbit, varp, animation, hammering };
+module.exports = { messageBox, itemBox, hasHammer, smithsUniformChance, smithingLevel, actionsPerCycle, produced, obj, varbit, varp, animation, hammering };

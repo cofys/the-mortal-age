@@ -287,7 +287,9 @@ class Game {
     sender.sendSong?.(data.music.lobby);
     if (!result) return;
     const first = Common.getVarp(player, "zeal") === 0;
-    const zeal = this.zealFor(player, result);
+    const award = { player, minigame: "soul-wars", points: this.zealFor(player, result) };
+    Common.api.emitCustomEvent("minigame:points", award);
+    const zeal = award.points;
     Common.addVarp(player, "zeal", zeal);
     const tokens = Common.addVarp(player, "zeal_tokens", zeal);
     if (result === "win") Common.addVarp(player, "total_wins", 1);

@@ -151,7 +151,11 @@ function levelCheck(player, npcId, text) {
 
 /** Members' world (this server runs members content) and level parts, ANDed. */
 function genericCondition(player, npcId, text) {
-  if (/adventure paths/i.test(text)) return /does not have/i.test(text);
+  if (/adventure paths/i.test(text)) {
+    const query = { player, active: false };
+    pluginApi.emitCustomEvent('adventure-paths:state', query);
+    return /does not have/i.test(text) ? !query.active : query.active;
+  }
   const world = /non-members|free-to-play|f2p/i.test(text) ? false : /member/i.test(text) ? true : null;
   const level = levelCheck(player, npcId, text);
   if (world === null && level === null) return null;

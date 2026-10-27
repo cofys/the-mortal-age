@@ -7,20 +7,20 @@ let api;
 let FightCaveArea = null;
 const sessions = new WeakMap();
 const CombatAchievements = require("./tzhaar/CombatAchievements.TzhaarFightCaves");
+const Resurrection = require("./tzhaar/Resurrection.TzhaarFightCaves");
 
 const ATTR_WAVE = "tzhaar:fight-cave-wave";
 const ATTR_ROTATION = "tzhaar:fight-cave-rotation";
-const ATTR_LEFT_AT = "tzhaar:fight-cave-left-at";
 const WAVE_MESSAGE_COLOUR = "ef1020";
 const FINAL_WAVE = 63;
 const WAVE_DELAY_TICKS = 6;
 const EXIT_DELAY_TICKS = 8;
-const REENTRY_MS = 3 * 60 * 1000;
 const JAD_KILL_BONUS = 4000;
 const HEALER_HEAL = 5;
 const HEALER_HEAL_TICKS = 4;
 const HEALER_COMBAT_REACH = 4;
 const HEAL_GRAPHIC = 444; // TZHAAR_HEAL
+const TZREK_JAD = /^TzRek-Jad$/;
 const LOGOUT_PAUSED = "Your logout request has been received. The minigame will be paused at the end of this wave. "
   + "If you try to log out before that, you will have to repeat this wave.";
 
@@ -225,6 +225,13 @@ function processRun({ player }) {
   if (session.nextWaveAt !== -1 && cycle >= session.nextWaveAt) spawnWave(player, session);
 }
 
+// The Elite Karamja Diary doubles it (Wiki: Karamja Diary).
+function tokkulFor(player, amount) {
+  const request = { player, amount };
+  api.emitCustomEvent("diary:tokkul", request);
+  return request.amount;
+}
+
 // Ends the run outside the cave. Tokkul is N(N+1) for N waves cleared, plus 4,000 for Jad.
 function finishRun(player, wavesCleared, wonJad) {
   const { ItemIdentifiers: Items } = core;
@@ -240,8 +247,10 @@ function finishRun(player, wavesCleared, wonJad) {
   }
   player.getCombat().reset();
   player.moveTo(tile(EXIT));
+  // Leaving a run in any way clears a TzTok-Jad Slayer task (Wiki: TzHaar Fight Cave, 13 August 2015).
+  api.emitCustomEvent("slayer:leave-task-area", { player, npcId: core.NpcIdentifiers.TZTOK_JAD, message: "the fight cave" });
   CombatAchievements.finish(player, wonJad);
-  give(player, Items.TOKKUL, wavesCleared * (wavesCleared + 1) + (wonJad ? JAD_KILL_BONUS : 0));
+  give(player, Items.TOKKUL, tokkulFor(player, wavesCleared * (wavesCleared + 1) + (wonJad ? JAD_KILL_BONUS : 0)));
   if (wonJad) {
     give(player, Items.FIRE_CAPE, 1);
     api.emitCustomEvent("collection-log:obtain", { player, itemId: Items.FIRE_CAPE, amount: 1 });
@@ -264,14 +273,6 @@ function rescueGroundItems(player, area) {
 }
 
 function enterCave({ player }) {
-  const leftAt = Number(player.getAttribute(ATTR_LEFT_AT) ?? 0);
-  const waitMs = leftAt + REENTRY_MS - Date.now();
-  if (waitMs > 0) {
-    const minutes = Math.ceil(waitMs / 60000);
-    const wait = minutes > 1 ? `${minutes} minutes` : waitMs > 30000 ? "a minute or so" : "a bit";
-    say(player, `Hey, JalYt, you were in cave only a moment ago. You wait ${wait} before going in again.`);
-    return true;
-  }
   startRun(player, 1, core.Misc.getRandom(SPAWN_CYCLE.length - 1), ENTRY);
   say(player, "You're on your own now JalYt, prepare to fight for your life!");
   return true;
@@ -279,7 +280,6 @@ function enterCave({ player }) {
 
 function leaveCave({ player }) {
   const session = sessions.get(player);
-  player.setAttribute(ATTR_LEFT_AT, Date.now());
   finishRun(player, session ? session.wave - 1 : 0, false);
   return true;
 }
@@ -291,6 +291,18 @@ function caveDeath(event) {
   // Falling to a healer after Jad is already down still counts as the win.
   if (session.exitAt !== -1) finishRun(event.player, FINAL_WAVE, true);
   else finishRun(event.player, session.wave - 1, false);
+}
+
+// The TzRek-Jad pet is 1/100 from a Jad killed on a Slayer task, 1/200 otherwise (Wiki: TzTok-Jad).
+function jadPetChance({ player, npc, rules }) {
+  if (npc?.getId?.() !== core.NpcIdentifiers.TZTOK_JAD || !Array.isArray(rules)) return;
+  const request = { player, npc, onTask: false };
+  api.emitCustomEvent("slayer:on-task", request);
+  if (request.onTask) rules.push({ pattern: TZREK_JAD, multiplier: 2 });
+}
+
+function inRun(player) {
+  return sessions.has(player);
 }
 
 function keepItemsInCave(event) {
@@ -347,9 +359,9 @@ module.exports = {
     core = pluginApi.core;
     require("./tzhaar/Monsters.TzhaarFightCaves")(pluginApi);
     CombatAchievements(pluginApi);
+    Resurrection(pluginApi, { inRun });
     pluginApi.persistAttribute(ATTR_WAVE, null);
     pluginApi.persistAttribute(ATTR_ROTATION, null);
-    pluginApi.persistAttribute(ATTR_LEFT_AT);
     pluginApi.onObjectFirstClick(core.ObjectIdentifiers.CAVE_ENTRANCE_44, enterCave);
     pluginApi.onObjectFirstClick(core.ObjectIdentifiers.CAVE_ENTRANCE_45, leaveCave);
     pluginApi.onObjectSecondClick(core.ObjectIdentifiers.CAVE_ENTRANCE_45, leaveCave);
@@ -359,6 +371,7 @@ module.exports = {
     pluginApi.onShouldDropItemsOnDeath(keepItemsInCave);
     pluginApi.onCanTeleport(noTeleportOut);
     pluginApi.onCanLogout(holdLogout);
+    pluginApi.onCustomEvent("npc-drops:tertiary-chance", jadPetChance);
   },
   waveMonsters,
 };

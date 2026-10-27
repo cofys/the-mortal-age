@@ -1,4 +1,5 @@
 let core;
+let pluginApi;
 const methods = new Map();
 const uncappedDamage = new WeakMap();
 
@@ -426,8 +427,12 @@ function rangedAmmoHandlerDecrementAmmo(player, pos, amount) {
     player.getCombat().reset();
     return true;
   }
+  // Content may keep some shots from costing a scale (a league relic), as core asks for quiver ammunition.
+  const saving = { player, itemId: blowpipeItem.getId(), amount, saved: 0 };
+  pluginApi.emitCustomEvent("ranged:ammo-saving", saving);
+  const scales = amount - Math.min(amount, Math.max(0, saving.saved | 0));
   let depleted = false;
-  for (let i = 0; i < amount; i++) {
+  for (let i = 0; i < scales; i++) {
     if (BlowpipeState.consumeScale(blowpipeItem) <= 0) {
       depleted = true;
       break;
@@ -527,6 +532,7 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
+    pluginApi = api;
     api.onCombatHitDamage(rememberDamage);
     api.registerRangedAmmoResolver({ resolve: rangedAmmoResolverResolve });
     api.registerRangedAmmoHandler({ checkAmmo: rangedAmmoHandlerCheckAmmo, decrementAmmo: rangedAmmoHandlerDecrementAmmo });

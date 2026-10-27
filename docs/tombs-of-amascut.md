@@ -20,6 +20,7 @@ The whole raid, from the Jaltevas pyramid lobby to Osmumten's burial chamber. It
 | `Apmeken.*`, `BaBa.*` | Path of Apmeken: Apmeken's Sight and Ba-Ba. |
 | `Wardens.*`, `WardensData.TombsOfAmascut.js` | The Wardens: obelisk and core phases (WARDENS_P1) and the final phase (WARDENS_P3). |
 | `Rewards.*`, `Loot.TombsOfAmascut.js` | The burial chamber, loot rolls, the loot interface (771) and the lobby retrieval chest. |
+| `Summary.*` | The burial chamber's scoreboard: this raid's summary (`toa_raid_summary`, 482). |
 | `Items.*` | Masori fortifying, Armadyl to Armadylean plates, Elidinis' ward (f), Thread of Elidinis and keris jewels. |
 
 Tumeken's shadow is a weapon used everywhere, so it lives in `plugins/items/TumekensShadow.plugin.js` ([tumekens-shadow.md](tumekens-shadow.md)). The raid only answers its `toa:in-tombs` question (`Raid.*`), for the passive's ×4.
@@ -174,6 +175,7 @@ The first version was written without access to the Wiki or the cache, so it fol
   - How OSRS hands the item over isn't known, so the unique then joins the finder's loot in the reward interface (771). The opened sarcophagus's Search reopens it.
   - An unopened sarcophagus's unique is kept (persisted) and comes out of the lobby chest.
 - **The vault's chests:** each party slot has its own chest (`TOA_VAULT_CHEST_LOC0`–`7`, varbits 14356–14360 and 14370–14372). A player sees their own chest as theirs (2) or emptied (4), and the others as someone else's; another player's chest won't open for them.
+- **The burial chamber's scoreboard** (`toa_vault_scoreboard`, Read): rsprox 227/01852, 00581, 01753 and 01845 show it opening this raid's summary, `toa_raid_summary` (482), not the lobby's records board. It shows the nine room times (the Wardens' phases together), the challenge total (their sum) and overall total, the active invocations and the raid level. Script 6590 then adds one row per member, most damage dealt first (every recording orders them so; the reader also dealt the most in each, so reader-first can't be ruled out): name, damage dealt, damage taken, deaths, title struct, -1, rank, party size and whether it is the reader. The titles ("The Brawler", "The Leech": structs with param 1525) are left as -1, which the script draws as "-", because how a member earns each one isn't recorded.
 - **Moving NPCs:** Zebak's waves and jugs, Akkha's unstable orbs, Ba-Ba's boulders and the moving Wardens move with collision off, as in Near-Reality. Before, the route finder couldn't move them over tiles the map blocks.
 
 **Still open:**

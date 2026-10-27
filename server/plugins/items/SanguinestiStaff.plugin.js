@@ -23,6 +23,7 @@ const CAST_ANIMATION = 1167;
 const CAST_GRAPHIC = { START: 665, PROJECTILE: 1040, END: 1042 };
 
 let core = null;
+let api = null;
 let chargedIds = new Set();
 let unchargedByCharged = new Map();
 let chargedByUncharged = new Map();
@@ -99,6 +100,10 @@ function onHitResolved({ attacker, hit }) {
 function useCharge(player) {
   const { Flag } = core;
   const staff = weaponOf(player);
+  // Content may spare the charge (a league relic): the same question every powered staff asks.
+  const consume = { player, itemId: staff.getId(), skip: false };
+  api.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) return;
   const left = chargesOf(staff) - 1;
   staff.setMetaValue(CHARGES_META_KEY, Math.max(0, left));
   if (left > 0) return;
@@ -240,7 +245,8 @@ function uncharge({ player, item }) {
 module.exports = {
   name: "SanguinestiStaff",
   members: true,
-  register(api) {
+  register(pluginApi) {
+    api = pluginApi;
     core = api.core;
     const I = core.ItemIdentifiers;
     unchargedByCharged = new Map([

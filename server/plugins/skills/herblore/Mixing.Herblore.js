@@ -36,9 +36,15 @@ function message(recipe) {
 function makeOne(player, recipe) {
   const inventory = player.getInventory();
   if (!hasIngredients(inventory, recipe)) return false;
-  for (const { id, count } of recipe.ingredients) inventory.deleteNumber(id, count);
-  inventory.addItem(new Common.core.Item(recipe.productId, 1));
-  for (const { id, count } of recipe.returns) inventory.addItem(new Common.core.Item(id, count));
+  // Content may keep an ingredient or change the product ("herblore:mix", a league relic's saved secondaries and 4-dose potions).
+  const mix = {
+    player, recipe, productId: recipe.productId,
+    consume: recipe.ingredients.map((item) => ({ ...item })), returns: recipe.returns.map((item) => ({ ...item })),
+  };
+  Common.api.emitCustomEvent("herblore:mix", mix);
+  for (const { id, count } of mix.consume) if (count > 0) inventory.deleteNumber(id, count);
+  inventory.addItem(new Common.core.Item(mix.productId, 1));
+  for (const { id, count } of mix.returns) if (count > 0) inventory.addItem(new Common.core.Item(id, count));
   if (recipe.cleaned) {
     Common.spam(player, `You clean the ${Common.core.ItemDefinition.forId(recipe.cleaned.grimyId).getName()}.`);
     Common.addXp(player, recipe.cleaned.xp);
@@ -48,7 +54,8 @@ function makeOne(player, recipe) {
   }
   Common.spam(player, message(recipe));
   Common.addXp(player, recipe.xp);
-  Common.api.emitCustomEvent("herblore:made", { player, itemId: recipe.productId });
+  Common.api.emitCustomEvent("herblore:made", { player, itemId: mix.productId });
+  Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: mix.productId, amount: 1, xp: recipe.xp });
   return true;
 }
 
@@ -124,9 +131,14 @@ function start(player, recipe, amount) {
   let wait = 2;
   Common.run(player, () => {
     if (--wait > 0) return true;
-    if (!makeOne(player, recipe)) return false;
+    // Content may make several potions in the one cycle ("skills:actions-per-cycle").
+    const actions = Common.actionsPerCycle(player, "mix", recipe);
+    for (let done = 0; done < actions; done++) {
+      if (!makeOne(player, recipe)) return false;
+      if (--remaining <= 0) return false;
+    }
     wait = recipe.ticks;
-    return --remaining > 0;
+    return remaining > 0;
   });
 }
 

@@ -53,7 +53,10 @@ Wiki candidates on the same plane, with both the Wiki name and the cache name
 agreeing with the authored name. The area boxes, skip decisions and `--only`
 labels still apply. Ambiguity or missing evidence is reported without changing
 the row. Correct variants, explicit cache `key` entries and unnamed rows remain
-unchanged. Coordinates, facing, wandering and other metadata are retained.
+unchanged, as does a nameless multinpc parent one of whose variants has the name: live
+spawns the Leagues Tutor at 3226, 3215 as 317 (cache name `null`), which `league_account`
+(varbit 10031) shows as the main game's 316 and hides from a league character, so it is not
+"repaired" to the Wiki's 316. Coordinates, facing, wandering and other metadata are retained.
 Repair evidence retains every plausible Wiki ID before the normal add-only
 `--tag`/`--id`/most-used choice and name/tile deduplication; those choices cannot
 make an ambiguous source pin appear unique.

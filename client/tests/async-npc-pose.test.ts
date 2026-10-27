@@ -14,6 +14,8 @@ import { ActorGeometryCache } from "../render/webgpu/actors/actorGpu";
 const { RenderDataWorkerPool } = require("../game/worker/RenderDataWorkerPool");
 
 const turn = () => sleep(5);
+/** Past AsyncNpcPoseCache's SHOWN_POSE_GRACE_MS: an actor's last pose no longer bridges a new sequence. */
+const pastShownGrace = () => sleep(170);
 function fixture() {
     const type: any = { id: 1, modelIds: [1], widthScale: 128, heightScale: 128, ambient: 0, contrast: 0 };
     const seq = new SeqType(1, { game: "oldschool", revision: 241 } as any);
@@ -273,7 +275,10 @@ test("actor fallback ownership never substitutes a different actor's action pose
         assert.notEqual(f.queue.getFallbackKey([1, 2, 0], 8), actor7.key);
         assert.equal(f.queue.getFallbackKey([1, 1, 3], 7), actor7.key);
         f.queue.get([1, 2, 2], 7);
-        assert.notEqual(f.queue.getFallbackKey([1, 2, 2], 7), actor7.key, "an obsolete action cannot become the new animation's fallback");
+        assert.equal(f.queue.getFallbackKey([1, 2, 2], 7), actor7.key,
+            "right after it was shown, the last pose bridges the new animation while its first pose builds");
+        await pastShownGrace();
+        assert.notEqual(f.queue.getFallbackKey([1, 2, 2], 7), actor7.key, "an obsolete action cannot stay the new animation's fallback");
     } finally { f.queue.dispose(); }
 });
 
@@ -378,6 +383,7 @@ test("active NPC base geometry and empty-pass metadata survive animated-pose LRU
             queue.getKey([1, 1, frame % 4], 7);
         }
         queue.getKey([1, 2, 0], 7);
+        await pastShownGrace();
         const fallback = queue.getFallbackKey([1, 2, 0], 7)!;
         assert.equal(fallback, base);
         assert.equal(resident(fallback), true, "a movement/action change must retain a drawable neutral base");
@@ -476,4 +482,19 @@ test("pool reserves distinct existing descriptors, retains in-flight occupancy a
     assert.equal(await unstarted, undefined);
     assert.equal(shutdownWakes, 0, "terminating an undispatched reservation must not start queued foreground work");
     initialized({ setCustomContent: async () => {} });
+});
+
+test("a new sequence's first pose shows the actor's last pose while it builds, not the base model", async () => {
+    const f = fixture();
+    try {
+        // Actor 7 shows sequence 1 (its base and pose built by the worker).
+        f.queue.get([1, 1, 0], 7); await turn();
+        f.calls[0].resolve(f.geometry(f.calls[0].input)); await turn();
+        f.calls[1].resolve(f.geometry(f.calls[1].input)); await turn();
+        const shown = f.queue.get([1, 1, 0], 7)!;
+        assert.equal(shown.seqId, 1);
+        // The server starts sequence 2: its first pose isn't built yet.
+        const bridging = f.queue.get([1, 2, 0], 7);
+        assert.equal(bridging?.key, shown.key, "keeps the pose it was showing rather than snapping to the base model");
+    } finally { f.queue.dispose(); }
 });

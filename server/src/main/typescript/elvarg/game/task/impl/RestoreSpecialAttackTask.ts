@@ -61,7 +61,11 @@ export class RestoreSpecialAttackTask extends Task {
             this.stop();
             return;
         }
-        let amount = this.character.getSpecialPercentage() + 10;
+        // Content may change how much a cycle restores (a league relic); the cycle's length is the modifiers'.
+        const regen = { player: this.character, amount: 10 };
+        const { PluginManager } = require("../../../plugins/PluginManager");
+        PluginManager.emitCustomEvent("combat-special:regenerate", regen);
+        let amount = this.character.getSpecialPercentage() + Math.max(0, regen.amount | 0);
         if (amount >= 100) {
             amount = 100;
             this.character.setRecoveringSpecialAttack(false);

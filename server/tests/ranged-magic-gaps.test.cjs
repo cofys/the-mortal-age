@@ -116,6 +116,58 @@ test("3rd Age bow keeps shortbow speed, 9 tile reach, 65 Ranged and +80 accuracy
   assert.equal(ItemDefinition.forId(I._3RD_AGE_BOW).getRequirements()[4], 65);
 });
 
+test("ranged weapons reach the cache's attack range, +2 on Longrange up to 10 (Wiki: Attack range)", () => {
+  const reach = (item, weapon, longRange) => {
+    const player = playerWith(item);
+    player.getWeapon = () => core.WeaponInterfaces[weapon];
+    const profile = core.WeaponProfiles.get(player);
+    player.getFightType = () => (longRange ? profile.longRangeFightType : null);
+    return core.WeaponProfiles.attackDistance(player, 6);
+  };
+  // [item, weapon interface, range, Longrange range]
+  for (const [item, weapon, range, longRange] of [
+    [I.MAGIC_LONGBOW, "LONGBOW", 10, 10],
+    [I.MAGIC_SHORTBOW, "SHORTBOW", 7, 9],
+    [I.KARILS_CROSSBOW, "KARILS_CROSSBOW", 8, 10],
+    [I.ARMADYL_CROSSBOW, "CROSSBOW", 8, 10],
+    [I.ZARYTE_CROSSBOW, "CROSSBOW", 8, 10],
+    [I.RUNE_CROSSBOW, "CROSSBOW", 7, 9],
+    [I.CROSSBOW, "CROSSBOW", 10, 10],
+    [I.PHOENIX_CROSSBOW, "CROSSBOW", 5, 7],
+    [I.DORGESHUUN_CROSSBOW, "CROSSBOW", 6, 8],
+    [I.HEAVY_BALLISTA, "BALLISTA", 9, 10],
+    [I.LIGHT_BALLISTA, "BALLISTA", 9, 10],
+    [I.COMP_OGRE_BOW, "SHORTBOW", 5, 7],
+    [I.MAGIC_COMP_BOW, "SHORTBOW", 10, 10],
+    [I.SEERCULL, "SHORTBOW", 8, 10],
+    [I._3RD_AGE_BOW, "SHORTBOW", 9, 10],
+    [I.TOKTZ_XIL_UL, "OBBY_RINGS", 7, 9],
+    [I.MORRIGANS_JAVELIN, "JAVELIN", 5, 7],
+    [I.RUNE_DART, "DART", 3, 5],
+    [I.RUNE_KNIFE, "KNIFE", 4, 6],
+    [I.TOXIC_BLOWPIPE, "BLOWPIPE", 5, 7],
+    [I.CHINCHOMPA_2, "CHINCHOMPA", 9, 10],
+    [I.VENATOR_BOW, "SHORTBOW", 6, 8],
+    [I.TWISTED_BOW, "LONGBOW", 10, 10],
+  ]) {
+    const name = ItemDefinition.forId(item).getName();
+    assert.equal(reach(item, weapon, false), range, `${name} range`);
+    assert.equal(reach(item, weapon, true), longRange, `${name} Longrange range`);
+  }
+});
+
+test("melee reach ignores the cache ranges and Longrange: halberds 2, anything else 1, on a defensive style", () => {
+  const reach = (item, weapon) => {
+    const player = playerWith(item);
+    player.getWeapon = () => core.WeaponInterfaces[weapon];
+    player.getFightType = () => core.WeaponInterfaces[weapon].getFightType().at(-1);
+    return core.CombatFactory.MELEE_COMBAT.attackDistance(player);
+  };
+  assert.equal(reach(I.DRAGON_HALBERD, "HALBERD"), 2);
+  assert.equal(reach(I.DRAGON_SCIMITAR, "SCIMITAR"), 1);
+  assert.equal(reach(I.ABYSSAL_WHIP, "WHIP"), 1);
+});
+
 test("seeking dragon arrows have their own ammunition and successful minimum, leaving specials alone", () => {
   assert.equal(core.Ammunition.getForItem(I.SEEKING_DRAGON_ARROW), core.Ammunition.SEEKING_DRAGON_ARROW);
   assert.ok(core.RangedWeapon.DARK_BOW.getAmmunitionData().includes(core.Ammunition.SEEKING_DRAGON_ARROW));

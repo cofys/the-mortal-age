@@ -28,7 +28,7 @@ They spawned with their stats and drops but fought as ordinary NPCs:
   - After **three missed hits** in that style (tortured gorillas: four) it says "Rhaaaaaaa!" and changes to one of the other two, at random.
   - A miss is a hit that does no damage, whether the player prayed against it or not.
 - **Protection prayer (demonic only):** a hit in the style it protects against does nothing, from players, thralls or allies alike.
-  - Verac's set gets through (its roll hook marks the hit). Special attacks don't.
+  - Verac's set gets through (its roll hook marks the hit), and so do the ancient mace and dragon sword specials, which pierce NPC melee prayers since the [22 October 2025 update](https://oldschool.runescape.wiki/w/Update:Grid_Master_Rewards,_Poll_%26_New_Player_Improvements). Other special attacks don't.
   - It changes prayer after **four damaging hits and 70 damage** in styles it isn't protecting against, counted together. It then protects against the style of the hit that took it over.
   - It switches by becoming its colour's other id, so the cache draws the overhead icon (sprite 440, index 0/1/2), as live does.
   - On the switch tick it plays `demonic_gorilla_smash_chest` (7228). In the captures every switch shows it, and nothing else.

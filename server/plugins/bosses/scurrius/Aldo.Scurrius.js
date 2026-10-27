@@ -5,7 +5,9 @@
  *   "Trade Scurrius' spine for a combat lamp?", several "Trade ALL your Scurrius spines for combat
  *   lamps?", and the lamps come with an item box;
  * - the lamp gives 5,000 experience in Attack, Strength, Defence, Ranged, Magic or Hitpoints, or
- *   3,500 in Prayer, picked over two pages of options.
+ *   3,500 in Prayer, picked over two pages of options;
+ * - he is spawned as rat_boss_biologist (12606), which the cache shows by varbit 9586: Talk-to
+ *   only (7226) until he has told the player about the lamps, then Talk-to and Trade (7615).
  *
  * Not here: Aldo making rat bone weapons, which needs the bone weapons themselves first.
  */
@@ -16,6 +18,14 @@ const LAMP_SOUND = 2655;
 const NO_SPINE = "Ah, I'll need one of Scurrius' spines to do that. Perhaps you could fetch me one?";
 const SPINE_USED = "Ah, a Scurrius spine! A captivating subject indeed. I'll eagerly take them off your hands, and rest assured, you will be well rewarded.";
 const LAMP_PROMPT = "Choose the skill you wish to gain XP in.";
+
+/**
+ * Cache varbit rat_boss_biologist_npc: 1 turns him into the Aldo with Trade. Captured (rsprox 83):
+ * set as the player continues past his lamp line in "Can you tell me about Scurrius' spine?".
+ */
+const MET_VARBIT = 9586;
+const MET_ATTRIBUTE = "scurrius:aldo-told-of-lamps";
+const LAMP_LINE = /^If you don't want a bone weapon, I can also trade you a lamp/;
 
 let api = null;
 let core = null;
@@ -73,6 +83,22 @@ function useSpine(event) {
 }
 
 /** The lamp's two pages of skills. */
+/** His lamp line: once the player continues past it, he offers Trade from then on. */
+function toldOfLamps(request) {
+  if (request.definition?.getName?.() !== "Historian Aldo" || !LAMP_LINE.test(String(request.text ?? ""))) return;
+  const { player } = request;
+  const after = request.after;
+  request.after = () => {
+    after?.();
+    player.setAttribute(MET_ATTRIBUTE, true);
+    player.getPacketSender().sendVarbit(MET_VARBIT, 1);
+  };
+}
+
+function onLogin({ player }) {
+  if (player.getAttribute(MET_ATTRIBUTE) === true) player.getPacketSender().sendVarbit(MET_VARBIT, 1);
+}
+
 function lampSkills() {
   const { Skill } = core;
   return [
@@ -117,6 +143,9 @@ function attach(pluginApi) {
   pluginApi.onNpcInteraction("Historian Aldo", { Trade: trade });
   pluginApi.onItemOnNpc(useSpine);
   pluginApi.onItemAction("Antique lamp", { Rub: rubLamp });
+  pluginApi.persistAttribute(MET_ATTRIBUTE, false);
+  pluginApi.onCustomEvent("npc-dialogue:line", toldOfLamps);
+  pluginApi.onPlayerLogin(onLogin);
 }
 
-module.exports = { attach, _test: { swapSpines, offerTrade, useSpine, rubLamp, grantLamp, lampSkills, LAMP_XP, PRAYER_LAMP_XP } };
+module.exports = { attach, _test: { MET_VARBIT, MET_ATTRIBUTE, toldOfLamps, onLogin, swapSpines, offerTrade, useSpine, rubLamp, grantLamp, lampSkills, LAMP_XP, PRAYER_LAMP_XP } };

@@ -14,6 +14,7 @@ const Sleepwalkers = require("./nightmare/Sleepwalkers.Nightmare");
 const Sanctuary = require("./nightmare/Sanctuary.Nightmare");
 const Retrieval = require("./nightmare/Retrieval.Nightmare");
 const Specials = require("./nightmare/Specials.Nightmare");
+const Scoreboard = require("./nightmare/Scoreboard.Nightmare");
 
 module.exports = {
   name: "Nightmare",
@@ -28,6 +29,7 @@ module.exports = {
     Specials.attachSpecials(api);
     Sanctuary.attachSanctuary(api);
     Retrieval.attachRetrieval(api);
+    Scoreboard.attachScoreboard(api);
     require("./nightmare/CombatAchievements.Nightmare")(api);
     require("./nightmare/Commands.Nightmare")(api);
   },

@@ -17,6 +17,7 @@ const FUSE_ACCURACY = {
 const FUSE_BY_CHILD_ID = { 0: "SHORT", 1: "MEDIUM", 3: "LONG" };
 
 let core;
+let pluginApi;
 const CHINCHOMPAS = ["CHINCHOMPA_2", "RED_CHINCHOMPA_2", "BLACK_CHINCHOMPA"];
 let method;
 
@@ -74,12 +75,19 @@ function consumeChinchompa(player, pos, amount, delayTicks = 0) {
   if (!weapon) {
     return false;
   }
+  // Content may keep some throws from costing a chinchompa (a league relic), as core asks for quiver ammunition.
+  const saving = { player, itemId: weapon.getId(), amount, saved: 0 };
+  pluginApi.emitCustomEvent("ranged:ammo-saving", saving);
+  const thrown = amount - Math.min(amount, Math.max(0, saving.saved | 0));
   const apply = () => {
     // A swap mid-flight moved this stack out of the slot; leave the new one alone.
     if (player.getEquipment().get(Equipment.WEAPON_SLOT) !== weapon) {
       return;
     }
-    weapon.decrementAmountBy(amount);
+    if (thrown <= 0) {
+      return;
+    }
+    weapon.decrementAmountBy(thrown);
     if (weapon.getAmount() <= 0) {
       player.sendMessage("You have run out of ammunition!");
       player.getEquipment().set(Equipment.WEAPON_SLOT, new Item(-1));
@@ -110,6 +118,7 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
+    pluginApi = api;
     api.registerCombatMethodResolver({ resolve: resolveChinchompa });
     api.registerRangedCombatModifier({ modifyMaxHit: () => null, modifyAttackRoll: fuseAccuracy });
     api.registerRangedAmmoHandler({ checkAmmo: () => null, decrementAmmo: consumeChinchompa });

@@ -430,13 +430,42 @@ function rareMultiplier(table, entry) {
   return Number.isFinite(multiplier) && multiplier > 1 ? multiplier : 1;
 }
 
+/** The NPC's name (its current definition's), or the cache's name for `npcId`, for plugins that boost by source. */
+function sourceName(npc, npcId) {
+  const name = (npc?.getCurrentDefinition?.() ?? npc?.getDefinition?.())?.getName?.();
+  if (name) return String(name);
+  const cached = Number.isInteger(npcId) ? pluginApi?.core?.CacheDefinitions?.getNpc?.(npcId)?.name : null;
+  return cached ? String(cached) : null;
+}
+
+/**
+ * What makes this kill's drops likelier, asked once per roll: plugins answer npc-drops:chance
+ * { player, npc, npcId, source, rules } by pushing { pattern, multiplier } rules matched against
+ * each entry's name (a league's boosted drops). `source` is the NPC's name, or what a
+ * npc-drops:roll-table request named. Unlike the tertiary rules these reach every entry: the
+ * pre-roll, the main roll, the separate rolls and the tertiary drops.
+ */
+function chanceRules(player, npc, source) {
+  const rules = [];
+  if (!player || !pluginApi) return rules;
+  pluginApi.emitCustomEvent("npc-drops:chance", { player, npc, npcId: npc?.getId?.() ?? null, source, rules });
+  return rules;
+}
+
+/** How many times likelier `entry` is on this kill: the world's boss rare multiplier times the matching chance rules. */
+function entryMultiplier(table, entry, rules) {
+  return rareMultiplier(table, entry) * rulesMultiplier(entry, rules);
+}
+
 const WILDERNESS_CLUE = /^clue scroll \((?!beginner\))/i;
 
 /**
  * What makes tertiary drops likelier for this kill, asked once per kill: rules
  * { pattern, multiplier } matched against each entry's name. An imbued ring of wealth doubles
  * clue scrolls in the Wilderness, and plugins answer npc-drops:tertiary-chance
- * { player, npc, npcId, rules } by pushing their own (Mortimer's clue tasks).
+ * { player, npc, npcId, rules } by pushing their own (Mortimer's clue tasks). A rule may instead
+ * give `outOf`, a chance of at least 1 in that many for each matching entry, or `guarantee`, one
+ * matching entry (the rarest of those `accept(entry)` allows) when none hit (league relics' clue scrolls).
  */
 function tertiaryRules(player, npc) {
   const rules = [];
@@ -447,12 +476,17 @@ function tertiaryRules(player, npc) {
   return rules;
 }
 
-function tertiaryMultiplier(entry, rules) {
+/** The product of the rules whose pattern matches the entry's name (tertiary rules, chance rules). */
+function rulesMultiplier(entry, rules) {
   let multiplier = 1;
+  let floor = 0;
   for (const rule of rules) {
-    if (rule.pattern.test(entry.name || "")) multiplier *= rule.multiplier;
+    if (!rule.pattern.test(entry.name || "")) continue;
+    if (Number.isFinite(rule.multiplier)) multiplier *= rule.multiplier;
+    // At least 1 in `outOf`: the multiplier that brings this entry's weight/out_of up to it.
+    if (rule.outOf > 0) floor = Math.max(floor, Number(entry.out_of) / ((Number.isInteger(entry.weight) ? entry.weight : 1) * rule.outOf));
   }
-  return multiplier;
+  return Math.max(multiplier, floor);
 }
 
 function rollSharedTable(name, player, depth = 0) {
@@ -513,10 +547,32 @@ function resolveEntry(entry, player, context = null) {
 }
 
 /**
- * One roll on a table: its pre-roll, main roll and separate rolls. Separate rolls marked
- * `once_per_kill` are made on the first of a table's `rolls` only.
+ * One weighted roll among `entries` out of `outOf` (the pool, which may hold an empty part):
+ * each entry's weight is multiplied by its chance rules and the pool grows by what was added, so
+ * a boosted rarity moves from w/N to mw/(N + (m-1)w) and the other entries keep their weights.
+ * The world's boss rare multiplier stays out of weighted rolls (it only raises independent rolls).
  */
-function rollOnce(table, entries, player, first = true, context = null) {
+function rollWeighted(entries, outOf, rules) {
+  let total = Number.isInteger(outOf) && outOf > 0 ? outOf : entries.reduce((sum, entry) => sum + entry.weight, 0);
+  const weights = entries.map((entry) => {
+    const weight = entry.weight * rulesMultiplier(entry, rules);
+    total += weight - entry.weight;
+    return weight;
+  });
+  let roll = Math.random() * Math.max(1, total);
+  for (let index = 0; index < entries.length; index++) {
+    roll -= weights[index];
+    if (roll < 0) return entries[index];
+  }
+  return null;
+}
+
+/**
+ * One roll on a table: its pre-roll, main roll and separate rolls. Separate rolls marked
+ * `once_per_kill` are made on the first of a table's `rolls` only. `rules` are the kill's chance
+ * rules (chanceRules), applied to every entry.
+ */
+function rollOnce(table, entries, player, first = true, context = null, rules = []) {
   const drops = [];
   const main = [];
   const separateGroups = new Map();
@@ -526,7 +582,7 @@ function rollOnce(table, entries, player, first = true, context = null) {
     if (entry.always) {
       continue;
     } else if (entry.pre_roll) {
-      if (!preRollHit && hits(entry, rareMultiplier(table, entry))) {
+      if (!preRollHit && hits(entry, entryMultiplier(table, entry, rules))) {
         drops.push(...resolveEntry(entry, player, context));
         preRollHit = true;
       }
@@ -536,7 +592,7 @@ function rollOnce(table, entries, player, first = true, context = null) {
         const group = separateGroups.get(entry.roll_group) || [];
         group.push(entry);
         separateGroups.set(entry.roll_group, group);
-      } else if (hits(entry, rareMultiplier(table, entry))) {
+      } else if (hits(entry, entryMultiplier(table, entry, rules))) {
         drops.push(...resolveEntry(entry, player, context));
       }
     } else if (Number.isInteger(entry.weight)) {
@@ -545,29 +601,13 @@ function rollOnce(table, entries, player, first = true, context = null) {
   }
 
   for (const group of separateGroups.values()) {
-    const outOf = Number(group[0]?.out_of);
-    let roll = randomInt(Number.isInteger(outOf) && outOf > 0 ? outOf : group.reduce((sum, entry) => sum + entry.weight, 0));
-    for (const entry of group) {
-      roll -= entry.weight;
-      if (roll < 0) {
-        drops.push(...resolveEntry(entry, player, context));
-        break;
-      }
-    }
+    const entry = rollWeighted(group, Number(group[0]?.out_of), rules);
+    if (entry) drops.push(...resolveEntry(entry, player, context));
   }
 
   if (!preRollHit && main.length > 0) {
-    const maxRoll = Number.isInteger(table.main_max_roll)
-      ? table.main_max_roll
-      : main.reduce((sum, entry) => sum + entry.weight, 0);
-    let roll = randomInt(Math.max(1, maxRoll));
-    for (const entry of main) {
-      roll -= entry.weight;
-      if (roll < 0) {
-        drops.push(...resolveEntry(entry, player, context));
-        break;
-      }
-    }
+    const entry = rollWeighted(main, table.main_max_roll, rules);
+    if (entry) drops.push(...resolveEntry(entry, player, context));
   }
 
   return drops;
@@ -587,9 +627,11 @@ function killContext(player, npc) {
  * One kill: guaranteed drops, then a pre-roll (which replaces the main roll when it hits),
  * then a single weighted main-table roll, then independent separate/tertiary rolls. A table
  * with `rolls` repeats everything but the guaranteed, tertiary and `once_per_kill` drops that many times.
+ * `source` names the kill for npc-drops:chance (the NPC's name unless the caller says otherwise).
  */
-function rollTable(table, player, npc, context = killContext(player, npc)) {
-  const selected = OrderedRewards.select(table, player, pluginApi, Math.random, rate => rareMultiplier(table, rate));
+function rollTable(table, player, npc, context = killContext(player, npc), source = sourceName(npc)) {
+  const chance = chanceRules(player, npc, source);
+  const selected = OrderedRewards.select(table, player, pluginApi, Math.random, rate => entryMultiplier(table, rate, chance));
   const drops = [];
   const entries = Array.isArray(table.entries) ? table.entries : [];
   for (const entry of entries) {
@@ -600,15 +642,16 @@ function rollTable(table, player, npc, context = killContext(player, npc)) {
   const rolls = Number.isInteger(table.rolls) && table.rolls > 1 ? table.rolls : 1;
   if (selected.entry) drops.push(...resolveEntry(selected.entry, player, context));
   else for (let roll = 0; roll < rolls; roll++) {
-    drops.push(...rollOnce(table, entries, player, roll === 0, context));
+    drops.push(...rollOnce(table, entries, player, roll === 0, context, chance));
   }
 
   const rules = table.tertiary?.length || table.tertiary_groups?.length ? tertiaryRules(player, npc) : [];
   for (const group of table.tertiary_groups || []) {
     if (group.type !== "exclusive") throw new Error("Unsupported tertiary group");
-    const entry = OrderedRewards.group(group.entries, row => tertiaryMultiplier(row, rules) * rareMultiplier(table, row));
+    const entry = OrderedRewards.group(group.entries, row => rulesMultiplier(row, rules) * entryMultiplier(table, row, chance));
     if (entry) drops.push(...resolveEntry(entry, player, context));
   }
+  const hitNames = new Set();
   for (const entry of table.tertiary || []) {
     // A tertiary at 1/1 is a conditional drop, not a guaranteed one: the wiki writes
     // "Always" for things that always drop *given* a condition (an active clue step, a quest,
@@ -620,9 +663,22 @@ function rollTable(table, player, npc, context = killContext(player, npc)) {
       continue;
     }
     if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
-    if (hits(entry, tertiaryMultiplier(entry, rules) * rareMultiplier(table, entry))) {
+    if (hits(entry, rulesMultiplier(entry, rules) * entryMultiplier(table, entry, chance))) {
       drops.push(...resolveEntry(entry, player, context));
+      hitNames.add(entry.name || "");
     }
+  }
+  for (const rule of rules) {
+    if (rule.guarantee !== true) continue;
+    const matching = (table.tertiary || []).filter((entry) => Number(entry.out_of) > 1 && rule.pattern.test(entry.name || "")
+      && (entry.name !== LOOTING_BAG || lootingBagDrops(npc)));
+    // Only an entry the rule accepts satisfies it: a natural drop of one it refuses (a clue tier already held) does not.
+    const allowed = typeof rule.accept === "function" ? matching.filter((entry) => rule.accept(entry)) : matching;
+    if (allowed.length === 0 || allowed.some((entry) => hitNames.has(entry.name || ""))) continue;
+    // The rarest by its chance (weight / out_of), not its denominator alone.
+    const chance = (entry) => (Number.isInteger(entry.weight) ? entry.weight : 1) / Number(entry.out_of);
+    const rarest = allowed.reduce((best, entry) => chance(entry) < chance(best) ? entry : best);
+    drops.push(...resolveEntry(rarest, player, context));
   }
 
   selected.commit?.();
@@ -735,7 +791,8 @@ module.exports = {
     // chest) rolled with the same roller and shared tables; the drops are pushed onto `drops`.
     // { player, npcId, drops, npc? } rolls that NPC's own table instead, for a boss that rewards
     // several players without dying to each (the Nightmare); `npc` places it (looting bags), and
-    // `entryFilter(entry)` keeps only some of its entries (a shared kill rolling its parts apart).
+    // `entryFilter(entry)` keeps only some of its entries (a shared kill rolling its parts apart);
+    // `source` names the roll for npc-drops:chance when there is no NPC to name it (a chest).
     api.onCustomEvent("npc-drops:roll-table", (request) => {
       ensureDrops();
       let table = request.table ?? tableForNpc(request.npcId);
@@ -746,7 +803,10 @@ module.exports = {
           tertiary: (table.tertiary || []).filter(request.entryFilter),
         };
       }
-      if (table) request.drops.push(...rollTable(table, request.player, request.npc ?? null));
+      if (!table) return;
+      const npc = request.npc ?? null;
+      const source = request.source ?? sourceName(npc, request.npcId);
+      request.drops.push(...rollTable(table, request.player, npc, killContext(request.player, npc), source));
     });
     // "npc-drops:place" { player, drops, location }: drops rolled elsewhere, put down as a kill's.
     api.onCustomEvent("npc-drops:place", ({ player, drops, location }) => placeDrops(player, drops, location));
@@ -793,5 +853,5 @@ module.exports = {
   _test: { loadDrops, tablesByNpc, sharedTables },
 
   // Exposed for the smoke test.
-  __internals: { loadDrops, rollTable, rollSharedTable, placeDrops, tablesByNpc, sharedTables },
+  __internals: { loadDrops, rollTable, rollOnce, rollSharedTable, placeDrops, tablesByNpc, sharedTables },
 };

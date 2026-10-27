@@ -24,6 +24,36 @@ Clicks don't stop it: in recording 703 the player clicks on tick 5, the phial re
 they move on the next. So movement is held until the refill. Using an empty phial on the Ectofuntus
 refills it too (Wiki). The teleport takes the usual checks (level 20 Wilderness).
 
+### Refill protection and feedback
+
+The [Ectophial Wiki page](https://oldschool.runescape.wiki/w/Ectophial) states that automatic
+refilling cannot be interrupted by the player and grants damage immunity; successful PvP
+attacks still award experience. Protection starts on arrival and ends when the phial is full.
+The plugin zeroes incoming combat hits at impact, after launch-time experience is awarded,
+and direct damage at the final health-decrement boundary. The latter uses the generic
+`combat:damage-apply` event (`{ target, hit }`, with a mutable `HitDamage`) so existing
+poison/venom pulses also cannot reduce health during refill. Damage before arrival and after
+completion is unaffected. Manual filling does not start this automatic-refill protection.
+
+Recordings 361, 703 and 3929 show the liquid area sound (2401, one loop, range 5) when the
+phial is emptied. Their automatic-refill kneeling sequence has a 10-cycle delay and sound
+1132 has a 30-cycle delay. Recording 3929 also sends `busy` = 1 with the pouring action and
+`busy` = 0 with the completed refill. These delays do not change the tick 3 arrival or
+tick 5 inventory refill in the table above (relative to the pouring action).
+
+Regression coverage in `server/tests/ectophial.test.cjs` exercises the registered handlers,
+both damage paths, the captured feedback, item swaps, requirements rejection, removal cleanup
+and manual filling. Combat immunity, busy state, animation/sound delays, the pouring sound
+and direct-damage immunity each failed before their fixes. The cache supplies the sequence,
+graphic and busy-varbit identifiers. This validation does not constitute a Ghosts Ahoy quest
+playthrough or a visual review of the animation.
+
+A live poisoned-player check kept health at 99 while the poison severity advanced from 30
+to 29 during refill; the next pulse after completion reduced health to 93. A separate live
+check confirmed the busy bit, full/empty/full inventory sequence, arrival, refill messages and
+the unchanged level-20 Wilderness restriction. PvP attacker experience was checked by tracing
+the launch/impact execution path, rather than a live two-player combat test.
+
 ## Pool of slime
 
 Recording 377. A bucket used on the pool fills every bucket carried (Wiki). It plays

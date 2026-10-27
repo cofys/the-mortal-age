@@ -14,7 +14,7 @@ const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 const { curePoisonAndVenom } = require('../plugins/items/ConsumableEffects');
 const SerpentineHelm = require('../plugins/items/SerpentineHelm.plugin');
 SerpentineHelm.register({
-  core: { ItemIdentifiers }, persistAttribute() {}, onItemAction() {},
+  core: { ItemIdentifiers, Equipment }, persistAttribute() {}, onItemAction() {},
   onItemOnItem() {}, onCombatHitResolved() {}, onPlayerProcess() {},
 });
 

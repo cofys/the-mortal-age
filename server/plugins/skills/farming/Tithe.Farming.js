@@ -4,6 +4,7 @@ const Model = require("./Model.Farming");
 const Patches = require("./Patches.Farming");
 const Guild = require("./Guild.Farming");
 const Bologa = require("./Bologa.Farming");
+const Rewards = require("./Rewards.Farming");
 
 const BOLOGA_UNLOCK_COST = 75000;
 
@@ -13,9 +14,6 @@ const CROPS = [
     { name: "Logavano", level: 74, xp: 23, object: core.ObjectIdentifiers.LOGAVANO_SEEDLING },
 ];
 const TANGLEROOT_BASE_DENOMINATOR = 7_494_389;
-const REWARDS = [["Farmer's strawhat", 75], ["Farmer's jacket", 150], ["Farmer's shirt", 150],
-    ["Farmer's boro trousers", 125], ["Farmer's boots", 50], ["Compost", 1], ["Supercompost", 5], ["Grape seed", 2],
-    ["Gricoller's can", 200], ["Seed box", 250], ["Herb sack", 250], ["Herb box", 30], ["Seed pack", 30], ["Bologa's blessing", 1, 20]];
 class TitheArea extends core.PrivateArea {
     constructor() { super([new core.Boundary(1805, 1840, 3485, 3518, 0)]); }
     process(mobile) { if (mobile.isPlayer?.()) titheProcess({ player: mobile.getAsPlayer() }); }
@@ -145,7 +143,9 @@ function titheObject(event) {
         const result = Model.titheDeposit(score.score, player.getInventory().getAmount(fruit), crop.xp);
         player.getInventory().deleteNumber(fruit, result.count);
         score.score = result.score;
-        score.points = Math.min(16000, score.points + result.points);
+        const award = { player, minigame: "tithe-farm", points: result.points };
+        core.PluginManager.emitCustomEvent("minigame:points", award);
+        score.points = Math.min(16000, score.points + award.points);
         Patches.award(player, result.xp);
         player.getSkillManager().addExperiences(core.Skill.FARMING, result.bonus);
         sync(player);
@@ -197,16 +197,20 @@ function titheItem(event) {
 }
 function titheItemOnNpc(event) {
     if ((event.definition ?? event.target.getDefinition())?.getName() !== "Farmer Gricoller") return;
-    const reward = REWARDS.find(([name]) => name.startsWith("Farmer's") && Data.itemId(name) === event.itemId);
+    const reward = Rewards.outfitRefund(event.itemId);
     if (!reward) return;
     event.handled = true;
-    const { player } = event, refund = Math.floor(reward[1] * 0.8);
-    Patches.choose(player, [[`Return ${reward[0]} for ${refund} points`, () => {
-        if (!player.getLocation().isWithinDistance(event.target.getLocation(), 5) || player.getInventory().forSlot(event.slot)?.getId() !== event.itemId) return;
-        const score = scoreFor(player);
+    const { player } = event, refund = Math.floor(reward.cost * 0.8);
+    const item = player.getInventory().forSlot(event.slot), farm = Patches.farmFor(player), score = scoreFor(player);
+    if (!item || item.getId() !== event.itemId || item.getMeta()) return;
+    Patches.choose(player, [[`Return ${reward.name} for ${refund} points`, () => {
+        if (player.busy() || Patches.farmFor(player) !== farm || scoreFor(player) !== score
+            || !player.getLocation().isWithinDistance(event.target.getLocation(), 5)
+            || player.getInventory().forSlot(event.slot) !== item || item.getId() !== event.itemId || item.getMeta()) return;
         if (score.points + refund > 16000) { player.sendMessage("Spend some reward points first."); return; }
         player.getInventory().deleteAtSlot(event.slot);
         score.points += refund; sync(player);
+        core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "tithe-outfit-refund" });
     }], ["Keep the item", () => {}]]);
 }
 function titheNpc(event) {
@@ -229,33 +233,7 @@ function titheNpc(event) {
     }
     if (event.definition?.getName() !== "Farmer Gricoller") return;
     event.handled = true;
-    const { player } = event;
-    const score = scoreFor(player);
-    player.sendMessage(`You have ${score.points} Tithe Farm reward points.`);
-    const entries = REWARDS.map(([name, cost, amount]) => [`${name} (${cost} points)`, () => {
-        if (!player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
-        if (score.points < cost) { player.sendMessage("You do not have enough points."); return; }
-        if (name === "Herb sack" && player.getSkillManager().getMaxLevel(core.Skill.HERBLORE) < 58) { player.sendMessage("You need a base Herblore level of 58."); return; }
-        if (name === "Bologa's blessing" && !score.bologa) { player.sendMessage("First arrange for Bologa to bless your grapes."); return; }
-        const itemId = Data.itemId(name);
-        const received = name === "Seed pack"
-            ? Guild.giveSeedPack(player, 3, true)
-            : Patches.give(player, itemId, amount ?? 1);
-        if (!received) return;
-        score.points -= cost;
-        core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
-        sync(player);
-        core.PluginManager.emitCustomEvent("collection-log:obtain", { player, itemId, amount: amount ?? 1 });
-    }]);
-    entries.push([score.autoWeedUnlocked ? "Toggle Auto-weed" : "Unlock Auto-weed (50 points)", () => {
-        if (!player.getLocation().isWithinDistance(event.npc.getLocation(), 5)) return;
-        if (!score.autoWeedUnlocked && score.points < 50) { player.sendMessage("You need 50 points."); return; }
-        if (!score.autoWeedUnlocked) { score.points -= 50; score.autoWeedUnlocked = true; }
-        core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
-        Patches.farmFor(player).autoWeed = !Patches.farmFor(player).autoWeed;
-        player.sendMessage(`Auto-weed is ${Patches.farmFor(player).autoWeed ? "enabled" : "disabled"}.`); sync(player);
-    }]);
-    Patches.choose(player, entries);
+    Rewards.open(event);
 }
 
-Object.assign(module.exports, { titheLogin, titheLogout, titheProcess, titheObject, titheItem, titheItemOnNpc, titheNpc });
+Object.assign(module.exports, { scoreFor, titheLogin, titheLogout, titheProcess, titheObject, titheItem, titheItemOnNpc, titheNpc });

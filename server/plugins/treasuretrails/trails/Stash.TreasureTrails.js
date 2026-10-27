@@ -140,6 +140,11 @@ module.exports = function attachStash(pluginApi) {
   api.persistAttribute(STORED_ATTRIBUTE, {});
   api.onBeforeObjectInteraction(interact);
   api.onPlayerLogin(restore);
+  // "treasure-trails:stashes" { list }: every STASH unit, built or not, as { tier, location } (a league relic's clue compass).
+  api.onCustomEvent("treasure-trails:stashes", (request) => {
+    if (!Array.isArray(request?.list)) return;
+    for (const unit of stashes().values()) request.list.push({ tier: unit.tier.name, location: unit.location });
+  });
 };
 
 Object.assign(module.exports, { BUILT_ATTRIBUTE, STORED_ATTRIBUTE, stashes, interact, restore });

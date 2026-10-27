@@ -1,12 +1,13 @@
-/** Wiki: Dark bow (bh) can only attack inside the listed PvP minigames and combat rings. */
-let core;
-let api;
+/** Wiki: imbued weapons can only attack inside the listed PvP minigames and combat rings. */
 
-function restrictWeapon(event) {
+function restrictWeapon(api, event) {
+  const { core } = api;
   const { attacker, target } = event;
   if (!attacker?.isPlayer?.()) return;
   const weapon = attacker.getAsPlayer().getEquipment().get(core.Equipment.WEAPON_SLOT);
-  if (weapon?.getId() !== core.ItemIdentifiers.DARK_BOW_BH_) return;
+  const { ItemIdentifiers: I } = core;
+  if (![I.DARK_BOW_BH_, I.ABYSSAL_DAGGER_BH_, I.ABYSSAL_DAGGER_BH_P_,
+    I.ABYSSAL_DAGGER_BH_P_PLUS_, I.ABYSSAL_DAGGER_BH_P_PLUS_PLUS_].includes(weapon?.getId())) return;
   const request = { attacker, target, allowed: false };
   api.emitCustomEvent("bounty-hunter:weapon-area", request);
   if (!request.allowed) {
@@ -19,8 +20,6 @@ module.exports = {
   name: "BountyHunterWeapons",
   members: true,
   register(pluginApi) {
-    api = pluginApi;
-    core = pluginApi.core;
-    pluginApi.onCanAttack(restrictWeapon);
+    pluginApi.onCanAttack(restrictWeapon.bind(null, pluginApi));
   },
 };

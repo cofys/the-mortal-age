@@ -3,7 +3,6 @@ const { TeleportHandler } = require("../../src/main/typescript/elvarg/game/model
 const { TeleportType } = require("../../src/main/typescript/elvarg/game/model/teleportation/TeleportType");
 const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
-const { ObjectIdentifiers } = require("../../src/main/typescript/elvarg/util/ObjectIdentifiers");
 const { RING_OF_WEALTH_DESTINATIONS } = require("./Teleports.Jewellery");
 
 const RING_OF_WEALTH_SCROLL = 12783;
@@ -134,18 +133,6 @@ function findRing(player, item, ringId) {
     if (ring) return ring;
   }
   return null;
-}
-
-function recharge(player, item) {
-  const chargedId = UNCHARGED_RINGS.get(item.getId())
-    ?? (isImbuedRingOfWealth(item.getId()) ? 20786 : 11980);
-  if (item.getId() === chargedId || item.getId() === 21456 || item.getId() === 21458) {
-    player.sendMessage("Your ring of wealth is already fully charged.");
-    return;
-  }
-  item.setId(chargedId);
-  refresh(player);
-  player.sendMessage("You recharge your ring of wealth at the Fountain of Rune.");
 }
 
 function imbue(player, ring) {
@@ -285,21 +272,10 @@ module.exports = {
       event.handled = imbue(event.player, ring);
     });
 
-    api.onItemOnObject((event) => {
-      if (!isRingOfWealth(event.itemId) || ![
-        ObjectIdentifiers.FOUNTAIN_OF_RUNE,
-        ObjectIdentifiers.FOUNTAIN_OF_RUNE_2,
-      ].includes(event.objectId)) {
-        return;
-      }
-      event.handled = true;
-      recharge(event.player, event.item);
-    });
-
     api.onPlayerDeathItemDrop((event) => removeImbueOnDeath(event, itemOnGroundManager));
   },
   isWearingRingOfWealth,
   isWearingImbuedRingOfWealth,
   autoCollectCurrencies,
-  _test: { CHARGED_RINGS, IMBUED_RING_IDS, TELEPORTS, consumeCharge, imbue, recharge, removeImbueOnDeath, ringState, teleport },
+  _test: { CHARGED_RINGS, IMBUED_RING_IDS, TELEPORTS, consumeCharge, imbue, removeImbueOnDeath, ringState, teleport },
 };

@@ -252,6 +252,31 @@ test("the imported easy table rolls 2-4 resolvable rewards and the casket opens 
   assert.equal(Caskets.open(event), false, "the opened casket cannot be opened again");
 });
 
+test("opening an ordinary casket asks drops:chance once and applies its boost to the uniques", () => {
+  // Easy uniques are 8.8% of the pool, 32.6% at 5x: every roll at 0.2 misses them unboosted.
+  const uniques = new Set(TABLES.easy.entries.filter(row => /clue uniques$/i.test(row.section)).map(row => row.item_id));
+  const openAt = (boost) => {
+    const f = fixture(), asked = [];
+    f.on("drops:chance", request => {
+      asked.push(request);
+      if (boost) request.rules.push({ pattern: /.*/, multiplier: boost });
+    });
+    f.items[0] = new core.Item(I.REWARD_CASKET_EASY_, 1);
+    const random = Math.random;
+    Math.random = () => 0.2;
+    try { assert.equal(Caskets.open(f.event()), true); } finally { Math.random = random; }
+    assert.equal(f.attributes.get(Runtime.completedAttribute(EASY)), 1, "the casket opened");
+    return { asked, given: [...f.items.filter(Boolean), ...f.ground].map(item => item.getId()), player: f.player };
+  };
+  const plain = openAt(null);
+  assert.equal(plain.asked.length, 1, "one question per casket");
+  assert.equal(plain.asked[0].player, plain.player);
+  assert.equal(plain.asked[0].source, "treasure-trails-casket");
+  assert.ok(plain.given.every(id => !uniques.has(id)), "no rule: the ordinary odds");
+  const boosted = openAt(5);
+  assert.ok(boosted.given.some(id => uniques.has(id)), "a 5x rule makes the same roll a unique");
+});
+
 test("an easy casket stays shut, and is kept, without a canonical table", () => {
   const f = fixture();
   const saved = TABLES.easy;

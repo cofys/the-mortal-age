@@ -5,9 +5,11 @@ import {
     getCustomEnumCountOverride,
     getCustomEnumValueOverride,
     getCustomStructParam,
+    getEnumOverride,
     getLeagueTaskStructParam,
     getRelicOrMasteryStructParam,
     getReplacedChallengeStructIds,
+    getStructOverride,
 } from "../../../common/gamemode/GamemodeContentStore";
 import { isNpcSearch, isNpcSearchResult, setNpcSearchResults } from "../spawnSearch";
 import { createTypedArrayFromCode } from "../Cs2ArrayObject";
@@ -54,6 +56,9 @@ function itemNameIndex(ctx: HandlerContext): ItemNameIndexEntry[] {
 }
 
 function loadEnum(ctx: HandlerContext, enumId: number) {
+    // A server-defined enum (a league's relic tiers, say) stands in for the cache's, or for none.
+    const override = getEnumOverride(enumId);
+    if (override) return override as any;
     const type = ctx.enumTypeLoader?.load(enumId);
     if (enumId === GAMEFRAME_LAYOUT_ENUM && type?.stringValues) {
         for (const [key, label] of [
@@ -377,8 +382,11 @@ export function registerConfigOps(handlers: HandlerMap): void {
         const structId = ctx.intStack[--ctx.intStackSize];
         const param = ctx.paramTypeLoader?.load(paramId);
 
-        // Check for custom content override first (centralized registry)
-        let overrideVal = getCustomStructParam(structId, paramId);
+        // Server-sent structs (a league's relics, say) come first, then the custom content registry
+        let overrideVal = getStructOverride(structId, paramId);
+        if (overrideVal === undefined) {
+            overrideVal = getCustomStructParam(structId, paramId);
+        }
         // Then check for cache league task data
         if (overrideVal === undefined) {
             overrideVal = getLeagueTaskStructParam(structId, paramId);

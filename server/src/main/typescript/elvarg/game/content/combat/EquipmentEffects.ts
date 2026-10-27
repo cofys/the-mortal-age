@@ -8,6 +8,7 @@ export interface CombatEffectiveLevelContext {
   purpose: "accuracy" | "damage";
 }
 export type CombatEffectiveLevelModifier = (entity: Mobile, level: number, context: CombatEffectiveLevelContext) => number;
+export type MeleeStrengthPercentModifier = (entity: Mobile, percent: number) => number;
 export type RunEnergyRestoreModifier = (entity: Mobile, delayMs: number) => number;
 export type RunEnergyDrainModifier = (entity: Mobile, amount: number) => number;
 export type SpecialEnergyRestoreModifier = (entity: Mobile, delayTicks: number) => number;
@@ -27,6 +28,7 @@ export type PrayerDrainModifier = (entity: Mobile, amount: number, context: Pray
 
 const meleeHitModifiers: HitModifier[] = [];
 const combatEffectiveLevelModifiers: CombatEffectiveLevelModifier[] = [];
+const meleeStrengthPercentModifiers: MeleeStrengthPercentModifier[] = [];
 const rangedHitModifiers: HitModifier[] = [];
 const magicHitModifiers: HitModifier[] = [];
 const magicDamageBonusModifiers: HitModifier[] = [];
@@ -62,6 +64,18 @@ export function registerMeleeHitModifier(modifier: HitModifier): void {
 /** Runs after prayers/stance bonuses, before multiplying equipment bonuses. */
 export function registerCombatEffectiveLevelModifier(modifier: CombatEffectiveLevelModifier): void {
   if (typeof modifier === "function") combatEffectiveLevelModifiers.push(modifier);
+}
+
+/** Adds to the Strength prayer's percentage, so the boost stacks additively with Piety. */
+export function registerMeleeStrengthPercentModifier(modifier: MeleeStrengthPercentModifier): void {
+  if (typeof modifier === "function") meleeStrengthPercentModifiers.push(modifier);
+}
+
+export function applyMeleeStrengthPercentModifiers(entity: Mobile, percent: number): number {
+  return meleeStrengthPercentModifiers.reduce((value, modifier) => {
+    const next = modifier(entity, value);
+    return Number.isFinite(next) ? next : value;
+  }, percent);
 }
 
 export function applyCombatEffectiveLevelModifiers(entity: Mobile, level: number, context: CombatEffectiveLevelContext): number {

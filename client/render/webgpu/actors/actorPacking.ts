@@ -690,7 +690,11 @@ export function updateNpcClientAnimations(
     const ids = ecs.queryByMap(map.mapX, map.mapY);
     if (ids.length === 0) return;
 
+    // The client cycle each step of this batch stands for, so a sequence that arrived partway
+    // through it only steps from its own start (NpcEcs.hasSeqStartedBy).
+    const batchEndCycle = getClientCycle() | 0;
     for (let t = 0; t < clientTicksElapsed; t++) {
+        const stepCycle = batchEndCycle - (clientTicksElapsed - 1 - t);
         for (let j = 0; j < ids.length; j++) {
             const id = ids[j] | 0;
             if (!shouldStepNpcOnMap(client, map, id)) continue;
@@ -789,7 +793,7 @@ export function updateNpcClientAnimations(
                 } catch {}
             }
 
-            if (seqId >= 0 && seqDelay === 0) {
+            if (seqId >= 0 && seqDelay === 0 && ecs.hasSeqStartedBy(id, stepCycle)) {
                 const actionInfo = resolveNpcSequenceFrameInfo(client, seqId);
                 const actionStep = stepNpcSequenceTrack(
                     ecs.getFrameIndex(id) | 0,

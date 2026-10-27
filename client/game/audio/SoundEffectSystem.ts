@@ -8,7 +8,6 @@ import {
     resumeAudioContextIfNeeded,
     unregisterManagedAudioContext,
 } from "./audioContext";
-import { resampleToSampleRate, smoothLowPass } from "./resample";
 
 type DecodedSound = {
     sampleRate: number;
@@ -130,6 +129,15 @@ type ActiveAmbientSound = {
 const CYCLE_LENGTH_SECONDS = 0.02;
 
 export type PendingSoundEffect = { soundId: number; options: PlaySoundOptions; consumed: boolean };
+/**
+ * An 8-bit sample's level at full volume. The OSRS client plays a sound at volume 127 (its
+ * maximum) as `(sample << 8) * (127 << 6) >> 6` in a 24-bit mix and writes the top 16 bits, so a
+ * full-scale sample reaches 127/256 of full scale: half, leaving headroom for sounds that
+ * overlap. Playing them at sample / 128 made every effect twice as loud and clipped stacked area
+ * sounds (Scurrius' stomp and its rubble).
+ */
+const SAMPLE_SCALE = 127 / 32768;
+
 export class SoundEffectSystem {
     readonly beforePlayListeners = new Set<(sound: PendingSoundEffect) => void>();
     readonly volumeChangedListeners = new Set<(type: "effects" | "area") => void>();
@@ -231,25 +239,12 @@ export class SoundEffectSystem {
         }
     }
 
-    private cacheKey(soundId: number, sampleRate: number, trimOnset: boolean): string {
-        return `${soundId}@${sampleRate}@${trimOnset ? "trimmed" : "full"}`;
+    private cacheKey(soundId: number, trimOnset: boolean): string {
+        return `${soundId}@${trimOnset ? "trimmed" : "full"}`;
     }
 
-    private decode(
-        soundId: number,
-        targetSampleRate?: number,
-        forceResample = false,
-        loadedRaw?: RawSoundData,
-        trimOnset = true,
-    ): DecodedSound | undefined {
-        const ctx = this.context;
-        const effectiveRate =
-            forceResample && ctx
-                ? ctx.sampleRate
-                : typeof targetSampleRate === "number"
-                  ? targetSampleRate
-                  : 0;
-        const cacheKey = this.cacheKey(soundId, effectiveRate, trimOnset);
+    private decode(soundId: number, loadedRaw?: RawSoundData, trimOnset = true): DecodedSound | undefined {
+        const cacheKey = this.cacheKey(soundId, trimOnset);
         const cached = this.decodedCache.get(cacheKey);
         if (cached) return cached;
 
@@ -258,7 +253,7 @@ export class SoundEffectSystem {
         if (!raw) return undefined;
         const t1 = performance.now();
 
-        const decoded = this.toFloatData(raw, effectiveRate);
+        const decoded = this.toFloatData(raw);
         const t2 = performance.now();
 
         // Only log issues once per sound ID to avoid spam
@@ -319,14 +314,20 @@ export class SoundEffectSystem {
             .catch(() => this.pendingRetries.delete(soundId));
     }
 
-    private toFloatData(raw: RawSoundData, targetSampleRate: number): DecodedSound {
+    /**
+     * The sound as OSRS mixes it: its 8-bit samples at their own rate (22050 Hz for the synths,
+     * 44100 for the sampled effects), unfiltered, at OSRS's level. Web Audio resamples the buffer
+     * to the device's rate, as the game client's sinc decimator does; the client's own linear
+     * resampler and low-pass (a ~10 kHz cut, twice over) used to dull every effect.
+     */
+    private toFloatData(raw: RawSoundData): DecodedSound {
         const total = raw.samples.length | 0;
 
         const onsetSec = (raw.delayCycles ?? 0) * CYCLE_LENGTH_SECONDS;
 
         if (total <= 0) {
             return {
-                sampleRate: raw.sampleRate || targetSampleRate || 22050,
+                sampleRate: raw.sampleRate || 22050,
                 channelData: new Float32Array(0),
                 duration: 0,
                 loopStartSec: 0,
@@ -336,39 +337,23 @@ export class SoundEffectSystem {
         }
 
         // Keep the full buffer — loop boundaries are applied at playback, not decode.
-        let channel: Float32Array = new Float32Array(total);
+        const channel = new Float32Array(total);
         for (let i = 0; i < total; i++) {
-            channel[i] = raw.samples[i] / 128.0;
+            channel[i] = raw.samples[i] * SAMPLE_SCALE;
         }
 
         // Compute loop boundaries in source samples
         const srcLoopStart = Math.max(0, Math.min(total, Math.floor(raw.start)));
         const srcLoopEnd = raw.end > 0 ? Math.max(0, Math.min(total, Math.floor(raw.end))) : 0;
 
-        let output: Float32Array = channel;
-        let outputRate = raw.sampleRate;
-
-        if (targetSampleRate > 0 && targetSampleRate !== raw.sampleRate) {
-            if (targetSampleRate > raw.sampleRate) {
-                const nyquist = raw.sampleRate / 2;
-                smoothLowPass(channel, raw.sampleRate, nyquist * 0.9);
-            }
-
-            output = resampleToSampleRate(channel, raw.sampleRate, targetSampleRate);
-            outputRate = targetSampleRate;
-            smoothLowPass(output, outputRate);
-        } else {
-            smoothLowPass(output, outputRate);
-        }
-
         // Convert loop boundaries from source-sample indices to seconds
         const loopStartSec = srcLoopStart > 0 ? srcLoopStart / raw.sampleRate : 0;
         const loopEndSec = srcLoopEnd > srcLoopStart ? srcLoopEnd / raw.sampleRate : 0;
 
         return {
-            sampleRate: outputRate,
-            channelData: output,
-            duration: output.length / outputRate,
+            sampleRate: raw.sampleRate,
+            channelData: channel,
+            duration: total / raw.sampleRate,
             loopStartSec,
             loopEndSec,
             onsetSec,
@@ -429,7 +414,7 @@ export class SoundEffectSystem {
 
         resumeAudioContextIfNeeded(ctx);
 
-        const decoded = this.decode(soundId, undefined, false, loadedRaw);
+        const decoded = this.decode(soundId, loadedRaw);
         if (!decoded) {
             // Cache group may still be streaming in (sparse cache); retry once
             // it lands instead of silently dropping the sound.
@@ -813,7 +798,7 @@ export class SoundEffectSystem {
         ctx: AudioContext,
         now: number,
     ): void {
-        const decoded = this.decode(soundId, undefined, true, undefined, false);
+        const decoded = this.decode(soundId, undefined, false);
         if (!decoded) {
             return;
         }
@@ -1176,7 +1161,7 @@ export class SoundEffectSystem {
         }
         const nextSoundId = validSoundIds[nextIndex];
 
-        const decoded = this.decode(nextSoundId, undefined, false, undefined, false);
+        const decoded = this.decode(nextSoundId, undefined, false);
         if (!decoded) {
             return;
         }

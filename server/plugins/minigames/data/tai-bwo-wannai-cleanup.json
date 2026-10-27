@@ -1,0 +1,408 @@
+{
+  "_sources": "OSRS Wiki (Tai Bwo Wannai Cleanup) for requirements, XP and favour; rsprox 227/01858, 237/01102 and 231/03030 for timings, messages, sounds, animations, varbits and the stick claims. Gameval names, resolved from the cache. Part 3 (rewards): the Wiki's Gabooty's Tai Bwo Wannai Cooperative, Safta Doc, Rionasta and Hardwood Grove pages; rsprox 227/01858, 237/01102, 227/01757 and 231/03030 for the shop messages, Safta's machete, the grove doors and Murcaily's warning; the cache for the parcel interface's ops (scripts 2851/2855).",
+  "quest": "jungle_potion",
+  "regions": [[2752, 2879, 3008, 3135]],
+  "varbits": {
+    "points": "vill_comm_points",
+    "max": "vill_comm_max",
+    "progress": "cleanup_progress",
+    "overlay": "tbw_overlayopen",
+    "favour": "favour_percentage"
+  },
+  "progress": { "told": 1, "hacked": 2, "repaired": 4, "claimed": 5 },
+  "maxPoints": 1000,
+  "interfaces": { "overlay": "village_community_score", "hud": "toplevel_osrs_stretch:overlay_hud" },
+  "machetes": [
+    { "item": "machette", "hack": "tbw_cleanup_player_hack", "chance": 0.55 },
+    { "item": "machette_opal", "hack": "tbw_cleanup_player_hack_opal", "chance": 0.7 },
+    { "item": "machette_jade", "hack": "tbw_cleanup_player_hack_jade", "chance": 0.85 },
+    { "item": "machette_redtopaz", "hack": "tbw_cleanup_player_hack_redtopaz", "chance": 1 }
+  ],
+  "jungle": [
+    { "type": "light", "locs": ["tai_bwo_jungle_vegetation_easy_1", "tai_bwo_jungle_vegetation_easy_2", "tai_bwo_jungle_vegetation_easy_3", "tai_bwo_jungle_vegetation_easy_4", "tai_bwo_jungle_vegetation_easy_5"], "level": 10, "xp": 32, "points": 3, "spar": "thatching_spar_light", "low": 48, "high": 180 },
+    { "type": "medium", "locs": ["tai_bwo_jungle_vegetation_med_1", "tai_bwo_jungle_vegetation_med_2", "tai_bwo_jungle_vegetation_med_3", "tai_bwo_jungle_vegetation_med_4", "tai_bwo_jungle_vegetation_med_5"], "level": 20, "xp": 55, "points": 5, "spar": "thatching_spar_med", "low": 32, "high": 160 },
+    { "type": "dense", "locs": ["tai_bwo_jungle_vegetation_hard_1", "tai_bwo_jungle_vegetation_hard_2", "tai_bwo_jungle_vegetation_hard_3", "tai_bwo_jungle_vegetation_hard_4", "tai_bwo_jungle_vegetation_hard_5"], "level": 35, "xp": 80, "points": 10, "spar": "thatching_spar_dense", "low": 8, "high": 90 }
+  ],
+  "failXp": 1,
+  "hack": { "chipEvery": 2, "resultAt": 6, "pause": 3, "favourDelay": 3, "regrowTicks": 149 },
+  "spars": [
+    { "item": "thatching_spar_light", "xp": 28.1, "points": 1 },
+    { "item": "thatching_spar_med", "xp": 42.1, "points": 3 },
+    { "item": "thatching_spar_dense", "xp": 65.1, "points": 5 }
+  ],
+  "fence": {
+    "locs": ["village_fence_rotten", "village_fence_fixed1", "village_fence_fixed2", "village_fence_fixed3", "village_fence_fixedcomplete"],
+    "startAt": 5, "doneAt": 10, "pause": 3, "decayTicks": 1000
+  },
+  "skewers": { "item": "tbw_skewer_stick", "perSpar": 5, "carcass": "village_spider_carcass", "spiderOnStick": "tbw_spider_on_stick_raw" },
+  "sticks": { "item": "village_trade_sticks", "linear": 0.0375, "square": 0.0000415 },
+  "villagerCooldown": { "claimed": 7, "ready": 1, "stepTicks": 300 },
+  "villagers": [
+    { "name": "Sharimika", "varbit": "chat_sharimika", "npc": "tbwcu_sharimika" },
+    { "name": "Mamma Bufetta", "varbit": "chat_mamma", "npc": "tbwcu_mamma_bufetta" },
+    { "name": "Layleen", "varbit": "chat_layleen", "npc": "tbwcu_layleen" },
+    { "name": "Karaday", "varbit": "chat_karaday", "npc": "tbwcu_karaday" },
+    { "name": "Safta Doc", "varbit": "chat_safta", "npc": "tbwcu_safta_doc" },
+    { "name": "Gabooty", "varbit": "chat_gabooty", "npc": "tbwcu_gabooty" },
+    { "name": "Fanellaman", "varbit": "chat_fanellaman", "npc": "tbwcu_fanellaman" },
+    { "name": "Jagbakoba", "varbit": "chat_jag", "npc": "tbwcu_jagbakoba" },
+    { "name": "Murcaily", "varbit": "chat_murc", "npc": "tbwcu_murcaily", "first": true },
+    { "name": "Rionasta", "varbit": "chat_rion", "npc": "tbwcu_rionasta" }
+  ],
+  "seqs": {
+    "success": "tbw_cleanup_player_hack_success",
+    "fail": "tbw_cleanup_player_hack_fail",
+    "prepare": "tbw_cleanup_player_prepare_wood",
+    "fenceStart": "tbw_cleanup_player_fixfence_start",
+    "fenceMid": "tbw_cleanup_player_fixfence_mid",
+    "fenceEnd": "tbw_cleanup_player_fixfence_end",
+    "spiderOnStick": "tbw_cleanup_player_spider_on_stick"
+  },
+  "spotanims": { "chippings": "tbw_chippings" },
+  "sounds": { "swing": 1286, "chip": 1284, "success": [1287, 1288], "fail": 1285, "prepare": 1274, "fence": 1276, "spiderOnStick": 1280 },
+  "messages": {
+    "notTold": "Perhaps you should check with the local villagers before you start hacking away at the local vegetation?",
+    "noMachete": "You need to be holding a machete to cut away this jungle.",
+    "level": "You need a Woodcutting level of {level} to hack this jungle.",
+    "fullInventory": "You have no space in your inventory for any further thatching spars.",
+    "cutBack": "This jungle has been cut back to the ground.",
+    "favourFull": "Your Favour total is now full, you cannot gain any more.<br>Talk to the villagers to get favour converted to trading sticks.",
+    "notToldFence": "Perhaps you should check with the local villagers before you start repairing the village fence?",
+    "noSpars": "You need some thatching spars in order to repair this fence.",
+    "noFenceMachete": "You need a machete to repair this fence.",
+    "skewers": "You hack the spar into skewers.",
+    "firstClaim": "Great, I saw you were fixing the fence earlier, it looks like you've got the hang of this now! Let me give you something for your effort!",
+    "claim": "Hey, I've seen you working around the village. You've been doing a lot of good work around here for us. Let me give you something for your trouble.",
+    "claimed": "You get {sticks} trading sticks. You are left with {favour}% favour.",
+    "noRoom": "You don't have enough inventory space.",
+    "parcelCurrency": "You cannot send any form of currency through the parcel service",
+    "parcelRum": "The villager refuses to send this through the parcel system.",
+    "parcelNoSticks": "You don't have enough trading sticks to send that.",
+    "parcelValue": "{item}: it costs 10 trading sticks per item to send.",
+    "parcelTooFew": "It costs at least 10 trading sticks to use this service. Sorry but you don't have enough.",
+    "groveWarn": "Hey there! You can't chop those trees until you've helped out around our village!",
+    "groveAnyway": "I just want to go in anyway.",
+    "groveStayOut": "Okay, I'll stay out here.",
+    "groveFee": "You need 100 trading sticks to enter the Hardwood Grove.",
+    "groveLeave": "You don't seem to have any Teak or Mahogany logs.<br>Are you sure you wish to leave?",
+    "groveLeaveYes": "Yes, I wanna get out of here!",
+    "groveLeaveNo": "Erk! No, I want to stay in the grove.",
+    "groveChop": "You need to have helped clean up Tai Bwo Wannai village before cutting down these trees.  You should leave through the gates into the main village.",
+    "selectOption": "Select an option"
+  },
+  "murcaily": {
+    "toldLine": "Well Bwana, if you're stuck for something to do",
+    "hackedLine": "I see that you've been hacking away at the jungle",
+    "conditions": {
+      "afterJunglePotion": "First time after completing Jungle Potion:",
+      "hackedNotRepaired": "First time after hacking away at jungle if the fence hasn't been repaired yet:",
+      "repaired": "First time after repairing the fence:",
+      "notHacked": "If the player hasn't hacked away at jungle:",
+      "hacked": "If the player has hacked away at jungle:"
+    }
+  },
+  "shop": {
+    "coop": "Gabooty's Tai Bwo Wannai Cooperative.",
+    "drinks": "Gabooty's Tai Bwo Wannai Drinky Store.",
+    "versions": {"default": " (Default)", "gloves": " (Karamja gloves)"},
+    "gloves": ["atjun_gloves_easy", "atjun_gloves_med", "atjun_gloves_hard", "atjun_gloves_elite"],
+    "asked": {"option": "What do you do here?", "condition": "If the player has asked Gabooty what he does in Tai Bwo Wannai:"}
+  },
+  "safta": {
+    "tuber": "village_rare_tuber",
+    "gems": 3,
+    "jingle": 256,
+    "machetes": [
+      {
+        "item": "machette_opal",
+        "gems": ["uncut_opal", "opal"],
+        "sticks": 300,
+        "order": "Ok Bwana, if you want to order the opal machete",
+        "has": "GYBFJF",
+        "missing": "nz3gBM",
+        "done": "There you go Bwana, a nice new opal machete for you.",
+        "box": "Safta doc sells you an opal machete."
+      },
+      {
+        "item": "machette_jade",
+        "gems": ["uncut_jade", "jade"],
+        "sticks": 600,
+        "order": "Ok Bwana, if you want to order the Jade machete",
+        "has": "MKwPVC",
+        "missing": "FHVeEb",
+        "done": "There you go Bwana, a nice new jade machete for you.",
+        "box": "Safta doc sells you a jade machete."
+      },
+      {
+        "item": "machette_redtopaz",
+        "gems": ["uncut_red_topaz", "red_topaz"],
+        "sticks": 1200,
+        "order": "Ok Bwana, if you want to order the Red Topaz machete",
+        "has": "ZN8P9K",
+        "missing": "SzMRV7",
+        "done": "There you go Bwana, a nice new Red Topaz machete for you.",
+        "box": "Safta doc sells you a red topaz machete."
+      }
+    ],
+    "transcriptDone": "There you go Bwana, a nice new",
+    "diary": {"diary": "karamja", "task": "exchange-gems-for-a-machete"}
+  },
+  "parcels": {
+    "interface": "tai_bwo_wannai_post",
+    "items": "tai_bwo_wannai_post:items",
+    "_ops": "Script 2855 sets each item's ops: 1 Value, 2 Pack-1, 3 Pack-5, 4 Pack-10, 5 Pack-All, 6 Pack-X, 7 Examine.",
+    "ops": {"value": 1, "amounts": {"2": 1, "3": 5, "4": 10, "5": -1}, "x": 6, "examine": 7},
+    "perItem": 10,
+    "action": "Tai Bwo Wannai Parcel Service",
+    "condition": "If the player does not have at least 10 trading sticks in their inventory:",
+    "_currencies": "The Wiki's Rionasta 'Ineligible items' table, by item name; Karamjan rum has its own message.",
+    "currencies": [
+      "Agility arena ticket",
+      "Archery ticket",
+      "Blood money",
+      "Castle wars ticket",
+      "Coins",
+      "Ecto-token",
+      "Frog token",
+      "Glistening tear",
+      "Golden nugget",
+      "Mark of grace",
+      "Mermaid's tear",
+      "Minnow",
+      "Molch pearl",
+      "Numulite",
+      "Paramaya ticket",
+      "Pieces of eight",
+      "Platinum token",
+      "Reward token",
+      "Tokkul",
+      "Trading sticks",
+      "Unidentified minerals",
+      "Warrior guild token"
+    ],
+    "rum": "Karamjan rum"
+  },
+  "grove": {
+    "_note": "The doors are on the west edge of x=2817; inside is x >= 2817 (rsprox 231/03030, 227/01858).",
+    "doors": ["tbwcu_bamboo_door_l", "tbwcu_bamboo_door_r"],
+    "open": [
+      {"loc": "tbwcu_bamboo_door_inactive_l", "at": [2816, 3083, 0], "rotation": 3},
+      {"loc": "tbwcu_bamboo_door_inactive_r", "at": [2816, 3084, 0], "rotation": 1}
+    ],
+    "doorTiles": [[2817, 3083, 0], [2817, 3084, 0]],
+    "wall": "inviswall",
+    "insideFromX": 2817,
+    "exit": [2816, 3083, 0],
+    "bounds": [2817, 3076, 2830, 3091],
+    "fee": 100,
+    "closeTicks": 2,
+    "sounds": {"door": 40, "pay": 1283},
+    "trees": ["Teak", "Mahogany"],
+    "logs": ["teak_logs", "mahogany_logs"],
+    "murcaily": "tbwcu_murcaily",
+    "eliteVariant": "opening-hardwood-grove-doors-with-elite-karamja-diary",
+    "eliteEnter": "wl-xhL"
+  },
+  "events": {
+    "_sources": "Wiki (Light Jungle 'Event rate', Mod Ash; Tai Bwo Wannai Cleanup event table; the monsters' pages) and rsprox 227/01858, 237/01102 (Leagues worlds: XP and favour there are boosted), 231/03030.",
+    "chance": {"varbit": "eventchance", "max": 7, "outOf": 101},
+    "goutChance": {"low": 100, "high": 33, "fromLevel": 10, "toLevel": 99},
+    "stepback": {"seq": "tbw_cleanup_player_surprise_stepback", "delay": 30, "speed": 34, "reverse": 49},
+    "stall": "tbw_cleanup_player_hack_stall",
+    "bushShake": "tbw_cleanup_bush_shake",
+    "lifeTicks": 3000,
+    "table": [
+      {
+        "key": "spider",
+        "weight": 22,
+        "spawn": "tbwcu_spider_appear",
+        "npc": "tbwcu_jungle_spider",
+        "turnAfter": 2,
+        "message": "A spider jumps out and attacks you.",
+        "chat": "game",
+        "sound": 1279,
+        "points": [10, 20],
+        "afterClaim": true
+      },
+      {
+        "key": "tribesman",
+        "weight": 21,
+        "spawn": "tbwcu_tribesman_instant",
+        "npc": "tbwcu_tribesman",
+        "turnAfter": 2,
+        "message": "You disturb a tribesman hiding in the jungle.",
+        "chat": "spam",
+        "points": [10, 20],
+        "bones": true
+      },
+      {
+        "key": "snake",
+        "weight": 21,
+        "spawn": "tbwcu_snakejungle_appear",
+        "npc": "tbwcu_village_snake",
+        "turnAfter": 3,
+        "message": "A snake strikes by surprise.",
+        "chat": "spam",
+        "sound": 1278,
+        "points": [10, 10]
+      },
+      {
+        "key": "mosquito",
+        "weight": 8,
+        "npc": "tbwcu_mosquito_single",
+        "turnAfter": 2,
+        "message": "You disturb a giant mosquito nest.",
+        "chat": "spam",
+        "points": [10, 10],
+        "agility": 17.5
+      },
+      {
+        "key": "swarm17",
+        "weight": 7,
+        "npc": "tbwcu_mosquito_swarm3",
+        "turnAfter": 2,
+        "message": "You disturb a giant mosquito nest.",
+        "chat": "spam",
+        "sound": 1272,
+        "points": [10, 10],
+        "agility": 35
+      },
+      {
+        "key": "swarm20",
+        "weight": 6,
+        "npc": "tbwcu_mosquito_swarm5",
+        "turnAfter": 2,
+        "message": "You disturb a giant mosquito nest.",
+        "chat": "spam",
+        "sound": 1272,
+        "points": [10, 10],
+        "agility": 75
+      },
+      {"key": "gemRock", "weight": 5},
+      {
+        "key": "broodooCombat",
+        "weight": 4,
+        "spawn": "tbwcu_broodoo_combat_instant",
+        "npc": "tbwcu_broodoo_combat",
+        "turnAfter": 2,
+        "message": "You disturb the grave of a Broodoo victim - an entity appears before you.",
+        "chat": "spam",
+        "sound": 1267,
+        "points": [30, 30]
+      },
+      {
+        "key": "broodooPoison",
+        "weight": 3,
+        "spawn": "tbwcu_broodoo_poison_instant",
+        "npc": "tbwcu_broodoo_poison",
+        "turnAfter": 2,
+        "message": "You disturb the grave of a Broodoo victim - an entity appears before you.",
+        "chat": "spam",
+        "sound": 1267,
+        "points": [30, 30]
+      },
+      {
+        "key": "broodooDisease",
+        "weight": 2,
+        "spawn": "tbwcu_broodoo_disease_instant",
+        "npc": "tbwcu_broodoo_disease",
+        "turnAfter": 2,
+        "message": "You disturb the grave of a Broodoo victim - an entity appears before you.",
+        "chat": "spam",
+        "sound": 1267,
+        "points": [30, 30]
+      }
+    ],
+    "wildSpider": {"name": "Jungle spider", "points": [10, 20]},
+    "killMessage": "You gain favour for killing a threat to the village.",
+    "agilityMessage": "You gain experience in agility for defeating such an agile foe.",
+    "gout": {
+      "loc": "village_gout_tuber",
+      "message": "You hack away at the remaining bush to reveal an unusual plant.",
+      "sound": 1282,
+      "lifeTicks": 1000,
+      "dig": {
+        "seq": "human_dig",
+        "sound": 1470,
+        "again": 2,
+        "doneAt": 6,
+        "item": "village_rare_tuber",
+        "message": "You dig up the plant and find a tuber.",
+        "notYours": "It's not yours to dig."
+      }
+    },
+    "gem": {
+      "locs": ["village_gem_rock1", "village_gem_rock2", "village_gem_rock3"],
+      "message": "You hack away at the remaining bush to reveal a gem rock.",
+      "lifeTicks": 1000,
+      "level": 40,
+      "xp": 65,
+      "low": 28,
+      "high": 70,
+      "swing": "You swing your pick at the rock.",
+      "noPickaxe": "You need a pickaxe to mine this rock.",
+      "levelMessage": "You need a Mining level of 40 to mine this rock.",
+      "full": "Your inventory is too full to hold any more gems.",
+      "table": [
+        ["uncut_opal", 60, "an Opal"],
+        ["uncut_jade", 30, "a piece of Jade"],
+        ["uncut_red_topaz", 15, "a Red Topaz"],
+        ["uncut_sapphire", 9, "a Sapphire"],
+        ["uncut_emerald", 5, "an Emerald"],
+        ["uncut_ruby", 5, "a Ruby"],
+        ["uncut_diamond", 4, "a Diamond"]
+      ],
+      "mined": "You just mined {gem}!"
+    },
+    "broodoo": {
+      "npcs": ["tbwcu_broodoo_combat", "tbwcu_broodoo_poison", "tbwcu_broodoo_disease"],
+      "speed": 6,
+      "distance": 8,
+      "maxHit": 7,
+      "playerMaxHit": 3,
+      "cast": {
+        "seq": "human_castentangle",
+        "spotanim": 177,
+        "projectile": "entangle_travel",
+        "start": 56,
+        "end": 75,
+        "angle": 16,
+        "progress": 64,
+        "startHeight": 45,
+        "endHeight": 0,
+        "sounds": [[2247, 0], [151, 0], [227, 56]]
+      },
+      "weaken": {
+        "npc": "tbwcu_broodoo_poison",
+        "message": "You feel incredibly weakened.",
+        "sound": 1266,
+        "drain": [1, 3],
+        "skills": ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC"]
+      },
+      "nothing": "Nothing interesting happens.",
+      "feed": {
+        "tbwcu_broodoo_combat": {"kind": "food", "damage": [10, 35], "skill": "COOKING"},
+        "tbwcu_broodoo_poison": {
+          "kind": "potion",
+          "skill": "HERBLORE",
+          "quest": "druidic_ritual",
+          "potions": {
+            "Antipoison": 20,
+            "Superantipoison": 30,
+            "Sanfew serum": 30,
+            "Antidote+": 40,
+            "Antidote++": 50,
+            "Anti-venom": 50,
+            "Anti-venom+": 50
+          }
+        },
+        "tbwcu_broodoo_disease": {
+          "kind": "potion",
+          "skill": "HERBLORE",
+          "quest": "druidic_ritual",
+          "potions": {"Relicym's balm": 30, "Sanfew serum": 30}
+        }
+      }
+    }
+  }
+}

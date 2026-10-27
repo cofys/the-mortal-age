@@ -1,13 +1,16 @@
-const { CombatType } = require("../../src/main/typescript/elvarg/game/content/combat/CombatType");
-const { CombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/CombatMethod");
-const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
-const { Flag } = require("../../src/main/typescript/elvarg/game/model/Flag");
-const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
-const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
+// Inventory creation/recharging: https://oldschool.runescape.wiki/w/Transcript:Blood_shard
+let core;
+let CombatType, Equipment, Flag, Misc;
+let AMULET_OF_FURY_ID, AMULET_OF_BLOOD_FURY_ID, BLOOD_SHARD_ID;
 
-const AMULET_OF_FURY_ID = ItemIdentifiers.AMULET_OF_FURY;
-const AMULET_OF_BLOOD_FURY_ID = ItemIdentifiers.AMULET_OF_BLOOD_FURY;
-const BLOOD_SHARD_ID = ItemIdentifiers.BLOOD_SHARD;
+function initialize(coreApi) {
+  core = coreApi;
+  ({ CombatType, Equipment, Flag, Misc, BonusManager } = core);
+  AMULET_OF_FURY_ID = core.ItemIdentifiers.AMULET_OF_FURY;
+  AMULET_OF_BLOOD_FURY_ID = core.ItemIdentifiers.AMULET_OF_BLOOD_FURY;
+  BLOOD_SHARD_ID = core.ItemIdentifiers.BLOOD_SHARD;
+}
+
 const BLOOD_FURY_META_KEY = "blood-fury";
 const BLOOD_FURY_CHARGES_PER_SHARD = 10000;
 const BLOOD_FURY_MAX_CHARGES = 30000;
@@ -57,40 +60,91 @@ function sendChargesMessage(player, item) {
     .sendMessage(`Your amulet has ${bloodFuryCharges(item).toLocaleString("en-US")} charges left.`);
 }
 
+function validIngredients(player, item, id, charges) {
+  return player.getInventory().getItems().includes(item) && item.getId() === id &&
+    player.getInventory().getAmount(BLOOD_SHARD_ID) > 0 &&
+    (id === AMULET_OF_FURY_ID || bloodFuryCharges(item) === charges);
+}
+
+function showSuccess(player, text) {
+  player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(
+    new core.ItemStatementDialogue(0, AMULET_OF_BLOOD_FURY_ID, text),
+  ));
+}
+
+function confirmation(player, title, yes, no, accept, warnings = [], itemId = AMULET_OF_FURY_ID) {
+  const chain = new core.DialogueChainBuilder();
+  for (const text of warnings) {
+    chain.add(new core.DoubleItemStatementDialogue(
+      chain.getDialogues().size, itemId, BLOOD_SHARD_ID, text,
+    ));
+  }
+  chain.add(new core.OptionDialogue(chain.getDialogues().size, {
+    executeOption(option) {
+      player.getDialogueManager().reset();
+      if (Number(option) === 1) accept();
+    },
+  }, yes, no).setTitle(title));
+  player.getDialogueManager().startDialogues(chain);
+}
+
 function createBloodFury(player, furyItem) {
-  player.getInventory().deleteNumber(BLOOD_SHARD_ID, 1);
-  setBloodFuryCharges(furyItem, BLOOD_FURY_CHARGES_PER_SHARD);
-  refresh(player);
-  player.sendMessage("You combine the blood shard with the amulet of fury.");
+  if (!validIngredients(player, furyItem, AMULET_OF_FURY_ID)) return;
+  confirmation(player, "Are you sure you wish to do this?",
+    "Yes, combine the Blood shard with the Amulet of fury.", "No, I'll keep my Blood shard.", () => {
+      if (!validIngredients(player, furyItem, AMULET_OF_FURY_ID)) return;
+      player.getInventory().deleteNumber(BLOOD_SHARD_ID, 1);
+      setBloodFuryCharges(furyItem, BLOOD_FURY_CHARGES_PER_SHARD);
+      refresh(player);
+      showSuccess(player, "You have successfully created an Amulet of blood fury.");
+    }, [
+      "<col=7f0000>Warning!</col> The Amulet of fury will consume your Blood shard to make the Amulet of blood fury and you won't be able to get it back.",
+      "The Amulet of blood fury is untradeable.",
+    ]);
 }
 
 function chargeBloodFury(player, amuletItem) {
   const charges = bloodFuryCharges(amuletItem);
+  if (!validIngredients(player, amuletItem, AMULET_OF_BLOOD_FURY_ID, charges)) return;
   if (charges >= BLOOD_FURY_MAX_CHARGES) {
-    player.sendMessage("Your amulet of blood fury cannot hold any more charges.");
+    player.sendMessage("Your Amulet of blood fury is already at maximum capacity.");
     return;
   }
 
-  const maxShards = Math.floor((BLOOD_FURY_MAX_CHARGES - charges) / BLOOD_FURY_CHARGES_PER_SHARD);
-  const addShards = Math.min(player.getInventory().getAmount(BLOOD_SHARD_ID), maxShards);
-  if (addShards <= 0) {
-    return;
+  function recharge() {
+    if (!validIngredients(player, amuletItem, AMULET_OF_BLOOD_FURY_ID, charges)) return;
+    const added = Math.min(BLOOD_FURY_CHARGES_PER_SHARD, BLOOD_FURY_MAX_CHARGES - charges);
+    player.getInventory().deleteNumber(BLOOD_SHARD_ID, 1);
+    setBloodFuryCharges(amuletItem, charges + added);
+    refresh(player);
+    showSuccess(player, `You have successfully added ${added.toLocaleString("en-US")} hits to your Amulet of blood fury. It will now work for ${(charges + added).toLocaleString("en-US")} more hits.`);
   }
 
-  player.getInventory().deleteNumber(BLOOD_SHARD_ID, addShards);
-  setBloodFuryCharges(amuletItem, charges + addShards * BLOOD_FURY_CHARGES_PER_SHARD);
-  refresh(player);
-  player.sendMessage(
-    addShards === 1
-      ? "You charge the amulet of blood fury with 1 blood shard."
-      : `You charge the amulet of blood fury with ${addShards} blood shards.`
-  );
+  confirmation(player, "Use the Blood shard to add charges to the amulet?",
+    "Yes, recharge my Amulet of blood fury.", "No, keep my Blood shard.", () => {
+      if (!validIngredients(player, amuletItem, AMULET_OF_BLOOD_FURY_ID, charges)) return;
+      if (charges + BLOOD_FURY_CHARGES_PER_SHARD > BLOOD_FURY_MAX_CHARGES) {
+        confirmation(player, "Recharge anyway?", "Yes, recharge my Amulet of blood fury.", "No, keep my Blood shard.", recharge,
+          ["<col=7f0000>Warning!</col> Your Amulet of blood fury is nearly at maximum capacity and will be capped at 30,000 hits."],
+          AMULET_OF_BLOOD_FURY_ID);
+      } else recharge();
+    });
 }
 
 function revertBloodFury(player, item) {
   setBloodFuryCharges(item, 0);
   refresh(player);
   player.sendMessage("You remove the blood magic from the amulet.");
+}
+
+function healFromLandedHit(player, damageTaken) {
+  if (Misc.getRandom(4) !== 0) {
+    return;
+  }
+  const heal = Math.floor(damageTaken * 0.3);
+  if (heal > 0) {
+    player.heal(heal);
+  }
 }
 
 function applyBloodFuryEffect(hit) {
@@ -109,12 +163,9 @@ function applyBloodFuryEffect(hit) {
     }
 
     charges -= 1;
-    if (Misc.getRandom(4) === 0) {
-      const heal = Math.floor(damage * 0.3);
-      if (heal > 0) {
-        player.heal(heal);
-      }
-    }
+    // Resolution happens before the hit reaches the target's HP. Heal from the health
+    // actually lost on landing, so earlier same-cycle damage and overkill do not count.
+    resolvedHit.onApplied((damageTaken) => healFromLandedHit(player, damageTaken));
   }
 
   if (charges === startingCharges) {
@@ -128,76 +179,11 @@ function applyBloodFuryEffect(hit) {
   }
 }
 
-function resolveBaseMethod(player) {
-  if (!player) {
-    return null;
-  }
-
-  const combat = player.getCombat?.();
-  if (
-    combat?.getCastSpell?.() != null ||
-    (combat?.getAutocastSpell?.() != null && player.getEquipment?.()?.hasStaffEquipped?.())
-  ) {
-    return null;
-  }
-
-  if (combat?.getRangedWeapon?.() != null) {
-    return null;
-  }
-
-  const special = player.getCombatSpecial?.();
-  if (
-    player.isSpecialActivated?.() === true &&
-    special &&
-    special.getCombatMethod?.()?.type?.() === CombatType.MELEE
-  ) {
-    return special.getCombatMethod();
-  }
-
-  return CombatFactory.MELEE_COMBAT;
-}
-
-class BloodFuryCombatMethod extends CombatMethod {
-  constructor(baseMethod) {
-    super();
-    this.baseMethod = baseMethod;
-  }
-
-  handleAfterHitEffects(hit) {
-    this.baseMethod.handleAfterHitEffects(hit);
-    applyBloodFuryEffect(hit);
-  }
-}
-
-for (const methodName of [
-  "start",
-  "finished",
-  "onCombatBegan",
-  "onCombatEnded",
-  "canAttack",
-  "attackSpeed",
-  "attackDistance",
-  "type",
-  "hits",
-]) {
-  BloodFuryCombatMethod.prototype[methodName] = function (...args) {
-    return this.baseMethod[methodName](...args);
-  };
-}
-
-const WRAPPED_METHODS = new WeakMap();
-
-function getWrappedMethod(baseMethod) {
-  let wrapped = WRAPPED_METHODS.get(baseMethod);
-  if (!wrapped) {
-    wrapped = new BloodFuryCombatMethod(baseMethod);
-    WRAPPED_METHODS.set(baseMethod, wrapped);
-  }
-  return wrapped;
-}
-
 let BonusManager;
-let CombatFactory;
+
+function onHitResolved({ hit }) {
+  if (hit.getCombatType() === CombatType.MELEE) applyBloodFuryEffect(hit);
+}
 
 function createFromShard({ player, usedItem, usedWithItem }) {
   createBloodFury(player, usedItem.getId() === AMULET_OF_FURY_ID ? usedItem : usedWithItem);
@@ -207,42 +193,22 @@ function chargeFromShard({ player, usedItem, usedWithItem }) {
   chargeBloodFury(player, usedItem.getId() === AMULET_OF_BLOOD_FURY_ID ? usedItem : usedWithItem);
 }
 
+function check({ player, item }) {
+  if (item.getId() === AMULET_OF_BLOOD_FURY_ID) sendChargesMessage(player, item);
+}
+
+function revert({ player, item }) {
+  if (item.getId() === AMULET_OF_BLOOD_FURY_ID) revertBloodFury(player, item);
+}
+
 module.exports = {
   name: "AmuletOfBloodFury",
   members: true,
   register(api) {
-    BonusManager = api.getBonusManager();
-    CombatFactory = api.getCombatFactory();
+    api.onServerStartup(initialize.bind(null, api.core));
     api.onItemOnItem("Blood shard", "Amulet of fury", createFromShard, { noted: false });
     api.onItemOnItem("Blood shard", "Amulet of blood fury", chargeFromShard, { noted: false });
-
-    api.onItemAction((event) => {
-      if (event.itemId !== AMULET_OF_BLOOD_FURY_ID) {
-        return;
-      }
-
-      if (event.clickType === 2) {
-        event.handled = true;
-        sendChargesMessage(event.player, event.item);
-        return;
-      }
-
-      if (event.clickType === 3 && event.interfaceId === Equipment.INVENTORY_INTERFACE_ID) {
-        event.handled = true;
-        revertBloodFury(event.player, event.item);
-      }
-    });
-
-    api.registerCombatMethodResolver({
-      resolve(attacker) {
-        const player = asPlayer(attacker);
-        if (!getBloodFury(player)) {
-          return null;
-        }
-
-        const baseMethod = resolveBaseMethod(player);
-        return baseMethod?.type?.() === CombatType.MELEE ? getWrappedMethod(baseMethod) : null;
-      },
-    });
+    api.onItemAction("Amulet of blood fury", { Check: check, Revert: revert });
+    api.onCombatHitResolved(onHitResolved);
   },
 };

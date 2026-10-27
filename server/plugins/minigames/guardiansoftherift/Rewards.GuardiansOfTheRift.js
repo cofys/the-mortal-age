@@ -31,10 +31,17 @@ function red(value) {
   return `<col=ef1020>${value}</col>`;
 }
 
+/** The points a closed rift awards, after "minigame:points" (a league's tier passive multiplies them). */
+function awarded(player, points) {
+  const award = { player, minigame: "guardians-of-the-rift", points };
+  Shared.api().emitCustomEvent("minigame:points", award);
+  return award.points;
+}
+
 function closed({ player, state }) {
   const earned = state.elemental + state.catalytic >= Shared.REWARD_ENERGY;
-  const elemental = earned ? pointsFor(state.elemental) : 0;
-  const catalytic = earned ? pointsFor(state.catalytic) : 0;
+  const elemental = earned ? awarded(player, pointsFor(state.elemental)) : 0;
+  const catalytic = earned ? awarded(player, pointsFor(state.catalytic)) : 0;
   const banked = Records.points(player);
   Records.setPoints(player, banked.elemental + elemental, banked.catalytic + catalytic);
   const total = Records.points(player);

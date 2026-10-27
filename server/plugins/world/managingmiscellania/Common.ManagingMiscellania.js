@@ -88,8 +88,23 @@ function questComplete(player, key) {
   return request.complete === true;
 }
 
-const ruler = (player) => questComplete(player, "throne_of_miscellania");
-const royalTrouble = (player) => questComplete(player, "royal_trouble");
+/**
+ * The kingdom's rules for this player: whether they rule it and with Royal Trouble's enhancements
+ * (the quests), what the workers' pay costs, how much they gather, an approval held fixed, and
+ * whether managing it counts as a visit wherever the player is (`visiting`).
+ * Content may change them ("miscellania:rules", a league relic's pocket kingdom).
+ */
+function rules(player) {
+  const request = {
+    player, ruler: questComplete(player, "throne_of_miscellania"), royalTrouble: questComplete(player, "royal_trouble"),
+    payMultiplier: 1, outputMultiplier: 1, approval: null, visiting: false,
+  };
+  getApi().emitCustomEvent("miscellania:rules", request);
+  return request;
+}
+
+const ruler = (player) => rules(player).ruler === true;
+const royalTrouble = (player) => rules(player).royalTrouble === true;
 
 function favour(player) {
   const request = { player, value: null };
@@ -158,17 +173,20 @@ function workersBusy(kingdom) {
  * Pays every day since the last one, up to 30 days after the last visit. Returns the new
  * kingdom and favour; the input is not changed.
  */
-function payDays(kingdom, favourNow, day, rt) {
+function payDays(kingdom, favourNow, day, rt, rates = {}) {
   const next = { ...kingdom, workers: { ...kingdom.workers } };
   const cap = limits(rt);
-  let currentFavour = favourNow;
+  // The workers' pay, scaled ("miscellania:rules"): the same work for a share of the coins.
+  const payMultiplier = rates.payMultiplier > 0 ? rates.payMultiplier : 1;
+  const fixedFavour = Number.isFinite(rates.approval);
+  let currentFavour = fixedFavour ? rates.approval : favourNow;
   const lastWorkday = Math.min(day, next.lastVisitDay + DATA.pauseAfterDays);
   for (let d = next.lastDay + 1; d <= lastWorkday; d++) {
-    const paid = Math.min(5 + Math.floor(next.coffer / 10), cap.dailyPayMax, next.coffer);
-    next.coffer -= paid;
+    const paid = Math.min(5 + Math.floor(next.coffer / 10), cap.dailyPayMax, Math.floor(next.coffer / payMultiplier));
+    next.coffer -= Math.min(next.coffer, Math.ceil(paid * payMultiplier));
     const effectiveness = Math.floor((paid * 100) / 8333);
     next.points = Math.min(DATA.resourcePointCap, next.points + Math.floor((effectiveness * currentFavour) / 100));
-    if (currentFavour > DATA.favourFloor) {
+    if (!fixedFavour && currentFavour > DATA.favourFloor) {
       currentFavour = Math.max(DATA.favourFloor, currentFavour - Math.ceil((cap.favourSubtraction - currentFavour) / 15));
     }
   }
@@ -212,7 +230,7 @@ function addAll(out, counts) {
 }
 
 /** Everything the subjects gathered with these points, by the module's rules. Keys: item ids, or "clue". */
-function gather(kingdom, random = Math.random) {
+function gather(kingdom, random = Math.random, outputMultiplier = 1) {
   const out = new Map();
   const i = items();
   const t = i.tables;
@@ -257,6 +275,10 @@ function gather(kingdom, random = Math.random) {
   const farm = baseQuantity(w.farm, cost.farm, points);
   addAll(out, rollTable(t.seeds, farm, random));
   addAll(out, rollTable(t.treeSeeds, Math.floor(farm / 200), random));
+  // More of every resource ("miscellania:rules"), each count scaled and rounded down; the clues stay as rolled.
+  if (outputMultiplier > 0 && outputMultiplier !== 1) {
+    for (const [key, count] of out) if (key !== "clue") out.set(key, Math.floor(count * outputMultiplier));
+  }
   return out;
 }
 
@@ -272,10 +294,12 @@ function onIslands(player) {
  * player is on the islands, records the visit. Only for regents.
  */
 function catchUp(player, day = today()) {
-  if (!ruler(player)) return null;
-  const rt = royalTrouble(player);
-  const result = payDays(kingdomOf(player, day), favour(player), day, rt);
-  if (onIslands(player)) result.kingdom.lastVisitDay = day;
+  const rule = rules(player);
+  if (rule.ruler !== true) return null;
+  const approval = Number.isFinite(rule.approval) ? Math.max(0, Math.min(DATA.favourMax, Math.floor(rule.approval))) : null;
+  const result = payDays(kingdomOf(player, day), favour(player), day, rule.royalTrouble === true,
+    { payMultiplier: rule.payMultiplier, approval });
+  if (onIslands(player) || rule.visiting === true) result.kingdom.lastVisitDay = day;
   save(player, result.kingdom);
   if (result.favour !== favour(player)) setFavour(player, result.favour);
   return result.kingdom;
@@ -295,6 +319,7 @@ module.exports = {
   items,
   varbits,
   ruler,
+  rules,
   royalTrouble,
   favour,
   setFavour,

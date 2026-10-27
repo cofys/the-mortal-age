@@ -91,9 +91,24 @@ export function preloadSequences(): void {
  * when the actor takes a step, as skilling loops do.
  */
 export function getSequencePriority(id: number): number {
-    const cached = sequencePriorities.get(id);
+    return readSequenceByte(sequencePriorities, id, 10, -1);
+}
+
+const sequenceForcedPriorities = new Map<number, number>();
+
+/**
+ * SeqType.forcedPriority (opcode 5; 5 when unset): a sequence can't replace one with a higher
+ * value (attacks are 6, blocks 5, so a block never cuts a swing short).
+ */
+export function getSequenceForcedPriority(id: number): number {
+    return readSequenceByte(sequenceForcedPriorities, id, 5, 5);
+}
+
+/** One single-byte field of a sequence, or `fallback` when it is unset (or there is no cache). */
+function readSequenceByte(cache: Map<number, number>, id: number, wanted: number, fallback: number): number {
+    const cached = cache.get(id);
     if (cached !== undefined) return cached;
-    let priority = -1;
+    let value = fallback;
     try {
         const data = sequences().getFile(id)?.data;
         const revision = CachePipeline.getActive().revision;
@@ -101,8 +116,8 @@ export function getSequencePriority(id: number): number {
         while (buffer.remaining > 0) {
             const opcode = buffer.readUnsignedByte();
             if (opcode === 0) break;
-            if (opcode === 10) {
-                priority = buffer.readUnsignedByte();
+            if (opcode === wanted) {
+                value = buffer.readUnsignedByte();
                 break;
             }
             if (opcode === 1) {
@@ -115,8 +130,8 @@ export function getSequencePriority(id: number): number {
     } catch {
         // No cache (tests, tools): treat as unset.
     }
-    sequencePriorities.set(id, priority);
-    return priority;
+    cache.set(id, value);
+    return value;
 }
 
 export function getLastSequenceId(): number {

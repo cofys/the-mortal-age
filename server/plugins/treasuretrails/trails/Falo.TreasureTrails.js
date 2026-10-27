@@ -78,7 +78,7 @@ function showItem(event) {
   const song = trail && songOf(trail);
   if (!song) return;
   event.handled = true;
-  const correct = isAnswer(song, itemId);
+  const correct = isAnswer(song, itemId) || Runtime.requirementWaived(player, "falo", itemId);
   const steps = Dialogue.transcript(player, npc, npcId, correct ? CORRECT : WRONG);
   // "You show your object to Falo." and how his eyes take it are game messages.
   for (const step of steps ?? []) if (step.type === "message" && /Falo/.test(step.text ?? "")) player.sendMessage(step.text);

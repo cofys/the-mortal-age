@@ -136,8 +136,8 @@ function ashFor(itemId) {
   return ashes.get(itemId) ?? null;
 }
 
-/** Experience is whole in tsps; a bone's tenths round up, as the old table did (bones 4.5 -> 5). */
-const experience = (xp, scale) => Math.ceil(xp * scale);
+/** SkillManager preserves tenths; do not round up bone or bonecrusher rewards here. */
+const experience = (xp, scale) => xp * scale;
 
 function restorePrayer(player, itemId, bone) {
   if (!bone.restore) return;

@@ -35,6 +35,16 @@ function canAttack(attacker, target = player()) {
   return event.allow;
 }
 
+test("every imbued abyssal dagger is restricted while standard poison variants stay usable", () => {
+  const I = core.ItemIdentifiers;
+  for (const id of [I.ABYSSAL_DAGGER_BH_, I.ABYSSAL_DAGGER_BH_P_, I.ABYSSAL_DAGGER_BH_P_PLUS_, I.ABYSSAL_DAGGER_BH_P_PLUS_PLUS_]) {
+    assert.equal(canAttack(player(id)), false, `imbued dagger ${id} outside permitted areas`);
+  }
+  for (const id of [I.ABYSSAL_DAGGER, I.ABYSSAL_DAGGER_P_, I.ABYSSAL_DAGGER_P_PLUS_, I.ABYSSAL_DAGGER_P_PLUS_PLUS_]) {
+    assert.equal(canAttack(player(id)), null, `ordinary dagger ${id} is unrestricted`);
+  }
+});
+
 test("BH darkbow refuses the wilderness and unsupported PvP areas; ordinary darkbow is unaffected", () => {
   assert.equal(canAttack(player()), false);
   assert.equal(canAttack(player(core.ItemIdentifiers.DARK_BOW)), null);
@@ -103,6 +113,15 @@ test("Castle Wars and the Fight Pit approve only their canonical game areas", ()
   assert.equal(canAttack(attacker, target), false, "the waiting room cannot approve the bow");
 });
 
+test("imbued abyssal daggers use the Fight Pit permission and reject its waiting room", () => {
+  const attacker = player(core.ItemIdentifiers.ABYSSAL_DAGGER_BH_), target = player();
+  attacker.getLocation = () => new core.Location(2399, 5160, 0);
+  target.getLocation = () => new core.Location(2398, 5160, 0);
+  assert.equal(canAttack(attacker, target), null);
+  target.getLocation = () => new core.Location(2399, 5170, 0);
+  assert.equal(canAttack(attacker, target), false);
+});
+
 test("a POH approves only two opponents in the same actual combat ring", (t) => {
   require("../plugins/skills/construction/Core.Construction").init(api);
   const House = require("../plugins/skills/construction/House.Construction");
@@ -121,5 +140,19 @@ test("a POH approves only two opponents in the same actual combat ring", (t) => 
   target.getLocation = () => new core.Location(101, 100, 0);
   assert.equal(canAttack(attacker, target), null);
   target.getLocation = () => new core.Location(102, 100, 0);
+  assert.equal(canAttack(attacker, target), false);
+});
+
+test("imbued daggers work past the Clan Wars free-for-all line, not in safe or private areas", () => {
+  require("../plugins/areas/ferox/Common.FeroxEnclave").init(api);
+  require("../plugins/areas/ferox/FreeForAll.FeroxEnclave")(api);
+  const attacker = player(core.ItemIdentifiers.ABYSSAL_DAGGER_BH_), target = player();
+  attacker.getLocation = () => new core.Location(3327, 4762, 0);
+  target.getLocation = () => new core.Location(3328, 4762, 0);
+  assert.equal(canAttack(attacker, target), null);
+  target.getLocation = () => new core.Location(3328, 4759, 0);
+  assert.equal(canAttack(attacker, target), false);
+  target.getLocation = () => new core.Location(3328, 4762, 0);
+  target.getPrivateArea = () => ({});
   assert.equal(canAttack(attacker, target), false);
 });

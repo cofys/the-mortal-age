@@ -14,6 +14,7 @@ const CHARGES_META_KEY = "crystal-halberd";
 const LAST_CHARGE_CYCLE_ATTRIBUTE = "crystal-halberd:last-charge-cycle";
 
 let core = null;
+let api = null;
 let inactiveByActive = new Map();
 let activeByInactive = new Map();
 let chargedIds = new Set();
@@ -46,6 +47,12 @@ function refresh(player) {
 function useCharge(player, item) {
   const current = charges(item);
   if (current <= 0) {
+    return;
+  }
+  // Content may spare the charge (a league relic): the question every charged weapon asks.
+  const consume = { player, itemId: item.getId(), skip: false };
+  api.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) {
     return;
   }
   const left = current - 1;
@@ -124,6 +131,7 @@ function addShardCharges(event) {
 
 function attach(pluginApi) {
   core = pluginApi.core;
+  api = pluginApi;
   inactiveByActive = buildIdMaps(core.ItemIdentifiers);
   activeByInactive = new Map();
   for (const [active, inactive] of inactiveByActive) {

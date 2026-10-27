@@ -18,6 +18,7 @@ The plugin is `server/plugins/skills/Slayer.plugin.js`; its units are in
 | `Checks.Slayer.js` | The enchanted gem's and slayer ring's Check |
 | `Rewards.Slayer.js` | The Slayer Rewards interface |
 | `Equipment.Slayer.js` | Protective gear; kurask and turoth weaknesses |
+| `SlaughterBracelet.Slayer.js` | Bracelet of slaughter effects, shared charges, Check and Break |
 | `Finishers.Slayer.js` | Rock hammer, bag of salt, ice cooler, fungicide spray |
 | `Superiors.Slayer.js` | Superior monsters |
 | `Keys.Slayer.js` | Brimstone and Larran's keys from Konar's and Krystilia's task kills |
@@ -113,7 +114,12 @@ levels for, 3-35 kills (Wiki; in OSRS the player chooses the amount).
 A superior rolls two unique tables, each at 1 in (200 - (Slayer level + 55)² / 125) (Wiki,
 Superior slayer monster): an imbued heart (1/8), dust battlestaff (7/16) or mist battlestaff
 (7/16) from the first, an eternal gem 1/8 of the time from the second. The Wiki also says either
-table is equally likely; here each table is rolled on its own.
+table is equally likely; here each table is rolled on its own. Before the roll the plugin asks
+`drops:chance` { player, source: "superior-slayer-monster", rules } and a rule whose pattern
+matches one of a table's items multiplies that table's chance (a league's boosted drops,
+[server/docs/leagues.md](../server/docs/leagues.md)). Whether a task kill brings a superior at all
+is asked first on `slayer:superior-spawn` { player, npc, unlocked, chance }: Bigger and Badder's
+bit and 1 in 200, which a listener may unlock or shorten; the toggle-off always holds.
 
 ### Kills
 
@@ -128,12 +134,67 @@ table is equally likely; here each table is rolled on its own.
   on no monster's drop table: `NpcDrops` strips the Wiki's "Konar task bonus" rows, which dropped
   a brimstone key from every superior kill, on task or not.
 
+### Bracelet of slaughter
+
+[Wiki mechanics](https://oldschool.runescape.wiki/w/Bracelet_of_slaughter): while item
+`BRACELET_OF_SLAUGHTER` is in the hands slot at the Slayer XP drop, a qualifying task kill has
+a 25% chance to preserve the remaining count. Slayer XP, task XP accounting, superior rolls
+and drops still run. TzTok-Jad and TzKal-Zuk are excluded. A preserved last kill leaves the task
+active; the next kill rolls normally.
+
+Charges belong to the player, shared by every bracelet of slaughter: the persisted attribute
+`slayer:slaughter-charges` starts at 30. Only activations spend charges. Replacing, banking,
+dropping or trading the bracelet does not reset the pool. The last activation resets it to 30
+and removes the worn bracelet, except for a 10% regeneration roll once the Elite Combat
+Achievements rewards are claimed from Ghommal (`combat-achievements:tier` answers `claimed`;
+reaching the points alone is not enough). Sources: the
+[bracelet page](https://oldschool.runescape.wiki/w/Bracelet_of_slaughter) (“the elite Combat
+Achievements rewards add a 10% chance for the bracelet to regenerate rather than disappearing”)
+and the [Elite rewards list](https://oldschool.runescape.wiki/w/Combat_Achievements#Rewards)
+(“10% chance to fully recharge instead of breaking”); the Wiki says rewards are claimed from
+Ghommal once the points are reached. Inventory Break consumes that exact
+bracelet and resets the pool; Check works in inventory and while worn. Notes and bank
+placeholders cannot use either action. This does not implement the expeditious bracelet.
+
+Evidence:
+
+- User-supplied live rsprox capture `slayer/braceletofslaughter.txt`, inspected 2026-10-26:
+  11 monster-kill counter increments, nine `slayer_count` decrements (54 to 45), and two
+  preserved counts. At ticks 1042 and 1083 the server sends `message_game type=spam`:
+  “Your bracelet of slaughter prevents your slayer count from decreasing. It has 26 charges
+  left.”, then the same with 25. No `slayer_count` update occurs on those two ticks. The
+  implementation sends the captured activation text on the same spam channel, after XP.
+- Local `osrs-captures` index: `facts '*slaughter*'` finds the item in 103 recordings but no
+  recorded item actions. It provides no Check/Break or terminal-charge transcript.
+- Revision 241 cache (`osrs-241_2026-10-20`): item 21183 is the wearable bracelet, 21184 its
+  note, 21185 its bank placeholder; inventory actions are Wear/Check/Break/Drop; item param
+  451 is the worn Check action. No bracelet-charge varp or varbit exists by those names.
+- Check, Break, depletion and regeneration **mechanics** follow the Wiki; their message wording
+  (including “It then regenerates itself to full charge!” and singular-charge grammar) is not on
+  the Wiki and remains unverified against live captures. No raw logs or
+  account details are committed.
+
+Regression coverage extends `server/tests/slayer.test.cjs`: real death handlers and named item
+hook dispatch, 25% and 10% boundaries, last-kill XP/count behavior, shared charges, attribute
+save/load, exact inventory removal, normal completion after depletion, Jad/Zuk exclusions,
+and note/placeholder rejection.
+
+Verification (2026-10-26, branch `fix/bracelet-of-slaughter`): server TypeScript build passed;
+`node --test tests/slayer.test.cjs tests/slayer-helmet.test.cjs tests/combat-achievements.test.cjs`
+passed all 78 tests. Omitting the bracelet kill-count integration made four new regressions
+fail. The worktree client returned HTTP 200 on port 3149 and the game server listened on
+43749. Live MCP checks were not completed: the OS rejected the assigned port 49849 with
+`EADDRINUSE`, including an independent bind probe. No worktree port was overridden.
+
 ### Completing
 
 - **Streaks:** Krystilia's tasks add to the Wilderness streak, Mortimer's to his own. All others
   add to the standard streak.
 - **Points:** none for the first four tasks. After that, the master's points (Turael, Aya and
   Spria give none), times 5, 15, 25, 35 or 50 on every 10th, 50th, 100th, 250th or 1,000th task.
+  Both numbers are asked first on `slayer:task-reward` { player, master, freeTasks, multiplier }
+  (Mortimer's completions ask too): a listener may lower the free tasks or multiply the points
+  (a league's tier passive, [server/docs/leagues.md](../server/docs/leagues.md)).
 
 ### Other rules
 

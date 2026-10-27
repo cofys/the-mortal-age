@@ -133,7 +133,7 @@ function depositFruit(player, random = Math.random) {
   const counted = Math.min(fruit, room.fruitPerPoint * room.maxPoints);
   const whole = Math.floor(counted / room.fruitPerPoint);
   const points = Math.min(room.maxPoints, whole + (random() < (counted % room.fruitPerPoint) / room.fruitPerPoint ? 1 : 0));
-  Common.addPoints(player, "graveyard", points);
+  Common.awardPoints(player, "graveyard", points);
   player.getSkillManager().addExperiences(Common.core.Skill.MAGIC, bananas * room.bananaXp + peaches * room.peachXp);
   player.setAttribute(RUNES_OWED_ATTRIBUTE, (Number(player.getAttribute(RUNES_OWED_ATTRIBUTE)) || 0) + points);
   player.sendMessage(Common.message("fruitDeposited", { fruit, points, s: points === 1 ? "" : "s" }));

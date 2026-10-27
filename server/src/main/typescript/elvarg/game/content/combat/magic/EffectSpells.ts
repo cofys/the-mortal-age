@@ -66,21 +66,40 @@ export class EffectSpells extends Spell {
                     player.sendMessage("You already have Vengeance's effect.");
                     return true;
                 }
-                if (!player.getVengeanceTimer().finished()) {
-                    player.sendMessage("You must wait another " + player.getVengeanceTimer().secondsRemaining() + " seconds before you can cast that again.");
+                if (EffectSpells.vengeanceOnCooldown(player)) {
+                    return true;
+                }
+                // Pays the runes from the inventory and any rune source (rune pouch).
+                if (!spell.canCast(player, true)) {
                     return true;
                 }
 
+                // No chat message on a successful cast (rsprox captures).
                 player.setHasVengeance(true);
-                player.getVengeanceTimer().start(30);
-                player.getPacketSender().sendEffectTimer(30, EffectTimer.VENGEANCE)
-                    .sendMessage("You now have Vengeance's effect.");
-                player.getInventory().deleteItemSet(spell.itemsToConsume(player));
+                EffectSpells.startVengeanceCooldown(player);
                 player.performAnimation(new Animation(8316));
                 player.performGraphic(new Graphic(726, GraphicHeight.HIGH));
+                player.getSkillManager().addExperiences(Skill.MAGIC, spell.baseExperience());
                 break;
         }
         return true;
+    }
+
+    /** Vengeance and Vengeance Other share one 50-tick cooldown, on the caster (Wiki: Vengeance_Other). */
+    public static readonly VENGEANCE_COOLDOWN_SECONDS = 30;
+
+    /** Refuses a vengeance spell while the caster's cooldown runs, with the live message. */
+    public static vengeanceOnCooldown(caster: Player): boolean {
+        if (caster.getVengeanceTimer().finished()) {
+            return false;
+        }
+        caster.sendMessage(`You can only cast vengeance spells every ${EffectSpells.VENGEANCE_COOLDOWN_SECONDS} seconds.`);
+        return true;
+    }
+
+    public static startVengeanceCooldown(caster: Player): void {
+        caster.getVengeanceTimer().start(EffectSpells.VENGEANCE_COOLDOWN_SECONDS);
+        caster.getPacketSender().sendEffectTimer(EffectSpells.VENGEANCE_COOLDOWN_SECONDS, EffectTimer.VENGEANCE);
     }
 
     public static forSpellName(name: string | undefined): EffectSpells | null {
@@ -168,7 +187,7 @@ export class EffectSpells extends Spell {
     public static VENGEANCE = new EffectSpells(
         () => { return 9136; },
         () => { return 94; },
-        () => { return 14000; },
+        () => { return 112; },
         () => { return [new Item(9075, 4), new Item(557, 10), new Item(560, 2)]; },
         () => { return null; },
         () => { },

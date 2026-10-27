@@ -592,6 +592,22 @@ test("the Hunter Guild stairs fade as captured and land where live OSRS does, bo
   assert.deepEqual([at.getX(), at.getY(), at.getZ()], [1558, 3047, 0]);
 });
 
+test("the Wilderness Slayer Cave's exits lead out beside their surface stairs, and the north stairs lead in (#1350)", () => {
+  const walk = (id, x, y, from, hook) => {
+    const object = locAt(id, x, y, 0);
+    const visit = explorer(from);
+    const request = { player: visit.player, object, objectId: id, clickType: 1, handled: false };
+    hooks[hook](request);
+    assert.equal(request.handled, true, `loc ${id} is taken`);
+    runTicks(visit, 3);
+    const at = visit.player.getLocation();
+    return [at.getX(), at.getY(), at.getZ()];
+  };
+  assert.deepEqual(walk(40389, 3384, 10050, [3385, 10052, 0], "object"), [3259, 3663, 0], "south exit");
+  assert.deepEqual(walk(40391, 3405, 10146, [3406, 10145, 0], "object"), [3293, 3749, 0], "north exit");
+  assert.deepEqual(walk(40390, 3293, 3746, [3293, 3749, 0], "ladders:climb"), [3406, 10145, 0], "north entrance");
+});
+
 test("another tile or option isn't claimed: the click falls through to whoever handles it", () => {
   const object = locAt(57591, 1288, 3133, 0);
   const visit = explorer([1289, 3136, 0]);

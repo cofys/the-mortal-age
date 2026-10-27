@@ -20,10 +20,17 @@ function clean(event) {
   }
   const inventory = player.getInventory();
   if (inventory.getItems()[slot]?.getId() !== itemId) return true;
-  inventory.setItem(slot, new Common.core.Item(herb.cleanId, 1)).refreshItems();
+  // Content may clean every herb of the kind in one click ("skills:actions-per-cycle", a league relic's all at once).
+  const actions = Common.actionsPerCycle(player, "clean");
+  const slots = [slot, ...inventory.getItems().map((item, index) => (index !== slot && item?.getId() === itemId ? index : -1)).filter((index) => index >= 0)];
+  for (const at of slots.slice(0, actions)) {
+    inventory.setItem(at, new Common.core.Item(herb.cleanId, 1));
+    Common.addXp(player, herb.xp);
+    Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: herb.cleanId, amount: 1, xp: herb.xp });
+  }
+  inventory.refreshItems();
   Common.sound(player, CLEAN_SOUNDS[Math.floor(Math.random() * CLEAN_SOUNDS.length)]);
   Common.spam(player, `You clean the ${name}.`);
-  Common.addXp(player, herb.xp);
   return true;
 }
 

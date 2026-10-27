@@ -325,6 +325,9 @@ export const FEATURE_FLAG_LEAGUES = 1 << 1;
  * Set of varp IDs that should be transmitted to the server when changed.
  * In OSRS, this is determined by the varp's transmit flag in the cache.
  */
+/** Cache 241 Adventure Paths view, task focus and notification filters. Progress stays server-owned. */
+export const ADVENTURE_PATHS_TRANSMIT_VARPS: readonly number[] = [2357, 2358, 2359, 2370];
+
 export const TRANSMIT_VARPS: ReadonlySet<number> = new Set([
     VARP_OPTION_RUN, // Run toggle
     VARP_ATTACK_STYLE, // Combat attack style
@@ -333,6 +336,7 @@ export const TRANSMIT_VARPS: ReadonlySet<number> = new Set([
     VARP_KEYBINDING_ESC_TO_CLOSE, // %keybinding_esc_to_close
     VARP_SHOP_QUANTITY, // Shop quantity selector (%shop_quantity)
     VARP_SIDE_JOURNAL_STATE, // Side journal tab selection (drives IF_OPENSUB swap for 629:43)
+    ...ADVENTURE_PATHS_TRANSMIT_VARPS,
     ...XPDROPS_TRANSMIT_VARPS, // XP drops setup/tracker persistence
     // Sound/music settings - transmit so server can persist them
     VARP_MUSIC_VOLUME, // Music volume (0-100)

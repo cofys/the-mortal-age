@@ -102,6 +102,8 @@ export class Sound {
     public static readonly DRAGON_MACE_SPECIAL = new Sound(2541, 1, 0, 0)
     public static readonly DRAGON_SPEAR_SPECIAL = new Sound(2544, 1, 0, 0)
     public static readonly DRAGON_BATTLEAXE_SPECIAL = new Sound(2538, 1, 0, 1)
+    /** Lumber Up activation, rsprox captures 293 and 3149. */
+    public static readonly DRAGON_AXE_SPECIAL = new Sound(2531, 1, 0, 1)
     public static readonly DRAGON_LONGSWORD_SPECIAL = new Sound(2529, 1, 0, 0)
     public static readonly MAGIC_LONGBOW_SPECIAL = Sound.SHOOT_BOW_QUIET
     public static readonly WHIP_SPECIAL = new Sound(2713, 1, 0, 0)

@@ -26,6 +26,17 @@ owner-authorized reviewed batches. Unverified cases stay explicit.
 
 ## Current checkpoint — 2026-10-25
 
+### Community-tested quests: skip full manual replay
+
+The user accepted the 21 completion reports in [issue #1257](https://github.com/RSPSApp/tsps/issues/1257)
+for queue decisions. Read the [community completion exclusions](quest-helper-728-community-completions.md) before selecting any new full
+playthrough. Preserve the report’s caveats and use targeted checks for known bugs;
+these passes do not certify complete Quest Helper or recovery/cutscene parity.
+None of the 21 names belongs to the original 106 active job roster, so that scope
+and its independently audited count are unchanged by this exemption. Unlisted quests
+remain eligible; Scorpion Catcher/Velrak issue #1204 is still being fixed.
+
+
 The owner authorized the 108-PR split merge batch. The [independent PR index](quest-helper-728-prs.md)
 links live publication state and integration repairs; merging changes does not accept
 additional natural routes or certify deferred, recovery, alternate or visual branches.
@@ -47,8 +58,8 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **25/106 active scoped main routes (23.58%)**. The count
-is 25/128 against the original inventory; the increase in percentage comes only
+of accepted route counts: **26/106 active scoped main routes (24.53%)**. The count
+is 26/128 against the original inventory; the increase in percentage comes only
 from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend, Lost City, Tree Gnome Village, Hazeel Cult, Elemental Workshop I, Observatory Quest and Queen of Thieves routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The [independent PRs](quest-helper-728-prs.md) are updated in reviewed batches; historical figures below remain

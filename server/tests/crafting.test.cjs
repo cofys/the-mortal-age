@@ -20,6 +20,7 @@ const tasks = [];
 
 before(async () => {
   await CachePipeline.initialize(process.cwd());
+  PluginManager.getCoreApi().ObjectDefinition.init();
   const api = PluginManager.createApi('LeatherCraftingTest');
   require('../plugins/skills/Crafting.plugin').register({
     ...api,
@@ -31,8 +32,17 @@ before(async () => {
     onInterfaceActionClick: handler => { handlers.button = handler; },
     onObjectInteraction: (name, actions) => { namedObjects[name] = actions; },
     persistAttribute: () => {},
+    sendMultiChatboxPrompt: player => player.log.push(["legacy-choice-menu"]),
+    emitCustomEvent: (name, event) => {
+      if (name === "quest:get-stage") event.stage = event.player.questStage ?? 0;
+      else api.emitCustomEvent(name, event);
+    },
     getTaskManager: () => ({ submit: task => tasks.push(task) }),
   });
+  require('../plugins/quests/quests/OneSmallFavour.Quest')(new Proxy({
+    core: api.core,
+    onItemOnObject: handler => { handlers.questItemOnObject = handler; },
+  }, { get: (object, key) => object[key] ?? (() => {}) }));
 });
 
 function membersWorld(t, members) {
@@ -52,6 +62,7 @@ function playerWith(entries = [], { level = 99, threadUses } = {}) {
     getAmount: id => amounts.get(id) ?? 0,
     deleteNumber: (id, amount) => amounts.set(id, Math.max(0, (amounts.get(id) ?? 0) - amount)),
     addItem: item => amounts.set(item.id, (amounts.get(item.id) ?? 0) + item.getAmount()),
+    adds: (id, amount = 1) => amounts.set(id, (amounts.get(id) ?? 0) + amount),
   };
   const packetSender = {
     sendCreationMenu(value) {
@@ -489,4 +500,181 @@ test('a furnace product above the Crafting level is refused before the menu clos
   assert.equal(tasks.length, before);
   assert.deepEqual(player.log, [['message', 'You need a Crafting level of at least 23 to craft this.']]);
   assert.equal(player.getInterfaceId(), 6);
+});
+
+// Pottery: captures 3121 (normal world), 1757/1858/1098 (Leagues); Wiki creation rates.
+const potteryStation = name => ({
+  getDefinition: () => ({ getName: () => name }),
+  getLocation: () => new Location(3109, 3499, 0),
+});
+function openPottery(player, firing = false) {
+  const name = firing ? 'Pottery Oven' : "Potter's Wheel";
+  const event = { player, object: potteryStation(name), handled: false };
+  namedObjects[name][firing ? 'Fire' : 'Use'](event);
+  assert.equal(event.handled, true);
+}
+
+test('pottery offers the captured ordered quantity menu even at level 1', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.SOFT_CLAY, 3]], { level: 1 });
+  player.questStage = 34;
+  openPottery(player);
+  assert.equal(getMenu().getTitle(), 'How many do you wish to make?');
+  assert.equal(getMenu().getOptions().mode, 0);
+  assert.equal(getMenu().getOptions().maxAmount, 3);
+  assert.deepEqual(getMenu().getItems(), [ItemIds.UNFIRED_POT, ItemIds.UNFIRED_PIE_DISH,
+    ItemIds.UNFIRED_BOWL, ItemIds.UNFIRED_PLANT_POT, ItemIds.UNFIRED_CUP, ItemIds.UNFIRED_POT_LID]);
+  assert.deepEqual(getMenu().getOptions().labels, ['Pot', 'Pie dish', 'Bowl', 'Plant pot', 'Set of cups', 'Pot lid']);
+  assert.equal(player.amounts.get(ItemIds.SOFT_CLAY), 3);
+});
+
+test('shaping repeats at three ticks, with first result two ticks after starting', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.SOFT_CLAY, 3]]);
+  openPottery(player);
+  const rows = craft(player, getMenu(), ItemIds.UNFIRED_BOWL, 2, 9);
+  assert.deepEqual(madeOn(rows, 'You make the clay into a bowl.'), [2, 5]);
+  assert.ok(rows[0].some(row => row[0] === 'animation' && row[1] === 883));
+  assert.ok(rows[0].some(row => row[0] === 'sound' && row[1] === 2588));
+  assert.deepEqual(xpOn(rows, 2), [18]);
+  assert.ok(rows[2].some(row => row[0] === 'animation' && row[1] === 883));
+  assert.equal(rows[3].some(row => row[0] === 'animation'), false);
+  assert.equal(player.amounts.get(ItemIds.UNFIRED_BOWL), 2);
+  assert.equal(player.amounts.get(ItemIds.SOFT_CLAY), 1);
+});
+
+test('oven always opens its quantity menu and fires at six ticks then every seven', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.UNFIRED_BOWL, 3]], { level: 13 });
+  openPottery(player, true);
+  assert.equal(getMenu().getTitle(), 'What would you like to fire in the oven?');
+  assert.equal(getMenu().getOptions().mode, 9);
+  assert.equal(getMenu().getOptions().maxAmount, 3);
+  const rows = craft(player, getMenu(), ItemIds.UNFIRED_BOWL, 2, 16);
+  assert.deepEqual(madeOn(rows, 'You put a bowl in the oven.'), [0, 7]);
+  assert.deepEqual(madeOn(rows, 'You remove the bowl from the oven.'), [6, 13]);
+  assert.ok(rows[0].some(row => row[0] === 'animation' && row[1] === 1317));
+  assert.ok(rows[0].some(row => row[0] === 'sound' && row[1] === 2725));
+  assert.deepEqual(xpOn(rows, 6), [15]);
+  assert.equal(player.amounts.get(ItemIds.BOWL), 2);
+  assert.equal(player.amounts.get(ItemIds.UNFIRED_BOWL), 1);
+});
+
+test('unfired pottery used on an oven opens the same menu without consuming the item', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.UNFIRED_BOWL, 2]]);
+  const event = { player, itemId: ItemIds.UNFIRED_BOWL, object: potteryStation('Pottery Oven') };
+  handlers.handlePotteryItemOnObject(event);
+  assert.equal(event.handled, true);
+  assert.equal(player.amounts.get(ItemIds.UNFIRED_BOWL), 2);
+  assert.equal(getMenu().getOptions().mode, 9);
+});
+
+test('pottery interruption before completion preserves materials and XP', t => {
+  membersWorld(t, true);
+  for (const firing of [false, true]) {
+    const input = firing ? ItemIds.UNFIRED_BOWL : ItemIds.SOFT_CLAY;
+    const { player, getMenu } = playerWith([[input, 2]]);
+    openPottery(player, firing);
+    getMenu().execute(firing ? input : ItemIds.UNFIRED_BOWL, 2);
+    const task = tasks.at(-1);
+    player.moving = true;
+    task.execute();
+    assert.equal(player.amounts.get(input), 2);
+    assert.equal(player.log.some(row => row[0] === 'xp'), false);
+    assert.equal(player.getAttribute(TASK_ATTRIBUTE), null);
+  }
+});
+
+test('cups produce four for one clay for the shaping XP of one action', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.SOFT_CLAY, 1]]);
+  openPottery(player);
+  const rows = craft(player, getMenu(), ItemIds.UNFIRED_CUP, 1, 3);
+  assert.equal(player.amounts.get(ItemIds.UNFIRED_CUP), 4);
+  assert.deepEqual(xpOn(rows, 2), [8.5]);
+  assert.deepEqual(messages(rows[2]), ['You make the clay into a set of cups.']);
+  openPottery(player, true);
+  const fired = craft(player, getMenu(), ItemIds.UNFIRED_CUP, 2, 14);
+  assert.deepEqual(madeOn(fired, 'You put an item in the oven.'), [0, 7]);
+  assert.deepEqual(madeOn(fired, 'You remove the item from the oven.'), [6, 13]);
+  assert.deepEqual(xpOn(fired, 6), [8.5]);
+  assert.equal(player.amounts.get(ItemIds.EMPTY_CUP), 2);
+});
+
+test('pottery shaping enforces levels and the quest pot-lid unlock; firing needs neither', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.SOFT_CLAY, 3], [ItemIds.UNFIRED_PLANT_POT, 1]], { level: 1 });
+  openPottery(player);
+  craft(player, getMenu(), ItemIds.UNFIRED_BOWL, 1, 3);
+  assert.equal(player.amounts.get(ItemIds.SOFT_CLAY), 3);
+  player.level = 99;
+  openPottery(player);
+  craft(player, getMenu(), ItemIds.UNFIRED_POT_LID, 1, 3);
+  assert.equal(player.amounts.get(ItemIds.SOFT_CLAY), 3);
+  player.questStage = 34;
+  openPottery(player);
+  const lid = craft(player, getMenu(), ItemIds.UNFIRED_POT_LID, 1, 3);
+  assert.deepEqual(xpOn(lid, 2), [20]);
+  assert.equal(player.amounts.get(ItemIds.UNFIRED_POT_LID), 1);
+  player.level = 1;
+  withRandom(t, 0);
+  openPottery(player, true);
+  const rows = craft(player, getMenu(), ItemIds.UNFIRED_PLANT_POT, 1, 7);
+  assert.equal(player.amounts.get(ItemIds.EMPTY_PLANT_POT), 1);
+  assert.deepEqual(xpOn(rows, 6), [17.5]);
+  openPottery(player, true);
+  const lidFired = craft(player, getMenu(), ItemIds.UNFIRED_POT_LID, 1, 7);
+  assert.deepEqual(xpOn(lidFired, 6), [20]);
+  assert.equal(player.amounts.get(ItemIds.POT_LID), 1);
+});
+
+test('low-level pottery can crack without output or XP; level 13 always succeeds', t => {
+  membersWorld(t, true);
+  withRandom(t, 0.999);
+  for (const level of [1, 12, 13]) {
+    const { player, getMenu } = playerWith([[ItemIds.UNFIRED_POT, 1]], { level });
+    openPottery(player, true);
+    const rows = craft(player, getMenu(), ItemIds.UNFIRED_POT, 1, 7);
+    assert.equal(player.amounts.get(ItemIds.UNFIRED_POT), 0);
+    assert.equal(player.amounts.get(ItemIds.POT) ?? 0, level < 13 ? 0 : 1);
+    assert.deepEqual(xpOn(rows, 6), level < 13 ? [] : [6.3]);
+  }
+});
+
+test('free-to-play pottery menu excludes cups, plant pots and pot lids', t => {
+  membersWorld(t, false);
+  const { player, getMenu } = playerWith([[ItemIds.SOFT_CLAY, 2]]);
+  openPottery(player);
+  assert.deepEqual(getMenu().getItems(), [ItemIds.UNFIRED_POT, ItemIds.UNFIRED_PIE_DISH, ItemIds.UNFIRED_BOWL]);
+});
+
+test('empty wheel shows the captured message box and schedules no work', () => {
+  const { player, getMenu } = playerWith();
+  openPottery(player);
+  assert.equal(getMenu(), undefined);
+  assert.ok(player.log.some(row => row[0] === 'statement' && row[1] === "You don't have anything suitable to craft with."));
+});
+
+test('One Small Favour leaves pot lid firing to the timed Crafting path', () => {
+  const { player } = playerWith([[ItemIds.UNFIRED_POT_LID, 1]]);
+  const event = { player, itemId: ItemIds.UNFIRED_POT_LID,
+    object: potteryStation('Pottery Oven'),
+    objectId: PluginManager.getCoreApi().CacheDefinitions.getLocId('fai_barbarian_pottery_oven'), handled: false };
+  handlers.questItemOnObject(event);
+  assert.equal(event.handled, false);
+  assert.equal(player.amounts.get(ItemIds.UNFIRED_POT_LID), 1);
+  assert.equal(player.amounts.get(ItemIds.POT_LID), undefined);
+});
+
+test('a completed one-step move cancels pottery even after the movement queue empties', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.UNFIRED_BOWL, 2]]);
+  openPottery(player, true);
+  getMenu().execute(ItemIds.UNFIRED_BOWL, 2);
+  player.getLocation().addX(1);
+  const task = tasks.at(-1);
+  task.execute();
+  assert.equal(player.getAttribute(TASK_ATTRIBUTE), null);
+  assert.equal(player.amounts.get(ItemIds.UNFIRED_BOWL), 2);
 });
