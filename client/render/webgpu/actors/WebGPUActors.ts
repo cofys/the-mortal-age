@@ -46,6 +46,7 @@ import {
     packProjectileActorData,
     packWorldGfxActorData,
     updateNpcClientAnimations,
+    updateDeckNpcClientAnimations,
 } from "./actorPacking";
 import { PlayerPoseGeometry, type PosedActorGeometry } from "./actorPlayers";
 import { NpcPoseGeometry } from "./actorNpcs";
@@ -726,6 +727,7 @@ export class WebGPUActors {
         for (let i = 0; i < visible.length; i++) {
             updateNpcClientAnimations(client, visible[i], ticks);
         }
+        updateDeckNpcClientAnimations(client, ticks);
     }
 
     private packMapNpcs(state: MapActorState, map: WebGPUMapSquare): void {

@@ -305,6 +305,12 @@ function depositAllFromLoc({ player }) {
   depositAll(player, null);
 }
 
+/** Something else put cargo in the hold (a crewmate's salvage): an open hold shows it. */
+function cargoChanged({ player }) {
+  const boat = heldBoat(player);
+  if (boat && isOpen(player)) refresh(player, boat);
+}
+
 const HOLD_ACTIONS = { Open: openHold, "Deposit-all": depositAllFromLoc, "Deposit-held": depositHeld };
 
 module.exports = {
@@ -317,5 +323,6 @@ module.exports = {
     api.persistAttribute(WARNING_ATTRIBUTE);
     for (const name of HOLD_NAMES) api.onObjectInteraction(name, HOLD_ACTIONS);
     api.onInterfaceActionClick(clickHold);
+    api.onCustomEvent("sailing:cargo-changed", cargoChanged);
   },
 };

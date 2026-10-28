@@ -7,6 +7,7 @@
 //   --user visionbot --pass vision1234 --out shot.png [--yaw 1024 --pitch 300]
 //   [--clip-secs 5 --clip-fps 10 --clip-out clip.mp4]
 //   [--animation-smoothing on|off] [--check-animation-smoothing 1]
+//   [--check-mobile-keyboard 1] (use --url with ?mobile=1)
 // VISION_CHROME_FLAGS is an optional JSON array for software rendering in CI.
 // --url defaults to this worktree's client (PORT in the root .env, see
 // docs/worktrees.md), then http://localhost:3000; VISION_CLIENT_URL overrides.
@@ -329,6 +330,52 @@ async function main() {
       await sleep(Number(arg("settle-ms", "1500")));
     } else {
       await sleep(Number(arg("settle-ms", "2500")));
+    }
+
+    if (arg("check-mobile-keyboard", "0") === "1") {
+      await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
+      const point = await cdp.evaluate(`(() => {
+        const c = ${CLIENT_JS}, canvas = c.renderer.canvas;
+        // Cache rev 241: toplevel_osm:48 runs the chat keyboard toggle (script 2251).
+        const button = c.widgetManager.getWidgetByUid((601 << 16) | 48);
+        if (!button || c.widgetManager.isEffectivelyHidden(button.uid)) throw new Error("mobile keyboard button is not visible");
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: rect.left + (button._absX + button.width * button._absScaleX / 2) * rect.width / canvas.width,
+          y: rect.top + (button._absY + button.height * button._absScaleY / 2) * rect.height / canvas.height,
+        };
+      })()`);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await sleep(500);
+      summary.mobileKeyboard = await cdp.evaluate(`(async () => {
+        const c = ${CLIENT_JS}, keyboard = c.mobileChatKeyboard, canvas = c.renderer.canvas;
+        const check = (condition, message) => { if (!condition) throw new Error(message); };
+        try {
+          const input = document.querySelector("input[data-mobile-chat-input]");
+          check(input && document.activeElement === input, "the first keyboard tap did not retain mobile chat focus");
+          check(c.varManager.getVarcInt(1226) === 1, "the chat script did not keep its keyboard toggle open");
+          c.closeMenu();
+          check(document.activeElement === input, "menu cleanup dismissed the mobile chat input");
+          // The tap focuses first; the clientscript supplies the hint in a later frame.
+          await new Promise(requestAnimationFrame);
+          keyboard.show("Type a message", 0);
+          c.resetMenu();
+          check(document.activeElement === input, "menu reset dismissed the mobile chat input");
+          await new Promise(resolve => setTimeout(resolve, 500));
+          check(document.activeElement === input, "the frame loop dismissed the mobile chat input");
+          keyboard.hide();
+          check(document.activeElement !== input && !keyboard.isOpen, "explicit hide did not dismiss chat");
+          c.closeMenu();
+          check(document.activeElement === canvas, "closing a menu did not restore normal canvas focus");
+          keyboard.show();
+          c.closeMenu();
+          check(document.activeElement === input, "reopened chat lost focus");
+          return { tap: true, menuClose: true, menuReset: true, laterFrames: true, hide: true, reopen: true };
+        } finally {
+          keyboard.hide();
+        }
+      })()`);
     }
 
     if (arg("check-animation-smoothing", "0") === "1") {

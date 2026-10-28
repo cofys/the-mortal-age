@@ -21,8 +21,11 @@ const SCRIPT_RESTORE_CHAT_INPUT = 2158;
 const IF_EVENT_PAUSEBUTTON_OP1 = (1 << 0) | (1 << 1);
 const MAX_BOATS = 5;
 
-/** What the interface was opened for (varbit 18553; table 149 `boat_selection_type`). */
-const MODE = { CUSTOMISE: 2, BOARD: 3, RECOVER: 5, SUMMON: 6, TELEPORT_TO_BOAT: 8 };
+/**
+ * What the interface was opened for (varbit 18553; table 149 `boat_selection_type`). Bank cargo
+ * (11) is a dock crewmate's "Can you help bank my cargo hold contents?" (rsprox).
+ */
+const MODE = { CUSTOMISE: 2, BOARD: 3, RECOVER: 5, SUMMON: 6, TELEPORT_TO_BOAT: 8, BANK_CARGO: 11 };
 
 /** The pending choice per player: what to do with the chosen boat slot. */
 const pending = new Map();

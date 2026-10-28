@@ -1146,6 +1146,12 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     }
     player.setAttribute(TRAINING_CLAIMED_ATTRIBUTE, true);
     const skills = player.getSkillManager();
+    // Completed without experience (a league quest pack): the training happens but pays nothing.
+    if (quest.experienceWithheld(player)) {
+      player.sendMessage("Several hours later...");
+      setStage(player, STAGE_TRAINING);
+      return;
+    }
     if (stepId === "KpGxV1") {
       skills.addExperiences(Skill.STRENGTH, 35000);
       skills.addExperiences(Skill.HITPOINTS, 35000);

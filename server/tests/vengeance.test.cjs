@@ -14,10 +14,12 @@ const { Spell } = require("../dist/game/content/combat/magic/Spell");
 const { SecondsTimer } = require("../dist/game/model/SecondsTimer");
 const { Skill } = require("../dist/game/model/Skill");
 const { PluginManager } = require("../dist/plugins/PluginManager");
+const { Player } = require("../dist/game/entity/impl/player/Player");
 const VengeanceTimer = require("../plugins/interface/VengeanceTimer.plugin");
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  require("../plugins/items/BlightedSpellSacks.plugin").register(PluginManager.createApi("BlightedSpellSacksTest"));
 });
 
 const COOLDOWN_MESSAGE = "You can only cast vengeance spells every 30 seconds.";
@@ -121,6 +123,88 @@ test("a target on its own vengeance cooldown can still receive Vengeance Other",
   target.vengeance = false;
   castVengeanceOther(caster, target);
   assert.equal(target.vengeance, true);
+});
+
+function sackCaster({ x = 3100, y = 3600, sacks = 2, magic = 99, defence = 99, book } = {}) {
+  const core = PluginManager.getCoreApi();
+  const player = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.messages = [];
+  player.sendMessage = (message) => player.messages.push(message);
+  player.setLocation(new core.Location(x, y, 0));
+  player.setSpellbook(book ?? core.MagicSpellbook.LUNAR);
+  for (const [skill, level] of [[Skill.MAGIC, magic], [Skill.DEFENCE, defence]]) {
+    player.getSkillManager().setMaxLevels(skill, level, false);
+    player.getSkillManager().setCurrentLevel(skill, level, false);
+  }
+  player.getInventory().resetItems();
+  if (sacks) player.getInventory().add(new core.Item(core.ItemIdentifiers.BLIGHTED_VENGEANCE_SACK, sacks), false);
+  return player;
+}
+
+test("blighted sacks pay one complete Vengeance cast, retaining regular runes and cooldown", () => {
+  const core = PluginManager.getCoreApi();
+  const player = sackCaster();
+  for (const item of EffectSpells.VENGEANCE.itemsRequired(player)) player.getInventory().add(item.clone(), false);
+  assert.equal(LunarSpells.handleSelf(player, "Vengeance"), true);
+  assert.equal(player.hasVengeanceReturn(), true);
+  assert.equal(player.getInventory().getAmount(core.ItemIdentifiers.BLIGHTED_VENGEANCE_SACK), 1);
+  assert.ok(EffectSpells.VENGEANCE.itemsRequired(player).every(item => player.getInventory().getAmount(item.id) === item.getAmount()));
+  player.setHasVengeance(false);
+  LunarSpells.handleSelf(player, "Vengeance");
+  assert.equal(player.getInventory().getAmount(core.ItemIdentifiers.BLIGHTED_VENGEANCE_SACK), 1);
+  assert.ok(player.messages.includes(COOLDOWN_MESSAGE));
+});
+
+test("blighted sacks also fund Vengeance Other, with normal target and cooldown checks", () => {
+  const core = PluginManager.getCoreApi();
+  const caster = sackCaster();
+  const target = sackCaster({ x: 3101 });
+  target.setAttribute("accept-aid", false);
+  assert.equal(LunarSpells.handlePlayerTarget(caster, target, "Vengeance Other"), false);
+  assert.equal(caster.getInventory().getAmount(core.ItemIdentifiers.BLIGHTED_VENGEANCE_SACK), 2);
+  target.setAttribute("accept-aid", true);
+  assert.equal(LunarSpells.handlePlayerTarget(caster, target, "Vengeance Other"), true);
+  assert.equal(target.hasVengeanceReturn(), true);
+  assert.equal(caster.getInventory().getAmount(core.ItemIdentifiers.BLIGHTED_VENGEANCE_SACK), 1);
+  assert.equal(caster.getVengeanceTimer().finished(), false);
+  assert.equal(target.getVengeanceTimer().finished(), true);
+});
+
+test("sacks preserve spell requirements and cannot supply another Lunar spell", () => {
+  const core = PluginManager.getCoreApi();
+  for (const options of [
+    { magic: 93 }, { defence: 39 }, { book: core.MagicSpellbook.NORMAL },
+    { x: 3200, y: 3200 }, { sacks: 0 },
+  ]) {
+    const player = sackCaster(options);
+    LunarSpells.handleSelf(player, "Vengeance");
+    assert.equal(player.hasVengeanceReturn(), false, JSON.stringify(options));
+    assert.equal(player.getInventory().getAmount(core.ItemIdentifiers.BLIGHTED_VENGEANCE_SACK), options.sacks ?? 2);
+  }
+  const player = sackCaster();
+  LunarSpells.handleSelf(player, "Dream");
+  assert.equal(player.getInventory().getAmount(core.ItemIdentifiers.BLIGHTED_VENGEANCE_SACK), 2);
+  assert.ok(player.messages.some(message => message.includes("required items")));
+});
+
+test("sacks can be used in Ferox, Mage Arena bank, supported PvP minigames and PvP worlds", (t) => {
+  const core = PluginManager.getCoreApi();
+  const players = [sackCaster({ x: 3130, y: 3630 }), sackCaster({ x: 2539, y: 4712 })];
+  for (const name of ["Castle Wars", "Soul Wars"]) {
+    const player = sackCaster({ x: 3200, y: 3200 });
+    player.getArea = () => ({ getName: () => name });
+    players.push(player);
+  }
+  for (const player of players) {
+    LunarSpells.handleSelf(player, "Vengeance");
+    assert.equal(player.hasVengeanceReturn(), true);
+  }
+  t.mock.method(core.WorldDefinition, "hasGlobalWorldTag", tag => tag === "pvp");
+  const pvp = sackCaster({ x: 3200, y: 3200 });
+  LunarSpells.handleSelf(pvp, "Vengeance");
+  assert.equal(pvp.hasVengeanceReturn(), true);
 });
 
 test("vengeance_rebound follows the effect; vengeance_timelimit the cooldown", () => {

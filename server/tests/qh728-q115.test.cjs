@@ -796,3 +796,69 @@ test('the escaping slave owns his own transcript and turns back into a male slav
   action(h, { player: p, npcId: core.NpcIdentifiers.ESCAPING_SLAVE, stepId: 'nxSDg3' });
   assert.equal(varbit(p, 2803), 0, 'the caught escaping slave turns back into a male slave');
 });
+
+test('Tourist Trap registered before Tribal Totem releases the real mansion chest to its owner', () => {
+  RegionManager.loadMapFiles(2638, 3324, false);
+  const anchor = new core.Location(2638, 3324, 1);
+  const closed = core.MapObjects.get(2709, anchor, null);
+  assert.ok(closed, 'the real map supplies the mansion chest');
+  assert.equal(closed.getDefinition().getName(), 'Chest');
+  const arrays = ['objectInteractionHooks', 'npcDialogueVariantHooks', 'npcDialogueConditionHooks',
+    'npcInteractionHooks', 'npcDeathHooks', 'itemOnNpcHooks', 'itemOnObjectHooks',
+    'itemOnItemHooks', 'itemActionHooks', 'loginHooks', 'logoutHooks', 'interfaceActionClickHooks'];
+  const saved = Object.fromEntries([...arrays, 'objectHooksByName', 'objectHooksById',
+    'customEventHooks', 'nextObjectHookOrder'].map(key => [key, PluginManager[key]]));
+  for (const key of arrays) PluginManager[key] = [];
+  for (const key of ['objectHooksByName', 'objectHooksById', 'customEventHooks']) PluginManager[key] = new Map();
+  PluginManager.nextObjectHookOrder = 0;
+  try {
+    require('../plugins/quests/quests/TouristTrap.Quest')(PluginManager.createApi('q115-real-owner'));
+    require('../plugins/quests/quests/TribalTotem.Quest')(PluginManager.createApi('q118-real-owner'));
+    const tribal = runtime.getRegisteredQuests().findLast(entry => entry.key === 'tribal_totem');
+    const player = makePlayer('shared-chest-owner');
+    player.setLocation(2639, 3324, 1);
+    tribal.setStage(player, 4);
+    const dispatch = (object, option) => {
+      const definition = object.getDefinition();
+      const clickType = definition.getInteractions().indexOf(option) + 1;
+      assert.ok(clickType > 0, `${option} is an actual cache action`);
+      return PluginManager.emitObjectInteraction({ player, object, objectId: object.getId(), definition,
+        location: { x: 2638, y: 3324, z: 1 }, clickType, option: option.toLowerCase(), handled: false });
+    };
+    assert.equal(dispatch(closed, 'Open'), true);
+    const opened = core.MapObjects.get(2710, anchor, null);
+    assert.ok(opened, 'the later owning quest replaces2709 with actual open2710');
+    assert.equal(core.MapObjects.get(2709, anchor, null), null);
+    assert.equal(dispatch(opened, 'Search'), true);
+    assert.equal(player.items.get(core.ItemIdentifiers.TOTEM), 1);
+    dispatch(opened, 'Search');
+    assert.equal(player.items.get(core.ItemIdentifiers.TOTEM), 1, 'normal repeat search never duplicates');
+
+    const laterOwner = [];
+    PluginManager.createApi('later-shared-owner').onObjectInteraction(event => {
+      laterOwner.push(event.objectId); event.handled = true;
+    });
+    // Other real cache siblings exercise the same named-handler ownership rule.
+    for (const [id, name, option] of [[37, 'Gate', 'Open'], [155, 'Bookcase', 'Search'],
+      [255, 'Winch', 'Operate'], [1994, 'Chest', 'Open'], [2530, 'Barrel', 'Search'],
+      [2668, 'Winch bucket', 'Use']]) {
+      const other = new core.GameObject(id, new core.Location(0, 0, 0), 10, 0, null);
+      const definition = other.getDefinition();
+      assert.equal(definition.getName(), name);
+      const clickType = definition.getInteractions().indexOf(option) + 1;
+      assert.ok(clickType > 0);
+      const before = laterOwner.length;
+      PluginManager.emitObjectInteraction({ player, object: other, objectId: id, definition,
+        location: { x: 0, y: 0, z: 0 }, clickType, option: option.toLowerCase(), handled: false });
+      assert.equal(laterOwner.length, before + 1, `${name} ${id} reaches its later owner`);
+    }
+
+  } finally {
+    const opened = core.MapObjects.get(2710, anchor, null);
+    if (opened) core.ObjectManager.deregister(opened, true);
+    if (!core.MapObjects.get(2709, anchor, null)) {
+      core.ObjectManager.register(new core.GameObject(2709, anchor, closed.getType(), closed.getFace(), null), true);
+    }
+    Object.assign(PluginManager, saved);
+  }
+});

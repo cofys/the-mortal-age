@@ -203,6 +203,18 @@ export class LocUpdates {
         const added = this.r.addedLocs.get(`${tile.x | 0},${tile.y | 0},${level | 0},${shape | 0}`);
         const onAddedLoc = added !== undefined && (added.locId | 0) === (locId | 0);
         const keys = onAddedLoc ? [exactKey] : [exactKey, matchKey];
+        // As in OSRS, a sequence with a frame step loops (or holds its last frames) until the
+        // loc is animated again or changed; one without plays once and reverts.
+        let loops = false;
+        try {
+            loops = ((this.r.osrsClient.seqTypeLoader.load(animId | 0) as { frameStep?: number })?.frameStep ?? -1) > 0;
+        } catch {}
+        // A boat deck rebuilds its whole scene for an animation, so the same animation sent
+        // again while it plays (a salvaging hook's idle, every few ticks) only extends it.
+        const repeating =
+            this.deckViewAt(tile) !== undefined &&
+            this.r.locOverrides.get(exactKey)?.seqId === (animId | 0) &&
+            (loops || this.animTimers.has(exactKey));
         for (const key of keys) {
             clearTimeout(this.animTimers.get(key));
             this.animTimers.delete(key);
@@ -224,14 +236,7 @@ export class LocUpdates {
             });
         }
         const group = this.groupOf(locId);
-        this.reloadTile(tile, group);
-
-        // As in OSRS, a sequence with a frame step loops (or holds its last frames) until the
-        // loc is animated again or changed; one without plays once and reverts.
-        let loops = false;
-        try {
-            loops = ((this.r.osrsClient.seqTypeLoader.load(animId | 0) as { frameStep?: number })?.frameStep ?? -1) > 0;
-        } catch {}
+        if (!repeating) this.reloadTile(tile, group);
         if (loops) return;
         const host = this.r as unknown as WebGLOsrsRendererHost;
         const timer = setTimeout(() => {
@@ -272,6 +277,13 @@ export class LocUpdates {
      * build is still on its way, rebuilds the scene.
      */
     private reloadTile(tile: Tile, group: LocReloadGroup): void {
+        // A deck loc belongs to its boat's scene, which is rebuilt as a whole (as in WebGL):
+        // a main-world square under the deck's coordinates would never show the change.
+        const deckView = this.deckViewAt(tile);
+        if (deckView !== undefined) {
+            this.r.scheduleWorldEntityLocRebuild(deckView);
+            return;
+        }
         if (this.r.instanceActive) {
             const scene = this.r.instanceSceneMap;
             if (group === "full" || !scene || !this.r.mapManager.getMap(scene.mapX, scene.mapY) ||
@@ -283,6 +295,12 @@ export class LocUpdates {
             return;
         }
         this.scheduleReload(Math.floor(tile.x / 64), Math.floor(tile.y / 64), group);
+    }
+
+    /** The boat (world entity) whose deck scene holds a tile, if any. */
+    private deckViewAt(tile: Tile): number | undefined {
+        const view = this.r.osrsClient?.worldViewManager?.findWorldViewAt(tile.x | 0, tile.y | 0);
+        return view && this.r.worldEntityOverlays.has(view.id) ? view.id : undefined;
     }
 
     /** Port of scheduleLocReload: bump the version, then rebuild loaded/loading squares in a batch. */

@@ -52,9 +52,12 @@ function actionsPerCycle(player, kind) {
   return Math.max(1, request.actions | 0);
 }
 
-/** A product made, with its amount and XP ("skills:produced", for content that adds to it: a league relic's extra product). */
-function produced(player, itemId, amount, xp) {
-  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.CRAFTING, itemId, amount, xp });
+/**
+ * A product made, with its amount and XP ("skills:produced", for content that adds to it: a league relic's extra product).
+ * `kind` names the loop as "skills:actions-per-cycle" does; `materials` ([id, amount] pairs) are what one product used, where known.
+ */
+function produced(player, itemId, amount, xp, kind = null, materials = null) {
+  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.CRAFTING, itemId, amount, xp, kind, materials });
 }
 
 function addCraftingXp(player, xp) {

@@ -45,10 +45,18 @@ function alive(entity) {
   return !!entity?.isRegistered?.() && (entity.getHitpoints?.() ?? 1) > 0;
 }
 
+/** A league that locks bosses (Shattered Relics) may refuse the fight before it starts. */
+function bossLocked(player, npc) {
+  const query = { player, name: npc.getDefinition?.()?.getName?.(), notify: true, locked: false };
+  api.emitCustomEvent("league:boss-locked", query);
+  return query.locked === true;
+}
+
 function pokeVorkath({ player, npc }) {
   if (!npc || npc.getId() !== Shared.SLEEPING_ID || !alive(npc)) return false;
   if (!alive(player)) return false;
   if (player.getPrivateArea?.() !== npc.getPrivateArea?.()) return false;
+  if (bossLocked(player, npc)) return true;
   player.performAnimation(new core.Animation(POKE_ANIMATION));
   player.getPacketSender().sendSoundEffect(POKE_SOUND, 1, 15);
   // The no-op form at once, so a second poke can't start a second wake.

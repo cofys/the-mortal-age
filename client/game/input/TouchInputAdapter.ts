@@ -29,9 +29,9 @@ export class TouchInputAdapter {
         this.recognizer.setConfig({ enableCameraOrbit: enabled });
     }
 
-    onFingerDown(x: number, y: number, timeMs: number, orbitOnly = false): void {
+    onFingerDown(x: number, y: number, timeMs: number, orbitOnly = false, widgetDrag = false): void {
         this.clearLongPressTimer();
-        this.applyIntents(this.recognizer.fingerDown(x, y, timeMs, orbitOnly));
+        this.applyIntents(this.recognizer.fingerDown(x, y, timeMs, orbitOnly, widgetDrag));
         this.scheduleLongPressCheck();
     }
 
@@ -83,6 +83,12 @@ export class TouchInputAdapter {
                     break;
                 case "tap":
                     this.input.applyTouchTap(intent.x, intent.y);
+                    break;
+                case "widgetPress":
+                    this.input.beginTouchWidgetDrag(intent.x, intent.y);
+                    break;
+                case "widgetRelease":
+                    this.input.endTouchWidgetDrag();
                     break;
                 case "longPress":
                     this.input.applyTouchLongPress(intent.x, intent.y);

@@ -42,7 +42,10 @@ Pets.register({
   getRegionManager: () => ({ blocked: () => true }),
   getItemOnGroundManager: () => ({ registerNonGlobal() {}, registerLocation() {} }),
   persistAttribute() {},
-  onCustomEvent: (name, handler) => events.set(name, handler),
+  onCustomEvent: (name, handler) => {
+    const previous = events.get(name);
+    events.set(name, previous ? event => { previous(event); handler(event); } : handler);
+  },
   emitCustomEvent: (name, request) => {
     if (name === "collection-log:obtain") collectionLogObtains.push(request);
     // Stub the public diary query here; real service coverage is in chompy-pet-acquisition.
@@ -53,6 +56,7 @@ Pets.register({
   onAnyNpcInteraction() {},
   onInterfaceActionClick() {},
   onNpcClick() {},
+  onNpcDialogueCondition() {},
   onNpcInteraction() {},
   onPlayerLogout: (handler) => logoutHooks.push(handler),
   onPlayerDisconnect() {},
@@ -254,15 +258,16 @@ test("metamorphosis cycles one step and stores the chosen variant", () => {
 
 test("a pet with no metamorphosis cycle refuses to morph", () => {
   const player = createPlayer();
-  const npc = createPetNpc(player, 6717);
+  const npc = createPetNpc(player, Pets.__internals.PETS.find(pet => pet.enumName === "BEAVER").petId);
   player.setAttribute("pets:current", npc);
   assert.equal(Pets.__internals.morph(player, npc), false);
   assert.equal(npc.transformed, undefined);
   assert.equal(player.getAttribute("pets:variant"), undefined);
 });
 
-test("the stored variant is re-applied to a freshly summoned follower", () => {
+test("the legacy base-item ownership re-applies its stored variant to a freshly summoned follower", () => {
   const player = createPlayer();
+  player.setAttribute("pets.owned", [SNAKELING_ITEM]);
   player.setAttribute("pets:variant", { "item:12921": 2132 });
   const pet = Pets.__internals.PET_BY_ITEM_ID.get(SNAKELING_ITEM);
   const npc = createPetNpc(player, 2130);
@@ -270,20 +275,8 @@ test("the stored variant is re-applied to a freshly summoned follower", () => {
   assert.equal(npc.transformed, 2132);
 });
 
-test("a cross-item morph keeps one ownership record and ticks the base log item", () => {
-  const player = createPlayer();
-  const npc = createPetNpc(player, 7337);
-  player.setAttribute("pets:current", npc);
-  player.setAttribute("pets.owned", [20665]);
-  player.inventory.push(ItemIdentifiers.AIR_TALISMAN);
-  assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, 7338);
-  assert.deepEqual(player.getAttribute("pets:variant"), { "skill:runecrafting": 7338 });
-  assert.equal(Pets.__internals.pickup(player, npc), true);
-  assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN, 20667]);
-  assert.deepEqual(player.getAttribute("pets.owned"), [20667]);
-  assert.deepEqual(collectionLogObtains.at(-1)?.itemId, 20665, "the base log item");
-});
+// Cross-item Rift ownership/variant/base-log assertions now run through the real
+// native unlocked chooser in rift-guardian-menu-native.test.cjs.
 
 test("a cached Metamorphosis option dispatches to morph, Talk-to to interact", () => {
   const player = createPlayer();
@@ -449,19 +442,8 @@ test("the Baby mole-rat needs both mole parts", () => {
   assert.deepEqual(player.inventory, []);
 });
 
-test("the Rift guardian needs its talisman, which is not consumed", () => {
-  const player = createPlayer();
-  const npc = createPetNpc(player, 7337);
-  player.setAttribute("pets:current", npc);
-  assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, undefined);
-  assert.match(player.messages.at(-1), /air talisman/);
-
-  player.inventory.push(ItemIdentifiers.AIR_TALISMAN);
-  assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, 7338);
-  assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN]);
-});
+// The obsolete Rift talisman-cycle expectation is superseded by real native
+// unlocked-menu/ownership coverage in rift-guardian-menu-native.test.cjs.
 
 test("the Chompy chick requires a claimed elite reward rather than the old synthetic flag", () => {
   const player = createPlayer();

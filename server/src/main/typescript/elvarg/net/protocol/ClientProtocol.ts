@@ -1419,23 +1419,33 @@ export function encodeResetInteractionMode(worldId: number): Buffer {
 
 /** Puts the camera back on the player and stops any shake (cam_reset). */
 /**
- * cam_target: the camera (and what the client centres its view and sound on) follows a tile or
- * another player instead of the local player, as for a spectator; cam_reset ends it.
+ * cam_target: the camera (and what the client centres its view and sound on) follows a tile or an
+ * actor instead of the local player, until cam_reset: a player (sub 1, a spectator's view), an NPC
+ * (sub 2) or a world entity (sub 3, a boat), each by its index. A tile with `cycles` is glided to
+ * over that many client cycles from where the camera is (sub 4; a cutscene's tour, as live moves
+ * its roaming camera NPC).
  */
-export function encodeCameraTarget(target: { x: number; y: number; level: number } | { player: number }): Buffer {
-  if ("player" in target) {
+export function encodeCameraTarget(
+  target: { x: number; y: number; level: number; cycles?: number } | { player: number } | { npc: number } | { worldEntity: number },
+): Buffer {
+  const actor = "player" in target ? [1, target.player] : "npc" in target ? [2, target.npc]
+    : "worldEntity" in target ? [3, target.worldEntity] : undefined;
+  if (actor) {
     const payload = Buffer.alloc(4);
     payload[0] = 12;
-    payload[1] = 1;
-    payload.writeUInt16BE(target.player & 0xffff, 2);
+    payload[1] = actor[0];
+    payload.writeUInt16BE(actor[1] & 0xffff, 2);
     return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
   }
-  const payload = Buffer.alloc(7);
+  if (!("x" in target)) throw new Error("camera target");
+  const glide = target.cycles !== undefined;
+  const payload = Buffer.alloc(glide ? 9 : 7);
   payload[0] = 12;
-  payload[1] = 0;
+  payload[1] = glide ? 4 : 0;
   payload.writeUInt16BE(target.x & 0xffff, 2);
   payload.writeUInt16BE(target.y & 0xffff, 4);
   payload[6] = target.level & 0x3;
+  if (glide) payload.writeUInt16BE(Math.max(0, target.cycles!) & 0xffff, 7);
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
 }
 
@@ -1861,6 +1871,10 @@ function widgetIntPacket(opcode: ServerPacketId, uid: number, value?: number): B
 
 export function encodeWidgetCloseSub(uid: number): Buffer {
   return widgetIntPacket(ServerPacketId.WIDGET_CLOSE_SUB, uid);
+}
+
+export function encodeTriggerOnDialogAbort(): Buffer {
+  return encodeServerPacket(ServerPacketId.TRIGGER_ONDIALOGABORT, Buffer.alloc(0));
 }
 
 export function encodeWidgetSetText(uid: number, text: string): Buffer {

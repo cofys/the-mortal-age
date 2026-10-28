@@ -1803,11 +1803,13 @@ module.exports = function registerTheFremennikIslesQuest(api) {
     api.sendMultiChatboxPrompt(player, `Choose a combat skill (${round} of 2)`, ...pairs);
   }
 
-  function grantRewards(player) {
+  function grantRewards(player, quest, options = {}) {
     const skills = player.getSkillManager();
     skills.addExperiences(Skill.CONSTRUCTION, 5000);
     skills.addExperiences(Skill.CRAFTING, 5000);
     skills.addExperiences(Skill.WOODCUTTING, 10000);
+    // A completion without experience (a league's quest pack) offers no combat XP either.
+    if (options.experience === false) return;
     // NpcDialogues sends sendInterfaceRemoval right after the final action, which
     // would wipe a prompt opened now: open it on the next tick instead.
     const { CountdownTask, TaskManager } = api.core;

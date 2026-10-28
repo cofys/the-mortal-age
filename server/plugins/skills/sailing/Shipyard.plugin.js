@@ -155,12 +155,13 @@ function beginVisit(player, dock, slot) {
 }
 
 /** A shipwright's Customise-boat: choose the boat, then go to the shipyard with it. */
-function customiseBoat({ player, npc }) {
-  const name = npc.getDefinition?.()?.getName?.() ?? "";
+function customiseBoat({ player, npc, definition }) {
+  // The resolved form's name: the spawned parent (14972) is nameless, its varbit form is Junior Jim.
+  const name = (definition ?? npc.getCurrentDefinition?.(player))?.getName?.() ?? "";
   const dock = content().docks.find((candidate) => candidate.shipwright === name);
   if (!dock) return false;
   // The Bank PIN guards this (Wiki: Bank_PIN); a locked PIN asks first, then reopens it.
-  const pin = { player, feature: "customise-boat", resume: () => customiseBoat({ player, npc }) };
+  const pin = { player, feature: "customise-boat", resume: () => customiseBoat({ player, npc, definition }) };
   pluginApi.emitCustomEvent("bank-pin:guard", pin);
   if (pin.locked) return true;
   openBoatSelection(player, MODE.CUSTOMISE, dock, (slot) => enterShipyard(player, dock, slot));

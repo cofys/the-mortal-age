@@ -231,6 +231,8 @@ export function worldEntriesToSimple(
                 typeof e.actionIndex === "number" && e.actionIndex >= 0 ? e.actionIndex : undefined,
             opcode: typeof e.opcode === "number" ? e.opcode : undefined,
             deprioritized: e.deprioritized,
+            // The scene's own left-click choice (a helm's "Set heading" over the sea).
+            swapPinned: e.swapPinned === true ? true : undefined,
             playerServerId:
                 typeof e.playerServerId === "number"
                     ? e.playerServerId

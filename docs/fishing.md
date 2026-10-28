@@ -52,3 +52,23 @@ minnows, karambwan vessels). Tests: `server/tests/fishing.test.cjs`.
   not checked: no recording or Wiki page gives the refusal.
 - What live OSRS says when the karambwanji run out mid-session is not recorded; the loop stops
   with the generic "You do not have the required bait."
+
+## Crystal harpoon signets
+
+The [celestial signet](https://oldschool.runescape.wiki/w/Celestial_signet#Passive_effect)
+retains the [elven signet](https://oldschool.runescape.wiki/w/Elven_signet#Passive_effect)'s
+10% chance to save a crystal equipment charge. Both the charged and uncharged celestial
+signet work while worn; carrying a signet does not activate it. Its stardust charges belong
+to the Mining effect, rather than this passive saving effect.
+
+Ordinary harpoon fishing previously recognised only the elven signet, so upgrading it to
+a celestial signet lost the saving effect. Both celestial signet states now participate in
+the existing saving roll. Saving the final charge keeps the harpoon active and still awards
+the catch and Fishing XP; a roll of 0.1 or greater spends the charge and the final charge
+turns it inactive. The [crystal harpoon](https://oldschool.runescape.wiki/w/Crystal_harpoon#Gaining_and_Consuming_Charges)
+then continues to fish with the dragon harpoon's catch bonus.
+
+Regression coverage exercises catch delivery with both celestial signet states and both
+carried and wielded harpoons, the final charge, the 10% boundary and carrying the ring
+without wearing it. The capture index has no crystal harpoon or signet actions; this
+correction relies on the Wiki, rather than a recording or an exact packet/timing comparison.

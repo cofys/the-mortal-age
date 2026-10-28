@@ -50,8 +50,9 @@ function slotsFor(player) {
   return SLOT_LEVELS.filter((required) => level >= required).length;
 }
 
-function openShop({ player, npc }) {
-  const name = npc.getDefinition?.()?.getName?.() ?? "";
+function openShop({ player, npc, definition }) {
+  // The resolved form's name: the spawned parent (14972) is nameless, its varbit form is Junior Jim.
+  const name = (definition ?? npc.getCurrentDefinition?.(player))?.getName?.() ?? "";
   const dock = content().docks.find((candidate) => candidate.shipwright === name);
   if (!dock) return false;
   buyingAt.set(player, dock);

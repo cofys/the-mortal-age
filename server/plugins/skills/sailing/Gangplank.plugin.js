@@ -103,5 +103,6 @@ module.exports = {
     api.onObjectInteraction("Gangplank", { Board: boardBoat, Disembark: disembarkBoat });
     api.onObjectInteraction("Mooring point", { Board: boardBoat, Disembark: disembarkBoat });
     api.onObjectInteraction("Buoy", { Dock: dockAtBuoyOp });
+    api.setUsableFromDeck?.(["Gangplank", "Mooring point", "Buoy"]);
   },
 };

@@ -40,7 +40,7 @@ function blowOne(player, recipe) {
   player.getInventory().deleteNumber(I.MOLTEN_GLASS, 1);
   player.getInventory().addItem(new Item(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
-  Shared.produced(player, recipe.itemId, 1, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp, "glassblowing");
   player.sendMessage(`You make ${Shared.withArticle(recipe.name)}.`);
   return true;
 }

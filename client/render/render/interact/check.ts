@@ -417,8 +417,12 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                 const tileY = (walkTile?.tileY ?? 0) | 0;
                 const localX = (tileX - baseX) | 0;
                 const localY = (tileY - baseY) | 0;
+                // At a helm the sea is in heading mode: the tile's option is "Set heading", and it's
+                // the left-click above any loc under the cursor (the sail cloth included), as live.
+                const heading = tileX > 0 && tileY > 0 && host.osrsClient.isHeadingTile?.(tileX, tileY) === true;
                 walkHereEntry = {
-                    option: "Walk here",
+                    option: heading ? "Set heading" : "Walk here",
+                    ...(heading && { swapPinned: true }),
                     targetId: -1,
                     targetType: MenuTargetType.NONE,
                     targetName: "",
@@ -990,6 +994,9 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                             mapY: localY,
                             actionIndex: actionIdx,
                         });
+                        // A loc's first option (the sail cloth's Trim) stays the left-click over
+                        // "Set heading" (live: Trim on a left-click while a gust waits).
+                        if (actionIdx === 0 && walkHereEntry?.swapPinned) delete walkHereEntry.swapPinned;
                     }
 
                     menuEntries.push({

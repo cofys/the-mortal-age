@@ -1093,15 +1093,18 @@ module.exports = function registerDragonSlayerII(api) {
       p.setAttribute(ATTR_GALVEK_DEFEATED, false);
     }
   }
+  /** Ellen's four 25,000 XP rewards are spent, or the quest was completed without experience (a league quest pack). */
+  function ellenTrainingDone(p) {
+    return Number(p.getAttribute(ATTR_TRAINING_REWARDS)) >= 4 || quest.experienceWithheld(p);
+  }
   function talkEllenTraining({ player: p, npcId }) {
     if (!quest.isComplete(p)) return false;
-    startTranscript(api, p, npcId, "Ellen", Number(p.getAttribute(ATTR_TRAINING_REWARDS)) >= 4
+    startTranscript(api, p, npcId, "Ellen", ellenTrainingDone(p)
       ? "after-claiming-experience-rewards" : "standard-dialogue");
   }
   function handleEllenTrainingAction(event) {
     const { player, npcId, stepId } = event;
-    if (npcId !== N.ELLEN || stepId !== "P2tord" || !quest.isComplete(player)
-      || Number(player.getAttribute(ATTR_TRAINING_REWARDS)) >= 4) return;
+    if (npcId !== N.ELLEN || stepId !== "P2tord" || !quest.isComplete(player) || ellenTrainingDone(player)) return;
     event.handled = true;
     // The transcript tail immediately closes its chatbox after this action. If
     // the reward modal opens in the same callback, that close removes the modal

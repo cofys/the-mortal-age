@@ -1,6 +1,7 @@
 import type { InputManager } from "../InputManager";
 import type { VarManager } from "../../rs/config/vartype/VarManager";
 import { isMobileMode, isTouchDevice } from "../../common/utils/DeviceUtil";
+import { OSM_CHAT_KEYBOARD } from "../../runelite/api/gameval/VarClientID";
 
 const CHAT_INPUT_VARC = 335;
 const OSRS_KEY_ENTER = 84;
@@ -28,6 +29,10 @@ export class MobileChatKeyboard {
 
     show(hint: string = "", keyboardType: number = 0): void {
         if (typeof document === "undefined" || (!isMobileMode && !isTouchDevice)) return;
+        // The chat toggle treats an unset (-1) varc as open and would immediately hide it.
+        if (this.deps.varManager.getVarcInt(OSM_CHAT_KEYBOARD) < 0) {
+            this.deps.varManager.setVarcInt(OSM_CHAT_KEYBOARD, 0);
+        }
         const input = this.ensureInput();
         input.placeholder = hint;
         input.inputMode = (keyboardType | 0) === 1 ? "numeric" : "text";
@@ -45,6 +50,7 @@ export class MobileChatKeyboard {
 
     hide(): void {
         this.open = false;
+        this.deps.varManager.setVarcInt(OSM_CHAT_KEYBOARD, 0);
         try {
             this.input?.blur();
         } catch {}

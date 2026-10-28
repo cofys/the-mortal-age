@@ -3,7 +3,6 @@ import type { WidgetActionClientPayload } from "../../network/ServerConnection";
 import { sendWidgetActionMessage } from "../../network/ServerConnection";
 import { spawnSearchPick } from "../../rs/cs2/spawnSearch";
 import type { ScriptEvent } from "../../rs/cs2/Cs2Vm";
-import { createScriptEvent } from "../../rs/cs2/Cs2Vm";
 import type { WidgetManager } from "../../widgets/WidgetManager";
 import { shouldTransmitAction } from "../../widgets/WidgetFlags";
 import type { InputManager } from "../InputManager";
@@ -283,38 +282,7 @@ export class WidgetActionRouter {
             return;
         }
 
-        const optionLower = event.option?.toLowerCase() ?? "";
-        const isQuantityDialog = optionLower === "withdraw-x" || optionLower === "deposit-x";
-        const widgetGroupId = event.widget?.groupId ?? event.widget?.uid >>> 16;
-        const isBankInterface = widgetGroupId === 12 || widgetGroupId === 15;
-
-        if (isQuantityDialog && isBankInterface) {
-            const payload = buildWidgetActionPayload(widgetManager, event);
-            if (payload) {
-                this.deps.setPendingInputDialogAction({
-                    payload,
-                    option: optionLower,
-                });
-                const scriptEvent = createScriptEvent({
-                    args: [2251],
-                    widget: event.widget,
-                });
-                console.log(`[handleWidgetAction] Invoking chatbox_open_input for ${optionLower}`);
-                const result = cs2Vm?.runScriptEvent(scriptEvent);
-                console.log(`[handleWidgetAction] Script execution result: ${result}`);
-
-                if (cs2Vm) {
-                    cs2Vm.inputDialogType = 0;
-                    cs2Vm.inputDialogString = "";
-                }
-                this.deps.getVarManager()?.setVarcString(335, "");
-                console.log(
-                    `[handleWidgetAction] inputDialogType set to: ${cs2Vm?.inputDialogType}`,
-                );
-            }
-            return;
-        }
-
+        // Bank Withdraw-X/Deposit-X go to the server like any op; it opens the "Enter amount:" prompt.
         try {
             const payload = buildWidgetActionPayload(widgetManager, event);
             if (!payload) return;

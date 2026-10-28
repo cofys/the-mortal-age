@@ -212,28 +212,41 @@ export function ensureWorldEntityOverlaysLoaded(renderer: WebGPURenderer, nowMs:
     }
 }
 
-/** Rebuilds a deck after its locs changed (LOC_ADD_CHANGE arrives after the first build). */
+/** Boats whose deck rebuild is waiting on the shared timer. */
+const pendingLocRebuilds = new WeakMap<WebGPURenderer, Set<number>>();
+
+/**
+ * Rebuilds a deck after its locs changed (LOC_ADD_CHANGE arrives after the first build). Changes
+ * within the timer's 150 ms share one rebuild per boat; every boat asked for is rebuilt.
+ */
 export function scheduleWorldEntityLocRebuild(renderer: WebGPURenderer, entityIndex: number): void {
+    let pending = pendingLocRebuilds.get(renderer);
+    if (!pending) pendingLocRebuilds.set(renderer, (pending = new Set()));
+    pending.add(entityIndex);
     if (renderer.worldEntityLocRebuildTimer !== null) return;
     renderer.worldEntityLocRebuildTimer = setTimeout(() => {
         renderer.worldEntityLocRebuildTimer = null;
-        const overlay = renderer.worldEntityOverlays.get(entityIndex);
-        if (!overlay) return;
-        void loadWorldEntityScene(
-            renderer,
-            overlay.entityIndex,
-            overlay.templateChunks,
-            overlay.regionX,
-            overlay.regionY,
-            overlay.worldX,
-            overlay.worldY,
-            overlay.sizeX,
-            overlay.sizeZ,
-            overlay.extraLocs,
-            overlay.configId,
-            overlay.extraNpcs,
-            overlay.basePlane,
-        );
+        const entities = [...pending!];
+        pending!.clear();
+        for (const index of entities) {
+            const overlay = renderer.worldEntityOverlays.get(index);
+            if (!overlay) continue;
+            void loadWorldEntityScene(
+                renderer,
+                overlay.entityIndex,
+                overlay.templateChunks,
+                overlay.regionX,
+                overlay.regionY,
+                overlay.worldX,
+                overlay.worldY,
+                overlay.sizeX,
+                overlay.sizeZ,
+                overlay.extraLocs,
+                overlay.configId,
+                overlay.extraNpcs,
+                overlay.basePlane,
+            );
+        }
     }, 150);
 }
 

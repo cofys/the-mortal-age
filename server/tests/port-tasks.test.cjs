@@ -230,3 +230,49 @@ test("a port master cancels a task and its crates, and has nothing to cancel or 
   hooks.npcs["Port master"]["Claim-rewards"]({ player, npc });
   assert.deepEqual(player.inventory.map((item) => item.getId()), [common.DATA.coinBags[1]]);
 });
+
+test("crewmates carrying crates: the ledger counts theirs, says they'll help, and takes theirs first (rsprox)", () => {
+  const SCIMITARS = 31; // Corsair Cove scimitar delivery: 3 crates from the Pandemonium, as recorded
+  const crate = common.taskById(SCIMITARS).crate;
+  const player = createPlayer();
+  player.setAttribute(common.SLOTS_ATTRIBUTE, [{ id: SCIMITARS, taken: 0, delivered: 0 }]);
+  const events = [];
+  const core = common.core();
+  const real = core.PluginManager;
+  // Courier.Crew.js answers these; here the crew take the 2 left, as Jenkins did.
+  core.PluginManager = { emitCustomEvent: (name, event) => {
+    events.push([name, event]);
+    if (name === "port-tasks:cargo-taken") {
+      event.helped = event.left;
+      common.setCrewCargo(event.player, event.index, { crate, amount: event.left });
+    }
+  } };
+  try {
+    hooks.objects["Ledger table"]["Take-cargo"]({ player, location: PANDEMONIUM_LEDGER });
+    const [name, taken] = events[0];
+    assert.equal(name, "port-tasks:cargo-taken");
+    assert.equal(taken.left, 2);
+    const box = player.dialogues.at(-1).getDialogues().get(0);
+    assert.equal(box.getText?.() ?? box.text,
+      "You pick up a crate of scimitars. There are two more crates of this type to collect, but your crew can help with that.");
+    assert.ok(player.log.includes(`sendConfig 5174=${crate}`) && player.log.includes("sendVarbit 19473=2"), "sailing_crew_held_cargo_0");
+    assert.deepEqual(ledger.collectable(player, "the_pandemonium"), [], "the crew carry the rest: nothing left to collect");
+
+    // At Corsair Cove, all three packed (taken 3), the crew carrying 2 out of the hold.
+    player.setAttribute(common.SLOTS_ATTRIBUTE, [{ id: SCIMITARS, taken: 3, delivered: 0 }]);
+    common.setCrewCargo(player, 0, { crate, amount: 2, boatSlot: 0 });
+    player.log.length = 0;
+    hooks.objects["Ledger table"]["Deposit-cargo"]({ player, location: { x: 2577, y: 2840, z: 0 } });
+    const delivered = events.find(([event]) => event === "port-tasks:crew-delivered")?.[1];
+    assert.deepEqual([delivered?.crate, delivered?.amount, delivered?.boatSlot], [crate, 2, 0]);
+    const messages = player.log.filter((line) => line.startsWith("message "));
+    assert.equal(messages[0], "message Your crew drop off the cargo that needed to be delivered here.");
+    assert.match(messages[1], /You have finished the .*Corsair Cove scimitar delivery/);
+    assert.equal(common.slots(player)[0], null, "the crew's two and the player's crate complete it");
+    assert.equal(common.crewAmount(player, 0), 0);
+  } finally {
+    core.PluginManager = real;
+  }
+  assert.equal(ledger.moreToGo(1, "collect"), " There is one more crate of this type to collect.");
+  assert.equal(ledger.moreToGo(4, "deliver"), " There are four more crates of this type to deliver.");
+});

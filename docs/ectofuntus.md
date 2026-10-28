@@ -106,7 +106,32 @@ put any more in." shows in a message box (not captured). Superior dragon bonemea
 below 70 Prayer. The count is saved in `ectofuntus:tokens` and shown in `ahoy_ectotokens_base`
 (4769) and `ahoy_ectotokens_more` (5671), which only hold 255.
 
-The captures' experience values are scrubbed, so the Wiki's are used.
+The experience rates above use the Wiki's table rather than the recordings' XP drops.
+
+### Worship experience and Zealot's robes
+
+The [Ectofuntus Wiki page](https://oldschool.runescape.wiki/w/Ectofuntus) lists bat bones at
+21.2 Prayer XP per offering. Worship passes that fractional amount to the skill manager;
+rounding each offering up to 22 incorrectly added 4 XP per five offerings. A live check of
+five bat-bonemeal offerings now gives 106 XP, consumes five bonemeal and five slime buckets,
+and adds 25 unclaimed ecto-tokens.
+
+The [Zealot's robes Wiki page](https://oldschool.runescape.wiki/w/Zealot%27s_robes) and the
+Ectofuntus page specify a 1.25% chance per worn piece, up to 5%, to preserve both bonemeal
+and slime. One saving roll covers the pair. Saved offerings still give their normal Prayer
+experience and five ecto-tokens; they leave both filled containers in their original slots.
+Carrying the robes gives no bonus. Requirements and the 1,000-token limit are checked before
+rolling, so saved supplies cannot bypass them.
+A live full-set offering preserved both filled containers while granting Prayer XP and
+increasing the unclaimed token count from 45 to 50.
+
+Regression coverage exercises the registered Worship and item-use handlers with real
+inventory, equipment and skill containers. It checks fractional XP accumulation, each
+robe-count probability boundary, saved and consumed pairs, ordinary captured feedback,
+missing supplies, the superior-dragon level requirement and the token limit. The inventory
+swaps, worship message, animation, sound and five-token increment are supported by rsprox
+recording 377; the fractional XP and robe probabilities use the Wiki pages above. The
+recordings inspected do not establish any extra message when the robes save supplies.
 
 ## Ghost disciples
 

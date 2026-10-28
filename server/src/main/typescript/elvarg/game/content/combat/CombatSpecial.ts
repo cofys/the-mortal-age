@@ -9,6 +9,7 @@ import { RestoreSpecialAttackTask } from '../../task/impl/RestoreSpecialAttackTa
 import { Equipment } from "../../model/container/impl/Equipment";
 import { DuelRule } from "../Duelling";
 import { PlayerRights } from "../../model/rights/PlayerRights";
+import { applySpecialEnergyCostModifiers } from "./EquipmentEffects";
 import type { WeaponSpecialTraits, SpecialAttackTargeting } from "./WeaponSpecialTraits";
 
 /** Weapon special attacks are defined by plugins, not hardcoded here. */
@@ -101,7 +102,7 @@ export class CombatSpecial {
             player.getCombatSpecial() != null &&
             player.getCombatSpecial() == special &&
             player.isSpecialActivated() &&
-            CombatSpecial.affordable(player, special, special.getDrainAmount())
+            CombatSpecial.affordable(player, special, special.getDrainAmountForWeaponId(player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.()))
         );
     }
 
@@ -112,6 +113,7 @@ export class CombatSpecial {
      * may use the special anyway; the drain then takes what there is.
      */
     public static cost(character: Mobile, special: CombatSpecial | null, base: number, phase: "check" | "drain"): { cost: number; allow: boolean } {
+        base = applySpecialEnergyCostModifiers(character, base);
         const request = {
             player: character, specialId: special?.getId() ?? null, cost: base,
             available: character.getSpecialPercentage(), allow: false, phase,
@@ -128,9 +130,16 @@ export class CombatSpecial {
         return allow || character.getSpecialPercentage() >= cost;
     }
 
-    public static drain(character: Mobile, amount: number) {
+    /** The cost for the wielded variant, including equipment and content modifiers. */
+    public static energyCost(player: Player, special: CombatSpecial): number {
+        const weaponId = player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.();
+        return CombatSpecial.cost(player, special, special.getDrainAmountForWeaponId(weaponId), "check").cost;
+    }
+
+    /** `isCost` false spends an amount directly (Unleash), without cost modifiers. */
+    public static drain(character: Mobile, amount: number, isCost = true) {
         const special: CombatSpecial | null = character.isPlayer?.() ? ((character as any).getAsPlayer?.()?.getCombatSpecial?.() ?? null) : null;
-        character.decrementSpecialPercentage(CombatSpecial.cost(character, special, amount, "drain").cost);
+        character.decrementSpecialPercentage(isCost ? CombatSpecial.cost(character, special, amount, "drain").cost : amount);
 
         CombatSpecial.ensureRestoreTask(character);
 
@@ -267,8 +276,8 @@ export class CombatSpecial {
             player.setSpecialActivated(true);
             CombatSpecial.updateBar(player);
 
-            const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
             if (queuedAttack) {
+                const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
                 if (!developerQueuedAttackSpam && !CombatSpecial.affordable(player, spec, spec.getDrainAmountForWeaponId(equippedWeaponId))) {
                     player.sendMessage("You do not have enough special attack energy left!");
                     player.setSpecialActivated(false);

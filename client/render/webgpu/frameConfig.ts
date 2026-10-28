@@ -17,6 +17,7 @@ import {
     type BrowserQualityProfile,
 } from "../render/constants";
 import { getControlledPlayerEcsIndex, getControlledPlayerWorldViewId } from "./camera";
+import { projectDeckToWorld } from "../render/worldEntityMotion";
 import type { WebGPURenderer } from "./WebGPURenderer";
 
 interface TilePoint {
@@ -98,7 +99,7 @@ function resolveQualityProfile(): BrowserQualityProfile {
  */
 export function computeWebGPURoofPlaneLimit(renderer: WebGPURenderer): number {
     const cameraTile = getCameraTileXY(renderer);
-    const playerTile = getPlayerTileXY(renderer);
+    const playerTile = roofPlayerTile(renderer, getPlayerTileXY(renderer));
 
     let playerPlane = getPlayerBasePlane(renderer) | 0;
     const worldViewId = getControlledPlayerWorldViewId(renderer);
@@ -119,6 +120,20 @@ export function computeWebGPURoofPlaneLimit(renderer: WebGPURenderer): number {
         playerTile,
         targetTile: renderer.osrsClient.followPlayerCamera ? playerTile : cameraTile,
     });
+}
+
+/**
+ * The player's tile for the roof checks: aboard a boat, where the deck is drawn in the world.
+ * The deck tile itself is thousands of tiles from the camera, and the line between them
+ * looked up every tile's roof flag in every loaded map, every frame.
+ */
+function roofPlayerTile(renderer: WebGPURenderer, playerTile: TilePoint): TilePoint {
+    const worldViewId = getControlledPlayerWorldViewId(renderer);
+    const index = getControlledPlayerEcsIndex(renderer);
+    if (worldViewId < 0 || index === undefined || renderer.osrsClient.getCameraTargetPosition()) return playerTile;
+    const projected = projectDeckToWorld(renderer, worldViewId,
+        renderer.osrsClient.playerEcs.getX(index), renderer.osrsClient.playerEcs.getY(index));
+    return projected ? { x: (projected.x / 128) | 0, y: (projected.y / 128) | 0 } : playerTile;
 }
 
 /** Port of getCameraTileXY (render/render/camera/roof.ts). */

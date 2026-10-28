@@ -685,9 +685,7 @@ export function updateNpcClientAnimations(
     clientTicksElapsed: number,
 ): void {
     if (clientTicksElapsed <= 0) return;
-    const ecs = client.npcEcs;
-    const pe = client.playerEcs;
-    const ids = ecs.queryByMap(map.mapX, map.mapY);
+    const ids = client.npcEcs.queryByMap(map.mapX, map.mapY);
     if (ids.length === 0) return;
 
     // The client cycle each step of this batch stands for, so a sequence that arrived partway
@@ -698,134 +696,163 @@ export function updateNpcClientAnimations(
         for (let j = 0; j < ids.length; j++) {
             const id = ids[j] | 0;
             if (!shouldStepNpcOnMap(client, map, id)) continue;
+            stepNpcClient(client, id, stepCycle);
+        }
+    }
+}
 
-            const walkingNow = ecs.shouldUseWalkAnim(id);
-            const movementOrientation = walkingNow ? ecs.getCurrentStepRot(id) : undefined;
-            ecs.setWalking(id, walkingNow);
+/**
+ * Advances the NPCs aboard boats (a world view's deck), once per client tick: no map square
+ * holds their deck tiles, so the per-map pass above never reaches them and they kept their
+ * spawn facing and a stale movement track (a crewmate walking sideways along the deck).
+ */
+export function updateDeckNpcClientAnimations(client: OsrsClient, clientTicksElapsed: number): void {
+    if (clientTicksElapsed <= 0) return;
+    const ecs = client.npcEcs;
+    const deckIds: number[] = [];
+    ecs.forEachActive((id: number) => {
+        if (ecs.isLinked(id) && (ecs.getWorldViewId(id) | 0) >= 0) deckIds.push(id | 0);
+    });
+    if (deckIds.length === 0) return;
+    const batchEndCycle = getClientCycle() | 0;
+    for (let t = 0; t < clientTicksElapsed; t++) {
+        const stepCycle = batchEndCycle - (clientTicksElapsed - 1 - t);
+        for (const id of deckIds) stepNpcClient(client, id, stepCycle);
+    }
+}
 
-            const npcWorldX = ecs.getWorldX(id) | 0;
-            const npcWorldY = ecs.getWorldY(id) | 0;
-            let desiredFacing: number | undefined;
+/**
+ * One client tick of an NPC: facing and rotation, its movement track and its action track.
+ * `stepCycle` is the client cycle the step stands for (see updateNpcClientAnimations).
+ */
+function stepNpcClient(client: OsrsClient, id: number, stepCycle: number): void {
+    const ecs = client.npcEcs;
+    const pe = client.playerEcs;
+    const walkingNow = ecs.shouldUseWalkAnim(id);
+    const movementOrientation = walkingNow ? ecs.getCurrentStepRot(id) : undefined;
+    ecs.setWalking(id, walkingNow);
 
-            const interactionIndex = ecs.getInteractionIndex?.(id);
-            const npcInteraction =
-                typeof interactionIndex === "number" && interactionIndex >= 0
-                    ? decodeInteractionIndex(interactionIndex)
-                    : null;
-            if (npcInteraction) {
-                if (npcInteraction.type === "player") {
-                    const targetIdx = pe.getIndexForServerId?.(npcInteraction.id | 0);
-                    if (targetIdx != null) {
-                        const facing = computeFacingRotation(
-                            npcWorldX - (pe.getX(targetIdx) | 0),
-                            npcWorldY - (pe.getY(targetIdx) | 0),
-                        );
-                        if (facing !== undefined) desiredFacing = facing;
-                    }
-                } else if (npcInteraction.type === "npc") {
-                    const targetEcs = ecs.getEcsIdForServer?.(npcInteraction.id | 0);
-                    if (targetEcs != null && ecs.isLinked(targetEcs | 0)) {
-                        const targetMapId = ecs.getMapId(targetEcs | 0) | 0;
-                        const targetWorldX =
-                            (((targetMapId >> 8) & 0xff) << 13) + (ecs.getX(targetEcs | 0) | 0);
-                        const targetWorldY =
-                            ((targetMapId & 0xff) << 13) + (ecs.getY(targetEcs | 0) | 0);
-                        const facing = computeFacingRotation(
-                            npcWorldX - targetWorldX,
-                            npcWorldY - targetWorldY,
-                        );
-                        if (facing !== undefined) desiredFacing = facing;
-                    }
-                }
-            }
-            if (
-                desiredFacing === undefined &&
-                walkingNow &&
-                movementOrientation !== undefined
-            ) {
-                desiredFacing = movementOrientation;
-            }
-            if (desiredFacing !== undefined) {
-                ecs.setTargetRot(id, desiredFacing);
-            }
+    const npcWorldX = ecs.getWorldX(id) | 0;
+    const npcWorldY = ecs.getWorldY(id) | 0;
+    let desiredFacing: number | undefined;
 
-            const rot = ecs.getRotation(id) | 0;
-            const targetRot = ecs.getTargetRot(id) | 0;
-            if (rot !== targetRot) {
-                ecs.setRotation(id, interpolateRotation(rot, targetRot, ecs.getRotationSpeed(id) | 0));
-            }
-
-            const seqId = ecs.getSeqId(id) | 0;
-            const seqDelay = ecs.getSeqDelay?.(id) | 0;
-            const { movementSeqId } = resolveNpcMovementSequenceIds(client, ecs, id);
-            const currentMovementSeqId = ecs.getMovementSeqId?.(id) | 0;
-            if ((movementSeqId | 0) !== (currentMovementSeqId | 0)) {
-                ecs.setMovementSeqId?.(id, movementSeqId | 0);
-                ecs.setMovementFrameIndex?.(id, 0);
-                ecs.setMovementAnimTick?.(id, 0);
-                ecs.setMovementLoopCount?.(id, 0);
-            }
-
-            const movementInfo = resolveNpcSequenceFrameInfo(client, movementSeqId | 0);
-            const movementStep = stepNpcSequenceTrack(
-                ecs.getMovementFrameIndex?.(id) | 0,
-                ecs.getMovementAnimTick?.(id) | 0,
-                ecs.getMovementLoopCount?.(id) | 0,
-                movementInfo.frameCount,
-                movementInfo.lengths,
-                movementInfo.seqType,
-                false,
-            );
-            ecs.setMovementFrameIndex?.(id, movementStep.frameIndex | 0);
-            ecs.setMovementAnimTick?.(id, movementStep.animTick | 0);
-            ecs.setMovementLoopCount?.(id, movementStep.loopCount | 0);
-
-            if (movementStep.frameAdvanced && movementInfo.seqType?.frameSounds?.size) {
-                try {
-                    client.handleSeqFrameSounds(movementInfo.seqType, movementStep.frameIndex | 0, {
-                        position: {
-                            x: npcWorldX,
-                            y: npcWorldY,
-                            z: (ecs.getLevel(id) | 0) * 128,
-                        },
-                        isLocalPlayer: false,
-                    });
-                } catch {}
-            }
-
-            if (seqId >= 0 && seqDelay === 0 && ecs.hasSeqStartedBy(id, stepCycle)) {
-                const actionInfo = resolveNpcSequenceFrameInfo(client, seqId);
-                const actionStep = stepNpcSequenceTrack(
-                    ecs.getFrameIndex(id) | 0,
-                    ecs.getAnimTick(id) | 0,
-                    ecs.getLoopCount(id) | 0,
-                    actionInfo.frameCount,
-                    actionInfo.lengths,
-                    actionInfo.seqType,
-                    true,
+    const interactionIndex = ecs.getInteractionIndex?.(id);
+    const npcInteraction =
+        typeof interactionIndex === "number" && interactionIndex >= 0
+            ? decodeInteractionIndex(interactionIndex)
+            : null;
+    if (npcInteraction) {
+        if (npcInteraction.type === "player") {
+            const targetIdx = pe.getIndexForServerId?.(npcInteraction.id | 0);
+            if (targetIdx != null) {
+                const facing = computeFacingRotation(
+                    npcWorldX - (pe.getX(targetIdx) | 0),
+                    npcWorldY - (pe.getY(targetIdx) | 0),
                 );
-
-                if (actionStep.cleared) {
-                    ecs.clearSeq(id);
-                } else {
-                    ecs.setFrameIndex(id, actionStep.frameIndex | 0);
-                    ecs.setAnimTick(id, actionStep.animTick | 0);
-                    ecs.setLoopCount(id, actionStep.loopCount | 0);
-                }
-
-                if (actionStep.frameAdvanced && actionInfo.seqType?.frameSounds?.size) {
-                    try {
-                        client.handleSeqFrameSounds(actionInfo.seqType, actionStep.frameIndex | 0, {
-                            position: {
-                                x: npcWorldX,
-                                y: npcWorldY,
-                                z: (ecs.getLevel(id) | 0) * 128,
-                            },
-                            isLocalPlayer: false,
-                        });
-                    } catch {}
-                }
+                if (facing !== undefined) desiredFacing = facing;
             }
+        } else if (npcInteraction.type === "npc") {
+            const targetEcs = ecs.getEcsIdForServer?.(npcInteraction.id | 0);
+            if (targetEcs != null && ecs.isLinked(targetEcs | 0)) {
+                const targetMapId = ecs.getMapId(targetEcs | 0) | 0;
+                const targetWorldX =
+                    (((targetMapId >> 8) & 0xff) << 13) + (ecs.getX(targetEcs | 0) | 0);
+                const targetWorldY =
+                    ((targetMapId & 0xff) << 13) + (ecs.getY(targetEcs | 0) | 0);
+                const facing = computeFacingRotation(
+                    npcWorldX - targetWorldX,
+                    npcWorldY - targetWorldY,
+                );
+                if (facing !== undefined) desiredFacing = facing;
+            }
+        }
+    }
+    if (
+        desiredFacing === undefined &&
+        walkingNow &&
+        movementOrientation !== undefined
+    ) {
+        desiredFacing = movementOrientation;
+    }
+    if (desiredFacing !== undefined) {
+        ecs.setTargetRot(id, desiredFacing);
+    }
+
+    const rot = ecs.getRotation(id) | 0;
+    const targetRot = ecs.getTargetRot(id) | 0;
+    if (rot !== targetRot) {
+        ecs.setRotation(id, interpolateRotation(rot, targetRot, ecs.getRotationSpeed(id) | 0));
+    }
+
+    const seqId = ecs.getSeqId(id) | 0;
+    const seqDelay = ecs.getSeqDelay?.(id) | 0;
+    const { movementSeqId } = resolveNpcMovementSequenceIds(client, ecs, id);
+    const currentMovementSeqId = ecs.getMovementSeqId?.(id) | 0;
+    if ((movementSeqId | 0) !== (currentMovementSeqId | 0)) {
+        ecs.setMovementSeqId?.(id, movementSeqId | 0);
+        ecs.setMovementFrameIndex?.(id, 0);
+        ecs.setMovementAnimTick?.(id, 0);
+        ecs.setMovementLoopCount?.(id, 0);
+    }
+
+    const movementInfo = resolveNpcSequenceFrameInfo(client, movementSeqId | 0);
+    const movementStep = stepNpcSequenceTrack(
+        ecs.getMovementFrameIndex?.(id) | 0,
+        ecs.getMovementAnimTick?.(id) | 0,
+        ecs.getMovementLoopCount?.(id) | 0,
+        movementInfo.frameCount,
+        movementInfo.lengths,
+        movementInfo.seqType,
+        false,
+    );
+    ecs.setMovementFrameIndex?.(id, movementStep.frameIndex | 0);
+    ecs.setMovementAnimTick?.(id, movementStep.animTick | 0);
+    ecs.setMovementLoopCount?.(id, movementStep.loopCount | 0);
+
+    if (movementStep.frameAdvanced && movementInfo.seqType?.frameSounds?.size) {
+        try {
+            client.handleSeqFrameSounds(movementInfo.seqType, movementStep.frameIndex | 0, {
+                position: {
+                    x: npcWorldX,
+                    y: npcWorldY,
+                    z: (ecs.getLevel(id) | 0) * 128,
+                },
+                isLocalPlayer: false,
+            });
+        } catch {}
+    }
+
+    if (seqId >= 0 && seqDelay === 0 && ecs.hasSeqStartedBy(id, stepCycle)) {
+        const actionInfo = resolveNpcSequenceFrameInfo(client, seqId);
+        const actionStep = stepNpcSequenceTrack(
+            ecs.getFrameIndex(id) | 0,
+            ecs.getAnimTick(id) | 0,
+            ecs.getLoopCount(id) | 0,
+            actionInfo.frameCount,
+            actionInfo.lengths,
+            actionInfo.seqType,
+            true,
+        );
+
+        if (actionStep.cleared) {
+            ecs.clearSeq(id);
+        } else {
+            ecs.setFrameIndex(id, actionStep.frameIndex | 0);
+            ecs.setAnimTick(id, actionStep.animTick | 0);
+            ecs.setLoopCount(id, actionStep.loopCount | 0);
+        }
+
+        if (actionStep.frameAdvanced && actionInfo.seqType?.frameSounds?.size) {
+            try {
+                client.handleSeqFrameSounds(actionInfo.seqType, actionStep.frameIndex | 0, {
+                    position: {
+                        x: npcWorldX,
+                        y: npcWorldY,
+                        z: (ecs.getLevel(id) | 0) * 128,
+                    },
+                    isLocalPlayer: false,
+                });
+            } catch {}
         }
     }
 }

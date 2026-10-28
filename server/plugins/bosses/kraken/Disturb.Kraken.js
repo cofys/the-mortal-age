@@ -88,6 +88,13 @@ function bossReady(bossNpc) {
   return whirlpoolsNear(bossNpc.getLocation?.(), bossNpc.getPrivateArea?.()).length === 0;
 }
 
+/** A league that locks bosses (Shattered Relics) may refuse the fight before it starts. */
+function bossLocked(player, bossId) {
+  const query = { player, name: Shared.core().NpcDefinition.forId(bossId)?.getName?.(), notify: true, locked: false };
+  pluginApi?.emitCustomEvent("league:boss-locked", query);
+  return query.locked === true;
+}
+
 function disturb({ player, npc }) {
   if (!npc || !Shared.alive(npc)) return false;
   if (!Shared.alive(player)) return false;
@@ -97,6 +104,7 @@ function disturb({ player, npc }) {
   // Already surfaced (or another Whirlpool variant): nothing to wake.
   if (surfacedId == null) return false;
   const { CAVE_WHIRLPOOL, BOSS_WHIRLPOOL, TENTACLE_WHIRLPOOL } = Shared.ids();
+  if (npcId === BOSS_WHIRLPOOL && bossLocked(player, surfacedId)) return true;
   const { SURFACE_ANIM } = Shared;
   if (npcId === CAVE_WHIRLPOOL) {
     surface(npc, surfacedId, SURFACE_ANIM.cave, player);
@@ -189,7 +197,11 @@ function later(ticks, action) {
   );
 }
 
+/** Kept for `league:boss-locked` (a custom event needs the api). */
+let pluginApi = null;
+
 function attach(api) {
+  pluginApi = api;
   api.onNpcInteraction("Whirlpool", { Disturb: disturb });
   api.onNpcRoute(npcRoute);
   api.onItemOnNpc(explosive);

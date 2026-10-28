@@ -39,6 +39,15 @@ export class BoatDeckArea extends PrivateArea {
         this.addLoc(loc);
     }
 
+    /** Takes a loc of that shape off its deck tile (a Barracuda Trial's rum crate, delivered). */
+    public removeLoc(loc: BoatDeckLoc): void {
+        const location = this.locLocation(loc);
+        for (const object of this.getObjects()) {
+            if (object.getLocation().equals(location) && object.getType() === loc.shape) this.detach(object);
+        }
+        this.solid.delete(BoatDeckArea.key(location.getX(), location.getY()));
+    }
+
     /** A deck lives as long as its boat (BoatManager.dispose destroys it), aboard or not. */
     postLeave(mobile: Mobile, _logout: boolean): void {
         this.remove(mobile);

@@ -35,6 +35,8 @@ export interface OsrsMenuEntry extends MenuEntry {
     onClick?: (entry?: MenuEntry, e?: MouseEvent, ctx?: unknown) => void;
     // Optional coordinates captured when building the entry
     tile?: { tileX: number; tileY: number; plane?: number };
+    /** The scene's own left-click choice (a helm's "Set heading" over the sea). */
+    swapPinned?: boolean;
     mapX?: number;
     mapY?: number;
     // Index of the option in the underlying action list (0-based). Helps compute real opcodes.

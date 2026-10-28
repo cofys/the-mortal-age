@@ -47,6 +47,12 @@ export interface OwnedBoat {
     type: string;
     name: BoatName;
     hitpoints: number;
+    /** Damage taken since the boat was last recovered: its hitpoints are its parts' maximum less this. */
+    damage: number;
+    /** A built wind or gale catcher: switched on, the wind motes it holds, and how many pay full XP. */
+    windCatcherOn?: boolean;
+    windMotes?: number;
+    windMotesOwed?: number;
     facilities: number[];
     location: BoatLocation;
     /** The cargo hold, by slot; `null` is an empty slot. */
@@ -122,6 +128,10 @@ export function normalizeSailingState(raw: any): SailingState {
             type: boat.type,
             name: normalizeName(boat.name),
             hitpoints: finite(boat.hitpoints) ? boat.hitpoints : 0,
+            damage: finite(boat.damage) && boat.damage > 0 ? boat.damage : 0,
+            ...(boat.windCatcherOn === true && { windCatcherOn: true }),
+            ...(finite(boat.windMotes) && boat.windMotes > 0 && { windMotes: boat.windMotes }),
+            ...(finite(boat.windMotesOwed) && boat.windMotesOwed > 0 && { windMotesOwed: boat.windMotesOwed }),
             facilities: Array.isArray(boat.facilities) ? boat.facilities.filter(Number.isInteger) : [],
             location: normalizeLocation(boat.location),
             cargo: normalizeCargo(boat.cargo),

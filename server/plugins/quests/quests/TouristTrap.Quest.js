@@ -619,7 +619,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function openCampGate(event) {
     const { player, objectId } = event;
-    if (!CAMP_GATE_IDS.has(objectId)) return;
+    if (!CAMP_GATE_IDS.has(objectId)) return false;
     event.handled = true;
     const stage = stageOf(player);
     if (stage >= STAGE_GUARD_TALKED && stage < STAGE_SHABIM_TASK) {
@@ -654,7 +654,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function openMineDoor(event) {
     const { player, objectId } = event;
-    if (!MINE_DOOR_IDS.has(objectId)) return;
+    if (!MINE_DOOR_IDS.has(objectId)) return false;
     event.handled = true;
     if (objectId === 2690 || objectId === 2691) {
       player.sendMessage("You return to the surface.");
@@ -673,7 +673,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function enterDeepMine(event) {
     const { player, objectId } = event;
-    if (!MINE_CAVE_IDS.has(objectId)) return;
+    if (!MINE_CAVE_IDS.has(objectId)) return false;
     if (stageOf(player) < STAGE_GUARD_DISTRACTED) return;
     event.handled = true;
     if (stageOf(player) >= STAGE_ANA_SENT_UP) {
@@ -688,7 +688,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function searchBookcase(event) {
     const { player, objectId } = event;
-    if (objectId !== BOOKCASE_OBJECT_ID) return;
+    if (objectId !== BOOKCASE_OBJECT_ID) return false;
     event.handled = true;
     if (stageOf(player) < STAGE_SHABIM_TASK) return;
     player.setAttribute(SEARCHED_BOOKCASE_ATTRIBUTE, true);
@@ -697,7 +697,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function openChest(event) {
     const { player, objectId } = event;
-    if (objectId !== CHEST_OBJECT_ID) return;
+    if (objectId !== CHEST_OBJECT_ID) return false;
     event.handled = true;
     if (stageOf(player) < STAGE_SHABIM_TASK) return;
     if (!held(player, BEDABIN_KEY_ITEM_ID)) {
@@ -717,7 +717,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function useAnvil(event) {
     const { player, objectId } = event;
-    if (objectId !== ANVIL_OBJECT_ID) return;
+    if (objectId !== ANVIL_OBJECT_ID) return false;
     event.handled = true;
     if (stageOf(player) < STAGE_HAS_PLANS) return;
     if (held(player, PROTOTYPE_DART_ITEM_ID) || held(player, PROTOTYPE_DART_TIP_ITEM_ID)) {
@@ -749,7 +749,7 @@ module.exports = function registerTouristTrapQuest(api) {
       event.player.sendMessage("You look into the barrel and see Ana.");
       return;
     }
-    if (!MINE_BARREL_OBJECT_IDS.has(objectId)) return;
+    if (!MINE_BARREL_OBJECT_IDS.has(objectId)) return false;
     event.handled = true;
     event.player.sendMessage("This looks like a mining barrel.");
   }
@@ -771,7 +771,7 @@ module.exports = function registerTouristTrapQuest(api) {
       advance(player, STAGE_ANA_SURFACE);
       return;
     }
-    if (!MINE_BARREL_OBJECT_IDS.has(objectId)) return;
+    if (!MINE_BARREL_OBJECT_IDS.has(objectId)) return false;
     event.handled = true;
     if (stageOf(player) < STAGE_IN_DEEP_MINE) return;
     if (held(player, ANA_IN_A_BARREL_ITEM_ID) || held(player, BARREL_ITEM_ID)) {
@@ -786,7 +786,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function searchMineCart(event) {
     const { player, objectId } = event;
-    if (!MINE_CART_OBJECT_IDS.has(objectId)) return;
+    if (!MINE_CART_OBJECT_IDS.has(objectId)) return false;
     event.handled = true;
     const stage = stageOf(player);
     if (stage === STAGE_HAS_BARREL) {
@@ -804,7 +804,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function useWinchBucket(event) {
     const { player, objectId } = event;
-    if (objectId !== WINCH_BUCKET_OBJECT_ID) return;
+    if (objectId !== WINCH_BUCKET_OBJECT_ID) return false;
     if (stageOf(player) < STAGE_ANA_SENT_UP) return;
     event.handled = true;
     if (held(player, ANA_IN_A_BARREL_ITEM_ID)) player.getInventory().deleteNumber(ANA_IN_A_BARREL_ITEM_ID, 1);
@@ -814,7 +814,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function operateWinch(event) {
     const { player, objectId } = event;
-    if (objectId !== WINCH_OBJECT_ID) return;
+    if (objectId !== WINCH_OBJECT_ID) return false;
     if (stageOf(player) < STAGE_ANA_SENT_UP) return;
     event.handled = true;
     player.sendMessage("You operate the winch and haul the barrel containing Ana onto the side.");
@@ -824,7 +824,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function searchWoodenCart(event) {
     const { player, objectId } = event;
-    if (!CAMP_CART_OBJECT_IDS.has(objectId)) return;
+    if (!CAMP_CART_OBJECT_IDS.has(objectId)) return false;
     const stage = stageOf(player);
     if (stage === STAGE_ESCAPED) {
       event.handled = true;

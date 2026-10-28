@@ -23,7 +23,7 @@ export class HintArrowLayer {
     ) {}
 
     draw(): void {
-        if (hintArrow.type !== 1 && hintArrow.type !== 2) return;
+        if (hintArrow.type !== 1 && hintArrow.type !== 2 && hintArrow.type !== 4) return;
         if (!this.texture) this.ensureTexture();
         if (!this.texture || !isHintArrowBlinkOn()) return;
         const point = hintArrowScreenPoint(

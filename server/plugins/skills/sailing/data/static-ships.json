@@ -152,5 +152,10 @@
     "hostile": false,
     "fineX": 387264,
     "fineY": 410944
-  }
+  },
+  {"id": "bt_ralph", "configId": 10, "sizeX": 8, "sizeZ": 8, "templateChunkX": 481, "templateChunkY": 794, "deckLevel": 1, "walkable": "template", "hull": {"offsetX": 0, "offsetY": 0, "width": 128, "length": 384}, "deckCentreX": 448, "deckCentreY": 448, "boardingTile": {"x": 3, "y": 4}, "hitpoints": 20, "hostile": false, "boardable": false, "fineX": 388544, "fineY": 374592},
+  {"id": "bt_rum_boat", "configId": 10, "sizeX": 8, "sizeZ": 8, "templateChunkX": 482, "templateChunkY": 794, "deckLevel": 1, "walkable": "template", "hull": {"offsetX": 0, "offsetY": 0, "width": 128, "length": 384}, "deckCentreX": 448, "deckCentreY": 448, "boardingTile": {"x": 3, "y": 4}, "hitpoints": 20, "hostile": false, "boardable": false, "fineX": 388800, "fineY": 354240},
+  {"id": "bt_gurtob", "configId": 10, "sizeX": 8, "sizeZ": 8, "templateChunkX": 483, "templateChunkY": 794, "deckLevel": 1, "walkable": "template", "hull": {"offsetX": 0, "offsetY": 0, "width": 128, "length": 384}, "deckCentreX": 448, "deckCentreY": 448, "boardingTile": {"x": 3, "y": 4}, "hitpoints": 20, "hostile": false, "boardable": false, "fineX": 312128, "fineY": 387520},
+  {"id": "bt_toad_boat", "configId": 10, "sizeX": 8, "sizeZ": 8, "templateChunkX": 484, "templateChunkY": 794, "deckLevel": 1, "walkable": "template", "hull": {"offsetX": 0, "offsetY": 0, "width": 128, "length": 384}, "deckCentreX": 448, "deckCentreY": 448, "boardingTile": {"x": 3, "y": 4}, "hitpoints": 20, "hostile": false, "boardable": false, "fineX": 287424, "fineY": 385216},
+  {"id": "bt_gwyna", "configId": 10, "sizeX": 8, "sizeZ": 8, "templateChunkX": 485, "templateChunkY": 794, "deckLevel": 1, "walkable": "template", "hull": {"offsetX": 0, "offsetY": 0, "width": 128, "length": 384}, "deckCentreX": 448, "deckCentreY": 448, "boardingTile": {"x": 3, "y": 4}, "hitpoints": 20, "hostile": false, "boardable": false, "fineX": 287936, "fineY": 442560}
 ]

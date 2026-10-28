@@ -15,7 +15,8 @@ module.exports = function registerDragonHastaSpecialAttack(api) {
 
   class DragonHastaCombatMethod extends MeleeCombatMethod {
     start(character, target) {
-      CombatSpecial.drain(character, unleashDrain(character));
+      // All the energy, not the special's cost: a cost cap (a league fragment) leaves it alone.
+      CombatSpecial.drain(character, unleashDrain(character), false);
       super.start(character, target);
     }
 

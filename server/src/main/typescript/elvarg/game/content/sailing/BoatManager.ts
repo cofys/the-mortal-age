@@ -87,6 +87,8 @@ export class BoatManager {
             deckCentreX: spec.deckCentreX,
             deckCentreY: spec.deckCentreY,
             baseSpeed: spec.stats?.baseSpeed,
+            speedCap: spec.stats?.speedCap,
+            acceleration: spec.stats?.acceleration,
             ...placement,
         });
         BoatManager.boats.set(entityIndex, { boat, spec, deck: new BoatDeckArea(boat, spec), locChanges: [] });
@@ -112,6 +114,18 @@ export class BoatManager {
         active.spec = { ...active.spec, locs: [...active.spec.locs.filter((other) => !replaced(other)), loc] };
         active.deck.setLoc(loc);
         active.locChanges.push(loc);
+    }
+
+    /** Takes a deck loc (its tile and shape) off the boat, for everyone who sees it. */
+    public static removeDeckLoc(boat: Boat, loc: BoatDeckLoc): void {
+        const active = BoatManager.boats.get(boat.entityIndex);
+        if (!active || active.boat !== boat) return;
+        const same = (other: BoatDeckLoc) =>
+            other.x === loc.x && other.y === loc.y && other.level === loc.level && other.shape === loc.shape;
+        if (!active.spec.locs.some(same)) return;
+        active.spec = { ...active.spec, locs: active.spec.locs.filter((other) => !same(other)) };
+        active.deck.removeLoc(loc);
+        active.locChanges.push({ ...loc, removed: true });
     }
 
     /**
@@ -203,17 +217,27 @@ export class BoatManager {
      */
     public static steerToward(player: Mobile, x: number, y: number): boolean {
         const boat = BoatManager.getBoatAboard(player);
-        if (!boat || boat.helmPlayerId !== player.getIndex()) return false;
-        if (boat.containsDeckTile(x, y)) return true;
+        if (!boat || !BoatManager.steers(player, boat)) return false;
+        // A captain whose crewmate holds the helm walks the deck as usual (rsprox).
+        if (boat.containsDeckTile(x, y)) return boat.helmPlayerId === player.getIndex();
         const heading = boat.helmHeadingToward(x, y);
         if (heading !== undefined) BoatManager.applyHelmHeading(player, boat, heading);
         return true;
     }
 
+    /**
+     * Whether a player steers the boat: from its helm, or as its owner while a crewmate holds the
+     * helm (rsprox: the owner's clicks on the sea set the heading then, from anywhere on deck).
+     */
+    public static steers(player: Mobile, boat: Boat): boolean {
+        if (boat.helmPlayerId === player.getIndex()) return true;
+        return boat.helmCrew !== undefined && boat.ownerPlayerId === player.getIndex();
+    }
+
     /** OSRS SetHeading (0-15), sent by the client in place of a click while steering. */
     public static setHelmHeading(player: Mobile, packedHeading: number): void {
         const boat = BoatManager.getBoatAboard(player);
-        if (!boat || boat.helmPlayerId !== player.getIndex()) return;
+        if (!boat || !BoatManager.steers(player, boat)) return;
         if (!(packedHeading >= 0 && packedHeading <= 15)) return;
         BoatManager.applyHelmHeading(player, boat, packedHeadingToAngle(packedHeading));
     }
@@ -225,6 +249,22 @@ export class BoatManager {
         return (RegionManager.getClipping(x, y, 0, null) & SOLID_OBJECT) === 0;
     }
 
+    /**
+     * Moves a boat at once to another position (and facing, if given): a Barracuda Trial's start,
+     * a portal. Viewers see it jump there (WorldEntitySync), and it sails on from the new facing.
+     */
+    public static teleport(boat: Boat, to: { fineX: number; fineY: number; angle?: number }): void {
+        boat.fineX = to.fineX;
+        boat.fineY = to.fineY;
+        boat.prevFineX = to.fineX;
+        boat.prevFineY = to.fineY;
+        if (to.angle !== undefined) {
+            boat.angle = to.angle;
+            boat.heading = to.angle;
+        }
+        boat.teleportCount++;
+    }
+
     /** Runs after every boat has moved each tick. */
     public static onAfterTick(listener: () => void): void {
         BoatManager.afterTickListeners.push(listener);
@@ -232,7 +272,9 @@ export class BoatManager {
 
     public static tick(): void {
         for (const { boat } of BoatManager.boats.values()) {
-            tickBoat(boat, BoatManager.isSailable);
+            boat.prevFineX = boat.fineX;
+            boat.prevFineY = boat.fineY;
+            boat.lastStep = tickBoat(boat, BoatManager.isSailable);
         }
         for (const listener of BoatManager.afterTickListeners) listener();
     }

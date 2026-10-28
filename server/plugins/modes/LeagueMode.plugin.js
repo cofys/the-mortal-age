@@ -28,6 +28,17 @@ module.exports = {
     require("./league/Rewards.LeagueMode")(api);
     require("./league/Passives.LeagueMode")(api);
     require("./league/BoostedDrops.LeagueMode")(api);
+    require("./league/Shattered.LeagueMode")(api);
+    require("./league/Fragments.LeagueMode")(api);
+    require("./league/FragmentDrops.LeagueMode")(api);
+    require("./league/FragmentEffects.LeagueMode")(api);
+    require("./league/FragmentGathering.LeagueMode")(api);
+    require("./league/FragmentProduction.LeagueMode")(api);
+    require("./league/FragmentSkilling.LeagueMode")(api);
+    require("./league/FragmentMinigames.LeagueMode")(api);
+    require("./league/FragmentSage.LeagueMode")(api);
+    require("./league/Unlocks.LeagueMode")(api);
+    require("./league/Sage.LeagueMode")(api);
     require("./league/Commands.LeagueMode")(api);
   },
 };

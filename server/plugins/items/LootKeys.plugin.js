@@ -104,10 +104,11 @@ function openKey(player, slot, expectedKey = null) {
     player.sendMessage("This Loot key has no recoverable loot and was not consumed.");
     return false;
   }
+  const tab = KEY_IDS.indexOf(key.getId());
   player.getInventory().deleteAtSlot(slot, 1);
   syncLootKeySkull(player);
   setChestItems(player, items);
-  setChestTab(player, KEY_IDS.indexOf(key.getId()));
+  setChestTab(player, tab);
   return true;
 }
 
@@ -302,6 +303,7 @@ function openSkullyPrompt(api, player) {
 const CHEST_NAME = "Loot Chest";
 const GROUP_ID = 742;
 const MAIN_MODAL_UID = (161 << 16) | 16;
+const TABS_UID = (GROUP_ID << 16) | 4;
 const CONTENT_UID = (GROUP_ID << 16) | 5;
 const INVENTORY_IDS = [558, 559, 560, 561, 562];
 const WITHDRAW_ALL_INVENTORY_UID = (GROUP_ID << 16) | 27;
@@ -347,6 +349,7 @@ function sendNativeState(player) {
 }
 
 function sendActionFlags(player) {
+  player.getPacketSender().sendInterfaceFlagsRange(TABS_UID, 0, MAX_KEYS - 1, 1 << 1);
   player.getPacketSender().sendInterfaceFlagsRange(CONTENT_UID, 0, 139, ALL_ACTION_FLAGS);
   [WITHDRAW_ALL_INVENTORY_UID, WITHDRAW_ALL_BANK_UID, DESTROY_UID, DESTROY_CONFIRM_UID, DESTROY_CANCEL_UID, ITEM_MODE_UID, NOTE_MODE_UID]
     .forEach((uid) => player.getPacketSender().sendInterfaceFlagsRange(uid, -1, -1, 1 << 1));
@@ -438,6 +441,17 @@ function handleContentAction(player, event) {
 
 function handleChestInterfaceAction(player, event) {
   if (player.getInterfaceId() !== GROUP_ID) return false;
+  if (event.buttonId === TABS_UID) {
+    if (event.action !== 1 || !Number.isInteger(event.slot) || event.slot < 0 || event.slot >= MAX_KEYS) return true;
+    const key = inventoryKeys(player).find(({ item }) => item.getId() === KEY_IDS[event.slot]);
+    if (key && LootKeys.chestItems(player).length) {
+      player.sendMessage("Empty the current loot chest before opening another Loot key.");
+    } else if (key) {
+      if (openChestKey(player, key.slot, key.item)) return true;
+    }
+    refreshChest(player);
+    return true;
+  }
   if (handleContentAction(player, event)) return true;
   const state = stateFor(player);
   switch (event.buttonId) {

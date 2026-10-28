@@ -31,7 +31,7 @@
         { "varbits": { "20157": 0, "4371": 1 } }
       ]
     },
-    "316": { "name": "Make-X for darts and bolts", "varbit": 10971 },
+    "316": { "name": "Make-X for darts and bolts", "varbit": 10971, "default": 1 },
     "371": { "name": "Auto-equip & sort items from gravestone", "varbit": 9776 },
     "372": { "name": "Player Report options", "varbit": 1334 },
     "374": { "name": "Beginner clue scroll warning", "varbit": 10693 },

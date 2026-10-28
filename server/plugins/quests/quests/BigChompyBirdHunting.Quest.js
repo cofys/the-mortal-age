@@ -546,7 +546,10 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
   }
 
   function incrementChompyKills(player) {
-    const kills = chompyKills(player) + 1;
+    // Content may count a kill as more than one ("big-chompy-bird-hunting:kill-credit", a league fragment).
+    const credit = { player, kills: 1 };
+    api.emitCustomEvent?.("big-chompy-bird-hunting:kill-credit", credit);
+    const kills = chompyKills(player) + (Number.isSafeInteger(credit.kills) && credit.kills > 1 ? credit.kills : 1);
     player.setAttribute(CHOMPY_KILLS_ATTRIBUTE, kills);
     player.getPacketSender?.().sendConfig?.(VARP_CHOMPY_KILLS, kills);
     return kills;

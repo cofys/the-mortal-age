@@ -11,6 +11,11 @@ const BOARDS_ATTRIBUTE = "port-tasks:boards";
 /** Rewards earned with no inventory space, for a port master's Claim-rewards (persisted). */
 const UNCLAIMED_ATTRIBUTE = "port-tasks:unclaimed";
 const COMPLETED_ATTRIBUTE = "port-tasks:completed";
+/**
+ * Crates crewmates carry for the player, per task slot (not saved): `{ crate, amount, boatSlot }`,
+ * `boatSlot` when they took them out of that boat's hold to deliver (crew/Courier.Crew.js).
+ */
+const CREW_CARGO_ATTRIBUTE = "port-tasks:crew-cargo";
 
 const MAX_SLOTS = 5;
 /** Tasks a player may hold: 1, and one more at Sailing 7, 28, 56 and 84 (Wiki; not boostable). */
@@ -25,6 +30,10 @@ const VARBIT = Object.freeze({
   CARRYING_CARGO: 19134, // sailing_carrying_cargo: the ledger table and cargo hold switch on it
 });
 const VARP_TASKS_COMPLETED = 5207;
+/** sailing_crew_held_cargo_n (varp, the crate) and _amount (varbit), per task slot; the hold they came from (rsprox). */
+const VARP_CREW_CARGO0 = 5174;
+const VARBIT_CREW_CARGO0_AMOUNT = 19473;
+const VARP_CREW_CARGO_HOLD = 5179;
 
 const tasksById = new Map(DATA.tasks.map((task) => [task.id, task]));
 const tasksByRow = new Map(DATA.tasks.map((task) => [task.row, task]));
@@ -86,6 +95,38 @@ function sendSlots(player) {
     sender.sendVarbit(VARBIT.SLOT0_ID + 3 * i + 2, slot?.delivered ?? 0);
   });
   sender.sendVarbit(VARBIT.EXTRA_SLOTS_UNLOCKED, Math.max(0, slotLimit(player) - 1));
+  sendCrewCargo(player);
+}
+
+function crewCargo(player) {
+  const saved = player.getAttribute(CREW_CARGO_ATTRIBUTE);
+  return Array.from({ length: MAX_SLOTS }, (_, i) => (Array.isArray(saved) && saved[i]) || null);
+}
+
+/** Crates the crew carry for a task slot. */
+function crewAmount(player, index) {
+  return crewCargo(player)[index]?.amount ?? 0;
+}
+
+function setCrewCargo(player, index, entry) {
+  const held = crewCargo(player);
+  held[index] = entry;
+  player.setAttribute(CREW_CARGO_ATTRIBUTE, held);
+  sendCrewCargo(player);
+}
+
+/**
+ * The crew's crates, as live sends them: the crate and how many per task slot, and while they
+ * carry a delivery out of a hold, that hold's inventory (-1 otherwise).
+ */
+function sendCrewCargo(player, holdInventory = -1) {
+  const sender = player.getPacketSender();
+  crewCargo(player).forEach((entry, i) => {
+    sender.sendConfig(VARP_CREW_CARGO0 + i, entry?.crate ?? -1);
+    sender.sendVarbit(VARBIT_CREW_CARGO0_AMOUNT + i, entry?.amount ?? 0);
+  });
+  const fromHold = crewCargo(player).find((entry) => entry?.holdInventory !== undefined);
+  sender.sendConfig(VARP_CREW_CARGO_HOLD, fromHold?.holdInventory ?? holdInventory);
 }
 
 /** The crate in the player's hands (weapon slot), or undefined. */
@@ -144,6 +185,7 @@ module.exports = {
   BOARDS_ATTRIBUTE,
   UNCLAIMED_ATTRIBUTE,
   COMPLETED_ATTRIBUTE,
+  CREW_CARGO_ATTRIBUTE,
   BOARD_SIZE,
   VARBIT,
   VARP_TASKS_COMPLETED,
@@ -156,6 +198,9 @@ module.exports = {
   slots,
   setSlots,
   sendSlots,
+  crewCargo,
+  crewAmount,
+  setCrewCargo,
   heldCrate,
   isCrate,
   handsFree,

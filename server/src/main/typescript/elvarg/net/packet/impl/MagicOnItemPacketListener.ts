@@ -258,7 +258,7 @@ export class MagicOnItemPacketListener {
     // Untradeable items alch too, after a warning (rsprox 3215: Iban's staff for 12 coins); only
     // the server's own untradeable flag (PvP preset items) keeps an item out. A plugin that turns
     // the cast into something else clears `confirm`, `keepItem` and `recast`.
-    const policy = { player, itemId, spellId, allowed: !item.isUntradeable?.()
+    const policy = { player, itemId, spellId, high: isHighAlch, allowed: !item.isUntradeable?.()
       && definition.getHighAlchValue() > 0 && definition.getLowAlchValue() > 0,
       coins: isHighAlch ? definition.getHighAlchValue() : definition.getLowAlchValue(),
       castTicks: isHighAlch ? MagicOnItemPacketListener.HIGH_ALCH_CAST_TICKS : MagicOnItemPacketListener.LOW_ALCH_CAST_TICKS,

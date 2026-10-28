@@ -1,0 +1,9 @@
+# Normal Beaver Talk-to
+
+Plan2026-10-27: conservative automatic selection refuses the many canonical form/use/overhead sections. Add an explicit ordinary variant to the normal content row, validated against indexed variants by the existing owned-current route. No generated edits or first-section fallback. Future form rows need their own selector.
+
+RSProx skillpetwc141 entity recordings,229/02783/02785 item/Bank/Pickup; no Talk-to response captured. Pinned241 skillpetwc12181 has native Talk-to. Wiki Transcript:Beaver normal variant supplies woodchuck question and approximately32,768 reply, retained in existing canonical export. Forestry acquisition/unlocks separate.
+
+Native NPC packet -> Pets current/owner/removal guard -> pets:interact -> Dialogue.Pets validated explicit selector -> exact npc-dialogue:start -> real dialogue/session/packets. Test question/reply/completion/repeat and actual Pickup/Bank/save/login/Drop, foreign/queued refusals. Fresh build/focused/full, independent Codex review and rendered native checks before PR; cleanup own services/slot. No Claude/live edits.
+
+Verification: fresh build, retained RED2newfailures,100focused,9564/9564full (462225ms,no skips/failures). Existing omitted-startup Hunter/WarpedSceptre fixture warnings disclosed; new native paths no hook errors. Independent Codex86foundations+1actual Call replacement/stale priorNPC/save relog scenario clear; frozen source hashes in local report. Rendered native Drop/Talk/Continue/reply/end/repeat/Pickup verified canonical text/Beaver portrait and cancellation, returned13322 and cleared447/448. Disposable item/account/location seeded through MCP, all feature actions native. Proof beaver-dialogue-{question,reply,pickup}-native.png. Own server saved/stopped; client/browser/helper closed; slot7cleared,3107/43707/49807/9229free. NoClaude/live edits.

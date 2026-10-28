@@ -10,6 +10,7 @@ const GROUP_ID = 30009;
 const OVERLAY_HOST_UID = (161 << 16) | 34;
 const LEFT_ROW_COUNT = 32;
 const LEFT_ROW_HEIGHT = 28;
+const BUY_NOTED_ATTRIBUTE = "custom-shops:buy-noted";
 const COMPONENT = {
   ROOT: 0,
   LEFT_PANEL: 1,
@@ -17,6 +18,7 @@ const COMPONENT = {
   LEFT_TITLE: 3,
   LEFT_VIEW: 4,
   LEFT_SCROLLBAR: 5,
+  NOTED_TOGGLE: 6,
   LEFT_BACKGROUND_START: 20,
   LEFT_ICON_START: 60,
   LEFT_LABEL_START: 100,
@@ -49,6 +51,7 @@ const ICON_ITEM_IDS = {
 };
 
 let CombatFactory;
+let ItemDefinition;
 
 function iconItemId(icon) {
   if (Number.isInteger(icon)) return icon;
@@ -111,9 +114,15 @@ function buildInterface() {
     text: "<col=ffd27f>Custom shops</col>", fontId: 496, textColor: 0xffd27f, textShadowed: true, xTextAlignment: 1, yTextAlignment: 1,
   });
   const list = add(COMPONENT.LEFT_VIEW, root, {
-    rawX: 4, rawY: 48, rawWidth: 140, rawHeight: 268, width: 140, height: 268, scrollWidth: 140, scrollHeight: LIST_CONTENT_HEIGHT,
+    rawX: 4, rawY: 48, rawWidth: 140, rawHeight: 240, width: 140, height: 240, scrollWidth: 140, scrollHeight: LIST_CONTENT_HEIGHT,
   });
-  add(COMPONENT.LEFT_SCROLLBAR, root, { rawX: 146, rawY: 48, rawWidth: 16, rawHeight: 268, width: 16, height: 268, noClickThrough: true });
+  add(COMPONENT.LEFT_SCROLLBAR, root, { rawX: 146, rawY: 48, rawWidth: 16, rawHeight: 240, width: 16, height: 240, noClickThrough: true });
+
+  add(COMPONENT.NOTED_TOGGLE, root, {
+    type: TYPE_TEXT, rawX: 4, rawY: 292, rawWidth: 156, rawHeight: 24, width: 156, height: 24,
+    text: "Buy noted: Off", fontId: 494, textColor: 0xe8ded0, textShadowed: true, xTextAlignment: 1, yTextAlignment: 1,
+    actions: ["Toggle"], flags: FLAG_OP1,
+  });
 
   for (let row = 0; row < LEFT_ROW_COUNT; row++) {
     const y = row * LEFT_ROW_HEIGHT;
@@ -143,6 +152,7 @@ const INTERFACE_DEFINITION = buildInterface();
 function render(player, shops = customShops()) {
   const shop = selectedShop(player, shops);
   const sender = player.getPacketSender();
+  renderNotedToggle(player);
 
   for (let row = 0; row < LEFT_ROW_COUNT; row++) {
     const entry = shops[row];
@@ -178,15 +188,51 @@ function selectShop(player, row) {
   return true;
 }
 
+function renderNotedToggle(player) {
+  const noted = player.getAttribute(BUY_NOTED_ATTRIBUTE) === true;
+  player.getPacketSender().sendString(`Buy noted: <col=${noted ? "00ff00" : "ff9040"}>${noted ? "On" : "Off"}</col>`, uid(COMPONENT.NOTED_TOGGLE));
+}
+
+function toggleNoted({ player }) {
+  if (player.getInterfaceId() !== ShopManager.MAIN_INTERFACE_ID || !selectedShopIds.has(player) || !canUseShops(player)) return;
+  player.setAttribute(BUY_NOTED_ATTRIBUTE, player.getAttribute(BUY_NOTED_ATTRIBUTE) !== true);
+  renderNotedToggle(player);
+}
+
+function deliverNoted(request) {
+  if (request.player.getAttribute(BUY_NOTED_ATTRIBUTE) !== true ||
+      selectedShopIds.get(request.player) !== request.shopId || request.deliverId !== request.itemId) return;
+  const definition = ItemDefinition.forId(request.deliverId);
+  if (definition.isStackable()) return;
+  const noteId = definition.getNoteId();
+  if (!Number.isInteger(noteId) || noteId <= 0) return;
+  const note = ItemDefinition.forId(noteId);
+  if (note.isNoted() && note.unNote() === request.deliverId) request.deliverId = noteId;
+}
+
+function openShops({ player }) {
+  if (canUseShops(player)) open(player);
+  return true;
+}
+
+function selectShopButton({ player, buttonId }) {
+  return selectShop(player, LEFT_ROW_UIDS.indexOf(buttonId));
+}
+
+function initialize(api) {
+  CombatFactory = api.getCombatFactory();
+  ItemDefinition = api.core.ItemDefinition;
+}
+
 module.exports = {
   name: "CustomShops",
   register(api) {
-    CombatFactory = api.getCombatFactory();
+    api.onServerStartup(initialize.bind(null, api));
+    api.persistAttribute(BUY_NOTED_ATTRIBUTE, false);
     api.registerCustomInterface(INTERFACE_DEFINITION);
-    api.registerCommand("shops", ({ player }) => {
-      if (canUseShops(player)) open(player);
-      return true;
-    }, undefined, "Browse custom shops");
-    api.onInterfaceActionButton(LEFT_ROW_UIDS, ({ player, buttonId }) => selectShop(player, LEFT_ROW_UIDS.indexOf(buttonId)));
+    api.registerCommand("shops", openShops, undefined, "Browse custom shops");
+    api.onInterfaceActionButton(LEFT_ROW_UIDS, selectShopButton);
+    api.onInterfaceActionButton(uid(COMPONENT.NOTED_TOGGLE), toggleNoted);
+    api.onCustomEvent("shop:delivery", deliverNoted);
   },
 };

@@ -270,6 +270,47 @@ test("real Bounty Hunter deaths return humans to the lobby and honour Skully's l
     assert.deepEqual(keys.chestItems(p), [{ id: core.ItemIdentifiers.COINS, amount: 123, meta: null }]);
     assert.equal(keys.countKeys(p), 0);
   });
+  await t.test('the native key tabs open successive keys without losing unclaimed loot', (t) => {
+    const p = fighter(t, false, new core.Location(3168, 3498));
+    const messages = [];
+    t.mock.method(p, 'sendMessage', (message) => messages.push(message));
+    const I = core.ItemIdentifiers;
+    const first = keys.createKey([new core.Item(I.COINS, 123)], 0);
+    const second = keys.createKey([new core.Item(I.FIRE_RUNE, 7, { owner: 'second-key' })], 1);
+    p.getInventory().addItem(first);
+    p.getInventory().addItem(second);
+    assert.equal(keys.openKey(p, 0), true);
+    const flags = [], scripts = [];
+    t.mock.method(p.getPacketSender(), 'sendInterfaceFlagsRange', (...args) => { flags.push(args); return p.getPacketSender(); });
+    t.mock.method(p.getPacketSender(), 'sendInterfaceScript', (...args) => { scripts.push(args); return p.getPacketSender(); });
+    keys._test.open(p);
+    const tabs = (742 << 16) | 4, items = (742 << 16) | 5;
+    assert.ok(flags.some(([uid, from, to, mask]) => uid === tabs && from === 0 && to === 4 && mask === 2), 'View tab must transmit, as well as running cache script 8017 locally');
+    const tab = (slot, action = 1) => PluginManager.emitInterfaceActionClick({ player: p, buttonId: tabs, groupId: 742, childId: 4, slot, action, handled: false });
+    assert.equal(tab(1), true);
+    assert.equal(keys.countKeys(p), 1, 'switching cannot consume a key over unclaimed loot');
+    assert.deepEqual(keys.chestItems(p), [{ id: I.COINS, amount: 123, meta: null }]);
+    assert.match(messages.at(-1), /^Empty the current loot chest/);
+    assert.equal(scripts.at(-1)[3][4842], 0, 'restore the server tab after the client switched locally');
+    keys._test.handleInterfaceAction(p, { buttonId: items, slot: 0, action: 5 });
+    assert.equal(keys.chestItems(p).length, 0);
+    assert.equal(p.getInventory().getAmount(I.COINS), 123);
+    for (const slot of [-1, 5, 1.5]) tab(slot);
+    tab(1, 2);
+    assert.equal(keys.countKeys(p), 1, 'invalid tab clicks cannot consume the key');
+    assert.equal(tab(1), true);
+    assert.equal(keys.countKeys(p), 0);
+    assert.equal(keys.chestTab(p), 1);
+    assert.deepEqual(keys.chestItems(p), [{ id: I.FIRE_RUNE, amount: 7, meta: { owner: 'second-key' } }]);
+    assert.deepEqual(keys._test.nativeInventories(p)[559].slots, [{ slot: 0, itemId: I.FIRE_RUNE, quantity: 7 }]);
+    keys._test.handleInterfaceAction(p, { buttonId: items, slot: 0, action: 5 });
+    assert.equal(keys.chestItems(p)[0].amount, 7, 'a stale click from the previous tab cannot withdraw');
+    keys._test.handleInterfaceAction(p, { buttonId: items, slot: 28, action: 5 });
+    assert.equal(keys.chestItems(p).length, 0);
+    assert.equal(p.getInventory().getAmount(I.FIRE_RUNE), 7);
+    tab(1);
+    assert.equal(keys.chestItems(p).length, 0, 'repeated empty-tab clicks never replay consumed keys');
+  });
   for (const scenario of [
     { name: 'enabled keys collect a human victim', enabled: true },
     { name: 'enabled keys collect a BH bot victim', enabled: true, victimBot: true },

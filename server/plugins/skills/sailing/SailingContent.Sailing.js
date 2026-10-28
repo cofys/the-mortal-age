@@ -261,12 +261,13 @@ function animateSails(player, boat, from, to, { settle = true } = {}) {
 }
 
 /** Fades the screen out (or back in) with interface 174 and `fade_overlay` (script 948). */
-function fade(player, out) {
-  const args = out ? [0, 255, 0, 0, FADE_CYCLES] : [0, 0, 0, 255, FADE_CYCLES];
+/** `minimap: false` leaves the minimap shown (a crewmate banking cargo fades without hiding it, rsprox). */
+function fade(player, out, cycles = FADE_CYCLES, { minimap = true } = {}) {
+  const args = out ? [0, 255, 0, 0, cycles] : [0, 0, 0, 255, cycles];
   player.getPacketSender().sendSubInterface(OVERLAY_ATMOSPHERE_UID, FADE_OVERLAY_GROUP, 1, {
     postScripts: [{ scriptId: SCRIPT_FADE, args }],
   });
-  setVarbit(player, VARBIT.MINIMAP_STATE, out ? 2 : 0);
+  if (minimap) setVarbit(player, VARBIT.MINIMAP_STATE, out ? 2 : 0);
 }
 
 module.exports = {

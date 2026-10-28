@@ -141,10 +141,19 @@ function stopMining(player, resetAnimation = true) {
   if (resetAnimation) player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
 }
 
+let api = null;
+
+function init(pluginApi) {
+  api = pluginApi;
+}
+
 /** Wiki: "Ores are determined when the pay-dirt is mined, not when cleaning." */
 function awardPayDirt(player, vein, now) {
   const state = Mine.stateOf(player);
-  state.held.push(Mine.rollOre(Mine.miningLevel(player)).key);
+  // Content may make golden nuggets commoner ("minigame:chance", a league fragment): `multiplier` times.
+  const nuggets = { player, minigame: "motherlode-mine", kind: "golden-nugget", multiplier: 1 };
+  api?.emitCustomEvent?.("minigame:chance", nuggets);
+  state.held.push(Mine.rollOre(Mine.miningLevel(player), Math.random, nuggets.multiplier).key);
   Mine.save(player, state);
   player.getInventory().add(new Item(Mine.PAY_DIRT, 1), true);
   player.getSkillManager().addExperiences(Skill.MINING, PAY_DIRT_XP);
@@ -181,4 +190,4 @@ function tick(now) {
   for (const [player, mining] of miners) tickMiner(player, mining, now);
 }
 
-module.exports = { spawnAll, mineVein, stopMining, tick, veins, miners, VEIN_IDS, LIFESPAN, RESPAWN };
+module.exports = { init, spawnAll, mineVein, stopMining, tick, veins, miners, VEIN_IDS, LIFESPAN, RESPAWN };

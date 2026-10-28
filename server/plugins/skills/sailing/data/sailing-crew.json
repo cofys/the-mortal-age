@@ -1,0 +1,182 @@
+{
+  "_sources": [
+    "Crewmate ids, ship NPCs and Helmsmanship/Privateering/Deckhandiness are read from cache table 173 (sailing_crew) by `id` (its unique_id).",
+    "level, quests, diaries and tempoross: the skill guide's crew rows (cache dbrows 12710-12723) and the Wiki's Crewmates page.",
+    "slotLevels: the skill guide's 'Maximum crewmates' rows (cache dbrows 12709, 12712, 12716, 12719, 12722).",
+    "npcs: the cache's sailing_crew_* NPCs. recruit/pandemonium are the varbit-transformed parents spawned in the world; world/dock are the Talk-to forms they resolve to.",
+    "variants: which transcript variant (data/definitions/npc-dialogues.json) plays, first rule that matches. Keys: at (recruit | pandemonium | dock), recruited, met, pandemonium (quest done), sailing40, ghostspeak.",
+    "markers: transcript steps the Wiki export left as 'missing'/'unavailable' markers, resolved per step id: skip, play (its own steps), or below40 (its steps then end, before 40 Sailing).",
+    "Their world spawns (recruit spots, Pandemonium hangouts, the dock crewmate and the Crew Registrar) are in data/definitions/npc-spawns.json."
+  ],
+  "slotLevels": [40, 55, 70, 85, 95],
+  "crew": [
+    {
+      "id": 1,
+      "key": "generic_1",
+      "name": "Jobless Jim",
+      "level": 40,
+      "page": "Jobless Jim",
+      "npcs": {"recruit": 15251, "pandemonium": 15252, "world": 15253, "dock": 15254},
+      "varbits": {"met": 19504, "unlocked": 19483, "visibility": 19493},
+      "variants": [
+        {"at": "dock", "variant": "at-port-as-a-crew-member"},
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"met": true, "variant": "standard-dialogue-at-port-sarim-subsequent-dialogue-at-port-sarim"},
+        {"variant": "standard-dialogue-at-port-sarim"}
+      ],
+      "markers": {"J7jw75": "skip", "ObWVzo": "play"}
+    },
+    {
+      "id": 2,
+      "key": "generic_2",
+      "name": "Adventurer Ada",
+      "level": 55,
+      "page": "Adventurer Ada",
+      "npcs": {"recruit": 15261, "world": 15262, "dock": 15263},
+      "varbits": {"met": 19505, "unlocked": 19484, "visibility": 19494},
+      "variants": [
+        {"recruited": true, "variant": "when-at-the-pandemonium-after-joining-crew"},
+        {"met": true, "variant": "subsequent-dialogue-before-recruiting"},
+        {"variant": "standard-dialogue-before-recruiting"}
+      ]
+    },
+    {
+      "id": 3,
+      "key": "generic_3",
+      "name": "Jittery Jim",
+      "level": 70,
+      "page": "Jittery Jim",
+      "npcs": {"recruit": 15270, "pandemonium": 15271, "world": 15272, "dock": 15273},
+      "varbits": {"met": 19506, "unlocked": 19485, "visibility": 19495},
+      "variants": [
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"met": true, "variant": "subsequent-dialogue"},
+        {"variant": "initial-dialogue"}
+      ]
+    },
+    {
+      "id": 4,
+      "key": "generic_4",
+      "name": "Jolly Jim",
+      "level": 85,
+      "page": "Jolly Jim",
+      "npcs": {"recruit": 15280, "pandemonium": 15281, "world": 15282, "dock": 15283},
+      "varbits": {"met": 19507, "unlocked": 19486, "visibility": 19496},
+      "variants": [
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"pandemonium": false, "variant": "before-completing-pandemonium"},
+        {"sailing40": false, "met": true, "variant": "before-sailing-level-40-again"},
+        {"sailing40": false, "variant": "before-sailing-level-40"},
+        {"variant": "after-sailing-level-40"}
+      ]
+    },
+    {
+      "id": 5,
+      "key": "generic_5",
+      "name": "Sailor Jakob",
+      "level": 95,
+      "page": "Sailor Jakob",
+      "npcs": {"recruit": 15290, "pandemonium": 15291, "world": 15292, "dock": 15293},
+      "varbits": {"met": 19508, "unlocked": 19487, "visibility": 19497},
+      "variants": [
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"pandemonium": false, "variant": "before-completing-pandemonium"},
+        {"sailing40": false, "met": true, "variant": "before-level-40-sailing-again"},
+        {"sailing40": false, "variant": "before-level-40-sailing"},
+        {"variant": "after-sailing-level-40"}
+      ]
+    },
+    {
+      "id": 6,
+      "key": "werewolf",
+      "name": "Oarswoman Olga",
+      "level": 65,
+      "page": "Oarswoman Olga",
+      "quests": ["in_aid_of_the_myreque"],
+      "npcs": {"recruit": 15300, "pandemonium": 15301, "world": 15302, "dock": 15303},
+      "varbits": {"met": 19509, "unlocked": 19488, "visibility": 19498},
+      "variants": [
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"met": true, "variant": "subsequent-dialogue"},
+        {"variant": "initial-dialogue"}
+      ],
+      "markers": {"80QUI8": "below40"}
+    },
+    {
+      "id": 7,
+      "key": "fremennik",
+      "name": "Bosun Zarah",
+      "level": 80,
+      "page": "Bosun Zarah",
+      "quests": ["royal_trouble"],
+      "diaries": [["fremennik", "easy"], ["fremennik", "medium"], ["fremennik", "hard"]],
+      "npcs": {"recruit": 15310, "pandemonium": 15311, "world": 15312, "dock": 15313},
+      "varbits": {"met": 19510, "unlocked": 19489, "visibility": 19499},
+      "variants": [
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"met": true, "variant": "subsequent-dialogue"},
+        {"variant": "initial-dialogue"}
+      ]
+    },
+    {
+      "id": 8,
+      "key": "spirit_angler",
+      "name": "Spotter Virginia",
+      "level": 90,
+      "page": "Spotter Virginia",
+      "tempoross": 100,
+      "npcs": {"recruit": 15320, "pandemonium": 15321, "world": 15322, "dock": 15323},
+      "varbits": {"met": 19511, "unlocked": 19490, "visibility": 19500},
+      "variants": [
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"pandemonium": false, "variant": "before-completing-pandemonium"},
+        {"sailing40": false, "met": true, "variant": "before-sailing-level-40-again"},
+        {"sailing40": false, "variant": "before-sailing-level-40"},
+        {"variant": "after-sailing-level-40"}
+      ]
+    },
+    {
+      "id": 9,
+      "key": "captain_siad",
+      "name": "Ex-Captain Siad",
+      "level": 50,
+      "page": "Ex-Captain Siad",
+      "recruitPage": "Captain Siad",
+      "quests": ["the_tourist_trap"],
+      "npcs": {"recruitTalk": 15049, "pandemonium": 15330, "world": 15331, "dock": 15332},
+      "varbits": {"unlocked": 19491, "visibility": 19501},
+      "variants": [
+        {"at": "dock", "variant": "at-port-as-a-crew-member"},
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"quests": true, "variant": "standard-dialogue-after-the-tourist-trap", "page": "Captain Siad"}
+      ]
+    },
+    {
+      "id": 10,
+      "key": "ghost_jenkins",
+      "name": "Cabin Boy Jenkins",
+      "level": 60,
+      "page": "Cabin Boy Jenkins (ghost)",
+      "quests": ["dragon_slayer_i", "the_restless_ghost"],
+      "npcs": {"recruit": 15339, "pandemonium": 15340, "world": 15341, "dock": 15342},
+      "varbits": {"met": 19512, "unlocked": 19492, "visibility": 19613, "recruitVisibility": 19610},
+      "variants": [
+        {"at": "dock", "ghostspeak": true, "variant": "at-port-as-a-crew-member-with-ghostspeak"},
+        {"at": "dock", "variant": "at-port-as-a-crew-member-without-ghostspeak"},
+        {"recruited": true, "variant": "when-at-the-pandemonium"},
+        {"ghostspeak": false, "met": true, "variant": "subsequent-dialogue-without-ghostspeak"},
+        {"ghostspeak": false, "variant": "initial-dialogue-without-ghostspeak"},
+        {"met": true, "sailing40": false, "variant": "speaking-to-jenkins-again-before-sailing-level-40"},
+        {"variant": "initial-dialogue-with-ghostspeak"}
+      ],
+      "markers": {"Bu7A94": "skip", "w-L7IV": "skip"},
+      "noBoat": {
+        "ghostspeak": [{"npc": "This some 'ghost ship' joke? If not, I reckon yer boat ain't here."}],
+        "withoutGhostspeak": [
+          {"npc": "Woooo wooo wooooo woooo."},
+          {"message": "You think Jenkins is either trying to tell you that your boat isn't at this dock, or he's telling you to go swim to Crandor. Could be either."}
+        ]
+      }
+    }
+  ]
+}

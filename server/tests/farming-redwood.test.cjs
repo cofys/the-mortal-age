@@ -154,11 +154,12 @@ test('the Woodcutting request uses per-log farmed depletion while wild redwoods 
         },
     }, { get: (api, key) => api[key] ?? (() => {}) }));
     const p = farmer();
-    let logs = 0;
     const axe = new core.Item(core.ItemIdentifiers.BRONZE_AXE);
+    const inventory = new core.Inventory(p);
+    p.getPacketSender().sendItemContainer = function () { return this; };
+    inventory.add(axe, false);
     Object.assign(p, {
-        getInventory: () => ({ contains: id => id === axe.getId(), isFull: () => false,
-            getItems: () => [axe], adds: () => logs++ }),
+        getInventory: () => inventory,
         getEquipment: () => ({ getItems: () => [], get: () => null }),
         getSkillManager: () => ({ getCurrentLevel: () => 99, stopSkillable() {}, addExperiences() {} }),
         getCombat: () => ({ reset() {} }), getForceMovement: () => null,
@@ -183,7 +184,7 @@ test('the Woodcutting request uses per-log farmed depletion while wild redwoods 
         Math.random = () => rolls.shift() ?? 0.99; // log, no nests, then depletion
         for (let i = 0; i < 4; i++) task.execute();
     } finally { Math.random = random; }
-    assert.equal(logs, 1);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.REDWOOD_LOGS), 1);
     assert.equal(depletions.length, 1, 'a single successful log can deplete a farmed spot');
     assert.equal(depletions[0].respawnTicks, 200);
     assert.equal(canCut(p, 0), false);

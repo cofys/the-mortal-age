@@ -172,7 +172,12 @@ function travel(player, tree, to) {
     constructor() { super(MOVE_TICKS, player, false); }
     execute() {
       if (player.isRegistered() && player.getHitpoints() > 0) {
-        player.moveTo(new Location(to[0], to[1], to[2]));
+        const from = player.getLocation?.()?.clone?.() ?? null;
+        const fromInstance = player.getPrivateArea?.() != null;
+        const destination = new Location(to[0], to[1], to[2]);
+        player.moveTo(destination);
+        // As the core's teleports do ("teleport:landed"): where it began, for content that remembers it.
+        pluginApi?.emitCustomEvent?.("teleport:landed", { player, from, fromInstance, to: destination });
         sender.closeSubInterface(CHATBOX_MODAL);
       }
       this.stop();

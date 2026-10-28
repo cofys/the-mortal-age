@@ -58,7 +58,7 @@ function makeOne(player, recipe, spinning) {
   player.getInventory().addItem(new (Shared.getCore().Item)(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
   if (spinning) Shared.getApi().emitCustomEvent("crafting:spun", { player, itemId: recipe.itemId, amount: 1 });
-  Shared.produced(player, recipe.itemId, 1, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp, spinning ? "spinning" : "weaving");
   return true;
 }
 

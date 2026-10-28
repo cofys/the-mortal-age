@@ -31,7 +31,7 @@ Status:
     - Big Chompy Bird Hunting started (ogre arrows);
     - Zogre Flesh Eaters: completed for the unstrung comp bow, started for stringing it and for brutal arrows (the Wiki recipes say "Completion" and "Partial completion" respectively);
     - the Slayer unlock Broader Fletching (broad arrows, broad bolts, amethyst broad bolts).
-  - **Make-X for darts and bolts:** All Settings 316, varbit `option_fletch_dart_or_bolt_makex`. Off (the default), each click makes one set at once; on, a menu of up to 10 sets.
+  - **Make-X for darts and bolts:** All Settings 316, varbit `option_fletch_dart_or_bolt_makex`. On by default, it offers a menu of up to 10 sets; turning it off makes one set per click. Saved choices take precedence over the default.
   - **The fletching knife:** a tick off each knife action after the first.
   - **The bow string spool:** account-bound bow strings, Fill/Check/Empty, notes, spare spools for capacity, stringing from it, and filling it from spun bow strings through `crafting:spun`.
   - **Achievement diaries:** stringing an oak shortbow in the Gnome Stronghold and a magic longbow in Tirannwn (Western Provinces), and dragon darts at the Bedabin Camp (Desert). The Wiki lists each bow task's items as the unstrung bow and a bow string, so cutting the unstrung bow doesn't count. The Wiki gives no bounds for these places: the Bedabin Camp box is the one desert heat uses, and the Gnome Stronghold and Tirannwn (with Prifddinas) boxes are our estimates around their walls and towns.
@@ -97,3 +97,34 @@ No capture covers knife on logs, gem tips, javelins, shields, the spool or the V
 - the spool;
 - the fletching knife's timing;
 - the diary task (strung bow only, inside the area).
+
+## Feather alternatives parity (2026-10-27)
+
+The [Feather](https://oldschool.runescape.wiki/w/Feather),
+[Gryphon feather](https://oldschool.runescape.wiki/w/Gryphon_feather) and
+[Stymphike feather](https://oldschool.runescape.wiki/w/Stymphike_feather) Wiki pages,
+retrieved 2026-10-27, support using both feathers for ammunition. They were missing
+from the shared feather alternatives, preventing production and XP. The recipe data
+now includes both, including headless arrows, bolts, darts, ogre arrows and atlatl darts.
+The gryphon page documents a directional restriction: use the feather on the material;
+reverse use returns "Nothing interesting happens." The alternative's `usedOnly` flag
+preserves that behaviour without an item-id exception in the handler.
+
+The [Fletching training](https://oldschool.runescape.wiki/w/Fletching_training) page,
+retrieved the same day, says dart/bolt Make-X defaults on since Easter 2023. The settings
+catalog now supplies that default while retaining either saved choice.
+
+Regression coverage checks both feathers across five ammunition recipes, quantities,
+XP, delayed versus instant production, reverse use, level requirements, Make-X and
+selected-feather consumption. A separate login regression checks the default and saved
+on/off choices. All 49 focused Fletching/settings tests pass; the new production checks
+and default check failed before their fixes.
+
+In-game checks used supplied materials and levels: each feather produced 10 rune darts
+(188 XP), 10 mithril bolts (50 XP), and 15 headless arrows (15 XP). Reverse gryphon use
+returned the documented message without producing darts; reverse stymphike use made 10.
+Make-X produced 20 rune darts and 376 XP with each feather. A fresh login received
+Make-X enabled, and explicit off and on choices each survived logout/login.
+No indexed recording covers either new feather. Recordings 96, 1757 and 3280 cover
+ordinary rune-dart feathering on Leagues worlds; they do not establish the new feather
+alternatives or the default. No visual timing claim is made.

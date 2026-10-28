@@ -362,6 +362,69 @@ test("sanfew serum is made in three steps", () => {
   ]);
 });
 
+// Sanfew steps are manual even with spare ingredients (Wiki); never open Make-X or auto-repeat.
+for (let dose = 1; dose <= 4; dose++) {
+  const steps = [
+    [`${dose}dose2restore`, "unicorn_horn_dust", `sanfew_salve_step_1_${dose}_dose`, 9.5 * (dose + 2)],
+    [`sanfew_salve_step_1_${dose}_dose`, "snake_weed", `sanfew_salve_step_2_${dose}_dose`, 10.5 * (dose + 2)],
+    [`sanfew_salve_step_2_${dose}_dose`, "nail_beast_nail", `sanfew_salve_${dose}_dose`, 12 * (dose + 2)],
+  ];
+  for (const [base, secondary, product, xp] of steps) {
+    for (const reverse of [false, true]) {
+      test(`Sanfew ${product}: one manual make per click (${reverse ? "base first" : "secondary first"})`, () => {
+        const who = player([[base], [base], [secondary], [secondary]], 65);
+        assert.equal(use(who, reverse ? base : secondary, reverse ? secondary : base), true);
+        assert.equal(who.sent.menu, undefined, "no Make-X menu with spare ingredients");
+        assert.equal(who.inv.count(product), 1);
+        assert.equal(who.inv.count(base), 1);
+        assert.equal(who.inv.count(secondary), 1);
+        assert.equal(who.sent.xp, xp);
+        assert.deepEqual(who.sent.sounds, [2608]);
+        assert.deepEqual(who.sent.animations, [core.CacheDefinitions.getSeqId("human_herbing_vial")]);
+        ticks(8);
+        assert.equal(who.inv.count(product), 1, "no automatic second potion");
+        assert.equal(who.sent.xp, xp);
+        assert.equal(use(who, secondary, base), true);
+        assert.equal(who.inv.count(product), 2, "another click makes another potion");
+        assert.equal(who.sent.xp, 2 * xp);
+      });
+    }
+  }
+  test(`Sanfew step 1(${dose}) refuses horn dust already added, in both directions`, () => {
+    const base = `sanfew_salve_step_1_${dose}_dose`;
+    for (const reverse of [false, true]) {
+      const who = player([[base], ["unicorn_horn_dust"]], 65);
+      assert.equal(use(who, reverse ? base : "unicorn_horn_dust", reverse ? "unicorn_horn_dust" : base), true);
+      assert.deepEqual(who.sent.messages, ["I've already used this item in the mixture. I don't need to use it again."]);
+      assert.equal(who.inv.count(base), 1);
+      assert.equal(who.inv.count("unicorn_horn_dust"), 1);
+      assert.equal(who.sent.xp, 0);
+      assert.deepEqual(who.sent.sounds, []);
+      assert.deepEqual(who.sent.animations, []);
+      assert.equal(who.sent.menu, undefined);
+    }
+  });
+}
+
+test("Sanfew manual mixing preserves the Herblore and quest requirements", () => {
+  const low = player([["4dose2restore"], ["unicorn_horn_dust"]], 64);
+  use(low, "unicorn_horn_dust", "4dose2restore");
+  assert.equal(low.inv.count("4dose2restore"), 1);
+  assert.equal(low.sent.xp, 0);
+  assert.deepEqual(low.sent.messages, ["You need level 65 Herblore to upgrade the potion."]);
+  world.quests.set("zogre_flesh_eaters:started", false);
+  const unstarted = player([["4dose2restore"], ["unicorn_horn_dust"]], 65);
+  use(unstarted, "unicorn_horn_dust", "4dose2restore");
+  assert.equal(unstarted.inv.count("4dose2restore"), 1);
+  assert.equal(unstarted.sent.xp, 0);
+  world.quests.set("zogre_flesh_eaters:started", true);
+  world.quests.set("zogre_flesh_eaters", false);
+  const unfinished = player([["sanfew_salve_step_2_4_dose"], ["nail_beast_nail"]], 65);
+  use(unfinished, "nail_beast_nail", "sanfew_salve_step_2_4_dose");
+  assert.equal(unfinished.inv.count("sanfew_salve_4_dose"), 0);
+  assert.equal(unfinished.sent.xp, 0);
+});
+
 test("divine potions take a crystal dust per dose", () => {
   const who = player([["2dose2attack"], ["prif_crystal_shard_crushed", 50]], 70);
   use(who, "prif_crystal_shard_crushed", "2dose2attack");

@@ -141,4 +141,5 @@ module.exports = function attach(api) {
 };
 
 module.exports.formatPlayTime = formatPlayTime;
+module.exports.openInfo = openInfo;
 module.exports.playTime = playTime;

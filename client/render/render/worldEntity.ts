@@ -391,28 +391,39 @@ export function ensureWorldEntityOverlaysLoaded(host: WebGLOsrsRendererHost, now
     
 }
 
+/** Boats whose deck rebuild is waiting on the shared timer. */
+const pendingLocRebuilds = new WeakMap<WebGLOsrsRendererHost, Set<number>>();
+
+/** Changes within the timer's 150 ms share one rebuild per boat; every boat asked for is rebuilt. */
 export function scheduleWorldEntityLocRebuild(host: WebGLOsrsRendererHost, entityIndex: number): void {
 
+        let pending = pendingLocRebuilds.get(host);
+        if (!pending) pendingLocRebuilds.set(host, (pending = new Set()));
+        pending.add(entityIndex);
         if (host.worldEntityLocRebuildTimer !== null) return;
         host.worldEntityLocRebuildTimer = setTimeout(() => {
             host.worldEntityLocRebuildTimer = null;
-            const overlay = host.worldEntityOverlays.get(entityIndex);
-            if (!overlay) return;
-            console.log(`[WebGLOsrsRenderer] Rebuilding world entity overlay with deferred locs`);
-            host.loadWorldEntityScene(
-                overlay.entityIndex,
-                overlay.templateChunks,
-                overlay.regionX,
-                overlay.regionY,
-                overlay.worldX,
-                overlay.worldY,
-                overlay.sizeX,
-                overlay.sizeZ,
-                overlay.extraLocs,
-                overlay.configId,
-                overlay.extraNpcs,
-                overlay.basePlane,
-            );
+            const entities = [...pending!];
+            pending!.clear();
+            for (const index of entities) {
+                const overlay = host.worldEntityOverlays.get(index);
+                if (!overlay) continue;
+                console.log(`[WebGLOsrsRenderer] Rebuilding world entity overlay with deferred locs`);
+                host.loadWorldEntityScene(
+                    overlay.entityIndex,
+                    overlay.templateChunks,
+                    overlay.regionX,
+                    overlay.regionY,
+                    overlay.worldX,
+                    overlay.worldY,
+                    overlay.sizeX,
+                    overlay.sizeZ,
+                    overlay.extraLocs,
+                    overlay.configId,
+                    overlay.extraNpcs,
+                    overlay.basePlane,
+                );
+            }
         }, 150);
     
 }

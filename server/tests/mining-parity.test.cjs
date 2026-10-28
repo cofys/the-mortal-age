@@ -54,6 +54,8 @@ function createPlayer({ pickaxe = ItemIds.RUNE_PICKAXE, level = 99, full = false
       contains: (id) => id === pickaxe,
       isFull: () => full,
       adds: (id, amount) => added.push([id, amount]),
+      getAddableAmount: (item) => item.getAmount(),
+      add: (item) => added.push([item.getId(), item.getAmount()]),
       getItems: () => [],
     }),
     getEquipment: () => ({ getItems: () => (amulet > 0 ? [null, null, { getId: () => amulet }] : []) }),
@@ -330,11 +332,16 @@ test("each rock rolls the Wiki skilling success chart", () => {
     "Clay rocks": [128, 400], "Copper rocks": [100, 350], "Tin rocks": [100, 350], "Blurite rocks": [90, 350],
     "Iron rocks": [96, 350], "Barronite rocks": [80, 100], "Silver rocks": [25, 200], "Coal rocks": [16, 100],
     "Gold rocks": [7, 75], "Mithril rocks": [4, 50], "Adamantite rocks": [2, 25], "Runite rocks": [1, 18],
+    "Lead rocks": [112, 278], "Gem rocks": [28, 70], "Amethyst crystals": [-18, 10],
   };
+  // Wiki pages without the pre-roll template: gem rocks, sunstone, Daeyalt.
+  const noGems = new Set(["Gem rocks", "Sunstone rocks", "Daeyalt rocks"]);
   for (const rock of Mining.ROCKS.filter((entry) => !entry.cascade)) {
-    assert.deepEqual(rock.chance, charts[rock.objectName], rock.objectName);
-    assert.equal(rock.gems, true, `${rock.objectName} has the gem pre-roll`);
+    if (charts[rock.objectName]) assert.deepEqual(rock.chance, charts[rock.objectName], rock.objectName);
+    else assert.equal(rock.chance.length, 2, `${rock.objectName} has a chart`);
+    assert.equal(rock.gems === true, !noGems.has(rock.objectName), `${rock.objectName} gem pre-roll`);
   }
+  assert.deepEqual(Mining.ROCKS.find((rock) => rock.objectName === "Gem rocks").gloryChance, [84, 210]);
   // Wiki Runite rocks: 17/256 at level 85; the roll succeeds on faces 0-16 only.
   for (const [value, expected] of [[face(16), 1], [face(17), 0]]) {
     const h = harness();
@@ -540,4 +547,224 @@ test("rune essence: every roll gives essence and there is no gem pre-roll (Wiki 
     restoreRandom();
     restore();
   }
+});
+
+/** Mines `name` with every roll on face 0 (no gem, a hit, the first outcome), following a staged rock's new locs. */
+function mineAll(h, player, name, rockId) {
+  const rock = new GameObject(rockId, new core.Location(3285, 3368, 0), 10, 0, null);
+  const original = MapObjects.get;
+  MapObjects.get = (id) => [rock, ...h.registered].reverse().find((object) => object.getId() === id) ?? null;
+  h.interactions.get(name).Mine({ player, object: rock, definition: { getName: () => name } });
+  return { rock, restore: () => { MapObjects.get = original; } };
+}
+
+test("lead rocks (Wiki): 25 Mining, 40.5 XP, mined out as their own leadrock1_empty, which says it is empty", () => {
+  const h = harness();
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineAll(h, player, "Lead rocks", loc("leadrock1"));
+  try {
+    h.tick(2);
+    assert.equal(player.messages.at(-1), "You manage to mine some lead.");
+    assert.deepEqual(player.added, [[core.ItemIdentifiers.LEAD_ORE, 1]]);
+    assert.equal(player.xp.at(-1)[1], 40.5);
+    assert.equal(h.registered.at(-1).getId(), loc("leadrock1_empty"));
+    assert.equal(player.packets.scripts.at(-1)[5], 10, "6 s respawn");
+    assert.equal(Mining.isMiningActive(player), false);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+  const event = { player, object: { getId: () => loc("leadrock1_empty") } };
+  h.interactions.get("Rocks").Mine(event);
+  assert.equal(event.handled, true);
+  assert.equal(player.messages.at(-1), "There is currently no ore available in this rock.");
+});
+
+test("nickel rocks (Wiki) give 2-16 ores before going, and no mining enhancer's extra ore", () => {
+  let extraAsked = false;
+  const h = harness({ emit: (key) => { if (key === "mining:extra-ore") extraAsked = true; } });
+  const player = createPlayer();
+  // Face 0 draws the least: two ores.
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineAll(h, player, "Nickel rocks", loc("nickelrock1"));
+  try {
+    h.tick(2);
+    assert.equal(player.added.length, 1);
+    assert.deepEqual(h.registered, [], "the rock holds a second ore");
+    assert.equal(Mining.isMiningActive(player), true);
+    h.tick(3);
+    assert.deepEqual(player.added, [[core.ItemIdentifiers.NICKEL_ORE, 1], [core.ItemIdentifiers.NICKEL_ORE, 1]]);
+    assert.equal(h.registered.at(-1).getId(), loc("nickelrock1_empty"));
+    assert.equal(extraAsked, false);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
+test("rubium rocks (Wiki): two splinters a success from 72, at least two successes, then a 1/6 chance each", () => {
+  const h = harness();
+  const player = createPlayer({ level: 72 });
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineAll(h, player, "Rubium rocks", loc("rubiumrock1"));
+  try {
+    h.tick(2);
+    assert.deepEqual(player.added, [[core.ItemIdentifiers.RUBIUM_SPLINTERS, 2]]);
+    assert.deepEqual(h.registered, [], "never after the first");
+    h.tick(3);
+    assert.equal(h.registered.at(-1).getId(), loc("rubiumrock1_empty"), "face 0 is under 1/6");
+  } finally {
+    restoreRandom();
+    restore();
+  }
+  const low = createPlayer({ level: 71 });
+  const h2 = harness();
+  const restoreLow = scriptRandom([], 0);
+  const mined = mineAll(h2, low, "Rubium rocks", loc("rubiumrock1"));
+  try {
+    h2.tick(2);
+    assert.deepEqual(low.added, [[core.ItemIdentifiers.RUBIUM_SPLINTERS, 1]]);
+  } finally {
+    restoreLow();
+    mined.restore();
+  }
+});
+
+test("a full inventory still mines a stackable ore the player already holds", () => {
+  const h = harness();
+  const player = createPlayer({ full: true });
+  const inventory = player.getInventory();
+  player.getInventory = () => ({ ...inventory, contains: (id) => id === ItemIds.RUNE_PICKAXE || id === core.ItemIdentifiers.RUBIUM_SPLINTERS });
+  const { restore } = mineAll(h, player, "Rubium rocks", loc("rubiumrock1"));
+  restore();
+  assert.deepEqual(player.dialogues, []);
+  assert.equal(Mining.isMiningActive(player), true);
+});
+
+test("gem rocks (227/1846, 1858; Wiki table): the gem's line, sound 2655, 65 XP, gemrock -> rocks2, and a glory's chart", () => {
+  const h = harness();
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineAll(h, player, "Gem rocks", loc("gemrock"));
+  try {
+    h.tick(2);
+    assert.equal(player.messages.at(-1), "You just mined an Opal!");
+    assert.deepEqual(player.added, [[core.ItemIdentifiers.UNCUT_OPAL, 1]]);
+    assert.ok(player.packets.sounds.includes(2655));
+    assert.ok(!player.packets.sounds.includes(MINING_SUCCESS_SOUND));
+    assert.equal(player.xp.at(-1)[1], 65);
+    assert.deepEqual(player.packets.configs, [[ORE_MINED_VARP, 1]], "recorded: gems count as ore mined");
+    assert.equal(h.registered.at(-1).getId(), loc("rocks2"));
+    assert.equal(player.packets.scripts.at(-1)[5], 99);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+  // Level 41 (the rune pickaxe's): 46/256 plain, 136/256 with a charged glory; face 50 tells them apart.
+  for (const [amulet, expected] of [[-1, 0], [core.ItemIdentifiers.AMULET_OF_GLORY_4_, 1]]) {
+    const h2 = harness();
+    const miner = createPlayer({ level: 41, amulet });
+    const restoreRoll = scriptRandom([face(50)], 0);
+    const mined = mineAll(h2, miner, "Gem rocks", loc("gemrock1"));
+    try {
+      h2.tick(2);
+      assert.equal(miner.added.length, expected, `amulet ${amulet}`);
+    } finally {
+      restoreRoll();
+      mined.restore();
+    }
+  }
+  const byWeight = Mining.ROCKS.find((rock) => rock.objectName === "Gem rocks").outcomes.map((o) => [itemName(o.itemId), o.weight]);
+  assert.deepEqual(byWeight, [["Uncut opal", 60], ["Uncut jade", 30], ["Uncut red topaz", 15], ["Uncut sapphire", 9], ["Uncut emerald", 5], ["Uncut ruby", 5], ["Uncut diamond", 4]]);
+});
+
+test("amethyst crystals (233-234, Leagues): wall swings, 240 XP, two or three before the empty wall, which says it is empty", () => {
+  const h = harness();
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const wall = new GameObject(loc("amethystrock1"), new core.Location(3285, 3368, 0), 0, 0, null);
+  const original = MapObjects.get;
+  MapObjects.get = (id) => [wall, ...h.registered].reverse().find((object) => object.getId() === id) ?? null;
+  h.interactions.get("Amethyst crystals").Mine({ player, object: wall, definition: { getName: () => "Amethyst crystals" } });
+  try {
+    h.tick(1);
+    assert.equal(player.animations.at(-1), core.CacheDefinitions.getSeqId("human_mining_rune_pickaxe_wall"));
+    h.tick(1);
+    assert.equal(player.messages.at(-1), "You manage to mine some amethyst.");
+    assert.equal(player.xp.at(-1)[1], 240);
+    assert.deepEqual(h.registered, []);
+    h.tick(3);
+    const empty = h.registered.at(-1);
+    assert.equal(empty.getId(), loc("amethystrock_empty"));
+    const [, , locId, shape, , ticks] = player.packets.scripts.at(-1);
+    assert.deepEqual([locId, shape, ticks], [loc("amethystrock_empty"), 0, 125], "the wall's own shape (recorded 0)");
+  } finally {
+    restoreRandom();
+    MapObjects.get = original;
+  }
+  const event = { player, object: { getId: () => loc("amethystrock_empty") } };
+  h.interactions.get("Empty wall").Mine(event);
+  assert.equal(player.messages.at(-1), "There is currently no ore available in this rock.");
+});
+
+test("daeyalt rocks (226-231): sang wall swings, sound 2998, one stage down per ore, then empty, and back whole", () => {
+  const h = harness();
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const { rock, restore } = mineAll(h, player, "Daeyalt rocks", loc("area_sanguine_mine_minerocks_01"));
+  try {
+    h.tick(1);
+    assert.equal(player.animations.at(-1), core.CacheDefinitions.getSeqId("sang_mining_wall_rune_pickaxe"));
+    h.tick(1);
+    assert.equal(player.messages.at(-1), "You manage to mine some ore.");
+    assert.deepEqual(player.added, [[core.ItemIdentifiers.DAEYALT_ORE, 1]]);
+    assert.equal(core.CacheDefinitions.getObjId("sang_jas_ore"), core.ItemIdentifiers.DAEYALT_ORE);
+    assert.ok(player.packets.sounds.includes(2998));
+    assert.equal(h.registered.at(-1).getId(), loc("area_sanguine_mine_minerocks_02"));
+    h.tick(3);
+    assert.equal(h.registered.at(-1).getId(), loc("area_sanguine_mine_minerocks_03"));
+    h.tick(3);
+    assert.equal(h.registered.at(-1).getId(), loc("area_sanguine_mine_minerocks_04"));
+    assert.equal(player.messages.at(-1), "This rock face is now empty.");
+    assert.equal(player.added.length, 3);
+    assert.equal(Mining.isMiningActive(player), false);
+    h.tick(47);
+    assert.equal(h.registered.at(-1).getId(), loc("area_sanguine_mine_minerocks_01"), "grows back whole");
+    assert.equal(h.registered.at(-1).getLocation().getX(), rock.getLocation().getX());
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
+test("every loc named for mining in the cache has a handler (this plugin, or the content that owns it)", () => {
+  // Rocks other plugins mine, by name: quests, minigames, bosses, stars, Motherlode.
+  const elsewhere = new Set([
+    "Ascension rocks", "Blockage", "Blocked Crevice", "Boulder", "Cave entrance", "Cave exit", "Corrupt Deposit",
+    "Crashed Star", "Crystal Deposit", "Guardian parts", "Guardian remains", "Huge guardian remains",
+    "Large guardian remains", "Magical rocks", "Ore vein", "Rock Formation (Glowing)", "Rock Formation", "Rock",
+    "Rockfall", "Rocks", "Rockslide", "Rubble", "Salt Deposit", "Stalagmite", "Stalagmites", "Wall",
+    // Quest locs handled by id.
+    "Structural pillar", "Rock of Dalgroth", "Rock slide", "Sunstone monolith",
+  ]);
+  // Not mineable yet (docs/mining.md, Not done): each needs its own area or mechanic.
+  const notYet = new Set([
+    "Limestone rock", "Pile of rock", "Pile of Rock", "Rubium deposit", "Infernal shale deposit", "Calcified rocks",
+    "Daeyalt Essence", "Gem Rock", "Easter egg rock", "Amalgamation", "Ancient essence crystals",
+    "Adamant ore vein", "Clay ore vein", "Coal ore vein", "Copper ore vein", "Iron ore vein", "Mithril ore vein",
+    "Tin ore vein", "Depleted vein", "Gold vein", "Ash pile", "Empty ash pile", "Giant Boulder", "Large Boulder",
+    "Medium Boulder", "Small Boulder", "Blocked volcanic chamber", "Volcanic sulphur", "Fallen guardian",
+    "Basalt rocks", "Efh salt rocks", "Te salt rocks", "Urt salt rocks",
+  ]);
+  const h = harness();
+  const missing = new Set();
+  const count = core.CacheDefinitions.getCounts().objects;
+  for (let id = 0; id < count; id++) {
+    const definition = core.CacheDefinitions.getObject(id);
+    if (!definition?.actions?.some((action) => action && /^mine$/i.test(action))) continue;
+    const name = (definition.name ?? "").replace(/<[^>]+>/g, "");
+    if (!h.interactions.has(name) && !elsewhere.has(name) && !notYet.has(name)) missing.add(name);
+  }
+  assert.deepEqual([...missing], []);
 });

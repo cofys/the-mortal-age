@@ -266,6 +266,7 @@ export class InputManager {
      * see down (clickMode3) then up (clickMode2 LEFT → NONE), matching mouse clicks.
      */
     private touchTapReleaseAfterFrames: number = 0;
+    private touchWidgetDragging = false;
 
     // === Keyboard State ===
 
@@ -296,10 +297,12 @@ export class InputManager {
     isTouch: boolean = false;
 
     /**
-     * Optional hook fired from the real touchstart gesture (canvas coords).
-     * Used to open the soft keyboard within the user-activation window (iOS/Android).
+     * Reports whether this gesture starts on a draggable inventory item (canvas coordinates).
      */
-    onCanvasTouchStart?: (x: number, y: number) => void;
+    onCanvasTouchStart?: (x: number, y: number) => boolean;
+    /** A stationary tap inside the real touchend event, where iOS permits keyboard focus. */
+    onCanvasTouchTap?: (x: number, y: number) => void;
+    onCanvasTouchCancel?: () => void;
 
     // === Delta tracking for camera ===
     lastMouseX: number = -1;
@@ -369,6 +372,7 @@ export class InputManager {
         element.addEventListener("touchstart", this.onTouchStart, nonPassive);
         element.addEventListener("touchmove", this.onTouchMove, nonPassive);
         element.addEventListener("touchend", this.onTouchEnd, nonPassive);
+        element.addEventListener("touchcancel", this.onTouchCancel, nonPassive);
         element.addEventListener("contextmenu", this.onContextMenu);
         element.addEventListener("focusout", this.onFocusOut);
     }
@@ -390,6 +394,7 @@ export class InputManager {
         this.element.removeEventListener("touchstart", this.onTouchStart);
         this.element.removeEventListener("touchmove", this.onTouchMove);
         this.element.removeEventListener("touchend", this.onTouchEnd);
+        this.element.removeEventListener("touchcancel", this.onTouchCancel);
         this.element.removeEventListener("contextmenu", this.onContextMenu);
         this.element.removeEventListener("focusout", this.onFocusOut);
         this.removeDocumentGrab();
@@ -414,6 +419,7 @@ export class InputManager {
     }
 
     applyTouchTap(x: number, y: number): void {
+        this.onCanvasTouchTap?.(x, y);
         this.clickX = x;
         this.clickY = y;
         this.clickTime = Date.now();
@@ -423,6 +429,23 @@ export class InputManager {
         this.touchTapReleaseAfterFrames = 1;
         this.mouseX = x;
         this.mouseY = y;
+    }
+
+    beginTouchWidgetDrag(x: number, y: number): void {
+        this.touchWidgetDragging = true;
+        this.clickX = x;
+        this.clickY = y;
+        this.clickTime = Date.now();
+        this.clickMode1 = ClickMode.LEFT;
+        this.clickMode2 = ClickMode.LEFT;
+        this.touchTapReleaseAfterFrames = 0;
+    }
+
+    endTouchWidgetDrag(): void {
+        this.touchWidgetDragging = false;
+        // A quick tap may begin and end between UI frames; preserve its press for one frame.
+        if (this.clickMode1 === ClickMode.LEFT) this.touchTapReleaseAfterFrames = 1;
+        else this.clickMode2 = ClickMode.NONE;
     }
 
     applyTouchLongPress(x: number, y: number): void {
@@ -474,6 +497,12 @@ export class InputManager {
     }
 
     cancelTouchGesture(): void {
+        if (this.touchWidgetDragging) {
+            this.onCanvasTouchCancel?.();
+            this.clickMode1 = ClickMode.NONE;
+            this.clickMode3 = ClickMode.NONE;
+            this.touchWidgetDragging = false;
+        }
         this.clickMode2 = ClickMode.NONE;
         this.mouseWheelDown = false;
         this._dragStartX = -1;
@@ -977,11 +1006,11 @@ export class InputManager {
         this.prevTouchTime = performance.now();
         this.touchScrollVelocityY = 0;
         this.isTouchScrolling = false;
-        // Soft-keyboard open must happen inside this gesture (focus after touchend is rejected).
+        let widgetDrag = false;
         try {
-            this.onCanvasTouchStart?.(x, y);
+            widgetDrag = this.onCanvasTouchStart?.(x, y) === true;
         } catch {}
-        this.touchAdapter.onFingerDown(x, y, this.lastInputTimeMs);
+        this.touchAdapter.onFingerDown(x, y, this.lastInputTimeMs, false, widgetDrag);
         event.preventDefault();
     };
 
@@ -1056,6 +1085,14 @@ export class InputManager {
         this.prevTouchY = -1;
         this.prevTouchTime = 0;
         // Note: touchScrollVelocityY is intentionally kept for momentum scrolling
+        event.preventDefault();
+    };
+
+    private onTouchCancel = (event: TouchEvent) => {
+        this.touchAdapter.onCancel();
+        this.isPinching = false;
+        this.touchScrollVelocityY = 0;
+        this.isTouchScrolling = false;
         event.preventDefault();
     };
 

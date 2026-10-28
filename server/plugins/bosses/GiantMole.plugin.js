@@ -4,7 +4,7 @@
  * Melee-only, max hit 21. Between 5% and 50% hitpoints every player attack has
  * a 25% chance to make her burrow to one of the lair's fixed resurface spots,
  * dropping aggression (Mod Ash: 1/4). Poison damage and magic splashes never
- * trigger a burrow, and she stops digging below 10 hitpoints.
+ * trigger a burrow, and she stops digging at or below 10 hitpoints.
  *
  * Drops (npc-drops.json) and lair spawns (npc-spawns.json) are data-driven and
  * not repeated here.
@@ -13,7 +13,7 @@
  * shield tracking, mole hill Look-inside player count.
  */
 
-const BURIED_ATTRIBUTE = "giant_mole:buried";
+const BURIED_ATTRIBUTE = "giant-mole:buried";
 const BURROW_TICKS = 4; // ponytail: eyeballed; tune against live if she reads fast/slow
 const BURROW_HP_FLOOR = 10;
 const BURROW_MIN_FRACTION = 0.05;
@@ -37,26 +37,16 @@ const BURROW_LOCATIONS = [
   [1778, 5164], [1760, 5163], [1753, 5150],
 ];
 
-let TaskManager;
-let Misc;
-let Animation;
-let Graphic;
-let Location;
-let CombatType;
-let NpcIdentifiers;
-let ObjectIdentifiers;
-let Task;
-
-function isGiantMole(entity) {
+function isGiantMole({ NpcIdentifiers }, entity) {
   return entity?.isNpc?.() === true && entity.getId() === NpcIdentifiers.GIANT_MOLE;
 }
 
-function digMoleHill({ player }) {
+function digMoleHill({ Animation, Location }, { player }) {
   player.performAnimation(new Animation(DIG_ANIMATION_ID));
   player.moveTo(new Location(MOLE_LAIR_ENTRANCE.x, MOLE_LAIR_ENTRANCE.y, 0));
 }
 
-function climbMoleHoleExit({ player, location }) {
+function climbMoleHoleExit({ Location }, { player, location }) {
   if (location.x !== MOLE_HOLE_ROPE.x || location.y !== MOLE_HOLE_ROPE.y) {
     return false;
   }
@@ -64,34 +54,29 @@ function climbMoleHoleExit({ player, location }) {
   return true;
 }
 
-function tryBurrow({ target, hit }) {
-  if (!isGiantMole(target) || target.getAttribute(BURIED_ATTRIBUTE) != null) {
-    return;
-  }
+function watchBurrow(core, { target, hit }) {
+  if (!isGiantMole(core, target)) return;
+  // Regular attacks, cannonballs and thralls carry the player's source. Poison,
+  // reflected damage and magic splashes must not start a dig (splashes apply no hit).
+  if (!hit.getSource()?.isPlayer() || hit.isReflected() || hit.getHitmask() === core.HitMask.GREEN) return;
+  hit.onApplied(() => tryBurrow(core, target));
+}
 
+function tryBurrow(core, target) {
+  if (target.getAttribute(BURIED_ATTRIBUTE) != null) return;
   const hitpoints = target.getHitpoints();
   const maxHitpoints = target.getDefinition().getHitpoints();
-  if (maxHitpoints <= 0 || hitpoints < BURROW_HP_FLOOR) {
-    return;
-  }
+  if (maxHitpoints <= 0 || hitpoints <= BURROW_HP_FLOOR) return;
   if (
     hitpoints < maxHitpoints * BURROW_MIN_FRACTION ||
     hitpoints > maxHitpoints * BURROW_MAX_FRACTION
-  ) {
-    return;
-  }
-  // A magic splash never lands, so it cannot start a burrow.
-  if (hit?.getCombatType?.() === CombatType.MAGIC && hit.isAccurate?.() === false) {
-    return;
-  }
-  if (Misc.getRandom(BURROW_SUBSPOT_COUNT - 1) !== 0) {
-    return;
-  }
-
-  startBurrow(target);
+  ) return;
+  if (core.Misc.getRandom(BURROW_SUBSPOT_COUNT - 1) !== 0) return;
+  startBurrow(core, target);
 }
 
-function startBurrow(npc) {
+function startBurrow(core, npc) {
+  const { Animation, Graphic, Task, TaskManager } = core;
   const token = {};
   npc.setAttribute(BURIED_ATTRIBUTE, token);
   npc.getCombat().reset();
@@ -103,12 +88,13 @@ function startBurrow(npc) {
   const task = new Task(BURROW_TICKS, npc, false);
   task.execute = () => {
     task.stop();
-    emerge(npc, token);
+    emerge(core, npc, token);
   };
   TaskManager.submit(task);
 }
 
-function emerge(npc, token) {
+function emerge(core, npc, token) {
+  const { Animation, Graphic } = core;
   if (npc.getAttribute(BURIED_ATTRIBUTE) !== token) {
     return;
   }
@@ -117,7 +103,7 @@ function emerge(npc, token) {
   npc.setUntargetable(false);
   npc.setVisible(true);
 
-  const spot = pickBurrowLocation(npc.getLocation());
+  const spot = pickBurrowLocation(core, npc.getLocation());
   if (spot) {
     npc.moveTo(spot);
   }
@@ -125,7 +111,7 @@ function emerge(npc, token) {
   npc.performGraphic(new Graphic(MUD_HOLE_UP_GRAPHIC_ID));
 }
 
-function pickBurrowLocation(current) {
+function pickBurrowLocation({ Misc, Location }, current) {
   const candidates = BURROW_LOCATIONS.filter(
     ([x, y]) => x !== current.getX() || y !== current.getY()
   );
@@ -136,8 +122,8 @@ function pickBurrowLocation(current) {
   return new Location(x, y, current.getZ());
 }
 
-function revealBuriedMole({ npc }) {
-  if (!isGiantMole(npc) || npc.getAttribute(BURIED_ATTRIBUTE) == null) {
+function revealBuriedMole(core, { npc }) {
+  if (!isGiantMole(core, npc) || npc.getAttribute(BURIED_ATTRIBUTE) == null) {
     return;
   }
   npc.setAttribute(BURIED_ATTRIBUTE, null);
@@ -149,20 +135,9 @@ module.exports = {
   name: "GiantMole",
   members: true,
   register(api) {
-    const core = api.core;
-    TaskManager = api.getTaskManager();
-    Misc = core.Misc;
-    Animation = core.Animation;
-    Graphic = core.Graphic;
-    Location = core.Location;
-    CombatType = core.CombatType;
-    NpcIdentifiers = core.NpcIdentifiers;
-    ObjectIdentifiers = core.ObjectIdentifiers;
-    Task = core.Task;
-
-    api.onItemOnObject("Spade", "Mole hill", digMoleHill);
-    api.onObjectFirstClick(ObjectIdentifiers.ROPE_17, climbMoleHoleExit);
-    api.onPlayerDealtDamage(tryBurrow);
-    api.onNpcBeforeDeath(revealBuriedMole);
+    api.onItemOnObject("Spade", "Mole hill", digMoleHill.bind(null, api.core));
+    api.onObjectFirstClick(api.core.ObjectIdentifiers.ROPE_17, climbMoleHoleExit.bind(null, api.core));
+    api.onCustomEvent("combat:damage-apply", watchBurrow.bind(null, api.core));
+    api.onNpcBeforeDeath(revealBuriedMole.bind(null, api.core));
   },
 };

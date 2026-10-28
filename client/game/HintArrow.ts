@@ -4,13 +4,16 @@ import type { OverlayUpdateArgs } from "../ui/devoverlay/Overlay";
  * Server-driven OSRS hint arrow state.
  *
  * The server sends an NPC hint (type 1, the Kalphite Queen head icon), a player hint
- * (type 3, an overhead arrow riding the actor, e.g. a Castle Wars flag carrier) or a
- * tile hint (type 2). Tile hints are drawn by [TutorialHintOverlay]; actor hints join
+ * (type 3, an overhead arrow riding the actor, e.g. a Castle Wars flag carrier), a
+ * tile hint (type 2) or a world entity hint (type 4, a boat: a Barracuda Trial's rum
+ * boat). Tile and world entity hints are drawn by [TutorialHintOverlay]; actor hints join
  * the player's overhead head icons so they follow the rendered head smoothly.
  */
 export interface HintArrowState {
-    /** 0 = none, 1 = npc, 2 = tile, 3 = player. */
+    /** 0 = none, 1 = npc, 2 = tile, 3 = player, 4 = world entity. */
     type: number;
+    /** The hinted world entity (a boat) for type 4 hints. */
+    worldEntityIndex: number;
     npcId: number;
     /** Server id of the hinted player for type 3 hints. */
     playerId: number;
@@ -24,7 +27,9 @@ export interface HintArrowState {
     plane: number;
 }
 
-export const hintArrow: HintArrowState = { type: 0, npcId: 0, playerId: 0, x: 0, y: 0, height: 0, position: 2, plane: 0 };
+export const hintArrow: HintArrowState = {
+    type: 0, npcId: 0, playerId: 0, worldEntityIndex: -1, x: 0, y: 0, height: 0, position: 2, plane: 0,
+};
 let hintArrowRevision = 0;
 /** Allows optional client providers to release only their own arrow. */
 export const getHintArrowRevision = (): number => hintArrowRevision;
@@ -66,6 +71,14 @@ export function setHintArrowPlayer(playerId: number): void {
     hintArrowRevision++;
     hintArrow.type = 3;
     hintArrow.playerId = playerId | 0;
+}
+
+/** An arrow over a world entity (a boat), `height * 2` world units above its centre, as a tile hint's. */
+export function setHintArrowWorldEntity(entityIndex: number, height: number): void {
+    hintArrowRevision++;
+    hintArrow.type = 4;
+    hintArrow.worldEntityIndex = entityIndex | 0;
+    hintArrow.height = (height | 0) & 0xff;
 }
 
 export function clearHintArrow(): void {
@@ -128,6 +141,14 @@ export function hintArrowScreenPoint(
         worldX = hintArrow.x + subX / 128;
         worldY = hintArrow.y + subY / 128;
         plane = localPlane;
+        heightOffsetTiles = ((hintArrow.height | 0) * 2) / 128;
+    } else if (hintArrow.type === 4) {
+        // Over the boat where it's drawn (its interpolated position), on the player's floor.
+        const entity = client?.worldViewManager?.getWorldEntity?.(hintArrow.worldEntityIndex);
+        if (!entity?.position) return undefined;
+        worldX = entity.position.x / 128;
+        worldY = entity.position.z / 128;
+        plane = args.state.playerLevel ?? 0;
         heightOffsetTiles = ((hintArrow.height | 0) * 2) / 128;
     } else {
         // Actor hints (type 3) are overhead head icons, drawn with the other head icons.

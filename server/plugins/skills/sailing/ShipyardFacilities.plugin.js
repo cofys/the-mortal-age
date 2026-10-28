@@ -3,6 +3,8 @@
 // replaces it. Building costs the facility's materials and gives no XP; removing refunds
 // nothing. Flow, animations and sounds from a live capture of building and removing a range
 // (docs/sailing-osrs-reference.md); what a hotspot allows, levels and materials are the cache's.
+/** Needed to build a wind or gale catcher, and kept (Wiki). */
+const CAPTURED_WIND_MOTE = 31745;
 const { BoatManager } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatManager");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
 const { setVarbit, playSound } = require("./SailingContent.Sailing");
@@ -74,7 +76,10 @@ function buildFacility(event) {
     player.sendMessage(refused);
     return;
   }
-  for (const [item, count] of requirements.materials) player.getInventory().delete(item, count);
+  // A catcher's captured wind mote is needed, not used up (Wiki).
+  for (const [item, count] of requirements.materials) {
+    if (item !== CAPTURED_WIND_MOTE) player.getInventory().delete(item, count);
+  }
   facilities.setFacility(boat, hotspot, facility);
   closeCustomisation(player, visit);
   player.performAnimation(new Animation(SEQ_BUILD));

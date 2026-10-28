@@ -15,6 +15,9 @@ const { Location } = require("../dist/game/model/Location");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { Skill } = require("../dist/game/model/Skill");
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const { GameConstants } = require("../dist/game/GameConstants");
+const { decodePluginMessagePayload } = require("../dist/net/protocol/ClientProtocol");
 const plugin = require("../plugins/minigames/PestControl.plugin");
 const Rewards = require("../plugins/minigames/pestcontrol/Rewards.PestControl");
 const Bots = require("../plugins/minigames/pestcontrol/Bots.PestControl");
@@ -35,7 +38,7 @@ const npcHandlers = {};
 const buttonHandlers = new Map();
 const emitted = [];
 const api = {
-  core: { ItemDefinition, ItemIdentifiers, Skill },
+  core: PluginManager.getCoreApi(),
   registerShopCurrency() {},
   registerDefinitionSource() {},
   registerNpcCombatMethodProvider() {},
@@ -578,6 +581,7 @@ const POINTS_VARP = 261;
 function rewardPlayer({ points = 1000, level = 99 } = {}) {
   const player = new Player(null);
   const calls = [];
+  player.getSession = () => ({ sendClientPacket: (packet) => calls.push(["sendClientPacket", packet]) });
   // Records every send; sendInterface also marks the modal open, as the real PacketSender does.
   const sender = new Proxy({}, { get: (_, name) => (...args) => {
     calls.push([name, ...args]);
@@ -626,6 +630,38 @@ test("XP rewards: floor(level^2/600) x 35/32/18 per point, +1% for 10 and +10% f
   exchangeAndConfirm(low, 19);
   assert.equal(low.getSkillManager().getExperience(Skill.PRAYER) - prayer, 363, "the tenths are kept, 2 x 181.8");
   assert.equal(Rewards.getPoints(low), 0);
+});
+
+test("XP rewards and their displayed per-point values use the world's and player's multipliers", (t) => {
+  const previous = GameConstants.EXPERIENCE_MULTIPLIER;
+  t.after(() => { GameConstants.EXPERIENCE_MULTIPLIER = previous; });
+  const message = (calls) => decodePluginMessagePayload(calls.filter(([name]) => name === "sendClientPacket").at(-1)[1].subarray(3));
+  GameConstants.EXPERIENCE_MULTIPLIER = 100;
+  for (const [option, skill, base] of [[0, Skill.ATTACK, 245], [3, Skill.STRENGTH, 245], [6, Skill.DEFENCE, 245],
+    [9, Skill.RANGED, 224], [12, Skill.MAGIC, 224], [15, Skill.HITPOINTS, 245], [18, Skill.PRAYER, 126]]) {
+    const { player, calls } = rewardPlayer({ points: 1, level: 65 });
+    const before = player.getSkillManager().getExperience(skill);
+    exchangeAndConfirm(player, option);
+    assert.equal(player.getSkillManager().getExperience(skill) - before, base * 100, skill.getName());
+    assert.equal(Rewards.getPoints(player), 0);
+    assert.equal(message(calls).channel, "pest-control");
+    assert.equal(message(calls).data.xpPerPoint[skill.getName()], base * 100);
+    assert.ok(calls.findIndex(([name]) => name === "sendClientPacket") < calls.findIndex(([name]) => name === "sendInterface"), "send the displayed rewards before the client draws its rows");
+  }
+  const bulk = rewardPlayer({ points: 100, level: 65 });
+  const bulkBefore = bulk.player.getSkillManager().getExperience(Skill.ATTACK);
+  exchangeAndConfirm(bulk.player, 2);
+  assert.equal(bulk.player.getSkillManager().getExperience(Skill.ATTACK) - bulkBefore, 2_695_000, "100-point bonus also receives the world multiplier");
+  const nextReward = Rewards._test.xpPerPoint(0, bulk.player.getSkillManager().getMaxLevel(Skill.ATTACK)) * 100;
+  assert.equal(message(bulk.calls).data.xpPerPoint.Attack, nextReward, "level-ups refresh the next reward's displayed XP");
+  GameConstants.EXPERIENCE_MULTIPLIER = 1.5;
+  t.mock.method(PluginManager, "emitCanGainExperience", () => ({ allow: null, multiplier: 2 }));
+  const { player, calls } = rewardPlayer({ points: 10, level: 25 });
+  const before = player.getSkillManager().getExperience(Skill.PRAYER);
+  exchangeAndConfirm(player, 19);
+  assert.equal(player.getSkillManager().getExperience(Skill.PRAYER) - before, 545);
+  assert.equal(calls.find(([name]) => name === "sendExpDrop")[2], 545.4, "10-point bonus and tenths survive both multipliers");
+  assert.equal(message(calls).data.xpPerPoint.Prayer, 54);
 });
 
 test("XP rewards refuse skills under 25 and rewards the player cannot afford", () => {

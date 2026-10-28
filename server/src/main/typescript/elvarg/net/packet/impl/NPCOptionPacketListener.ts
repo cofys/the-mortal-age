@@ -9,6 +9,9 @@ import { RegionManager } from "../../../game/collision/RegionManager";
 import { Skill } from "../../../game/model/Skill";
 import { Sounds } from "../../../game/Sounds";
 
+/** How far an NPC ship's crew can be spoken to from another boat or the shore. */
+const OTHER_SHIP_REACH_TILES = 16;
+
 export class NPCOptionPacketListener {
   public executeOption(player: any, index: number, clickType: number): void {
     const trace = (why: string, npc?: any) =>
@@ -24,13 +27,20 @@ export class NPCOptionPacketListener {
     if (index < 0 || index > World.getNpcs().capacityReturn()) { trace("DROPPED: index range"); return; }
     const npc = World.getNpcs().get(index);
     if (!npc) { trace("DROPPED: npc slot empty"); return; }
-    const playerBoat = BoatManager.getBoatAboard(player);
-    const npcBoat = BoatManager.getBoatAboard(npc);
-    if (npcBoat && npcBoat !== playerBoat) { trace("DROPPED: other boat", npc); return; }
-    const npcArea = npc.getPrivateArea?.() ?? null;
-    if (npcArea && npcArea !== player.getPrivateArea?.()) { trace("DROPPED: private area", npc); return; }
     const npcOwner = npc.getOwner?.();
     if (npcOwner && npcOwner !== player) { trace("DROPPED: foreign owner", npc); return; }
+    const playerBoat = BoatManager.getBoatAboard(player);
+    const npcBoat = BoatManager.getBoatAboard(npc);
+    if (npcBoat && npcBoat !== playerBoat) {
+      // An NPC ship's crew (a Barracuda Trial's master) is spoken to from your own boat or the
+      // shore, without boarding: "I can't reach that!" further away (rsprox). A ship the player
+      // can't see (another player's quest ship) can't be reached at all.
+      if (!npcBoat.static || !BoatManager.canSeeBoat(player, npcBoat)) { trace("DROPPED: other boat", npc); return; }
+      NPCOptionPacketListener.operateAcross(player, npc, index, clickType);
+      return;
+    }
+    const npcArea = npc.getPrivateArea?.() ?? null;
+    if (npcArea && npcArea !== player.getPrivateArea?.()) { trace("DROPPED: private area", npc); return; }
     // Aboard, the client sees main-world NPCs at their root position while the player stands
     // in a deck scene; range must be measured root-to-root.
     const playerRoot = BoatManager.rootLocation(player);
@@ -74,6 +84,19 @@ export class NPCOptionPacketListener {
         npc.setPositionToFace?.(player.getLocation());
       }
     }, routeEvent.range, routeEvent.ignoreProjectileClip === true);
+  }
+
+  private static operateAcross(player: any, npc: any, index: number, clickType: number): void {
+    const definition = npc.getCurrentDefinition(player);
+    const option = definition?.getActions()?.[clickType - 1]?.toLowerCase();
+    if (!option || NpcDefinition.isCombatOption(option)) return;
+    if (!BoatManager.rootLocation(player).isWithinDistance(BoatManager.rootLocation(npc), OTHER_SHIP_REACH_TILES)) {
+      player.sendMessage("I can't reach that!");
+      return;
+    }
+    player.getMovementQueue().reset();
+    NPCOptionPacketListener.operate(player, npc, index, clickType, definition, option);
+    if (player.getDialogueManager().isActive()) npc.setMobileInteraction?.(player);
   }
 
   private static operate(player: any, npc: any, index: number, clickType: number, definition: any, option: string | undefined): void {

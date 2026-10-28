@@ -147,11 +147,15 @@ function inRange(player, ship, range) {
   return root.isWithinDistance(target, range);
 }
 
-/** Spawns an owner-scoped NPC on the ship's deck; it walks and is clicked like any deck actor. */
-function addDeckNpc(ship, npcId, x, y, owner) {
+/**
+ * Spawns an NPC on the ship's deck; it walks and is clicked like any deck actor. It's the owner's
+ * alone unless `shared` (a public ship's crew, like a Barracuda Trial's master).
+ */
+function addDeckNpc(ship, npcId, x, y, owner, { shared = false } = {}) {
   const location = deckLocation(ship, x, y);
   const npc = coreApi().PluginManager.spawnNpc({
-    id: npcId, x: location.getX(), y: location.getY(), z: location.getZ(), owner, ownerOnly: true,
+    id: npcId, x: location.getX(), y: location.getY(), z: location.getZ(),
+    ...(shared ? {} : { owner, ownerOnly: true }),
   });
   if (!npc) return undefined;
   coreApi().BoatManager.getDeck(ship.boat)?.enter(npc);

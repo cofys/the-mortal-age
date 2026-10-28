@@ -25,6 +25,9 @@ export type WidgetServerPayload =
           postScripts?: Array<{ scriptId: number; args: (number | string)[] }>;
       }
     | {
+          action: "trigger_ondialogabort";
+      }
+    | {
           action: "close_sub";
           targetUid: number;
       }

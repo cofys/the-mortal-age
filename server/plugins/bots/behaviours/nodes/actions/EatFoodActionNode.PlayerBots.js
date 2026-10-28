@@ -63,7 +63,11 @@ class EatFoodActionNode {
     const isF2pPvp = state?.mode === "pvp" && state.pvp?.loadoutId?.startsWith("f2p_");
     const lowHpRatio = state?.mode === "pvp" ? this.getCachedPvpEatAtHpRatio(state) : this.lowHpRatio;
     const lowHpThreshold = computeEatThreshold(maxHp, lowHpRatio, isF2pPvp);
-    if (currentHp > lowHpThreshold) {
+    // Veteran and elite bots can react to imminent lethal hits; weaker tiers watch current HP.
+    const tickEat = !isF2pPvp && Number(pvpProfile?.confidenceTier ?? 0) >= 3 &&
+      Number(player.getHitpointsAfterPendingDamage?.() ?? currentHp) <= 0 &&
+      Math.random() < Number(pvpProfile.tickEatChance ?? 0);
+    if (currentHp > lowHpThreshold && !tickEat) {
       if (isF2pPvp) {
         state.pvp.f2pFoodPending = false;
         state.pvp.f2pFoodPendingHp = null;
@@ -129,8 +133,8 @@ class EatFoodActionNode {
     if (!consume(firstSlot)) return "failure";
 
     let comboEatTriggered = false;
-    if (pvpProfile && firstSlot !== comboSlot && comboSlot !== undefined &&
-        currentHp <= Math.max(1, Math.ceil(maxHp * Math.max(0.1, lowHpRatio * 0.72))) &&
+    if (Number(pvpProfile?.confidenceTier ?? 0) >= 3 && firstSlot !== comboSlot && comboSlot !== undefined &&
+        (tickEat || currentHp <= Math.max(1, Math.ceil(maxHp * Math.max(0.1, lowHpRatio * 0.72)))) &&
         Math.random() < Number(pvpProfile.comboEatChance ?? 0)) {
       comboEatTriggered = consume(comboSlot);
       if (comboEatTriggered) state.pvp.lastComboEatAt = nowMs ?? Date.now();

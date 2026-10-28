@@ -364,6 +364,11 @@ test("the bank's looting bag view: View, Deposit-1/5/10/X/All, Deposit loot, Dis
   assert.equal(p.amountPrompt, "Enter amount:");
   p.amountAction.execute(3);
   assert.equal(bankTabs.held.get(FIRE_RUNE), 3, "Deposit-X");
+  p.amountPrompt = null;
+  op(0, 6, "Deposit-X");
+  assert.equal(p.amountPrompt, "Enter amount:", "the option's own name asks too");
+  p.amountAction.execute(2);
+  assert.equal(bankTabs.held.get(FIRE_RUNE), 5, "Deposit-X");
   op(0, 7);
   assert.equal(bankTabs.held.get(FIRE_RUNE), 13, "Deposit-All");
   click({ player: p, groupId: 15, childId: bankside("lootingbag_bankall"), handled: false });

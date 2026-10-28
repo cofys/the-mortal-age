@@ -125,8 +125,11 @@ function sideFind(player) {
     player.sendMessage(Common.message("numulite"));
     return;
   }
+  // Content may make fossils commoner ("minigame:chance", a league fragment): `multiplier` times.
+  const fossils = { player, minigame: "fossil-island", kind: "fossil", multiplier: 1 };
+  Common.api?.emitCustomEvent?.("minigame:chance", fossils);
   for (const [size, weight, outOf] of sideDrops.fossils) {
-    if (Math.random() < weight / outOf) {
+    if (Math.random() < (weight * Math.max(1, fossils.multiplier)) / outOf) {
       player.getInventory().adds(items.fossils[size], 1);
       player.sendMessage(Common.message("fossil"));
       return;

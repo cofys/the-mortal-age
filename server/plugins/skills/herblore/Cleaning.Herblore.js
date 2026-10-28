@@ -26,7 +26,7 @@ function clean(event) {
   for (const at of slots.slice(0, actions)) {
     inventory.setItem(at, new Common.core.Item(herb.cleanId, 1));
     Common.addXp(player, herb.xp);
-    Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: herb.cleanId, amount: 1, xp: herb.xp });
+    Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: herb.cleanId, amount: 1, xp: herb.xp, kind: "clean" });
   }
   inventory.refreshItems();
   Common.sound(player, CLEAN_SOUNDS[Math.floor(Math.random() * CLEAN_SOUNDS.length)]);

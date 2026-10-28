@@ -95,6 +95,10 @@ export class Bank extends ItemContainer {
     public static readonly NOTE_CHILD = 25; // bankmain:note
     /** bankmain:quantity1, quantity5, quantity10, quantityx, quantityall. */
     public static readonly QUANTITY_CHILDREN = [29, 31, 33, 35, 37];
+    /** bank_quantity_type (varbit 6590) for X, the index of bankmain:quantityx above. */
+    public static readonly QUANTITY_X_MODE = 3;
+    /** bank_requestedquantity: the remembered X amount. */
+    public static readonly REQUESTED_QUANTITY_VARBIT = 3960;
     public static readonly PLACEHOLDER_CHILD = 40; // bankmain:placeholder
     public static readonly DEPOSIT_INVENTORY_CHILD = 47; // bankmain:depositinv
     public static readonly DEPOSIT_WORN_CHILD = 49; // bankmain:depositworn
@@ -667,6 +671,39 @@ export class Bank extends ItemContainer {
         return Math.min(total, ({ 1: 1, 3: 1, 4: 5, 5: 10, 6: custom, 7: custom, 8: total } as Record<number, number>)[button] ?? 0);
     }
 
+    /**
+     * Whether an item op asks for the amount first: Withdraw-X (op 6) and Deposit-X (op 7), as
+     * captured, or the default click in X mode before any amount was entered.
+     */
+    public static asksAmount(
+        kind: "withdraw" | "deposit",
+        button: number,
+        option: string | undefined,
+        custom = 0,
+        defaultMode = 0,
+    ): boolean {
+        const named = option?.trim().toLowerCase();
+        const xOp = named ? named.endsWith("-x") : button === (kind === "withdraw" ? 6 : 7);
+        const defaultOp = button === (kind === "withdraw" ? 1 : 2);
+        return xOp || (defaultOp && defaultMode === Bank.QUANTITY_X_MODE && custom <= 0);
+    }
+
+    /**
+     * Capture: the "Enter amount:" chatbox prompt (meslayer_mode7). The answer becomes the
+     * remembered X (bank_requestedquantity), then `then` runs with it in the same tick.
+     */
+    public static promptAmount(player: Player, then?: (amount: number) => void): void {
+        player.setEnteredAmountAction({
+            execute: (amount: number) => {
+                if (!Bank.isOpen(player)) return;
+                player.setBankCustomQuantity(amount);
+                player.getPacketSender().sendVarbit(Bank.REQUESTED_QUANTITY_VARBIT, player.getBankCustomQuantity());
+                then?.(player.getBankCustomQuantity());
+            },
+        });
+        player.getPacketSender().sendEnterAmountPrompt("Enter amount:");
+    }
+
     public static handleWidgetAction(player: Player, packet: {
         groupId: number;
         childId: number;
@@ -702,6 +739,15 @@ export class Bank extends ItemContainer {
             const event = { player, item: entry.item, tab: entry.tab, slot: entry.slot, op: packet.buttonNum, option: packet.option, handled: false };
             getPluginManager().emitCustomEvent(Bank.ITEM_OP_EVENT, event);
             if (event.handled) return true;
+            if (Bank.asksAmount("withdraw", packet.buttonNum, packet.option, player.getBankCustomQuantity(), player.getBankQuantityMode())) {
+                const itemId = entry.item.getId();
+                Bank.promptAmount(player, (amount) => {
+                    // The bank may have changed while the prompt was open.
+                    const item = player.getBank(entry.tab).getItems()[entry.slot];
+                    if (item?.getId() === itemId && item.getAmount() > 0) Bank.withdraw(player, itemId, entry.slot, amount, entry.tab);
+                });
+                return true;
+            }
             const amount = Bank.actionAmount(
                 "withdraw", packet.buttonNum, packet.option, entry.item.getAmount(),
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),
@@ -717,6 +763,14 @@ export class Bank extends ItemContainer {
             const event = { player, item, slot: packet.slot, op: packet.buttonNum, option: packet.option, handled: false };
             getPluginManager().emitCustomEvent(Bank.INVENTORY_OP_EVENT, event);
             if (event.handled) return true;
+            if (Bank.asksAmount("deposit", packet.buttonNum, packet.option, player.getBankCustomQuantity(), player.getBankQuantityMode())) {
+                const itemId = item.getId();
+                const slot = packet.slot;
+                Bank.promptAmount(player, (amount) => {
+                    if (player.getInventory().getItems()[slot]?.getId() === itemId) Bank.deposits(player, itemId, slot, amount);
+                });
+                return true;
+            }
             const amount = Bank.actionAmount(
                 "deposit", packet.buttonNum, packet.option, player.getInventory().getAmount(item.getId()),
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),
@@ -753,6 +807,9 @@ export class Bank extends ItemContainer {
         } else if (packet.childId === Bank.NOTE_CHILD) {
             player.setNoteWithdrawal(!player.withdrawAsNote());
             sender.sendVarbit(3958, player.withdrawAsNote() ? 1 : 0);
+        } else if (packet.childId === Bank.QUANTITY_CHILDREN[Bank.QUANTITY_X_MODE] && packet.buttonNum === 2) {
+            // Capture: Set custom quantity only asks for the amount; nothing moves.
+            Bank.promptAmount(player);
         } else if (Bank.QUANTITY_CHILDREN.includes(packet.childId)) {
             player.setBankQuantityMode(Bank.QUANTITY_CHILDREN.indexOf(packet.childId));
             sender.sendVarbit(6590, player.getBankQuantityMode());
@@ -1085,7 +1142,7 @@ export class Bank extends ItemContainer {
             3755: player.isPlaceholders() ? 1 : 0,
             3958: player.withdrawAsNote() ? 1 : 0,
             3959: player.insertModeReturn() ? 1 : 0,
-            3960: player.getBankCustomQuantity(),
+            [Bank.REQUESTED_QUANTITY_VARBIT]: player.getBankCustomQuantity(),
             4150: player.getCurrentBankTab(),
             4170: 0,
             5450: 1,

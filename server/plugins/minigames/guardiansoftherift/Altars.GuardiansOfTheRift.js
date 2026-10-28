@@ -209,6 +209,12 @@ function onTrip(player) {
 
 // ------------------------------------------------------------------ crafting
 
+// The ordinary essence fallback still runs the generic handler during an altar trip.
+// Eligibility belongs to the active game, not the essence or handler that bound it.
+function excludeRiftGuardianRoll(event) {
+  if (event.skill === Shared.core().Skill.RUNECRAFTING && Game.isPlaying(event.player)) event.eligible = false;
+}
+
 function altarRune(player, objectId) {
   const request = { player, objectId, rune: null };
   Shared.api().emitCustomEvent("runecrafting:altar-rune", request);
@@ -237,8 +243,10 @@ function craft(event) {
   Shared.graphic(player, "runecrafting", 92);
   Shared.sound(player, CRAFT_SOUND);
   Shared.addXp(player, "RUNECRAFTING", essence * rune.xp);
+  // Wiki / Mod Elena (30 March 2022): guardian essence cannot award a Rift guardian.
+  // Keep the success receipt for other consumers without an ordinary altar pet rate.
   Shared.api().emitCustomEvent("runecrafting:success", {
-    player, skill: Shared.core().Skill.RUNECRAFTING, petBase: rune.petBase, rolls: essence, runeId: rune.runeId,
+    player, skill: Shared.core().Skill.RUNECRAFTING, rolls: essence, runeId: rune.runeId, amountPerEssence: rune.amount,
   });
   return true;
 }
@@ -309,6 +317,7 @@ module.exports = {
     api.onObjectInteraction("Portal", { Use: leaveAltar });
     api.onObjectInteraction("Altar", { "Craft-rune": craft });
     api.onNpcDialogueCondition(answerCondition);
+    api.onCustomEvent("pets:skilling-eligibility", excludeRiftGuardianRoll);
     Temple.allowAway(onTrip);
     Game.on("altars", altarsChanged);
     Game.on("join", joined);

@@ -46,7 +46,7 @@ function player({ smithing = 99, items = {}, hands = -1 } = {}) {
   const equipment = new Array(14).fill(null);
   if (hands !== -1) equipment[Equipment.HANDS_SLOT] = { getId: () => hands };
   const p = {
-    messages: [], xp: 0, varbits: new Map(), dialogues: 0, menu: null, inventory,
+    messages: [], xp: 0, varbits: new Map(), dialogues: 0, statement: null, sounds: [], menu: null, inventory,
     index: ++playerIndex, location: new Location(1940, 4960, 0), runEnergy: 100, moving: false,
     getIndex: () => p.index,
     getLocation: () => p.location,
@@ -78,16 +78,22 @@ function player({ smithing = 99, items = {}, hands = -1 } = {}) {
         return (...args) => {
           if (name === "sendVarbit") p.varbits.set(args[0], args[1]);
           if (name === "sendCreationMenu") p.menu = args[0];
+          if (name === "sendSound") p.sounds.push(args[0]);
           return sender;
         };
       } });
       return sender;
     },
-    getDialogueManager: () => ({ startDialogues: () => { p.dialogues++; } }),
+    getDialogueManager: () => ({ startDialogues: (chain) => { p.dialogues++; p.statement = chain.getDialogues().get(0)?.getText(); } }),
     sendMessage: (message) => p.messages.push(message),
     performAnimation() {},
   };
   return p;
+}
+
+function loadedOre(p, id) {
+  return (stateOf(p).ores[id] ?? 0) + stateOf(p).conveyor.filter((load) => load.item === id)
+    .reduce((sum, load) => sum + load.count, 0);
 }
 
 function ticks(count) {
@@ -116,15 +122,15 @@ test("coal bags must be emptied before belt loading; excess inventory coal remai
   stateOf(p).ores[ItemIds.COAL] = 240;
   p.setAttribute("storage-items:coal-bag", [[ItemIds.COAL, 27]]);
   putOre(p);
-  assert.equal(stateOf(p).ores[ItemIds.COAL], 250);
+  assert.equal(loadedOre(p, ItemIds.COAL), 250);
   assert.deepEqual(p.getAttribute("storage-items:coal-bag"), [[ItemIds.COAL, 27]], "Put-ore-on does not auto-empty a bag");
   assert.equal(p.inventory.get(ItemIds.COAL), 0);
-  assert.equal(stateOf(p).ores[ItemIds.MITHRIL_ORE], 1);
+  assert.equal(loadedOre(p, ItemIds.MITHRIL_ORE), 1);
   const Storage = require("../plugins/items/storage/Common.StorageItems");
   Storage.init({ core: PluginManager.getCoreApi() });
   Storage.emptyToInventory(p, { key: "coal-bag" });
   putOre(p);
-  assert.equal(stateOf(p).ores[ItemIds.COAL], 254);
+  assert.equal(loadedOre(p, ItemIds.COAL), 254);
   assert.equal(p.inventory.get(ItemIds.COAL), 23, "unloaded coal remains when the furnace is full");
 });
 
@@ -176,7 +182,7 @@ test("lead and cupronickel use their shared recipes and nickel cannot fill the p
   stateOf(mixed).coffer = 1000;
   stateOf(mixed).ores[ItemIds.IRON_ORE] = 20;
   putOre(mixed);
-  assert.equal(stateOf(mixed).ores[ItemIds.NICKEL_ORE], 8);
+  assert.equal(loadedOre(mixed, ItemIds.NICKEL_ORE), 8);
 });
 
 test("emptying requires confirmation, destroys only owned ore and clears its conveyor NPCs", () => {
@@ -185,7 +191,7 @@ test("emptying requires confirmation, destroys only owned ore and clears its con
   putOre(p); putOre(other);
   BlastFurnace._test.checkPot({ player: p });
   prompts.at(-1).choices[3]();
-  assert.equal(stateOf(p).ores[ItemIds.IRON_ORE], 5, "selecting Empty alone destroys nothing");
+  assert.equal(loadedOre(p, ItemIds.IRON_ORE), 5, "selecting Empty alone destroys nothing");
   prompts.at(-1).choices[1]();
   ticks(4);
   assert.deepEqual(stateOf(p).ores, {});
@@ -205,7 +211,7 @@ test("the dispenser holds at most 28 bars per metal", () => {
   putOre(p);
   ticks(4);
   assert.equal(stateOf(p).bars[ItemIds.IRON_BAR], 28);
-  assert.equal(stateOf(p).ores[ItemIds.IRON_ORE], 1, "ore waits when this metal's dispenser is full");
+  assert.equal(p.inventory.get(ItemIds.IRON_ORE), 1, "ore stays carried when a metal's dispenser is full");
 });
 
 test("manual machine actions stop for movement, exhaustion and logout", () => {
@@ -281,7 +287,7 @@ test("collecting old bars or reentering cannot smelt ore still on a stopped conv
   assert.equal(stateOf(p).bars[ItemIds.GOLD_BAR], undefined);
   BlastFurnace._test.enterRoom({ player: p });
   assert.equal(stateOf(p).bars[ItemIds.GOLD_BAR], undefined);
-  assert.equal(stateOf(p).ores[ItemIds.GOLD_ORE], 3);
+  assert.equal(loadedOre(p, ItemIds.GOLD_ORE), 3);
   Machinery._test.pedal(station(p));
   manualTicks(4);
   assert.equal(stateOf(p).bars[ItemIds.GOLD_BAR], 3);
@@ -392,7 +398,7 @@ test("ore needs coins in the coffer and, under 60 Smithing, the foreman's permit
   stateOf(p).permitUntil = Date.now() + 60_000;
   putOre(p);
   assert.equal(p.inventory.get(ItemIds.IRON_ORE), 0);
-  assert.equal(stateOf(p).ores[ItemIds.IRON_ORE], 5);
+  assert.equal(loadedOre(p, ItemIds.IRON_ORE), 5);
 });
 
 test("iron with coal smelts into steel with half the coal; the rest is iron", () => {
@@ -415,7 +421,7 @@ test("mithril waits in the pot for its coal, and primary ore is capped at 28", (
   stateOf(p).coffer = 1000;
   stateOf(p).ores[ItemIds.MITHRIL_ORE] = 10;
   putOre(p);
-  assert.equal(stateOf(p).ores[ItemIds.MITHRIL_ORE], 28);
+  assert.equal(loadedOre(p, ItemIds.MITHRIL_ORE), 28);
   assert.equal(p.inventory.get(ItemIds.MITHRIL_ORE), 12);
   ticks(4);
   assert.equal(stateOf(p).bars[ItemIds.MITHRIL_BAR], undefined);
@@ -492,4 +498,141 @@ test("the Furnace stairs gate entry but always allow the exit", () => {
   stairs({ player: p, objectId: 9084 });
   assert.deepEqual(locations.at(-1), [1939, 4958], "starting The Giant Dwarf permits entry");
   giantDwarfStarted = false;
+});
+
+// rsprox 1757: 28 runite bars, 16 runite ore and 20 coal; the next coal load is refused.
+test("a full dispenser refuses all belt loading until bars are collected", () => {
+  const p = player({ items: { [ItemIds.COAL]: 5, [ItemIds.RUNITE_ORE]: 5 } });
+  stateOf(p).coffer = 1000;
+  stateOf(p).bars[ItemIds.RUNITE_BAR] = 28;
+  stateOf(p).ores[ItemIds.RUNITE_ORE] = 16;
+  stateOf(p).ores[ItemIds.COAL] = 20;
+  putOre(p);
+  assert.equal(p.inventory.get(ItemIds.COAL), 5);
+  assert.equal(p.inventory.get(ItemIds.RUNITE_ORE), 5);
+  assert.equal(stateOf(p).ores[ItemIds.COAL], 20);
+  assert.equal(spawned.length, 0);
+  assert.equal(p.statement, "You should collect your bars before making any more.");
+  p.varbits.set(DISPENSER, 3);
+  take(p, ItemIds.RUNITE_BAR, 28);
+  putOre(p);
+  assert.equal(p.inventory.get(ItemIds.COAL), 0, "taking bars releases the belt");
+});
+
+test("coal-only conveyor loads are lost on logout, but coal already in the pot stays", () => {
+  const p = player({ items: { [ItemIds.COAL]: 5 } });
+  stateOf(p).coffer = 1000;
+  stateOf(p).ores[ItemIds.COAL] = 20;
+  putOre(p);
+  BlastFurnace._test.logout({ player: p });
+  BlastFurnace._test.enterRoom({ player: p });
+  ticks(4);
+  assert.equal(stateOf(p).ores[ItemIds.COAL], 20);
+  BlastFurnace._test.leaveRoom({ player: p });
+});
+
+test("mixed conveyor loads survive logout without becoming pot contents on reentry", () => {
+  dwarfOperated = false;
+  const p = player({ items: { [ItemIds.COAL]: 5, [ItemIds.MITHRIL_ORE]: 2 } });
+  putOre(p);
+  BlastFurnace._test.logout({ player: p });
+  BlastFurnace._test.enterRoom({ player: p });
+  assert.equal(stateOf(p).ores[ItemIds.COAL] ?? 0, 0);
+  assert.equal(stateOf(p).ores[ItemIds.MITHRIL_ORE] ?? 0, 0);
+  assert.equal(stateOf(p).bars[ItemIds.MITHRIL_BAR], undefined);
+  dwarfOperated = true;
+  stateOf(p).coffer = 1000;
+  ticks(4);
+  assert.equal(stateOf(p).bars[ItemIds.MITHRIL_BAR], 2);
+  assert.equal(stateOf(p).ores[ItemIds.COAL], 1);
+  BlastFurnace._test.leaveRoom({ player: p });
+});
+
+test("an empty belt uses the recorded message box", () => {
+  const p = player();
+  stateOf(p).coffer = 1000;
+  putOre(p);
+  assert.equal(p.statement, "You don't have anything suitable for putting into the blast furnace.");
+});
+
+test("an empty dispenser uses the recorded message box", () => {
+  const p = player();
+  takeBars({ player: p });
+  assert.equal(p.statement, "The dispenser doesn't contain any bars.");
+});
+
+test("the dispenser quantity menu uses the recorded take mode and available amount", () => {
+  const p = player();
+  stateOf(p).bars[ItemIds.RUNITE_BAR] = 5;
+  p.varbits.set(DISPENSER, 3);
+  takeBars({ player: p });
+  assert.equal(p.menu.getTitle(), "How many would you like to take?");
+  assert.equal(p.menu.getOptions().mode, 17);
+  assert.equal(p.menu.getOptions().maxAmount, 5);
+  stateOf(p).bars[ItemIds.IRON_BAR] = 20;
+  takeBars({ player: p });
+  assert.equal(p.menu.getOptions().maxAmount, 20, "a smaller stack cannot cap the other metal");
+});
+
+test("water cooling gives the recorded feedback once, only when bars are cooled", () => {
+  const p = player({ items: { [ItemIds.BUCKET_OF_WATER]: 1 } });
+  p.varbits.set(DISPENSER, 2);
+  coolWithWater({ player: p, objectId: 9092, itemId: ItemIds.BUCKET_OF_WATER });
+  assert.equal(p.messages.at(-1), "You throw the water over the bars.");
+  assert.deepEqual(p.sounds, [1051]);
+  coolWithWater({ player: p, objectId: 9092, itemId: ItemIds.BUCKET_OF_WATER });
+  assert.deepEqual(p.sounds, [1051]);
+});
+
+test("conveyor capacity includes pending ore, while pot varbits wait for delivery", () => {
+  const p = player({ items: { [ItemIds.MITHRIL_ORE]: 28 } });
+  stateOf(p).coffer = 1000;
+  putOre(p);
+  assert.equal(p.varbits.get(952), 0);
+  p.inventory.set(ItemIds.MITHRIL_ORE, 1);
+  putOre(p);
+  assert.equal(p.inventory.get(ItemIds.MITHRIL_ORE), 1);
+  assert.equal(p.statement, "You should make sure all your ore smelts before adding any more.");
+  ticks(4);
+  assert.equal(p.varbits.get(952), 28);
+});
+
+test("saved mixed conveyor loads resume once, keeping their progress", () => {
+  const p = player({ items: { [ItemIds.COAL]: 5, [ItemIds.MITHRIL_ORE]: 2 } });
+  stateOf(p).coffer = 1000;
+  putOre(p);
+  ticks(2);
+  BlastFurnace._test.logout({ player: p });
+  const saved = JSON.parse(JSON.stringify(stateOf(p)));
+  const restored = player();
+  restored.setAttribute("blast-furnace", saved);
+  BlastFurnace._test.enterRoom({ player: restored });
+  BlastFurnace._test.enterRoom({ player: restored });
+  ticks(1);
+  assert.equal(stateOf(restored).bars[ItemIds.MITHRIL_BAR], undefined);
+  ticks(1);
+  assert.equal(stateOf(restored).bars[ItemIds.MITHRIL_BAR], 2);
+  assert.equal(stateOf(restored).ores[ItemIds.COAL], 1);
+  ticks(4);
+  assert.equal(stateOf(restored).bars[ItemIds.MITHRIL_BAR], 2);
+  BlastFurnace._test.leaveRoom({ player: restored });
+});
+
+test("noted ore used on the belt is refused without loading raw ore carried alongside it", () => {
+  const p = player({ items: { [ItemIds.MITHRIL_ORE]: 2 } });
+  const core = PluginManager.getCoreApi();
+  const noted = core.ItemDefinition.forId(ItemIds.MITHRIL_ORE).getNoteId();
+  assert.equal(core.ItemDefinition.forId(noted).isNoted(), true);
+  stateOf(p).coffer = 1000;
+  BlastFurnace._test.useOreOnBelt({ player: p, itemId: noted });
+  assert.equal(p.statement, "There would be no point in smelting that.");
+  assert.equal(p.inventory.get(ItemIds.MITHRIL_ORE), 2);
+  assert.deepEqual(stateOf(p).conveyor, []);
+});
+
+
+test("logging out elsewhere does not create furnace state", () => {
+  const p = player();
+  BlastFurnace._test.logout({ player: p });
+  assert.equal(p.getAttribute("blast-furnace"), undefined);
 });

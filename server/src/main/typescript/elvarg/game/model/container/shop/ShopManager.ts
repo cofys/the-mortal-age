@@ -13,6 +13,7 @@ import { ShopIdentifiers } from "../../../../util/ShopIdentifiers";
 import { encodeShopClose, encodeShopOpen } from "../../../../net/protocol/ClientProtocol";
 import { PlayerSave } from "../../../entity/impl/player/persistence/PlayerSave";
 import { scarcityPriceMultiplier, kingdomPriceBias, hatredTierForShop } from "./shopPricing";
+import { Inventory } from "../impl/Inventory";
 
 export interface ShopItemContainerAction {
     kind: "value" | "buy_sell" | "x";
@@ -727,7 +728,7 @@ export class ShopManager {
             return;
         }
 
-        if (!this.canReceivePayment(player, shop.definition.getCurrency(), sellable, quantity)) {
+        if (!this.canReceivePayment(player, shop.definition.getCurrency(), sellable, quantity, quantity * price)) {
             player.sendMessage("You don't have enough inventory space.");
             return;
         }
@@ -1017,16 +1018,22 @@ export class ShopManager {
     }
 
     /**
-     * Whether a sale's payment fits: the currency is not an inventory item,
-     * the player already holds some, a slot is free, or selling `quantity`
-     * from `slots` (in order) empties one.
+     * Preview the same slot deletions as the sale, then ask the actual container
+     * whether its complete payment fits, including metadata and stack limits.
      */
-    private static canReceivePayment(player: any, currency: ShopCurrency, slots: number[], quantity: number): boolean {
+    private static canReceivePayment(player: any, currency: ShopCurrency, slots: number[], quantity: number, payment: number): boolean {
         const itemId = this.currencyHandlers.get(currency)?.itemId ?? this.currencyItemId(currency);
         if (!(itemId > 0)) return true;
         const inventory = player.getInventory();
-        if (inventory.containsNumber(itemId) || inventory.getFreeSlots() > 0) return true;
-        return slots.length > 0 && inventory.getItems()[slots[0]].getAmount() <= quantity;
+        const preview = new Inventory(player).setItems(inventory.getCopiedItems());
+        let remaining = quantity;
+        for (const slot of slots) {
+            if (remaining <= 0) break;
+            const taken = Math.min(remaining, preview.getItems()[slot].getAmount());
+            preview.deleteAtSlot(slot, taken, false);
+            remaining -= taken;
+        }
+        return remaining === 0 && preview.getAddableAmount(new Item(itemId, payment)) === payment;
     }
 
     private static currencyItemId(currency: ShopCurrency): number {

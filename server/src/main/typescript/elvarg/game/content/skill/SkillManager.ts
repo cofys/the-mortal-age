@@ -186,6 +186,8 @@ export class SkillManager {
             this.player.getUpdateFlag().flag(Flag.APPEARANCE);
         }
         if (newLevel <= startingLevel) this.updateSkill(skill);
+        // What landed: the gain less anything over the experience cap.
+        PluginManager.emitExperienceGained({ player: this.player, skill, experience: this.skills.experience[skillIndex] - currentExperience });
         // The gain as it was added (after the rates and the tenths), for content that reacts to
         // experience itself (a league relic's bonus XP). `multiplied` says whether the rates applied.
         PluginManager.emitCustomEvent("skills:experience-gained", { player: this.player, skill, experience, multiplied: multipliers });

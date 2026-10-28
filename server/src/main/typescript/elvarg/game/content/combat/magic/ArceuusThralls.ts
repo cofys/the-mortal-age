@@ -92,7 +92,10 @@ export class ArceuusThralls {
 
                 if (++attackTicks % 4 === 0) {
                     thrall.performAnimation(new Animation(thrall.getAttackAnim()));
-                    const hit = new HitDamage(Misc.getRandom(maxHit), HitMask.RED).setSource(player)
+                    // Content may raise each attack's max hit (a league fragment), as for the duration.
+                    const max = { player, thrall, target, maxHit };
+                    PluginManager.emitCustomEvent("magic:thrall-max-hit", max);
+                    const hit = new HitDamage(Misc.getRandom(Math.max(0, Math.floor(Number(max.maxHit) || 0))), HitMask.RED).setSource(player)
                         .onApplied(damage => target.getCombat().addDamage(player, damage));
                     target.getCombat().getHitQueue().addPendingDamage([hit]);
                 }

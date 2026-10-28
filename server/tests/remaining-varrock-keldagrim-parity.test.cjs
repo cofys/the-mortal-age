@@ -147,6 +147,8 @@ function player() {
     isFull: () => Boolean(p.full),
     getItems: () => [...items].filter(([, amount]) => amount > 0).map(([id, amount]) => ({ getId: () => id, getAmount: () => amount, getDefinition: () => core.ItemDefinition.forId(id) })),
     adds(id, amount) { items.set(id, (items.get(id) ?? 0) + amount); },
+    getAddableAmount(item) { return item.getAmount(); },
+    add(item) { this.adds(item.getId(), item.getAmount()); },
     deleteNumber(id, amount) { assert.ok((items.get(id) ?? 0) >= amount, `missing item ${id}`); items.set(id, items.get(id) - amount); },
   };
   const packet = new Proxy({

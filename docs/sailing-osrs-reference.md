@@ -528,7 +528,7 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
   - the first roll 6 ticks after the cast, then every 4;
   - the messages for too low a level, a full inventory and finding nothing, and stopping without a message when you walk, leave the boat or sail out of reach;
   - the hook animations for every boat size (the captured ones are the sloop's).
-- **Salvaging, not yet:** crewmates, salvage into the cargo hold, "Inspect" on a wreck, clue scrolls and soup from sorting, and opulent salvage's rare seed, herb and gem tables (rolled as nothing). Tsps floors XP on every gain, so 5.5 XP a sort counts as 5.
+- **Salvaging, not yet:** the player's own salvage into the cargo hold (crewmates fill it; see docs/sailing.md, crewmates), "Inspect" on a wreck, clue scrolls and soup from sorting, and opulent salvage's rare seed, herb and gem tables (rolled as nothing). Tsps floors XP on every gain, so 5.5 XP a sort counts as 5.
 - **Boat selection and recovery:**
   - The bank isn't sent when interface 934 opens.
   - The Port Wizard's line is only shown overhead, not also in the chatbox.

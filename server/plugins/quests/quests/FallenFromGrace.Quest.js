@@ -1050,6 +1050,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
     boat.angle = CAVERN_MOORING.angle;
     boat.heading = CAVERN_MOORING.angle;
     boat.moveMode = 0;
+    boat.velocity = 0;
     Sailing.dock(player, "wyrmscraig_cave");
     setFlag(player, FLAG_WYRMS_ENTRY);
     quest.setStage(player, STAGE_CAVERN);

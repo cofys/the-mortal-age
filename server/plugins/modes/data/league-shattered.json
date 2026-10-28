@@ -1,0 +1,415 @@
+{
+  "$comment": "Leagues III - Shattered Relics' own screens (docs/leagues.md 'Shattered Relics'), used by plugins/modes/league/Shattered.LeagueMode.js, Fragments.LeagueMode.js and Unlocks.LeagueMode.js. No recording exists (the league ran from January to March 2022, before osrs-captures' rev 223), so every id is from the cache's own scripts and every rule from the Wiki's Shattered_Relics_League pages (/Guide, /Fragments, /Unlocks). Each screen draws only for league type 3 (varbit 10032), which LeagueMode already sends.",
+  "league": 3,
+
+  "_sidePanel": "The journal's Leagues tab mounts 736 for this league instead of 656 (script 5798 draws it from varp 2615 points, varbit 10046 tasks and varp 3276 renown). Its buttons only play a sound on the client (script 1601); the server opens the screen behind each.",
+  "sidePanel": {
+    "group": 736,
+    "info": 21,
+    "tasks": 25,
+    "fragments": 30,
+    "unlocks": 35
+  },
+
+  "_renown": "Sage's Renown (Wiki /Unlocks): earned by tasks, spent on unlocks. Varp 3276 holds it for the side panel and the unlocks screen. `byTaskPoints`: a task's League Points -> the renown it pays (Wiki /Tasks: Beginner and Easy 5 points and 1 renown, Medium 25 and 2, Hard 50 and 3, Elite 125 and 4, Master 250 and 5), so any award of a task's points pays its tier's renown; other amounts pay none.",
+  "renown": {
+    "varp": 3276,
+    "byTaskPoints": { "5": 1, "25": 2, "50": 3, "125": 4, "250": 5 }
+  },
+
+  "_classChoice": "league_3_class (737), from its own text: Select (737:6 / 11 / 16) sets varp 3345 to the class (script 5805 shows its confirm panel 737:20), Decline (737:23) sets it back to 0, Accept (737:26) applies it. `skill` is the skill id (Attack 0, Ranged 4, Magic 6) whose unlock varbit script 5830 reads; `fragment` is enum 4136's fragment id. 737 names the items but not their amounts; the amounts here are this server's choice (the Wiki: 'a few starter items').",
+  "classChoice": {
+    "group": 737,
+    "varp": 3345,
+    "_open": "737 has no close button: it opens `openDelayTicks` after login, once the welcome screen's Play (welcome_screen:play 378:72, as the league tutorial waits for it) has been pressed and nothing else is open, and again whenever it closes before a class is chosen.",
+    "openDelayTicks": 2,
+    "welcomePlay": [378, 72],
+    "decline": 23,
+    "accept": 26,
+    "classes": {
+      "1": { "name": "Unwavering Warrior", "select": 6, "skill": 0, "fragment": 1, "items": [[1325, 1]] },
+      "2": { "name": "Focused Ranger", "select": 11, "skill": 4, "fragment": 4, "items": [[845, 1], [884, 150]] },
+      "3": { "name": "Masterful Wizard", "select": 16, "skill": 6, "fragment": 6, "items": [[1379, 1], [556, 300], [558, 150]] }
+    }
+  },
+
+  "_fragments": "league_3_fragments (735). Enum 4136 lists the 53 fragments (struct params 1448 name, 1455 id); a fragment's XP is varbit 13403 + id - 1 (0 = not owned; script 5789: level 1 below 2,000, level 2 below 8,000, level 3 from 8,000). The seven equipped slots are `slotVarbits`, each holding a fragment id. Enum 4127 gives the points (varp 2614) each slot opens at (script 5786: 0, 10, 300, 1,500, 3,000, 7,500, 15,000). The list (735:18) has 9 children per fragment, the clickable one at 9 x (id - 1) with View (client) and Equip (op2); the loadout (735:36) has 6 per slot, the clickable one at 6 x slot + 1 with Unequip (op2).",
+  "fragments": {
+    "group": 735,
+    "enum": 4136,
+    "idParam": 1455,
+    "nameParam": 1448,
+    "itemParam": 1462,
+    "tierParam": 1454,
+    "levelParams": [1456, 1457, 1458],
+    "setParams": [1459, 1460],
+    "setsEnum": 4137,
+    "setIdParam": 1464,
+    "setPiecesParams": [1468, 1470],
+    "setItemParam": 1471,
+    "xpVarbitBase": 13403,
+    "slotVarbits": [13395, 13396, 13397, 13398, 13399, 13401, 13402],
+    "slotsEnum": 4127,
+    "list": 18,
+    "listChildren": 9,
+    "loadout": 36,
+    "loadoutChildren": 6,
+    "close": 7,
+    "unequipAll": 16,
+    "equipOp": 2,
+    "unequipOp": 2,
+    "_swap": "Wiki /Fragments: fragments \"can be exchanged while inside a bank, near a bank chest, or near The Sage\" (`bank`, `sage.nearDistance`). Equip, Unequip and Unequip all are refused elsewhere with `messages.swapAway`."
+  },
+
+  "_bank": "In a bank, for fragments (Wiki /Fragments: \"inside a bank, near a bank chest\") and quest packs (the launch news: \"you can only auto-complete quests while in a Bank\"): a loc with the `bankAction` option (booths, counters and tables, whatever their name), a bank chest (`bankChests`, whose option is Use) that has an option at all, or an NPC with the option (bankers of every name), within `distance`; a closed or decorative booth has none. Neither source gives a distance; this one is this server's, a bank's inside being a few tiles from its booths.",
+  "bank": {
+    "bankAction": "Bank",
+    "bankChests": ["Bank chest", "Bank Chest"],
+    "distance": 8
+  },
+
+  "_sage": "The Sage (Wiki The_Sage_(Shattered_Relics_League)): NPC 11232 (Talk-to, Check-pets, Collect-items) at Catherby, 2774, 3433, the league's Leagues Tutor. No spawn is recorded and the main world's spawns don't have it, so a world running this league spawns it there. Talk-to plays its transcript; its \"Do I have any League items to collect?\" and Collect-items hand over `items`: per quest pack, what the Wiki's /Unlocks table says can be claimed from the Sage (Gnome I the Karamjan monkey greegree, Elf I Iban's staff, Elf II a crystal shield or a crystal bow, Morytania II Drakan's medallion, Fairy I magic secateurs and a Dramen staff, Heroes ice gloves), for every pack unlocked, its prerequisites too. An inner list is a choice of one. The Sage gives what the character owns none of (carried, worn or banked; the transcript: \"It doesn't look like you need any League items right now\"), so a lost one can be collected again, and one a quest's own reward gave (A Taste of Hope's medallion, Roving Elves' crystal bow or shield) isn't given twice. The crystal pair is the new crystal bow / shield Roving Elves gives.",
+  "sage": {
+    "npc": 11232,
+    "spawn": [2774, 3433, 0],
+    "nearDistance": 8,
+    "items": {
+      "Gnome I": [4031],
+      "Elf I": [1409],
+      "Elf II": [[4212, 4224]],
+      "Morytania II": [22400],
+      "Fairy I": [7409, 772],
+      "Heroes": [1580]
+    },
+    "conditions": {
+      "nothing": "If the player does not have any items to collect:",
+      "owed": "If the player has an item to collect from The Sage:"
+    },
+    "collectAction": "You receive an item from the Sage."
+  },
+
+  "_unlocks": "league_3_unlocks (733). Varp 3343 is the tab (0 Skills, 1 Bosses, 2 Quests), varp 3344 the selected entry (1-based, 0 none); the client writes neither. Tabs sit on 733:9 at 9 x tab; entries on 733:18 in enum key order, each tab's entries `entryChildren` children apart with Select on the first (read from the web client's widget tree after scripts 5812-5816 ran: skills 12, bosses 4, quests 5). Unlock (733:11) and Decline (733:44) run on the client; Accept (733:47) is the server's. The confirm panel (733:40) runs script 5827, which shows it, whenever 3343 or 3344 is sent; 733:1 runs 5806, which hides it, when 3343 is. The web client runs those handlers once as the screen opens too, and the list (733:18) redraws only when 3343 or 3344 changes; so the open, and Accept (which clears the entry to redraw the list), hide the confirm panel again a tick later. Close is 733:21.",
+  "unlocks": {
+    "group": 733,
+    "tabVarp": 3343,
+    "selectionVarp": 3344,
+    "tabs": 9,
+    "tabChildren": 9,
+    "entries": 18,
+    "accept": 47,
+    "confirmPanel": 40,
+    "close": 21,
+    "costParam": 1442,
+    "nameParam": 1437,
+    "skills": {
+      "enum": 4129,
+      "skillParam": 1435,
+      "entryChildren": 12,
+      "selectChild": 0,
+      "_alwaysUnlocked": "Defence, Fishing and Thieving: script 5830 answers 1 for them (Wiki /Guide: every player starts with them).",
+      "alwaysUnlocked": [1, 10, 17],
+      "_varbits": "Script 5830: skill id -> its unlock varbit.",
+      "varbits": { "0": 13344, "2": 13345, "4": 13346, "6": 13347, "3": 13348, "5": 13349, "16": 13350, "15": 13351, "12": 13352, "20": 13353, "14": 13354, "13": 13355, "7": 13356, "11": 13357, "8": 13358, "9": 13359, "18": 13360, "19": 13361, "22": 13362, "21": 13363 }
+    },
+    "bosses": {
+      "enum": 4130,
+      "npcParam": 1436,
+      "entryChildren": 4,
+      "selectChild": 0,
+      "_names": "The NPCs a locked boss stops a character attacking (Wiki /Unlocks: locked bosses can't be fought; the Wilderness's are not in the list, the Mimic is free), by the cache's NPC names: the unlock's own NPC (param 1436) and the rest of a group (Barrows' brothers, the Dagannoth Kings, Dusk and Dawn, both Hunllefs, Phosani's Nightmare). Raids are locked by their final boss (Great Olm and its claws, Verzik Vitur). Wintertodt and Tempoross are skilling bosses no one attacks, so their locks aren't enforced. `messageCooldownMs` keeps the refusal to one message per boss that long: a cannon, a multi-target attack and the boss's own hits (auto-retaliate) all ask again and again.",
+      "messageCooldownMs": 6000,
+      "names": {
+        "5888": ["Abyssal Sire"],
+        "8615": ["Alchemical Hydra"],
+        "1673": ["Ahrim the Blighted", "Dharok the Wretched", "Guthan the Infested", "Karil the Tainted", "Torag the Corrupted", "Verac the Defiled"],
+        "8195": ["Bryophyta"],
+        "5863": ["Cerberus"],
+        "7554": ["Great Olm", "Great Olm (Left claw)", "Great Olm (Right claw)"],
+        "2205": ["Commander Zilyana"],
+        "319": ["Corporeal Beast"],
+        "2265": ["Dagannoth Prime", "Dagannoth Rex", "Dagannoth Supreme"],
+        "9021": ["Crystalline Hunllef", "Corrupted Hunllef"],
+        "2215": ["General Graardor"],
+        "5779": ["Giant Mole"],
+        "7849": ["Dusk", "Dawn"],
+        "8583": ["Hespori"],
+        "963": ["Kalphite Queen"],
+        "239": ["King Black Dragon"],
+        "494": ["Kraken"],
+        "3162": ["Kree'arra"],
+        "3129": ["K'ril Tsutsaroth"],
+        "11278": ["Nex"],
+        "9460": ["The Nightmare", "Phosani's Nightmare"],
+        "7416": ["Obor"],
+        "8713": ["Sarachnis"],
+        "7286": ["Skotizo"],
+        "10572": [],
+        "8369": ["Verzik Vitur"],
+        "499": ["Thermonuclear smoke devil"],
+        "8061": ["Vorkath"],
+        "7371": [],
+        "9049": ["Zalcano"],
+        "2042": ["Zulrah"]
+      },
+      "_requires": "Wiki /Unlocks footnote: Nex requires every God Wars boss to be unlocked first (General Graardor, Commander Zilyana, Kree'arra, K'ril Tsutsaroth).",
+      "requires": { "11278": { "bosses": [2215, 2205, 3162, 3129], "message": "needsGodWars" } },
+      "_varbits": "Script 5831: the boss's NPC id -> its unlock varbit.",
+      "varbits": { "239": 13364, "5779": 13365, "963": 13366, "7416": 13367, "8195": 13368, "7849": 13369, "1673": 13370, "2265": 13371, "8583": 13372, "8713": 13373, "7286": 13374, "9049": 13375, "494": 13376, "9021": 13377, "499": 13378, "2042": 13379, "8061": 13380, "5863": 13381, "3162": 13382, "2215": 13383, "2205": 13384, "3129": 13385, "9460": 13386, "8615": 13387, "7554": 13388, "8369": 13389, "10572": 13390, "7371": 13391, "319": 13392, "5888": 13393, "11278": 13394 }
+    },
+    "quests": {
+      "enum": 4131,
+      "indexParam": 1444,
+      "entryChildren": 5,
+      "selectChild": 0,
+      "_varbits": "Script 5832: a pack's param 1444 (1-36) -> varbit 13544 + it, which holds the pack's price; 0 means unlocked (script 5816). The cache has no quest prices.",
+      "varbitBase": 13544,
+      "_packs": "Wiki /Unlocks 'Storyline breakdown' (Initial Cost) and each pack's 'all content from' packs (the same as the cache's param 1446). The Wiki: a price includes its prerequisites while they are incomplete, and unlocking one unlocks its prerequisites; so a pack's price drops by the price of each prerequisite pack already unlocked (the largest only, where one includes another). `quests`: the table's Main Quest and Additional Quests, which buying the pack completes (Wiki: \"Auto-completing quests will not grant the experience\"; the Sage: \"skip through these Quests while still gaining any final rewards\"). Kourend II's main quest is its three house quests, already listed. The Recipe for Disaster subquests (Freeing ...) and the miniquests (Alfred Grimhand's Barcrawl, Enter the Abyss, The Frozen Door, Architectural Alliance) aren't quests this server registers, so they are listed but not completed.",
+      "_experienceItems": "Completion rewards that are experience in an item (found by completing every pack's quests): King's Ransom's antique lamp 11679, One Small Favour's two 4447, Client of Kourend's two 21262, X Marks the Spot's 23072, Contact!'s combat lamp 10586, Dream Mentor's dreamy lamp 11157, The Great Brain Robbery's blessed lamp 10889, and the Tomes of Experience of A Taste of Hope 22415, Darkness of Hallowvale 9656 and Sins of the Father 24690. A pack's completion takes back what it handed out of these, since auto-completion grants no experience.",
+      "experienceItems": [11679, 4447, 21262, 23072, 10586, 11157, 10889, 22415, 9656, 24690],
+      "packs": {
+        "Camelot I": { "cost": 6, "quests": ["Holy Grail", "Merlin's Crystal"] },
+        "Camelot II": { "cost": 27, "requires": ["Camelot I"], "quests": ["King's Ransom", "Holy Grail", "One Small Favour", "Murder Mystery", "Black Knights' Fortress", "Merlin's Crystal", "Shilo Village", "Rune Mysteries", "Jungle Potion", "Druidic Ritual"] },
+        "Champions": { "cost": 12, "quests": ["Dragon Slayer I", "Bone Voyage", "Romeo & Juliet", "The Dig Site"] },
+        "Desert I": { "cost": 8, "quests": ["Icthlarin's Little Helper", "The Tourist Trap", "Gertrude's Cat"] },
+        "Desert II": { "cost": 43, "requires": ["Desert I", "Troll I"], "quests": ["Desert Treasure I", "Contact!", "The Feud", "The Frozen Door", "Temple of Ikov", "Troll Stronghold", "The Tourist Trap", "The Dig Site", "Waterfall Quest", "Priest in Peril", "Icthlarin's Little Helper", "Prince Ali Rescue", "Death Plateau", "Gertrude's Cat"] },
+        "Dorgeshuun": { "cost": 24, "quests": ["Another Slice of H.A.M.", "Fishing Contest", "Death to the Dorgeshuun", "The Giant Dwarf", "The Dig Site", "The Lost Tribe", "Goblin Diplomacy", "Rune Mysteries", "Freeing the Goblin generals", "Freeing the Mountain Dwarf"] },
+        "Druid": { "cost": 10, "requires": ["Troll I"], "quests": ["Eadgar's Ruse", "Troll Stronghold", "Druidic Ritual", "Death Plateau"] },
+        "Elemental": { "cost": 5, "quests": ["Elemental Workshop II", "Elemental Workshop I"] },
+        "Elf I": { "cost": 8, "quests": ["Underground Pass", "Biohazard", "Plague City"] },
+        "Elf II": { "cost": 31, "requires": ["Elf I"], "quests": ["Mourning's End Part I", "Roving Elves", "Big Chompy Bird Hunting", "Sheep Herder", "Regicide", "Waterfall Quest", "Underground Pass", "Biohazard", "Plague City"] },
+        "Elf III": { "cost": 60, "requires": ["Elf II"], "quests": ["Song of the Elves", "Mourning's End Part II", "Mourning's End Part I", "Making History", "Priest in Peril", "The Restless Ghost", "Roving Elves", "Big Chompy Bird Hunting", "Sheep Herder", "Regicide", "Waterfall Quest", "Underground Pass", "Biohazard", "Plague City"] },
+        "Fairy I": { "cost": 12, "quests": ["Fairytale I - Growing Pains", "Lost City", "Nature Spirit", "Priest in Peril", "The Restless Ghost"] },
+        "Fairy II": { "cost": 16, "requires": ["Fairy I"], "quests": ["Fairytale II - Cure a Queen", "Fairytale I - Growing Pains", "Lost City", "Nature Spirit", "Priest in Peril", "The Restless Ghost"] },
+        "Fremennik I": { "cost": 28, "requires": ["Heroes"], "quests": ["Throne of Miscellania", "Horror from the Deep", "Heroes' Quest", "The Fremennik Trials", "Alfred Grimhand's Barcrawl", "Dragon Slayer I", "Merlin's Crystal", "Lost City", "Shield of Arrav"] },
+        "Fremennik II": { "cost": 49, "requires": ["Fremennik I"], "quests": ["Royal Trouble", "Lunar Diplomacy", "The Fremennik Isles", "Horror from the Deep", "Throne of Miscellania", "The Fremennik Trials", "Shilo Village", "Lost City", "Rune Mysteries", "Alfred Grimhand's Barcrawl", "Heroes' Quest", "Jungle Potion", "Dragon Slayer I", "Merlin's Crystal", "Shield of Arrav", "Druidic Ritual"] },
+        "Fremennik III": { "cost": 74, "requires": ["Fremennik II"], "quests": ["Fremennik Exiles", "Dream Mentor", "Horror from the Deep", "Royal Trouble", "The Fremennik Isles", "Lunar Diplomacy", "Mountain Daughter", "Heroes' Quest", "Eadgar's Ruse", "Alfred Grimhand's Barcrawl", "Throne of Miscellania", "The Fremennik Trials", "Shilo Village", "Lost City", "Rune Mysteries", "Dragon Slayer I", "Merlin's Crystal", "Shield of Arrav", "Troll Stronghold", "Druidic Ritual", "Jungle Potion", "Death Plateau"] },
+        "Gnome I": { "cost": 13, "quests": ["Monkey Madness I", "The Grand Tree", "Tree Gnome Village"] },
+        "Gnome II": { "cost": 44, "requires": ["Gnome I", "Troll I"], "quests": ["Monkey Madness II", "Monkey Madness I", "Enlightened Journey", "The Eyes of Glouphrie", "Troll Stronghold", "Watchtower", "The Grand Tree", "Death Plateau", "Freeing Awowogei"] },
+        "Heroes": { "cost": 16, "quests": ["Heroes' Quest", "Dragon Slayer I", "Merlin's Crystal", "Lost City", "Shield of Arrav"] },
+        "Karamja I": { "cost": 7, "quests": ["Shilo Village", "Jungle Potion", "Druidic Ritual"] },
+        "Karamja II": { "cost": 16, "requires": ["Karamja I"], "quests": ["One Small Favour", "Tai Bwo Wannai Trio", "Shilo Village", "Rune Mysteries", "Jungle Potion", "Druidic Ritual"] },
+        "Kourend I": { "cost": 4, "quests": ["Client of Kourend", "X Marks the Spot"] },
+        "Kourend II": { "cost": 13, "requires": ["Kourend I"], "quests": ["The Queen of Thieves", "The Forsaken Tower", "The Ascent of Arceuus", "Client of Kourend", "X Marks the Spot"] },
+        "Kourend III": { "cost": 47, "requires": ["Kourend II"], "quests": ["A Kingdom Divided", "Tale of the Righteous", "The Ascent of Arceuus", "The Forsaken Tower", "The Queen of Thieves", "The Depths of Despair", "X Marks the Spot", "Architectural Alliance", "Client of Kourend"] },
+        "Legends": { "cost": 47, "requires": ["Heroes", "Karamja I", "Elf I"], "quests": ["Legends' Quest", "Family Crest", "Heroes' Quest", "Shilo Village", "Underground Pass", "Waterfall Quest", "Dragon Slayer I", "Merlin's Crystal", "Lost City", "Shield of Arrav", "Jungle Potion", "Biohazard", "Druidic Ritual", "Plague City", "Freeing Sir Amik Varze"] },
+        "Morytania I": { "cost": 17, "quests": ["In Search of the Myreque", "Animal Magnetism", "Ghosts Ahoy", "Nature Spirit", "Ernest the Chicken", "The Restless Ghost", "Priest in Peril"] },
+        "Morytania II": { "cost": 28, "requires": ["Morytania I"], "quests": ["A Taste of Hope", "Animal Magnetism", "Ghosts Ahoy", "Darkness of Hallowvale", "Nature Spirit", "Ernest the Chicken", "The Restless Ghost", "Priest in Peril", "In Aid of the Myreque", "In Search of the Myreque"] },
+        "Morytania III": { "cost": 37, "requires": ["Morytania II"], "quests": ["Sins of the Father", "Animal Magnetism", "Ghosts Ahoy", "A Taste of Hope", "Vampyre Slayer", "Darkness of Hallowvale", "Nature Spirit", "Ernest the Chicken", "The Restless Ghost", "Priest in Peril", "In Aid of the Myreque", "In Search of the Myreque"] },
+        "Myths": { "cost": 114, "requires": ["Legends", "Champions"], "quests": ["Dragon Slayer II", "Legends' Quest", "Dream Mentor", "A Tail of Two Cats", "Animal Magnetism", "Ghosts Ahoy", "Bone Voyage", "Client of Kourend", "Family Crest", "Heroes' Quest", "Shilo Village", "Underground Pass", "Waterfall Quest", "Lunar Diplomacy", "Eadgar's Ruse", "Icthlarin's Little Helper", "Ernest the Chicken", "The Restless Ghost", "Priest in Peril", "The Dig Site", "X Marks the Spot", "Dragon Slayer I", "Merlin's Crystal", "Lost City", "Shield of Arrav", "Jungle Potion", "Biohazard", "The Fremennik Trials", "Rune Mysteries", "Troll Stronghold", "Druidic Ritual", "Gertrude's Cat", "Plague City", "Death Plateau"] },
+        "Pirate I": { "cost": 18, "quests": ["Rum Deal", "Pirate's Treasure", "Zogre Flesh Eaters", "Priest in Peril", "Big Chompy Bird Hunting", "Jungle Potion", "Druidic Ritual"] },
+        "Pirate II": { "cost": 35, "requires": ["Pirate I"], "quests": ["The Great Brain Robbery", "Cabin Fever", "Creature of Fenkenstrain", "Rum Deal", "Pirate's Treasure", "Zogre Flesh Eaters", "Priest in Peril", "Big Chompy Bird Hunting", "Jungle Potion", "Druidic Ritual", "The Restless Ghost", "Freeing Pirate Pete", "Freeing Skrach Uglogwee"] },
+        "Temple Knight I": { "cost": 9, "quests": ["Recruitment Drive", "Sea Slug", "Black Knights' Fortress", "Druidic Ritual"] },
+        "Temple Knight II": { "cost": 26, "requires": ["Temple Knight I"], "quests": ["The Slug Menace", "Sea Slug", "Wanted!", "Recruitment Drive", "The Lost Tribe", "Priest in Peril", "Enter the Abyss", "Black Knights' Fortress", "Druidic Ritual", "Goblin Diplomacy", "Rune Mysteries"] },
+        "Troll I": { "cost": 5, "quests": ["Troll Stronghold", "Death Plateau"] },
+        "Troll II": { "cost": 19, "requires": ["Troll I"], "quests": ["My Arm's Big Adventure", "Eadgar's Ruse", "The Feud", "Jungle Potion", "Troll Stronghold", "Druidic Ritual", "Death Plateau"] },
+        "Troll III": { "cost": 57, "requires": ["Troll II", "Karamja I"], "quests": ["Making Friends with My Arm", "My Arm's Big Adventure", "Swan Song", "Cold War", "Romeo & Juliet", "Eadgar's Ruse", "The Feud", "Jungle Potion", "One Small Favour", "Garden of Tranquillity", "Troll Stronghold", "Druidic Ritual", "Death Plateau", "Shilo Village", "Rune Mysteries", "Creature of Fenkenstrain", "Priest in Peril", "The Restless Ghost"] }
+      }
+    }
+  },
+
+  "_fragmentXp": "Wiki /Fragments: \"Gaining any experience in any unlocked skill while the fragment is equipped will gain 1 XP, at a maximum of one per 4 ticks\"; a duplicate gives 500 XP even unequipped. Levels from client script 5789: 1 from 1 XP, 2 from 2,000, 3 from 8,000; a fragment stops at 8,000 and then leaves the drop pool (Wiki).",
+  "fragmentXp": { "everyTicks": 4, "perGain": 1, "levels": [1, 2000, 8000], "duplicate": 500 },
+
+  "_fragmentDrops": "Wiki /Fragments: drops are \"based on activity and scaled by the amount of XP acquired\", the activity picks the pool, and combat fragments are tiered by the NPC. They come as the cache's Unidentified fragment items (26544-26548), which Break opens (Wiki Unidentified_fragment_(combat)) into a fragment whose own item (enum 4136 param 1462) it is, and for combat of the item's tier (param 1454). The Wiki gives no rates: `xpPerDrop` (a skilling gain of that much XP is a sure drop; less is that share of a chance) and `hitpointsPerDrop` (the same for a kill, by the NPC's hitpoints) are this server's. Combat tiers by NPC name are the Wiki's lists; every other NPC is tier 1. Misc fragments have no listed source, so only ::fragment gives their item.",
+  "fragmentDrops": {
+    "items": { "harvesting": 26544, "production": 26545, "skilling": 26546, "combat": 26547, "misc": 26548 },
+    "_skills": "Skill (client stat id) -> the category its XP rolls for. Combat skills and Magic roll on kills instead.",
+    "skills": { "10": "harvesting", "8": "harvesting", "14": "harvesting", "19": "harvesting", "21": "harvesting", "7": "production", "13": "production", "12": "production", "9": "production", "15": "production", "20": "production", "22": "production", "17": "skilling", "16": "skilling", "11": "skilling", "5": "skilling" },
+    "xpPerDrop": { "harvesting": 30000, "production": 30000, "skilling": 20000 },
+    "hitpointsPerDrop": 1500,
+    "_combatTiers": "Wiki /Fragments combat tiers: the NPCs (by name) that drop tiers 2-4.",
+    "combatTiers": {
+      "2": ["Ahrim the Blighted", "Dharok the Wretched", "Guthan the Infested", "Karil the Tainted", "Torag the Corrupted", "Verac the Defiled", "Dagannoth Prime", "Dagannoth Rex", "Dagannoth Supreme", "Hespori", "Sarachnis", "Skotizo"],
+      "3": ["Abyssal Sire", "Cerberus", "Crystalline Hunllef", "Corrupted Hunllef", "Kalphite Queen", "Kraken", "Vorkath", "Zulrah"],
+      "4": ["Alchemical Hydra", "Great Olm", "Corporeal Beast", "TzTok-Jad", "TzKal-Zuk", "General Graardor", "Commander Zilyana", "Kree'arra", "K'ril Tsutsaroth", "Nex", "The Nightmare", "Phosani's Nightmare", "Verzik Vitur"]
+    }
+  },
+
+  "_fragmentEffects": "The combat fragments' and sets' effects. Each fragment works with the number its equipped level gives in the cache (enum 4136 params 1456-1458, the numbers its level texts 1450-1452 quote): a percent, a heal, ticks between restores (Larger Recharger 41/33/17, Divine Restoration 25/15/6), Venomaster's poison severity (15/25/35, which hits for 3/5/7), Superior Tracking's 1-in-N (150/100/30), or a max hit bonus (Bandosian Might per tick of attack speed, Saradominist Defence flat). Venomaster's chance isn't given anywhere, so `chancePercent` is this server's. Sets (enum 4137): a set's tiers need the pieces params 1468 / 1470 give of equipped fragments that list it (params 1459 / 1460); their numbers are only in their texts (params 1467 / 1469), copied here.",
+  "fragmentEffects": {
+    "accuracy": { "1": "melee", "3": "ranged", "5": "magic" },
+    "ammoSaving": { "fragment": 4, "excluded": "chinchompa" },
+    "runeSaving": { "fragment": 6 },
+    "specialRestore": { "fragment": 11 },
+    "prayerRestore": { "fragment": 9 },
+    "venom": { "fragment": 13, "chancePercent": 25, "poisonImmuneFrom": 2, "venomImmuneFrom": 3 },
+    "slayerHeal": { "fragment": 14 },
+    "meleeChargeSaving": { "fragment": 2 },
+    "prayerDrain": { "fragment": 8 },
+    "_specialCost": "Special Discount's numbers are tenths of a percent of energy (500/400/250 = 50/40/25%).",
+    "specialCost": { "fragment": 12, "perPercent": 10 },
+    "thrallMaxHit": { "fragment": 7 },
+    "superiorChance": { "fragment": 15 },
+    "slayerPoints": { "fragment": 16 },
+    "_godArmour": "Four worn items of the god, counted as the God Wars Dungeon counts them (godwars:god-items). Saradominist Defence: damage taken from an NPC or player in the last 6 ticks (3.6 seconds).",
+    "godArmour": {
+      "items": 4,
+      "bandos": { "fragment": 17 },
+      "armadyl": { "fragment": 18 },
+      "zamorak": { "fragment": 19 },
+      "saradomin": { "fragment": 20, "withinTicks": 6 }
+    },
+    "sets": {
+      "absoluteUnit": { "set": 1, "reductionPercent": [30, 50], "reflectPercent": [50, 100] },
+      "drakansTouch": { "set": 6, "chancePercent": 50, "healPercent": [5, 10] },
+      "extraRolls": {
+        "14": { "style": "melee", "chancePercent": [30, 60] },
+        "5": { "style": "ranged", "chancePercent": [30, 60] },
+        "3": { "style": "magic", "chancePercent": [30, 60] }
+      },
+      "fastMetabolism": { "set": 8, "regenMultiplier": [4] },
+      "knifesEdge": { "set": 10, "permillePerHitpoint": [3, 6] }
+    }
+  },
+
+  "_gatheringEffects": "The harvesting fragments and Message In A Bottle (Wiki /Fragments), used by plugins/modes/league/FragmentGathering.LeagueMode.js. Each works with its level's number in the cache (params 1456-1458): a percent chance (Chef's Catch, Slash & Burn, Rock Solid, Molten Miner, Seedy Business), a 1-in-N chance (Catch Of The Day, one roll on NpcDrops' shared `table`), a chance multiplier (Homewrecker, Message In A Bottle), the extra Hunter XP percent (Chinchonkers; two chinchompas a catch from level `doubleFrom`) or the percent chance of a doubled harvest (Certified Farmer). `rocks` are Rock Solid's (Wiki: iron, sandstone and granite). The sets' numbers are only in their texts (enum 4137 params 1467 / 1469): Greedy Gatherer's resources and Personal Banker's chance at tiers 1 / 2. Where several apply to one resource they compose: the fragment's change (cooked, smelted, burnt) to every piece, Greedy Gatherer's extra pieces with their XP, then Personal Banker's bank or the inventory; extras that do not fit fall to the floor (ours: the Wiki does not say).",
+  "gatheringEffects": {
+    "chefsCatch": { "fragment": 21 },
+    "catchOfTheDay": { "fragment": 22, "table": "rareDrop" },
+    "slashAndBurn": { "fragment": 25 },
+    "homewrecker": { "fragment": 26 },
+    "rockSolid": { "fragment": 29, "rocks": ["Iron rocks", "Sandstone rocks", "Granite rocks"] },
+    "moltenMiner": { "fragment": 30 },
+    "chinchonkers": { "fragment": 39, "creature": "chinchompa", "doubleFrom": 3 },
+    "certifiedFarmer": { "fragment": 41 },
+    "seedyBusiness": { "fragment": 42 },
+    "messageInABottle": { "fragment": 50 },
+    "greedyGatherer": { "set": 9, "skills": ["MINING", "WOODCUTTING", "FISHING", "FARMING"], "resources": [2, 3] },
+    "personalBanker": { "set": 12, "skills": ["MINING", "WOODCUTTING", "FISHING", "FARMING"], "chancePercent": [50, 100] }
+  },
+
+  "_productionEffects": "The production fragments and The Alchemist, The Craftsman and Unchained Talent (Wiki /Fragments), used by plugins/modes/league/FragmentProduction.LeagueMode.js. Each fragment works with its level's number in the cache (params 1456-1458): a percent chance (Plank Stretcher, Smithing Double, Dragon On A Bit, Imcando's Apprentice, Dine & Dash, Rooty Tooty 2x Runeys, Mixologist's 4-dose potion), a count (Rumple-Bow-String's flax a Spin Flax, Enchanted Jeweler's pieces a cast) or a percent more (Alchemaniac's High Alchemy coins, Profletchional's and Just Druid!'s XP, Pro Tips' bolt tips, rounded down: ours). `kinds` are the skills' make-X loops (`skills:produced` / `skills:actions-per-cycle`; fletching's `shields` are made from logs too). Enchanted Jeweler multiplies only the `jewellery` an enchant takes (by name), not a quest's enchanted rod or sickle. Mixologist's secondary-saving chance is only in the Wiki (20/50/100%), so it is here. Rune Escape needs the Ourania Altar, which this server doesn't have. The sets' numbers are only in their texts (enum 4137 param 1467): The Alchemist's and The Craftsman's activities all at once (`actions` a cycle: the inventory), Unchained Talent's `boost` to the non-combat skills (Sailing, which the league predates, left out: ours).",
+  "productionEffects": {
+    "plankStretcher": { "fragment": 28, "material": "plank" },
+    "smithingDouble": { "fragment": 31, "kinds": ["smith"] },
+    "rumpleBowString": { "fragment": 32, "spell": "Spin Flax" },
+    "dragonOnABit": { "fragment": 33, "kinds": ["leather"], "product": "d'hide", "material": "dragon leather" },
+    "imcandosApprentice": { "fragment": 34, "kinds": ["jewellery"] },
+    "enchantedJeweler": { "fragment": 35, "jewellery": ["ring", "necklace", "amulet", "bracelet"] },
+    "alchemaniac": { "fragment": 36 },
+    "profletchional": { "fragment": 37, "kinds": ["logs", "shields", "stringing"] },
+    "proTips": { "fragment": 38, "kinds": ["chisel"], "product": "bolt tips" },
+    "dineAndDash": { "fragment": 40, "kinds": ["cook"] },
+    "mixologist": { "fragment": 43, "secondarySavePercent": [20, 50, 100] },
+    "justDruid": { "fragment": 44, "kinds": ["clean"] },
+    "rootyTooty": { "fragment": 47 },
+    "theAlchemist": { "set": 2, "actions": 28, "batch": { "COOKING": ["cook"], "HERBLORE": ["clean", "mix"] } },
+    "theCraftsman": {
+      "set": 4,
+      "actions": 28,
+      "batch": {
+        "SMITHING": ["smelt", "smith", "cannonballs"],
+        "CRAFTING": ["leather", "glassblowing", "gems", "pottery", "battlestaves", "spinning"],
+        "FLETCHING": ["logs", "shields", "chisel"]
+      }
+    },
+    "unchainedTalent": {
+      "set": 15,
+      "boost": 8,
+      "skills": ["COOKING", "WOODCUTTING", "FLETCHING", "FISHING", "FIREMAKING", "CRAFTING", "SMITHING", "MINING", "HERBLORE", "AGILITY", "THIEVING", "SLAYER", "FARMING", "RUNECRAFTING", "CONSTRUCTION", "HUNTER"]
+    }
+  },
+
+  "_skillingEffects": "The skilling fragments and Clued In (Wiki /Fragments and each fragment's page), used by plugins/modes/league/FragmentSkilling.LeagueMode.js. Each works with its level's number in the cache (params 1456-1458): Praying Respects' percent of the usual Prayer XP for remains buried or scattered as they drop (NPC drops: ours, the Wiki names no source), Smooth Criminal's percent more pickpocket success (stacking as the gloves of silence do; no stun damage from level `painlessFrom`), Deeper Pockets' and Hot On The Trail's percent chances, Golden Brick Road's coins with a mark of grace, Grave Robber's percent more hallowed marks (the Grand Hallowed Coffin's too: ours), and Clued In's 1-in-N, the least chance of each clue scroll an NPC drops. Hot On The Trail's `logs` are the Wiki's table: the scroll box tier a burnt log gives (logs the league predates give none: ours); logs Slash & Burn burns count too.",
+  "skillingEffects": {
+    "prayingRespects": { "fragment": 10 },
+    "smoothCriminal": { "fragment": 23, "painlessFrom": 2 },
+    "deeperPockets": { "fragment": 24 },
+    "hotOnTheTrail": {
+      "fragment": 27,
+      "logs": {
+        "LOGS": "beginner", "ACHEY_TREE_LOGS": "beginner", "OAK_LOGS": "beginner", "WHITE_LOGS": "beginner",
+        "WILLOW_LOGS": "easy", "TEAK_LOGS": "easy", "GREEN_LOGS": "easy",
+        "MAPLE_LOGS": "medium", "MAHOGANY_LOGS": "medium", "BLUE_LOGS": "medium",
+        "BRUMA_ROOT": "hard", "BRUMA_KINDLING": "hard", "ARCTIC_PINE_LOGS": "hard", "YEW_LOGS": "hard", "PURPLE_LOGS": "hard",
+        "BLISTERWOOD_LOGS": "elite", "MAGIC_LOGS": "elite",
+        "RED_LOGS": "master", "REDWOOD_LOGS": "master"
+      }
+    },
+    "goldenBrickRoad": { "fragment": 45 },
+    "graveRobber": { "fragment": 46, "minigame": "hallowed-sepulchre" },
+    "cluedIn": { "fragment": 49 }
+  },
+
+  "_minigameEffects": "The minigame fragments (Wiki /Fragments and each fragment's page), used by plugins/modes/league/FragmentMinigames.LeagueMode.js. Each level's number in the cache (params 1456-1458: 100/200/300) is the percent more of a minigame's points (`minigame:points`) or chance (`minigame:chance`): x2/x3/x4. `points` names the minigames whose `minigame:points` { player, minigame, points } a fragment raises (the tier passives' event), `chances` the minigame and kind of each find. Rogues' Chompy Farm's chompy kills a kill counts for are only in its level texts (2/3/4). Not here: Barbarian Assault's honour points and the Rogues' Den safe (this server has neither). Fossil Island's fossils here are Hunter's drift nets' and the Volcanic Mine's side finds; numulite is no fossil.",
+  "minigameEffects": {
+    "barbarianPestWars": { "fragment": 51, "points": ["pest-control", "soul-wars"] },
+    "roguesChompyFarm": { "fragment": 52, "points": ["tithe-farm"], "chompyKills": [2, 3, 4] },
+    "mothersMagicFossils": {
+      "fragment": 53,
+      "points": ["mage-training-arena"],
+      "chances": { "motherlode-mine": ["golden-nugget"], "fossil-island": ["fossil"] }
+    }
+  },
+
+  "_sageEffects": "The three sets that give an item (Wiki /Fragments and each set's page), used by plugins/modes/league/FragmentSage.LeagueMode.js. The item is the set struct's param 1471 (the Arcane grimoire, the Crystal of memories, which this cache names Crystal of Echoes, and the Portable waystone). The Wiki says the Sage gives it; here it is handed over when the set becomes active and the character holds none (in the inventory, worn, banked, in its grave or at Death's Office), into the inventory, else the bank, else the floor (ours). Like the Arcane grimoire (Leagues polish), holding the item is the token: it keeps working when the set comes off (the Wiki doesn't say). The Crystal of memories' Teleport-back returns to where the character's last teleport began, unless that was in an instance or `noRecall` (the Wiki's exclusions this server has: Fossil Island's underwater area, Entrana, the rune essence mine, Pyramid Plunder and the Agility Pyramid's upper floors; the boxes are ours). Every teleport counts, the crystal's own too (so a second Teleport-back returns to where the first was used), and home teleports, fairy rings, spirit trees and Wilderness obelisks, which move the player themselves, send the same `teleport:landed`, up to Wilderness level 20 (ours). The Portable waystone teleports to any of the league's twelve waystones (Wiki: Waystone (Shattered Relics League)), not past Wilderness level 20 (Wiki), with the quest a place needs; the Wiki names only the towns, so every tile is this server's (city teleport landings where one exists).",
+  "sageEffects": {
+    "sets": [7, 11, 13],
+    "crystal": { "wildernessLevel": 20 },
+    "noRecall": [
+      { "name": "Fossil Island underwater", "minX": 3712, "maxX": 3839, "minY": 10240, "maxY": 10367, "z": 1 },
+      { "name": "Entrana", "minX": 2798, "maxX": 2878, "minY": 3315, "maxY": 3395, "z": 0 },
+      { "name": "Rune essence mine", "minX": 2880, "maxX": 2943, "minY": 4800, "maxY": 4863 },
+      { "name": "Pyramid Plunder", "minX": 1918, "maxX": 1985, "minY": 4416, "maxY": 4482 },
+      { "name": "Agility Pyramid", "minX": 3354, "maxX": 3378, "minY": 2826, "maxY": 2856, "minZ": 1 },
+      { "name": "Agility Pyramid's top floor", "minX": 3034, "maxX": 3058, "minY": 4686, "maxY": 4709, "z": 2 }
+    ],
+    "waystone": {
+      "wildernessLevel": 20,
+      "places": [
+        { "name": "Al Kharid", "tile": [3293, 3163, 0] },
+        { "name": "Ardougne", "tile": [2661, 3301, 0] },
+        { "name": "Brimhaven", "tile": [2758, 3178, 0] },
+        { "name": "Canifis", "tile": [3494, 3485, 0], "quest": "priest_in_peril", "questName": "Priest in Peril" },
+        { "name": "Catherby", "tile": [2809, 3436, 0] },
+        { "name": "Falador", "tile": [2964, 3378, 0] },
+        { "name": "Ferox Enclave", "tile": [3151, 3636, 0] },
+        { "name": "Rellekka", "tile": [2670, 3632, 0] },
+        { "name": "Kourend", "tile": [1643, 3672, 0] },
+        { "name": "Lumbridge", "tile": [3222, 3218, 0] },
+        { "name": "Prifddinas", "tile": [3239, 6076, 0], "quest": "song_of_the_elves", "questName": "Song of the Elves" },
+        { "name": "Varrock", "tile": [3213, 3424, 0] }
+      ]
+    }
+  },
+
+  "messages": {
+    "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
+    "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",
+    "_needsGodWars": "The Wiki footnotes Nex as requiring every God Wars boss; this wording is this server's.",
+    "needsGodWars": "You need to unlock every God Wars Dungeon general before you can unlock Nex.",
+    "_fragmentFound": "No message is recorded for breaking a fragment; these are this server's.",
+    "_swapAway": "No message is recorded for changing fragments away from a bank or the Sage; this one is this server's.",
+    "swapAway": "You can only change your fragments in a bank, near a bank chest or near the Sage.",
+    "_questsAway": "The launch news's own words for the rule (\"you can only auto-complete quests while in a Bank\"); no in-game message is recorded.",
+    "questsAway": "You can only auto-complete quests while in a bank.",
+    "_sageReceive": "The transcript's action says \"You receive an item from the Sage.\"; this names the item after it. The full-inventory line is this server's.",
+    "sageReceive": "You receive an item from the Sage: {item}.",
+    "sageNothing": "It doesn't look like you need any League items right now. I'll be here if you ever do.",
+    "sageInventoryFull": "You don't have enough inventory space for the Sage's items.",
+    "fragmentFound": "You break the fragment open and find {name}.",
+    "fragmentDuplicate": "You break the fragment open and find {name} again: it gains {xp} experience.",
+    "fragmentsMastered": "You have mastered every fragment this could hold.",
+    "fragmentUsage": "Use ::fragment <id|harvesting|production|skilling|combat|misc> [tier].",
+    "_classNoRoom": "No message is recorded for this; it is this server's.",
+    "classNoRoom": "You need more space in your inventory or bank to accept this class.",
+    "renownGranted": "Granted {amount} Sage's Renown to {name} ({renown} now).",
+    "renownUsage": "Use ::renown <amount> [player].",
+    "notShattered": "{name} is not in Leagues III - Shattered Relics.",
+    "_nestBanked": "The Wiki gives no messages for Homewrecker's banked nests or Catch Of The Day's rare catch; these are this server's.",
+    "nestBanked": "<col=ff0000>A bird's nest falls out of the tree and is sent to your bank.",
+    "rareCatch": "<col=ff0000>You find {item} while fishing.",
+    "_scrollBoxFound": "The Wiki gives no message for Hot On The Trail's scroll box; this is this server's.",
+    "scrollBoxFound": "<col=ef1020>You find a {tier} scroll box in the ashes.",
+    "_sageItem": "The Wiki gives no messages for the Sage's items; these are this server's.",
+    "sageItem": "The Sage's power reaches you: you receive {item}.",
+    "recallNothing": "The crystal holds no memory of a teleport yet.",
+    "recallMemory": "The crystal remembers where your last teleport began.",
+    "recallAutomatic": "The crystal remembers where each teleport begins on its own.",
+    "sageItemBanked": "The Sage's power reaches you: {item} is sent to your bank.",
+    "sageItemFloor": "The Sage's power reaches you: {item} falls to the floor.",
+    "waystoneChoose": "Choose a waystone",
+    "waystoneMore": "More...",
+    "waystoneQuest": "You need to complete {quest} to use that waystone."
+  }
+}

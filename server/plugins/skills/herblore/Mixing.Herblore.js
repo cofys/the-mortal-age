@@ -55,7 +55,7 @@ function makeOne(player, recipe) {
   Common.spam(player, message(recipe));
   Common.addXp(player, recipe.xp);
   Common.api.emitCustomEvent("herblore:made", { player, itemId: mix.productId });
-  Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: mix.productId, amount: 1, xp: recipe.xp });
+  Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: mix.productId, amount: 1, xp: recipe.xp, kind: "mix" });
   return true;
 }
 
@@ -145,11 +145,11 @@ function start(player, recipe, amount) {
 /**
  * The skillmulti menu as captured: "How many do you wish to make?", clientscript 2046's first
  * argument 0, and the most the inventory makes as both the limit and the amount it opens on.
- * With only one to make, it is made at once.
+ * With only one to make, or a manual recipe such as a Sanfew step, it is made at once.
  */
 function offer(player, recipe) {
   const most = makeable(player.getInventory(), recipe);
-  if (most <= 1) {
+  if (recipe.manual || most <= 1) {
     makeOne(player, recipe);
     return;
   }
@@ -164,6 +164,12 @@ function offer(player, recipe) {
 
 function mix(event) {
   const { player, usedItemId, usedWithItemId } = event;
+  const refusal = Common.repeatMessage(usedItemId, usedWithItemId);
+  if (refusal) {
+    event.handled = true;
+    player.sendMessage(refusal);
+    return;
+  }
   const found = Common.recipesWith(usedItemId, usedWithItemId);
   const recipes = found.length > 0 ? found : capeRecipes(player, usedItemId, usedWithItemId);
   if (recipes.length === 0) return;

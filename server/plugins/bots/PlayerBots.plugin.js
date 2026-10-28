@@ -155,7 +155,7 @@ const BOT_CONFIG = Object.freeze({
     loadoutWeights: Object.freeze([
       Object.freeze({ value: "edge_main_melee", weight: 28 }),
       Object.freeze({ value: "edge_ranged_melee", weight: 20 }),
-      Object.freeze({ value: "low_level_pure", weight: 14 }),
+      Object.freeze({ value: "low_level_pure", weight: 42 }),
       Object.freeze({ value: "rune_pure_members", weight: 9 }),
       Object.freeze({ value: "void_pure", weight: 8 }),
       Object.freeze({ value: "edge_void_melee", weight: 10 }),
@@ -173,7 +173,7 @@ const BOT_CONFIG = Object.freeze({
       Object.freeze({ value: "f2p_addy_pure", weight: 7 }),
       Object.freeze({ value: "f2p_mage_pure", weight: 3 }),
       Object.freeze({ value: "f2p_bind_ko", weight: 4 }),
-      Object.freeze({ value: "rusher", weight: 8 }),
+      Object.freeze({ value: "rusher", weight: 32 }),
     ]),
     hotspotWeights: Object.freeze([
       Object.freeze({ value: "edge_ditch", weight: 34 }),

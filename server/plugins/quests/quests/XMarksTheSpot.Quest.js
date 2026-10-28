@@ -163,7 +163,8 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   function recoverVeosRewards(player) {
     const used = mirrorLampState(player);
     const inventory = player.getInventory();
-    if (!used && !ownsItem(player, ANTIQUE_LAMP) && inventory.getFreeSlots() >= 1) {
+    // No lamp to reclaim after a completion without experience (a league quest pack).
+    if (!used && !quest.experienceWithheld(player) && !ownsItem(player, ANTIQUE_LAMP) && inventory.getFreeSlots() >= 1) {
       const before = inventory.getAmount(ANTIQUE_LAMP);
       inventory.adds(ANTIQUE_LAMP, 1);
       if (inventory.getAmount(ANTIQUE_LAMP) <= before) return;

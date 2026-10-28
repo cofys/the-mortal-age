@@ -864,6 +864,10 @@ export class MovementQueue {
         // When not overlapping and already adjacent to a stationary leader,
         // do not re-route; this avoids jittering too close/too far while idle.
         if (followerDistance <= 1 && !leaderMoving && followerDistance !== 0) {
+            if (!RegionManager.canMovestart(this.character.getLocation(), following.getLocation(),
+                this.character.getSize(), this.character.getSize(), this.character.getPrivateArea())) {
+                this.notifyFollowBlocked(following, "blocked-adjacent");
+            }
             return;
         }
 
@@ -884,6 +888,7 @@ export class MovementQueue {
             destination == null ||
             destination.equals(this.character.getLocation())
         ) {
+            if (followerDistance > 1) this.notifyFollowBlocked(following, "no-destination");
             return;
         }
 
@@ -894,7 +899,14 @@ export class MovementQueue {
 
         this.reset();
         this.markBotRepathScheduled(destination, nowMs);
-        PathFinder.calculateWalkRoute(this.character, destination.getX(), destination.getY());
+        const checkpoints = PathFinder.calculateWalkRoute(this.character, destination.getX(), destination.getY());
+        // An alternative route can succeed with zero checkpoints while the
+        // follower is still separated. It will never reach emitPathBlocked.
+        if (checkpoints === 0 && followerDistance > 1) this.notifyFollowBlocked(following, "empty-route");
+    }
+
+    private notifyFollowBlocked(following: Mobile, reason: string): void {
+        PluginManager.emitCustomEvent("movement:follow-blocked", { entity: this.character, following, reason });
     }
 
     private getClosestFollowTile(leader: Mobile): Location | null {

@@ -69,10 +69,12 @@ function successChance(low, high, level) {
   return Math.min(1, Math.max(0, chance));
 }
 
-function rollOre(level, random = Math.random) {
+/** `nuggets` multiplies the golden nugget's chance (a league fragment's). */
+function rollOre(level, random = Math.random, nuggets = 1) {
   for (const ore of ORES) {
     if (ore.low === undefined) return ore;
-    if (level >= ore.level && random() < successChance(ore.low, ore.high, level)) return ore;
+    const chance = successChance(ore.low, ore.high, level) * (ore.item === GOLDEN_NUGGET ? Math.max(1, nuggets) : 1);
+    if (level >= ore.level && random() < chance) return ore;
   }
   return ORES[ORES.length - 1];
 }

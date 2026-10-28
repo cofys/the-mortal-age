@@ -23,6 +23,7 @@ CrystalHalberd.attach({
   onItemAction: (name, actions) => itemActions.set(name, actions),
   onItemOnItem() {},
   onCombatHitResolved() {},
+  emitCustomEvent() {},
 });
 
 function item(id, amount = 1) {

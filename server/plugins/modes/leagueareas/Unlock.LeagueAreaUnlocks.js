@@ -24,8 +24,11 @@ function sendState(player, type) {
  * data no longer gives it) starts at the league home.
  */
 function login({ player, league }) {
+  // LeagueMode sends this event for every league, including those without area unlocks.
+  const rules = Common.league(league);
+  if (!rules) return;
   if (Common.unlocked(player).length === 0) {
-    player.setAttribute(Common.AREAS_ATTRIBUTE, [...Common.league(league).defaults]);
+    player.setAttribute(Common.AREAS_ATTRIBUTE, [...rules.defaults]);
   }
   if (!Regions.isOpenAt(league, player, player.getLocation())) {
     player.moveTo(require("./Enforcement.LeagueAreaUnlocks").home(league, player));

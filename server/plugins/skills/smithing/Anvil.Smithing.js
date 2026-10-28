@@ -97,7 +97,7 @@ function smithOnce(player, product) {
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, product.xp);
   player.sendMessage(`You hammer the ${product.metal} and make ${product.phrase}.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: product.itemId });
-  Common.produced(player, Core.Skill.SMITHING, product.itemId, product.amount, product.xp);
+  Common.produced(player, Core.Skill.SMITHING, product.itemId, product.amount, product.xp, "smith");
   return true;
 }
 

@@ -427,7 +427,8 @@ function complete(player, task) {
     player.sendMessage(fill(FREE_TASK, { streak, tasks: streak === 1 ? "task" : "tasks", more: reward.freeTasks + 1 - totalTasks }));
     return;
   }
-  const points = base * multiplier(streak) * reward.multiplier;
+  // Whole points, as the message shows them: a multiplier may be fractional (a league fragment's +10%).
+  const points = Math.floor(base * multiplier(streak) * reward.multiplier);
   grantPoints(player, points);
   player.sendMessage(fill(POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
 }
@@ -447,7 +448,7 @@ function completeMortimer(player, taskModifier) {
     player.sendMessage(fill(MORTIMER_NO_POINTS, { streak }));
     return;
   }
-  const points = taskModifier.value * taskReward(player, MORTIMER).multiplier;
+  const points = Math.floor(taskModifier.value * taskReward(player, MORTIMER).multiplier);
   grantPoints(player, points);
   player.sendMessage(fill(MORTIMER_POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
 }

@@ -80,6 +80,12 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
 | `league:saved-points` | `{ save } -> { points, tasks }` (an offline league character's save) | LeaguePoints |
 | `league:account-points` | `{ player } -> { leagues, total }` (a main character's league points, by type) | LeagueMode (Records) |
+| `league:award-renown` / `league:spend-renown` | `{ player, amount } -> { awarded }` / `{ spent }` (Shattered Relics' Sage's Renown) | LeagueMode (Shattered) |
+| `league:renown` | `{ player } -> { renown }` | LeagueMode (Shattered) |
+| `league:grant-fragment` | `{ player, id, xp? }` owns a Shattered Relics fragment | LeagueMode (Fragments) |
+| `league:unlock-skill` | `{ player, skill }` unlocks a Shattered Relics skill for free | LeagueMode (Unlocks) |
+| `league:unlocks` | `{ player } -> { skills, bosses, quests }` | LeagueMode (Unlocks) |
+| `league:open-tasks` / `league:open-fragments` / `league:open-unlocks` | `{ player }` from Shattered Relics' side panel | LeagueTasks (#1358) / Fragments / Unlocks |
 | `league:completed-tasks` | `{ player } -> { ids }` | LeaguePoints |
 | `league:complete-task` | `{ player, id } -> { found, completed }` (a catalog task, by id) | LeagueTasks |
 | `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueTasks, LeagueRelics, LeagueAreaUnlocks listen |
@@ -148,7 +154,19 @@ relics are the first askers; nothing changes when nobody answers):
 | `magic:alchemy-policy` (extended) | core `MagicOnItemPacketListener` | asked before the level check (the zone rules still follow it), now with `requiredLevel`, `freeRunes`, `keepItem` and `recast` (cast again on the slot once this cast ends while it holds the same item); a plugin that turns the cast into something else (Mage Training Arena, While Guthix Sleeps) clears `confirm`, `keepItem` and `recast` |
 | `bone-altars:offering` | BoneAltars | `{ player, itemId, boneItemId, cost, anyAltar }`: an item that is not a bone offered as `boneItemId`, `cost` of it an offering, and with `anyAltar` on any altar one prays at (the bone's burying XP; a private area's altars, a house's, stay its own) |
 | `farming:plant-rules` | Farming, as a seed or sapling is planted | `{ player, crop, seedId, patch, keepSeed, grown, diseaseFree, undying, message }`: a line said after the planting's own; keep the seed, grow the crop at once (not anima plants), keep it from disease, or keep a diseased crop from dying (it waits for a cure); the last two are kept on the patch's state |
-| `farming:harvests-per-action`, `farming:pick` | Farming | `{ player, patch, crop, harvests }` picks an action; `{ player, crop, patch, itemId, amount }` before a pick is handed over |
+| `farming:harvests-per-action`, `farming:pick` | Farming | `{ player, patch, crop, harvests }` picks an action; `{ player, crop, patch, itemId, amount, experience, stored }` before a pick is handed over (`experience` is the pick's Farming XP; `stored` what a listener took itself, as the bank) |
+| `skills:produced` (extended) | the production skills | now with `kind` (the loop, as `skills:actions-per-cycle` names it) and, for leather and jewellery, `materials` (`[id, amount]` one product used) |
+| `construction:materials` | Construction, before a build's materials go | `{ player, buildable, materials }`: a listener may lower an amount |
+| `magic:enchant-pieces`, `magic:spell-batch` | the jewellery enchantments; the Lunar crafting spells | `{ player, spellName, itemId, pieces }` pieces a cast enchants, each with its XP; `{ player, spellName, batch }` items a cast converts |
+| `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
+| `minigame:chance` | the Motherlode Mine (`golden-nugget`), Hunter's drift nets and the Volcanic Mine (`fossil-island` `fossil`) | `{ player, minigame, kind, multiplier }`: the find `multiplier` times as likely |
+| `big-chompy-bird-hunting:kill-credit` | Big Chompy Bird Hunting's kill count | `{ player, kills }` a chompy kill counts for |
+| `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
+| `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
+| `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
+| `teleport:landed` | core `TeleportHandler`, as a teleport lands; the home teleport, fairy rings, spirit trees and Wilderness obelisks, which move the player themselves | `{ player, from, fromInstance, to }`: where it began, whether in an instance, and where it landed |
+| `league:fragments-changed` | LeagueMode (Fragments) | `{ player }` after Equip, Unequip or Unequip all changes the fragment slots |
+| `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
 | `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
 | `miscellania:open` (extended), `miscellania:check`, `miscellania:collect` | Managing Miscellania | `{ player, opened }` opens the kingdom's interface; `{ player, handled }` reports the approval and coffers, or collects as Advisor Ghrim's Collect does |
@@ -381,6 +399,232 @@ The Wiki pools every league's points. This server knows one league per account, 
 character played. On this server's NPC spawns only `::leagueshop` reaches the shop: the one Leagues
 Tutor spawned (315, Lumbridge) has neither Trade nor Rewards, and `npc-interactions.json` binds its
 Talk-to to a custom shop, so its conversation never runs.
+
+## Shattered Relics
+
+Leagues III's own screens (`league/Shattered.LeagueMode.js`, `Fragments.LeagueMode.js`,
+`Unlocks.LeagueMode.js`, `Sage.LeagueMode.js`, `NearBank.LeagueMode.js`, data
+`league-shattered.json`). No recording exists (the league ended in
+March 2022, before the captures' rev 223), so every packet is from the cache's scripts and every
+rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (varbit 10032).
+
+- **Side panel (736):** the journal's Leagues tab mounts it instead of 656
+  (`journal.sidePanelByLeague`). It draws points, tasks and Sage's Renown from varps. Its Info
+  button opens the Info panel, Tasks emits `league:open-tasks` for the task list, and Fragments and
+  Unlocks open their screens.
+- **Sage's Renown:** `league:renown`, sent as varp 3276. A task award pays its tier's renown, read
+  from its points (Wiki /Tasks: 5 points pay 1, 25 pay 2, 50 pay 3, 125 pay 4, 250 pay 5). Other
+  amounts pay none. `::renown <amount> [player]` grants it too.
+- **Class choice (737):** at the first login, and every login until chosen. Select sets varp 3345
+  so the client shows that class's confirm panel. Accept unlocks its combat skill (script 5830's
+  varbit), gives its fragment at level 1 and its items. 737 names the items; their amounts are this
+  server's choice. Items that don't fit the inventory go to a bank tab with room; with no room for
+  the whole kit, Accept gives nothing and the class stays unchosen.
+- **Fragments (735):** owned fragments (fragment XP, varbits 13403-13455) and the seven slots
+  (varbits 13395-13399, 13401, 13402) are saved. Slots open at the points enum 4127 gives. Equip
+  puts an owned fragment in the first open empty slot, never twice; Unequip and Unequip all clear
+  them. The screen opens anywhere, but fragments change only in a bank, near a bank chest or near
+  the Sage (Wiki /Fragments): within 8 tiles of a loc with a Bank option (booths, counters, tables;
+  a closed booth has none), a usable bank chest or an NPC with a Bank option (bankers of any name),
+  or of the Sage. The Wiki gives no distances, and no message for elsewhere; both are this
+  server's.
+- **Fragment XP:** each equipped fragment gains 1 XP for any XP gained in an unlocked skill, at
+  most once every 4 ticks (Wiki), through the core `onExperienceGained` hook. Levels 2 and 3 come
+  at 2,000 and 8,000 XP (script 5789), where a fragment stops. A set's tier counts the equipped
+  fragments that list it (enum 4137: 2 or 3 pieces).
+- **Drops:** a skill's XP may turn up its category's Unidentified fragment, the likelier the more
+  XP; a kill may turn up the combat one, by the NPC's hitpoints, carrying the NPC's tier on the
+  item (the Wiki's boss lists; any other NPC tier 1). Break opens it into a fragment not yet
+  mastered whose own item it is (enum 4136 param 1462), for combat of its tier (param 1454) or the
+  nearest with one left: new at level 1, or 500 XP for one already owned (Wiki). The rates are this
+  server's; misc fragments have no listed source, so only `::fragment` gives their item.
+- **Effects (batch 1):** Unholy Warrior / Ranger / Wizard (accuracy at 0 Prayer points),
+  Bottomless Quiver (ammunition and bow charges saved, through the core `combat:ammo-saving`),
+  Arcane Conduit (runes and powered-staff charges), Larger Recharger, Divine Restoration,
+  Venomaster (poison on hit, poison and venom immunity), Slay All Day, and the sets Absolute Unit,
+  Drakan's Touch, Twin Strikes, Double Tap and Chain Magic. Each fragment works with the number
+  its level gives in the cache (params 1456-1458; Venomaster's are poison severities 15/25/35,
+  hitting 3/5/7); the sets' numbers are only in their texts. Venomaster's chance (25%) is this
+  server's, and its immunity stops new poison without curing a running one. The extra rolls are
+  rolled with the hit's own spell, never a special attack, and pay XP like any hit, for no more
+  than the hitpoints left after the damage already queued (none after a killing blow). The per-tick
+  effects run as one task per Shattered Relics character, from login.
+- **Effects (batch 2):** Tactical Duelist (melee weapon charges saved: the scythe of vitur, the
+  crystal halberd and Arclight ask `combat:melee-charge` before spending one), Livin' On A Prayer
+  (the core `registerPrayerDrainRateModifier` scales what active prayers add to the drain counter
+  each tick), Special Discount (the core `registerSpecialEnergyCostModifier`, which every energy
+  check and `CombatSpecial.drain` use; the cache's 500/400/250 are tenths of a percent; the Dragon
+  hasta's Unleash spends all energy, which isn't its cost, so it isn't capped), Thrall
+  Damage (`magic:thrall-max-hit`, asked on each thrall attack), Superior Tracking
+  (`slayer:superior-spawn`; this server reads its text, which names no unlock, as working without
+  Bigger and Badder, but never once superiors are toggled off), Slay 'n' Pay (`slayer:task-reward`'s multiplier,
+  Mortimer's too), the god-armour four, and the sets Fast Metabolism (each Hitpoints regen heals
+  four times as much, through `stats:hitpoints-regen`) and Knife's Edge (every style's max hit, in
+  permille so it stays exact). The god-armour four need four worn items of their god, counted as
+  the God Wars Dungeon counts protection (`godwars:god-items`, so a godsword counts): Bandosian
+  Might adds its number to the melee max hit per tick of the weapon's attack speed, Zamorakian
+  Sight raises magic accuracy, Armadylean Decree raises enchanted bolt chances
+  (`combat:bolt-effect-chance`, after the Kandarin diary and the Armadyl crossbow's special), and
+  Saradominist Defence adds to every style's max hit for 6 ticks after combat damage from an NPC
+  or player lands (poison isn't a hit, so it never counts; nor does a boss's scripted damage that
+  skips the combat hit). Max hit bonuses add before Knife's Edge multiplies. The god-armour count
+  is God Wars' protection count (the Wiki's tables, so god books, symbols and blessings count too);
+  magic specials with a fixed max hit skip both max hit
+  bonuses, as they skip every magic max hit modifier.
+- **Gathering effects** (`league/FragmentGathering.LeagueMode.js`, data `gatheringEffects`): the
+  harvesting fragments, Message In A Bottle, Greedy Gatherer and Personal Banker, through the
+  skills' own events. Chef's Catch cooks a caught fish (`cooking:cooked`), Molten Miner smelts an
+  ore into the bar whose main ore it is (`smithing:bar-for-ore`; coal makes nothing) and Slash &
+  Burn burns a log (`firemaking:log-xp`), each with that skill's XP whatever its level. Greedy
+  Gatherer brings two or three of each Mining, Woodcutting, Fishing and Farming resource with the
+  XP of each, and Personal Banker banks them at 50% or always (then a full inventory gathers on).
+  They compose on one resource: the fragment's change to every piece, the extras, then the bank or
+  the inventory; extras go to an open container (a fish barrel, a log basket) first and fall to the
+  floor when nothing has room (ours). What a container took of the resource itself stays as it was
+  gathered (the containers hear `storage:gather` first), and a changed item the bank has no room
+  for is banked as gathered, without the change's XP. Farming's extras never take the room the pick
+  itself needs; a Fishing Trawler trip is no catch for Catch Of The Day. Farming's harvest (`farming:pick`, now with the pick's `experience` and
+  a `stored` count) is noted and maybe doubled by Certified Farmer; Seedy Business keeps a seed
+  (`farming:plant-rules`); Rock Solid keeps iron, sandstone and granite standing
+  (`mining:deplete-rock`); Homewrecker makes Woodcutting's bird nests 2-4 times likelier and banks
+  them (`woodcutting:nest-chance`, `woodcutting:nest-drop`); Message In A Bottle multiplies the
+  clue nests, geodes and bottles (`treasure-trails:vessel-chance`); Catch Of The Day rolls
+  NpcDrops' rare drop table once (`npc-drops:roll-table`) on a 1-in-N catch; Chinchonkers adds
+  Hunter XP for a chinchompa and two of them at level 3 (`hunter:rewards`). The banked nest and
+  rare catch messages are this server's.
+
+- **Production effects** (`league/FragmentProduction.LeagueMode.js`, data `productionEffects`):
+  the production fragments, The Alchemist, The Craftsman and Unchained Talent. The two
+  all-at-once sets answer `skills:actions-per-cycle` with the inventory (28) for the Wiki's
+  activities only (The Alchemist: cooking, cleaning, mixing; The Craftsman: smelting, smithing,
+  cannonballs, leather, glass, uncut gems, pottery, battlestaves, spinning, fletching logs (bows
+  and shields) and bolt tips). Unchained Talent keeps the non-combat skills 8 over their level, checked every tick
+  (`league:fragment-tick` from the fragment task), and takes the boost off with the set; Sailing,
+  which the league predates, is left out (ours). The fragments hear `skills:produced`, which now
+  carries the loop's `kind` (and `materials` for leather and jewellery): Smithing Double (an anvil's
+  product again with its XP, falling when the inventory is full), Imcando's Apprentice (gemmed
+  jewellery again with its XP, only with room), Dragon On A Bit (dragonhide armour's leather back
+  to the bank), Dine & Dash (another cooked food to the bank, no XP, never untradeable food or in an
+  instance), Profletchional and Just Druid! (more XP for logs and stringing, and for cleaning),
+  Pro Tips (more bolt tips a gem, rounded down: ours). Mixologist answers `herblore:mix` (a potion
+  from an unfinished one with four doses; its secondary kept at the Wiki's 20/50/100%), Rooty Tooty
+  2x Runeys `runecrafting:success` (each rune its chance of another, Guardians of the Rift's altars
+  too), Plank Stretcher `construction:materials` (a build's planks kept: hotspots, staircases and
+  the workbench's flatpacks, through House's `useMaterials`), Enchanted Jeweler
+  `magic:enchant-pieces` (jewellery only, not a quest's enchanted rod or sickle),
+  Rumple-Bow-String `magic:spell-batch` (Spin Flax) and Alchemaniac `magic:alchemy-policy` (High
+  Alchemy only, by the policy's new `high`).
+
+- **Skilling effects** (`league/FragmentSkilling.LeagueMode.js`, data `skillingEffects`): the
+  skilling fragments and Clued In. Praying Respects buries and scatters the remains a kill drops
+  through Prayer's own `prayer:bury` (which now scatters demonic ashes too) at 50/100/200% of their
+  XP, and takes them off the drop (`npc-drops:roll`; NPC drops only: ours), leaving remains above
+  the player's Prayer level and the long and curved bones kept for Construction (ours). Smooth Criminal raises
+  Thieving's own pickpocket chance by its percent, stacking as the gloves of silence do, and from
+  level 2 stuns without the damage (`chanceBonus` and `painless` on `thieving:pickpocket-target`).
+  Deeper Pockets doubles the loot through `thieving:loot`'s new `multiplier`, which Thieving's
+  own handover multiplies with the rogue outfit's (a pouch's coins come directly; a clue never twice). Hot On The Trail gives
+  the Wiki's tier of scroll box for the log lit (`firemaking:success`, and `league:log-burnt` for
+  Slash & Burn's logs) while the clue capacity allows another (`treasure-trails:can-receive`); logs
+  the league predates give none (ours), and Wintertodt's bruma roots and kindling, fed to its
+  brazier rather than lit, never do here. Golden Brick Road puts its coins beside a mark of grace
+  (`agility:mark`). Grave Robber raises a coffin's hallowed marks, the Grand Hallowed Coffin's too
+  (ours), through the minigames' `minigame:points` (tier passives, below); a part mark is that chance of a whole one. Clued In makes each clue scroll an NPC drops
+  at least 1 in 30/25/15 (`npc-drops:tertiary-chance`). The scroll box message is this server's.
+
+- **Minigame effects** (`league/FragmentMinigames.LeagueMode.js`, data `minigameEffects`):
+  Barbarian Pest Wars (Pest Control's commendation points and Soul Wars' zeal tokens), Rogues'
+  Chompy Farm (the Tithe Farm's points; a chompy kill counted 2-4 times on the ogre bow's count)
+  and Mother's Magic Fossils (the Mage Training Arena's pizazz points earned in its rooms; the
+  Motherlode Mine's golden nuggets and Fossil Island's unidentified fossils, from drift nets and
+  the Volcanic Mine, likelier) pay x2/x3/x4, through the
+  minigames' `minigame:points` (tier passives, below) and new `minigame:chance`, and the quest's
+  `big-chompy-bird-hunting:kill-credit`.
+- **The Sage's items** (`league/FragmentSage.LeagueMode.js`, data `sageEffects`): Endless
+  Knowledge, Last Recall and Trailblazer give the item their set struct names (param 1471: the
+  Arcane grimoire, the Crystal of memories, which this cache calls Crystal of Echoes, and the
+  Portable waystone), handed over when the set becomes active (`league:fragments-changed`, from the
+  fragments screen, and at login) to a character holding none (in the inventory, worn, banked
+  rather than a placeholder, in its grave or at Death's Office), into the inventory, else the bank,
+  else the floor; the Wiki has the Sage give it (ours). As with the grimoire's own unit (Leagues polish), holding it is
+  the token, so it keeps working when the set comes off. The crystal's Teleport-back returns to
+  where the character's last teleport began, from the core's new `teleport:landed` (`from`,
+  `fromInstance`), unless that was in an instance, Fossil Island's underwater area, Entrana, the
+  rune essence mine, Pyramid Plunder or the Agility Pyramid's upper floors (the Wiki's exclusions
+  this server has; boxes ours), up to Wilderness level 20 (ours); Check-memories says whether one
+  is kept, and Save-memory that it keeps itself. Every teleport counts, the crystal's own too, so a
+  second Teleport-back returns to where the first was used. Home teleports, fairy rings, spirit
+  trees and Wilderness obelisks move the player themselves and send the same event. The waystone's Teleport lists the league's twelve
+  waystones in pages, not past Wilderness level 20, Canifis needing Priest in Peril and Prifddinas
+  Song of the Elves; the tiles are this server's (the Wiki names only the towns).
+
+- **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
+  skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
+  now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
+  unlocked. Buying a pack unlocks its prerequisites. Defence, Fishing and Thieving start unlocked.
+  Nex can be bought only once every God Wars general is unlocked.
+- **Quest packs:** bought only in a bank (the launch news: "you can only auto-complete quests while
+  in a Bank"; the same check as the fragments', `NearBank.LeagueMode.js`, before any renown is
+  spent; the message is the news's wording). Buying one completes the quests the Wiki's /Unlocks
+  table lists for it (main and additional quests) and for its prerequisite packs, each through its
+  own `quest.complete` (quest points, final rewards, the message, `quest:completed`), prerequisites
+  first. The Wiki: "Auto-completing quests will not grant the experience", so `complete(player, {
+  experience: false, scroll: false })`: no XP lands while they complete, a reward's later XP prompt
+  is held back (The Fremennik Isles reads the option), and the rewards that are XP in an item (the
+  lamps and Tomes of Experience in `experienceItems`, found by completing every pack) are taken
+  back. The quest runtime saves which quests were completed so (`quest.experienceWithheld`, the
+  attribute `quest.experience-withheld`), and their post-quest XP claims pay nothing: Ellen's
+  training (Dragon Slayer II), Daero's (Monkey Madness I; the Wiki: "No post-quest XP from Daero"),
+  Lydia's lamps (A Kingdom Divided), Veos's lamp (X Marks the Spot) and Ivan's tome (Sins of the
+  Father). There is no jingle or scroll per quest, so the unlocks screen stays open. Each quest
+  runs against an empty inventory; the character's own comes back, and the rewards go into it,
+  then the bank (counting what the bank really takes: a full bank or a capped stack takes less),
+  and what neither takes is dropped at the character's feet, as a quest reward past a full
+  inventory is (`forceAdd`). The other final rewards stay (Plague City's Ardougne teleport scroll,
+  Monkey Madness II's royal seed pod, Roving Elves' crystal bow, Drakan's medallion). A quest that
+  fails to complete is logged and the rest go on. Names this server registers no quest for are
+  skipped: Recipe for Disaster's subquests (its plugin keeps them internally, with no completion
+  API) and the miniquests (Alfred Grimhand's Barcrawl, Enter the Abyss, The Frozen Door,
+  Architectural Alliance). The packs' other content (Kourend favour, the Camelot training room's
+  waves, Troll III's fire pits) isn't given.
+- **The Sage (NPC 11232):** a world running Shattered Relics spawns it at Catherby (2774, 3433,
+  the Wiki's map; the main world's spawns don't have it). Talk-to plays its transcript. Its "Do I
+  have any League items to collect?" (the transcript's two conditions and its "You receive an item
+  from the Sage." action) and Collect-items hand over what the unlocked packs let a character
+  claim (Wiki /Unlocks): Gnome I the Karamjan monkey greegree, Elf I Iban's staff, Elf II a new
+  crystal bow or shield (a menu), Morytania II Drakan's medallion, Fairy I magic secateurs and a
+  Dramen staff, Heroes ice gloves. Only what the character owns none of, carried, worn or banked
+  (a bank placeholder doesn't count): a lost one can be collected again, as the transcript's "I'll
+  be here if you ever do" has it, and one a quest's own reward already gave (Drakan's medallion,
+  Roving Elves' crystal bow or shield) isn't given twice. Collecting again after alching or
+  selling one works too (Iban's staff alchs for 25,500); live's rule there isn't recorded.
+  Check-pets and the transcript's "League Intro cutscene replays." do nothing.
+- **Intro cutscene (734):** not built, because the cache can't drive it. 734 is a layer of static
+  models (43335, five of 43342, 43334), an empty text, a rectangle and a Mute / Unmute Music
+  toggle (scripts 5836-5838, which only set game option 7 and swap the two buttons). No script
+  animates or moves the models except 5835, which nothing in the cache calls and which only places
+  734:12 and turns 734:5 once; no script reads `league_3_has_seen_cutscene` (varbit 13488). The
+  sequence (the River of Souls, the Sage's lines, model animations and camera) was the server's,
+  and no recording of it exists, so playing it would mean inventing it.
+- **Locks:** a locked skill gives no XP, and a locked boss can't be attacked, by the player or its
+  thrall (its NPC names are in the data, raids by their final boss). Kraken's Disturb and Vorkath's
+  Poke ask `league:boss-locked` before waking them. Wintertodt and Tempoross aren't attacked, so
+  their locks aren't enforced, and instance entries (Zulrah, the Gauntlet, raids) aren't refused,
+  only the fights inside. The Wiki gives no message for either lock; the boss one is this
+  server's, said once per boss every few seconds.
+
+Not yet: Barbarian Assault's honour points and the Rogues' Den safe, which this server
+doesn't have; Rune Escape, which needs the Ourania Altar this server doesn't have; Plank
+Stretcher outside a house build, as Mahogany Homes; the ranged weapons' own charges, which
+no hook reports; the league's waystone objects themselves (only the portable one's teleports
+are here); The Alchemist's jugs of wine (no wine making here). Fishing has no clue bottles of
+its own, so Message In A Bottle reaches only Hunter's aerial fishing and drift nets for bottles.
+Fragments change only through Equip (dragging one into a slot isn't handled); the Display
+Fragments toggle (varbit 12383) is the client's own. The intro cutscene (734) has no recording
+or client driver, so it isn't played. Unlocking Herblore doesn't yet complete Druidic Ritual
+and set the skill to 174 XP (Wiki /Unlocks footnote); the Sage's Check-pets remains unimplemented.
+A quest the character had started keeps its quest items when a pack completes it.
+
 
 ## Relics
 
@@ -793,7 +1037,7 @@ open). Each item remembers its last destination. The menus' grouping and wording
 - **Grimoire** (Raging Echoes tier 7): spells' area, quest and diary requirements are lifted
   (`magic:spell-unlocked`; here the Mage Arena's god spells without their 100 casts); the Prayer
   level still counts, and no prayer here is gated by a quest. The Arcane grimoire's spellbook
-  swap is the item's own plugin (Leagues polish).
+  swap is the item's own plugin (above).
 - **Reloaded** (Raging Echoes tier 4): one more relic of tiers 1-3, a different one from that
   tier's own pick, chosen with the same click on it (`league:relics-extra`; any item it hands out
   is given). The relic interface shows only each tier's own pick: ours.
@@ -869,7 +1113,8 @@ Tier 1 counts once the character chose its first relic.
 Left out, with why: Raging Echoes' clue-step progress saved between clues (the trail runtime has
 no per-step save to carry across scrolls); Raging Echoes' one-minute farming ticks (Farming's
 growth model has no tick-length seam, and Farming is under active work elsewhere); the
-Trailblazer Reloaded ironman restriction and the crystal of memories (not in this cache).
+crystal of memories (not in this cache). The ironman restriction is under "The league character"
+above: every league character is a standard Ironman.
 
 ## The league tutorial
 
@@ -902,8 +1147,10 @@ sent `league_tutorial_completed` 10037 = 12 (finished) at login until it exists.
   item box; 11->12 "End Tutorial" (677:8), which awards "Complete the Leagues Tutorial" (+10), sets
   `orbs_disabled` back to 0 and closes 677 then 653. "Exit Leagues" (677:8 at stage 0) was never
   pressed in a recording.
-- **What it waits on:** the task list (657) and the area interface (512) with their walkthroughs,
-  and the tasks it awards; a tutorial that starts but cannot be finished is worse than none. A
+- **What it waits on:** the task list (657) and the tasks it awards (league tasks, #1358), and
+  the walkthroughs over the task list and the area interface (512, LeagueAreaUnlocks); a tutorial
+  that starts but cannot be finished is worse than none. Its guided first unlock is the area
+  plugin's "Not covered" item. A
   new league character also skips Tutorial Island on live; this server sends every new account
   there.
 
@@ -1152,20 +1399,20 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   point through the real path (the only way to the Echo boss challenges here).
 - `::areas [id or name]` - list your areas, the next unlock and the area you stand in, or unlock
   one through the usual checks (`::area` is AdminCommands' Area-class debug).
+- `::renown <amount> [player]` - grant Shattered Relics' Sage's Renown.
 
 ## Not yet
 
-Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier passives left out
-above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
-ask about, Shattered
-Relics' own panels. Each is its own item on the
-progress tracker.
+Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier
+passives left out above (clue-step progress and farming ticks), the boosted sources their own
+plugins have yet to ask about, and Shattered Relics' rules (see its section). Each is its own item
+on the progress tracker.
 Of the relics, Overgrown's automatic harvest and replanting and Pocket Kingdom's hourly cycle are
 their own items, as are the relics this cache cannot carry (Not in this cache, above).
 
-The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
-the house's league hall, which this server doesn't build yet, so the scroll's options answer
-only where the loc exists.
+The records have no POH league hall to stand in: its trophy case, pedestals and scroll need the
+house's league hall, which this server doesn't build yet, so the scroll's options answer only where
+the loc exists.
 
 The cache's "League Skill Cape Shop" (652) is not a shop: its only script (3201) creates 22 tiny
 cape items and prints "Loading: <cape>" for each, a model preloader. Nothing sells through it, and

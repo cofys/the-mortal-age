@@ -26,15 +26,32 @@ class FarmingSpell extends core.Spell {
         return true;
     }
 }
+function curePlantRefusal(patch, state) {
+    if (patch.type.includes("COMPOST")) return "Bins don't often get diseased.";
+    if (state.status === "dead") return "It says 'Cure' not 'Resurrect'. Although death may arise from disease, it is not in itself a disease and hence cannot be cured. So there.";
+    if (state.status === "grown") return "That's not diseased.";
+    if (!state.crop) return state.weeds ? "The weeds are healthy enough already." : "There's nothing there to cure.";
+    if (state.status !== "diseased") return "It's growing just fine.";
+    return null;
+}
 function farmingSpell(event, patch) {
     const key = core.CacheDefinitions.getSpellName(event.spellWidget, event.spellItemId)?.toLowerCase();
     if (!SPELLS[key] || key === "geomancy") return;
     event.handled = true;
     const { player } = event;
+    if (!patch) {
+        if (key !== "cure plant") { event.handled = false; return; }
+        player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(
+            new core.PlayerDialogue(0, "Umm... this spell won't cure that!")));
+        return;
+    }
     Model.advanceFarm(Patches.farmFor(player), Date.now());
     const state = Patches.stateFor(player, patch);
+    if (key === "cure plant") {
+        const refusal = curePlantRefusal(patch, state);
+        if (refusal) { player.sendMessage(refusal); return; }
+    }
     if (patch.type.includes("COMPOST") || patch.type === "ANIMA") { player.sendMessage("That spell cannot affect this patch."); return; }
-    if (key === "cure plant" && state.status !== "diseased") { player.sendMessage("The plant is not diseased."); return; }
     if (key === "fertile soil" && state.status === "grown") {
         player.sendMessage("Composting it isn't going to make it any bigger."); return;
     }
@@ -43,7 +60,9 @@ function farmingSpell(event, patch) {
     }
     if (key === "resurrect crops" && (state.status !== "dead" || state.resurrected || ["REDWOOD", "HESPORI"].includes(patch.type))) { player.sendMessage("You cannot resurrect this crop."); return; }
     if (!new FarmingSpell(key, event.spellId).cast(player)) return;
-    if (key === "cure plant") Patches.cure(player, patch, false);
+    if (key === "cure plant") {
+        if (Patches.cure(player, patch, false)) Patches.award(player, 91.5, patch);
+    }
     else if (key === "fertile soil") {
         const ultra = (Patches.farmFor(player).ultraFertile || player.getPacketSender().getVarbit(5960) > 0) && player.getInventory().getAmount(Data.itemId("Volcanic ash")) >= 2;
         if (ultra) player.getInventory().deleteNumber(Data.itemId("Volcanic ash"), 2);

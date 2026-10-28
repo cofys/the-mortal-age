@@ -39,7 +39,7 @@ function makeStaff(player, recipe) {
   inventory.deleteNumber(I.BATTLESTAFF, 1);
   inventory.addItem(new Item(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
-  Shared.produced(player, recipe.itemId, 1, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp, "battlestaves");
   return true;
 }
 

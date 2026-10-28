@@ -111,8 +111,9 @@ function recoverSlot(player, dock, slot) {
   castRecovery(player, dock);
 }
 
-function recoverBoat({ player, npc }) {
-  const name = npc.getDefinition?.()?.getName?.() ?? "";
+function recoverBoat({ player, npc, definition }) {
+  // The resolved form's name: the spawned parent (14972) is nameless, its varbit form is Junior Jim.
+  const name = (definition ?? npc.getCurrentDefinition?.(player))?.getName?.() ?? "";
   const dock = content().docks.find((candidate) => candidate.shipwright === name);
   if (!dock) return false;
   openBoatSelection(player, MODE.RECOVER, dock, (slot) => recoverSlot(player, dock, slot));

@@ -248,17 +248,29 @@ function fireHostileCannon(ship, target) {
       if (target.player.getIndex() !== target.boat.ownerPlayerId) return;
       if (coreApi().BoatManager.getBoatAboard(target.player) !== target.boat) return;
       if (coreApi().Sailing.instanceAboard(target.player) !== target.boat) return;
-      const owned = coreApi().Sailing.activeBoat(target.player);
-      if (!owned) return;
-      owned.hitpoints = Math.max(0, owned.hitpoints - ENEMY_DAMAGE);
-      target.player.getPacketSender().sendVarbit(PLAYER_BOAT_HP_VARBIT, owned.hitpoints);
-      target.player.getPacketSender().sendVarbit(PLAYER_BOAT_STORED_HP_VARBIT + owned.slot, owned.hitpoints);
-      coreApi().PluginManager.emitCustomEvent("sailing:ship-attacked", {
-        player: target.player, ship, target: target.boat, damage: ENEMY_DAMAGE, hitpoints: owned.hitpoints,
-      });
-      if (owned.hitpoints <= 0) coreApi().Sailing.escape(target.player);
+      damagePlayerBoat(target.player, ENEMY_DAMAGE, { ship, target: target.boat });
     }
   })());
+}
+
+/**
+ * Damages the player's own boat (a hostile ship's shot, a Barracuda Trial's lightning): its HP and
+ * the HP varbits, `sailing:ship-attacked`, and at 0 the escape to land.
+ */
+function damagePlayerBoat(player, damage, { ship, target } = {}) {
+  const owned = coreApi().Sailing.activeBoat(player);
+  if (!owned) return undefined;
+  // Hitpoints are the parts' maximum less the damage taken (a new or recovered boat is whole).
+  const max = require("./BoatParts.Sailing").boatStats(owned).hitpoints;
+  owned.damage = Math.min(max, (owned.damage ?? 0) + damage);
+  owned.hitpoints = Math.max(0, max - owned.damage);
+  player.getPacketSender().sendVarbit(PLAYER_BOAT_HP_VARBIT, owned.hitpoints);
+  player.getPacketSender().sendVarbit(PLAYER_BOAT_STORED_HP_VARBIT + owned.slot, owned.hitpoints);
+  coreApi().PluginManager.emitCustomEvent("sailing:ship-attacked", {
+    player, ship, target: target ?? coreApi().Sailing.instanceAboard(player), damage, hitpoints: owned.hitpoints,
+  });
+  if (owned.hitpoints <= 0) coreApi().Sailing.escape(player);
+  return owned.hitpoints;
 }
 
 function tickHostileShips() {
@@ -284,6 +296,7 @@ module.exports = {
   name: "SailingShipCombat",
   members: true,
   attach,
+  damagePlayerBoat,
   register(api) {
     initialize(api);
     api.onObjectInteraction(operateCannon);

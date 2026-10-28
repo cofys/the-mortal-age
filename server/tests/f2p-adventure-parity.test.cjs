@@ -62,6 +62,8 @@ function player() {
   let location = new core.Location(3210, 3220, 0), area = null;
   const inv = { getAmount: id => items.get(id) ?? 0, isFull: () => Boolean(p.full), getFreeSlots: () => p.full ? 0 : 28, contains: id => (items.get(id)??0)>0,
     adds(id, amount) { items.set(id, (items.get(id) ?? 0) + amount); },
+    getAddableAmount(item) { return item.getAmount(); },
+    add(item) { this.adds(item.getId(), item.getAmount()); },
     deleteNumber(id, amount) { assert.ok((items.get(id) ?? 0) >= amount); items.set(id, items.get(id) - amount); },
   };
   const packet = new Proxy({

@@ -15,6 +15,10 @@ const SHARK_PAINT = 32090;
 const SHARK_PAINT_CHANCE = 1 / 36;
 
 const HANDS_FULL = "You cannot pick up any cargo as your hands are full.";
+const CREW_HELP = ", but your crew can help with that.";
+const CREW_DROP_OFF = "Your crew drop off the cargo that needed to be delivered here.";
+/** Crate counts in the boxes, spelt out (rsprox: "There are two more crates of this type to collect"). */
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 const NO_CARGO = "There is no cargo available for you to collect here.";
 const LAST_SLOT_ATTRIBUTE = "port-tasks:last-slot";
 
@@ -32,14 +36,18 @@ function moreToGo(left, verb) {
   if (left <= 0) return "";
   return left === 1
     ? ` There is one more crate of this type to ${verb}.`
-    : ` There are ${left} more crates of this type to ${verb}.`;
+    : ` There are ${NUMBER_WORDS[left] ?? left} more crates of this type to ${verb}.`;
 }
 
-/** The held tasks with a crate still to collect at this dock, as [slot index, slot, task]. */
+/**
+ * The held tasks with a crate still to collect at this dock, as [slot index, slot, task]. Crates
+ * the crew are carrying count as collected.
+ */
 function collectable(player, dockId) {
   return common.slots(player)
     .map((slot, i) => [i, slot, slot && common.taskById(slot.id)])
-    .filter(([, slot, task]) => task?.type === "courier" && task.cargoPort === dockId && slot.taken < task.amount);
+    .filter(([i, slot, task]) => task?.type === "courier" && task.cargoPort === dockId
+      && slot.taken + common.crewAmount(player, i) < task.amount);
 }
 
 function takeCargo(player, location, preferLast) {
@@ -62,7 +70,13 @@ function takeCargo(player, location, preferLast) {
   player.performAnimation(new (common.core().Animation)(SEQ_PICKUP));
   player.getPacketSender().sendSoundEffect(SOUND_PICKUP, 1, 15);
   common.carry(player, task.crate, index);
-  itemBox(player, task.crate, `You pick up a ${common.crateName(task.crate)}.${moreToGo(task.amount - held[index].taken, "collect")}`);
+  // Crewmates with the boat docked here carry what's left (crew/Courier.Crew.js sets `helped`).
+  const left = task.amount - held[index].taken - common.crewAmount(player, index);
+  const pickup = { player, index, task, dock, left, helped: 0 };
+  common.core().PluginManager.emitCustomEvent("port-tasks:cargo-taken", pickup);
+  const more = moreToGo(left, "collect");
+  const text = pickup.helped > 0 && more ? `${more.slice(0, -1)}${CREW_HELP}` : more;
+  itemBox(player, task.crate, `You pick up a ${common.crateName(task.crate)}.${text}`);
 }
 
 function takeCargoOp({ player, location }) {
@@ -130,6 +144,14 @@ function depositCargo({ player, location }) {
     return;
   }
   const task = common.taskById(held[index].id);
+  // The crew hand theirs in first (rsprox: delivered 0 -> 3, then the player's crate).
+  const crew = common.crewCargo(player)[index];
+  if (crew?.crate === crate && crew.amount > 0) {
+    held[index] = { ...held[index], delivered: held[index].delivered + crew.amount };
+    common.setCrewCargo(player, index, null);
+    common.core().PluginManager.emitCustomEvent("port-tasks:crew-delivered", { player, index, ...crew });
+    player.sendMessage(CREW_DROP_OFF);
+  }
   held[index] = { ...held[index], delivered: held[index].delivered + 1 };
   common.putDown(player);
   if (held[index].delivered < task.amount) {
@@ -156,3 +178,4 @@ module.exports = attach;
 module.exports.rewardBag = rewardBag;
 module.exports.complete = complete;
 module.exports.collectable = collectable;
+module.exports.moreToGo = moreToGo;

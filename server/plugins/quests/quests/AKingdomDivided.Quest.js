@@ -1169,6 +1169,8 @@ module.exports = function registerAKingdomDividedQuest(api) {
     if (!held(player, BOOK_OF_THE_DEAD_ITEM_ID)) {
       give(player, BOOK_OF_THE_DEAD_ITEM_ID, 1, "Lydia gives you the Book of the Dead.");
     }
+    // A quest completed without experience (a league quest pack) has no lamps to claim.
+    if (quest.experienceWithheld(player)) return;
     // Lamps can be destroyed and reclaimed until they have been rubbed (wiki), so
     // the claim count is rubbed lamps plus any still carried.
     let claimed = countAttribute(player, LAMPS_ATTRIBUTE) + player.getInventory().getAmount(ANTIQUE_LAMP_ITEM_ID);

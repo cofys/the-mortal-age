@@ -235,6 +235,12 @@ function setRespawns() {
   }
 }
 
+/** "godwars:god-items" { player, god, count }: how many worn items are the god's ("bandos", "armadyl", "saradomin", "zamorak"). */
+function godItemsQuery(request) {
+  const faction = Common.factionByKey(String(request?.god ?? ""));
+  if (request?.player && faction?.protection) request.count = Common.godItemCount(request.player, faction);
+}
+
 function attachDungeon(api) {
   const { entrance } = Common.data;
   for (const faction of Common.factions) api.persistAttribute(Common.killsAttribute(faction.key), 0);
@@ -248,6 +254,7 @@ function attachDungeon(api) {
   api.onObjectFirstClick(entrance.rope, climbUp);
   api.onNpcDeath(creditKill);
   api.onPlayerLogin(syncOnLogin);
+  api.onCustomEvent("godwars:god-items", godItemsQuery);
   api.registerCommand("essence", essenceCommand, Common.core.PlayerRights.ADMINISTRATOR, "Set God Wars essence: ::essence [amount] [god]");
 }
 

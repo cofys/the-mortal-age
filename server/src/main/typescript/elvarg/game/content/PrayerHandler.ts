@@ -1,5 +1,6 @@
 import { Dueling, DuelRule } from "./Duelling";
 import { CombatType } from "./combat/CombatType";
+import { applyPrayerDrainRateModifiers } from "./combat/EquipmentEffects";
 import { Mobile } from "../entity/impl/Mobile";
 import { NPC } from "../entity/impl/npc/NPC";
 import { Player } from "../entity/impl/player/Player";
@@ -449,8 +450,10 @@ export class PrayerHandler {
         const bonus = player.getBonusManager().getOtherBonus()[BonusManager.PRAYER];
         const drainResistance = Math.max(1, 60 + (bonus * 2));
 
-        pointDrain += drainEffect;
-        const drainTreshold = Math.floor(pointDrain / drainResistance);
+        // Plugins may slow the drain (a league fragment); the counter keeps any fraction.
+        pointDrain += applyPrayerDrainRateModifiers(player, drainEffect);
+        // A modified rate is fractional (20.4) and sums with float error; the epsilon keeps 100 x 20.4 at 2,040.
+        const drainTreshold = Math.floor(pointDrain / drainResistance + 1e-9);
         if (drainTreshold >= 1) {
             const total = player.getSkillManager().getCurrentLevel(Skill.PRAYER) - drainTreshold;
             player.getSkillManager().setCurrentLevel(Skill.PRAYER, total, true);

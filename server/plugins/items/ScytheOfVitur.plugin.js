@@ -89,9 +89,10 @@ function consumeSwingCharge(player, hits) {
   if (!dealtDamage) {
     return;
   }
-  // Content may spare the charge (a league relic): the question every charged weapon asks.
+  // Content may spare the charge (a league fragment): the same question every melee weapon with charges asks.
   const consume = { player, itemId: item.getId(), skip: false };
-  pluginApi.emitCustomEvent("combat:consume-charge", consume);
+  pluginApi?.emitCustomEvent("combat:melee-charge", consume);
+  pluginApi?.emitCustomEvent("combat:consume-charge", consume);
   if (consume.skip) {
     return;
   }

@@ -84,7 +84,7 @@ export class Sailing {
         let slot = 0;
         while (state.boats.some((boat) => boat.slot === slot)) slot++;
         const boat: OwnedBoat = {
-            slot, type, name, hitpoints: 0, facilities: [],
+            slot, type, name, hitpoints: 0, damage: 0, facilities: [],
             location: { kind: "docked", dock: dockId },
             cargo: [],
             parts: baseParts(),
@@ -202,6 +202,7 @@ export class Sailing {
         if (refusal) return refusal;
         const boat = player.getSailing().boats.find((candidate) => candidate.slot === slot)!;
         boat.location = { kind: "docked", dock: dockId };
+        boat.damage = 0;
         return null;
     }
 

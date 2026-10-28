@@ -73,9 +73,11 @@ export abstract class Spell {
         ) === true) {
             return [];
         }
-        return items.filter((item) => item != null && PluginManager.emitSpellRuneBypass(
+        const cost = { player, spell: this, items: items.filter((item) => item != null && PluginManager.emitSpellRuneBypass(
             player, this.getSpellbook(), this.spellId(), item.id
-        ) !== true);
+        ) !== true) };
+        PluginManager.emitCustomEvent("magic:spell-cost", cost);
+        return cost.items;
     }
 
     /** The part of `items` the inventory cannot fully supply, aggregated per item. */

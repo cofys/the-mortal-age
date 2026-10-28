@@ -42,8 +42,17 @@ function enchant(player, spell, itemId) {
   player.performAnimation(new core.Animation(look.animation));
   player.performGraphic(new core.Graphic(look.graphic, 0, core.GraphicHeight.HIGH));
   player.getPacketSender().sendSound(look.sound);
-  inventory.setItem(slot, new core.Item(recipe.resultId, 1)).refreshItems();
-  player.getSkillManager().addExperiences(core.Skill.MAGIC, spell.baseExperience());
+  // Content may enchant more than one piece a cast ("magic:enchant-pieces", a league fragment), each with its XP.
+  const pieces = { player, spellName: spell.data.name, itemId, pieces: 1 };
+  pluginApi.emitCustomEvent("magic:enchant-pieces", pieces);
+  const count = Math.max(1, Math.min(inventory.getAmount(itemId), pieces.pieces | 0));
+  for (let piece = 0; piece < count; piece++) {
+    const at = piece === 0 ? slot : inventory.getItems().findIndex((item) => item?.getId() === itemId);
+    if (at < 0) break;
+    inventory.setItem(at, new core.Item(recipe.resultId, 1));
+    player.getSkillManager().addExperiences(core.Skill.MAGIC, spell.baseExperience());
+  }
+  inventory.refreshItems();
   pluginApi.emitCustomEvent("magic:enchanted", { player, spellName: spell.data.name, itemId, productId: recipe.resultId });
   pluginApi.emitCustomEvent("magic:enchant-item-cast", recipe);
   if (recipe.message) player.sendMessage(recipe.message);

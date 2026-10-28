@@ -1009,6 +1009,8 @@ module.exports = function registerPandemoniumQuest(api) {
     scene.headingTicks = VOYAGE_HEADING_RUNS[0][1];
     scene.boat.heading = VOYAGE_HEADING_RUNS[0][0] * 128;
     scene.boat.moveMode = sailingContent.MOVE_MODE.HALF;
+    // Under way at once: the route was worked out at half-sail speed from its first tick.
+    scene.boat.velocity = scene.boat.baseSpeed / 2;
   }
 
   /**
@@ -1050,6 +1052,7 @@ module.exports = function registerPandemoniumQuest(api) {
   function arriveAtWreck(player, scene) {
     scene.arrived = true;
     scene.boat.moveMode = sailingContent.MOVE_MODE.STOPPED;
+    scene.boat.velocity = 0;
     addWreckLocs(scene);
     Scenes.fade(player, true);
     Scenes.later(player, 1, () => {

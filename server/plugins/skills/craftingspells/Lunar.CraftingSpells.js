@@ -12,6 +12,7 @@ const { DATA, itemId, runes } = require("./Data.CraftingSpells");
 const LUNAR = DATA.lunar;
 
 let core = null;
+let pluginApi = null;
 let spells = null;
 
 /** Spell name (lower case) -> spell, built on first use. */
@@ -21,6 +22,7 @@ function lunarSpells() {
   class LunarCraftingSpell extends core.Spell {
     constructor(name, data) {
       super();
+      this.name = name;
       this.data = data;
       this.members = true;
       this.runeItems = runes(core, data.runes);
@@ -44,10 +46,14 @@ function lunarSpells() {
 /** Converts up to `batch` of the spell's inputs; the number converted. */
 function convert(player, spell) {
   const conversions = new Map(spell.data.conversions.map(([from, to]) => [itemId(core, from), itemId(core, to)]));
+  // Content may convert more a cast ("magic:spell-batch", a league fragment's Spin Flax).
+  const request = { player, spellName: spell.name, batch: spell.data.batch };
+  pluginApi?.emitCustomEvent("magic:spell-batch", request);
+  const batch = Number.isSafeInteger(request.batch) && request.batch > 0 ? request.batch : spell.data.batch;
   let converted = 0;
   for (const item of player.getInventory().getValidItems()) {
     const result = conversions.get(item.getId());
-    if (result === undefined || converted >= spell.data.batch) continue;
+    if (result === undefined || converted >= batch) continue;
     item.setId(result);
     converted++;
   }
@@ -123,5 +129,6 @@ function castLunarCraftingSpell(event) {
 
 module.exports = function attach(api) {
   core = api.core;
+  pluginApi = api;
   api.onSpellCast(castLunarCraftingSpell);
 };

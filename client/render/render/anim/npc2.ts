@@ -482,6 +482,9 @@ export function isNpcAnimationSmoothed(host: WebGLOsrsRendererHost, ecsId: numbe
     if (!host.osrsClient.clientPlugins.smoothsNpcs()) return false;
     if (!host.dynamicNpcAnimLoader?.isReady()) return false;
     const ecs = host.osrsClient.npcEcs;
+    // The smoothed (unbatched) draw places NPCs by their map square, which a deck NPC isn't on:
+    // NPCs aboard a boat keep the deck pass, whose dynamic poses carry the deck's transform.
+    if ((ecs.getWorldViewId?.(ecsId) ?? -1) >= 0) return false;
     const actionId = ecs.getSeqId(ecsId);
     const action = actionId >= 0 && ecs.getSeqDelay(ecsId) === 0;
     const { movementSeqId, idleSeqId } = host.resolveNpcMovementSequenceIds(ecs, ecsId);

@@ -66,6 +66,11 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
    `item-gameplay.json` entry. Live's set isn't in a recording (RSProx doesn't print appearance
    animations); it's the only human crate-carrying set in the cache.
 
+- **Crewmates** carry crates too (docs/sailing.md, Crewmates; `crew/Courier.Crew.js`): the
+   ledger counts the crates they hold as collected, adds "but your crew can help with that." to
+   the pickup box, and takes theirs before the player's crate. Counts in the boxes are spelt out
+   ("There are two more crates of this type to collect", rsprox).
+
 ## Ours, not live
 
 - The recordings predate the bags (they paid coins: "...and been given 59 coins as payment."),
@@ -83,4 +88,4 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
 - Opening port reward bags (each port's loot is on the Wiki).
 - Confiscating crates on a teleport, or when leaving port with one in hand, and the captain's
   log's task list and cancel.
-- Crewmates carrying crates, and Trim being refused while carrying cargo.
+- Trim being refused while carrying cargo.

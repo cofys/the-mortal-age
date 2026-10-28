@@ -4,13 +4,15 @@ export type TouchGestureIntent =
     | { type: "move"; x: number; y: number }
     | { type: "tap"; x: number; y: number }
     | { type: "longPress"; x: number; y: number }
+    | { type: "widgetPress"; x: number; y: number }
+    | { type: "widgetRelease" }
     | { type: "orbitStart"; x: number; y: number }
     | { type: "orbitMove"; x: number; y: number; deltaX: number; deltaY: number }
     | { type: "orbitEnd" }
     | { type: "scrollSample"; y: number; deltaY: number; deltaTimeMs: number }
     | { type: "cancel" };
 
-type Phase = "idle" | "pending" | "longPressed" | "orbiting" | "dragging";
+type Phase = "idle" | "pending" | "longPressed" | "orbiting" | "dragging" | "widgetDragging";
 
 /**
  * Pure one-finger gesture FSM. No DOM / timers — callers supply timestamps
@@ -24,6 +26,7 @@ type Phase = "idle" | "pending" | "longPressed" | "orbiting" | "dragging";
 export class TouchGestureRecognizer {
     private phase: Phase = "idle";
     private orbitOnly = false;
+    private widgetDrag = false;
     private startX = 0;
     private startY = 0;
     private startTimeMs = 0;
@@ -54,19 +57,20 @@ export class TouchGestureRecognizer {
     }
 
     /**
-     * Finger down — begins a pending gesture (no click yet). `orbitOnly` (the finger left on
+     * Finger down — draggable items hold LEFT; other gestures wait for release. `orbitOnly` (the finger left on
      * the screen after a pinch) may still orbit or drag, but never taps or long-presses.
      */
-    fingerDown(x: number, y: number, timeMs: number, orbitOnly = false): TouchGestureIntent[] {
+    fingerDown(x: number, y: number, timeMs: number, orbitOnly = false, widgetDrag = false): TouchGestureIntent[] {
         this.phase = "pending";
         this.orbitOnly = orbitOnly;
+        this.widgetDrag = widgetDrag && !orbitOnly;
         this.startX = x;
         this.startY = y;
         this.startTimeMs = timeMs;
         this.lastX = x;
         this.lastY = y;
         this.lastTimeMs = timeMs;
-        return [{ type: "move", x, y }];
+        return this.widgetDrag ? [{ type: "move", x, y }, { type: "widgetPress", x, y }] : [{ type: "move", x, y }];
     }
 
     fingerMove(x: number, y: number, timeMs: number): TouchGestureIntent[] {
@@ -95,7 +99,7 @@ export class TouchGestureRecognizer {
             return intents;
         }
 
-        if (this.phase === "dragging" || this.phase === "pending" || this.phase === "longPressed") {
+        if (!this.widgetDrag && (this.phase === "dragging" || this.phase === "pending" || this.phase === "longPressed")) {
             if (deltaTimeMs > 0 && Math.abs(deltaY) > 2) {
                 intents.push({ type: "scrollSample", y, deltaY, deltaTimeMs });
             }
@@ -104,6 +108,10 @@ export class TouchGestureRecognizer {
         if (this.phase === "pending" || this.phase === "longPressed") {
             const dist = Math.hypot(x - this.startX, y - this.startY);
             if (dist >= this.config.dragThresholdPx) {
+                if (this.widgetDrag && this.phase === "pending") {
+                    this.phase = "widgetDragging";
+                    return intents;
+                }
                 if (this.phase === "longPressed") {
                     // Already fired right-click; moving after that cancels hold state.
                     intents.push({ type: "cancel" });
@@ -138,7 +146,12 @@ export class TouchGestureRecognizer {
             return [];
         }
         this.phase = "longPressed";
-        return [{ type: "longPress", x: this.startX, y: this.startY }];
+        const intents: TouchGestureIntent[] = [{ type: "longPress", x: this.startX, y: this.startY }];
+        if (this.widgetDrag) {
+            this.widgetDrag = false;
+            intents.unshift({ type: "cancel" });
+        }
+        return intents;
     }
 
     fingerUp(x: number, y: number, _timeMs: number): TouchGestureIntent[] {
@@ -148,7 +161,9 @@ export class TouchGestureRecognizer {
 
         const intents: TouchGestureIntent[] = [{ type: "move", x, y }];
 
-        if (this.phase === "pending") {
+        if (this.widgetDrag) {
+            intents.push({ type: "widgetRelease" });
+        } else if (this.phase === "pending") {
             intents.push(this.orbitOnly ? { type: "cancel" } : { type: "tap", x: this.startX, y: this.startY });
         } else if (this.phase === "orbiting") {
             intents.push({ type: "orbitEnd" });
@@ -181,6 +196,7 @@ export class TouchGestureRecognizer {
     private reset(): void {
         this.phase = "idle";
         this.orbitOnly = false;
+        this.widgetDrag = false;
         this.startX = 0;
         this.startY = 0;
         this.startTimeMs = 0;

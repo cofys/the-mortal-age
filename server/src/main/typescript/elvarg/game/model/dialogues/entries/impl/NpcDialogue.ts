@@ -38,4 +38,13 @@ export class NpcDialogue extends Dialogue {
         NpcDialogue.sendChatText(player, this.text, (this.groupId << 16) | 6, (this.groupId << 16) | 5);
     }
 
+    /** The line with its "Click here to continue" held back: blank and not clickable (a cutscene's camera move). */
+    public sendHeld(player: Player): void {
+        this.send(player);
+        const continueUid = (this.groupId << 16) | 5;
+        player.getPacketSender()
+            .sendString("", continueUid)
+            .sendInterfaceFlagsRange(continueUid, -1, -1, 0);
+    }
+
 }

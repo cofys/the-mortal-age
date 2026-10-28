@@ -1,0 +1,19 @@
+# World followers and menagerie identities
+
+Plan2026-10-27: correct the12 no-cycle boss/reward base followers currently using explicit poh_* NPC definitions: Wisp, Butch, Baron, Lil'viathan, Scurry, Nexling, Vorki, Herbi, Hellpuppy, Skotos, Quetzin, Penance Pet. Cache241/pinned6e5033af plus localRSProx reports establish distinctworld IDs, includinghellpet3099 ratherthanpoh_hellpet964. OriginalWiki infoboxes pairhouse/world IDs; no rate/timing claims from cache. Capture reports .runtime/pet-follower-captures-*.txt; reportactioncoveragehonestly.
+
+Design: contentrows explicitly retain houseNpcId alongside correctworldpetId. SharedMenagerie useshouseNpcId when provided, preservingproperhouseNPCs ratherthanbreakingstoragewhilefixingfollowers. Aseparatehouse-IDmap handleslegacy pets:variant values as compatibilityreads only, validatinglogicalfamily andreturningcurrentworldID; do notregisterhouseNPCasworldpet oropenstaleownershippaths. DynamicQuetzinregistration updatesbothmaps. Physicalitems/families/activeitem descriptorsandrequirements remainunchanged; nocache-source/generatedJSONpatching. ExistingOlmlet/Zik/worldforms withoutthismetadata keepcurrentbehavior; Vetion/skillingmorphcycles separatefollowups.
+
+Tests: nativeDrop/Pickup all12; oldhousevariant+activeitem→actualsave/freshlogin correctworldform; actualBank/fullbag/double/foreignactions; realhouseStore/View/Take keepshouseNPC andphysicalitem. Review actualcontainers, currentNPC lifecycle, snapshots, legacyfamilyvalidation andhouseHeldElsewhere. IndependentCodexreview/adversarialtransition beforePR; freshbuild/focused/full andnativeclient representativeworld/housecontrols. Correctmodelidentity doesnotclaimmissingordinarydialogue/Emote/activityproducers done. Penance sourceactivitystillabsent, so testitemseed isfixture notnewfreeacquisition. NoClaude/live edits. All ownQAservices/slots clearedwhenfinished.
+
+## Verification
+
+Frozen build base59a8be580; product Pets SHA256 0D5F90010C0631BBD6485DF77E91EDEC25D28C7F721AC385E0A38344CBACA61C and Menagerie D9F4D4826DEF2227053D6BB2F8FAF2BE8D62BA9F2D52040415CA44FB6422DADE. Fresh build passed. Retained native RED28pass/24fail; final106focused and9599/9599full, no skips. Older omitted-startup Hunter/WarpedSceptre warnings remain in existing fixtures; new lifecycle tests initialize startup and have no hook errors.
+
+Production path: native item Drop -> Pets.drop/applyStoredVariant -> real NPC creation/active descriptor -> native current/owner-checked Pick-up -> physical Inventory. PlayerSave and login resolve legacy same-family house IDs to world IDs without registering house NPCs as followers. Item-on-owned-house -> Menagerie.storePet -> explicit houseNpcId -> real house NPC/container; dynamic View/Take -> physical item -> subsequent world Drop. Recovery checks actual held-elsewhere state.
+
+Independent Codex reviewer ran94foundations and1extra real Quetzin reward/save/login/Pickup/houseStore/save/recovery-refusal/View/Take/Drop scenario. No findings in inspected paths; frozen hashes rechecked. Common reward receipt is a controlled fixture, not proof of Hunter/BA activity completion or live rates.
+
+Rendered client: isolated disposable petworldqa,12items/location/house seeded via MCP. Native Wisp and Butch Drop/menu/Pickup showed12157/12158. Native building-mode Off and Wisp Use-on-house/View/dynamic Take/Close passed, with house roaming model and correct returned28246. Screenshots follower-identity-{wisp,butch,house,take}-native.png retained locally. Other10world definitions and all12house operations were exercised through real native packet tests, not claimed as rendered UI walkthroughs. No Emote or missing dialogue behavior claimed fixed.
+
+Own server saved/stopped; client/helper/browser closed; slot7 backed up then cleared;3107/43707/49807/9229 have no listeners. No live-game or Claude changes.

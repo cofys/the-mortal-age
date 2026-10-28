@@ -85,8 +85,20 @@ function statSkill(stat) {
   return core.Skill.values().find((skill) => skill.getClientId() === stat);
 }
 
+function sendExperienceRewards(player) {
+  const experience = Object.fromEntries([0, 2, 1, 4, 6, 3, 5].map((stat) => {
+    const skill = statSkill(stat);
+    const base = xpPerPoint(stat, player.getSkillManager().getMaxLevel(skill));
+    const { multiplier } = core.PluginManager.emitCanGainExperience(player, skill, base);
+    const xp = base * core.GameConstants.EXPERIENCE_MULTIPLIER * multiplier;
+    return [skill.getName(), Math.floor(xp * 10 + 1e-6) / 10];
+  }));
+  player.getSession().sendClientPacket(core.encodePluginMessage("pest-control", { xpPerPoint: experience }));
+}
+
 function openRewards(player) {
   const sender = player.getPacketSender();
+  sendExperienceRewards(player);
   sender.sendConfig(POINTS_VARP, getPoints(player));
   sender.sendInterface(REWARD_INTERFACE);
   sender.sendInterfaceFlagsRange(CONFIRM_UID, 0, 31, OP1_TRANSMIT);
@@ -126,7 +138,8 @@ function claimReward(player, option) {
     const skill = statSkill(reward.stat);
     const xp = xpPerPoint(reward.stat, player.getSkillManager().getMaxLevel(skill)) * reward.points * reward.bonus;
     setPoints(player, getPoints(player) - reward.points);
-    player.getSkillManager().addExperience(skill, xp, false);
+    player.getSkillManager().addExperience(skill, xp, true);
+    sendExperienceRewards(player);
     return true;
   }
   const items = reward.pack();

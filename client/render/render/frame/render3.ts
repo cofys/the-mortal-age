@@ -281,14 +281,10 @@ export function renderTransparentNpcPass(host: WebGLOsrsRendererHost,
                     }
 
                     // Draw world-entity NPCs separately so their transparent faces
-                    // receive the same deck height and transform as their opaque faces.
-                    if (ecs.getWorldViewId(id) >= 0) {
-                        weNpcIndices.push(j);
-                        (drawCall as any).offsets[j] = 0;
-                        (drawCall as any).numElements[j] = 0;
-                        drawRanges[j] = NULL_DRAW_RANGE;
-                        continue;
-                    }
+                    // receive the same deck height and transform as their opaque faces. A pose
+                    // the baked frames don't have goes through the dynamic draw, as in the
+                    // opaque pass.
+                    const onDeck = ecs.getWorldViewId(id) >= 0;
 
                     const seqId = ecs.getSeqId(id) | 0;
                     const seqDelay = ecs.getSeqDelay?.(id) | 0;
@@ -360,6 +356,14 @@ export function renderTransparentNpcPass(host: WebGLOsrsRendererHost,
                             });
                             continue;
                         }
+                    }
+
+                    if (onDeck) {
+                        weNpcIndices.push(j);
+                        (drawCall as any).offsets[j] = 0;
+                        (drawCall as any).numElements[j] = 0;
+                        drawRanges[j] = NULL_DRAW_RANGE;
+                        continue;
                     }
 
                     const anim = host._resolveNpcAnimation(map, j, ecs, id);

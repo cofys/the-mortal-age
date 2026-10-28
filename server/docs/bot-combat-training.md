@@ -298,6 +298,13 @@ Hotspot bots count towards that region's target. Persistent Wilderness clusters 
 12 low-level, 10 mid-level and 14 main bots at Edgeville, 40 at Varrock Ditch, and 4 each at
 Green Dragons and the Revenant Caves entrance. Safe tiles and buildings still cannot spawn bots.
 
+Regional bots and Bounty Hunter give the low-level pure and rusher loadouts higher weights, so
+roughly a third of their members-world population is one Defence with no protection prayers.
+Novice and standard bots eat at 35% and 40% HP and use single food; veterans and elites can
+combo eat and react to imminent lethal damage, with elites reacting more reliably. Restores
+are consumed at 8%/15%/24%/30% Prayer by tier, through real doses and potion cooldowns;
+one-Prayer builds do not waste them. Free-to-play food timing keeps its existing rules.
+
 Regional bots and hotspot bots both draw from the gear catalogue, including its random equipment
 pools and profile-gated valuable weapons. Hotspots keep their combat bands, and Varrock Ditch
 uses only free-to-play loadouts. A bot keeps its selected archetype when it regears.

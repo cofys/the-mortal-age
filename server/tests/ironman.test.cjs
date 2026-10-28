@@ -221,6 +221,14 @@ test("StaffCrowns: a staff crown wins, else the account's icon, else none", () =
   const ironMod = account("ironmod", "ironman");
   ironMod.setRights(core.PlayerRights.MODERATOR);
   assert.deepEqual(shown(ironMod), [0], "the player moderator crown wins");
+  for (const rights of [core.PlayerRights.ADMINISTRATOR, core.PlayerRights.OWNER, core.PlayerRights.DEVELOPER]) {
+    const staff = account("staffiron", "ironman");
+    staff.setRights(rights);
+    assert.deepEqual(shown(staff), [1], `staff rank ${rights.getId()} gets the gold crown instead of its Ironman helmet`);
+    staff.setRights(core.PlayerRights.NONE);
+    icons["account:refresh-chat-icons"]({ player: staff });
+    assert.deepEqual(staff.getChatIcons(), [2], "refresh restores the account icon when staff rights are removed");
+  }
   assert.deepEqual(shown(account("main")), []);
 });
 

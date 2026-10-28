@@ -35,6 +35,7 @@ module.exports = {
     crownsByRightsId = new Map([
       [PlayerRights.MODERATOR.getId(), [PLAYER_MODERATOR_CROWN]],
       [PlayerRights.ADMINISTRATOR.getId(), [JAGEX_MODERATOR_CROWN]],
+      [PlayerRights.OWNER.getId(), [JAGEX_MODERATOR_CROWN]],
       [PlayerRights.DEVELOPER.getId(), [JAGEX_MODERATOR_CROWN]],
     ]);
     api.onPlayerLogin(applyChatIcons);

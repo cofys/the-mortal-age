@@ -59,9 +59,10 @@ function hitResolved({ attacker, hit }) {
   if (hit.getCombatMethod() === core.CombatSpecial.getById('arclight')?.getCombatMethod()) return;
   const player = attacker.getAsPlayer(), sword = player.getEquipment().getItems()[core.Equipment.WEAPON_SLOT];
   if (sword?.getId() !== core.ItemIdentifiers.ARCLIGHT) return;
-  // Content may spare the charge (a league relic): the question every charged weapon asks.
+  // Content may spare the charge (a league fragment): the same question every melee weapon with charges asks.
   const consume = { player, itemId: sword.getId(), skip: false };
-  pluginApi.emitCustomEvent('combat:consume-charge', consume);
+  pluginApi?.emitCustomEvent('combat:melee-charge', consume);
+  pluginApi?.emitCustomEvent('combat:consume-charge', consume);
   if (consume.skip) return;
   const current = state(sword);
   current.charges = Math.max(0, current.charges - 1);

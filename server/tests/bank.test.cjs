@@ -47,19 +47,26 @@ ItemDefinition.forId = (id) => {
 };
 
 function createPlayer() {
-  // Every packet-sender call is a chainable no-op; sendVarbit also records.
+  // Every packet-sender call is a chainable no-op; sendVarbit and sendEnterAmountPrompt also record.
   const varbits = [];
+  const prompts = [];
   const sender = new Proxy({}, {
     get: (_target, prop) =>
       prop === "sendVarbit"
         ? (id, value) => { varbits.push([id, value]); return sender; }
-        : () => sender,
+        : prop === "sendEnterAmountPrompt"
+          ? (title) => { prompts.push(title); return sender; }
+          : () => sender,
   });
   let currentTab = 0;
   const messages = [];
   const player = {
     varbits,
+    prompts,
     messages,
+    custom: 0,
+    mode: 0,
+    amountAction: null,
     getUsername: () => "alice",
     sendMessage: (message) => messages.push(message),
     isSearchingBank: () => false,
@@ -72,8 +79,11 @@ function createPlayer() {
     withdrawAsNote: () => false,
     isPlaceholders: () => player.placeholders === true,
     isPlayerBot: () => false,
-    getBankCustomQuantity: () => 0,
-    getBankQuantityMode: () => 0,
+    getBankCustomQuantity: () => player.custom,
+    setBankCustomQuantity: (amount) => { player.custom = amount; },
+    getBankQuantityMode: () => player.mode,
+    setBankQuantityMode: (mode) => { player.mode = mode; },
+    setEnteredAmountAction: (action) => { player.amountAction = action; },
   };
   player.inventory = new Inventory(player);
   player.inventory.resetItems();
@@ -126,8 +136,8 @@ test("depositing items keeps each one's metadata", () => {
 test("inventory bank options count matching unnoted items across slots", () => {
   for (const [buttonNum, option, custom, mode, expected] of [
     [8, "Deposit-All", 0, 0, 4],
-    [7, "Deposit-X", 3, 0, 3],
-    [7, undefined, 3, 0, 3],
+    [6, "Deposit-3", 3, 0, 3],
+    [6, undefined, 3, 0, 3],
     [4, "Deposit-5", 0, 0, 4],
     [5, "Deposit-10", 0, 0, 4],
     [2, undefined, 3, 3, 3],
@@ -135,8 +145,8 @@ test("inventory bank options count matching unnoted items across slots", () => {
     [1, "Deposit-1", 0, 0, 1],
   ]) {
     const player = createPlayer();
-    player.getBankCustomQuantity = () => custom;
-    player.getBankQuantityMode = () => mode;
+    player.custom = custom;
+    player.mode = mode;
     for (const charges of [5, 20, 100, 1200]) {
       player.getInventory().add(new Item(TRIDENT, 1, { charges }), false);
     }
@@ -154,16 +164,122 @@ test("inventory bank options count matching unnoted items across slots", () => {
   }
 });
 
+/** The player's answer to the open "Enter amount:" prompt, as resume_p_countdialog delivers it. */
+function enterAmount(player, amount) {
+  const action = player.amountAction;
+  assert.ok(action, "an amount prompt is open");
+  player.amountAction = null;
+  action.execute(amount);
+}
+
+const withdrawOp = (player, buttonNum, option, slot = 0, itemId = 995) => Bank.handleWidgetAction(player, {
+  groupId: Bank.MAIN_INTERFACE_ID, childId: Bank.ITEMS_CHILD, buttonNum, option, slot, itemId,
+});
+const depositOp = (player, buttonNum, option, slot = 0, itemId = 995) => Bank.handleWidgetAction(player, {
+  groupId: Bank.SIDE_INTERFACE_ID, childId: Bank.SIDE_ITEMS_CHILD, buttonNum, option, slot, itemId,
+});
+
 test("Deposit-X still moves a partial noted stack", () => {
   const player = createPlayer();
-  player.getBankCustomQuantity = () => 3;
   player.getInventory().add(new Item(LAVA_BATTLESTAFF_NOTE, 7), false);
-  Bank.handleWidgetAction(player, {
-    groupId: Bank.SIDE_INTERFACE_ID, childId: Bank.SIDE_ITEMS_CHILD,
-    buttonNum: 7, option: "Deposit-X", slot: 0, itemId: LAVA_BATTLESTAFF_NOTE,
-  });
+  depositOp(player, 7, "Deposit-X", 0, LAVA_BATTLESTAFF_NOTE);
+  enterAmount(player, 3);
   assert.equal(player.getBank().getAmount(LAVA_BATTLESTAFF), 3);
   assert.equal(player.getInventory().getAmount(LAVA_BATTLESTAFF_NOTE), 4);
+});
+
+test("as captured: Withdraw-X asks for the amount, remembers it and withdraws it", () => {
+  for (const option of ["Withdraw-X", undefined]) {
+    const player = createPlayer();
+    player.custom = 500;
+    player.getBank().add(new Item(995, 5000), false);
+
+    withdrawOp(player, 6, option);
+    assert.deepEqual(player.prompts, ["Enter amount:"]);
+    assert.equal(player.getInventory().getAmount(995), 0, "nothing moves until the amount is entered");
+
+    enterAmount(player, 200);
+    assert.equal(player.custom, 200);
+    assert.deepEqual(player.varbits.filter(([id]) => id === Bank.REQUESTED_QUANTITY_VARBIT), [[Bank.REQUESTED_QUANTITY_VARBIT, 200]]);
+    assert.equal(player.getInventory().getAmount(995), 200);
+    assert.equal(player.getBank().getAmount(995), 4800);
+  }
+});
+
+test("as captured: Deposit-X asks for the amount, remembers it and deposits it", () => {
+  const player = createPlayer();
+  player.getInventory().add(new Item(995, 1000), false);
+
+  depositOp(player, 7, "Deposit-X");
+  assert.deepEqual(player.prompts, ["Enter amount:"]);
+  enterAmount(player, 10);
+
+  assert.equal(player.custom, 10);
+  assert.equal(player.getBank().getAmount(995), 10);
+  assert.equal(player.getInventory().getAmount(995), 990);
+});
+
+test("as captured: Withdraw/Deposit-<last X> and the X-mode click use the remembered amount without asking", () => {
+  const player = createPlayer();
+  player.custom = 200;
+  player.getBank().add(new Item(995, 5000), false);
+
+  withdrawOp(player, 5, "Withdraw-200");
+  assert.equal(player.getInventory().getAmount(995), 200);
+  depositOp(player, 6, "Deposit-200");
+  assert.equal(player.getInventory().getAmount(995), 0);
+
+  player.mode = Bank.QUANTITY_X_MODE;
+  withdrawOp(player, 1, undefined);
+  assert.equal(player.getInventory().getAmount(995), 200);
+  depositOp(player, 2, undefined);
+  assert.equal(player.getInventory().getAmount(995), 0);
+  assert.deepEqual(player.prompts, []);
+});
+
+test("the X-mode click asks for the amount while none is remembered", () => {
+  const player = createPlayer();
+  player.mode = Bank.QUANTITY_X_MODE;
+  player.getBank().add(new Item(995, 5000), false);
+
+  withdrawOp(player, 1, undefined);
+  assert.deepEqual(player.prompts, ["Enter amount:"]);
+  enterAmount(player, 30);
+  assert.equal(player.getInventory().getAmount(995), 30);
+});
+
+test("as captured: Set custom quantity remembers the amount without moving anything", () => {
+  const player = createPlayer();
+  player.mode = Bank.QUANTITY_X_MODE;
+  player.getBank().add(new Item(995, 5000), false);
+
+  Bank.handleWidgetAction(player, { groupId: Bank.MAIN_INTERFACE_ID, childId: Bank.QUANTITY_CHILDREN[3], buttonNum: 2 });
+  assert.deepEqual(player.prompts, ["Enter amount:"]);
+  enterAmount(player, 100);
+
+  assert.equal(player.custom, 100);
+  assert.equal(player.mode, Bank.QUANTITY_X_MODE);
+  assert.equal(player.getInventory().getAmount(995), 0);
+  withdrawOp(player, 1, undefined);
+  assert.equal(player.getInventory().getAmount(995), 100);
+});
+
+test("an amount entered after the item left its bank slot, or after the bank closed, moves nothing", () => {
+  const player = createPlayer();
+  player.getBank().add(new Item(995, 5000), false);
+  withdrawOp(player, 6, "Withdraw-X");
+  player.getBank().resetItems();
+  player.getBank().add(new Item(TRIDENT, 1), false);
+  enterAmount(player, 1);
+  assert.equal(player.getInventory().getValidItems().length, 0);
+
+  const closed = createPlayer();
+  closed.getBank().add(new Item(995, 5000), false);
+  withdrawOp(closed, 6, "Withdraw-X");
+  closed.closed = true;
+  enterAmount(closed, 100);
+  assert.equal(closed.getInventory().getAmount(995), 0);
+  assert.equal(closed.custom, 0);
 });
 
 test("withdrawing an item keeps its metadata", () => {
@@ -530,6 +646,41 @@ test("as captured: closing the bank by any route ends a bank search; closing any
     };
     assert.deepEqual(close(Bank.MAIN_INTERFACE_ID), [[101, 11]], route);
     assert.deepEqual(close(300), [], route);
+  }
+});
+
+test("as captured: closing the bank under an unanswered Enter amount prompt aborts the prompt first", () => {
+  const { PacketSender } = require("../dist/net/packet/PacketSender");
+  // ServerPacketId is a const enum, inlined at build time.
+  const ServerPacketId = { WIDGET_CLOSE_SUB: 104, TRIGGER_ONDIALOGABORT: 123 };
+  for (const route of ["sendInterfaceRemoval", "closeInterruptibleInterfaces"]) {
+    const sent = (answered) => {
+      const opcodes = [];
+      const player = createPlayer();
+      player.getSession = () => ({ sendClientPacket: (packet) => opcodes.push(packet[0]), write: () => {} });
+      player.getEnteredAmountAction = () => player.amountAction;
+      player.setEnteredSyntaxAction = () => {};
+      // Real interface reset; the bank's if_closesub stands in for the tracked-interface close.
+      const sender = Object.assign(Object.create(PacketSender.prototype), {
+        player,
+        closeTrackedInterfaces: () => opcodes.push(ServerPacketId.WIDGET_CLOSE_SUB) > 0,
+        sendConfig() { return this; },
+        sendVarbit() { return this; },
+        sendSubInterface: () => {},
+        endBankSearch: () => {},
+        emitInterfaceClosed: () => {},
+      });
+      Bank.promptAmount(player);
+      if (answered) player.amountAction.execute(5), player.setEnteredAmountAction(null);
+      opcodes.length = 0;
+      sender[route]();
+      assert.equal(player.amountAction, null, route);
+      return opcodes;
+    };
+    const aborted = sent(false);
+    assert.equal(aborted.filter((op) => op === ServerPacketId.TRIGGER_ONDIALOGABORT).length, 1, route);
+    assert.ok(aborted.indexOf(ServerPacketId.TRIGGER_ONDIALOGABORT) < aborted.indexOf(ServerPacketId.WIDGET_CLOSE_SUB), route);
+    assert.ok(!sent(true).includes(ServerPacketId.TRIGGER_ONDIALOGABORT), `${route}: no prompt left to abort`);
   }
 });
 

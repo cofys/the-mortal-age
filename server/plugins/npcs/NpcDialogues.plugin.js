@@ -865,11 +865,25 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         const animation = request.expression ?? step.expression;
         const expression = Number.isInteger(animation) && animation >= 0 ? animation : undefined;
         const speakerName = request.speakerName ?? (typedLine ? step.speaker : undefined);
+        // `holdTicks` (set by a line handler): the line shows first without "Click here to
+        // continue", which comes that many ticks later (a cutscene's camera moving, as live).
+        const hold = Number.isInteger(request.holdTicks) && request.holdTicks > 0
+          ? new ActionDialogue(index++, { execute: () => {
+            held?.sendHeld?.(player);
+            api.core.TaskManager.submit(new api.core.CountdownTask(player, request.holdTicks, () => {
+              if (manager.getCurrent?.() === hold) manager.advance();
+            }));
+          } })
+          : undefined;
+        if (hold) chain.add(hold);
+        let held;
         for (let start = 0; start < lines.length; start += 4) {
           const text = lines.slice(start, start + 4).join(" ");
-          chain.add(isPlayer
+          const dialogue = isPlayer
             ? new PlayerDialogue(index++, text, expression)
-            : new NpcDialogue(index++, speakerId, text, speakerName, expression, (request.side ?? step.side) === "right" ? 217 : 231));
+            : new NpcDialogue(index++, speakerId, text, speakerName, expression, (request.side ?? step.side) === "right" ? 217 : 231);
+          held ??= dialogue;
+          chain.add(dialogue);
         }
         // `after` (set by a line handler) runs once the player continues past the line,
         // before the conversation carries on: a teleport the wiki only narrates, say.
@@ -1072,6 +1086,7 @@ module.exports = {
       // option texts so resolveJump can reach a real answer without replaying it.
       const withOptions = (page, result) => {
         if (page && data[page]) {
+          result.page = page;
           const pageOptions = collectPageOptions(data[page]);
           result.context.pageOptions = pageOptions.byText;
           result.context.pageOptionList = pageOptions.list;
@@ -1096,7 +1111,8 @@ module.exports = {
           if (page) {
             const record = data[page.page];
             // Flat pages hold `steps` directly (no variants); use their default.
-            const steps = wanted && record?.variants ? record.variants[wanted] : pickVariant(record);
+            const steps = wanted ? (record?.variants ? record.variants[wanted]
+              : wanted === "standard-dialogue" ? record?.steps : undefined) : pickVariant(record);
             if (Array.isArray(steps)) return withOptions(page.page, { steps, branches: record?.branches, context, variant: wanted });
           }
         }
@@ -1128,7 +1144,9 @@ module.exports = {
       if (!request.player || !definition) return;
       const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant };
       const resolved = resolveTranscript(event);
-      if (request.exact && resolved?.variant !== request.variant) return;
+      const wanted = typeof request.variant === "string" ? request.variant : request.variant?.variant;
+      const wantedPage = typeof request.variant === "object" ? request.variant?.page : undefined;
+      if (request.exact && (resolved?.variant !== wanted || (wantedPage && resolved?.page !== wantedPage))) return;
       const steps = typeof request.select === "function" && resolved?.steps ? request.select(resolved.steps) : resolved?.steps;
       if (!steps?.length) return;
       startDialogue(api, event, steps, resolved.branches, resolved.context);

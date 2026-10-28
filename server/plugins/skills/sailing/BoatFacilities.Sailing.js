@@ -135,6 +135,9 @@ function rotationOf(hotspot, facilityRow) {
   return facesIn ? (hotspot.side + 2) & 3 : hotspot.side;
 }
 
+/** The wind and gale catchers' switched-off locs and their switched-on ones (cache, rsprox 907). */
+const CATCHER_SWITCHED_ON = { 59684: 59683, 59685: 59686 };
+
 /**
  * The deck locs for a boat's hotspots: each facility's loc, blocking its tile when the loc is
  * solid in the cache (a range or cargo hold, not a hook). With `placeholders`, as in the
@@ -145,9 +148,11 @@ function hotspotLocs(boat, placeholders = false) {
   const facilities = facilitiesOf(boat);
   return hotspotsOf(boat.type).flatMap((hotspot) => {
     const facility = facilities[hotspot.id] > 0 ? hotspot.allowed[facilities[hotspot.id] - 1] : undefined;
-    const id = facility !== undefined
+    let id = facility !== undefined
       ? CacheDefinitions.getDbRow(facility)?.column(FACILITY.loc)?.[0]
       : placeholderIds[hotspot.id];
+    // A wind or gale catcher left switched on is built that way.
+    if (boat.windCatcherOn && CATCHER_SWITCHED_ON[id] !== undefined) id = CATCHER_SWITCHED_ON[id];
     if (typeof id !== "number") return [];
     const blocks = (CacheDefinitions.getObject(id)?.clipType ?? 0) !== 0;
     return [{ id, x: hotspot.x, y: hotspot.y, level: hotspot.level, shape: LOC_SHAPE, rotation: rotationOf(hotspot, facility), blocks, hotspot: hotspot.id }];
@@ -165,6 +170,7 @@ function teleportFocusOf(boat) {
 }
 
 module.exports = {
+  CATCHER_SWITCHED_ON,
   teleportFocusOf,
   TYPE_HOTSPOTS,
   HOTSPOT_FACILITIES,

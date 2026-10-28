@@ -1923,8 +1923,8 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
         event.end = true;
         if (!quest.isComplete(player)) quest.complete(player);
         return;
-      case "UPl9kU": // recovering a lost tome from Ivan
-        if (!held(player, TOME_ITEM_ID)) give(player, TOME_ITEM_ID, 1);
+      case "UPl9kU": // recovering a lost tome from Ivan (none after a completion without experience)
+        if (!held(player, TOME_ITEM_ID) && !quest.experienceWithheld(player)) give(player, TOME_ITEM_ID, 1);
         return;
       case "ZoWCuH": // Ivan's post-Sins Drakan's medallion reclaim interface
       case "R8U1L0":

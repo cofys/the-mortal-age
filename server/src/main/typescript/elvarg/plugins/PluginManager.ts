@@ -67,6 +67,7 @@ import {
   PluginPathBlockedEvent,
   PluginPlayerProcessEvent,
   PluginPlayerLevelUpEvent,
+  PluginExperienceGainedEvent,
   PluginCustomEventName,
   PluginPlayerPathBlockedEvent,
   PluginCommandEvent,
@@ -246,6 +247,7 @@ export class PluginManager {
   private static friendRemoveHooks: PluginHook<PluginFriendEvent>[] = [];
   private static playerProcessHooks: PluginHook<PluginPlayerProcessEvent>[] = [];
   private static playerLevelUpHooks: PluginHook<PluginPlayerLevelUpEvent>[] = [];
+  private static experienceGainedHooks: PluginHook<PluginExperienceGainedEvent>[] = [];
   private static customEventHooks = new Map<
     PluginCustomEventName,
     PluginHook<any>[]
@@ -263,6 +265,10 @@ export class PluginManager {
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeNpcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeObjectInteractionHooks: PluginHook<PluginObjectInteractionEvent>[] = [];
+  /** Main-world locs used from a boat deck from further than usual, by id (setDeckReach). */
+  public static readonly deckReach = new Map<number, number>();
+  /** Main-world loc names usable from a boat deck (setUsableFromDeck). */
+  public static readonly usableFromDeck = new Set<string>();
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -993,6 +999,13 @@ export class PluginManager {
     }
     if (typeof npc.isRegistered === "function" && npc.isRegistered()) {
       World.getNpcs().remove(npc);
+    }
+  }
+
+  public static emitExperienceGained(event: PluginExperienceGainedEvent): void {
+    if (PluginManager.experienceGainedHooks.length === 0) return;
+    for (const hook of PluginManager.experienceGainedHooks) {
+      PluginManager.executeHook(hook, event, "experience_gained", "experience_gained");
     }
   }
 
@@ -2367,6 +2380,7 @@ export class PluginManager {
       CountdownTask: require("../game/task/impl/CountdownTask").CountdownTask,
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
+      TimedObjectReplacementTask: require("../game/task/impl/TimedObjectReplacementTask").TimedObjectReplacementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
       NPCRespawnTask: require("../game/task/impl/NPCRespawnTask").NPCRespawnTask,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
@@ -2375,13 +2389,13 @@ export class PluginManager {
       ObjectIdentifiers: require("../util/ObjectIdentifiers").ObjectIdentifiers,
       ShopIdentifiers: require("../util/ShopIdentifiers").ShopIdentifiers,
       Misc: require("../util/Misc").Misc,
-      MOBILE_CLIENT_ATTRIBUTE: require("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE,
       TimerKey: require("../util/timers/TimerKey").TimerKey,
       Sound: require("../game/Sound").Sound,
       Sounds: require("../game/Sounds").Sounds,
       Location: require(`${model}/Location`).Location,
       Mobile: require("../game/entity/impl/Mobile").Mobile,
       encodePluginMessage: require("../net/protocol/ClientProtocol").encodePluginMessage,
+      MOBILE_CLIENT_ATTRIBUTE: require("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE,
       encodeFinePosition: require("../net/protocol/ClientProtocol").encodeFinePosition,
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
@@ -2972,6 +2986,9 @@ export class PluginManager {
       },
       spawnNpc: (definition) => PluginManager.spawnNpc(definition, pluginName),
       removeNpc: (npc) => PluginManager.removeNpc(npc),
+      onExperienceGained: (handler) => {
+        if (typeof handler === "function") PluginManager.experienceGainedHooks.push({ ...hookProfile(handler), handler });
+      },
       onPlayerLevelUp: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -3101,6 +3118,12 @@ export class PluginManager {
           return;
         }
         PluginManager.objectRouteHooks.push({ ...hookProfile(handler), handler });
+      },
+      setDeckReach: (objectIds, tiles) => {
+        for (const id of objectIds ?? []) PluginManager.deckReach.set(id, tiles);
+      },
+      setUsableFromDeck: (names) => {
+        for (const name of names ?? []) PluginManager.usableFromDeck.add(name);
       },
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {
@@ -4325,12 +4348,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
           modifier
         ),
+      registerSpecialEnergyCostModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyCostModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
           modifier
         ),
       registerPrayerDrainModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
+          modifier
+        ),
+      registerPrayerDrainRateModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainRateModifier(
           modifier
         ),
       setCombatEngine: (engine) => {

@@ -13,6 +13,7 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
+const { PlayerSave } = require("../dist/game/entity/impl/player/persistence/PlayerSave");
 const { GameConstants } = require("../dist/game/GameConstants");
 
 const AREAS = 512;
@@ -52,7 +53,7 @@ before(async () => {
   };
   const api = new Proxy({
     core,
-    persistAttribute() {},
+    persistAttribute: (key, value) => PlayerSave.persistAttribute(key, value),
     getPluginConfig: (key, fallback) => (key === "league:type" ? worldLeague : fallback),
     setWorldProfile: (profile) => GameConstants.setWorldProfile(profile),
     getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
@@ -73,10 +74,11 @@ before(async () => {
 });
 
 /** A real player whose packets are recorded; logged in as a new character of `profile`. */
-function character(name, profile = "league", { login = true } = {}) {
+function character(name, profile = "league", { login = true, restore = null } = {}) {
   const player = new Player(null);
   player.setUsername(name);
   player.setProfile(profile);
+  if (restore) restore.applyToPlayer(player);
   const sent = { messages: [], varbits: new Map(), scripts: [], subs: [], flags: [], sounds: [], content: [], removals: 0 };
   const sender = new Proxy({}, {
     get: (target, key) => {
@@ -95,7 +97,7 @@ function character(name, profile = "league", { login = true } = {}) {
   });
   player.getPacketSender = () => sender;
   player.sendMessage = (text) => sent.messages.push(text);
-  if (login) hooks.onPlayerLogin({ player, username: name, isNewAccount: true, profile });
+  if (login) hooks.onPlayerLogin({ player, username: name, isNewAccount: !restore, profile });
   return Object.assign(player, { sent });
 }
 
@@ -154,6 +156,59 @@ test("a new league character starts with Misthalin and Karamja; a main character
   const echoes = character("echoesstarter");
   worldLeague = 4;
   assert.deepEqual(thresholds(echoes), [0, 0, 90, 200, 400], "Wiki: Raging Echoes' unlocks at 90, 200 and 400 tasks");
+});
+
+test("login leaves leagues without area rules untouched, including saved area state after reload", () => {
+  for (const type of [1, 2, 3, 6]) {
+    for (const savedAreas of [null, [MISTHALIN, KARAMJA, ASGARNIA]]) {
+      const name = `no-areas-${type}-${savedAreas ? "saved" : "new"}`;
+      const player = character(name, "league", { login: false });
+      player.setAttribute("league:type", type);
+      if (savedAreas) player.setAttribute("league:areas", [...savedAreas]);
+      const start = at(2662, 3305); // A supported area league would correct this locked location.
+      player.setLocation(start.clone());
+      const login = (target) => hooks.onPlayerLogin({ player: target, username: name, isNewAccount: false, profile: "league" });
+      assert.doesNotThrow(() => login(player), `league ${type} has no configured area defaults`);
+      for (const target of [player, character(name, "league", { login: false, restore: PlayerSave.fromPlayer(player) })]) {
+        // PlayerSave restores the registered [] default even when the original attribute was absent.
+        const expectedAreas = savedAreas ?? (target === player ? undefined : []);
+        assert.deepEqual(target.getAttribute("league:areas"), expectedAreas);
+        assert.doesNotThrow(() => login(target), `league ${type} remains safe after save/reload`);
+        assert.deepEqual(target.getAttribute("league:areas"), expectedAreas, "area state is neither created nor erased");
+        assert.ok(target.getLocation().equals(start), "login does not relocate a mode without area restrictions");
+        for (const varbit of [...SELECTION, LAST_VIEWED, AVAILABLE]) {
+          assert.equal(target.sent.varbits.has(varbit), false, `no area varbit ${varbit}`);
+        }
+        const areaState = query("league:areas", { player: target });
+        assert.deepEqual([areaState.league, areaState.unlocked, areaState.next, areaState.available], [null, [], null, false]);
+        const teleport = { player: target, destination: at(3290, 3180), allow: null };
+        hooks.onCanTeleport(teleport);
+        assert.equal(teleport.allow, null, "area enforcement stays inactive");
+      }
+    }
+  }
+});
+
+test("both supported area leagues initialize defaults and restore saved unlocks through the real save API", () => {
+  const previousLeague = worldLeague;
+  try {
+    for (const type of [4, 5]) {
+      worldLeague = type;
+      const player = character(`area-mode-${type}`);
+      assert.deepEqual(player.getAttribute("league:areas"), [MISTHALIN, KARAMJA]);
+      player.setAttribute("league:areas", [MISTHALIN, KARAMJA, MORYTANIA]);
+      player.setLocation(at(3495, 3491));
+      const restored = character(`area-mode-${type}`, "league", { restore: PlayerSave.fromPlayer(player) });
+      assert.deepEqual(restored.getAttribute("league:areas"), [MISTHALIN, KARAMJA, MORYTANIA]);
+      assert.ok(restored.getLocation().equals(at(3495, 3491)), "an unlocked region stays open after reload");
+      assert.deepEqual(SELECTION.map((id) => restored.sent.varbits.get(id)), [1, 2, MORYTANIA, 0, 0, 0]);
+      const teleport = { player: restored, destination: at(3290, 3180), allow: null };
+      hooks.onCanTeleport(teleport);
+      assert.equal(teleport.allow, false, "locked areas remain enforced");
+    }
+  } finally {
+    worldLeague = previousLeague;
+  }
 });
 
 test("the map squares follow the Wiki's areas; instances and the places open to everyone belong to none", () => {

@@ -157,7 +157,7 @@ function finishSmelt(player, chosen, furnaceId) {
   player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe) + extraXp);
   if (recipe.retrieveMessage) player.sendMessage(recipe.retrieveMessage);
   Core.api.emitCustomEvent("smelting:success", { player, skill, itemId: recipe.barId });
-  Common.produced(player, skill, recipe.barId, outcome.bars, smeltingXp(player, recipe) + extraXp);
+  Common.produced(player, skill, recipe.barId, outcome.bars, smeltingXp(player, recipe) + extraXp, "smelt");
   return true;
 }
 

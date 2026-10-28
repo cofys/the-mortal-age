@@ -35,6 +35,9 @@ function cancel(player, index) {
   if (!task) return;
   held[index] = null;
   common.setSlots(player, held);
+  // The crew carrying its crates put them down too (crew/Courier.Crew.js).
+  common.setCrewCargo(player, index, null);
+  common.core().PluginManager.emitCustomEvent("port-tasks:cancelled", { player, index, task });
   if (task.crate !== undefined && common.heldCrate(player) === task.crate) common.putDown(player);
   for (const boat of player.getSailing().boats) {
     if (task.crate !== undefined) cargo.take(boat, 0, task.crate, cargo.countIn(boat, task.crate));

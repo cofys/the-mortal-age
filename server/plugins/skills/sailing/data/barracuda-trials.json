@@ -1,0 +1,79 @@
+{
+  "$comment": "Barracuda Trials data the cache doesn't hold, from rsprox captures (docs/barracuda-trials.md). Ranks, targets, XP and rewards are the cache's (DB table 143).",
+  "trials": [
+    {
+      "key": "tempor_tantrum",
+      "intro": {"start": "The objective of this trial is to collect rum shipments", "camera": [3010, 2911], "objectives": 14, "steps": [{"line": "The objective of this trial is to collect rum shipments", "events": [{"at": 0, "camera": [2994, 2900, 150]}]}, {"line": "While you're out there, keep an eye out", "events": [{"at": 0, "camera": [2994, 2891, 150], "hint": {"tile": [2994, 2891], "height": 50, "position": "centre"}}]}, {"line": "Sailing over rapids will give you", "events": [{"at": 0, "camera": [2977, 2856, 150], "hint": {"tile": [2977, 2856], "height": 50, "position": "centre"}}]}, {"line": "The storm isn't going to make it easy", "events": [{"at": 0, "camera": [2975, 2828, 150], "hint": {"tile": [2975, 2828], "height": 250, "position": "west"}}]}, {"line": "As you make your way around, don't forget", "events": [{"at": 0, "camera": [2999, 2792, 150], "hint": {"ship": "bt_rum_boat", "height": 150}}]}, {"line": "Once you reach the boat, collect a shipment", "events": [{"at": 0, "camera": [3034, 2771, 180]}]}, {"line": "Make sure you come back the opposite side", "events": [{"at": 0, "camera": [3066, 2806, 150]}]}, {"line": "If you can deliver all the rum shipments", "events": [{"at": 0, "camera": [3078, 2836, 150]}]}, {"line": "Each trial has three ranks", "events": [{"at": 0, "camera": [3075, 2863, 150]}]}, {"line": "For this trial, you'll be asked to fetch", "events": [{"at": 0, "camera": [3073, 2903, 210]}]}, {"line": "You can't attempt the next rank", "events": [{"at": 0, "camera": [3046, 2923, 150]}]}]},
+      "name": "Tempor Tantrum",
+      "dbrow": 7243,
+      "level": 30,
+      "requires": {"stormResistance": 1, "rapidResistance": 1},
+      "master": { "npc": 15094, "name": "Rum-dashed Ralph", "page": "Rum-dashed Ralph", "ship": "bt_ralph", "tile": [3, 4] },
+      "ships": [
+        { "id": "bt_ralph", "fineX": 388544, "fineY": 374592, "angle": 1536 },
+        { "id": "bt_rum_boat", "fineX": 388800, "fineY": 354240, "angle": 512, "npcs": [{ "id": 15109, "tile": [3, 4] }] }
+      ],
+      "start": { "fineX": 388544, "fineY": 373824, "angle": 0 },
+      "hint": { "ship": "bt_rum_boat", "height": 150 },
+      "crateXp": 15,
+      "collectables": { "first": 59245, "count": 36 },
+      "coupon": { "item": 32085, "chance": 0.1333 },
+      "bounds": { "minX": 2940, "maxX": 3135, "minY": 2745, "maxY": 2945 },
+      "stormClouds": [[2946, 2868], [2948, 2837], [2951, 2801], [2962, 2846], [2967, 2817], [2971, 2786], [2973, 2826], [2973, 2880], [2977, 2808], [2986, 2846], [2990, 2886], [2990, 2901], [2994, 2795], [3002, 2845], [3003, 2913], [3004, 2764], [3012, 2779], [3016, 2910], [3020, 2765], [3021, 2801], [3025, 2902], [3027, 2908], [3030, 2887], [3034, 2784], [3034, 2909], [3038, 2807], [3038, 2893], [3039, 2884], [3042, 2911], [3047, 2889], [3047, 2900], [3048, 2908], [3049, 2771], [3053, 2914], [3055, 2890], [3055, 2786], [3055, 2900], [3059, 2805], [3064, 2924], [3074, 2883], [3074, 2903], [3075, 2841], [3080, 2765], [3082, 2796], [3082, 2861], [3088, 2913], [3089, 2808], [3089, 2892], [3091, 2819], [3090, 2884], [3093, 2855], [3100, 2780], [3100, 2845], [3104, 2885], [3107, 2803], [3112, 2790], [3113, 2874], [3115, 2827], [3116, 2842], [3121, 2856], [3121, 2887]]
+    },
+    {
+      "key": "jubbly_jive",
+      "intro": {"start": "The goal of this trial is to use balloon toads", "camera": [2418, 3018], "objectives": 20, "varbits": {"sailing_bt_jubbly_jive_pillar_3_state_player": 3}, "steps": [{"line": "The goal of this trial is to use balloon toads", "events": [{"at": 0, "camera": [2404, 3018, 150]}]}, {"line": "On your way, keep an eye out", "events": [{"at": 0, "camera": [2396, 3010, 150], "hint": {"tile": [2396, 3010], "height": 50, "position": "centre"}}]}, {"line": "Sailing over rapids will give you", "events": [{"at": 0, "camera": [2373, 3007, 150], "hint": {"tile": [2373, 3007], "height": 50, "position": "centre"}}]}, {"line": "As you continue sailing west", "events": [{"at": 0, "camera": [2351, 2999, 150], "hint": {"tile": [2351, 3001], "height": 50, "position": "centre"}}]}, {"line": "Once you've sailed far enough west", "events": [{"at": 0, "camera": [2307, 3019, 210], "clearHint": true}, {"at": 7, "camera": [2266, 3015, 210], "hint": {"ship": "bt_toad_boat", "height": 150}}, {"at": 14, "camera": [2246, 3013, 150]}]}, {"line": "Once you've collected some balloon toads", "events": [{"at": 0, "camera": [2270, 2988, 150], "clearHint": true}]}, {"line": "As you sail, watch out for the extra thick", "events": [{"at": 0, "camera": [2303, 2975, 150], "hint": {"tile": [2303, 2984], "height": 50, "position": "centre"}}]}, {"line": "As you keep making your way back", "events": [{"at": 0, "camera": [2331, 2973, 150], "clearHint": true}]}, {"line": "To lure a jubbly, look out for empty outcrops", "events": [{"at": 0, "camera": [2372, 2946, 180], "hint": {"tile": [2377, 2955], "height": 50, "position": "centre"}}, {"at": 9, "varbits": {"sailing_bt_jubbly_jive_pillar_4_state_player": 2}}]}, {"line": "It's worth noting that jubblies", "events": [{"at": 2, "varbits": {"sailing_bt_jubbly_jive_pillar_3_state_player": 1, "sailing_bt_jubbly_jive_pillar_4_state_player": 3}}]}, {"line": "While the jubblies are important", "events": [{"at": 0, "camera": [2392, 2939, 180], "clearHint": true}, {"at": 2, "varbits": {"sailing_bt_jubbly_jive_pillar_5_state_player": 2}}]}, {"line": "If you can lure all the jubblies", "events": [{"at": 0, "camera": [2429, 2938, 180], "varbits": {"sailing_bt_jubbly_jive_pillar_4_state_player": 1, "sailing_bt_jubbly_jive_pillar_5_state_player": 3}}, {"at": 2, "varbits": {"sailing_bt_jubbly_jive_pillar_6_state_player": 2}}]}, {"line": "For this trial, you'll be asked to lure", "events": [{"at": 0, "camera": [2436, 2979, 180]}, {"at": 4, "varbits": {"sailing_bt_jubbly_jive_pillar_5_state_player": 1, "sailing_bt_jubbly_jive_pillar_6_state_player": 3}}]}, {"line": "You can't attempt the next rank", "events": [{"at": 0, "camera": [2442, 3016, 180]}]}]},
+      "name": "Jubbly Jive",
+      "dbrow": 7244,
+      "level": 55,
+      "requires": {"rapidResistance": 2},
+      "master": { "npc": 15098, "name": "Gurtob", "page": "Gurtob", "ship": "bt_gurtob", "tile": [3, 3] },
+      "assistant": { "npc": 15102, "name": "Ros", "tiles": [[3, 2], [3, 3]] },
+      "ships": [
+        { "id": "bt_gurtob", "fineX": 312128, "fineY": 387520, "angle": 1536 },
+        { "id": "bt_toad_boat", "fineX": 287424, "fineY": 385216, "angle": 0, "npcs": [{ "id": 15109, "tile": [3, 4] }] }
+      ],
+      "start": { "fineX": 311872, "fineY": 386368, "angle": 512 },
+      "hint": { "ship": "bt_toad_boat", "height": 150 },
+      "crateXp": 25,
+      "collectables": { "first": 59174, "count": 56 },
+      "bounds": { "minX": 2225, "maxX": 2480, "minY": 2910, "maxY": 3055 },
+      "toads": [4, 4, 12, 9],
+      "pillars": [
+        {"loc": 59124, "click": [2264, 3003], "landing": [2265, 3003], "bird": [2266, 3003], "heights": [100, 250]},
+        {"loc": 59130, "click": [2294, 2989], "landing": [2294, 2989], "bird": [2295, 2990], "heights": [100, 30], "progress": 10},
+        {"loc": 59136, "click": [2309, 3011], "landing": [2310, 3011], "bird": [2310, 3012], "heights": [100, 30]},
+        {"loc": 59142, "click": [2349, 3000], "landing": [2352, 3001], "bird": [2351, 3001], "heights": [100, 620]},
+        {"loc": 59148, "click": [2375, 2955], "landing": [2377, 2955], "bird": [2377, 2955], "heights": [100, 128]},
+        {"loc": 59154, "click": [2422, 2950], "landing": [2425, 2951], "bird": [2424, 2951], "heights": [100, 620]},
+        {"loc": 59160, "click": [2422, 2998], "landing": [2424, 2998], "bird": [2424, 2998], "heights": [20, 150]},
+        {"loc": 59166, "click": [2442, 3018], "landing": [2443, 3018], "bird": [2443, 3019], "heights": [20, 0]}
+      ]
+    },
+    {
+      "key": "gwenith_glide",
+      "portalColours": {"ithell": 16316664, "amlodd": 2646192, "cadarn": 5292112},
+      "intro": {"start": "The objective of this trial is to imbue large crystals", "camera": [2268, 3476], "objectives": 30, "varbits": {"sailing_bt_gwenith_glide_crystal_ithell_deactivated": 1, "sailing_bt_gwenith_glide_crystal_amlodd_deactivated": 1, "sailing_bt_gwenith_glide_crystal_cadarn_deactivated": 1}, "steps": [{"line": "The objective of this trial is to imbue large crystals", "events": [{"at": 0, "camera": [2279, 3487, 150]}]}, {"line": "While you're out there, keep an eye out", "events": [{"at": 0, "camera": [2273, 3487, 150], "hint": {"tile": [2273, 3487], "height": 50, "position": "centre"}}]}, {"line": "The portals you're looking for", "events": [{"at": 0, "camera": [2260, 3494, 150], "hint": {"tile": [2260, 3500], "height": 250, "position": "north"}}, {"at": 15, "portal": true}]}, {"line": "After being teleported, you'll need", "events": [{"at": 0, "camera": [2114, 3233, 0]}]}, {"line": "As you sail around, you'll find crystal motes", "events": [{"at": 0, "camera": [2139, 3237, 150], "hint": {"tile": [2139, 3237], "height": 52, "position": "centre"}}]}, {"line": "In order to complete the trial", "events": [{"at": 0, "camera": [2139, 3260, 150], "hint": {"tile": [2161, 3293], "height": 250, "position": "east"}}]}, {"line": "The number of crystals that need imbuing", "events": [{"at": 0, "camera": [2152, 3292, 150]}, {"at": 7, "portal": true, "varbits": {"sailing_bt_gwenith_glide_crystal_ithell_deactivated": 0}}]}, {"line": "This course will truly test", "events": [{"at": 0, "camera": [2260, 3525, 0]}]}, {"line": "While navigating the more narrow spaces", "events": [{"at": 0, "camera": [2241, 3551, 150], "hint": {"tile": [2241, 3551], "height": 78, "position": "centre"}}]}, {"line": "When using the portals, you'll find", "events": [{"at": 0, "camera": [2242, 3574, 150], "hint": {"tile": [2238, 3574], "height": 250, "position": "west"}}]}, {"line": "If you can imbue all of the crystals", "events": [{"at": 0, "camera": [2211, 3545, 150], "clearHint": true}]}, {"line": "For this trial you'll be asked to imbue", "events": [{"at": 0, "camera": [2198, 3514, 150]}]}]},
+      "effectsPrompt": true,
+      "name": "Gwenith Glide",
+      "dbrow": 7245,
+      "level": 72,
+      "requires": {"crystalFleckedResistance": 1},
+      "quest": "regicide",
+      "master": { "npc": 15105, "name": "Gwyna", "page": "Gwyna", "ship": "bt_gwyna", "tile": [3, 4] },
+      "ships": [
+        { "id": "bt_gwyna", "fineX": 287936, "fineY": 442560, "angle": 1536 }
+      ],
+      "start": { "fineX": 288960, "fineY": 442816, "angle": 1024 },
+      "crateXp": 35,
+      "collectables": { "first": 58982, "count": 96 },
+      "bounds": { "minX": 2045, "maxX": 2290, "minY": 3125, "maxY": 3650 },
+      "clans": ["ithell", "amlodd", "cadarn", "crwys", "hefin", "iorwerth", "meilyr", "trahaearn"],
+      "portalPairs": [{"clan": "ithell", "portals": [[2258, 3495], [2258, 3502]], "exit": {"fineX": 267712, "fineY": 413888, "angle": 1536}}, {"clan": "amlodd", "portals": [[2206, 3572], [2239, 3572]], "exit": {"fineX": 266560, "fineY": 411584, "angle": 1536}}, {"clan": "cadarn", "portals": [[2195, 3500], [2195, 3510]], "exit": {"fineX": 269760, "fineY": 401984, "angle": 512}}, {"clan": "crwys", "portals": [[2146, 3462], [2155, 3462]], "exit": {"fineX": 271040, "fineY": 431808, "angle": 512}}, {"clan": "hefin", "portals": [[2160, 3506], [2169, 3506]], "exit": {"fineX": 288064, "fineY": 465216, "angle": 512}}, {"clan": "iorwerth", "portals": [[2196, 3582], [2205, 3582]], "exit": {"fineX": 269888, "fineY": 455744, "angle": 512}}, {"clan": "meilyr", "portals": [[2131, 3580], [2140, 3580]], "exit": {"fineX": 273600, "fineY": 416704, "angle": 1024}}, {"clan": "trahaearn", "portals": [[2170, 3521], [2179, 3521]], "exit": {"fineX": 269504, "fineY": 436928, "angle": 512}}, {"clan": null, "portals": [[2188, 3506], [2203, 3506]], "exits": [{"fineX": 282688, "fineY": 449088, "angle": 1536}, {"fineX": 280000, "fineY": 449088, "angle": 512}]}],
+      "returnPortals": [{"clan": "ithell", "at": [2156, 3291], "default": 0, "exits": [{"fineX": 289344, "fineY": 448960, "angle": 1024}, {"fineX": 289344, "fineY": 447296, "angle": 0}]}, {"clan": "amlodd", "at": [2153, 3245], "default": 0, "exits": [{"fineX": 287296, "fineY": 457536, "angle": 1536}, {"fineX": 282304, "fineY": 457536, "angle": 512}]}, {"clan": "cadarn", "at": [2125, 3169], "default": 0, "exits": [{"fineX": 281408, "fineY": 449984, "angle": 1024}, {"fineX": 281408, "fineY": 447936, "angle": 0}]}, {"clan": "crwys", "at": [2116, 3437], "default": 0, "exits": [{"fineX": 276032, "fineY": 443456, "angle": 1536}, {"fineX": 274624, "fineY": 443456, "angle": 512}]}, {"clan": "hefin", "at": [2104, 3572], "default": 0, "exits": [{"fineX": 278336, "fineY": 449088, "angle": 1536}, {"fineX": 276416, "fineY": 449088, "angle": 512}]}, {"clan": "iorwerth", "at": [2103, 3421], "default": 1, "exits": [{"fineX": 282944, "fineY": 458816, "angle": 1536}, {"fineX": 281024, "fineY": 458816, "angle": 512}]}, {"clan": "meilyr", "at": [2124, 3354], "default": 0, "exits": [{"fineX": 274624, "fineY": 458560, "angle": 1536}, {"fineX": 272704, "fineY": 458560, "angle": 512}]}, {"clan": "trahaearn", "at": [2105, 3541], "default": 0, "exits": [{"fineX": 279616, "fineY": 451008, "angle": 1536}, {"fineX": 277696, "fineY": 451008, "angle": 512}]}],
+      "resonanceCrystals": [[2100, 3475], [2100, 3482], [2112, 3478], [2113, 3573], [2123, 3481], [2123, 3489], [2124, 3520], [2124, 3528], [2135, 3521], [2137, 3488], [2137, 3498], [2141, 3488], [2141, 3498], [2161, 3571], [2162, 3557], [2168, 3542], [2170, 3571], [2172, 3557], [2182, 3490], [2182, 3494], [2194, 3536], [2202, 3491], [2218, 3560], [2218, 3566], [2221, 3497], [2225, 3525], [2225, 3535], [2228, 3557], [2233, 3506], [2233, 3513], [2235, 3504], [2235, 3515], [2237, 3540], [2241, 3551], [2244, 3564]]
+    }
+  ],
+  "ranks": ["Unranked", "Swordfish", "Shark", "Marlin"]
+}

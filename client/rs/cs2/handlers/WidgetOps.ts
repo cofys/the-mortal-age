@@ -2045,12 +2045,27 @@ export function registerWidgetOps(handlers: HandlerMap): void {
 
     // === Model ===
     // Model ops call invalidateWidget()
+
+    // The widget renderer draws an NPC's chathead only for widgets flagged as one (as the server's
+    // set_npc_head does); otherwise modelId 2 is read as a model id and draws an unrelated model.
+    const setNpcHead = (w: any, npcId: number) => {
+        w.modelType = 2;
+        w.modelId = npcId;
+        w.isNpcChathead = npcId >= 0;
+        w.npcTypeId = npcId >= 0 ? npcId : undefined;
+        w.isPlayerChathead = false;
+    };
+    const clearNpcHead = (w: any) => {
+        w.isNpcChathead = false;
+        w.npcTypeId = undefined;
+    };
     handlers.set(Opcodes.CC_SETMODEL, (ctx, intOp) => {
         const modelId = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (w) {
             w.modelType = 1;
             w.modelId = modelId;
+            clearNpcHead(w);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }
@@ -2063,6 +2078,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         if (w) {
             w.modelType = 1;
             w.modelId = modelId;
+            clearNpcHead(w);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }
@@ -2258,8 +2274,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         const npcId = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (w) {
-            w.modelType = 2;
-            w.modelId = npcId;
+            setNpcHead(w, npcId);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }
@@ -2282,8 +2297,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         const w = getWidgetFromStack(ctx);
         const npcId = ctx.intStack[--ctx.intStackSize];
         if (w) {
-            w.modelType = 2;
-            w.modelId = npcId;
+            setNpcHead(w, npcId);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }

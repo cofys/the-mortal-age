@@ -88,7 +88,7 @@ function cutOne(player, gem) {
   }
   inventory.addItem(new Item(gem.cut, 1));
   Shared.addCraftingXp(player, gem.xp);
-  Shared.produced(player, gem.cut, 1, gem.xp);
+  Shared.produced(player, gem.cut, 1, gem.xp, "gems");
   player.sendMessage(`You cut the ${gemName(gem)}.`);
   if (jewellers && inventory.contains(gem.uncut) && Math.random() < JEWELLERS_CHISEL_DOUBLE_CHANCE) {
     inventory.deleteNumber(gem.uncut, 1);
@@ -130,7 +130,7 @@ function cutAmethyst(player, recipe) {
   inventory.deleteNumber(I.AMETHYST, 1);
   inventory.addItem(new Item(recipe.itemId, recipe.amount));
   Shared.addCraftingXp(player, recipe.xp);
-  Shared.produced(player, recipe.itemId, recipe.amount, recipe.xp);
+  Shared.produced(player, recipe.itemId, recipe.amount, recipe.xp, "amethyst");
   return true;
 }
 

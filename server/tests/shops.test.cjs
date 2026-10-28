@@ -23,7 +23,7 @@ const STEEL_AXE_NOTE = 1354;
 const DEFINITIONS = {
   [COINS]: { name: "Coins", stackable: true, value: 1 },
   [BRONZE_AXE]: { name: "Bronze axe", value: 16 },
-  [STEEL_AXE]: { name: "Steel axe", value: 200 },
+  [STEEL_AXE]: { name: "Steel axe", value: 200, note: STEEL_AXE_NOTE },
   [STEEL_AXE_NOTE]: { name: "Steel axe", stackable: true, value: 200, noteOf: STEEL_AXE },
 };
 ItemDefinition.forId = (id) => {
@@ -35,7 +35,7 @@ ItemDefinition.forId = (id) => {
     isStackable: () => def.stackable === true,
     isNoted: () => def.noteOf != null,
     unNote: () => def.noteOf ?? id,
-    getNoteId: () => -1,
+    getNoteId: () => def.note ?? -1,
     getValue: () => def.value,
     isTradeable: () => true,
     isSellable: () => true,
@@ -45,11 +45,11 @@ ItemDefinition.forId = (id) => {
 const AXE_SHOP = 900;
 const GENERAL_STORE = 901;
 
-function loadShops() {
+function loadShops(steelStock = 1) {
   ShopDefinition.replace([
     new ShopDefinition(AXE_SHOP, "Bob's Brilliant Axes", "COINS", [
       { id: BRONZE_AXE, amount: 2, restockTicks: null, price: null },
-      { id: STEEL_AXE, amount: 1, restockTicks: null, price: null },
+      { id: STEEL_AXE, amount: steelStock, restockTicks: null, price: null },
     ], 100, 100, 100, "test"),
     new ShopDefinition(GENERAL_STORE, "Lumbridge General Store", "COINS", [
       { id: BRONZE_AXE, amount: 3, restockTicks: null, price: null },
@@ -263,4 +263,122 @@ test("a currency with a unit uses OSRS's wording: costs, buy-back and too few", 
     "Steel axe: shop will buy for 170 trade sticks.",
     "You don't have enough trade sticks.",
   ]);
+});
+
+
+const CustomShops = require("../plugins/interface/CustomShops.plugin");
+const CUSTOM_GROUP = 30009;
+const NOTED_TOGGLE_UID = (CUSTOM_GROUP << 16) | 6;
+const BUY_NOTED_ATTRIBUTE = "custom-shops:buy-noted";
+
+function customShopHarness(t, steelStock = 50) {
+  const fs = require("node:fs");
+  const readFileSync = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", (file, ...args) => String(file).endsWith("custom-shops.json")
+    ? JSON.stringify([{ id: AXE_SHOP, icon: STEEL_AXE }, { id: GENERAL_STORE, icon: BRONZE_AXE }])
+    : readFileSync(file, ...args));
+  const { Wilderness } = require("../dist/game/content/wilderness/Wilderness");
+  t.mock.method(Wilderness, "isIn", () => false);
+  let command, definition, delivery, startup;
+  const buttons = new Map();
+  const persisted = new Map();
+  CustomShops.register({
+    core: { ItemDefinition },
+    onServerStartup: (handler) => { startup = handler; },
+    getCombatFactory: () => ({ inCombat: () => false }),
+    persistAttribute: (key, value) => {
+      persisted.set(key, value);
+      PlayerSave.persistAttribute(key, value);
+    },
+    registerCustomInterface: (group) => { definition = group; },
+    registerCommand: (_name, handler) => { command = handler; },
+    onInterfaceActionButton: (ids, handler) => {
+      for (const id of Array.isArray(ids) ? ids : [ids]) buttons.set(id, handler);
+    },
+    onCustomEvent: (_name, handler) => { delivery = handler; },
+  });
+  t.mock.method(PluginManager, "emitCustomEvent", (name, request) => {
+    if (name === "shop:delivery") delivery(request);
+  });
+  startup();
+  loadShops(steelStock);
+  const texts = new Map();
+  const player = createPlayer();
+  player.busy = () => false;
+  const sender = player.getPacketSender();
+  player.getPacketSender = () => new Proxy(sender, {
+    get: (target, key) => key === "sendString"
+      ? (text, id) => { texts.set(id, text); return target; } : target[key],
+  });
+  player.getInventory().add(new Item(COINS, 10000), false);
+  const toggle = () => buttons.get(NOTED_TOGGLE_UID)({ player });
+  const open = () => command({ player });
+  open();
+  return { player, toggle, open, texts, persisted, definition, delivery, buttons };
+}
+
+test("custom shops offer a saved noted toggle with unnoted purchases by default", t => {
+  const h = customShopHarness(t);
+  assert.equal(h.persisted.get(BUY_NOTED_ATTRIBUTE), false);
+  assert.ok(PlayerSave.persistentAttributeKeys.has(BUY_NOTED_ATTRIBUTE));
+  assert.match(h.texts.get(NOTED_TOGGLE_UID), /Off/);
+  const widget = h.definition.widgets.find(({ id }) => id === NOTED_TOGGLE_UID);
+  assert.equal(widget.flags & 2, 2, "the toggle transmits its click");
+  assert.deepEqual(widget.actions, ["Toggle"]);
+  buy(h.player, 1, STEEL_AXE);
+  assert.equal(h.player.getInventory().getAmount(STEEL_AXE), 1);
+  h.toggle();
+  assert.equal(h.player.getAttribute(BUY_NOTED_ATTRIBUTE), true);
+  assert.match(h.texts.get(NOTED_TOGGLE_UID), /On/);
+  h.open();
+  assert.match(h.texts.get(NOTED_TOGGLE_UID), /On/, "reopening preserves the choice");
+  buy(h.player, 1, STEEL_AXE, "Buy 5");
+  assert.equal(h.player.getInventory().getAmount(STEEL_AXE_NOTE), 5);
+  assert.equal(h.player.getInventory().getAmount(COINS), 8800);
+  assert.equal(stockOf().find(([id]) => id === STEEL_AXE)[1], 44);
+  h.toggle();
+  buy(h.player, 1, STEEL_AXE);
+  assert.equal(h.player.getInventory().getAmount(STEEL_AXE), 2);
+  assert.equal(h.player.getInventory().getAmount(STEEL_AXE_NOTE), 5);
+  h.player.setInterfaceId(-1);
+  h.toggle();
+  assert.equal(h.player.getAttribute(BUY_NOTED_ATTRIBUTE), false, "a stale click cannot change it");
+});
+
+test("noted purchases use one slot, can extend a full inventory stack, and preserve payment on refusal", t => {
+  const h = customShopHarness(t);
+  h.toggle();
+  for (let slot = 1; slot < 28; slot++) h.player.getInventory().add(new Item(20000 + slot), false);
+  buy(h.player, 1, STEEL_AXE, "Buy 5");
+  assert.equal(h.player.getInventory().getAmount(COINS), 10000);
+  assert.equal(stockOf().find(([id]) => id === STEEL_AXE)[1], 50);
+  h.player.getInventory().deleteAtSlot(27, 1, false);
+  buy(h.player, 1, STEEL_AXE, "Buy 5");
+  assert.equal(h.player.getInventory().getAmount(STEEL_AXE_NOTE), 5);
+  assert.equal(h.player.getInventory().getFreeSlots(), 0);
+  buy(h.player, 1, STEEL_AXE, "Buy 5");
+  assert.equal(h.player.getInventory().getAmount(STEEL_AXE_NOTE), 10);
+  assert.equal(h.player.getInventory().getAmount(COINS), 8000);
+  assert.equal(stockOf().find(([id]) => id === STEEL_AXE)[1], 40);
+});
+
+test("noted mode leaves other shops, stackable/non-noteable items and other plugin delivery intact", t => {
+  const h = customShopHarness(t);
+  h.toggle();
+  for (const [shopId, itemId, deliverId] of [[GENERAL_STORE, STEEL_AXE, STEEL_AXE],
+    [AXE_SHOP, BRONZE_AXE, BRONZE_AXE], [AXE_SHOP, COINS, COINS],
+    [AXE_SHOP, STEEL_AXE, BRONZE_AXE], [AXE_SHOP, STEEL_AXE, STEEL_AXE_NOTE]]) {
+    const request = { player: h.player, shopId, itemId, deliverId };
+    h.delivery(request);
+    assert.equal(request.deliverId, deliverId);
+  }
+  const original = DEFINITIONS[STEEL_AXE].note;
+  try {
+    DEFINITIONS[STEEL_AXE].note = BRONZE_AXE;
+    const request = { player: h.player, shopId: AXE_SHOP, itemId: STEEL_AXE, deliverId: STEEL_AXE };
+    h.delivery(request);
+    assert.equal(request.deliverId, STEEL_AXE, "a nonreciprocal note id cannot substitute another item");
+  } finally {
+    DEFINITIONS[STEEL_AXE].note = original;
+  }
 });

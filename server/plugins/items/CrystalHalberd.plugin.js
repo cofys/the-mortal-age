@@ -49,9 +49,10 @@ function useCharge(player, item) {
   if (current <= 0) {
     return;
   }
-  // Content may spare the charge (a league relic): the question every charged weapon asks.
+  // Content may spare the charge (a league fragment): the same question every melee weapon with charges asks.
   const consume = { player, itemId: item.getId(), skip: false };
-  api.emitCustomEvent("combat:consume-charge", consume);
+  api?.emitCustomEvent("combat:melee-charge", consume);
+  api?.emitCustomEvent("combat:consume-charge", consume);
   if (consume.skip) {
     return;
   }

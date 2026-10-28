@@ -143,7 +143,7 @@ function buildRoomThrough(player, house, room, furniture, next, template) {
     say(player, `You don't have the right materials to build any staircase in the room ${next.plane > room.plane ? "above" : "below"}.`);
     return;
   }
-  for (const [itemId, amount] of House.getBuildMaterials(player, house, target, staircase)) House.useMaterial(player, itemId, amount);
+  House.useMaterials(player, staircase, House.getBuildMaterials(player, house, target, staircase));
   player.getInventory().delete(COINS, template.cost);
   house.setFurniture(target, staircase);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, staircase.experience);

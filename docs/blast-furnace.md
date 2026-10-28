@@ -11,17 +11,19 @@ The dwarven furnace under Keldagrim (`server/plugins/minigames/BlastFurnace.plug
 - **The foreman** lets smiths under 60 Smithing use the furnace for 2,500 coins for ten minutes. This runs through his transcript, both Talk-to and the Pay option: the plugin answers its coin, Smithing and Ring of Charos(a) conditions, and takes the fee on the "Okay, you can use the furnace for ten minutes." line. With the ring, the haggle costs 1,250. The chromium-ingot option is hidden because that content isn't in this server.
 - **The conveyor belt:** Put-ore-on loads every suitable ore you carry, and using one ore on the belt loads just that ore. It needs coins in the coffer, and the foreman's permit under level 60.
   - Each ore needs the level of the bar it makes (coal needs 30, for steel).
-  - The pot holds 28 ore that makes bars (copper, iron, silver, gold, mithril, adamantite and runite, all counted together), and 254 each of coal and tin **(RSPS)**. Ore over the limit stays in the inventory.
+  - The pot holds 28 primary ores (counted together), and 254 each of coal and tin. Pending conveyor loads count towards those limits; excess stays in the inventory. These capacities are documented on the [Blast Furnace page](https://oldschool.runescape.wiki/w/Blast_Furnace).
+  - A full stack of 28 bars of any metal blocks further belt loading, including coal. The bars must be collected first; the refused load stays carried.
+  - Pending ore is saved separately from the melting pot. Pot counters update when the load arrives. Logging out with only coal on the belt loses that pending coal, while coal already in the pot remains. Mixed pending loads survive logout and resume on return, rather than becoming pot contents immediately ([Wiki](https://oldschool.runescape.wiki/w/Blast_Furnace)).
   - Each ore type rides the belt as its own NPC (2924-2932), one tile a tick for 3 tiles, then falls into the pot (animation 2434) **(RSPS: timing)**.
 - **Smelting** happens when the belt is empty. It uses half the coal of a furnace (Wiki), and iron always succeeds.
   - Bars that need coal are made first, so iron with coal in the pot becomes steel, and any iron left over becomes iron bars.
   - Ore waits in the pot until there's enough coal for it.
-  - The dispenser holds 28 of each bar **(RSPS)**. Ore it has no room for stays in the pot and is smelted once bars are taken.
+  - The dispenser holds 28 of each bar ([Bar dispenser](https://oldschool.runescape.wiki/w/Bar_dispenser)). Ore it has no room for stays in the pot and is smelted once bars are taken.
   - XP is given as the bars are made. Gold gives 56.2 XP with goldsmith gauntlets or a Smithing cape.
   - The pot's ore and the dispenser's bars are sent as varbits 941-959 (RuneLite `BLAST_FURNACE_*`). Melting Pot and Bar dispenser "Check" list them.
 - **The bar dispenser** is loc 9092, a multiloc on varbit 936: 0 empty, 1 pouring, 2 hot, 3 cooled. It pours for 2 ticks, then the bars stay molten for 16 ticks before they cool **(RSPS: timings)**.
   - Molten bars need ice gloves or smiths gloves (i), or a bucket of water thrown on them (animation 2450).
-  - Take opens the skillmulti "What would you like to take?" menu, and gives as many as fit in the free inventory slots.
+  - Take opens the skillmulti "How many would you like to take?" menu, using take mode 17 and an available-quantity limit, and gives as many as fit in the free inventory slots.
 - **Also:**
   - The sink fills a bucket of water.
   - The temperature gauge opens interface 30.
@@ -87,9 +89,41 @@ Bar dispenser page's Mod Ash reference describes. The dispenser cap remains 28 p
 
 ## Verification
 
-`node --test tests/blast-furnace.test.cjs tests/smithing*.test.cjs tests/storage-items.test.cjs`
-checks paid and manual operation, fuel/pedals/heat gating, manual XP/cancellation, shared
+The Blast Furnace, Smithing and storage-item regression tests check paid and manual operation, fuel/pedals/heat gating, manual XP/cancellation, shared
 contribution cooldown, overheating/repairs, room scoping, coal-bag capacity, lead/cupronickel,
 confirmed pot emptying, stale-menu cooling checks, nearby shared cooling and F2P recipe gates.
 Review regressions also cover pending conveyor ore through Take/re-entry, helper-only cooling,
 integer-valued pedal energy across restarts, nickel limits and the captured Dumpy cycle.
+
+## Conveyor and dispenser parity evidence
+
+The [Blast Furnace page](https://oldschool.runescape.wiki/w/Blast_Furnace) documents the
+collect-bars refusal, primary/secondary ore limits, and coal-only versus mixed-load logout
+behaviour. The specific [Bar dispenser page](https://oldschool.runescape.wiki/w/Bar_dispenser)
+confirms a separate 28-bar capacity for each metal; it resolves the general page's less
+specific wording about bar capacity.
+
+Rsprox captures establish the following additional facts:
+
+- Recording **1757** has 28 runite bars, 16 runite ore and 20 coal in the furnace when a new
+  coal load is refused with “You should collect your bars before making any more.” The
+  refused load is not removed. Earlier successful coal loads update the pot's coal count
+  after inventory removal, followed by smelting.
+- Recording **3278** also shows the collect-bars refusal, the empty-belt message
+  “You don't have anything suitable for putting into the blast furnace.”, and the
+  noted-mithril-ore refusal “There would be no point in smelting that.”
+- Recordings **96**, **1757** and **3278** show the take quantity menu with mode 17 and
+  the title “How many would you like to take?”. A five-bar runite example offers five.
+  Empty-dispenser responses say “The dispenser doesn't contain any bars.”
+- Recording **3278** shows water cooling on the same response tick: the throw animation,
+  sound 1051, “You throw the water over the bars.”, one water bucket exchanged for an empty
+  bucket, and hot state 2 becoming cooled state 3. Sound 1051 exists in the active cache.
+
+These recordings are from Leagues V or Grid Master. They support the listed interaction
+responses and ordering; their XP multipliers and automatic noting are not normal-world
+behaviour. Exact normal-world conveyor travel time remains unverified, as do the manual
+machinery estimates listed above. This change retains the existing travel duration.
+
+Regressions cover full-dispenser refusal and collection recovery, pending-load capacity,
+delayed pot counters, coal-only logout loss, mixed-load persistence and resumption without
+duplication, the empty/refusal messages, take-menu parameters and water-cooling feedback.

@@ -2,7 +2,7 @@
  * Crystal harpoon charges (OSRS Wiki): created with 10,000 charges, one consumed
  * for every fish caught, recharged with crystal shards (100 each, up to 20,000).
  * An empty harpoon turns inactive and fishes like a dragon harpoon. Wearing an
- * elven signet gives a 10% chance to save the charge.
+ * elven or celestial signet gives a 10% chance to save the charge.
  */
 const START_CHARGES = 10000;
 const MAX_CHARGES = 20000;
@@ -50,8 +50,9 @@ function useCharge(player, item) {
 }
 
 function wearingSignet(player) {
-  const { ELVEN_SIGNET, ELVEN_SIGNET_2, ELVEN_SIGNET_3 } = core.ItemIdentifiers;
-  return [ELVEN_SIGNET, ELVEN_SIGNET_2, ELVEN_SIGNET_3].some((id) => player.getEquipment().contains(id));
+  const { ELVEN_SIGNET, ELVEN_SIGNET_2, ELVEN_SIGNET_3, CELESTIAL_SIGNET, CELESTIAL_SIGNET_UNCHARGED_ } = core.ItemIdentifiers;
+  return [ELVEN_SIGNET, ELVEN_SIGNET_2, ELVEN_SIGNET_3, CELESTIAL_SIGNET, CELESTIAL_SIGNET_UNCHARGED_]
+    .some((id) => player.getEquipment().contains(id));
 }
 
 /** Consumes one charge per caught fish; returns false when the signet saved it. */

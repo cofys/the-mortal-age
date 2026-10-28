@@ -47,7 +47,7 @@ function pour(player, cannonball) {
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, cannonball.xpPerBar * bars);
   player.sendMessage(`The molten metal cools slowly to form ${bars * BALLS_PER_BAR} cannonballs.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: cannonball.ballId });
-  require("./Common.Smithing").produced(player, Core.Skill.SMITHING, cannonball.ballId, bars * BALLS_PER_BAR, cannonball.xpPerBar * bars);
+  require("./Common.Smithing").produced(player, Core.Skill.SMITHING, cannonball.ballId, bars * BALLS_PER_BAR, cannonball.xpPerBar * bars, "cannonballs");
   return true;
 }
 

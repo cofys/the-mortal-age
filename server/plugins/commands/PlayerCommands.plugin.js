@@ -23,7 +23,7 @@ function parseIntArg(value) {
 function sendOnlinePlayers(player) {
   const connectedNames = [];
   for (const worldPlayer of World.getPlayers()) {
-    if (!worldPlayer || !World.isPlayerSessionConnected(worldPlayer)) {
+    if (!worldPlayer || worldPlayer.isPlayerBot?.() === true || !World.isPlayerSessionConnected(worldPlayer)) {
       continue;
     }
     connectedNames.push(worldPlayer.getUsername());

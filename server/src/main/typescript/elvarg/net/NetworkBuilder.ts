@@ -666,10 +666,6 @@ export class ClientConnection {
           if (action && (packet.amount > 0 || (packet.amount === 0 && action.acceptsZero === true) || (packet.amount < 0 && action.acceptsNegative === true))) {
             action.execute(packet.amount);
           }
-          else if (this.player && Bank.isOpen(this.player) && packet.amount > 0) {
-            this.player.setBankCustomQuantity(packet.amount);
-            this.player.getPacketSender().sendVarbit(3960, packet.amount);
-          }
           this.player?.setEnteredAmountAction(null);
           continue;
         }

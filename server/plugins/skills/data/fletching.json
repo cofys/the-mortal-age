@@ -6,7 +6,7 @@
     "hammer": ["HAMMER"]
   },
   "alternatives": {
-    "@feathers": ["FEATHER", "YELLOW_FEATHER", "ORANGE_FEATHER", "RED_FEATHER", "BLUE_FEATHER", "STRIPY_FEATHER"]
+    "@feathers": ["FEATHER", "YELLOW_FEATHER", "ORANGE_FEATHER", "RED_FEATHER", "BLUE_FEATHER", "STRIPY_FEATHER", { "item": "GRYPHON_FEATHER", "usedOnly": true }, "STYMPHIKE_FEATHER"]
   },
   "menus": {
     "make": { "title": "What would you like to make?" },

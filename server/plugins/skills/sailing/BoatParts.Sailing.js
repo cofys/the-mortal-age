@@ -62,11 +62,18 @@ function partStats(boat, part) {
   return stats >= 0 ? CacheDefinitions.getDbRow(stats) : undefined;
 }
 
-/** The boat's current and maximum hull HP. A boat never damaged reads as full. */
+/**
+ * The boat's current and maximum hull HP. A boat never damaged reads as full.
+ * Two damage records share the boat: upstream's combat tracks `damage` taken
+ * (recovery zeroes it; ShipCombat also mirrors it into `hitpoints`), while the
+ * fork's naval warfare writes `hitpoints` directly (0/unset = full). Whichever
+ * record shows less hull remaining wins, so both damage paths read correctly.
+ */
 function boatHull(boat) {
   const max = Math.max(1, boatStats(boat).hitpoints);
-  const current = boat.hitpoints > 0 ? Math.min(boat.hitpoints, max) : max;
-  return { current, max };
+  const fromDamage = boat.damage > 0 ? Math.max(0, max - boat.damage) : max;
+  const fromHitpoints = boat.hitpoints > 0 ? Math.min(boat.hitpoints, max) : max;
+  return { current: Math.min(fromDamage, fromHitpoints), max };
 }
 
 /** The boat's stats from its parts: HP is the hull's plus the keel's, and so on. */
@@ -124,7 +131,10 @@ function specFor(boat, base) {
     ...base,
     templateChunkX: base.templateChunkX + hull,
     locs,
-    stats: { ...base.stats, baseSpeed, speedCap: stats.speedCap || undefined, speedBoostDuration: stats.speedBoostDuration || undefined },
+    stats: {
+      ...base.stats, baseSpeed, speedCap: stats.speedCap || undefined, speedBoostDuration: stats.speedBoostDuration || undefined,
+      acceleration: stats.acceleration,
+    },
   };
 }
 

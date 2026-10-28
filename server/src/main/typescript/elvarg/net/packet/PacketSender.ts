@@ -60,6 +60,7 @@ import {
   encodeVarp,
   encodeVarpLong,
   encodeWidgetClose,
+  encodeTriggerOnDialogAbort,
   encodeWidgetCloseSub,
   encodeWidgetOpen,
   encodeWidgetOpenSub,
@@ -617,6 +618,12 @@ export class PacketSender {
     return this;
   }
 
+  /** An arrow over a world entity (a boat) by its index, `height` as a tile hint's (type 4, ours). */
+  public sendWorldEntityHint(entityIndex: number, height = 0): this {
+    this.player.getSession().sendClientPacket(encodeHintArrow(4, entityIndex, 0, height));
+    return this;
+  }
+
   /** Clears any active hint arrow. */
   public clearHintArrow(): this {
     this.player.getSession().sendClientPacket(encodeHintArrow(0, 0, 0, 0));
@@ -732,6 +739,11 @@ export class PacketSender {
     // A no-op here can leave stale inventory context active client-side, which
     // affects default left-click item actions (e.g. "Drop" appearing as primary).
     this.player.setStatus?.(PlayerStatus.NONE);
+    // Capture: closing the bank under an unanswered "Enter amount:" sends trigger_ondialogabort
+    // first, so the client's meslayer_ondialogabort drops the prompt along with its answer.
+    if (this.player.getEnteredAmountAction?.()) {
+      this.player.getSession().sendClientPacket(encodeTriggerOnDialogAbort());
+    }
     this.player.setEnteredAmountAction?.(null);
     this.player.setEnteredSyntaxAction?.(null);
     this.player.getDialogueManager?.()?.reset?.();
@@ -966,8 +978,13 @@ export class PacketSender {
     return this;
   }
 
-  /** cam_target: the camera follows a tile or another player (by index) until sendCameraReset. */
-  sendCameraTarget(target: { x: number; y: number; level: number } | { player: number }): this {
+  /**
+   * cam_target: the camera follows a tile, or a player, an NPC or a world entity (a boat) by its
+   * index, until sendCameraReset.
+   */
+  sendCameraTarget(
+    target: { x: number; y: number; level: number; cycles?: number } | { player: number } | { npc: number } | { worldEntity: number },
+  ): this {
     this.player.getSession().sendClientPacket(encodeCameraTarget(target));
     return this;
   }

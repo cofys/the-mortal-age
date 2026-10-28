@@ -245,6 +245,36 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
   assert.equal(CrystalHarpoon.charges(signet.equipment[Equipment.WEAPON_SLOT]), 10000);
   assert.equal(CrystalHarpoon.tryUseCharge(signet, () => 0.5), true, "outside the 10% roll it spends one");
 
+  // Wiki: Celestial signet inherits the elven signet effect in both charge states.
+  // Exercise actual catch delivery so saved charges still award the fish and its XP.
+  for (const ringId of [I.CELESTIAL_SIGNET, I.CELESTIAL_SIGNET_UNCHARGED_]) {
+    for (const carried of [false, true]) {
+      const fisher = player(carried ? { inventory: [I.CRYSTAL_HARPOON] } : { weapon: I.CRYSTAL_HARPOON });
+      const harpoon = carried ? fisher.items[0] : fisher.equipment[Equipment.WEAPON_SLOT];
+      fisher.equipment[Equipment.RING_SLOT] = new Item(ringId, 1);
+      harpoon.setMetaValue("crystal-harpoon", { charges: 1 });
+      const previousRandom = Math.random;
+      try {
+        Math.random = () => 0.099999;
+        landCatch(fisher, TOOLS.HARPOON, findTool(fisher, TOOLS.HARPOON), [FISH.SWORDFISH]);
+      } finally {
+        Math.random = previousRandom;
+      }
+      assert.equal(harpoon.getId(), I.CRYSTAL_HARPOON, `worn ring ${ringId} saves the final charge`);
+      assert.equal(CrystalHarpoon.charges(harpoon), 1);
+      assert.equal(fisher.items.at(-1).getId(), I.RAW_SWORDFISH);
+      assert.equal(fisher.xp.get("Fishing"), 100);
+      assert.deepEqual(fisher.messages, ["You catch a raw swordfish."]);
+      assert.equal(CrystalHarpoon.tryUseCharge(fisher, () => 0.1), true, "10% boundary spends the final charge");
+      assert.equal(harpoon.getId(), I.CRYSTAL_HARPOON_INACTIVE_);
+      assert.equal(findTool(fisher, TOOLS.HARPOON).bonus, 120);
+
+      const carriedRing = player({ weapon: I.CRYSTAL_HARPOON, inventory: [ringId] });
+      assert.equal(CrystalHarpoon.tryUseCharge(carriedRing, () => 0), true, "a carried ring cannot save charges");
+      assert.equal(CrystalHarpoon.charges(carriedRing.equipment[Equipment.WEAPON_SLOT]), 9999);
+    }
+  }
+
   const crystalLast = player({ inventory: [I.CRYSTAL_HARPOON] });
   crystalLast.items[0].setMetaValue("crystal-harpoon", { charges: 1 });
   assert.equal(CrystalHarpoon.tryUseCharge(crystalLast, () => 0.5), true);

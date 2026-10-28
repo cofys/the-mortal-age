@@ -755,6 +755,16 @@ export class NPC extends Mobile {
         return this.spawnPosition;
     }
 
+    /**
+     * Moves the NPC's home: where its movement coordinator keeps it (wander radius) and walks it
+     * back to. Content that walks an NPC around (a crewmate on a boat deck) sets it to where it
+     * sends the NPC, or the coordinator walks it straight back.
+     */
+    public setSpawnPosition(position: Location): NPC {
+        this.spawnPosition = position.clone();
+        return this;
+    }
+
     public getHeadIcon(): number {
         return this.headIcon;
     }

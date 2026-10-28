@@ -195,10 +195,14 @@ function procs(bolt, shot) {
   let chance = base * (hasKandarinHard(shot.player) ? KANDARIN_HARD_CHANCE_MULTIPLIER : 1);
   chance *= core.WeaponProfiles.get(shot.player)?.boltEffectChanceMultiplier ?? 1;
   if (traits?.enchantedBoltEffectChanceMultiplier > 0) chance *= traits.enchantedBoltEffectChanceMultiplier;
+  // Content may raise it further (a league fragment): "combat:bolt-effect-chance" { player, target, effect, chance }.
+  const request = { player: shot.player, target: shot.target, effect: bolt.effect, chance };
+  pluginApi.emitCustomEvent("combat:bolt-effect-chance", request);
+  if (Number.isFinite(request.chance)) chance = request.chance;
   // Content may scale the chance (a league relic), after the gear and the special have had their say.
-  const request = { player: shot.player, target: shot.event.target, itemId: shot.player.getCombat().getAmmunition()?.getItemId?.() ?? -1, chance };
-  pluginApi.emitCustomEvent("combat:bolt-proc-chance", request);
-  return Math.random() < request.chance;
+  const proc = { player: shot.player, target: shot.event.target, itemId: shot.player.getCombat().getAmmunition()?.getItemId?.() ?? -1, chance };
+  pluginApi.emitCustomEvent("combat:bolt-proc-chance", proc);
+  return Math.random() < proc.chance;
 }
 
 /** Live sends both on the shot, delayed by the hit's flight time in ticks (rsprox captures). */

@@ -122,6 +122,8 @@ function successChance(player, target) {
   const bonuses = [];
   if (wornName(player, core.Equipment.HANDS_SLOT) === "gloves of silence") bonuses.push(GLOVES_OF_SILENCE_BONUS);
   if (wearsThievingCape(player)) bonuses.push(THIEVING_CAPE_BONUS);
+  // Content's bonus percent ("thieving:pickpocket-target" `chanceBonus`, a league fragment), stacking as the gloves do.
+  if (target.chanceBonus > 0) bonuses.push(100 + target.chanceBonus);
   for (const bonus of bonuses) {
     low = Math.floor((low * bonus) / 100);
     high = Math.floor((high * bonus) / 100);
@@ -191,17 +193,23 @@ function rogueDoubleChance(player) {
   return pieces === ROGUE_PIECES.length ? 1 : pieces * ROGUE_CHANCE_PER_PIECE;
 }
 
-/** Hands the loot over: coins as the target's coin pouch; the rogue outfit may double it. */
-function giveLoot(player, target, loot, random = Math.random) {
-  const doubled = random() < rogueDoubleChance(player);
+/**
+ * Hands the loot over: coins as the target's coin pouch; the rogue outfit may double it, and
+ * content's `multiplier` (a league fragment's double loot) multiplies it again. Clues are never more.
+ * What the inventory has no room for (a doubled pouch's coins, a doubled item) falls to the floor.
+ */
+function giveLoot(player, target, loot, random = Math.random, multiplier = 1) {
+  const times = (random() < rogueDoubleChance(player) ? 2 : 1) * Math.max(1, multiplier | 0);
+  const inventory = player.getInventory();
   for (const { id, amount, clue } of loot) {
     if (id === core.ItemIdentifiers.COINS && target.coinPouch) {
-      player.getInventory().adds(target.coinPouch.id, 1);
+      inventory.adds(target.coinPouch.id, 1);
       // Wiki (Coin pouch): a doubled pouch gives one pouch plus its coins directly.
-      if (doubled) player.getInventory().adds(core.ItemIdentifiers.COINS, Array.isArray(target.coinPouch.coins) ? target.coinPouch.coins[0] : target.coinPouch.coins);
+      const coins = (times - 1) * (Array.isArray(target.coinPouch.coins) ? target.coinPouch.coins[0] : target.coinPouch.coins);
+      if (coins > 0) inventory.forceAdd(player, new core.Item(core.ItemIdentifiers.COINS, coins));
       continue;
     }
-    player.getInventory().adds(id, doubled && !clue ? amount * 2 : amount);
+    inventory.forceAdd(player, new core.Item(id, clue ? amount : amount * times));
   }
 }
 
@@ -237,10 +245,11 @@ function dodgyNecklaceProtects(player, random = Math.random) {
 
 function succeed(player, npc, target, name) {
   player.performAnimation(new core.Animation(target.pickpocketAnimation ?? THIEVING_ANIMATION));
-  // Content may change the loot before it is handed over ("thieving:loot", a league relic's doubled or noted loot).
-  const loot = { player, npc, target: target.name, loot: rollLoot(player, target) };
+  // Content may change the loot before it is handed over ("thieving:loot", a league relic's doubled or noted loot),
+  // or multiply it as the rogue outfit does (`multiplier`, a league fragment's double loot).
+  const loot = { player, npc, target: target.name, loot: rollLoot(player, target), multiplier: 1 };
   pluginApi.emitCustomEvent("thieving:loot", loot);
-  giveLoot(player, target, loot.loot);
+  giveLoot(player, target, loot.loot, Math.random, loot.multiplier);
   player.sendMessage(`You pick ${name}'s pocket.`);
   core.Sounds.sendSound(player, core.Sound.THIEVING_PICKPOCKET);
   player.getSkillManager().addExperiences(core.Skill.THIEVING, target.xp);
@@ -285,7 +294,7 @@ function caughtTask(player, npc, target) { return new (class extends core.Task {
     }
     if (this.stunned) {
       player.sendMessage("You've been stunned!");
-      player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(roll(target.stunDamage), core.HitMask.RED)]);
+      if (!target.painless) player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(roll(target.stunDamage), core.HitMask.RED)]);
       this.stop();
       return;
     }
@@ -357,7 +366,8 @@ function samePlace(location, from) {
 function pickpocket(event) {
   const { player, npc } = event;
   const npcName = event.definition.getName();
-  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false, alwaysSucceeds: false, pouchLimit: MAX_COIN_POUCHES };
+  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false, alwaysSucceeds: false, pouchLimit: MAX_COIN_POUCHES,
+    chanceBonus: 0, painless: false };
   pluginApi.emitCustomEvent("thieving:pickpocket-target", request);
   const target = request.target;
   if (!target) return false;
@@ -400,8 +410,10 @@ function pickpocket(event) {
   player.sendMessage(`You attempt to pick ${name}'s pocket.`);
   player.getClickDelay().reset();
   npc.getTimers().registers(core.TimerKey.ATTACK_IMMUNITY, 10);
-  // `alwaysSucceeds` (a league relic) lands every attempt as an unconscious target does, coin pouches kept.
-  const rolled = request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : request.alwaysSucceeds ? { ...target, low: 256, high: 256 } : target;
+  // `alwaysSucceeds` (a league relic) lands every attempt as an unconscious target does, coin pouches kept;
+  // `chanceBonus` raises the success chance by that percent and `painless` stuns without the damage (a league fragment).
+  const tuned = request.chanceBonus > 0 || request.painless ? { ...target, chanceBonus: Math.max(0, request.chanceBonus | 0), painless: request.painless === true } : target;
+  const rolled = request.unconscious ? { ...tuned, low: 256, high: 256, coinPouch: null } : request.alwaysSucceeds ? { ...tuned, low: 256, high: 256 } : tuned;
   core.TaskManager.submit(pickpocketTask(player, npc, rolled, name, { ...event, from: event.from ?? tile(player.getLocation()) }));
 }
 

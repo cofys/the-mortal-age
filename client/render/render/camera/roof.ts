@@ -316,13 +316,20 @@ export function getCameraPitchRs(host: WebGLOsrsRendererHost, ): number {
 export function computeFrameRoofPlaneLimit(host: WebGLOsrsRendererHost, ): number {
 
         const cameraTile = host.getCameraTileXY();
-        const playerTile = host.getPlayerTileXY();
+        let playerTile = host.getPlayerTileXY();
 
         // Deck actors stand on level 0 of a boat scene while the deck and its facilities are
         // on the boat's base plane, so measure roofs from the deck plane when aboard.
         let playerPlane = host.getPlayerBasePlane() | 0;
         const worldViewId = host.getControlledPlayerWorldViewId();
         if (worldViewId >= 0) {
+            // Roofs are the world's, where the deck is drawn: the deck tile itself is thousands
+            // of tiles from the camera, and the line between them was walked tile by tile.
+            const index = host.getControlledPlayerEcsIndex();
+            const projected = index !== undefined && !host.osrsClient.getCameraTargetPosition()
+                ? host.projectDeckToWorld(worldViewId, host.osrsClient.playerEcs.getX(index), host.osrsClient.playerEcs.getY(index))
+                : undefined;
+            if (projected) playerTile = { x: (projected.x / 128) | 0, y: (projected.y / 128) | 0 };
             const overlay = host.worldEntityOverlays.get(worldViewId);
             const deckPlane =
                 overlay?.basePlane ||

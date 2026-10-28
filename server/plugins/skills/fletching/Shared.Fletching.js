@@ -89,7 +89,12 @@ function sound(name) {
 
 function resolveMaterial([name, amount]) {
   const names = DATA.alternatives[name] ?? [name];
-  return { ids: names.map(itemId), amount };
+  return {
+    ids: names.map((entry) => itemId(typeof entry === "string" ? entry : entry.item)),
+    // The Wiki documents alternatives that work only as the used item, not the target.
+    usedOnlyIds: names.filter((entry) => entry.usedOnly).map((entry) => itemId(entry.item)),
+    amount,
+  };
 }
 
 /** The recipe with its group's defaults filled in and every name turned into an id. */
@@ -174,7 +179,8 @@ function registerVirtualMaterial(materialId, source) {
 }
 
 function recipesFor(a, b) {
-  return recipesByPair.get(pairKey(a, b)) ?? [];
+  return (recipesByPair.get(pairKey(a, b)) ?? [])
+    .filter((recipe) => !recipe.materials.some((material) => material.usedOnlyIds.includes(b)));
 }
 
 /** The Fletching level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
@@ -309,7 +315,7 @@ function makeBatch(player, recipe, via) {
   if (recipe.message) player.sendMessage(formatMessage(recipe.message, amount));
   if (recipe.xp > 0) player.getSkillManager().addExperiences(core.Skill.FLETCHING, recipe.xp);
   api.emitCustomEvent("fletching:made", { player, itemId: recipe.outputId, amount });
-  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.FLETCHING, itemId: recipe.outputId, amount, xp: recipe.xp });
+  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.FLETCHING, itemId: recipe.outputId, amount, xp: recipe.xp, kind: recipe.group });
   return true;
 }
 
@@ -436,7 +442,11 @@ function missingToolMessage(recipe) {
  */
 function handlePair(player, usedId, usedWithId) {
   const all = recipesFor(usedId, usedWithId);
-  if (all.length === 0) return false;
+  if (all.length === 0) {
+    if (!recipesByPair.has(pairKey(usedId, usedWithId))) return false;
+    player.sendMessage("Nothing interesting happens.");
+    return true;
+  }
   const choices = all.filter((recipe) => unlocked(player, recipe));
   if (choices.length === 0) {
     player.sendMessage("Nothing interesting happens.");

@@ -259,14 +259,10 @@ export function renderOpaqueActorPass(host: WebGLOsrsRendererHost,
                             continue;
                         }
 
-                        // NPCs assigned to a world entity skip the overworld pass
-                        if (ecs.getWorldViewId(id) >= 0) {
-                            weNpcIndices.push(j);
-                            (drawCall as any).offsets[j] = 0;
-                            (drawCall as any).numElements[j] = 0;
-                            drawRanges[j] = NULL_DRAW_RANGE;
-                            continue;
-                        }
+                        // NPCs assigned to a world entity skip the overworld pass. A pose the
+                        // baked frames don't have (a sidestep, a turn) still goes through the
+                        // dynamic draw below, which applies the deck's transform.
+                        const onDeck = ecs.getWorldViewId(id) >= 0;
 
                         const seqId = ecs.getSeqId(id) | 0;
                         const seqDelay = ecs.getSeqDelay?.(id) | 0;
@@ -338,6 +334,14 @@ export function renderOpaqueActorPass(host: WebGLOsrsRendererHost,
                                 });
                                 continue;
                             }
+                        }
+
+                        if (onDeck) {
+                            weNpcIndices.push(j);
+                            (drawCall as any).offsets[j] = 0;
+                            (drawCall as any).numElements[j] = 0;
+                            drawRanges[j] = NULL_DRAW_RANGE;
+                            continue;
                         }
 
                         const anim = host._resolveNpcAnimation(map, j, ecs, id);

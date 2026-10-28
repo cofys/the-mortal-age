@@ -309,7 +309,7 @@ class CookingTask extends Task {
           itemId: cookable.cooked,
         });
         player.getSkillManager().addExperiences(Skill.COOKING, cookable.xp);
-        pluginApi.emitCustomEvent("skills:produced", { player, skill: Skill.COOKING, itemId: cookable.cooked, amount: 1, xp: cookable.xp });
+        pluginApi.emitCustomEvent("skills:produced", { player, skill: Skill.COOKING, itemId: cookable.cooked, amount: 1, xp: cookable.xp, kind: "cook" });
       } else {
         player.getInventory().addItem(new Item(session.cookable.burnt, 1));
         const rawName =

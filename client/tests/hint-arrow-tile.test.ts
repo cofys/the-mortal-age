@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 
-import { hintArrow, hintArrowTileOffset, setHintArrowNpc, setHintArrowPlayer, setHintArrowTile } from "../game/HintArrow";
+import { hintArrow, hintArrowScreenPoint, hintArrowTileOffset, setHintArrowNpc, setHintArrowPlayer, setHintArrowTile } from "../game/HintArrow";
 import { handleAuthTickMessage } from "../network/serverConnection/handlers/authTick";
 import { state } from "../network/serverConnection/state";
 import { HintArrowLayer } from "../render/webgpu/overlays/HintArrowLayer";
@@ -90,6 +90,32 @@ function loginClearsThePreviousSessionsHint(): void {
     }
 }
 
+/** A Barracuda Trial's arrow over the rum boat: a world entity hint follows the boat where it's drawn. */
+function worldEntityHintsFollowTheBoat(): void {
+    handleAuthTickMessage({ type: "hint_arrow", payload: { arrowType: 4, a: 3004, b: 0, c: 150 } });
+    assert.equal(hintArrow.type, 4);
+    assert.equal(hintArrow.worldEntityIndex, 3004);
+    assert.equal(hintArrow.height, 150);
+    const boat = { position: { x: 3037 * 128 + 64, y: 0, z: 2767 * 128 + 64 } };
+    const seen: number[][] = [];
+    const args: any = {
+        state: { playerLevel: 0 },
+        helpers: {
+            getMinTileHeightInRadius: () => 0,
+            worldToScreen: (x: number, y: number, z: number) => { seen.push([x, y, z]); return [100, 200]; },
+        },
+    };
+    const client = { worldViewManager: { getWorldEntity: (index: number) => (index === 3004 ? boat : undefined) } };
+    assert.deepEqual(hintArrowScreenPoint(args, client, undefined), [100, 200]);
+    assert.deepEqual(seen[0], [3037.5, -(150 * 2) / 128, 2767.5], "over the boat, height * 2 world units up");
+    boat.position.x += 128;
+    hintArrowScreenPoint(args, client, undefined);
+    assert.equal(seen[1][0], 3038.5, "and moves with it");
+    assert.equal(hintArrowScreenPoint(args, { worldViewManager: { getWorldEntity: () => undefined } }, undefined), undefined,
+        "nothing while the boat isn't in view");
+}
+
+worldEntityHintsFollowTheBoat();
 tileHintsKeepPositionHeightAndPlane();
 offsetsMatchTheOsrsClient();
 webgpuDrawsTheArrow();

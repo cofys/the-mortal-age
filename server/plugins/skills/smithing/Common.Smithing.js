@@ -57,9 +57,9 @@ function actionsPerCycle(player, skill, kind) {
   return Math.max(1, request.actions | 0);
 }
 
-/** A product made, with its amount and XP ("skills:produced", for content that adds to it: a league relic's extra product). */
-function produced(player, skill, itemId, amount, xp) {
-  Core.api.emitCustomEvent("skills:produced", { player, skill, itemId, amount, xp });
+/** A product made, with its amount and XP ("skills:produced", for content that adds to it: a league relic's extra product); `kind` names the loop. */
+function produced(player, skill, itemId, amount, xp, kind = null) {
+  Core.api.emitCustomEvent("skills:produced", { player, skill, itemId, amount, xp, kind });
 }
 
 function required(kind, name, id) {

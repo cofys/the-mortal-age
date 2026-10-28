@@ -13,7 +13,7 @@ const MAX_GOSUB_DEPTH = 3;
 /**
  * Finds widgets whose tap opens the soft keyboard (CS2 mobile_keyboardshow). The script runs
  * in the frame loop, after the touch has ended, and iOS only shows the keyboard for a focus
- * made inside the touch event; so the touch handler asks this whether the tapped widget will
+ * made inside touchend; so the tap handler asks this whether the tapped widget will
  * show it, and focuses the input there. The script's own call then only sets the hint.
  */
 export class KeyboardButtonProbe {

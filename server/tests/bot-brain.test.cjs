@@ -2440,3 +2440,31 @@ test('the packaged bot object index matches the current cache and tracked resour
     })().catch(error => { console.error(error); process.exitCode = 1; });
   `], { cwd: require('node:path').resolve(__dirname, '..'), stdio: 'pipe' });
 });
+
+
+test('the shared PvP world and Bounty Hunter population has more one-defence pures without protection prayers', t => {
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const { createRequire } = require('node:module');
+  const path = require('node:path');
+  const filename = path.resolve(__dirname, '../plugins/bots/PlayerBots.plugin.js');
+  const context = { require: createRequire(filename), module: { exports: {} }, process, console,
+    __dirname: path.dirname(filename) };
+  vm.runInNewContext(fs.readFileSync(filename, 'utf8') + '\nmodule.exports.config = BOT_CONFIG;', context, { filename });
+  const { buildRoamingPvpMetadata } = require('../plugins/bots/behaviours/pvp/PvpAssignment.PlayerBots');
+  let seed = 1385;
+  t.mock.method(Math, 'random', () => ((seed = Math.imul(seed, 1664525) + 1013904223 >>> 0) / 2 ** 32));
+  let noProtectionPures = 0;
+  const types = new Set();
+  for (let index = 0; index < 1000; index++) {
+    const metadata = buildRoamingPvpMetadata({ config: context.module.exports.config });
+    const generated = loadoutTesting.buildGeneratedPreset(null, { pvp: metadata });
+    assert.ok(generated);
+    const stats = generated.preset.getStats();
+    if (stats[1] === 1 && stats[5] < 37) noProtectionPures++;
+    types.add(generated.archetypeId);
+  }
+  t.diagnostic(`${noProtectionPures}/1000 one-defence pures without protection prayers`);
+  assert.ok(noProtectionPures >= 250 && noProtectionPures <= 400, `${noProtectionPures}/1000 no-protection pures`);
+  assert.ok(types.size > 25, 'the rest of the catalogue remains represented');
+});

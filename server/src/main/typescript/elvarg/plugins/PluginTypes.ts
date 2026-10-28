@@ -67,6 +67,13 @@ export interface PluginPlayerLevelUpEvent {
   newLevel: number;
 }
 
+/** XP that just landed in a skill: after rates and the experience cap; not sent when refused, XP-locked or already at the cap. */
+export interface PluginExperienceGainedEvent {
+  player: any;
+  skill: any;
+  experience: number;
+}
+
 export type PluginCustomEventName = `${string}:${string}`;
 
 export interface PluginRegionLoadedEvent {
@@ -914,6 +921,8 @@ export interface PluginApi {
   spawnNpc(definition: PluginNpcSpawnDefinition): any;
   removeNpc(npc: any): void;
   onPlayerLevelUp(handler: (event: PluginPlayerLevelUpEvent) => void): void;
+  /** After XP lands in a skill (onCanGainExperience is the check before it). */
+  onExperienceGained(handler: (event: PluginExperienceGainedEvent) => void): void;
   /** Subscribes to an exact namespaced plugin event, such as `mining:success`. */
   onCustomEvent(
     eventName: PluginCustomEventName,
@@ -924,6 +933,17 @@ export interface PluginApi {
   onPathBlocked(handler: (event: PluginPathBlockedEvent) => void): void;
   onPlayerPathBlocked(handler: (event: PluginPlayerPathBlockedEvent) => void): void;
   onObjectRoute(handler: (event: PluginObjectRouteEvent) => void): void;
+  /**
+   * How far from the player's boat (in tiles) these main-world locs can be used from its deck,
+   * instead of the usual reach; clicks from further away get no answer (a Barracuda Trial's
+   * outcrops, thrown at from 18 tiles off).
+   */
+  setDeckReach(objectIds: number[], tiles: number): void;
+  /**
+   * Main-world locs (by name) a player on a boat deck can use, within the deck's usual reach (a
+   * dock's gangplank, a buoy). Any other land loc clicked from a deck: "I can't do that from here!"
+   */
+  setUsableFromDeck(names: string[]): void;
   onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */
@@ -1320,12 +1340,20 @@ export interface PluginApi {
   registerSpecialEnergyRestoreModifier(
     modifier: (entity: any, delayTicks: number) => number
   ): void;
+  /** Special attack energy a special costs, checked and drained; return the cost. */
+  registerSpecialEnergyCostModifier(
+    modifier: (entity: any, cost: number) => number
+  ): void;
   registerIncomingDamageModifier(
     modifier: (entity: any, hitDamage: any) => void
   ): void;
   /** Reduces an NPC/environmental Prayer drain; return the points actually drained. */
   registerPrayerDrainModifier(
     modifier: (entity: any, amount: number, context: any) => number
+  ): void;
+  /** Scales the drain effect a player's active prayers add each tick; return the new effect. */
+  registerPrayerDrainRateModifier(
+    modifier: (entity: any, drainEffect: number) => number
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
@@ -1417,6 +1445,7 @@ export interface PluginCoreApi {
   CountdownTask: any;
   ForceMovement: any;
   ForceMovementTask: any;
+  TimedObjectReplacementTask: any;
   TaskManager: any;
   NPCRespawnTask: any;
   ItemIdentifiers: any;
@@ -1425,13 +1454,13 @@ export interface PluginCoreApi {
   ObjectIdentifiers: any;
   ShopIdentifiers: any;
   Misc: any;
-  MOBILE_CLIENT_ATTRIBUTE: any;
   TimerKey: any;
   Sound: any;
   Sounds: any;
   Location: any;
   Mobile: any;
   encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
+  MOBILE_CLIENT_ATTRIBUTE: typeof import("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;

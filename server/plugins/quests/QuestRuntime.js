@@ -51,6 +51,8 @@ const FLOATER_OVERLAY_UID = (161 << 16) | 18;
 const QUEST_POINTS_VARP = 101;
 const QUEST_COMPLETE_JINGLE = 238;
 const QUEST_POINTS_ATTRIBUTE = "quest.points";
+/** Keys of the quests completed with `experience: false`, whose later XP claims pay nothing. */
+const EXPERIENCE_WITHHELD_ATTRIBUTE = "quest.experience-withheld";
 
 // Client quest list statuses.
 const STATUS_IN_PROGRESS = 0;
@@ -470,6 +472,7 @@ function registerQuest(api, def) {
   registerQuestWidgets(api);
   api.persistAttribute(stageAttribute(def.key), 0);
   api.persistAttribute(QUEST_POINTS_ATTRIBUTE, 0);
+  api.persistAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE, []);
 
   const stageKey = stageAttribute(def.key);
   const quest = {
@@ -504,23 +507,38 @@ function registerQuest(api, def) {
     isComplete(player) {
       return quest.getStage(player) >= (def.completionValue ?? 2);
     },
-    complete(player) {
+    /** Completed with `experience: false`: a post-quest XP claim (a trainer, a lamp reclaimed) pays nothing. Saved. */
+    experienceWithheld(player) {
+      const keys = player.getAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE);
+      return Array.isArray(keys) && keys.includes(def.key);
+    },
+    /**
+     * `options` for a completion the quest wasn't played through (Shattered Relics' quest packs):
+     * `experience: false` asks onReward (its third argument) to hold back experience it would hand
+     * out later, such as a prompt a tick on, and is saved for the quest's post-quest claims
+     * (`experienceWithheld`); `scroll: false` skips the jingle and the scroll.
+     */
+    complete(player, options = {}) {
       if (quest.isComplete(player)) return false;
+      if (options.experience === false && !quest.experienceWithheld(player)) {
+        const keys = player.getAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE);
+        player.setAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE, [...(Array.isArray(keys) ? keys : []), def.key]);
+      }
       quest.setStage(player, def.completionValue ?? 2);
 
       const points = (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) + (def.questPoints || 0);
       player.setAttribute(QUEST_POINTS_ATTRIBUTE, points | 0);
       player.getPacketSender().sendConfig(QUEST_POINTS_VARP, points | 0);
 
-      if (def.onReward) def.onReward(player, quest);
+      if (def.onReward) def.onReward(player, quest, options);
       if (def.rewardItemId !== undefined) {
         const inventory = player.getInventory();
         if (inventory.isFull()) inventory.forceAdd(player, new coreApi.Item(def.rewardItemId, 1));
         else inventory.adds(def.rewardItemId, 1);
       }
-      player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
+      if (options.scroll !== false) player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
       player.sendMessage(`Congratulations, you've completed a quest: <col=081190>${def.name}</col>`);
-      showCompletedScroll(player, quest, points | 0);
+      if (options.scroll !== false) showCompletedScroll(player, quest, points | 0);
       api.emitCustomEvent?.("quest:completed", { player, key: def.key, quest });
       return true;
     },
@@ -643,10 +661,12 @@ module.exports = {
   openBook,
   QUEST_POINTS_VARP,
   QUEST_POINTS_ATTRIBUTE,
+  EXPERIENCE_WITHHELD_ATTRIBUTE,
   QUEST_COMPLETE_JINGLE,
   registerQuestWidgets,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
+  questNamed,
   pickQuestShopVersion,
   sendQuestVarps,
   refreshQuestList,

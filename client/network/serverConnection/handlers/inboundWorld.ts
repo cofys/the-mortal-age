@@ -79,9 +79,18 @@ export function handleInboundWorld(msg: any): boolean {
             if (!client?.camera || !payload) return true;
             // cam_target: the camera follows a tile or another player (spectating) until cam_reset.
             if (payload.mode === "target") {
+                // A tile glided to (a cutscene's camera tour) starts from wherever the camera is now.
+                const from = payload.cycles > 0 ? client.getCameraTargetPosition() : undefined;
                 client.cameraTarget = Number.isInteger(payload.player)
                     ? { playerServerId: payload.player }
-                    : { x: payload.x | 0, y: payload.y | 0, level: payload.level | 0 };
+                    : Number.isInteger(payload.npc)
+                      ? { npcServerId: payload.npc }
+                      : Number.isInteger(payload.worldEntity)
+                        ? { worldEntityIndex: payload.worldEntity }
+                        : {
+                            x: payload.x | 0, y: payload.y | 0, level: payload.level | 0,
+                            ...(from && { glide: { fromX: from.x, fromY: from.y, start: getClientCycle(), cycles: payload.cycles | 0 } }),
+                        };
                 client.followPlayerCamera = true;
                 client.camera.clearScriptedCamera();
                 return true;

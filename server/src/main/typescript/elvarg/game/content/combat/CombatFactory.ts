@@ -1466,6 +1466,14 @@ export class CombatFactory {
         // Get the ranged weapon data
         const rangedWeapon = player.getCombat().getRangedWeapon();
 
+        // Plugins may save the shot's ammunition or weapon charge outright (a league perk), as
+        // `magic:rune-saving` does a spell's runes; plugin-owned ammunition included.
+        const ammoSaving = { player, weaponId: player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.() ?? -1, saved: false };
+        PluginManager.emitCustomEvent("combat:ammo-saving", ammoSaving);
+        if (ammoSaving.saved) {
+            return;
+        }
+
         // Plugin-owned ammunition (toxic blowpipe scales, the Gauntlet's bows) consumes itself.
         if (PluginManager.decrementRangedAmmo(player, pos, amount, delayTicks)) {
             return;

@@ -502,6 +502,12 @@ export class World {
                 for (const npc of bucket) activeNpcs.add(npc);
             }
         }
+        // A boat's deck lies away from the main world: its crew (a ship's NPCs, a Barracuda Trial's
+        // master) is active, and seen, wherever the boat is active at sea.
+        for (const boat of BoatManager.all()) {
+            if (!World.activeRegionIndex.isLocationActive(boat.tileX, boat.tileY, boat.level)) continue;
+            for (const npc of BoatManager.getDeck(boat)?.getNpcs() ?? []) activeNpcs.add(npc);
+        }
         // Finish mechanics that began while the NPC's region was active.
         for (const npc of World.activeNpcsForUpdate) {
             const definition = npc.getDefinition?.();
@@ -799,7 +805,8 @@ export class World {
             // A player held in the world after a disconnect still keeps their region awake.
             (player) => World.shouldRunNetworkUpdates(player) || World.removePlayerQueue.includes(player),
             World.processCycle,
-            Date.now()
+            Date.now(),
+            (player) => (BoatManager.getBoatAboard(player) ? BoatManager.rootLocation(player) : undefined)
         );
         PluginManager.emitActiveRegionsUpdated(snapshot);
     }

@@ -95,7 +95,7 @@ function craftFurnaceProduct(player, product) {
   inventory.addItem(new Item(product.itemId, product.amount));
   Shared.addCraftingXp(player, product.xp);
   Shared.getApi().emitCustomEvent("crafting:made", { player, itemId: product.itemId, furnace: true });
-  Shared.produced(player, product.itemId, product.amount, product.xp);
+  Shared.produced(player, product.itemId, product.amount, product.xp, "jewellery", [[product.bar, 1], ...product.extra.map((id) => [id, 1])]);
   return true;
 }
 

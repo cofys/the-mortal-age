@@ -403,6 +403,13 @@ test("real NPC listener keeps same-deck routing and rejects foreign decks, owner
   const scopedOwnerNpc = registerNpc(14959, 2831, 2360, fakePlayer(43, new Location(0, 0, 0)), false);
   const privateNpc = registerNpc(14959, 2831, 2360);
   privateNpc.setArea({ getObjects: () => [] });
+  // Another player's owner-only quest ship beside this one, with its owned Will (as Pandemonium spawns it).
+  const stranger = realPlayer(ship.boat.tileX + 2, ship.boat.tileY);
+  const privateShip = StaticShips.spawn("pandemonium_tutorial_ship", {
+    owner: stranger, ownerOnly: true, fineX: (ship.boat.tileX + 4) * 128 + 64, fineY: ship.boat.fineY,
+  });
+  const privateShipNpc = StaticShips.addDeckNpc(privateShip, 14958, 3, 3, stranger);
+  assert.equal(BoatManager.canSeeBoat(player, privateShip.boat), false);
   const interacted = [];
   const previousEmit = PluginManager.emitNpcInteraction;
   PluginManager.emitNpcInteraction = (event) => {
@@ -422,12 +429,15 @@ test("real NPC listener keeps same-deck routing and rejects foreign decks, owner
     listener.executeOption(player, foreignOwnerNpc.getIndex(), 1);
     listener.executeOption(player, scopedOwnerNpc.getIndex(), 1);
     listener.executeOption(player, privateNpc.getIndex(), 1);
-    assert.deepEqual(interacted, [], "other decks, foreign owners and private areas stay unreachable");
+    listener.executeOption(player, privateShipNpc.getIndex(), 1);
+    for (let tick = 0; tick < 2; tick++) TaskManager.process();
+    assert.deepEqual(interacted, [], "other decks, foreign owners, private areas and another player's quest ship stay unreachable");
   } finally {
     PluginManager.emitNpcInteraction = previousEmit;
-    for (const npc of [deckNpc, foreignDeckNpc, foreignOwnerNpc, scopedOwnerNpc, privateNpc]) {
+    for (const npc of [deckNpc, foreignDeckNpc, foreignOwnerNpc, scopedOwnerNpc, privateNpc, privateShipNpc]) {
       if (npc && World.getNpcs().get(npc.getIndex()) === npc) World.getNpcs().remove(npc);
     }
+    StaticShips.dispose(privateShip);
     StaticShips.dispose(ship);
     BoatManager.dispose(otherBoat);
   }
@@ -587,7 +597,10 @@ test("hostile ships return fire with the captured bronze projectile and damage t
     assert.equal(player.projectiles.length, 1);
     assert.equal(player.projectiles[0].rest[2], 3487, "bronze return-fire projectile");
     for (let tick = 0; tick < 3; tick++) TaskManager.process();
-    assert.equal(owned.hitpoints, 100 - ShipCombat._test.ENEMY_DAMAGE);
+    // Hitpoints are the parts' maximum less the damage taken.
+    const max = require("../plugins/skills/sailing/BoatParts.Sailing").boatStats(owned).hitpoints;
+    assert.equal(owned.damage, ShipCombat._test.ENEMY_DAMAGE);
+    assert.equal(owned.hitpoints, max - ShipCombat._test.ENEMY_DAMAGE);
     assert.deepEqual(events.map((entry) => entry.name), ["sailing:ship-attacked"]);
   } finally {
     PluginManager.emitCustomEvent = previousEmit;

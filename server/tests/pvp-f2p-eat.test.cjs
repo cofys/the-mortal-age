@@ -47,13 +47,15 @@ before(async () => {
 const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/actions/EatFoodActionNode.PlayerBots.js');
 const localRequire = createRequire(filename);
 
-function loadNode(comboEatChance) {
+function loadNode(comboEatChance, profileId) {
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), {
     module,
+    Math,
     require: (name) => {
       if (name.endsWith('/PvpAssignment.PlayerBots')) {
-        return { getPvpProfile: () => ({ id: 'standard', foodCharges: 10, eatAtHpRatio: 0.45, comboEatChance }) };
+        const { getPvpProfile } = localRequire(name);
+        return { getPvpProfile: () => ({ ...getPvpProfile(profileId), comboEatChance }) };
       }
       if (name.endsWith('/state/State.PlayerBots')) return {
         computeEatThreshold: (maxHp, ratio, f2p) =>
@@ -66,7 +68,7 @@ function loadNode(comboEatChance) {
   return module.exports;
 }
 
-function buildHarness(comboEatChance = 0) {
+function buildHarness(comboEatChance = 0, profileId = 'standard') {
   let hp = 30;
   let target = {};
   let attacker = null;
@@ -110,7 +112,7 @@ function buildHarness(comboEatChance = 0) {
       f2pFoodPendingHp: null,
     },
   };
-  const node = new (loadNode(comboEatChance).EatFoodActionNode)(null, { core, log: () => {} }, {});
+  const node = new (loadNode(comboEatChance, profileId).EatFoodActionNode)(null, { core, log: () => {} }, {});
   return {
     setHp: (value) => { hp = value; },
     getHp: () => hp,
@@ -179,7 +181,7 @@ test('PvP bots consume actual remaining food after virtual charges run out', () 
 
 
 test('low HP reacts with a real shark and karambwan in one turn, preserving food cooldowns and delays', () => {
-  const h = buildHarness(1);
+  const h = buildHarness(1, 'veteran');
   h.state.pvp.loadoutId = 'edge_main_melee';
   h.setHp(5);
   h.setItems([ItemIdentifiers.COOKED_KARAMBWAN, ItemIdentifiers.SHARK]);
@@ -192,7 +194,7 @@ test('low HP reacts with a real shark and karambwan in one turn, preserving food
 });
 
 test('two normal foods cannot be combo eaten, and eating permissions/cooldowns still apply', () => {
-  const h = buildHarness(1);
+  const h = buildHarness(1, 'veteran');
   h.state.pvp.loadoutId = 'edge_main_melee';
   h.setHp(5);
   h.setFood(2);
@@ -338,4 +340,62 @@ test('a stacked food decrement is recognised as a successful eat', () => {
   assert.equal(h.tick(), 'success');
   assert.equal(h.player.getInventory().getItems()[0].getAmount(), 2);
   assert.equal(h.state.virtualFoodChargesRemaining, 1, 'the occupied food slot remains available');
+});
+
+
+test('novice and standard bots stop safe eating and leave combo saves to veteran tiers', () => {
+  for (const profileId of ['novice', 'standard', 'veteran', 'elite']) {
+    const h = buildHarness(1, profileId);
+    h.state.pvp.loadoutId = 'low_level_pure';
+    h.setHp(30);
+    h.setFood(2);
+    assert.equal(h.tick(), 'failure', `${profileId} does not safe eat at half HP`);
+    h.setHp(5);
+    h.setItems([ItemIdentifiers.SHARK, ItemIdentifiers.COOKED_KARAMBWAN]);
+    assert.equal(h.tick(), 'success');
+    assert.equal(h.state.virtualFoodChargesRemaining, ['veteran', 'elite'].includes(profileId) ? 0 : 1,
+      `${profileId} combo eating`);
+  }
+});
+
+test('elite bots react to imminent lethal damage more reliably than veterans; lower tiers cannot', t => {
+  t.mock.method(Math, 'random', () => 0.8);
+  for (const profileId of ['novice', 'standard', 'veteran', 'elite']) {
+    const h = buildHarness(0, profileId);
+    h.state.pvp.loadoutId = 'low_level_pure';
+    h.setHp(40);
+    h.setFood(1);
+    h.player.getHitpointsAfterPendingDamage = () => 0;
+    assert.equal(h.tick(), profileId === 'elite' ? 'success' : 'failure', profileId);
+  }
+  t.mock.method(Math, 'random', () => 0.6);
+  const veteran = buildHarness(0, 'veteran');
+  veteran.state.pvp.loadoutId = 'low_level_pure';
+  veteran.setHp(40);
+  veteran.setFood(1);
+  veteran.player.getHitpointsAfterPendingDamage = () => 0;
+  assert.equal(veteran.tick(), 'success');
+  const safe = buildHarness(0, 'elite');
+  safe.state.pvp.loadoutId = 'low_level_pure';
+  safe.setHp(40);
+  safe.setFood(1);
+  safe.player.getHitpointsAfterPendingDamage = () => 1;
+  assert.equal(safe.tick(), 'failure', 'nonlethal pending damage does not trigger early eating');
+});
+
+test('restore timing follows bot skill and a one-Prayer pure never wastes a dose', () => {
+  const { getPvpProfile } = require('../plugins/bots/behaviours/pvp/PvpProfileRegistry.PlayerBots');
+  for (const [current, expected] of [[10, ['standard', 'veteran', 'elite']], [20, ['veteran', 'elite']], [26, ['elite']]]) {
+    for (const profileId of ['novice', 'standard', 'veteran', 'elite']) {
+      const f = prayerHarness();
+      f.skills.setCurrentLevel(core.Skill.PRAYER, current, false);
+      f.player.getInventory().setItem(0, new core.Item(ItemIdentifiers.SUPER_RESTORE_4_));
+      assert.equal(f.node.drinkPrayerPotion(f.player, getPvpProfile(profileId)), expected.includes(profileId),
+        `${profileId} at ${current} prayer`);
+    }
+  }
+  const pure = prayerHarness({ prayer: 1 });
+  pure.player.getInventory().setItem(0, new core.Item(ItemIdentifiers.SUPER_RESTORE_4_));
+  assert.equal(pure.node.drinkPrayerPotion(pure.player, getPvpProfile('elite')), false);
+  assert.equal(pure.player.getInventory().getItems()[0].getId(), ItemIdentifiers.SUPER_RESTORE_4_);
 });

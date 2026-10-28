@@ -40,6 +40,8 @@ The existing Combat Achievement reward plugin doubles this only when its saved
 claimed-tier set includes Master (5). Completed tasks or points without claiming
 do not grant the perk. A later Magic change does not resize an existing summon;
 replacement and logout keep the existing owned-task cleanup.
+Each attack's max hit is asked through `magic:thrall-max-hit` { player, thrall,
+target, maxHit } (Shattered Relics' Thrall Damage fragment raises it).
 
 Four regressions were observed failing before implementation: a zero roll dealt
 the tier maximum, launch awarded damage before application, cooldown was 30

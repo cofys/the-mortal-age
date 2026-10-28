@@ -272,7 +272,11 @@ function fairyTeleport(player, ring, from, fromClick) {
       if (tick === delay) vanish();
       if (tick === delay + 3) {
         if (!sameRing) {
+          const from = player.getLocation?.()?.clone?.() ?? null;
+          const fromInstance = player.getPrivateArea?.() != null;
           player.moveTo(ring.destination);
+          // As the core's teleports do ("teleport:landed"): where it began, for content that remembers it.
+          core.PluginManager?.emitCustomEvent?.("teleport:landed", { player, from, fromInstance, to: ring.destination });
           rememberUse(player, ring);
         }
         player.performAnimation(new core.Animation(APPEAR_ANIMATION));

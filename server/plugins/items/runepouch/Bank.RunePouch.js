@@ -101,8 +101,7 @@ function clickPouchSlot(player, event) {
   const entry = Pouch.slots(player)[slot];
   if (!entry) return;
   const op = Number(event.action);
-  // The client asks for Withdraw-X itself and sends the amount first; any other X op asks here.
-  if (op === X_PROMPT_OP && !/-x$/i.test(event.option ?? "")) {
+  if (op === X_PROMPT_OP) {
     Pouch.askAmount(player, AMOUNT_PROMPT, {
       execute(amount) {
         if (!(amount > 0)) return;

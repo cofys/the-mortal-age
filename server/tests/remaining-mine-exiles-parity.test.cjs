@@ -1298,6 +1298,85 @@ const TRIALS = 'quest.fremennik_trials.trials';
 const trial = (h, index) => (h.attrs.get(TRIALS) >>> (index * 3)) & 7;
 const fremennik = () => setup('../plugins/quests/quests/FremennikTrials.Quest', 'fremennik_trials', { waterbirth: true });
 
+test('Fremennik Trials: Brundt and Sigli keep their merchant requests until the items are delivered', () => {
+  const h = fremennik(), N = NPCS(h), I = ITEMS(h);
+  const merchant = 'quest.fremennik_trials.merchant';
+  const variant = (npcId) => h.hooks.variants[0]({ player: h.player, npcId });
+  h.quest.setStage(h.player, 1);
+  h.attrs.set(TRIALS, 1 << 6);
+  h.attrs.set(merchant, 4);
+  const brundtRequest = variant(N.BRUNDT_THE_CHIEFTAIN);
+  assert.match(brundtRequest, /the-sailor-s-favor-talking-to-brundt$/);
+  assert.equal(h.attrs.get(merchant), 5);
+  assert.equal(variant(N.BRUNDT_THE_CHIEFTAIN), brundtRequest, 'closing the first menu must not lose the request');
+  const sigliRequest = variant(N.SIGLI_THE_HUNTSMAN);
+  assert.match(sigliRequest, /finding-sigli-s-bowstring$/);
+  assert.equal(h.attrs.get(merchant), 6);
+  for (let step = 6; step <= 21; step++) {
+    h.attrs.set(merchant, step);
+    assert.equal(variant(N.BRUNDT_THE_CHIEFTAIN), brundtRequest, `Brundt still needs the map at merchant step ${step}`);
+    assert.equal(variant(N.SIGLI_THE_HUNTSMAN), sigliRequest, `Sigli still needs the bowstring at merchant step ${step}`);
+  }
+  h.inventory.set(I.CUSTOM_BOW_STRING, 1);
+  assert.match(variant(N.SIGLI_THE_HUNTSMAN), /giving-the-bowstring-to-sigli$/);
+  h.action(N.SIGLI_THE_HUNTSMAN, 'aiidGO');
+  assert.equal(h.inventory.get(I.CUSTOM_BOW_STRING), 0);
+  assert.equal(h.inventory.get(I.TRACKING_MAP), 1);
+  assert.match(variant(N.SIGLI_THE_HUNTSMAN), /talking-to-sigli-again$/);
+  assert.match(variant(N.BRUNDT_THE_CHIEFTAIN), /giving-the-map-to-brundt$/);
+  h.action(N.BRUNDT_THE_CHIEFTAIN, 'Q1dOsa');
+  assert.equal(h.inventory.get(I.TRACKING_MAP), 0);
+  assert.equal(h.inventory.get(I.FISCAL_STATEMENT), 1);
+  assert.match(variant(N.BRUNDT_THE_CHIEFTAIN), /talking-to-brundt-again$/);
+  h.inventory.clear();
+  h.attrs.set(merchant, 24);
+  assert.match(variant(N.BRUNDT_THE_CHIEFTAIN), /talking-to-brundt-again$/, 'handing Yrsa the statement must not restore the map request');
+  h.attrs.set(TRIALS, 2 << 6);
+  assert.equal(variant(N.BRUNDT_THE_CHIEFTAIN), 'the-council-members-talking-to-brundt');
+  assert.doesNotMatch(variant(N.SIGLI_THE_HUNTSMAN), /bowstring|sigli-again/, 'his own trial remains available after the merchant vote');
+});
+
+test('Fremennik Trials: the bouncer door admits a blessed lyre and the stage awards Olaf’s vote once', () => {
+  const h = fremennik(), N = NPCS(h), O = OBJECTS(h), I = ITEMS(h);
+  const door = new h.core.GameObject(O.DOOR_118, new h.core.Location(2667, 3683, 0), 0, 0);
+  const openDoor = () => h.object(O.DOOR_118, { object: door, location: { x: 2667, y: 3683, z: 0 } });
+  const at = (x, y, z = 0) => h.setLocation(new h.core.Location(x, y, z));
+  const play = () => h.hooks.itemActions.get(undefined)({ player: h.player, itemId: I.ENCHANTED_LYRE, option: 'Play' });
+  h.quest.setStage(h.player, 1);
+  h.choice(N.OLAF_THE_BARD_2, 'Yes');
+  at(2667, 3683);
+  assert.equal(openDoor().handled, true);
+  assert.equal(h.player.getLocation().getX(), 2667, 'entry requires an enchanted lyre');
+  h.inventory.set(I.ENCHANTED_LYRE, 1);
+  openDoor();
+  assert.equal(h.player.getLocation().getX(), 2666, 'the actual door leads into the backstage area');
+  play();
+  assert.equal(trial(h, 1), 1, 'backstage is not the performance stage');
+  at(2658, 3669);
+  play();
+  assert.equal(trial(h, 1), 1, 'playing in the main hall cannot earn the vote');
+  at(2658, 3683, 1);
+  play();
+  assert.equal(trial(h, 1), 1, 'the stage is on the ground floor');
+  at(2658, 3683);
+  play();
+  assert.equal(trial(h, 1), 2);
+  assert.equal(h.quest.getStage(h.player), 2);
+  assert.equal(h.inventory.get(I.ENCHANTED_LYRE), 0);
+  assert.equal(h.inventory.get(I.LYRE), 1);
+  play();
+  assert.equal(h.quest.getStage(h.player), 2, 'the performance cannot award a second vote');
+  at(2666, 3683);
+  openDoor();
+  assert.equal(h.player.getLocation().getX(), 2667, 'the spent lyre does not trap the player backstage');
+  openDoor();
+  assert.equal(h.player.getLocation().getX(), 2666, 'the bouncer still admits a finished bard');
+  at(2666, 3683);
+  h.attrs.set(TRIALS, 0);
+  openDoor();
+  assert.equal(h.player.getLocation().getX(), 2667, 'leaving is always allowed');
+});
+
 test('Fremennik Trials: Olaf can offer his own trial during the merchant errand', () => {
   const h = fremennik(), N = NPCS(h);
   h.quest.setStage(h.player, 1);

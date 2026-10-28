@@ -166,6 +166,64 @@ test("darts: one set per click while Make-X is off, a menu of up to 10 sets whil
   assert.equal(p.count("RUNE_DART"), 30);
 });
 
+// Wiki: Gryphon_feather, Stymphike_feather and Feather, retrieved 2026-10-27.
+for (const feather of ["GRYPHON_FEATHER", "STYMPHIKE_FEATHER"]) {
+  for (const [material, output, amount, feathers, xp] of [
+    ["RUNE_DART_TIP", "RUNE_DART", 10, 10, 188],
+    ["MITHRIL_BOLTS_UNF_", "MITHRIL_BOLTS", 10, 10, 50],
+    ["ARROW_SHAFT", "HEADLESS_ARROW", 15, 15, 15],
+    ["ATLATL_DART_SHAFT", "HEADLESS_ATLATL_DART", 20, 20, 20],
+    ["OGRE_ARROW_SHAFT", "FLIGHTED_OGRE_ARROW", 6, 24, 5.4],
+  ]) {
+    test(`${feather} feathers ${output} with normal quantities and XP`, () => {
+      answers.started.add("big_chompy_bird_hunting");
+      const p = player({ items: { [feather]: feathers, [material]: amount } });
+      assert.equal(use(p, feather, material), true);
+      if (!["RUNE_DART", "MITHRIL_BOLTS"].includes(output)) {
+        assert.equal(p.count(output), 0);
+        runTask();
+      }
+      assert.equal(p.count(output), amount);
+      assert.equal(p.count(feather), 0);
+      assert.equal(p.count(material), 0);
+      assert.equal(p.xp(), xp);
+    });
+  }
+}
+
+test("gryphon feather use is directional; stymphike feather use is reversible", () => {
+  for (const [material, output, amount] of [["RUNE_DART_TIP", "RUNE_DART", 10], ["MITHRIL_BOLTS_UNF_", "MITHRIL_BOLTS", 10], ["ARROW_SHAFT", "HEADLESS_ARROW", 15]]) {
+    const p = player({ items: { GRYPHON_FEATHER: amount, [material]: amount } });
+    assert.equal(use(p, material, "GRYPHON_FEATHER"), true);
+    assert.deepEqual(p.messages, ["Nothing interesting happens."]);
+    assert.equal(p.count(output), 0);
+    assert.equal(p.count("GRYPHON_FEATHER"), amount);
+    const q = player({ items: { STYMPHIKE_FEATHER: amount, [material]: amount } });
+    assert.equal(use(q, material, "STYMPHIKE_FEATHER"), true);
+    if (hooks.tasks.length) runTask();
+    assert.equal(q.count(output), amount);
+  }
+});
+
+test("new feathers respect levels and Make-X and spend the selected feather first", () => {
+  const p = player({ level: 80, items: { GRYPHON_FEATHER: 10, RUNE_DART_TIP: 10 } });
+  use(p, "GRYPHON_FEATHER", "RUNE_DART_TIP");
+  assert.equal(p.count("RUNE_DART"), 0);
+  assert.deepEqual(p.messages, ["You need a Fletching level of at least 81 to do this."]);
+  for (const feather of ["GRYPHON_FEATHER", "STYMPHIKE_FEATHER"]) {
+    const q = player({ items: { [feather]: 20, FEATHER: 20, RUNE_DART_TIP: 20 } });
+    q.getPacketSender().sendVarbit(CacheDefinitions.getVarbitId("option_fletch_dart_or_bolt_makex"), 1);
+    use(q, feather, "RUNE_DART_TIP");
+    assert.deepEqual(q.menu().getItems(), [I.RUNE_DART]);
+    q.menu().execute(I.RUNE_DART, 28);
+    runTask();
+    assert.equal(q.count("RUNE_DART"), 20);
+    assert.equal(q.count(feather), 0);
+    assert.equal(q.count("FEATHER"), 20);
+    assert.equal(q.xp(), 376);
+  }
+});
+
 test("coloured feathers fletch bolts, and the clicked feather is used first", () => {
   const p = player({ items: { MITHRIL_BOLTS_UNF_: 10, FEATHER: 10, RED_FEATHER: 10 } });
   use(p, "RED_FEATHER", "MITHRIL_BOLTS_UNF_");

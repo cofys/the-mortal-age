@@ -40,6 +40,11 @@ export interface HelmSteeringDeps {
  * set_interaction_mode): walk, nothing, or steer. At a helm live sets heading for every world but
  * the boat's own, so the sea steers and the deck walks. Returns false when the click should walk.
  */
+/** Whether a click on this tile steers (heading mode): its menu option is "Set heading". */
+export function isHeadingTile(deps: HelmSteeringDeps, tileX: number, tileY: number): boolean {
+    return deps.getTileMode(deps.getClickedWorldId(tileX, tileY)) === TileInteractionMode.Heading;
+}
+
 export function handleTileClick(deps: HelmSteeringDeps, tileX: number, tileY: number): boolean {
     const mode = deps.getTileMode(deps.getClickedWorldId(tileX, tileY));
     if (mode === TileInteractionMode.Walk) return false;

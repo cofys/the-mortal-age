@@ -18,10 +18,18 @@ const shipwrecks = require("./Shipwrecks.Salvaging");
 
 let pluginApi = null;
 
-const SEQ_CAST = 13576;
-const SEQ_HOOK_IDLE = 13577;
-const LOC_ANIM_CAST = 13573;
-const LOC_ANIM_IDLE = 13574;
+/**
+ * A hook's animations by its model's size, from the loc's own idle animation (cache): the raft's
+ * 1x3 hooks (13565), the skiff's 2x5 (13572) and the sloop's 3x8 ones (13579, its other hooks are
+ * 2x5). Each size's animations follow its idle in the same order; the crew's cast is its own
+ * (rsprox: 1180 and 1181 on a sloop's two hooks).
+ */
+const HOOK_ANIMS = new Map([
+  [13565, { crewDrop: 1179 }],
+  [13572, { crewDrop: 1180 }],
+  [13579, { crewDrop: 1181 }],
+]);
+const DEFAULT_HOOK_IDLE = 13572;
 const SEQ_SORT = 13599;
 const SOUND_SORT = 10864;
 const SOUND_SORT_NEXT = 10866;
@@ -64,6 +72,21 @@ function hookTierOf(name) {
 function successChance(low, high, level) {
   const clamped = Math.max(1, Math.min(99, level));
   return (1 + Math.floor((low * (99 - clamped)) / 98 + (high * (clamped - 1)) / 98 + 0.5)) / 256;
+}
+
+/** A hook loc's animations: the loc's cast/idle/reset and the human's (player or crewmate). */
+function hookAnims(locId) {
+  const idle = CacheDefinitions.getObject(locId)?.seqId;
+  const base = HOOK_ANIMS.has(idle) ? idle : DEFAULT_HOOK_IDLE;
+  return {
+    locDrop: base + 1,
+    locIdle: base + 2,
+    locReset: base + 3,
+    drop: base + 4,
+    idle: base + 5,
+    reset: base + 6,
+    crewDrop: HOOK_ANIMS.get(base).crewDrop,
+  };
 }
 
 function hasFreeSlot(player) {
@@ -141,14 +164,17 @@ function deployHook(event) {
   }
   const owned = Sailing.instanceAboard(player) === boat ? Sailing.activeBoat(player) : undefined;
   const hotspot = owned ? facilities.hotspotAt(owned, x, y) : undefined;
+  const anims = hookAnims(hook.id);
   const session = {
-    boat, hook, wreck, tier, generation: wreck.generation, ticks: 0,
+    boat, hook, wreck, tier, anims, generation: wreck.generation, ticks: 0,
     hotspot: hotspot !== undefined && hotspot < AT_FACILITY_HOTSPOTS ? hotspot : undefined,
   };
+  // A crewmate working this hook leaves it to the captain (rsprox).
+  if (hotspot !== undefined) pluginApi?.emitCustomEvent("sailing:hook-taken", { player, boat, hotspot });
   player.sendMessage(CAST);
   player.setPositionToFace(outwardFrom(boat, hook, owned, hotspot));
-  player.performAnimation(new Animation(SEQ_CAST));
-  animateDeckLoc(player, boat, hook, LOC_ANIM_CAST);
+  player.performAnimation(new Animation(anims.drop));
+  animateDeckLoc(player, boat, hook, anims.locDrop);
   shipwrecks.startDespawn(wreck);
   begin(player, session, () => salvageTick(player, session));
 }
@@ -167,8 +193,8 @@ function salvageTick(player, session) {
     setVarbit(player, VARBIT_AT_FACILITY0 + session.hotspot, 1);
   }
   if (session.ticks >= SETTLE_TICKS) {
-    player.performAnimation(new Animation(SEQ_HOOK_IDLE));
-    animateDeckLoc(player, boat, hook, LOC_ANIM_IDLE);
+    player.performAnimation(new Animation(session.anims.idle));
+    animateDeckLoc(player, boat, hook, session.anims.locIdle);
   }
   if (session.ticks < FIRST_ROLL_TICKS || (session.ticks - FIRST_ROLL_TICKS) % ROLL_TICKS !== 0) return;
   const type = shipwrecks.wreckType(wreck.type);
@@ -271,6 +297,9 @@ module.exports = {
   successChance,
   rollLoot,
   outwardFrom,
+  hookTile,
+  hookAnims,
+  HOOK_RANGE,
   register(api) {
     pluginApi = api;
     api.onServerStartup(startShipwrecks);

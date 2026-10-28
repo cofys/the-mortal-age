@@ -175,6 +175,8 @@ export class WidgetManager {
     onSubChangeListener?: (scriptId: number, sourceWidget: WidgetNode) => void;
     /** Invoker for runtime-set onSubChange handlers (set via IF_SETONSUBCHANGE) */
     onSubChangeInvoker?: (sourceWidget: WidgetNode) => void;
+    /** Invoker for onDialogAbort handlers (runtime IF_SETONDIALOGABORT or cache-loaded) */
+    onDialogAbortInvoker?: (sourceWidget: WidgetNode) => void;
 
     /** Current canvas dimensions for resizing root widgets */
     canvasWidth: number = 0;
@@ -2098,11 +2100,61 @@ export class WidgetManager {
     triggerOnSubChange(): void {
         if (!this.onSubChangeInvoker && !this.onSubChangeListener) return;
 
-        // Trigger onSubChange on the full widget tree for every loaded interface.
-        // Reference: VertexNormal.runComponentCloseListeners(var0, 1) walks all descendants,
-        // not just roots. This is important for:
+        // This is important for:
         // - Root interface (161): toplevel_subchange - shows/hides tab icons
         // - Chatbox (162): chat_onsubchange -> script 113 - resizes CHATMODAL for dialogs
+        this.forEachListenerNode((node, groupId) => {
+            if (node?.eventHandlers?.onSubChange && this.onSubChangeInvoker) {
+                try {
+                    this.onSubChangeInvoker(node);
+                } catch (e) {
+                    console.warn(
+                        `[WidgetManager] Error in onSubChange handler for ${groupId}:`,
+                        e,
+                    );
+                }
+            } else if (
+                Array.isArray(node?.onSubChange) &&
+                node.onSubChange.length > 0 &&
+                this.onSubChangeListener
+            ) {
+                try {
+                    const scriptId = node.onSubChange[0];
+                    if (typeof scriptId === "number" && scriptId > 0) {
+                        this.onSubChangeListener(scriptId, node);
+                    }
+                } catch (e) {
+                    console.warn(
+                        `[WidgetManager] Error in cache onSubChange handler for ${groupId}:`,
+                        e,
+                    );
+                }
+            }
+        });
+    }
+
+    /**
+     * TRIGGER_ONDIALOGABORT: run onDialogAbort on every loaded interface, as onSubChange is run.
+     * The chatbox prompts set it (meslayer_mode7 -> meslayer_ondialogabort), so the server can
+     * drop an "Enter amount:" prompt whose answer it no longer wants.
+     */
+    triggerOnDialogAbort(): void {
+        if (!this.onDialogAbortInvoker) return;
+        this.forEachListenerNode((node, groupId) => {
+            if (!node.eventHandlers?.onDialogAbort && !Array.isArray(node.onDialogAbort)) return;
+            try {
+                this.onDialogAbortInvoker!(node);
+            } catch (e) {
+                console.warn(`[WidgetManager] Error in onDialogAbort handler for ${groupId}:`, e);
+            }
+        });
+    }
+
+    /**
+     * Visit the full widget tree of every loaded interface.
+     * Reference: VertexNormal.runComponentCloseListeners(var0, 1) walks all descendants, not just roots.
+     */
+    private forEachListenerNode(visit: (node: WidgetNode, groupId: number) => void): void {
         for (const [groupId] of this.groups) {
             const roots = this.getAllGroupRoots(groupId);
             if (!roots.length) continue;
@@ -2113,32 +2165,7 @@ export class WidgetManager {
                 if (!node || typeof node !== "object") continue;
                 if (!this.isValidSubChangeListenerNode(node)) continue;
 
-                if (node?.eventHandlers?.onSubChange && this.onSubChangeInvoker) {
-                    try {
-                        this.onSubChangeInvoker(node);
-                    } catch (e) {
-                        console.warn(
-                            `[WidgetManager] Error in onSubChange handler for ${groupId}:`,
-                            e,
-                        );
-                    }
-                } else if (
-                    Array.isArray(node?.onSubChange) &&
-                    node.onSubChange.length > 0 &&
-                    this.onSubChangeListener
-                ) {
-                    try {
-                        const scriptId = node.onSubChange[0];
-                        if (typeof scriptId === "number" && scriptId > 0) {
-                            this.onSubChangeListener(scriptId, node);
-                        }
-                    } catch (e) {
-                        console.warn(
-                            `[WidgetManager] Error in cache onSubChange handler for ${groupId}:`,
-                            e,
-                        );
-                    }
-                }
+                visit(node, groupId);
 
                 const staticChildren = this.getStaticChildrenByParentUid(node.uid);
                 for (let i = staticChildren.length - 1; i >= 0; i--) {

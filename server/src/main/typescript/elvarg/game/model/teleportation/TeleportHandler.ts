@@ -18,6 +18,10 @@ class TeleportTask extends Task {
     private teleportTick = 0;
     private released = false;
 
+    /** Where the teleport began, and whether in an instance, for "teleport:landed". */
+    private readonly from: Location | null;
+    private readonly fromInstance: boolean;
+
     constructor(
         private readonly player: Player,
         private readonly targetLocation: Location,
@@ -26,6 +30,9 @@ class TeleportTask extends Task {
         private readonly onMiddle?: () => void
     ) {
         super(1, player, true);
+        // A bare test entity may have no position; the event then says nothing of a start.
+        this.from = player.getLocation?.()?.clone?.() ?? null;
+        this.fromInstance = player.getPrivateArea?.() != null;
     }
 
     execute(): void {
@@ -48,6 +55,8 @@ class TeleportTask extends Task {
             // The player is free on landing (OSRS clears varbit busy that tick): walking, being
             // attacked and clicking work again at once.
             this.release();
+            // Content that remembers where a teleport began (a league's recall item).
+            PluginManager.emitCustomEvent("teleport:landed", { player: this.player, from: this.from, fromInstance: this.fromInstance, to: this.targetLocation });
             this.onArrival?.();
             if (!this.teleportType.getOptions().repeatEndAnimation) {
                 this.stop();

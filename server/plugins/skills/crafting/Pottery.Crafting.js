@@ -92,7 +92,7 @@ function makePottery(player, recipe, firing) {
   }
   inventory.addItem(new Item(firing ? recipe.firedId : recipe.unfiredId, firing ? 1 : recipe.shaped ?? 1));
   Shared.addCraftingXp(player, firing ? recipe.firingXp : recipe.shapingXp);
-  Shared.produced(player, firing ? recipe.firedId : recipe.unfiredId, firing ? 1 : recipe.shaped ?? 1, firing ? recipe.firingXp : recipe.shapingXp);
+  Shared.produced(player, firing ? recipe.firedId : recipe.unfiredId, firing ? 1 : recipe.shaped ?? 1, firing ? recipe.firingXp : recipe.shapingXp, "pottery");
   const message = firing ? recipe.removeMessage : recipe.shapeMessage;
   if (message) player.sendMessage(message);
   return true;

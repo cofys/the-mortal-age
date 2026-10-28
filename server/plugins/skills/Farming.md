@@ -326,3 +326,39 @@ The compost regression fixture advances Farming ticks without advancing the wall
 clock. An additional regression varies elapsed milliseconds across early, delayed
 and catch-up ticks and verifies the animation/deposit phases remain at +2/+3 and
 every two ticks thereafter.
+
+## Cure Plant parity
+
+The [Cure Plant Wiki article](https://oldschool.runescape.wiki/w/Cure_Plant)
+specifies 91.5 Farming XP, 60 Magic XP, level 66 Magic and one astral/eight earth
+runes. A successful cast now awards the Farming XP through the existing Farming
+reward helper after restoring the diseased crop. It retains the crop's stage,
+resumes its growth clock, and needs neither secateurs nor a plant-cure potion.
+A repeat cast on the healthy crop cannot award XP or consume another cast.
+
+The same article supplies separate refusals for healthy growing crops, fully
+grown crops, compost bins, weeds, empty patches and dead crops. These branches
+return before consuming runes or awarding XP. Unrelated scenery now reaches the
+Wiki's player-spoken refusal instead of being ignored by the patch router.
+Other farming spells still leave unrelated scenery unhandled.
+
+`tests/farming-cure-plant.test.cjs` covers both skill awards, herb/tree cures,
+repeat casts, insufficient Magic/runes, all six patch refusals and the registered
+object-spell hook's unrelated-scenery branch. Nine of its ten checks fail against
+the previous implementation; all ten pass with the fix. The complete Farming
+regression suite passes 315 checks, including Fertile Soil and Resurrect Crops.
+
+An in-game server check planted a ranarr normally, advanced its growth until it
+became diseased, then cast on the actual patch. It consumed one astral/eight
+earth runes, changed the crop back to healthy growing, and increased the whole-XP
+snapshots by 60 Magic and 91 Farming (the skill system retains fractional XP).
+Weed and empty-patch refusals were also observed through normal object casting.
+Further checks verified the healthy-crop, compost-bin and player-spoken scenery
+refusals without changing runes or XP, then confirmed inventory and XP after relogging.
+
+Evidence for this change is the Wiki, fetched on 27 October 2026. Recordings 75
+and 86 are Leagues widget clicks followed by Moonclan teleports, not evidence of
+curing a crop; recordings 3254 and 3262 show a Pyromancer using a similarly named
+sequence. They are not used to infer Cure Plant's animation, graphics, timing,
+sounds or interface packet order. Those details remain unverified against live
+OSRS; no claim of complete visual or timing parity is made.

@@ -494,10 +494,12 @@ class PvpCombatExecutionNode {
     return this.reviewPrayers(player, state, target, nowMs, profile);
   }
 
-  drinkPrayerPotion(player) {
+  drinkPrayerPotion(player, profile) {
     const { Skill, TimerKey, ItemActionPacketListener, Inventory } = this.core;
     const skills = player.getSkillManager();
-    if (skills.getCurrentLevel(Skill.PRAYER) > Math.max(1, Math.floor(skills.getMaxLevel(Skill.PRAYER) * 0.3)) ||
+    const maxPrayer = skills.getMaxLevel(Skill.PRAYER);
+    if (maxPrayer <= 1 ||
+        skills.getCurrentLevel(Skill.PRAYER) > Math.floor(maxPrayer * Number(profile?.restoreAtPrayerRatio ?? 0.15)) ||
         player.getTimers().has(TimerKey.POTION)) return false;
     const inventory = player.getInventory();
     const slot = inventory.getItems().findIndex((item) =>
@@ -574,7 +576,7 @@ class PvpCombatExecutionNode {
     const profile = this.getProfile?.(state) ?? null;
     maybeChat(player, state, nowMs);
     this.reviewItemProtection(player, state, target);
-    if (this.drinkPrayerPotion(player) || this.drinkStartCombatPotion(player, state)) {
+    if (this.drinkPrayerPotion(player, profile) || this.drinkStartCombatPotion(player, state)) {
       this.setPhase?.(state, this.pvpPhase?.COMBAT ?? "combat");
       this.scheduleCombatAction?.(state, nowMs);
       return "running";

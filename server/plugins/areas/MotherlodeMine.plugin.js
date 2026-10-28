@@ -221,6 +221,7 @@ module.exports = {
   register(api) {
     Machine.init(api);
     Crates.init(api);
+    Veins.init(api);
     api.persistAttribute(Mine.STATE_ATTRIBUTE, { sack: {}, machine: [], held: [] });
     api.onServerStartup(start);
     api.onPlayerLogin(login);

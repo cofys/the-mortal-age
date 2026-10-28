@@ -30,6 +30,17 @@ assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraTarget({ x: 4127,
 assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraTarget({ player: 1766 }))), {
     type: "camera", payload: { mode: "target", player: 1766 },
 });
+// A Barracuda Trial intro's roaming camera NPC, and a boat, by index.
+assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraTarget({ npc: 9012 }))), {
+    type: "camera", payload: { mode: "target", npc: 9012 },
+});
+assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraTarget({ worldEntity: 3004 }))), {
+    type: "camera", payload: { mode: "target", worldEntity: 3004 },
+});
+// A cutscene's camera tour: a tile glided to over client cycles.
+assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraTarget({ x: 2994, y: 2891, level: 0, cycles: 150 }))), {
+    type: "camera", payload: { mode: "target", x: 2994, y: 2891, level: 0, cycles: 150 },
+});
 
 for (const [encode, mode] of [[encodeCameraMoveTo, "move"], [encodeCameraLookAt, "look"]] as const) {
     for (const instant of [true, false]) {

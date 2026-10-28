@@ -186,13 +186,14 @@ function chase({ player, npc, npcId }) {
   return true;
 }
 
-function fossil(factor = 3, max = 14) {
+/** `fossils` multiplies the unidentified fossils' chances (not numulite's): a league fragment's. */
+function fossil(factor = 3, max = 14, fossils = 1) {
   const I = H.core.ItemIdentifiers, draw = Math.random();
   let cumulative = 9 * factor / 175;
   if (draw < cumulative) return [I.NUMULITE, C.roll(5, max)];
   for (const [id, divisor] of [[I.UNIDENTIFIED_SMALL_FOSSIL, 350], [I.UNIDENTIFIED_MEDIUM_FOSSIL, 700],
     [I.UNIDENTIFIED_LARGE_FOSSIL, 875], [I.UNIDENTIFIED_RARE_FOSSIL, 3500]]) {
-    cumulative += factor / divisor;
+    cumulative += factor * Math.max(1, fossils) / divisor;
     if (draw < cumulative) return [id, 1];
   }
   return null;
@@ -209,8 +210,11 @@ function rewards(player, count) {
   const boost = { player, vessel: "bottle", tier: "medium", multiplier: 1 };
   H.api.emitCustomEvent("treasure-trails:vessel-chance", boost);
   const bottleOneIn = Math.max(1, Math.floor(600 / (boost.multiplier > 1 ? boost.multiplier : 1)));
+  // Content may make fossils commoner ("minigame:chance", a league fragment): `multiplier` times.
+  const fossils = { player, minigame: "fossil-island", kind: "fossil", multiplier: 1 };
+  H.api.emitCustomEvent("minigame:chance", fossils);
   for (let i = 0; i < count; i++) {
-    if (C.roll(1, 25) === 1) { const f = fossil(); if (f) result.push(f); }
+    if (C.roll(1, 25) === 1) { const f = fossil(3, 14, fossils.multiplier); if (f) result.push(f); }
     else if (C.roll(1, bottleOneIn) === 1 && !C.ownsClue(player, "MEDIUM") && !result.some(([id]) => id === clueId)) result.push([clueId, 1]);
     else result.push([fish[C.roll(0, fish.length - 1)], 1]);
   }

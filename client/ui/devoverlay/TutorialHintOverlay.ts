@@ -102,7 +102,7 @@ export class TutorialHintOverlay implements Overlay {
         if (phase !== RenderPhase.ToFrameTexture) return;
         if (!this.drawCall || !this.positions || !this.uvs || !this.array) return;
         // Actor hints (type 3) are overhead head icons, drawn by OverheadPrayerOverlay.
-        if (hintArrow.type !== 1 && hintArrow.type !== 2) return;
+        if (hintArrow.type !== 1 && hintArrow.type !== 2 && hintArrow.type !== 4) return;
 
         const args = this.lastArgs;
         if (!args?.helpers?.worldToScreen) return;

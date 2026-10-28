@@ -351,6 +351,9 @@ export class SceneRaycaster {
             this.collectNpcHitsForMap(map, effectiveRay, maxDistance, hits, basePlane);
         }
 
+        // NPCs aboard a boat stand in deck coordinates, which no map square holds.
+        this.collectDeckNpcHits(ray, maxDistance, hits, basePlane);
+
         // Player hits (global, then bucketed per map)
         if (hasPlanarDir) {
             this.collectPlayerHits(ray, maxDistance, hits, basePlane);
@@ -365,6 +368,7 @@ export class SceneRaycaster {
         ) {
             // Same rounded-square SDF as fogFactorOSRS in the shaders.
             const rounding = Math.min(FOG_CORNER_ROUNDING, fogCutoff);
+            const worldViews = this.osrsClient.worldViewManager;
             let write = 0;
             for (let i = 0; i < hits.length; i++) {
                 const h = hits[i];
@@ -374,9 +378,20 @@ export class SceneRaycaster {
                     hits[write++] = h;
                     continue;
                 }
-                const cx = tx + 0.5;
-                const cz = ty + 0.5;
-                const fromRoot = rootWorldX !== undefined && !deckView?.containsTile(tx, ty);
+                let cx = tx + 0.5;
+                let cz = ty + 0.5;
+                const onOwnDeck = deckView?.containsTile(tx, ty) === true;
+                if (!onOwnDeck) {
+                    // Another boat's deck (an NPC ship's crew or locs): measured where that deck
+                    // is drawn, not by its deck coordinates.
+                    const view = worldViews?.isWorldEntityTile(tx, ty) ? worldViews.findWorldViewAt(tx, ty) : undefined;
+                    const drawn = view && !view.isTopLevel() ? this.deckToWorldProvider?.(view.id, cx * 128, cz * 128) : undefined;
+                    if (drawn) {
+                        cx = drawn.x / 128;
+                        cz = drawn.y / 128;
+                    }
+                }
+                const fromRoot = rootWorldX !== undefined && !onOwnDeck;
                 const refX = fromRoot ? (rootWorldX as number) : playerWorldX;
                 const refZ = fromRoot ? (rootWorldZ as number) : playerWorldZ;
                 const qx = Math.abs(cx - refX) - fogCutoff + rounding;
@@ -679,6 +694,7 @@ export class SceneRaycaster {
             // linger temporarily in the ECS when their map is unstreamed.
             if (!npcEcs.isActive(ecsId) || !npcEcs.isLinked(ecsId)) continue;
             if ((npcEcs.getMapId(ecsId) | 0) !== mapId) continue;
+            if ((npcEcs.getWorldViewId?.(ecsId) ?? -1) >= 0) continue;
 
             const worldX = (npcEcs.getWorldX(ecsId) | 0) / 128.0;
             const worldZ = (npcEcs.getWorldY(ecsId) | 0) / 128.0;
@@ -747,6 +763,69 @@ export class SceneRaycaster {
                 npcEcsId: ecsId,
             });
         }
+    }
+
+    /**
+     * NPCs aboard a boat (a crewmate, a quest NPC on a ship's deck): their pick box goes where
+     * the deck is drawn, as a deck player's does, with the deck scene's height. Their tile stays
+     * the deck tile the server knows them by.
+     */
+    private collectDeckNpcHits(
+        ray: Ray,
+        maxDistance: number,
+        hits: SceneRaycastHit[],
+        basePlane?: number,
+    ): void {
+        const npcEcs = this.osrsClient.npcEcs;
+        npcEcs.forEachActive?.((ecsIdRaw: number) => {
+            const ecsId = ecsIdRaw | 0;
+            const worldViewId = npcEcs.getWorldViewId(ecsId) | 0;
+            if (worldViewId < 0 || !npcEcs.isLinked(ecsId)) return;
+            const view = this.osrsClient.worldViewManager.getWorldView(worldViewId);
+            if (!view) return;
+            const npcPlane = npcEcs.getLevel(ecsId) | 0;
+            if (typeof basePlane === "number" && (npcPlane | 0) !== (basePlane | 0)) return;
+            const interactId = baseNpcTypeId(npcEcs.getNpcTypeId(ecsId) | 0);
+            if (!(interactId > 0)) return;
+            let heightTiles = 0;
+            try {
+                let npcType: NpcType | undefined = this.osrsClient.npcTypeLoader.load(interactId);
+                while (npcType?.transforms) {
+                    npcType = npcType.transform(this.osrsClient.varManager, this.osrsClient.npcTypeLoader);
+                }
+                if (!npcType?.modelIds?.length) return;
+                heightTiles = (this.npcHeightProvider?.(npcType.id) ?? 200) / 128;
+            } catch {
+                return;
+            }
+            const deckX = npcEcs.getWorldX(ecsId) | 0;
+            const deckY = npcEcs.getWorldY(ecsId) | 0;
+            const projected = this.deckToWorldProvider?.(worldViewId, deckX, deckY);
+            if (!projected) return;
+            const groundY = this.sampleHeightAt(deckX / 128.0, deckY / 128.0, npcPlane);
+            const worldX = projected.x / 128.0;
+            const worldZ = projected.y / 128.0;
+            const size = Math.max(1, npcEcs.getSize(ecsId) | 0);
+            const half = Math.max(0.32, size * 0.42);
+            const height = Math.max(0.5, heightTiles);
+            const boxHit = rayIntersectsBox(
+                ray,
+                [worldX - half, groundY - height, worldZ - half],
+                [worldX + half, groundY - 0.05, worldZ + half],
+            );
+            if (!boxHit || boxHit.tMin > maxDistance) return;
+            const serverId = npcEcs.getServerId(ecsId) | 0;
+            hits.push({
+                t: Math.max(boxHit.tMin, 0),
+                interactType: InteractType.NPC,
+                interactId,
+                mapId: view.overlayMapId,
+                tileX: deckX >> 7,
+                tileY: deckY >> 7,
+                npcServerId: serverId > 0 ? serverId : undefined,
+                npcEcsId: ecsId,
+            });
+        });
     }
 
     private collectPlayerHits(

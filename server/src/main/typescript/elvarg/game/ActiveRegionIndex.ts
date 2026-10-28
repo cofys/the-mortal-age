@@ -56,16 +56,19 @@ export class ActiveRegionIndex {
         }
     }
 
-    update(players: Iterable<Player>, includePlayer: (player: Player) => boolean, processCycle: number, nowMs: number): ActiveRegionSnapshot {
+    /**
+     * `alsoAt` gives a second place a player keeps awake: the main-world tile under a player on a
+     * boat deck, so the sea round a sailing player (storm clouds, ships' crews) is processed too.
+     */
+    update(
+        players: Iterable<Player>,
+        includePlayer: (player: Player) => boolean,
+        processCycle: number,
+        nowMs: number,
+        alsoAt?: (player: Player) => { getX(): number; getY(): number; getZ(): number } | undefined,
+    ): ActiveRegionSnapshot {
         const nextKeys = new Set<string>();
-        for (const player of players) {
-            if (!player || includePlayer(player) !== true) {
-                continue;
-            }
-            const location = player.getLocation?.();
-            if (!location) {
-                continue;
-            }
+        const mark = (location: { getX(): number; getY(): number; getZ(): number }) => {
             const baseRegionX = location.getX() >> 6;
             const baseRegionY = location.getY() >> 6;
             const z = location.getZ();
@@ -75,6 +78,20 @@ export class ActiveRegionIndex {
                     nextKeys.add(key);
                     this.lastActiveAtByKey.set(key, nowMs);
                 }
+            }
+        };
+        for (const player of players) {
+            if (!player || includePlayer(player) !== true) {
+                continue;
+            }
+            const location = player.getLocation?.();
+            if (!location) {
+                continue;
+            }
+            mark(location);
+            const other = alsoAt?.(player);
+            if (other && (other.getX() >> 6 !== location.getX() >> 6 || other.getY() >> 6 !== location.getY() >> 6 || other.getZ() !== location.getZ())) {
+                mark(other);
             }
         }
 

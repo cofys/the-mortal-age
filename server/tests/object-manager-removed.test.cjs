@@ -232,7 +232,8 @@ test('deck-to-world loc clicks keep their route hook; ordinary clicks delegate t
     const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
     const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
     const object = new GameObject(1535, new Location(3226, 3214, 0), 0, 0, null);
-    const definition = { getInteractions: () => ['Open', 'Close'] };
+    const definition = { getName: () => 'Gangplank', getInteractions: () => ['Board', 'Disembark'] };
+    PluginManager.usableFromDeck.add('Gangplank');
     const source = new Location(10003, 10004, 0);
     let area = { countsAsMainWorld: () => true };
     let root = new Location(3226, 3213, 0);
@@ -272,7 +273,19 @@ test('deck-to-world loc clicks keep their route hook; ordinary clicks delegate t
     listener.executeAction(player, 1535, 3226, 3214, 2);
     assert.equal(routes.length, 1, 'route side effects also precede an out-of-range deck refusal');
     assert.equal(interactions.length, 1, 'the unreachable loc is not operated');
-    assert.deepEqual(messages, ["You can't reach that."]);
+    assert.deepEqual(messages, ["I can't reach that!"]);
+
+    // Any other land loc (a tree, a sign) can't be used from a boat at all (rsprox 901, 347).
+    messages.length = 0;
+    routes.length = 0;
+    root = new Location(3226, 3214, 0);
+    const tree = { getName: () => 'Tree', getInteractions: () => ['Chop down'] };
+    t.mock.method(ObjectDefinition, 'forPlayer', () => tree);
+    listener.executeAction(player, 1535, 3226, 3214, 1);
+    assert.deepEqual(messages, ["I can't do that from here!"]);
+    assert.equal(routes.length, 0, 'and the helm is kept');
+    t.mock.method(ObjectDefinition, 'forPlayer', () => definition);
+    root = new Location(3300, 3300, 0);
 
     area = null;
     routes.length = 0;

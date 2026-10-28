@@ -83,6 +83,18 @@ function recipesWith(firstId, secondId) {
       || recipe.ingredients.find(({ id }) => id === firstId).count >= 2));
 }
 
+/** A recipe can refuse its last (secondary) ingredient used again on its product. */
+function repeatMessage(firstId, secondId) {
+  index();
+  for (const [ingredientId, productId] of [[firstId, secondId], [secondId, firstId]]) {
+    const recipe = (recipesByIngredient.get(ingredientId) ?? []).find((candidate) =>
+      candidate.productId === productId && candidate.repeatMessage
+      && candidate.ingredients[candidate.ingredients.length - 1].id === ingredientId);
+    if (recipe) return recipe.repeatMessage;
+  }
+  return null;
+}
+
 /** "herblore:clean" `{ grimyId, clean, level }`: clean herb and its required Herblore level. */
 function answerClean(request) {
   const herb = herbFor(request?.grimyId);
@@ -181,7 +193,7 @@ function answerHerbs(request) {
 
 module.exports = {
   MIX_ANIMATION, MIX_SOUND,
-  init, gameval, herbFor, grindFor, recipesWith, answerClean, answerUnfinished, answerHerbs, level, actionsPerCycle, questDone, canUseHerblore,
+  init, gameval, herbFor, grindFor, recipesWith, repeatMessage, answerClean, answerUnfinished, answerHerbs, level, actionsPerCycle, questDone, canUseHerblore,
   wearsHerbloreCape, spam, mesbox, animate, sound, addXp, run,
   get api() { return api; },
   get core() { return core; },

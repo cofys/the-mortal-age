@@ -860,11 +860,25 @@ function useMaterial(player, itemId, amount) {
   if (amount > held) api.emitCustomEvent("storage:take", { player, itemId, amount: amount - held, taken: 0 });
 }
 
+/**
+ * Uses a build's materials (getBuildMaterials' map), as content may keep some of them
+ * ("construction:materials" `{ player, buildable, materials }` as [id, amount] pairs, a league
+ * fragment's planks kept): a listener may lower an amount, never raise it.
+ */
+function useMaterials(player, buildable, materials) {
+  const request = { player, buildable, materials: [...materials].map(([itemId, amount]) => [itemId, amount]) };
+  api.emitCustomEvent("construction:materials", request);
+  for (const [itemId, amount] of request.materials) {
+    const used = Math.min(Number(amount) || 0, materials.get(itemId) ?? 0);
+    if (used > 0) useMaterial(player, itemId, used);
+  }
+}
+
 function buildFurniture(player, house, target, buildable) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const materials = getBuildMaterials(player, house, target, buildable);
   if (typeof materials === "string") return player.sendMessage(materials);
-  for (const [itemId, amount] of materials) useMaterial(player, itemId, amount);
+  useMaterials(player, buildable, materials);
   if (buildable.buildAnimationId >= 0) player.performAnimation(new Animation(buildable.buildAnimationId));
   house.setFurniture(target, buildable);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
@@ -1272,4 +1286,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, useMaterials, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });

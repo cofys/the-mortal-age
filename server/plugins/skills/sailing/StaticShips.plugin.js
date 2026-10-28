@@ -4,7 +4,8 @@ const StaticShips = require("./StaticShips.Sailing");
 function interact(event) {
   if (event.clickType !== 1) return;
   const ship = StaticShips.get(event.entityIndex);
-  if (!ship || !StaticShips.canSee(event.player, ship)) return;
+  // Some ships are only scenery with NPCs and locs on them (the Barracuda Trials' boats).
+  if (!ship || ship.definition.boardable === false || !StaticShips.canSee(event.player, ship)) return;
   if (!StaticShips.inRange(event.player, ship, StaticShips.BOARD_RANGE)) {
     event.player.sendMessage("You can't reach that ship.");
     event.handled = true;

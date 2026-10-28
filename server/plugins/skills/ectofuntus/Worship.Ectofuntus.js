@@ -17,6 +17,15 @@ const Common = require("./Common.Ectofuntus");
 const TOKENS_PER_WORSHIP = 5;
 const MAX_UNCLAIMED_TOKENS = 1000;
 const WORSHIP_SOUND = 2671;
+// Wiki Zealot's robes: each worn piece adds 1.25% to save both ingredients on one roll.
+const ZEALOT_PIECES = ["shades_prayer_helm", "shades_prayer_top", "shades_prayer_bottom", "shades_prayer_boots"];
+const SAVE_CHANCE_PER_PIECE = 0.0125;
+
+function savesOffering(player) {
+  const worn = new Set(player.getEquipment().getItems().map(item => item?.getId()));
+  const pieces = ZEALOT_PIECES.filter(name => worn.has(Common.gameval("obj", name))).length;
+  return pieces > 0 && Math.random() < pieces * SAVE_CHANCE_PER_PIECE;
+}
 
 /** The first bonemeal pot carried that the player's Prayer level can worship with. */
 function bonemeal(player) {
@@ -49,12 +58,14 @@ function worship({ player }) {
     Common.mesbox(player, "There isn't room to put any more in.");
     return true;
   }
-  Common.swap(player, ItemIdentifiers.BUCKET_OF_SLIME, ItemIdentifiers.BUCKET);
-  Common.swap(player, pot.id, ItemIdentifiers.POT);
+  if (!savesOffering(player)) {
+    Common.swap(player, ItemIdentifiers.BUCKET_OF_SLIME, ItemIdentifiers.BUCKET);
+    Common.swap(player, pot.id, ItemIdentifiers.POT);
+  }
   Common.animate(player, "ahoy_prayer");
   Common.sound(player, WORSHIP_SOUND);
   Common.spam(player, "You put some ectoplasm and bonemeal into the Ectofuntus, and worship it.");
-  player.getSkillManager().addExperiences(Skill.PRAYER, Math.ceil(pot.row.xp));
+  player.getSkillManager().addExperiences(Skill.PRAYER, pot.row.xp);
   Common.setTokens(player, Common.tokens(player) + TOKENS_PER_WORSHIP);
   return true;
 }

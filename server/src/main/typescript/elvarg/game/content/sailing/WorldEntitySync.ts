@@ -3,6 +3,7 @@ import type { Player } from "../../entity/impl/player/Player";
 import { packTemplateChunk } from "../../model/areas/impl/TemplatedInstanceArea";
 import {
     encodeLocAddChange,
+    encodeLocDel,
     encodeRebuildWorldEntity,
     encodeWorldEntityInfo,
     type WorldEntityPosition,
@@ -31,6 +32,8 @@ interface ViewerState {
     positions: Map<number, WorldEntityPosition>;
     /** How many of each boat's deck loc changes the client has. */
     locChanges: Map<number, number>;
+    /** Each boat's teleport count when last sent: a newer one is sent as a jump (update type 3). */
+    teleports: Map<number, number>;
 }
 
 /**
@@ -45,7 +48,7 @@ export class WorldEntitySync {
     public static flush(player: Player): Buffer[] {
         let state = WorldEntitySync.viewers.get(player);
         if (!state) {
-            state = { order: [], boats: new Map(), positions: new Map(), locChanges: new Map() };
+            state = { order: [], boats: new Map(), positions: new Map(), locChanges: new Map(), teleports: new Map() };
             WorldEntitySync.viewers.set(player, state);
         }
         const visible = WorldEntitySync.boatsInView(player);
@@ -62,6 +65,7 @@ export class WorldEntitySync {
                 state.boats.delete(entityIndex);
                 state.positions.delete(entityIndex);
                 state.locChanges.delete(entityIndex);
+                state.teleports.delete(entityIndex);
                 continue;
             }
             kept.push(entityIndex);
@@ -76,7 +80,12 @@ export class WorldEntitySync {
                 z: position.z - last.z,
                 orientation: position.orientation - last.orientation,
             };
-            if (delta.x === 0 && delta.z === 0 && delta.orientation === 0) {
+            if (boat.teleportCount !== (state.teleports.get(entityIndex) ?? 0)) {
+                // A teleport: the client places the boat there at once instead of sailing it over.
+                updates.push({ updateType: 3, delta });
+                state.positions.set(entityIndex, position);
+                state.teleports.set(entityIndex, boat.teleportCount);
+            } else if (delta.x === 0 && delta.z === 0 && delta.orientation === 0) {
                 updates.push({ updateType: 1 });
             } else {
                 updates.push({ updateType: 2, delta });
@@ -105,6 +114,7 @@ export class WorldEntitySync {
             state.boats.set(boat.entityIndex, boat);
             state.positions.set(boat.entityIndex, position);
             state.locChanges.set(boat.entityIndex, BoatManager.deckLocChanges(boat).count);
+            state.teleports.set(boat.entityIndex, boat.teleportCount);
             locs.push(...WorldEntitySync.encodeDeckLocs(boat));
         }
 
@@ -169,6 +179,7 @@ export class WorldEntitySync {
     }
 
     private static encodeDeckLoc(boat: Boat, loc: BoatDeckLoc): Buffer {
+        if (loc.removed) return encodeLocDel(boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level, loc.shape, loc.rotation);
         return encodeLocAddChange(loc.id, boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level, loc.shape, loc.rotation, loc.opFlags);
     }
 }

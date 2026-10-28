@@ -80,7 +80,7 @@ function craftLeatherItem(player, materialId, recipe) {
   player.sendMessage(`You make ${recipe.made}.`);
   useThread(player);
   Shared.getApi().emitCustomEvent("crafting:made", { player, itemId: recipe.itemId });
-  Shared.produced(player, recipe.itemId, 1, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp, "leather", [[materialId, recipe.leather]]);
   return true;
 }
 
@@ -153,7 +153,7 @@ function combine(player, recipe) {
   for (const [id, amount] of recipe.materials ?? []) inventory.deleteNumber(id, amount);
   inventory.addItem(new (Shared.getCore().Item)(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
-  Shared.produced(player, recipe.itemId, 1, recipe.xp);
+  Shared.produced(player, recipe.itemId, 1, recipe.xp, "leather", [[recipe.pair[0], first], [recipe.pair[1], second], ...(recipe.materials ?? [])]);
   return true;
 }
 

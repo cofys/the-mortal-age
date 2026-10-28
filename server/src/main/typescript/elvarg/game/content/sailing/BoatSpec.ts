@@ -12,6 +12,8 @@ export interface BoatDeckLoc {
     blocks?: boolean;
     /** Which ops the client shows (bit 0 is op1), as live's loc_add_change_v2; all when absent. */
     opFlags?: number;
+    /** A change that takes the loc of this shape off its tile (sent as LOC_DEL). */
+    removed?: boolean;
 }
 
 /** Everything needed to build a boat of one type. Offsets are relative to the template zone. */
@@ -43,9 +45,10 @@ export interface BoatSpec {
     syncLocs?: ReadonlyArray<BoatDeckLoc>;
     /**
      * Full sail speed in fine units a tick (the hull's base speed; 192 when absent), the hull's
-     * speed cap (the trimmed sails' speed) and how long a trim lasts in ticks (the sails').
+     * speed cap (the trimmed sails' speed), how long a trim lasts in ticks (the sails') and the
+     * speed gained or lost a tick (64 and the sails' extra; 64 when absent).
      */
-    stats?: { baseSpeed?: number; speedCap?: number; speedBoostDuration?: number };
+    stats?: { baseSpeed?: number; speedCap?: number; speedBoostDuration?: number; acceleration?: number };
 }
 
 /** A boat's position in the main world: fine units (1/128 tile) and an angle out of 2048. */

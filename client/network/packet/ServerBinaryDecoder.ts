@@ -899,6 +899,9 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             };
         }
 
+        case ServerPacketId.TRIGGER_ONDIALOGABORT:
+            return { type: "widget", payload: { action: "trigger_ondialogabort" } };
+
         case ServerPacketId.WIDGET_CLOSE_SUB:
             return {
                 type: "widget",
@@ -1587,9 +1590,15 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 return { type: "camera", payload: { mode: "arc", centreX, centreY, x, y, height, cycles, easing, ignoreTerrain: (flags & 2) !== 0 } };
             }
             if (mode === 12) {
-                if (reader.readByte() === 1) return { type: "camera", payload: { mode: "target", player: reader.readShort() } };
-                const x = reader.readShort(), y = reader.readShort();
-                return { type: "camera", payload: { mode: "target", x, y, level: reader.readByte() } };
+                // A tile, or an actor by index: a player (1), an NPC (2) or a world entity (3); a tile
+                // glided to over client cycles (4).
+                const sub = reader.readByte();
+                if (sub === 1) return { type: "camera", payload: { mode: "target", player: reader.readShort() } };
+                if (sub === 2) return { type: "camera", payload: { mode: "target", npc: reader.readShort() } };
+                if (sub === 3) return { type: "camera", payload: { mode: "target", worldEntity: reader.readShort() } };
+                const x = reader.readShort(), y = reader.readShort(), level = reader.readByte();
+                if (sub === 4) return { type: "camera", payload: { mode: "target", x, y, level, cycles: reader.readShort() } };
+                return { type: "camera", payload: { mode: "target", x, y, level } };
             }
             if (mode === 6) {
                 return { type: "camera", payload: { mode: "unlock", unlock: reader.readBoolean() } };

@@ -414,16 +414,19 @@ function harvest(player, patch) {
     let produce = crop.produce;
     const blessing = crop.type === "GRAPES" && player.getInventory().contains(Data.itemId("Bologa's blessing"));
     if (blessing) produce = Data.itemId("Zamorak's grapes");
-    // Content may change what one pick yields ("farming:pick", a league relic's triple, noted harvests).
-    const pick = { player, crop: crop.key, patch, itemId: produce, amount };
+    // Content may change what one pick yields and its XP ("farming:pick", a league relic's triple, noted harvests),
+    // or take some of it itself (`stored`, a league fragment's banked harvests).
+    const experience = crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount);
+    const pick = { player, crop: crop.key, patch, itemId: produce, amount, experience, stored: 0 };
     core.PluginManager.emitCustomEvent("farming:pick", pick);
     const picked = Number.isInteger(pick.itemId) && pick.itemId > 0 ? pick.itemId : produce;
     const pickedAmount = Number.isSafeInteger(pick.amount) && pick.amount > 0 ? pick.amount : amount;
+    const left = pickedAmount - (Number.isSafeInteger(pick.stored) ? Math.min(pickedAmount, Math.max(0, pick.stored)) : 0);
     const sack = crop.type === "HERB" && picked === produce && player.getInventory().getItems().find(i => i.getId() === Data.itemId("Open herb sack"));
-    if (!(sack && Guild.storeCrop(player, sack, produce, pickedAmount)) && !give(player, picked, pickedAmount)) return false;
+    if (left > 0 && !(sack && Guild.storeCrop(player, sack, produce, left)) && !give(player, picked, left)) return false;
     if (blessing) player.getInventory().deleteNumber(Data.itemId("Bologa's blessing"), 1);
     animate(player, ANIM.HARVEST);
-    award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount), patch);
+    award(player, Number.isFinite(pick.experience) && pick.experience >= 0 ? pick.experience : experience, patch);
     const variable = Data.COMPOSTABLE_YIELD.has(crop.type) || ["BUSH", "CACTUS", "GRAPES", "CORAL"].includes(crop.type);
     // Wiki: a worn Farming cape (or max cape) saves herb lives more often.
     const capePerk = { player, skill: "FARMING", result: false };
@@ -624,8 +627,7 @@ function itemOnNpc(event) {
 function spellOnObject(event) {
     WORK.delete(event.player);
     const patch = findPatch(event.object.getId(), event.location);
-    if (!patch) return;
-    if (!canUsePatch(event.player, patch)) { event.handled = true; return; }
+    if (patch && !canUsePatch(event.player, patch)) { event.handled = true; return; }
     Spells.farmingSpell(event, patch);
 }
 /** A grown tree's Travel opens the spirit tree network's menu (SpiritTrees). */

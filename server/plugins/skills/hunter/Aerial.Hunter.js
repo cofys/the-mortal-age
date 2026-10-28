@@ -38,7 +38,9 @@ function borrow({ player }) {
 function fish({ player, npc, npcId }) {
   if (npcId !== H.core.NpcIdentifiers.FISHING_SPOT_12) return false;
   if (!borrowed.has(player)) { player.sendMessage("Ask Alry for a cormorant first."); return true; }
-  if (!nearby(player, npc, 9) || !requireLevel(player, 35) || !requireLevel(player, 43, H.core.Skill.FISHING)) return true;
+  // The level gate is borrowing the bird; expired boosts still allow bluegill catches.
+  // Wiki: Aerial_fishing (see docs/aerial-fishing.md).
+  if (!nearby(player, npc, 9)) return true;
   const I = H.core.ItemIdentifiers;
   const bait = [I.FISH_OFFCUTS, I.FINE_FISH_OFFCUTS, I.KING_WORM,
     ...(player.getAttribute(ATTRIBUTE) ? H.data.aerialFish.map(f => f.item) : [])].find(id => player.getInventory().contains(id));
@@ -46,8 +48,7 @@ function fish({ player, npc, npcId }) {
   const range = require("./Context.Hunter").distance(player.getLocation(), npc.getLocation());
   const duration = Math.max(1, Math.ceil(range / 2));
   const started = begin(player, duration, require("./Context.Hunter").ANIM.FALCON, () => {
-    if (!borrowed.has(player) || !player.getInventory().contains(bait) || !nearby(player, npc, 9)
-      || !requireLevel(player, 35) || !requireLevel(player, 43, H.core.Skill.FISHING)) return;
+    if (!borrowed.has(player) || !player.getInventory().contains(bait) || !nearby(player, npc, 9)) return;
     player.getPacketSender().sendGraphic(new H.core.Graphic(1633), npc.getLocation());
     const combined = Math.floor((level(player, H.core.Skill.FISHING) * 2 + level(player)) / 3);
     const sample = roll(0, Math.max(0, combined - 1));

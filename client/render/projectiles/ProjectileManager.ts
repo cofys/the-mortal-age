@@ -9,6 +9,7 @@ import { sampleBridgeHeightForWorldTile } from "../../game/scene/BridgeHeightSam
 import { BridgePlaneStrategy } from "../../game/scene/PlaneResolver";
 import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
 import { Projectile, ProjectileConfig } from "./Projectile";
+import { projectDeckToWorld } from "../render/worldEntityMotion";
 
 // --- Constants & Configuration ---
 
@@ -52,18 +53,36 @@ class ProjectileTargetSystem {
         if (type === "player") {
             const idx = osrs.playerEcs?.getIndexForServerId(serverId);
             if (idx === undefined) return null;
+            // A player on a boat stands in deck coordinates: aim where the deck is drawn (a
+            // Barracuda Trial's crates flying to the boat).
+            const worldViewId = osrs.playerEcs.getWorldViewId?.(idx) ?? -1;
+            const onDeck = worldViewId >= 0
+                ? projectDeckToWorld(this.renderer as any, worldViewId, osrs.playerEcs.getX(idx), osrs.playerEcs.getY(idx))
+                : undefined;
             return {
-                x: osrs.playerEcs.getX(idx),
-                y: osrs.playerEcs.getY(idx),
-                plane: Number.isFinite(plane)
-                    ? (plane as number) | 0
-                    : osrs.playerEcs.getLevel(idx),
+                x: onDeck?.x ?? osrs.playerEcs.getX(idx),
+                y: onDeck?.y ?? osrs.playerEcs.getY(idx),
+                // Aboard, on the deck's own floor (live's target is the deck tile, level 1), so the
+                // projectile lands on the deck, not on the sea under it.
+                plane: onDeck
+                    ? osrs.playerEcs.getLevel(idx) | 0
+                    : Number.isFinite(plane)
+                      ? (plane as number) | 0
+                      : osrs.playerEcs.getLevel(idx),
             };
         } else if (type === "npc") {
             const npcEcs = osrs.npcEcs;
             const ecsId = npcEcs?.getEcsIdForServer?.(serverId);
             if (ecsId === undefined || !npcEcs.isActive(ecsId) || !npcEcs.isLinked(ecsId)) {
                 return null;
+            }
+            // An NPC aboard a boat: where its deck is drawn.
+            const npcView = npcEcs.getWorldViewId?.(ecsId) ?? -1;
+            if (npcView >= 0) {
+                const onDeck = projectDeckToWorld(this.renderer as any, npcView, npcEcs.getWorldX(ecsId), npcEcs.getWorldY(ecsId));
+                if (onDeck) {
+                    return { x: onDeck.x, y: onDeck.y, plane: npcEcs.getLevel(ecsId) | 0 };
+                }
             }
             // NPCs are stored in local map coords, convert to World
             const npcX = npcEcs.getX(ecsId);

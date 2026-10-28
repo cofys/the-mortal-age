@@ -440,8 +440,7 @@ function clickBankView(event) {
     const entry = bagItems(bag)[event.slot];
     if (!entry) return;
     const op = Number(event.action);
-    // The client asks for Deposit-X itself and sends the amount first; any other X op asks here.
-    if (op === BANK_X_PROMPT_OP && !/-x$/i.test(event.option ?? "")) {
+    if (op === BANK_X_PROMPT_OP) {
       return askAmount(player, (amount) => {
         if (!(amount > 0)) return;
         player.setBankCustomQuantity(amount);

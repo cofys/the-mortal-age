@@ -1,5 +1,6 @@
 import { ClientState } from "../../../game/ClientState";
-import { clearHintArrow, setHintArrowNpc, setHintArrowPlayer, setHintArrowTile } from "../../../game/HintArrow";
+import { clearHintArrow, setHintArrowNpc, setHintArrowPlayer,
+    setHintArrowWorldEntity, setHintArrowTile } from "../../../game/HintArrow";
 import { clearAttackTimer, setAttackTimer } from "../../../game/plugins/attacktimer/attackTimerState";
 import { loadItemPrices } from "../domain/itemPrices";
 import { LOGIN_FLAG_TOKEN } from "../constants";
@@ -104,6 +105,7 @@ export function handleAuthTickMessage(msg: any): boolean {
         if (arrowType === 1) setHintArrowNpc(a);
         else if (arrowType === 2) setHintArrowTile(a, b, Number(msg.payload?.c) | 0, Number(msg.payload?.d) | 0);
         else if (arrowType === 3) setHintArrowPlayer(a);
+        else if (arrowType === 4) setHintArrowWorldEntity(a, Number(msg.payload?.c) | 0);
         else clearHintArrow();
         return true;
     }

@@ -157,7 +157,11 @@ function activate(player, index, to, chosen) {
         continue;
       }
       traveller.sendMessage(chosen ? data.messages.chosen : data.messages.random);
-      traveller.moveTo(randomTile(destination));
+      const from = traveller.getLocation?.()?.clone?.() ?? null;
+      const landing = randomTile(destination);
+      traveller.moveTo(landing);
+      // As the core's teleports do ("teleport:landed"): where it began, for content that remembers it.
+      api?.emitCustomEvent?.("teleport:landed", { player: traveller, from, fromInstance: false, to: landing });
     }
   });
   return true;
