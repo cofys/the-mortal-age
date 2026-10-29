@@ -5,6 +5,57 @@ Courses live in `server/plugins/skills/agility/courses/`, one file each, run by
 tiles from the rev-241 cache (`yarn dump:loc`); movement from rsprox captures where they exist
 (`rsprox_index.py trace`), otherwise it is a guess and says so below.
 
+## The Agility course helper
+
+From rsprox captures (Varrock 339 and 3154, main game; the other courses' Leagues sheets), done by
+`Agility.plugin.js` for every course with a `helper` id (the cache's enum 3507):
+
+- A lap's first obstacle sets `helper_agility_highlighted_course` (varbit 13140) to the course's
+  id with its first visible step, and runs `helper_agility_start_lap` with a tick clock as it ends.
+  A course whose lap starts elsewhere says so with `startsLap` (the Agility Pyramid: the stairs up
+  from the ground).
+- Every course obstacle runs `helper_agility_add_xp` with the XP it gave, in tenths. A Varrock lap
+  sends 135, 230, 190, 280, 100, 245, 45, 35 and 1437: the Wiki's obstacle XP, adding up to 269.7.
+- The lap's last obstacle clears the varbit and runs `helper_agility_end_lap` with the clock and
+  the extra laps counted (0, or 1 when a lap counts twice).
+- The client works out laps an hour from the clock's differences, so the clock counts game ticks
+  from 2024 rather than the server's own tick.
+
+## Rooftop timing
+
+The captures' patterns, counted from the tick the player arrives (the runner's steps start the
+tick after):
+
+- **Gaps:** the player turns towards the far roof, jumps (2586, sound 2462, both 15 cycles in) two
+  ticks after arriving, lands (2588) a tick later and gets the XP the tick after (`gapJump`).
+- **Wall gaps:** a jump up the wall (2583 and sound 2468, 20 cycles in) a tick after arriving, the
+  grab (2585) a tick later, the pull up the tick after that (`wallScramble`).
+- **Hurdles:** sound 1936 with the hurdle (1603, cycles 8-50).
+- **Tightropes:** sound 2495 on the first tiles. Draynor's pay on the last tile (the runner's
+  `walk` with `arrive: true`); Rellekka's and Shayzien's the tick after.
+- **Landings:** a landing on an obstacle's last tick plays out; the runner doesn't reset it.
+- **Varrock:** the rough wall's climb (828, 15 cycles in) a tick after arriving, on the roof two
+  ticks later with the grab (2585) and sound 2468; three jumps along the clothes line (sound 2461)
+  with the line's creak (area sound 413) halfway; the wall's run-up, jump, five holds two ticks
+  apart (sound 2459), two side-steps (sound 2451) and the jump onto the roof; the balcony's run-up,
+  leap (4789, sound 2461) and grab; the edge's hop (741, sound 2461), jump down and landing with
+  the lap.
+- **Canifis:** the tree is climbed from 3508,3488 (1765 and sound 1705, 60 cycles in), on the roof
+  six ticks later; the first gap has a step's run-up (1995); the pole vault crosses a tile a tick
+  from 3482,3481 to 3487,3476, the tiles the captures put the player on, landing on 3489,3476.
+- **Rellekka:** the tiles walked in 1885: the first tightrope from 2622,3658, the ledge after the
+  second gap to 2639,3653, the last tightrope from 2647,3662 to 2655,3670, and a step west after
+  the landing, which comes with the lap.
+- **Agility Pyramid** (2932, 1757): the low wall, ledge, plank and gap lines are spam and the
+  doorway's is a message box; the low wall (840 and sound 2453, 30 cycles in) a tick after
+  arriving, paid three ticks later; the ledge (sound 2451) and the wall gap's hand-holds (sound
+  2450, no messages) off six ticks after on; the plank's creak (2470) with its line; the gap jump
+  (3067 and sound 2465, 20 cycles in) a tick after arriving, three tiles, paid three ticks later;
+  the top's climb (sound 2454) shows the top in an item box a tick later.
+  `agility_pyramid_level` follows the floor (1-5) and is 0 again out of the doorway; on floors 1
+  and 3 it swaps the static pyramid block for the moving one. Falls set it too, from where they
+  land; no fall was captured.
+
 ## Shared obstacles
 
 Some courses share obstacles. A course with `sharesWith: { course, through }` continues a lap that
@@ -51,8 +102,13 @@ course's `marks` block:
   - the beam swing (the cache has no Shayzien swing; `dorgesh_grapple_swing` is used);
   - where the gap's jump lands (1554,3639) and where the zipline lands (1522,3626);
   - the mark of grace tiles.
-- **Not sent:** the course's progress varbits (`shayzien_agility_low_progress`) and the agility
-  helper highlight; no other course sends them either.
+- **Progress varbit:** the basic course sets `shayzien_agility_low_progress` to the obstacle the
+  lap has reached (1 after the ladder, 2 after the monkeybars, 3 after the tightrope, as captured)
+  and back to 0 when the lap is done; the reset is not captured. No cache script or loc reads it.
+  The advanced course's `shayzien_agility_up_progress` is not sent: nothing captured it changing.
+- **Timing** (1632): the ladder's climb a tick after arriving; the monkeybars two ticks after,
+  off the tick after the last bar; the tightrope a tile a tick from the tick after arriving, paid
+  the tick after the last tile.
 - The start ladder is named "Ladder", so the Agility plugin claims it from the Ladders plugin
   (`ladders:climb`).
 

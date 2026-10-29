@@ -611,41 +611,27 @@ test('Troubled Tortugans Shieldbane fight and final hand-in complete once', () =
 // Regression: captured sailing/deck route, eligibility and recovery
 // ---------------------------------------------------------------------------
 
-test('Current Affairs releases a moving duck, stops it on the captured tile and collects from the boat', () => {
+test('Current Affairs speaks its lines over sea charting\'s Catherby current duck', () => {
   const h = makeHarness('../plugins/quests/quests/CurrentAffairs.Quest');
-  const I = h.core.ItemIdentifiers;
+  const emit = (name, event) => { for (const fn of h.hooks.custom.get(name) ?? []) fn(event); return event; };
   h.quest.setStage(h.player, 40);
-  h.inventory.set(I.CURRENT_DUCK, 1);
-  const release = h.hooks.itemActions.get('Current duck')['Track-current'];
+  // Another current is no business of the quest's.
+  emit('charting:duck-released', { player: h.player, spot: 'current_duck_fairy_ring' });
+  assert.equal(h.transcripts.length, 0);
 
-  release({ player: h.player });
-  assert.match(h.messages.at(-1), /on your boat/);
-  assert.equal(h.spawned.some((npc) => npc.getId() === 15152), false);
+  emit('charting:duck-released', { player: h.player, spot: 'current_duck_catherby_bay' });
+  assert.equal(h.transcripts.at(-1).variant, 'going-with-the-flow-deploying-the-current-duck');
 
-  h.varbits.set(19136, 1);
-  h.sailing.activeBoatSlot = 0;
-  h.sailing.boats = [{ slot: 0, location: { kind: 'at_sea', fineX: 3000 * 128, fineY: 3000 * 128 } }];
-  release({ player: h.player });
-  assert.match(h.messages.at(-1), /island east of Catherby/);
-
-  h.sailing.boats[0].location = { kind: 'at_sea', fineX: 2837 * 128, fineY: 3414 * 128 };
-  release({ player: h.player });
-  const duck = h.spawned.find((npc) => npc.getId() === 15152);
-  assert.ok(duck, 'the released moving duck exists');
-
-  h.hooks.namedNpcs.get('Current duck').Collect({ player: h.player, npc: duck });
-  assert.match(h.messages.at(-1), /still tracking/);
-  assert.equal(h.inventory.get(I.CURRENT_DUCK), 1);
-
-  h.tick(220);
-  assert.equal(duck.transformedId, 15153);
-  assert.ok(h.messages.includes('The current duck comes to a stop.'));
-
-  h.sailing.boats[0].location = { kind: 'at_sea', fineX: 2802 * 128, fineY: 3322 * 128 };
-  h.hooks.namedNpcs.get('Current duck').Collect({ player: h.player, npc: duck });
-  assert.equal(h.varbits.get(18602), 1);
+  emit('charting:complete', { player: h.player, spot: 'current_duck_catherby_bay' });
   assert.equal(h.attrs.get('current-affairs:currents-charted'), true);
-  assert.ok(h.removed.includes(duck));
+  const collected = emit('charting:duck-collected', { player: h.player, spot: 'current_duck_catherby_bay', handled: false });
+  assert.equal(collected.handled, true, 'the quest\'s lines replace the plain object box');
+  assert.equal(h.transcripts.at(-1).variant, 'going-with-the-flow-retrieving-the-current-duck');
+
+  // After the quest the duck is plain charting.
+  h.quest.setStage(h.player, 45);
+  const later = emit('charting:duck-collected', { player: h.player, spot: 'current_duck_catherby_bay', handled: false });
+  assert.equal(later.handled, false);
 });
 
 test('Current Affairs recovers a lost duck and a revoked form through the real variants', () => {

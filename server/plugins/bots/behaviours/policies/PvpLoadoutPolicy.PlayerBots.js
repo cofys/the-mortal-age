@@ -1,6 +1,6 @@
 "use strict";
 
-const { applyPreset } = require("../../../modes/pvp/Presets.PvpMode");
+const { applyPreset, canEquipPresetItem } = require("../../../modes/pvp/Presets.PvpMode");
 const { Presetable } = require("../../../../src/main/typescript/elvarg/game/content/presets/Presetable");
 const { CombatSpells } = require("../../../../src/main/typescript/elvarg/game/content/combat/magic/CombatSpells");
 const { Item } = require("../../../../src/main/typescript/elvarg/game/model/Item");
@@ -208,45 +208,48 @@ function profileAllowedForArchetype(archetype, profile) {
   return true;
 }
 
-function resolveConfiguredItemId(spec, magicPackage) {
+function resolveConfiguredItemId(spec, magicPackage, allowed = () => true) {
   if (spec == null) {
     return null;
   }
-  if (Array.isArray(spec)) {
-    return resolveConfiguredItemId(choose(spec), magicPackage);
+  const choices = Array.isArray(spec) ? spec : spec.choice;
+  if (choices) {
+    const candidates = choices.map((choice) => ({ choice, id: resolveConfiguredItemId(choice, magicPackage, allowed) }))
+      .filter(({ choice, id }) => choice == null || id != null);
+    return choose(candidates)?.id ?? null;
   }
   if (typeof spec === "string") {
     if (spec.startsWith("@")) {
-      return choose(pool(spec.slice(1)));
+      return choose(pool(spec.slice(1)).filter(allowed));
     }
-    return spec === "magic_staff" ? magicPackage?.staffId : itemId(spec, "archetype item");
-  }
-  if (spec.choice) {
-    return resolveConfiguredItemId(choose(spec.choice), magicPackage);
+    const id = spec === "magic_staff" ? magicPackage?.staffId : itemId(spec, "archetype item");
+    return id != null && allowed(id) ? id : null;
   }
   if (spec.pool) {
-    return choose(pool(spec.pool));
+    return choose(pool(spec.pool).filter(allowed));
   }
   if (spec.magicStaff) {
-    return magicPackage?.staffId ?? itemId(spec.magicStaff, "archetype magicStaff");
+    const id = magicPackage?.staffId ?? itemId(spec.magicStaff, "archetype magicStaff");
+    return allowed(id) ? id : null;
   }
-  return spec.item ? resolveConfiguredItemId(spec.item, magicPackage) : null;
+  return spec.item ? resolveConfiguredItemId(spec.item, magicPackage, allowed) : null;
 }
 
-function resolveConfiguredItem(spec, magicPackage) {
+function resolveConfiguredItem(spec, magicPackage, allowed) {
   if (spec == null) {
     return null;
   }
   const amount = typeof spec === "object" && !Array.isArray(spec)
     ? Number(spec.amount ?? 1)
     : 1;
-  const id = resolveConfiguredItemId(spec, magicPackage);
+  const id = resolveConfiguredItemId(spec, magicPackage, allowed);
   return id == null ? null : item(id, amount);
 }
 
 function buildConfiguredEquipment(definition, magicPackage) {
+  const preset = { getStats: () => definition.stats };
   return Object.values(definition.equipment ?? {})
-    .map((spec) => resolveConfiguredItem(spec, magicPackage))
+    .map((spec) => resolveConfiguredItem(spec, magicPackage, (id) => canEquipPresetItem(preset, item(id))))
     .filter((entry) => entry != null);
 }
 
@@ -401,6 +404,9 @@ function applyGeneratedPvpLoadout(player, state, options = {}) {
   let generated;
   try {
     generated = buildGeneratedPreset(player, state);
+    if (generated?.preset) {
+      options.api?.emitCustomEvent?.("player-bots:pvp-loadout", { player, state, preset: generated.preset });
+    }
   } catch (error) {
     if (state?.pvp) state.pvp.loadoutPending = true;
     options.api?.log?.("bot_pvp_loadout_generation_failed", {

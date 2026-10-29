@@ -5,6 +5,7 @@ const { climb, leap, balance } = require("../Steps.Agility");
 module.exports = {
   key: "alkharid",
   name: "Al Kharid Rooftop",
+  helper: 4, // the Agility helper's course (enum 3507: "Al Kharid Rooftops")
   lapXp: 216,
   petBase: 26648, // Giant squirrel base chance (Wiki)
   marks: {

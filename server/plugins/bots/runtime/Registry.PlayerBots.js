@@ -569,14 +569,14 @@ function createBotRegistry(options) {
       };
     }
     if (wantsPvpPriming) {
-      const pvpMetadata =
+      const pvpMetadata = plan.pvpMetadata ?? (
         assignedHotspotId != null
           ? buildHotspotPvpMetadata({
               hotspotId: assignedHotspotId,
             })
           : buildRoamingPvpMetadata({
               excludeF2p: true,
-            });
+            }));
       assignPvpMetadata(state, {
         metadata: pvpMetadata,
       });
@@ -1169,6 +1169,7 @@ function createBotRegistry(options) {
     /**
      * `username` picks the bot's name (null when it is taken); `persistent` loads and keeps
      * its save, so it carries its levels and items from one session to the next.
+     * `pvpMetadata` pins a profile, loadout and archetype before the initial kit is equipped.
      */
     spawnPvpBot(location, options = {}) {
       let username = options.username ?? null;
@@ -1183,6 +1184,7 @@ function createBotRegistry(options) {
         spawnLocation: location,
         mode: options.mode ?? null,
         persistent: options.persistent === true,
+        pvpMetadata: options.pvpMetadata,
       });
     },
     scheduleInitialSpawn,

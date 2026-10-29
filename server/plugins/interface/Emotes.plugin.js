@@ -7,6 +7,15 @@ const EMOTE_CONTENTS_UID = (EMOTES_GROUP_ID << 16) | 2;
 const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
 const LAST_EMOTE_SLOT = 55;
 const EMOTE_ACTION_FLAGS = (1 << 1) | (1 << 2);
+/** Locked slots and the var each needs, as the tab's cache script 702 tests them. */
+const LOCKS = require("./data/emotes.json").locks;
+/**
+ * The emote varbits unlocked here (by name), for unlocks with no state of their own:
+ * random events and the like. Unlocks that follow from other progress (a quest stage,
+ * a Stronghold floor, a clue count) stay with their plugin, which sends the varbit.
+ */
+const UNLOCKED_ATTRIBUTE = "emotes:unlocked";
+const UNLOCKABLE_VARBITS = new Set(Object.values(LOCKS).map((lock) => lock.varbit).filter(Boolean));
 
 const EMOTES = [
     { sequence: 855, loop: 189 },
@@ -106,6 +115,43 @@ for (const [itemIds, sequence, graphic] of SKILLCAPE_ROWS) {
 }
 
 const variantIndices = new WeakMap();
+let api;
+
+function unlockedVarbits(player) {
+    const saved = player.getAttribute(UNLOCKED_ATTRIBUTE);
+    return Array.isArray(saved) ? saved : [];
+}
+
+/** Script 702's test: the var at least `min` (1 unless stated), or one of `values`. */
+function isUnlocked(player, lock) {
+    const cache = api.core.CacheDefinitions;
+    const sender = player.getPacketSender();
+    const id = lock.varp ? cache.getVarpId(lock.varp) : cache.getVarbitId(lock.varbit);
+    const value = id == null ? 0 : lock.varp ? sender.getVarp(id) : sender.getVarbit(id);
+    return lock.values ? lock.values.includes(value) : value >= (lock.min ?? 1);
+}
+
+/**
+ * `emotes:unlock` { player, varbit: "emote_glassbox" } saves and sends one emote varbit.
+ * Sets `unlocked` when it wasn't unlocked before, so the caller can say so.
+ */
+function unlockEmote(request) {
+    const { player, varbit } = request;
+    if (!player || !UNLOCKABLE_VARBITS.has(varbit)) return;
+    const id = api.core.CacheDefinitions.getVarbitId(varbit);
+    const saved = unlockedVarbits(player);
+    if (id == null || saved.includes(varbit)) return;
+    player.setAttribute(UNLOCKED_ATTRIBUTE, [...saved, varbit]);
+    player.getPacketSender().sendVarbit(id, 1);
+    request.unlocked = true;
+}
+
+function restoreUnlocks({ player }) {
+    for (const varbit of unlockedVarbits(player)) {
+        const id = api.core.CacheDefinitions.getVarbitId(varbit);
+        if (id != null) player.getPacketSender().sendVarbit(id, 1);
+    }
+}
 
 function enableEmoteActions(player) {
     player.getPacketSender().sendInterfaceFlagsRange(
@@ -166,8 +212,12 @@ function resolveEmote(player, slot, action, api) {
 module.exports = {
     name: "Emotes",
     _test: { questCapeReady, resolveSkillcapeEmote, resolveEmote },
-    register(api) {
+    register(pluginApi) {
+        api = pluginApi;
         const CombatFactory = api.getCombatFactory();
+        api.persistAttribute(UNLOCKED_ATTRIBUTE, []);
+        api.onCustomEvent("emotes:unlock", unlockEmote);
+        api.onPlayerLogin(restoreUnlocks);
 
         api.onPlayerLogin(({ player }) => {
             // The login hook runs before the gameframe root is mounted. Sending the
@@ -194,6 +244,12 @@ module.exports = {
 
             if (player.busy() || CombatFactory.inCombat(player)) {
                 player.sendMessage("You cannot do this right now.");
+                return true;
+            }
+
+            const lock = LOCKS[slot];
+            if (lock && !isUnlocked(player, lock)) {
+                api.core.StatementDialogue.send(player, lock.message);
                 return true;
             }
 

@@ -25,6 +25,9 @@ const REPLACE_ATTRIBUTE = "slayer:replace-offered";
 /** Set when the player asks Mortimer to cancel the task he just gave (the Wiki has no text after it). */
 const CANCEL_ATTRIBUTE = "slayer:cancel-asked";
 const CANCEL_OPTION = "Can I cancel that task? (100 Points)";
+const ASSIGNMENT_OPTION = "I need another assignment.";
+/** Turael's transcript holds his assignment menu in the variant for later visits. */
+const ASSIGNMENT_VARIANT = "standard-dialogue-subsequent-visits-to-turael";
 const CHOICE_WAITING = "Hmm... It appears as though Mortimer has provided you with a task choice, you must go to them in order to pick.";
 /** Ours: the Wiki has no line for the Slayer XP modifier. */
 const XP_MODIFIER_LINE = "Your new task is to kill [amount] [task monster]. Creatures on this task will award increased Slayer experience.";
@@ -103,7 +106,35 @@ function assignmentClick(event) {
     offerChoice(event.player, master, event.definition, event.definition.getId());
     return;
   }
+  if (assignmentTalk(event.player, master) && playAssignmentBranch(event)) return;
   say(event.player, event.definition, assignmentLine(event.player, master));
+}
+
+/**
+ * Where Assignment says more than the task line, as the transcript's "I need another
+ * assignment." branch does (rsprox captures): Turael and Aya on a task, with their short
+ * "You're still hunting ..., you have N to go." and the offer to replace a task they wouldn't
+ * give (1445, 2965), and Krystilia's warning before the first Wilderness task (3279, 3434).
+ */
+function assignmentTalk(player, master) {
+  const task = Tasks.current(player);
+  if (task) return master.replacesTasks === true;
+  return master.wilderness === true && State.varbit(player, "slayer_wilderness_tasks_completed") === 0
+    && !waitingElsewhere(player, master) && Tasks.meetsMaster(player, master);
+}
+
+/** Plays that branch of the master's transcript, without the player asking. */
+function playAssignmentBranch(event) {
+  const request = {
+    player: event.player,
+    npc: event.npc,
+    npcId: event.definition.getId(),
+    variant: ASSIGNMENT_VARIANT,
+    select: (steps) => findOption(steps, ASSIGNMENT_OPTION)?.steps?.filter((step, index) => index > 0 || !step.player),
+    handled: false,
+  };
+  api.emitCustomEvent("npc-dialogue:start", request);
+  return request.handled;
 }
 
 /** "slayer:assignment": the transcript's assignment step; fills in the master's line. */
@@ -198,7 +229,10 @@ function fillLine(request) {
   if (!master) return;
   const task = Tasks.current(request.player);
   const streak = State.varbit(request.player, "slayer_tasks_completed");
+  // Turael's offer names both streaks (rsprox: "standard task streak of 1 ... Wilderness task streak of 13").
+  const wildernessStreak = State.varbit(request.player, "slayer_wilderness_tasks_completed");
   request.text = request.text
+    .replace(/Wilderness task streak of \[task streak amount\]/g, `Wilderness task streak of ${wildernessStreak}`)
     .replace(/\[task streak amount\]/g, String(streak))
     .replace(/\[X\]/g, String(mortimerTasks(request.player)))
     .replace(/\[(amount|number)\]/g, String(task?.count ?? 0))

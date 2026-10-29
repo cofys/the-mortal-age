@@ -2,6 +2,14 @@
 
 const C = require("./Context.Hunter"), { H } = C;
 const traps = new Map(), released = new Map();
+// The broav pit, from rsprox capture 1698 (While Guthix Sleeps): the trap is set with the small-trap
+// animation and stands a tick later with sound 2639; the bait goes in with a pick-up; a caught broav is
+// dismantled at once and found a tick later in a message box with the item.
+const SET_SOUND = 2639;
+const BAIT_SOUND = 2739;
+const BAIT_SOUND_DELAY = 20;
+const DISMANTLE_SOUND = 2649;
+const REFUSAL = "You need some logs and a knife to set a pitfall trap.";
 
 function owns(player) {
   const I = H.core.ItemIdentifiers;
@@ -27,9 +35,10 @@ function build({ player, object }) {
   if ([...traps.values()].some(t => t.base.getLocation().equals(object.getLocation()) && t.base.getPrivateArea() === object.getPrivateArea())) return true;
   const I = H.core.ItemIdentifiers;
   const logs = require("./Traps.Hunter").materials({ logs: true }, player);
-  if (!C.hasTool(player, I.KNIFE)) { player.sendMessage("You need a knife and logs."); return true; }
-  C.begin(player, 3, C.ANIM.SET, () => {
+  if (!C.hasTool(player, I.KNIFE) || !C.exchange(player, logs, [], false)) { player.sendMessage(REFUSAL); return true; }
+  C.begin(player, 1, C.ANIM.SMALL, () => {
     if ([...traps.values()].some(t => t.base.getLocation().equals(object.getLocation()) && t.base.getPrivateArea() === object.getPrivateArea()) || traps.has(player) || !permitted(player) || !C.hasTool(player, I.KNIFE) || !C.exchange(player, logs, [])) return;
+    player.getPacketSender().sendSound(SET_SOUND, 1, 0);
     const trap = { base: object, player, state: "empty", due: H.tick + 100 };
     traps.set(player, trap); H.players.add(player);
     H.core.ObjectManager.deregister(object, true);
@@ -48,14 +57,16 @@ function bait({ player, object }) {
   const trap = traps.get(player);
   if (object.getId() !== H.core.ObjectIdentifiers.PIT_TRAP) return false;
   if (!trap || trap.object !== object || trap.state !== "empty" || !C.nearby(player, object) || !permitted(player)) return true;
-  C.begin(player, 2, C.ANIM.SMALL, () => {
+  if (!C.begin(player, 1, C.ANIM.PICKUP, () => {
     if (traps.get(player) !== trap || !permitted(player) || !C.exchange(player, [[H.core.ItemIdentifiers.MORT_MYRE_FUNGUS, 1]], [])) return;
+    player.sendMessage("You bait the pit trap.");
     trap.state = "baited"; trap.capture = H.tick + C.roll(8, 20); trap.due = H.tick + 100;
     transform(trap, H.core.ObjectIdentifiers.BAITED_PIT_TRAP);
     const loc = trap.base.getLocation();
     trap.npc = H.api.spawnNpc({ id: H.core.NpcIdentifiers.WILD_BROAV, x: loc.getX() - 5, y: loc.getY() - 3, z: loc.getZ(), wanderRadius: 3 });
     if (trap.npc && player.getPrivateArea()) trap.npc.setArea(player.getPrivateArea());
-  });
+  })) return true;
+  player.getPacketSender().sendSound(BAIT_SOUND, 1, BAIT_SOUND_DELAY);
   return true;
 }
 
@@ -63,14 +74,20 @@ function dismantle({ player, object }) {
   const trap = traps.get(player);
   if (object.getId() !== H.core.ObjectIdentifiers.COLLAPSED_TRAP_10 && object.getId() !== H.core.ObjectIdentifiers.PIT_TRAP) return false;
   if (!trap || trap.object !== object || !C.nearby(player, object)) return true;
-  C.begin(player, 2, C.ANIM.TAKE, () => {
+  if (!C.begin(player, 1, C.ANIM.SMALL, () => {
     if (traps.get(player) !== trap) return;
+    player.getPacketSender().sendSound(DISMANTLE_SOUND, 1, 0);
     if (trap.state === "caught") {
-      if (!C.requireLevel(player, 62) || owns(player) || !C.exchange(player, [], [[H.core.ItemIdentifiers.UNCONSCIOUS_BROAV, 1]])) return;
+      const I = H.core.ItemIdentifiers;
+      if (!C.requireLevel(player, 62) || owns(player) || !C.exchange(player, [], [[I.UNCONSCIOUS_BROAV, 1]])) return;
+      // Wiki (Wild broav): 19.2 Hunter XP.
       C.xp(player, 19.2, "broav", H.core.NpcIdentifiers.WILD_BROAV);
+      player.getDialogueManager().startDialogues(new H.core.DialogueChainBuilder()
+        .add(new H.core.ItemStatementDialogue(0, I.UNCONSCIOUS_BROAV, "You find an unconscious broav in the trap.")));
     }
     cleanup({ player });
-  });
+  })) return true;
+  player.sendMessage("You dismantle the trap.");
   return true;
 }
 

@@ -249,6 +249,8 @@ SpellTeleports.register({
     SpellTeleports: require("../dist/game/content/combat/magic/SpellTeleports").SpellTeleports,
     LunarSpells: { getTeleportDestinations: () => [] },
     ArceuusSpells: { getTeleportDestinations: () => [] },
+    MagicSpellbook: require("../dist/game/model/MagicSpellbook").MagicSpellbook,
+    RegionManager: { blocked: () => false },
   },
   persistAttribute() {},
   onItemAction: (handler) => { breakTablet = handler; },
@@ -280,7 +282,9 @@ test("breaking a tablet teleports to its spell's destination and uses one tablet
   assert.equal(player.items.length, 2, "the tablet goes as it is absorbed, two ticks in");
   teleports[0].onMiddle();
   assert.equal(player.items.length, 1);
-  assert.deepEqual([teleports[0].destination.getX(), teleports[0].destination.getY()], [3213, 3424]);
+  // Anywhere in the Varrock spell's 5x5 landing square (rsprox captures).
+  const { destination } = teleports[0];
+  assert.ok(Math.abs(destination.getX() - 3213) <= 2 && Math.abs(destination.getY() - 3424) <= 2, `${destination.getX()},${destination.getY()}`);
   assert.equal(teleports[0].type, "TELE_TAB");
 });
 

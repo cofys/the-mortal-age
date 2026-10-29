@@ -4,17 +4,34 @@
 // https://oldschool.runescape.wiki/w/Hunter
 function build(core) {
   const { ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O } = core;
+  // Trap stages by cache gameval: the loc while it is being set, the empty trap, the catch or miss
+  // (shown two ticks before the full or failed loc) and the sounds they play (rsprox captures).
+  const loc = name => core.CacheDefinitions.getLocId(name);
+  const BOX = { layTicks: 2, layMessage: "You begin setting up the trap.", laySound: 2636, dismantle: 5212,
+    trappingSound: 2627, fullSound: 362, collapse: ["The box trap that you laid has collapsed.", core.ChatType.SPAM] };
+  const NET = { layTicks: 1, layMessage: "You begin setting up a trap.", laySound: 2644, layAreaSound: true, dismantle: 5207,
+    dismantleSoundFirst: true, trappingSound: 2652, settingAnimation: 5266, refusal: "You need a net and rope to set a net trap.",
+    collapse: ["The net trap that you set has collapsed.", core.ChatType.SPAM] };
+  const sapling = colour => ({ tree: loc(`hunting_sapling_up_${colour}`), setting: loc(`hunting_sapling_setting_${colour}`),
+    idleTree: loc(`hunting_sapling_set_${colour}`), idle: loc(`hunting_sapling_net_set_${colour}`),
+    failing: loc(`hunting_sapling_failing_${colour}`), fail: loc(`hunting_sapling_failed_${colour}`) });
   const traps = {
-    bird: { level: 1, item: I.BIRD_SNARE, idle: O.BIRD_SNARE_2, fail: O.BIRD_SNARE, animation: 5208 },
-    box: { level: 27, item: I.BOX_TRAP, idle: O.BOX_TRAP_5, fail: O.BOX_TRAP_7, animation: 5208 },
+    bird: { level: 1, item: I.BIRD_SNARE, idle: loc("hunting_ojibway_trap"), failing: loc("hunting_ojibway_trap_failing"),
+      fail: loc("hunting_ojibway_trap_broken"), animation: 5208, layTicks: 3, layMessage: "You begin setting up the trap.", laySound: 2646,
+      dismantle: 5207, trappingSound: 2637, fullSound: 2625, collapse: ["The bird snare that you laid has fallen over.", core.ChatType.GAME] },
+    box: { level: 27, item: I.BOX_TRAP, idle: loc("hunting_boxtrap_empty"), failing: loc("hunting_boxtrap_failing"),
+      fail: loc("hunting_boxtrap_failed"), animation: 5208, ...BOX },
     magic: { level: 71, item: I.MAGIC_BOX, idle: O.MAGIC_BOX, fail: O.MAGIC_BOX_FAILED, animation: 5212 },
-    deadfall: { level: 23, idle: O.DEADFALL, fail: O.BOULDER_14, animation: 5212, knife: true, logs: true, max: 2 },
-    pit: { level: 31, idle: O.SPIKED_PIT, fail: O.COLLAPSED_TRAP, animation: 5212, knife: true, logs: true },
-    orange: { level: 47, tree: O.YOUNG_TREE_2, idleTree: O.YOUNG_TREE, idle: O.NET_TRAP, fail: O.NET_TRAP_4, bait: I.MARRENTILL_TAR, animation: 5215 },
-    red: { level: 59, tree: O.YOUNG_TREE_5, idleTree: O.YOUNG_TREE_4, idle: O.NET_TRAP_10, fail: O.NET_TRAP_9, bait: I.TARROMIN_TAR, animation: 5215 },
-    black: { level: 67, tree: O.YOUNG_TREE_11, idleTree: O.YOUNG_TREE_10, idle: O.NET_TRAP_20, fail: O.NET_TRAP_14, bait: I.HARRALANDER_TAR, animation: 5215 },
-    swamp: { level: 29, tree: O.YOUNG_TREE_8, idleTree: O.YOUNG_TREE_7, idle: O.NET_TRAP_15, fail: O.NET_TRAP_19, bait: I.GUAM_TAR, animation: 5215 },
-    tecu: { level: 79, tree: O.YOUNG_TREE_14, idleTree: O.YOUNG_TREE_13, idle: O.NET_TRAP_25, fail: O.NET_TRAP_24, bait: I.IRIT_TAR, animation: 5215 },
+    deadfall: { level: 23, idle: loc("hunting_deadfall_trap"), fail: loc("hunting_deadfall_boulder"), setting: loc("hunting_deadfall_setting"),
+      failing: loc("hunting_deadfall_failing"), animation: 5212, knife: true, logs: true, max: 2, layTicks: 1,
+      layMessage: "You begin setting up a trap.", laySound: 2645, dismantle: 5212, trappingSound: 2631 },
+    pit: { level: 31, idle: O.SPIKED_PIT, fail: O.COLLAPSED_TRAP, animation: 5212, knife: true, logs: true, layTicks: 1, laySound: 2639,
+      dismantle: 5212, dismantleTicks: 1, dismantleSound: 2649, caughtSuffix: "!", refusal: "You need some logs and a knife to set a pitfall trap." },
+    orange: { level: 47, ...sapling("orange"), bait: I.MARRENTILL_TAR, animation: 5215, ...NET },
+    red: { level: 59, ...sapling("red"), bait: I.TARROMIN_TAR, animation: 5215, ...NET },
+    black: { level: 67, ...sapling("black"), bait: I.HARRALANDER_TAR, animation: 5215, ...NET },
+    swamp: { level: 29, ...sapling("swamp"), bait: I.GUAM_TAR, animation: 5215, ...NET },
+    tecu: { level: 79, ...sapling("mountain"), bait: I.IRIT_TAR, animation: 5215, ...NET },
     monkey: { level: 60, idle: O.LARGE_BOULDER_2, fail: O.LARGE_BOULDER, animation: 7259, max: 1, inputs: [[I.BANANA, 1]] },
     rabbit: { level: 27, item: I.RABBIT_SNARE, idle: O.RABBIT_SNARE, fail: O.RABBIT_SNARE, animation: 5208 },
   };
@@ -50,15 +67,19 @@ function build(core) {
       [[I.BIG_BONES, 1], [I.MOONLIGHT_ANTELOPE_ANTLER, 1], [I.MOONLIGHT_ANTELOPE_FUR, 1], [I.RAW_MOONLIGHT_ANTELOPE, 1]]],
     [N.MANIACAL_MONKEY_3, "monkey", 60, 1000, O.LARGE_BOULDER_4, -79, 227, [[I.DAMAGED_MONKEY_TAIL, 1]]],
   ].map(([npc, trap, level, xp, caught, low, high, loot]) => ({ npc, trap, level, xp, caught, low, high, loot }));
+  // release: the graphic of a barehanded catch let go (cache spotanim gameval).
   const butterflies = [
-    [N.RUBY_HARVEST, I.RUBY_HARVEST, 15, 24, 25, 44, core.Skill.ATTACK],
-    [N.SAPPHIRE_GLACIALIS, I.SAPPHIRE_GLACIALIS, 25, 34, 35, 54, core.Skill.DEFENCE],
-    [N.SNOWY_KNIGHT, I.SNOWY_KNIGHT, 35, 44, 45, 64, core.Skill.HITPOINTS],
-    [N.BLACK_WARLOCK, I.BLACK_WARLOCK, 45, 54, 55, 74, core.Skill.STRENGTH],
-  ].map(([npc, jar, level, xp, hands, handsXp, boost]) => ({ npc, jar, level, xp, hands, handsXp, boost, low: 20, high: 296 }));
+    [N.RUBY_HARVEST, I.RUBY_HARVEST, 15, 24, 25, 44, core.Skill.ATTACK, "ruby"],
+    [N.SAPPHIRE_GLACIALIS, I.SAPPHIRE_GLACIALIS, 25, 34, 35, 54, core.Skill.DEFENCE, "glacialis"],
+    [N.SNOWY_KNIGHT, I.SNOWY_KNIGHT, 35, 44, 45, 64, core.Skill.HITPOINTS, "snowy"],
+    [N.BLACK_WARLOCK, I.BLACK_WARLOCK, 45, 54, 55, 74, core.Skill.STRENGTH, "warlock"],
+  ].map(([npc, jar, level, xp, hands, handsXp, boost, kind]) => ({ npc, jar, level, xp, hands, handsXp, boost, low: 20, high: 296,
+    release: `hunting_butterfly_${kind}_out_spot_anim` }));
   butterflies.push(
-    { npc: N.SUNLIGHT_MOTH, jar: I.SUNLIGHT_MOTH_2, level: 65, hands: 75, xp: 74, handsXp: 94, boost: "restore", low: 20, high: 296, handsLow: 20, handsHigh: 296 },
-    { npc: N.MOONLIGHT_MOTH, jar: I.MOONLIGHT_MOTH_2, level: 75, hands: 85, xp: 84, handsXp: 104, boost: core.Skill.PRAYER, low: 0, high: 276, handsLow: 20, handsHigh: 286 });
+    { npc: N.SUNLIGHT_MOTH, jar: I.SUNLIGHT_MOTH_2, level: 65, hands: 75, xp: 74, handsXp: 94, boost: "restore", low: 20, high: 296, handsLow: 20, handsHigh: 296,
+      release: "hunting_moth_sunlight_out_spot_anim" },
+    { npc: N.MOONLIGHT_MOTH, jar: I.MOONLIGHT_MOTH_2, level: 75, hands: 85, xp: 84, handsXp: 104, boost: core.Skill.PRAYER, low: 0, high: 276, handsLow: 20, handsHigh: 286,
+      release: "hunting_moth_moonlight_out_spot_anim" });
   const implings = [
     ["BABY", 17, 27, 20, 18, 79, 402], ["YOUNG", 22, 32, 22, 20, 69, 351],
     ["GOURMET", 28, 38, 24, 22, 61, 325], ["EARTH", 36, 46, 27, 25, 51, 302],
@@ -86,10 +107,18 @@ function build(core) {
     [I.BLUEGILL, 35, 43, 16.5, 11.5, 3.5], [I.COMMON_TENCH, 51, 56, 45, 40, 10],
     [I.MOTTLED_EEL, 68, 73, 90, 65, 20], [I.GREATER_SIREN, 87, 91, 130, 100, 25],
   ].map(([item, hunter, fishing, hunterXp, fishingXp, cookingXp]) => ({ item, hunter, fishing, hunterXp, fishingXp, cookingXp }));
-  const data = { traps, creatures, butterflies, implings, falconry, birdhouses, aerialFish };
+  // Lines on a checked catch that aren't "You've caught a <npc name>." (rsprox captures 1104, 1128, 1757).
+  const catchLines = {
+    [N.EMBERTAILED_JERBOA]: ["You dismantle the trap.", "You've caught an embertailed jerboa... or maybe not."],
+    [N.TECU_SALAMANDER]: ["The salamander that pops out of the net doesn't look to be fully grown.", "You dismantle the trap."],
+    [N.SABRE_TOOTHED_KYATT]: ["You dismantle the trap.", "You've caught a sabretoothed kyatt!"],
+  };
+  const data = { traps, creatures, catchLines, butterflies, implings, falconry, birdhouses, aerialFish };
   // Fail on a stale enum at startup instead of creating invalid items/objects in-game.
+  const stages = ["idle", "fail", "failing", "setting", "tree", "idleTree"];
   for (const value of [...creatures.map(c => [c.npc, c.caught, ...c.loot.map(l => l[0])]),
-    ...butterflies.map(c => [c.npc, c.jar]), ...implings.map(c => [c.jar, ...c.npcs]),
+    ...Object.values(traps).map(def => stages.filter(key => key in def).map(key => def[key])),
+    ...butterflies.map(c => [c.npc, c.jar, core.CacheDefinitions.getSpotanimId(c.release)]), ...implings.map(c => [c.jar, ...c.npcs]),
     ...falconry.map(c => [c.npc, c.fur, c.falcon]), ...birdhouses.map(c => [c.item, c.logs]), ...aerialFish.map(c => [c.item])].flat()) {
     if (!Number.isInteger(value)) throw new Error("Hunter data references an unavailable cache identifier");
   }

@@ -19,10 +19,16 @@ const Loc = Object.freeze({
 });
 
 const ROPE_SOUND = 2495;
+/** shayzien_agility_low_progress: the lap's progress, 1 after the ladder (rsprox 1632). */
+const LOW_PROGRESS_VARBIT = 12334;
 
-/** Monkeybars: on, cross to `end`, off, and drop to `landing` a tick later (rsprox 1632). */
+/**
+ * Monkeybars: on two ticks after arriving, cross to `end`, off the tick after the last bar, and
+ * drop to `landing` a tick later (rsprox 1632).
+ */
 function monkeybars(end, landing) {
   return [
+    { wait: 2 },
     { anim: Anim.MONKEY_BARS_JUMP },
     { sound: 2474 },
     { sound: 2470, loops: 9 },
@@ -39,7 +45,9 @@ function monkeybars(end, landing) {
 module.exports = {
   key: "shayzien-basic",
   name: "Shayzien Basic Agility Course",
+  helper: 21, // the Agility helper's course (enum 3507: "Shayzien Agility Course")
   lapXp: 153.5,
+  progressVarbit: LOW_PROGRESS_VARBIT,
   petBase: 31804, // Giant squirrel base chance (Wiki)
   marks: {
     level: 1,
@@ -52,7 +60,7 @@ module.exports = {
       level: 1,
       xp: 5.5,
       route: [1554, 3630, 0],
-      steps: [{ faceDir: "north" }, ...climb([1554, 3632, 3])],
+      steps: [{ faceDir: "north" }, { wait: 1 }, ...climb([1554, 3632, 3])],
     },
     {
       object: Loc.MONKEYBARS,
@@ -69,7 +77,15 @@ module.exports = {
       xp: 9,
       route: [1537, 3633, 2],
       render: Anim.BALANCE_WALK,
-      steps: [{ sound: ROPE_SOUND, loops: 3 }, ...balance([1534, 3633]), { sound: ROPE_SOUND, loops: 4 }, ...balance([1528, 3633])],
+      // A tile a tick from the tick after arriving; the XP comes the tick after the last tile.
+      steps: [
+        { wait: 1 },
+        ...balance([1536, 3633]),
+        { sound: ROPE_SOUND, loops: 3 },
+        ...balance([1533, 3633]),
+        { sound: ROPE_SOUND, loops: 4 },
+        ...balance([1528, 3633]),
+      ],
     },
     {
       object: Loc.BAR,

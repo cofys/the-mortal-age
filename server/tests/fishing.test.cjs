@@ -83,6 +83,7 @@ test("fishing spots, catch chances and the catch cascade follow OSRS", async () 
       getEquipment: () => ({ contains: (id) => equipment.includes(id) }),
       getLocation: () => at,
       sendMessage: (message) => messages.push(message),
+      getPacketSender: () => ({ sendTypedMessage: (type, message) => messages.push(message), sendSoundEffect() {} }),
     };
   }
 
@@ -109,9 +110,18 @@ test("fishing spots, catch chances and the catch cascade follow OSRS", async () 
   const rolls = [0.99, 0];
   assert.deepEqual(rollCatch(player({ fishing: 50 }), TOOLS.HARPOON, () => rolls.shift()), [FISH.TUNA]);
 
-  // Big net: every roll stands alone, so one cast can land bass, cod and two mackerel.
-  assert.deepEqual(rollCatch(player(), TOOLS.BIG_NET, () => 0), [FISH.BASS, FISH.COD, FISH.MACKEREL, FISH.MACKEREL]);
-  assert.deepEqual(rollCatch(player({ fishing: 20 }), TOOLS.BIG_NET, () => 0), [FISH.MACKEREL, FISH.MACKEREL]);
+  // Big net: every roll stands alone, so one cast can land the junk, two mackerel, cod and bass.
+  const junk = [FISH.LEATHER_BOOTS, FISH.SEAWEED, FISH.LEATHER_GLOVES, FISH.OYSTER, FISH.CASKET];
+  assert.deepEqual(rollCatch(player(), TOOLS.BIG_NET, () => 0), [...junk, FISH.MACKEREL, FISH.MACKEREL, FISH.COD, FISH.BASS]);
+  assert.deepEqual(rollCatch(player({ fishing: 20 }), TOOLS.BIG_NET, () => 0), [...junk, FISH.MACKEREL, FISH.MACKEREL]);
+  // Wiki charts: boots and seaweed 10/256 at every level, a casket 1 to 2.
+  assert.equal(catchChance(99, FISH.LEATHER_BOOTS), 11 / 256);
+  assert.equal(catchChance(1, FISH.CASKET), 2 / 256);
+  assert.equal(FISH.OYSTER.experience, 10);
+  assert.equal(FISH.SEAWEED.experience, 1);
+  assert.equal(FISH.SHARK.message(1), "You catch a shark!");
+  assert.equal(FISH.TROUT.message(1), "You catch a raw trout");
+  assert.equal(FISH.LOBSTER.message(1), "You catch a lobster.");
 
   // Barbarian fishing: Strength and Agility gate each leaping fish.
   const weak = player({ fishing: 99, levels: { Strength: 30, Agility: 30 } });
@@ -184,6 +194,7 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
       }),
       getLocation: () => null,
       sendMessage: (message) => messages.push(message),
+      getPacketSender: () => ({ sendTypedMessage: (type, message) => messages.push(message), sendSoundEffect() {} }),
     };
   }
 
@@ -350,7 +361,7 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
       setForceMovement() {},
       getCombat: () => ({ reset() {} }),
       getMovementQueue: () => ({ reset() {}, setBlockMovement() {} }),
-      getPacketSender: () => ({ sendObjectRemoval: () => log.removed++, sendObject() {} }),
+      getPacketSender: () => ({ sendObjectRemoval: () => log.removed++, sendObject() {}, sendTypedMessage: (type, message) => log.messages.push(message) }),
       moveTo: (to) => { log.moved = to; },
     });
   }
@@ -518,7 +529,7 @@ test("minnow fishing: Wiki catch rates, rotating spots, flying fish and Kylie's 
       }),
       getEquipment: () => ({ getItems: () => new Array(14).fill(null), contains: () => false }),
       getLocation: () => new Location(...Platform.PLATFORM_LANDING),
-      getPacketSender: () => ({ sendInterfaceRemoval() {}, sendEnterAmountPrompt: (text) => { p.promptText = text; } }),
+      getPacketSender: () => ({ sendInterfaceRemoval() {}, sendEnterAmountPrompt: (text) => { p.promptText = text; }, sendTypedMessage: (type, message) => p.messages.push(message), sendSoundEffect() {} }),
       setEnteredAmountAction: (action) => { p.prompt = action; },
       sendMessage: (message) => p.messages.push(message),
     };
@@ -603,14 +614,15 @@ async function fishingLoop() {
     const slots = items.map(([id, amount = 1]) => new Item(id, amount));
     const stackable = (id) => core.ItemDefinition.forId(id).isStackable();
     const p = {
-      slots, messages: [], statements: [], xp: 0, at: new Location(2900, 3119, 0),
+      slots, messages: [], statements: [], animations: [], xp: 0, at: new Location(2900, 3119, 0),
       isRegistered: () => true,
       getHitpoints: () => 10,
       getMovementQueue: () => ({ size: () => 0 }),
       getForceMovement: () => null,
       getLocation: () => p.at,
-      performAnimation() {},
+      performAnimation: (animation) => p.animations.push(animation.getId()),
       sendMessage: (message) => p.messages.push(message),
+      getPacketSender: () => ({ sendTypedMessage: (type, message) => p.messages.push(message), sendSoundEffect() {} }),
       getDialogueManager: () => ({ startDialogues: (chain) => p.statements.push(chain) }),
       getEquipment: () => ({ contains: () => false, getItems: () => new Array(14).fill(null) }),
       getSkillManager: () => ({
@@ -668,25 +680,60 @@ async function withRandom(value, body) {
   }
 }
 
-test("fishing spots roll on the Wiki's tick lengths: 6 for nets, cages and harpoons, 5 for rods", async () => {
+test("fishing spots roll on the Wiki's tick lengths after the captured first roll", async () => {
   const { core, Fishing, fisher, amount, spot, start, ticks } = await fishingLoop();
   const { ItemIdentifiers: I, NpcIdentifiers: N } = core;
   const { TOOLS } = Fishing;
   // Every roll lands, and 0.02 keeps clear of the 1-in-91 random stop of moving spots.
   await withRandom(0.02, async () => {
-    // Wiki (Game tick/Action lengths): a lobster pot rolls every 6 ticks, a fly rod every 5.
+    // rsprox captures: the first roll is 3 ticks after a cage's start line, then every 6
+    // (Wiki: Game tick/Action lengths); 4 ticks after a rod's, then every 5.
     const lobster = fisher({ items: [[I.LOBSTER_POT]] });
     start(lobster, spot(N.FISHING_SPOT_10, 3), "Cage");
-    ticks(5);
-    assert.equal(amount(lobster, I.RAW_LOBSTER), 0, "no lobster on the fifth tick");
+    assert.deepEqual(lobster.messages, ["You attempt to catch a lobster."]);
+    ticks(2);
+    assert.equal(amount(lobster, I.RAW_LOBSTER), 0, "no lobster before the third tick");
     ticks(1);
     assert.equal(amount(lobster, I.RAW_LOBSTER), 1);
-    ticks(6);
+    assert.equal(lobster.messages.at(-1), "You catch a lobster.");
+    ticks(5);
+    assert.equal(amount(lobster, I.RAW_LOBSTER), 1);
+    ticks(1);
     assert.equal(amount(lobster, I.RAW_LOBSTER), 2);
     const fly = fisher({ items: [[I.FLY_FISHING_ROD], [I.FEATHER, 10]] });
     start(fly, spot(N.ROD_FISHING_SPOT_10, 4), "Lure");
-    ticks(5);
+    assert.deepEqual(fly.messages, ["You cast out your line...<br>You attempt to catch a fish."]);
+    ticks(3);
+    assert.equal(amount(fly, I.RAW_TROUT) + amount(fly, I.RAW_SALMON), 0);
+    ticks(1);
     assert.equal(amount(fly, I.RAW_TROUT) + amount(fly, I.RAW_SALMON), 1);
+    assert.match(fly.messages.at(-1), /^You catch a raw (trout|salmon)$/);
+    // The rod casts once, then waits on the spot on every roll (human_fishing_casting, human_fish_onspot).
+    assert.deepEqual(fly.animations, [622, 623]);
+    ticks(5);
+    assert.deepEqual(fly.animations, [622, 623, 623]);
+
+    // Sea bait says its second line a tick after the first.
+    const bait = fisher({ items: [[I.FISHING_ROD], [I.FISHING_BAIT, 10]] });
+    start(bait, spot(N.FISHING_SPOT_21, 5), "Bait");
+    assert.deepEqual(bait.messages, ["You cast out your line..."]);
+    ticks(1);
+    assert.deepEqual(bait.messages, ["You cast out your line...", "You attempt to catch a fish."]);
+
+    // No bait, too low a level and a full inventory are message boxes.
+    const noBait = fisher({ items: [[I.FISHING_ROD]] });
+    start(noBait, spot(N.FISHING_SPOT_21, 6), "Bait");
+    assert.equal(noBait.statements[0].getDialogues().get(0).getText(), "You don't have any fishing bait.");
+    const weak = fisher({ level: 50, items: [[I.HARPOON]] });
+    start(weak, spot(N.FISHING_SPOT_20, 7), "Harpoon");
+    assert.equal(weak.statements[0].getDialogues().get(0).getText(), "You need to be at least level 76 Fishing to harpoon these fish.");
+    const nearlyFull = fisher({ items: [[I.LOBSTER_POT], ...new Array(26).fill([I.LOGS])] });
+    start(nearlyFull, spot(N.FISHING_SPOT_10, 8), "Cage");
+    ticks(3);
+    assert.equal(amount(nearlyFull, I.RAW_LOBSTER), 1);
+    assert.equal(nearlyFull.statements.length, 0, "the box comes the tick after the catch");
+    ticks(1);
+    assert.equal(nearlyFull.statements[0].getDialogues().get(0).getText(), "You can't carry any more fish.");
   });
   for (const name of ["NET", "LOBSTER_POT", "HARPOON", "SHARK_HARPOON", "BIG_NET", "KARAMBWANJI_NET"]) {
     assert.equal(Fishing.rollInterval(TOOLS[name]), 6, name);
@@ -751,7 +798,7 @@ test("Holy Lake karambwanji: floor(level / 5) + 1 a catch, shrimps only with roo
     const netter = fisher({ level: 65, items: [[I.SMALL_FISHING_NET]] });
     assert.equal(start(netter, spot(N.FISHING_SPOT_58, 2), "Net"), true, "the fishing loop takes the Holy Lake spot");
     assert.deepEqual(netter.messages, ["You cast out your net..."]);
-    ticks(5);
+    ticks(2);
     assert.equal(amount(netter, I.RAW_KARAMBWANJI), 0);
     ticks(1);
     assert.equal(amount(netter, I.RAW_KARAMBWANJI), 14);

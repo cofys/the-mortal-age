@@ -36,11 +36,13 @@ function prepare(t, { base = 83, current = base, existing = 0, spade = true } = 
     player.moveTo(new core.Location(target.x, target.y, target.z));
     if (spade) player.getInventory().add(new core.Item(Data.itemId('Spade')), false);
     player.getInventory().add(new core.Item(crop.sapling), false);
-    const plant = () => itemOnObject({ player, object: { getId: () => target.id },
+    const plant = () => { itemOnObject({ player, object: { getId: () => target.id },
         location: { x: target.x, y: target.y, z: target.z }, itemId: crop.sapling,
-        itemSlot: player.getInventory().getSlotForItemId(crop.sapling) });
+        itemSlot: player.getInventory().getSlotForItemId(crop.sapling) }); ticks(1); };
     return { player, farm, state, plant, crop, saplings: () => player.getInventory().getAmount(crop.sapling) };
 }
+// Farming actions finish on later farming ticks, as in the captures.
+const ticks = (n) => { for (let i = 0; i < n; i++) Patches.tick(); };
 test('2026 spirit tree thresholds allow a second at88, third at93 and fourth at96', t => {
     for (const [level, existing] of [[83, 0], [88, 1], [93, 2], [96, 3], [99, 4]]) {
         const f = prepare(t, { base: level, existing });

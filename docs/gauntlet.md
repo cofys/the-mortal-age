@@ -125,6 +125,7 @@ Gathering also follows Near-Reality, since the Wiki gives no rates: a yield ever
 - Tool Storage gives back missing tools (Wiki: sceptre, axe, pickaxe, harpoon, pestle and mortar).
 - Water Pump, or a vial used on a fishing spot, fills vials.
 - Range cooks raw paddlefish for 15 XP. Paddlefish heals 20; Near-Reality's burn chance is used.
+- The range as rsprox captures show it (recordings 1158, 3276, 3285): the first fish two ticks after reaching it, `synth_sound 2577` and "You successfully cook a paddlefish." on the spam channel, `cooking_success_count` moved like any other cook, and "You haven't got anything to cook." in a message box with no raw fish.
 - Singing Bowl opens the make-X menu of what you can make next.
 - Crystal Singing Recipes opens interface 640; Egniol Potions explains the recipe.
 

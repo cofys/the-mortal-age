@@ -50,6 +50,7 @@ function ledge(object, index, dx, dy, xp) {
 module.exports = {
   key: "falador",
   name: "Falador Rooftop",
+  helper: 12, // the Agility helper's course (enum 3507: "Falador Rooftops")
   lapXp: 586,
   petBase: 26806, // Giant squirrel base chance (Wiki)
   marks: {

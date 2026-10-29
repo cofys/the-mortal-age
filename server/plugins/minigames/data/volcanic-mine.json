@@ -74,7 +74,6 @@
     ],
     "tiny": { "npc": 7816, "from": [3808, 10188, 1], "to": [3808, 10210, 1] },
     "attachedLava": [[3804, 10124], [3805, 10124], [3804, 10125], [3805, 10125], [3804, 10126], [3805, 10126], [3804, 10127], [3805, 10127]],
-    "chipTicks": 3,
     "_channel": "Water may not harden lava on the boulder channel (recorded refusal there).",
     "channel": [3802, 10118, 3812, 10215, 1]
   },

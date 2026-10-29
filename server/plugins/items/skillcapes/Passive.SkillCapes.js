@@ -12,10 +12,15 @@ const Capes = require("./Common.SkillCapes");
 
 const EXTRA_ORE_CHANCE = 0.05;
 const EXTRA_ORE_MAX_LEVEL = 70;
+// rsprox captures 3139 and 3165 (rev 232), spam after the ore line.
+const EXTRA_ORE_MESSAGE = "Your cape allows you to mine an additional ore.";
 
 function extraOre(request) {
   if (request.extra || request.rockLevel > EXTRA_ORE_MAX_LEVEL || !Capes.hasPerk(request.player, "MINING")) return;
-  if (Math.random() < EXTRA_ORE_CHANCE) request.extra = true;
+  if (Math.random() < EXTRA_ORE_CHANCE) {
+    request.extra = true;
+    request.message = EXTRA_ORE_MESSAGE;
+  }
 }
 
 function hitpointsRegen(regen) {

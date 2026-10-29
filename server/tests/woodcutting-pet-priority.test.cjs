@@ -11,6 +11,8 @@ before(async () => { await CachePipeline.initialize(path.resolve(__dirname,'..')
 after(() => PM.emitServerShutdown({}));
 const item = name => core.CacheDefinitions.getObjId(name);
 const npcId = name => core.CacheDefinitions.getNpcId(name);
+// A nest takes the place of a roll's log, so the fixed draws below let the nest roll miss.
+function missNest(value) {return ()=>new Error().stack.includes('maybeDropBirdNest')?0.99:value;}
 function actor(t) {
   const channel={kind:'test',remoteAddress:'127.0.0.1',isOpen:()=>true,send:()=>true,close(){},onData(){},onError(){},onClose(){}};
   const p=new Player(new PlayerSession(channel)); p.setIndex(next++); p.setUsername('beaverqa'+next); p.setRegistered(true); p.setLocation(new core.Location(3222,3218,0)); p.needsPlacement=false;
@@ -33,12 +35,12 @@ async function summon(f,name='skillpetwc') {const id=item(name);f.p.getInventory
 
 test('native last-slot priority gives pet before resource when another follower is active',async t=>{
  const f=actor(t),beaver=item('skillpetwc');f.p.getInventory().add(new core.Item(core.ItemIdentifiers.OLMLET),true);const other=await drop(f,core.ItemIdentifiers.OLMLET);assert.ok(other?.isRegistered());f.p.getInventory().add(new core.Item(core.ItemIdentifiers.BRONZE_AXE),true);while(f.p.getInventory().getFreeSlots()>1)f.p.getInventory().add(new core.Item(core.ItemIdentifiers.RAKE),false);
- const tree=new core.GameObject(core.ObjectIdentifiers.TREE,new core.Location(3223,3218,0),10,0,null);core.ObjectManager.register(tree,true);t.after(()=>core.ObjectManager.deregister(tree,true));t.mock.method(Math,'random',()=>0);await send(f,{type:'object_option',id:tree.getId(),x:3223,y:3218,action:'Chop down'});for(let i=0;i<20;i++)core.TaskManager.process();
+ const tree=new core.GameObject(core.ObjectIdentifiers.TREE,new core.Location(3223,3218,0),10,0,null);core.ObjectManager.register(tree,true);t.after(()=>core.ObjectManager.deregister(tree,true));t.mock.method(Math,'random',missNest(0));await send(f,{type:'object_option',id:tree.getId(),x:3223,y:3218,action:'Chop down'});for(let i=0;i<20;i++)core.TaskManager.process();
  assert.ok(f.p.getAttribute('pets.owned').includes(beaver),'controlled real chopping actually wins the pet');assert.equal(f.p.getInventory().getAmount(beaver),1,'Wiki pet-priority contract: last slot belongs to pet, not resource');assert.equal(f.p.getInventory().getAmount(core.ItemIdentifiers.LOGS),0,'resource must go to ground');const logs=core.World.getItems().filter(g=>g.getItem().getId()===core.ItemIdentifiers.LOGS&&g.getOwner()===f.p.getUsername());assert.equal(logs.reduce((n,g)=>n+g.getItem().getAmount(),0),1,'the displaced log must exist on the real ground');assert.equal(logs[0].getPrivateArea(),f.p.getPrivateArea());t.after(()=>{for(const g of logs)core.ItemOnGroundManager.deregister(g)});
 });
 async function chopOnce(t,f,random=0) {
  const tree=new core.GameObject(core.ObjectIdentifiers.TREE,new core.Location(3223,3218,0),10,0,null);
- core.ObjectManager.register(tree,true);t.after(()=>core.ObjectManager.deregister(tree,true));t.mock.method(Math,'random',()=>random);
+ core.ObjectManager.register(tree,true);t.after(()=>core.ObjectManager.deregister(tree,true));t.mock.method(Math,'random',missNest(random));
  const snapshots=[];PM.createApi('PetPriorityObserve'+f.p.getIndex()).onCustomEvent('woodcutting:success',e=>{if(e.player===f.p)snapshots.push({petRolled:e.petRolled,logs:f.p.getInventory().getAmount(core.ItemIdentifiers.LOGS),pets:f.p.getInventory().getAmount(item('skillpetwc'))});});
  await send(f,{type:'object_option',id:tree.getId(),x:3223,y:3218,action:'Chop down'});for(let i=0;i<20;i++)core.TaskManager.process();return snapshots;
 }

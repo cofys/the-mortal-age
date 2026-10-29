@@ -5,6 +5,7 @@
 // twos until the set is complete, then the zombie emotes and lamps. See SOURCES.md.
 const Flow = require("./DialogueFlow.RandomEvents");
 const Teleports = require("./Teleports.RandomEvents");
+const Rewards = require("./Rewards.RandomEvents");
 
 const PROFESSIONS = ["cook", "farmer", "lumberjack", "miner", "potter"];
 const FILLED_GRAVES = [9364, 9365, 9366, 9367, 10049];
@@ -13,6 +14,8 @@ const GRAVE_TILES = [[1924, 4996], [1926, 4999], [1928, 4996], [1930, 4999], [19
 const STONE_TILES = [[1924, 4998], [1926, 5001], [1928, 4998], [1930, 5001], [1932, 4998]];
 const COFFINS = [7587, 7588, 7589, 7590, 7591];
 const ZOMBIE = [13283, 13284, 13285, 13286, 13287];
+/** The zombie emotes' varbits, in the emote tab's order (cache script 702). */
+const EMOTE_UNLOCKS = new Map([["emote_zombie_walk", "Zombie Walk"], ["emote_zombie_dance", "Zombie Dance"]]);
 const MAUSOLEUM = 10055;
 const LEO_TILE = [1928, 5008];
 
@@ -172,12 +175,16 @@ module.exports = function attach(api, Events) {
   function reward(session) {
     const player = session.player;
     const missing = ZOMBIE.filter(piece => !Teleports.owns(player, piece)).slice(0, 2);
-    const rewards = missing.length
-      ? missing.map(piece => ({ id: piece, amount: 1 }))
-      : [{ id: I.LAMP, amount: 1 }];
-    player.sendMessage(missing.length
-      ? "Leo hands you some zombie outfit pieces."
-      : "Leo hands you a lamp.");
+    const emote = missing.length ? undefined : Rewards.unlockEmote(api, player, [...EMOTE_UNLOCKS.keys()]);
+    const rewards = missing.map(piece => ({ id: piece, amount: 1 }));
+    if (missing.length) {
+      player.sendMessage("Leo hands you some zombie outfit pieces.");
+    } else if (emote) {
+      player.sendMessage(`You have unlocked the ${EMOTE_UNLOCKS.get(emote)} emote.`);
+    } else {
+      rewards.push({ id: I.LAMP, amount: 1 });
+      player.sendMessage("Leo hands you a lamp.");
+    }
     Teleports.finish(session, { reward: rewards });
   }
 };

@@ -51,7 +51,11 @@ The stall regressions cover attempt/outcome separation, cache animation and soun
 
 Live checks confirmed a level-one player cannot steal tea. With the skill requirement supplied, an unseen Varrock theft grants one cup of tea and **16 XP**, sets varbit **170**, empties/restocks the stall, and prevents trading with the Tea Seller, who calls guards. Logout/login preserved the item, theft flag and refusal on Talk-to. Timer boundary checks use deterministic regressions rather than a captured expiration measurement.
 
-Five tiles remains a provisional lookout radius. The available stall captures do not establish exact guard detection range or facing. Merchant overhead-line timing is calibrated against the gem and silver refusals in 1554. The existing visibility ray and busy-guard exclusion are retained. Port Roberts' automatic stealing/jail activity belongs to a separate mechanic and remains unimplemented. Other uncaptured reward messages retain their existing wording. No generated data changes are required.
+Every attempt and steal line is a spam message (rsprox captures 1554 and 3220, and the Leagues stalls in 1098, 1102, 1104 and 1105). A stolen item without its own line is named with its article: "You steal a cake.", "You steal a chocolate slice." (1098), "You steal a silver bar." (1105), "You steal an uncut emerald." (1104), "You steal a banana." (3275). Bread, silver ore, silk ("You attempt to steal some silk from the silk stall." / "You steal a piece of silk.", 1098 and 1102) and tea keep their own lines. Items not seen in a capture (fur, spice, wine stall items, seeds, tiara, the other fruit) follow the same rule, with "some" for a plural name such as jangerberries.
+
+The Hosidius **Fruit Stall** (28823, empty 27537) follows its Wiki page: level 25, 28.5 XP, restocked after 4 ticks, cooking apple 40/100 down to papaya fruit 1/100, and the `marketthief_hosidius` varbit (capture 3275, Grid Master). Its guard dogs are among the stall guards; they attack a thief they see without the guards' "Hey! Get your hands off there!".
+
+Five tiles remains a provisional lookout radius. The available stall captures do not establish exact guard detection range or facing. Merchant overhead-line timing is calibrated against the gem and silver refusals in 1554. The existing visibility ray and busy-guard exclusion are retained. Port Roberts' automatic stealing/jail activity belongs to a separate mechanic and remains unimplemented. No generated data changes are required.
 
 ## Targets
 
@@ -86,9 +90,15 @@ Success is out of 256, at level 1 / level 99. A `*` marks a target whose page ha
 
 ## How a pickpocket plays out
 
+Every line below is a spam message (rsprox captures 335, 338, 339, 691, 2601, 3059 and the Leagues and Grid Master recordings), except the Digsite workman's.
+
 1. **The click tick:** the checks run, the attempt message is sent ("You attempt to pick the man's pocket.") and the two-tick cooldown starts. The checks are the level, the requirement, the stun, combat, the coin pouch limit and inventory space.
 2. **The outcome tick, either way:** the player stops tracking the NPC and faces the tile it stood on, so a walking NPC isn't followed round.
-3. **The next tick, on success:** the pickpocket animation (881), the loot, "You pick the man's pocket.", the pickpocket sound (2581) and the experience.
+3. **The next tick, on success:** the pickpocket animation (881), the loot, "You pick the man's pocket.", the loot's own lines, the pickpocket sound (2581) and the experience. The loot's lines, as captured:
+   - the Master Farmer counts his seeds: "You steal 3 potato seeds.", "You steal 1 redberry bush seed.", "You steal 6 Krandorian hop seeds." (335, 338; bush and hop seeds are named as their gamevals, not their item names);
+   - H.A.M. members name each item: "You steal a bronze dagger.", "You steal some thread.", "You steal a piece of cow hide.", "You steal a herb.", and "You steal a coin pouch." for their coins (1723, 3275). Coal wasn't seen and has no line;
+   - any clue scroll: "You steal a clue scroll." (1102, 1104, 1105, 1723, 3273, 3275);
+   - other targets' loot, a man's coin pouch included, has no line.
 4. **The next ticks, on failure** (from an rsprox capture of a hero, 2026-10-05):
    - **The next tick:** "You fail to pick the man's pocket." and the NPC's line ("What do you think you're doing?"), with no pickpocket animation.
    - **A tick later:** the NPC turns and strikes (its attack animation). The player blocks under the stunned_thieving graphic (245, height 124), the stun sound (2727) plays, and the 9-tick stun starts. Pickpocketing is blocked for 8 of those ticks, and no new attempt can start before the stun lands.
@@ -102,7 +112,8 @@ Success is out of 256, at level 1 / level 99. A `*` marks a target whose page ha
    Coins are given as the target's coin pouch.
 7. **Clue scrolls:** a clue is a scroll box once X Marks the Spot is complete. Rolling a tier the player already owns, carried or banked, gives nothing.
 8. **Master Farmer:** its herb seeds follow Farming level, as in the Wiki's calculator. Herb seeds are 48/1000 of its loot. Within that, ranarr, snapdragon and torstol share `(6 + min(85, Farming)) / 1000`, and guam gets 0.401 minus that.
-9. **Digsite workman:** "Steal-from" rather than "Pickpocket". After The Dig Site, coins are 4/11 and the animal skull no longer drops.
+9. **Digsite workman:** "Steal-from" rather than "Pickpocket". After The Dig Site, coins are 4/11 and the animal skull no longer drops. His lines are game messages that trail off: "You attempt to pick the workman's pocket...", "You pick the workman's pocket...", then "You find a specimen brush." (3228), "You steal some rope." or "You steal a bucket." (90). His other loot has no captured line.
+10. **Names in the lines** (`messageName` and `messageNames` in the data file): "the Master Farmer", "Martin" for Martin the Master Gardener (95), "the man" and "the woman" for the two H.A.M. members (2540, 2541), "the Menaphite" for the thug and "the Bandit" in the Bandit Camp (1757, 1788, 1858).
 
 ## Equipment and effects
 
@@ -111,7 +122,7 @@ Success is out of 256, at level 1 / level 99. A `*` marks a target whose page ha
 - **Rogue equipment:** 15% double loot per piece; the full set of 5 always doubles. A doubled coin pouch gives one pouch plus that pouch's coins (the lowest of a range). Clue scrolls are never doubled.
 - **Shadow Veil:** a 15% chance to avoid the stun, rolled first.
 - **Dodgy necklace:** a 25% chance to avoid the stun and damage. It has 10 charges, stored on the player; the last one crumbles it.
-- **Coin pouches:** a stack of 28 of one kind blocks pickpocketing until the pouches are opened. With a full inventory, a coins-only target can still be pickpocketed while its pouch stack has room.
+- **Coin pouches:** Open-all says "You open all of the pouches and receive a total of N coins." as a spam message with synth 2115, even for a single pouch (2601, 3059 and others). Open (one pouch) isn't captured and keeps "You open the pouch and find N coins.". A stack of 28 of one kind blocks pickpocketing until the pouches are opened. With a full inventory, a coins-only target can still be pickpocketed while its pouch stack has room.
 
 ## Requirements
 
@@ -133,9 +144,10 @@ Sources: [Blackjack](https://oldschool.runescape.wiki/w/Blackjack?action=raw), [
 - Knock-Out is refused during combat or when another blackjacking target can see the player. The Wiki does not require standing behind the target.
 - All blackjacks and target types use the Blackjack page's chart: low 80, high 240, interpolated by Thieving level. Its cited Jagex explanation explicitly says the rate is independent of target type. The Menaphite Thug subpage instead lists low 78; the main Blackjack page wins here.
 - Success gives 10 Thieving XP and holds the NPC unconscious for six ticks, with two guaranteed pickpockets. Those reuse the normal pickpocket cooldown, loot, rogue equipment, XP and pet path, using the bending animation and direct coins. A full inventory permits them if coins already have a stack; the coin-pouch cap does not stop them.
-- Failure makes the NPC aggressive after three ticks. A quick retry or pickpocket cancels that pending aggression, including a pickpocket with a full inventory. An attempt with a different weapon stops the target attacking, matching the documented reset method.
+- Captured knock-out (1788, 1858, Leagues V): the swing is `human_blunt_pound` with synth 1842; a tick later "You smack the bandit over the head and render them unconscious." (spam), the target says "Zzzzzz" and plays `human_unconscious`. It wakes with "Arghh my head." and `human_ready`. A failed swing says "Your blow only glances off the bandit's head." (spam) and the target "I'll kill you for that!", and strikes a tick later. An unconscious target answers a second knock-out with "I can't do that. They're unconscious."
+- Failure makes the NPC aggressive a tick later. A quick retry or pickpocket cancels that pending aggression, including a pickpocket with a full inventory. An attempt with a different weapon stops the target attacking, matching the documented reset method.
 - Awake bandits give coin pouches (40/50 coins); thugs give 60. The Wiki has no awake Pollnivnian success chart, so those two targets follow this module's established estimated-chart policy using the awake thug's 50/160 chart. Their stun damage is also estimated from the thug. These awake-only values need an OSRS capture before claiming exact parity.
-- The Wiki guarantees two pickpockets but gives no exact knockout/failure/lure tick counts. The six-tick unconscious window, three-tick aggression delay and ten-tick lure window are implementation timings needing a capture; no other RSPS was used.
+- The Wiki guarantees two pickpockets but gives no exact knockout/failure/lure tick counts. The six-tick unconscious window and ten-tick lure window are implementation timings needing a capture; no other RSPS was used. The capture shows the failed swing's strike landing as a stun (`stunned_thieving`) with 4 damage; its length isn't captured, so the target attacks normally instead.
 
 ## Not modelled
 
@@ -144,8 +156,8 @@ Sources: [Blackjack](https://oldschool.runescape.wiki/w/Blackjack?action=raw), [
 - **The Ardougne diary:** no diary system exists yet. Its effects would be +10% success (medium: in Ardougne; hard: everywhere), the gloves of silence becoming ineffective, and coin pouch limits of 56, 84 and 140.
 - **Location- or quest-only loot:** the Pirate's medallion fragment (The Onyx Crest only), the Pirate's very rare medium clue (no rate given), and the H.A.M. robe table during Death to the Dorgeshuun.
 - **The Digsite workman** being twice as slow to pickpocket as other NPCs.
+- **The H.A.M. camp's failures:** "You feel slightly concussed from the blow.", "Your agility helps you partially avoid the blow." and "You're beaten unconscious and bundled out of the HAM Camp." (1723, Leagues V, and the Wiki). A failure here is the ordinary stun.
 - **The in-game loot tracker:** OSRS adds each pickpocket's loot to it (client script 7192, `loottracker_lootadd`).
-- **Spam filtering:** OSRS sends the pickpocket messages as spam-type messages, which players can filter out. Here they are ordinary game messages.
 
 ## Cache NPCs with a Pickpocket option that this doesn't cover
 
@@ -156,8 +168,8 @@ Sources: [Blackjack](https://oldschool.runescape.wiki/w/Blackjack?action=raw), [
 ## Unverified details
 
 These aren't on the Wiki and are worth checking against a capture:
-- **Messages:** the requirement messages, the coin pouch opening messages, the dodgy necklace's charge and crumble messages, and "Your gloves of silence have worn out."
-- **NPC names in messages:** NPC names are lowercased, except the H.A.M. member, the Menaphite thug and TzHaar-Hur. Named NPCs (Fremennik citizens, vyres and elves) keep their own names without "the".
-- **The Master Farmer's line** "Cor blimey mate, what are ye doing in me pockets?". The Wiki only confirms "Cor blimey"; the other targets use "What do you think you're doing?".
+- **Messages:** the requirement messages, the single coin pouch's line, the dodgy necklace's charge and crumble messages, and "Your gloves of silence have worn out."
+- **NPC names in messages:** NPC names are lowercased, except the captured ones above and TzHaar-Hur. Named NPCs (Fremennik citizens, vyres and elves) keep their own names without "the".
+- **The Master Farmer's line** "Cor blimey mate, what are ye doing in me pockets?" is captured (335, 339); the other targets use "What do you think you're doing?".
 - **Stun length:** each target's Thieving info lists a stun timer of 4–6 s. The stun here is the 9 ticks of no movement and 8 of no pickpocketing that the Thieving page gives for all targets. The capture confirms 9 ticks of no movement for a hero, whose page says 6 s; the 8-tick pickpocket lock wasn't captured.
 - **Pet rates:** the Digsite workman and the Knight of Varlamore have no Rocky rate on the Wiki. They use the Warrior's and the Knight of Ardougne's.

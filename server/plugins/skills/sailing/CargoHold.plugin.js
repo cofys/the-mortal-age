@@ -4,6 +4,10 @@
 const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
 const { ItemDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
+const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
+const { CacheDefinitions } = require("../../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
+const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
+const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 const { VARBIT, content, setVarbit, playSound, boatName } = require("./SailingContent.Sailing");
 const cargo = require("./Cargo.Sailing");
 const portTasks = require("./porttasks/Common.PortTasks");
@@ -38,6 +42,9 @@ const SOUND_OPEN = 10907;
 const SOUND_DEPOSIT_ALL = 10905;
 const SOUND_TOOL = 2582;
 const SOUND_NOTHING = 2277;
+/** A crate taken out of the hold: human_pickuptable with synths 10903 and 10908 (rsprox, rev 235). */
+const SOUNDS_TAKE_CRATE = [10903, 10908];
+const SEQ_PICKUP_TABLE = "human_pickuptable";
 const SCRIPT_MODAL_BACKGROUND = 917;
 const SCRIPT_STEELBORDER = 227;
 /** Ops 1-6 and 10 (examine). */
@@ -151,10 +158,19 @@ function withdrawCrate(player, boat, slot, itemId) {
   if (cargo.take(boat, slot, itemId, 1) !== 1) return;
   const taskSlot = portTasks.slots(player).findIndex((held) => held && portTasks.taskById(held.id)?.crate === itemId);
   player.getPacketSender().sendInterfaceRemoval();
+  pickUpFromTable(player);
+  for (const sound of SOUNDS_TAKE_CRATE) playSound(player, sound);
   portTasks.carry(player, itemId, taskSlot);
 }
 
-/** Deposit-held (the hold while the player carries a crate): the crate goes into the hold. */
+function pickUpFromTable(player) {
+  player.performAnimation(new Animation(CacheDefinitions.getSeqId(SEQ_PICKUP_TABLE)));
+}
+
+/**
+ * Deposit-held (the hold while the player carries a crate): the crate goes into the hold with
+ * human_pickuptable, then a tick later synth 10905 and the line (rsprox 3449, 3450).
+ */
 function depositHeld({ player }) {
   const boat = heldBoat(player);
   const crate = portTasks.heldCrate(player);
@@ -163,8 +179,16 @@ function depositHeld({ player }) {
     player.sendMessage("Your cargo hold is too full to hold any more cargo.");
     return;
   }
+  pickUpFromTable(player);
   portTasks.putDown(player);
-  player.sendMessage("You deposit some cargo into the cargo hold.");
+  TaskManager.submit(new (class extends Task {
+    constructor() { super(1, player, false); }
+    execute() {
+      this.stop();
+      playSound(player, SOUND_DEPOSIT_ALL);
+      player.sendMessage("You deposit some cargo into the cargo hold.");
+    }
+  })());
 }
 
 function deposit(player, slot, itemId, amount) {
@@ -218,7 +242,8 @@ function takeTool(player, slot) {
   }
   tools.splice(tools.indexOf(tool.slot), 1);
   for (const id of tool.give) inventory.add(new Item(id, 1), true);
-  const what = { 0: "your captain's log", 1: "a spyglass", 4: "some diving gear" }[tool.slot]
+  // rsprox: "You collect your current duck from the tools compartment."
+  const what = { 0: "your captain's log", 1: "a spyglass", 2: "your current duck", 4: "some diving gear" }[tool.slot]
     ?? `a ${ItemDefinition.forId(tool.give[0])?.getName?.()?.toLowerCase?.() ?? "tool"}`;
   player.sendMessage(`You collect ${what} from the tools compartment.`);
   playSound(player, SOUND_TOOL);

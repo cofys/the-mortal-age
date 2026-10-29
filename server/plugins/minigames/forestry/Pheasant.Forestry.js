@@ -6,10 +6,15 @@
  *   a feather too."), one egg at a time;
  * - the forester takes it ("I have an egg for you.") for bark and Woodcutting and Thieving XP;
  * - at 181 ticks: "These pheasants will be finding new nesting grounds soon."; at 200 all is gone.
+ * - the reach (pickup seq) comes first and the egg, its line and sound 7542 the tick after;
+ * - a pheasant landing on the nest an egg was just taken from attacks: the block seq, the stun
+ *   graphic at height 124, sound 2727 twice, "The nest's inhabitant attacks you, causing you to
+ *   drop all your pheasant eggs." (no eggs: "The nest's inhabitant attacks you."), then "You've
+ *   been stunned!" (spam) the tick after;
+ * - clicking while stunned: "You're stunned!" (spam).
  * Inferred: the occupied nest is the nest01 form; reaching into it, or into the nest a pheasant is
- * flying to, brings "The nest's inhabitant attacks you, causing you to drop all your pheasant
- * eggs." and a 5-tick stun. Wiki: 8-9 bark an egg, Woodcutting 1.0-1.2 x level and Thieving 0.5 x
- * level.
+ * flying to, brings the attack and a 5-tick stun. Wiki: 8-9 bark an egg, Woodcutting 1.0-1.2 x
+ * level and Thieving 0.5 x level.
  */
 const Common = require("./Common.Forestry");
 const Spawns = require("./Spawns.Forestry");
@@ -27,7 +32,7 @@ function start(site) {
   for (let i = 0; i < 4; i++) {
     const at = tiles[i + 1];
     const occupied = i < 3;
-    const nest = { at, object: Common.placeLoc(occupied ? pheasant.nests.occupied : pheasant.nests.empty, at), occupied, incoming: false };
+    const nest = { at, object: Common.placeLoc(occupied ? pheasant.nests.occupied : pheasant.nests.empty, at), occupied, incoming: false, takers: new Set() };
     Common.tileGraphic(at, pheasant.graphics.spawn);
     event.nests.push(nest);
     if (occupied) event.pheasants.push({ npc: Common.spawnNpc(pheasant.npcs.pheasant, at), nest });
@@ -59,6 +64,8 @@ function flight(event) {
     bird.npc.moveTo?.(target.at.clone());
     Common.animate(bird.npc, seqs.land);
     bird.npc.performGraphic?.(new Common.core.Graphic(graphics.land));
+    for (const player of target.takers) attacked(player);
+    target.takers.clear();
   });
 }
 
@@ -109,45 +116,63 @@ function nestAt(object) {
 }
 
 function attacked(player) {
-  const { seqs, graphics, stunTicks } = P();
+  const { seqs, graphics, sounds, stunTicks } = P();
   const hadEggs = dropEggs(player) > 0;
   player.sendMessage(Common.message(hadEggs ? "attackedEggs" : "attacked"));
   Common.animate(player, seqs.block);
-  player.performGraphic?.(new Common.core.Graphic(graphics.stun));
+  player.performGraphic?.(new Common.core.Graphic(graphics.stun, 0, graphics.stunHeight));
+  for (const id of sounds.attack) Common.sound(player, id);
   player.getMovementQueue?.().reset?.();
   player.getTimers?.().registers?.(Common.core.TimerKey.STUN, stunTicks);
-  Common.later(1, () => player.sendMessage(Common.message("stunned")));
+  Common.later(1, () => Common.spam(player, Common.message("stunned")));
+}
+
+/** Live refuses every event click while stunned. */
+function stunned(player) {
+  if (!player.getTimers?.().has?.(Common.core.TimerKey.STUN)) return false;
+  Common.spam(player, Common.message("stunRefused"));
+  return true;
 }
 
 function retrieve({ player, object }) {
   const found = nestAt(object);
   if (!found) return false;
   const { nest } = found;
-  if (player.getTimers?.().has?.(Common.core.TimerKey.STUN)) return true;
-  const { items, seqs, featherChance } = P();
-  const inventory = player.getInventory();
-  if (inventory.contains(items.egg)) {
+  if (stunned(player) || Common.busy(player, 1)) return true;
+  const { items, seqs } = P();
+  if (player.getInventory().contains(items.egg)) {
     player.sendMessage(Common.message("oneEgg"));
     return true;
   }
-  if (nest.occupied || nest.incoming) {
-    attacked(player);
-    return true;
-  }
-  if (inventory.getFreeSlots() <= 0) {
-    inventory.full?.();
+  if (player.getInventory().getFreeSlots() <= 0) {
+    player.getInventory().full?.();
     return true;
   }
   Common.animate(player, seqs.pickup);
+  Common.later(1, () => takeEgg(found.event, nest, player));
+  return true;
+}
+
+/** The tick after the reach: the egg, or the bird's attack when the nest is taken. */
+function takeEgg(event, nest, player) {
+  if (event.over || !player.isRegistered?.()) return;
+  if (nest.occupied) {
+    attacked(player);
+    return;
+  }
+  const { items, sounds, featherChance } = P();
+  const inventory = player.getInventory();
+  if (inventory.contains(items.egg) || inventory.getFreeSlots() <= 0) return;
   inventory.add(new Common.core.Item(items.egg, 1), true);
-  found.event.eggTakers.add(player);
+  Common.sound(player, sounds.egg);
+  event.eggTakers.add(player);
+  if (nest.incoming) nest.takers.add(player);
   if (Math.random() < featherChance) {
     Common.give(player, items.feathers, 1);
     Common.spam(player, Common.message("eggFeather"));
   } else {
     Common.spam(player, Common.message("egg"));
   }
-  return true;
 }
 
 function eventOf(npc) {
@@ -178,7 +203,7 @@ function handIn(event, player) {
 function talk({ player, npc }) {
   const event = eventOf(npc);
   if (!event) return false;
-  if (player.getTimers?.().has?.(Common.core.TimerKey.STUN)) return true;
+  if (stunned(player)) return true;
   if (player.getInventory().contains(P().items.egg) && event.eggTakers.has(player)) {
     handIn(event, player);
     return true;

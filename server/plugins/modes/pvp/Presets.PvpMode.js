@@ -361,6 +361,10 @@ function presetWearer(preset) {
   };
 }
 
+function canEquipPresetItem(preset, item) {
+  return equipmentSlotOf(item.getId()) >= 0 && EquipmentRequirements.meets(presetWearer(preset), item.getDefinition());
+}
+
 function resolvePresetAutocastSpellId(preset) {
   const value =
     preset?.getAutocastSpellId?.() ??
@@ -815,6 +819,7 @@ function handlePresetActionButton(player, buttonId) {
 module.exports = {
   name: "Presets",
   applyPreset,
+  canEquipPresetItem,
   applyRandomGlobalPreset,
   getGlobalPresetByName,
   getGlobalPresetByKey,

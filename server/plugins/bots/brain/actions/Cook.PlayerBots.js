@@ -25,6 +25,8 @@ const INTERACT_COOLDOWN_MS = 1800;
 const FAILED_USES = 3;
 const AVOID_MS = 2 * 60 * 1000;
 const TINDERBOX = ItemIds.TINDERBOX;
+// The amount a bot picks in the cook menu: everything.
+const COOK_ALL = 28;
 
 const tileKey = (object) => {
   const loc = object.getLocation();
@@ -103,6 +105,12 @@ function createCookAction(spec, world) {
           player, object, objectId: object.getId(), item: raw.item, itemId: raw.item.getId(), itemSlot: raw.slot,
           interfaceType: 0, location: { x: at.getX(), y: at.getY(), z: at.getZ() }, handled: false,
         });
+        // More than one raw item opens the cook menu; a bot cooks them all.
+        const menu = player.getCreationMenu?.();
+        if (menu) {
+          player.getPacketSender().closeCreationMenu();
+          menu.execute(menu.getItems()[0], COOK_ALL);
+        }
       },
     });
   }

@@ -300,6 +300,8 @@ function fakePlayer(name = 'Tester') {
         sendCreationMenu: (menu) => { p.menu = menu; return sender; },
         sendInterface: (id) => { p.interfaces.push(id); return sender; },
         sendString: (text, uid) => { (p.strings ??= new Map()).set(uid, text); return sender; },
+        sendSound: (id) => { (p.sounds ??= []).push(id); return sender; },
+        sendTypedMessage: (type, text) => { p.messages.push(text); return sender; },
       };
       return sender;
     },
@@ -325,6 +327,15 @@ function objectAt(map, room, id) {
 function interact(name, option, player, object) {
   return hooks.objects[name][option]({ player, object, objectId: object?.getId?.(), definition: object?.getDefinition?.() });
 }
+
+test('the Gauntlet Portal in Prifddinas lands two tiles south of where runs end, as captured', () => {
+  bindHooks();
+  const player = fakePlayer('Visitor');
+  player.location = new Location(3228, 6116, 0);
+  interact('Gauntlet Portal', 'Enter', player, null);
+  ticks(3);
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], [3032, 6125, 1]);
+});
 
 test('the entrance turns players away until they have spoken to Bryn, and with items on them', () => {
   bindHooks();
@@ -975,6 +986,9 @@ test('points come from kills, crafting and cooking', () => {
     assert.equal(run.points, 17 + 2, 'a basic item');
     player.inventory.adds(items.rawPaddlefish);
     interact('Range', 'Cook', player, null);
+    ticks(1);
+    assert.equal(run.points, 19, 'the fish is two ticks after reaching the range');
+    ticks(1);
     assert.equal(run.points, 19 + 1, 'cooking a paddlefish');
   } finally {
     run.end('exit', { fade: false });

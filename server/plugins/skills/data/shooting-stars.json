@@ -23,7 +23,7 @@
  "anims": { "despawn": 8865, "despawnGameval": "game_star_meteor_despawn" },
  "sounds": { "prospect": 2661, "dust": 3600, "layer": 4925, "despawn": 4923 },
  "jingles": { "discovery": 287 },
- "varbits": { "mined": 11886, "traderMet": 11887, "bonusDust": 15351 },
+ "varbits": { "mined": 11886, "traderMet": 11887, "bonusDust": 15351, "lastMinedSize": 15353, "timeSinceLanded": 15354 },
  "noticeboard": {
   "interface": 47,
   "landingTimes": [6, 7, 8, 9, 10],

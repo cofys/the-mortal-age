@@ -6,7 +6,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 const Bots = require('../plugins/minigames/bountyhunter/Bots.BountyHunter');
-const { pickTierChoice, TIER_BANDS } = require('../plugins/bots/behaviours/pvp/PvpTierLoadouts.PlayerBots');
+const { pickTierChoice, TIER_BANDS, archetypeCombatLevel } = require('../plugins/bots/behaviours/pvp/PvpTierLoadouts.PlayerBots');
 
 const Entry = require('../plugins/minigames/bountyhunter/Entry.BountyHunter');
 const Coffer = require('../plugins/minigames/bountyhunter/Coffer.BountyHunter');
@@ -19,15 +19,61 @@ const core = PluginManager.getCoreApi();
 before(async () => {
   await CachePipeline.initialize();
   core.RegionManager.init();
+  require('../plugins/items/ItemDefinitionLoader.plugin').register({
+    log() {}, onPlayerLogin() {}, registerContentEndpoint() {},
+  });
   require('../plugins/items/Food.plugin').register(PluginManager.createApi('BountyHunterFoodRegression'));
 });
 
-test('lobby entry spawns funded, skulled PK bots and restores their entry fee after death', (t) => {
+test('every offered sigil spawn has an exact route out of the claw enclosure', (t) => {
+  const bh = require('../plugins/minigames/bountyhunter/State.BountyHunter');
+  Entry(PluginManager.createApi('BountyHunterSpawnsRegression'), bh);
+  const routes = new core.RsmodRouteFinding();
+  let sigil, offered;
+  t.mock.method(core.Misc, 'randomElement', (values) => {
+    if (values === bh.CRATER.sigils) return sigil;
+    offered = values;
+    return values[0];
+  });
+  for (sigil of bh.CRATER.sigils) {
+    const exits = bh.CRATER.exits.map((exit) => ({
+      x: exit.x + Math.sign(exit.x - exit.to.x) * 2,
+      y: exit.y + Math.sign(exit.y - exit.to.y) * 2,
+    }))
+      .filter(({ x, y }) => core.RegionManager.getClipping(x, y, 0, null) === 0);
+    assert.ok(exits.length, 'the cache has walkable ground in front of the fort gates');
+    Entry.spawnTile();
+    for (const { x, y } of offered) {
+      const spawn = new core.Location(x, y);
+      assert.equal(bh.isArenaTile(spawn), true);
+      assert.equal(core.RegionManager.blocked(spawn, null), false);
+      assert.ok(exits.some(({ x, y }) => routes.findRoute({ level: 0, srcX: spawn.getX(),
+        srcY: spawn.getY(), srcSize: 1, destX: x, destY: y, moveNear: false }).success),
+      `${spawn.getX()},${spawn.getY()} must reach the fort from sigil ${sigil.x},${sigil.y}`);
+    }
+  }
+});
+
+test('generated equipment selects wearable alternatives instead of dropping an invalid random choice', (t) => {
+  const { buildGeneratedPreset } = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots').__testing;
+  const { canEquipPresetItem } = require('../plugins/modes/pvp/Presets.PvpMode');
+  const state = { pvp: { profileId: 'standard', loadoutId: 'edge_main_melee', generatedArchetypeId: 'zerker_whip' } };
+  for (const roll of [0, 0.5, 0.99]) {
+    const random = t.mock.method(Math, 'random', () => roll);
+    const { preset } = buildGeneratedPreset(null, state);
+    assert.equal(preset.getStats()[1], 45);
+    assert.ok(preset.getEquipment().every((item) => canEquipPresetItem(preset, item)));
+    assert.ok(preset.getEquipment().some((item) => item.getDefinition().getEquipmentType().getSlot() === core.Equipment.BODY_SLOT));
+    assert.ok(preset.getEquipment().every((item) => item.getId() !== core.ItemIdentifiers.OBSIDIAN_PLATEBODY));
+    random.mock.restore();
+  }
+});
+
+test('the capped roster fills one per tick across combat bands and restores bots after death', (t) => {
   const hooks = new Map();
   const tasks = [];
   const spawned = [];
   const removed = [];
-  const populationRolls = [30, 50];
   const runtime = { botStatesByName: new Map(), spawnPvpBot };
   const human = { isPlayerBot: () => false };
   const bh = { lobby: new Set([human]), arena: new Set(), isArenaTile: () => true, inArena: () => false };
@@ -39,10 +85,13 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   function spawnPvpBot(location, options) {
     if (runtime.botStatesByName.has(options.username)) return null; // as the registry: name still taken
     const attributes = new Map();
-    const level = [60, 88, 110, 126][spawned.length % 4];
+    const generated = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots').__testing
+      .buildGeneratedPreset(null, { pvp: options.pvpMetadata });
+    const level = archetypeCombatLevel(generated.preset.getStats());
     const bot = {
       skulled: false, dying: false, coins: 0,
       getUsername: () => options.username,
+      band: options.pvpMetadata.combatLevelRange,
       isPlayerBot: () => true,
       getAttribute: (key) => attributes.get(key),
       setAttribute: (key, value) => attributes.set(key, value),
@@ -57,7 +106,8 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
       requestLogout: () => { removed.push(bot); hooks.get('logout')({ player: bot }); },
     };
     assert.equal(options.mode, 'pvp');
-    runtime.botStatesByName.set(options.username, { pvp: {} });
+    assert.ok(level >= bot.band.min && level <= bot.band.max, `${level} in ${bot.band.min}-${bot.band.max}`);
+    runtime.botStatesByName.set(options.username, { pvp: options.pvpMetadata });
     spawned.push(bot);
     return bot;
   }
@@ -65,11 +115,6 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   const api = {
     core: {
       Task: class {},
-      Misc: { random: (min, max) => {
-        assert.deepEqual([min, max], [30, 50]);
-        assert.ok(populationRolls.length, 'roll only once per new population');
-        return populationRolls.shift();
-      } },
       Item: class { constructor(id, amount) { this.amount = amount; } },
       ItemIdentifiers: { COINS: 995 },
       SkullType: { WHITE_SKULL: 'white' },
@@ -87,13 +132,24 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   enter({ player: { isPlayerBot: () => true } });
   assert.equal(spawned.length, 0, 'bots cannot populate the crater');
   enter({ player: human });
-  assert.deepEqual(spawned.map((bot) => bot.getUsername()), Array.from({ length: 30 }, (_, i) => `BhBot${i + 1}`));
+  assert.equal(spawned.length, 0, 'entry cannot burst-spawn the roster');
+  hooks.get('startup')();
+  for (let index = 0; index < 60; index++) {
+    tasks[0].execute();
+    assert.equal(spawned.length, index + 1, 'at most one spawn per tick');
+  }
+  assert.deepEqual(spawned.map((bot) => bot.getUsername()), Array.from({ length: 60 }, (_, i) => `BhBot${i + 1}`));
+  for (const band of Bots._test.BOT_BANDS) {
+    assert.equal(spawned.filter((bot) => bot.band.min === band.min).length, 12, `${band.min}-${band.max}`);
+  }
+  assert.deepEqual([...new Set(spawned.map((bot) => runtime.botStatesByName.get(bot.getUsername()).pvp.profileId))].sort(),
+    ['elite', 'novice', 'standard', 'veteran'], 'the high end includes the advanced shared PvP profile');
   for (const bot of spawned) {
     assert.equal(bot.isSkulled(), true);
     assert.equal(Coffer.balance(bot), Coffer.playerMinimumDeposit(bot));
   }
   enter({ player: human });
-  assert.equal(spawned.length, 30, 'another entry cannot duplicate the population');
+  assert.equal(spawned.length, 60, 'another entry cannot duplicate the population');
 
   const defender = spawned[0], rogue = spawned[1], quarry = spawned[2];
   const pvp = runtime.botStatesByName.get(defender.getUsername()).pvp;
@@ -110,20 +166,20 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   hooks.get('bounty-hunter:target-cleared')({ player: defender });
   assert.equal(pvp.targetPlayer, null, 'an idle bot drops its old assignment');
 
-  hooks.get('startup')();
   const victim = spawned[0];
   const killer = spawned[1];
+  const minimum = Coffer.playerMinimumDeposit(victim);
   Coffer.died({ player: victim, killer, skulled: true });
   assert.equal(killer.coins, 10_000, 'a bot kill pays the coffer reward');
-  assert.equal(Coffer.balance(victim), 20_000);
+  assert.equal(Coffer.balance(victim), minimum - 10_000);
   victim.skulled = false;
   victim.dying = true;
   tasks[0].execute();
-  assert.equal(Coffer.balance(victim), 20_000, 'no refill or reskull during death handling');
+  assert.equal(Coffer.balance(victim), minimum - 10_000, 'no refill or reskull during death handling');
   assert.equal(victim.isSkulled(), false);
   victim.dying = false;
   tasks[0].execute();
-  assert.equal(Coffer.balance(victim), 30_000);
+  assert.equal(Coffer.balance(victim), minimum);
   assert.equal(victim.isSkulled(), true);
   const rich = spawned[2];
   rich.setAttribute('bounty-hunter:coffer', 200_000);
@@ -131,35 +187,39 @@ test('lobby entry spawns funded, skulled PK bots and restores their entry fee af
   assert.equal(Coffer.balance(rich), 200_000, 'funding preserves an existing surplus');
 
   for (const bot of [...spawned]) bot.requestLogout();
-  assert.equal(removed.length, 30);
+  assert.equal(removed.length, 60);
   tasks[0].execute();
-  assert.equal(spawned.length, 31, 'an occupied crater recovers even after every bot leaves');
-  assert.equal(populationRolls.length, 1, 'departures keep the existing population target');
-  for (let index = 1; index < 30; index++) tasks[0].execute();
-  assert.equal(spawned.length, 60, 'one replacement per tick restores the roster without a burst');
+  assert.equal(spawned.length, 61, 'an occupied crater recovers even after every bot leaves');
+  for (let index = 1; index < 60; index++) tasks[0].execute();
+  assert.equal(spawned.length, 120, 'one replacement per tick restores the roster without a burst');
   tasks[0].execute();
-  assert.equal(spawned.length, 60, 'a full roster stops spawning');
+  assert.equal(spawned.length, 120, 'a full roster stops spawning');
   bh.lobby.clear();
   bh.arena.add(human);
   tasks[0].execute();
-  assert.equal(removed.length, 30, 'entering the arena keeps the population');
+  assert.equal(removed.length, 60, 'entering the arena keeps the population');
   const otherHuman = { isPlayerBot: () => false };
   bh.lobby.add(otherHuman);
   enter({ player: otherHuman });
   bh.arena.delete(human);
   tasks[0].execute();
-  assert.equal(removed.length, 30, 'one player leaving cannot remove another player\'s opponents');
+  assert.equal(removed.length, 60, 'one player leaving cannot remove another player\'s opponents');
   bh.lobby.delete(otherHuman);
   bh.arena.add(spawned[0]);
   tasks[0].execute();
-  assert.equal(removed.length, 60, 'the next tick removes every bot when the last real player leaves');
+  assert.equal(removed.length, 120, 'the next tick removes every bot when the last real player leaves');
   tasks[0].execute();
-  assert.equal(removed.length, 60, 'an empty crater does no more bot work');
+  assert.equal(removed.length, 120, 'an empty crater does no more bot work');
   bh.arena.clear();
   bh.lobby.add(human);
   enter({ player: human });
-  assert.equal(spawned.length, 110, 'the next visit rolls a fresh population, including the upper limit');
-  assert.equal(spawned.at(-1).getUsername(), 'BhBot110', 'fresh names: the last bots may still be online');
+  for (let index = 0; index < 60; index++) tasks[0].execute();
+  assert.equal(spawned.length, 180, 'the next visit fills a fresh capped population');
+  assert.equal(spawned.at(-1).getUsername(), 'BhBot180', 'fresh names: the last bots may still be online');
+  const high = spawned.slice(-60).find((bot) => bot.band.min === 121);
+  high.requestLogout();
+  tasks[0].execute();
+  assert.equal(spawned.at(-1).band.min, 121, 'a departed high-level bot is replaced in its own band');
   bh.lobby.clear();
   bh.arena.clear();
   tasks[0].execute();
@@ -177,6 +237,44 @@ test('members-only picks never draw a free-to-play preset', () => {
       assert.ok(!choice || !choice.tags.includes('f2p'), `${tier} ${choice?.loadoutId}`);
     }
   }
+});
+
+test('crater kits use eligible BH gear and the shared engine indexes their real specials and ammo', (t) => {
+  const bh = require('../plugins/minigames/bountyhunter/State.BountyHunter');
+  const api = PluginManager.createApi('BountyHunterLoadoutsRegression');
+  require('../plugins/minigames/bountyhunter/Loadouts.BountyHunter')(api, bh);
+  const { Presetable } = require('../dist/game/content/presets/Presetable');
+  const { applyGeneratedPvpLoadout } = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots');
+  const { SUPPORTED_SPEC_WEAPONS } = require('../plugins/bots/behaviours/policies/PvpCombatRuntimeCache.PlayerBots');
+  const I = core.ItemIdentifiers;
+  const player = new Player(null, new core.Location(3477, 4118));
+  player.setUsername('bh_gear');
+  player.setPlayerBot(true);
+  t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+  t.mock.method(player, 'sendMessage', () => {});
+  const gear = require('../plugins/minigames/bountyhunter/data/bot-gear.json');
+  const preset = (stats) => new Presetable('BH gear regression',
+    Object.keys(gear).map((key) => new core.Item(I[key])), [], stats, core.MagicSpellbook.NORMAL, true);
+  const high = preset([99, 99, 99, 99, 99, 99, 99]);
+  api.emitCustomEvent('player-bots:pvp-loadout', { player, preset: high });
+  assert.deepEqual(high.getInventory().map((item) => item.getId()), Object.values(gear).map((key) => I[key]));
+  for (const name of ['DARK_BOW_BH_', 'ABYSSAL_DAGGER_BH_P_PLUS_PLUS_', 'VESTAS_LONGSWORD_BH_', 'STATIUSS_WARHAMMER_BH_']) {
+    assert.ok(SUPPORTED_SPEC_WEAPONS.includes(I[name]), `${name} is usable by the shared special-attack policy`);
+    assert.match(core.ItemDefinition.forId(I[name]).getName(), /\(bh\)/i);
+  }
+  const pure = preset([60, 1, 99, 90, 99, 52, 94]);
+  api.emitCustomEvent('player-bots:pvp-loadout', { player, preset: pure });
+  assert.ok(pure.getInventory().some((item) => item.getId() === I.DRAGON_DAGGER_P_PLUS_PLUS_), 'a pure cannot upgrade to a 70 Attack dagger');
+  assert.ok(pure.getInventory().some((item) => item.getId() === I.BLACK_DHIDE_BODY), 'a pure cannot wear high-Defence Morrigan armour');
+  player.moveTo(new core.Location(3093, 3493));
+  const elsewhere = preset([99, 99, 99, 99, 99, 99, 99]);
+  api.emitCustomEvent('player-bots:pvp-loadout', { player, preset: elsewhere });
+  assert.deepEqual(elsewhere.getInventory().map((item) => item.getId()), Object.keys(gear).map((key) => I[key]), 'other PvP areas keep their kits');
+  player.moveTo(new core.Location(3477, 4118));
+  const state = { pvp: { profileId: 'elite', loadoutId: 'deep_wild_hybrid', generatedArchetypeId: 'elite_ancients_dbow' } };
+  assert.equal(applyGeneratedPvpLoadout(player, state, { api }), true);
+  assert.equal(state.pvp.generatedSpecWeaponId, I.DARK_BOW_BH_);
+  assert.equal(state.pvp.generatedSpecAmmoId, I.DRAGON_ARROW);
 });
 
 test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs out without refitting', async (t) => {
@@ -203,8 +301,10 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     let logouts = 0;
     t.mock.method(player, 'requestLogout', () => { logouts++; });
     player.setAutoRetaliate(true);
+    player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(core.ItemIdentifiers.DRAGON_SCIMITAR));
+    player.getEquipment().setItem(core.Equipment.BODY_SLOT, new core.Item(core.ItemIdentifiers.RUNE_PLATEBODY));
     player.getInventory().adds(core.ItemIdentifiers.SHARK, 5);
-    const state = { mode: 'pvp', home: { x: 3363, y: 4037, z: 0 }, pvp: { profileId: 'standard', riskTolerance: 0.3 } };
+    const state = { mode: 'pvp', home: { x: 3363, y: 4037, z: 0 }, pvp: { profileId: 'standard', riskTolerance: 0.3, retreat: null } };
     runtime.botStatesByName.set(name, state);
     bh.arena.add(player);
     t.after(() => { player.setRegistered(false); bh.arena.delete(player); bh.lobby.delete(player); clearMovementRequest(player); });
@@ -269,11 +369,11 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     quarry.setRegistered(false);
   });
 
-  await t.test('a bot that chooses to fight is not rerolled into retreat or refitted when empty', (t) => {
+  await t.test('a bot that chooses to fight is not rerolled while meals remain', (t) => {
     const f = fixture(t, 'bh_stay');
     let rolls = 0;
     t.mock.method(Math, 'random', () => { rolls++; return 0; });
-    for (const count of [5, 4, 1, 0]) {
+    for (const count of [5, 4, 1]) {
       f.player.getInventory().deleteNumber(core.ItemIdentifiers.SHARK, 5);
       if (count) f.player.getInventory().adds(core.ItemIdentifiers.SHARK, count);
       assert.equal(f.tick().handled, false);
@@ -282,7 +382,8 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     assert.equal(rolls, 1, 'one personality decision for the whole low-food episode');
     assert.equal(peekMovementRequest(f.player), null);
     assert.equal(f.logouts(), 0);
-    assert.equal(f.player.getInventory().getAmount(core.ItemIdentifiers.SHARK), 0);
+    assert.equal(f.player.getInventory().getAmount(core.ItemIdentifiers.SHARK), 1);
+    f.player.getInventory().resetItems();
     f.player.getInventory().adds(core.ItemIdentifiers.SHARK, 7);
     f.tick();
     f.player.getInventory().deleteNumber(core.ItemIdentifiers.SHARK, 1);
@@ -304,18 +405,55 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     assert.equal(peekMovementRequest(f.player), null);
     f.player.resetAttributes();
     f.tick(2000);
+    f.player.getInventory().resetItems();
+    f.player.getInventory().adds(core.ItemIdentifiers.SHARK, 5);
+    f.tick(2600);
     assert.ok(f.state.pvp.retreat, 'respawning does not inherit the previous retreat decision');
   });
 
   await t.test('a bare new life retains the actual PvP kit recovery before deciding whether to flee', (t) => {
     const f = fixture(t, 'bh_regear');
     f.player.getInventory().resetItems();
+    f.player.getEquipment().resetItems();
     assert.equal(f.tick().status, 'success');
-    assert.equal(f.state.recoveries, 1);
+    assert.equal(f.state.recoveries ?? 0, 0, 'a new life does not enter the escape recovery');
     assert.equal(f.state.pvp.retreat, null);
     assert.ok(f.player.getInventory().getValidItems().length > 6);
     assert.ok(f.player.getEquipment().getValidItems().length > 0);
     assert.equal(f.logouts(), 0);
+  });
+
+  await t.test('coins left in a naked bot inventory cannot prevent shared kit recovery', (t) => {
+    const f = fixture(t, 'bh_coins');
+    f.player.getInventory().resetItems();
+    f.player.getEquipment().resetItems();
+    f.player.getInventory().adds(core.ItemIdentifiers.COINS, 1000);
+    assert.equal(PvpController.prototype.ensureLoadout.call({ api }, f.player, f.state), true);
+    assert.ok(f.player.getEquipment().isSlotOccupied(core.Equipment.WEAPON_SLOT));
+    assert.ok(f.player.getEquipment().isSlotOccupied(core.Equipment.BODY_SLOT));
+    assert.ok(f.player.getInventory().getValidItems().length > 6);
+  });
+
+  await t.test('a protected item after death does not leave a bot in a partial kit', (t) => {
+    const f = fixture(t, 'bh_kept');
+    f.player.getInventory().resetItems();
+    f.player.getEquipment().resetItems();
+    f.player.getEquipment().setItem(core.Equipment.HEAD_SLOT, new core.Item(core.ItemIdentifiers.HELM_OF_NEITIZNOT));
+    f.state.pvp.loadoutPending = true;
+    assert.equal(f.tick().status, 'success');
+    assert.equal(f.state.pvp.loadoutPending, false);
+    assert.ok(f.player.getEquipment().isSlotOccupied(core.Equipment.WEAPON_SLOT));
+    assert.ok(f.player.getEquipment().isSlotOccupied(core.Equipment.BODY_SLOT));
+  });
+
+  await t.test('an exhausted bot leaves even if it previously chose to fight with its last meals', (t) => {
+    const f = fixture(t, 'bh_empty');
+    t.mock.method(Math, 'random', () => 0);
+    assert.equal(f.tick().handled, false);
+    f.player.getInventory().resetItems();
+    assert.equal(f.tick(1600).handled, true);
+    assert.ok(f.state.pvp.retreat?.exit, 'no food overrides the earlier risk decision');
+    assert.ok(peekMovementRequest(f.player), 'the exhausted bot has a real exit route');
   });
 
   await t.test('a transiently failed shared regear keeps owning its retreat until it finishes', (t) => {
@@ -323,17 +461,18 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     const errors = [];
     t.mock.method(console, 'error', (...args) => errors.push(args));
     f.player.getInventory().resetItems();
+    f.player.getEquipment().resetItems();
     const classification = t.mock.method(f.player, 'isPlayerBot', () => false);
     assert.equal(f.tick().status, 'running');
     const recovery = f.state.pvp.retreat;
-    assert.ok(recovery);
-    assert.equal(recovery.exit, undefined);
+    assert.equal(recovery ?? null, null);
+    assert.equal(f.state.pvp.loadoutPending, true);
     assert.equal(f.tick(1600).status, 'running');
     assert.equal(f.state.pvp.retreat, recovery);
     classification.mock.restore();
     assert.equal(f.tick(2200).status, 'success');
     assert.equal(f.state.pvp.retreat, null);
-    assert.equal(f.state.recoveries, 1);
+    assert.equal(f.state.recoveries ?? 0, 0);
     assert.ok(f.player.getEquipment().getValidItems().length > 0);
     assert.equal(f.logouts(), 0);
     assert.deepEqual(errors, [], 'the custom hook never claims a pending shared recovery');

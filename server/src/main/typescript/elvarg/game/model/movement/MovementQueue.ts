@@ -315,6 +315,13 @@ export class MovementQueue {
         if (this.player != null) {
             // Player related checks
 
+            // Wiki: Animation stall. A full stall holds the player still for the swing's
+            // animation. Deliberately silent: their click was not rejected, it is queued for
+            // the tick the animation releases (NetworkBuilder's stalled input).
+            if (this.player.getCombat().isAnimationStalled()) {
+                return Mobility.ANIMATION_STALL;
+            }
+
             let playerDueling = this.player.getDueling();
             if (!this.player.getTrading().getButtonDelay().finished() || !playerDueling.getButtonDelay().finished()) {
                 return Mobility.BUSY;
@@ -1664,6 +1671,11 @@ class Mobility {
     public static readonly FROZEN_SPELL = new Mobility();
     public static readonly STUNNED = new Mobility();
     public static readonly DUEL_MOVEMENT_DISABLED = new Mobility();
+    /**
+     * An attack animation is still playing (Wiki: Animation stall). No message: OSRS shows none
+     * when a click lands during the animation, because the click is queued rather than refused.
+     */
+    public static readonly ANIMATION_STALL = new Mobility();
     public static readonly MOBILE = new Mobility();
 
     /**

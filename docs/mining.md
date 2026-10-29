@@ -11,11 +11,13 @@ From rsprox captures (recordings 3139 and 3182, iron rocks, rev 232) unless anot
 
 | Moment | Live response |
 | --- | --- |
-| Click on a rock | The first swing lands the tick after the click (after arrival, if the player walked): `You swing your pick at the rock.` and the pickaxe animation, both at +1 |
-| Ore received | `You manage to mine some iron.` (the ore's word; copper, tin, clay, silver, coal, gold, mithril and adamantite are recorded too, some on Leagues worlds), sound 3600, the rock turns into `rocks1`/`rocks2`, `tracking_ore_mined` goes up by one |
+| Click on a rock | The first swing lands the tick after the click (after arrival, if the player walked): `You swing your pick at the rock.` (spam) and the pickaxe animation, both at +1 |
+| Each roll | The swing sequence is sent again on every roll tick, at the pickaxe's interval, hit or miss (recordings 1636, 3162, 3165; 468 with a bronze pickaxe: +2, +9, +17, +25). The ore that empties the rock resets it (-1) |
+| Ore received | `You manage to mine some iron.` (spam; the ore's word; copper, tin, clay, silver, coal, gold, mithril and adamantite are recorded too, some on Leagues worlds), sound 3600, the rock turns into `rocks1`/`rocks2`, `tracking_ore_mined` goes up by one |
 | Depletion | `add_overlaytimer_loc` (cache script 5474) is run for the miner with the depleted loc and the respawn in ticks (recordings 3139 and 3182: 9 for iron) |
-| Infernal pickaxe | When the ore combusts: `smokepuff` (height 150), sound 2725, no ore and no `tracking_ore_mined` change; the usual mining message and sound 3600 still come (recording 3139) |
-| Click on a depleted rock | `There is currently no ore available in this rock.` as a game message (recording 3139) |
+| Infernal pickaxe | When the ore combusts: `smokepuff` (height 150), sound 2725, no ore and no `tracking_ore_mined` change; the usual mining message, sound 3600 and the Mining XP still come, and the Smithing XP is the Wiki table's (5.5 for iron, recording 3139) |
+| Mining cape | `Your cape allows you to mine an additional ore.` (spam) after the ore line, a second ore with its XP, and `tracking_ore_mined` counts both (recordings 3139, 3165) |
+| Click on a depleted rock | The swing stops (sequence -1), sound 2661 and `There is currently no ore available in this rock.` as a game message (recording 3139) |
 | No usable pickaxe | Message box: `You need a pickaxe to mine this rock. You do not have a pickaxe which you have the Mining level to use.` (recording 73, iron rocks) |
 | Level too low | Message box: `You need a Mining level of 55 to mine this rock.` (recording 3280, mithril, a Leagues world; the Wiki gives the same level) |
 | Full inventory | Message box, `Your inventory is too full to hold any more <item>.` (recording 70, rune essence, a Leagues world; no recording has the message for an ore rock, so the ore's lowercase item name is the same pattern applied to it) |
@@ -82,12 +84,28 @@ OSRS Wiki rock pages (https://oldschool.runescape.wiki/w/Soft_clay_rocks, `/w/Le
   `gemrock1` `rocks1`. The Wiki table: opal 60, jade 30, red topaz 15, sapphire 9, emerald 5, ruby 5, diamond 4 of
   128. A charged glory changes the success chart itself (below). The recorded respawn timer was 19 ticks, a
   Leagues world; the Wiki's 99 is used.
+- **Barronite** (recording 1636, rev 226, Camdozaal; Wiki Barronite rocks): wall swings
+  (`human_mining_<pickaxe>_pickaxe_wall`), `You manage to mine some barronite shards.` / `... a barronite deposit.`, and
+  the rock stays standing through its ores. It runs out 20 seconds (33 ticks of being mined) after it starts being
+  mined, not on an ore: `camdozaalrock1` becomes `camdozaalrock1_empty`, with area sound 2661 (delay 10, range 1).
+  The recorded XP packets give 16 for shards and 32 for a deposit, as the Wiki does.
+- **Rune essence** (recordings 70 and 3027, Leagues worlds): no chat line for an essence, but sound 3600 and
+  `tracking_ore_mined` go up with each one.
+- **Sandstone** (recordings 3162 and 3165, rev 232): `You manage to quarry some sandstone.`, `rocks1` for 9 ticks.
+  An infernal pickaxe combusts it: `smokepuff`, sounds 2725 and 3600, the quarry line and Mining XP, and
+  Smithing 10.2 (1kg), 19.2 (5kg) or 28.2 (10kg), solved from the recorded XP drops. No recording combusts a 2kg
+  piece, so 2kg is kept for now. Granite combusts for the Wiki's 7.2, 13.2 and 22.2. A Mining cape's extra piece is
+  the same size (Wiki Sandstone rocks; recording 3165: two 1kg pieces).
+- **Miscellania coal** (recording 1757, rev 227, a Leagues world): a regent's coal goes to Miner Magnus:
+  `You manage to mine some coal, and give it to Miner Magnus.`, no coal, no sound 3600, no ore count,
+  `misc_approval` up by one, and Magnus says "Thanks!". Managing Miscellania answers `mining:hand-over`.
 - **Amethyst** (recordings, rev 233-234, a Leagues world): wall swings (`human_mining_<pickaxe>_pickaxe_wall`) and
   `You manage to mine some amethyst.`.
 - **Daeyalt** (recordings, rev 226-231, Meiyerditch mine): sang wall swings (`sang_mining_wall_<pickaxe>_pickaxe`),
   sound 2998, `You manage to mine some ore.`, and the rock face steps down a stage with each ore,
   `area_sanguine_mine_minerocks_01` -> `_02` -> `_03` while the player mines on, then `_04` with
-  `This rock face is now empty.`. It grows back as `_01`.
+  `This rock face is now empty.`. It grows back as `_01`. Its ore line is a game message (recording 1637), where
+  every other rock's is spam.
 
 ## Rolls and success chance
 
@@ -169,7 +187,10 @@ Leagues world) has `You just found a Sapphire!` while mining coal rocks, and the
   Mining (Wiki Mining Guild), which needs the guild's members area.
 - The skilling timer is Mining's own: other skills' actions (herb tar, food) don't delay it, so tick
   manipulation is not modelled.
-- Rune and pure essence rocks keep their own messages; they were not recorded on main-game worlds.
+- The first roll after the swing: main-game captures with dragon and infernal pickaxes have it the tick after the
+  swing, but slower pickaxes were recorded later (bronze on gold, recording 468: seven ticks after the swing; steel
+  and iron on Leagues worlds: interval minus one). Not enough to model; every pickaxe rolls the tick after.
+- Barronite's 1-minute respawn was 67 ticks in recording 1636, and the timer the client was sent read 86.
 - Other plugins that mine rocks of their own (quests, minigames, stars, Motherlode) keep their wording.
 - No recordings of a successful Mine on lead, nickel, rubium, soft clay, lovakite, sunstone or infernal shale: the
   messages follow the recorded pattern (`You manage to mine some lead.`, `... soft clay.`, `... rubium splinters.`,

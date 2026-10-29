@@ -265,7 +265,7 @@ import { MusicSystem } from "./audio/MusicSystem";
 import { AmbientSoundCollector } from "./audio/AmbientSoundCollector";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
-import { INVENTORY } from "../runelite/api/gameval/InterfaceID";
+import { isInTouchScrollLayer } from "./widgets/input/widgetTouchScrollInput";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
 import { KeyboardButtonProbe } from "./chat/keyboardButtonProbe";
 import { collectInputWidgetsAtPoint } from "./widgets/interaction/widgetClickProbe";
@@ -2319,7 +2319,9 @@ export class OsrsClient {
             for (let i = hits.length - 1; i >= 0; i--) {
                 const widget = hits[i];
                 if (this.widgetManager.isEffectivelyHidden(widget.uid)) continue;
-                if ((widget.uid >>> 16) === INVENTORY && widget.itemId >= 0 && this.widgetInteraction.isWidgetDraggable(widget)) return true;
+                if (!(widget.itemId >= 0) || !this.widgetInteraction.isWidgetDraggable(widget)) continue;
+                // Scrolling lists (the bank) keep swipe scrolling; their items drag after a short hold.
+                return isInTouchScrollLayer(widget, this.widgetManager) ? "afterHold" : true;
             }
             return false;
         };

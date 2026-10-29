@@ -29,6 +29,7 @@ test('waking a grown Farming Hespori sets recoil immunity on the boss, without c
     Object.assign(Patches.stateFor(player, patch), { crop: 'HESPORI', status: 'grown' });
     t.after(() => { Hespori.hesporiLogout({ player }); player.getArea()?.leave(player, false); });
     Hespori.harvestHespori(player, patch);
+    Patches.tick();
     assert.equal(spawned.length, 5);
     assert.equal(spawned[0].getAttribute('combat:recoil-immune'), true);
     for (const flower of spawned.slice(1)) assert.notEqual(flower.getAttribute('combat:recoil-immune'), true);

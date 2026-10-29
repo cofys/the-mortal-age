@@ -13,7 +13,7 @@ const hooks = new Map();
 let tick, tasks, npcs, objects, events, realObjects = false;
 const npcHooks = new Map(), lifecycle = {};
 const bits = { cake: 158, silk: 159, fur: 160, silver: 161, spice: 162, gem: 163, tea: 170, seed: 594, wine: 2050, keldabread: 589, keldagem: 590, keldasilver: 592, vikingfur: 165, silk_prif: 8422, silver_prif: 8424, gem_prif: 8423, spice_prif: 8425 };
-const itemNames = new Map([[I.CUP_OF_TEA, 'Cup of tea'], [I.UNCUT_SAPPHIRE, 'Uncut sapphire'], [I.BREAD, 'Bread']]);
+const itemNames = new Map([[I.CUP_OF_TEA, 'Cup of tea'], [I.BANANA, 'Banana'], [I.UNCUT_SAPPHIRE, 'Uncut sapphire'], [I.BREAD, 'Bread']]);
 core.ItemDefinition.forId = (id) => ({ getName: () => itemNames.get(id) ?? `item ${id}` });
 const testApi = {
     core: {
@@ -43,11 +43,11 @@ function advance(count = 1) {
     }
 }
 function player({ level = 99, full = false, area = null } = {}) {
-    const items = [], xp = [], messages = [], varbits = [], sounds = [], animations = [], attributes = new Map();
+    const items = [], xp = [], messages = [], spam = [], varbits = [], sounds = [], animations = [], attributes = new Map();
     return {
-        items, xp, messages, varbits, sounds, animations,
+        items, xp, messages, spam, varbits, sounds, animations,
         getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
-        getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]), sendSound: (...args) => sounds.push(args) }),
+        getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]), sendSound: (...args) => sounds.push(args), sendTypedMessage: (type, message) => { messages.push(message); if (type === core.ChatType.SPAM) spam.push(message); } }),
         getSkillManager: () => ({ getCurrentLevel: () => level, addExperiences: (_skill, amount) => xp.push(amount) }),
         getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
         getInventory: () => ({ isFull: () => full, full: () => messages.push('full'), addItem: (item) => items.push(item) }),
@@ -444,4 +444,34 @@ test('caught thefts can be attempted again on the next tick', () => {
     advance();
     assert.equal(who.items.length, 1);
     assert.deepEqual(who.xp, [205]);
+});
+
+// rsprox recordings 1554, 3220 (main game), 1098, 1104, 1105, 3275 (Leagues, Grid Master):
+// every line is spam, and an item without its own line is "You steal a cake.".
+test('stall lines are spam; a stolen item is named with its article; silk and the fruit stall as captured', () => {
+    const { stealLine } = Thieving._test;
+    const named = (name) => stealLine({ getDefinition: () => ({ getName: () => name }) });
+    assert.equal(named('Cake'), 'You steal a cake.');
+    assert.equal(named('Uncut emerald'), 'You steal an uncut emerald.');
+    assert.equal(named('Silver bar'), 'You steal a silver bar.');
+    assert.equal(named('Jangerberries'), 'You steal some jangerberries.');
+    for (const [name, id, attempt, success, roll = 0] of [
+        ['Silk stall', O.SILK_STALL, 'You attempt to steal some silk from the silk stall.', 'You steal a piece of silk.'],
+        ['Fruit Stall', O.FRUIT_STALL_3, null, 'You steal a banana.', 0.45],
+        ['Gem stall', O.GEM_STALL_3, 'You attempt to steal a gem from the gem stall.', 'You steal an uncut sapphire.'],
+    ]) {
+        const who = player(), stall = object(id);
+        const random = Math.random;
+        Math.random = () => roll;
+        try {
+            click(who, stall, name);
+            assert.deepEqual(who.spam, attempt ? [attempt] : [], name);
+            advance();
+            assert.deepEqual(who.spam, attempt ? [attempt, success] : [success], name);
+            assert.equal(who.messages.length, who.spam.length, name + ': nothing in the game channel');
+        } finally { Math.random = random; }
+    }
+    const fruit = STALLS.get('Fruit Stall');
+    assert.equal(fruit.level, 25); assert.equal(fruit.xp, 28.5);
+    assert.equal(emptyStallId(object(O.FRUIT_STALL_3)), O.FRUIT_STALL);
 });

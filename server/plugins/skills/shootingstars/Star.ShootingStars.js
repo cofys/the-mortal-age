@@ -83,6 +83,7 @@ function land(site, size, siteIndex = -1, now = Date.now()) {
     percentTicks: 0,
     landingTicks: DATA.landingTicks,
     landedAt: now,
+    landedTick: world.tick,
     discoveredBy: null,
     object: null,
     headbarNpc: null,

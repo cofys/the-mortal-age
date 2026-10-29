@@ -799,6 +799,33 @@ export class World {
         }
     }
 
+    /** The map square each owned boat was in last tick, by entity index. */
+    private static boatSquares = new Map<number, number>();
+
+    /**
+     * A player on a deck keeps the sea under their boat awake (refreshActiveRegions' root), but
+     * their own tile on the deck never changes: a boat sailing (or teleported) into another map
+     * square wakes the regions around its new spot, so the NPCs there (a charting duck) move.
+     */
+    private static refreshRegionsUnderBoats(): void {
+        let changed = false;
+        const seen = new Set<number>();
+        for (const boat of BoatManager.all()) {
+            if (boat.static) continue;
+            seen.add(boat.entityIndex);
+            const square = ((boat.tileX >> 6) << 16) | (boat.tileY >> 6);
+            if (World.boatSquares.get(boat.entityIndex) !== square) {
+                World.boatSquares.set(boat.entityIndex, square);
+                changed = true;
+            }
+        }
+        for (const index of [...World.boatSquares.keys()]) if (!seen.has(index)) World.boatSquares.delete(index);
+        if (changed) {
+            World.refreshActiveRegions();
+            World.activeNpcsForUpdate = World.collectActiveNpcsForUpdate();
+        }
+    }
+
     public static refreshActiveRegions(): void {
         const snapshot = World.activeRegionIndex.update(
             World.players,
@@ -1282,7 +1309,10 @@ export class World {
         });
 
         // Boats move after their passengers, before sync sees anyone's position.
-        timed("move_boats", () => BoatManager.tick());
+        timed("move_boats", () => {
+            BoatManager.tick();
+            World.refreshRegionsUnderBoats();
+        });
 
         // Owners that did not take a turn this cycle (bot stride) still need their
         // walk-to interactions ticked, or the interaction hangs until they do.

@@ -4,8 +4,10 @@
  * The words come from the "Current Affairs" transcript page (npc-dialogues.json,
  * osrsreboxed). NPCs: Arhein (3200), Harry (3213) and Councillor Catherine
  * (14952). Catherine is missing from npc-spawns.json, so she is owner-spawned at
- * her desk (2825,3454) on login; the collectable current duck (15153, the
- * "stopped, Collect" variant) is owner-spawned at its recorded stop tile.
+ * her desk (2825,3454) on login. The current duck itself (release, route, stop,
+ * Collect) is sea charting's (docs/sea-charting.md); the quest speaks its lines
+ * over the Catherby current through charting:duck-released, charting:complete and
+ * charting:duck-collected.
  *
  * Stages (varbit 18282 "current_affairs", varp 4956 bits 0-6): the values follow
  * RuneLite Quest Helper's pinned stage map (0, 5, 10, 15, 20, 25, 30, 35, 40),
@@ -32,10 +34,8 @@
  *   with the page's own question texts and success/failure branches replayed
  *   through the NpcDialogues export QuestRuntime.startTranscript itself uses.
  *   On a wrong answer only the missed questions are re-asked, as the Wiki notes.
- * - Track-current requires being aboard the player's own boat and within 8 tiles
- *   of the release ripple; collecting requires the stopped duck plus the boat
- *   within 12 tiles of the stop. The duck is placed west of the Obelisk of Water
- *   (2841,3422), and Collecting it is the "charting" step.
+ * - Charting the Catherby current (sea charting's current_duck_catherby_bay task)
+ *   is the "charting" step.
  * - Arhein has no post-quest variant on the page. A completed player with the
  *   duck keeps the post-quest page; without it, Quest Helper lets Arhein
  *   replace the reward, so the recorded without-duck branch is reused.
@@ -60,8 +60,6 @@ module.exports = function registerCurrentAffairsQuest(api) {
   const HARRY_NPC_ID = NpcIdentifiers.HARRY; // 3213
   const CATHERINE_NPC_ID = NpcIdentifiers.COUNCILLOR_CATHERINE; // 14952
   const MAYOR_NPC_ID = NpcIdentifiers.MAYOR_OF_CATHERBY; // 15050, chathead for Consult
-  const DUCK_MOVING_NPC_ID = NpcIdentifiers.CURRENT_DUCK; // 15152, released/followed duck
-  const DUCK_NPC_ID = NpcIdentifiers.CURRENT_DUCK_2; // 15153, the collectable stopped duck
 
   // Items (cache ids; ItemIdentifiers comments).
   const CHARCOAL_ITEM_ID = ItemIdentifiers.CHARCOAL; // 973
@@ -88,7 +86,6 @@ module.exports = function registerCurrentAffairsQuest(api) {
   const VARBIT_FORM2_GIVEN = 18289;
   const VARBIT_FORM_Q1 = 18290; // q1..q8 are two bits each through 18297
   const VARBIT_FORM_Q1_CORRECT = 18298;
-  const VARBIT_CATHERBY_CHARTED = 18602; // sailing_charting_current_duck_catherby_bay_complete
 
   const STAGE_STARTED = 5;
   const STAGE_FORM_GIVEN = 10;
@@ -158,17 +155,8 @@ module.exports = function registerCurrentAffairsQuest(api) {
 
   // Councillor Catherine's desk (desk 58192 at 2824,3453, cabinet at 2827,3453).
   const CATHERINE_SPAWN = { x: 2825, y: 3454, z: 0 };
-  // Capture 3467: release at (2837,3414), then the duck walks this route and
-  // stops at (2802,3322) south-west of Entrana.
-  const DUCK_RELEASE_LOCATION = { x: 2837, y: 3414, z: 0 };
-  const DUCK_STOP_LOCATION = { x: 2802, y: 3322, z: 0 };
-  const DUCK_COLLECT_RANGE = 12; // the boat deck's cross-world reach to the stopped duck
-  const DUCK_ROUTE = [
-    [2837, 3402], [2831, 3396], [2823, 3396], [2818, 3391], [2809, 3391],
-    [2809, 3389], [2801, 3389], [2801, 3378], [2798, 3375], [2798, 3343],
-    [2802, 3339], [2802, 3322],
-  ];
-  const VARBIT_BOARDED_BOAT = 19136; // sailing_boarded_boat
+  /** The task this quest charts (sea charting's current duck tasks, cache table 154). */
+  const CATHERBY_CURRENT = "current_duck_catherby_bay";
 
   const FORM_ANSWERS_ATTRIBUTE = "current-affairs:form-answers";
   const KIT_BOUGHT_ATTRIBUTE = "current-affairs:kit-bought";
@@ -182,9 +170,6 @@ module.exports = function registerCurrentAffairsQuest(api) {
   const fillStates = new WeakMap(); // player -> { index, answers }
   const audits = new WeakMap(); // player -> { answers, asked, remaining }
   const catherineByPlayer = new WeakMap(); // player -> owner-only NPC
-  const deployedDuckByPlayer = new WeakMap(); // player -> owner-only NPC
-  const duckJourneys = new WeakMap(); // player -> task key while the duck walks
-  const stoppedDucks = new WeakSet(); // the deployed duck finished its route
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
   const freeSlots = (player) => player.getInventory().getFreeSlots();
@@ -830,145 +815,27 @@ module.exports = function registerCurrentAffairsQuest(api) {
   // The current duck
   // ==========================================================================
 
-  /** True when the player is on their own boat (capture 3467: the duck climbs aboard). */
-  function aboard(player) {
-    const sender = player.getPacketSender?.();
-    if (sender?.getVarbit?.(VARBIT_BOARDED_BOAT) === 1) return true;
-    const state = player.getSailing?.();
-    const boat = state?.boats?.find?.((entry) => entry.slot === state.activeBoatSlot);
-    return boat?.location?.kind === "at_sea";
+  /** During the quest, the duck charting Catherby's current (sea charting's CurrentDuck) speaks the quest's lines. */
+  function inDuckStep(player) {
+    return !quest.isComplete(player) && quest.getStage(player) >= STAGE_DUCK_GIVEN;
   }
 
-  /** The boat's world tile at sea, or the player's tile when they are on foot. */
-  function worldTile(player) {
-    const state = player.getSailing?.();
-    const boat = state?.boats?.find?.((entry) => entry.slot === state.activeBoatSlot);
-    if (aboard(player) && boat?.location?.kind === "at_sea") {
-      return { x: Math.floor(boat.location.fineX / 128), y: Math.floor(boat.location.fineY / 128) };
-    }
-    const location = player.getLocation();
-    return { x: location.getX(), y: location.getY() };
-  }
-
-  function distanceFrom(tile, target) {
-    return Math.max(Math.abs(tile.x - target.x), Math.abs(tile.y - target.y));
-  }
-
-  function duckPath() {
-    const path = [];
-    let { x, y } = DUCK_RELEASE_LOCATION;
-    const push = (nextX, nextY) => {
-      while (x !== nextX || y !== nextY) {
-        x += Math.sign(nextX - x);
-        y += Math.sign(nextY - y);
-        path.push([x, y]);
-      }
-    };
-    for (const [nextX, nextY] of DUCK_ROUTE) push(nextX, nextY);
-    return path;
-  }
-
-  function startDuckJourney(player, duck) {
-    const key = {};
-    duckJourneys.set(player, key);
-    const path = duckPath();
-    let index = 0;
-    const step = () => {
-      if (duckJourneys.get(player) !== key || duck?.isRegistered?.() === false) return;
-      if (index >= path.length) {
-        duckJourneys.delete(player);
-        duck.moveTo(new Location(DUCK_STOP_LOCATION.x, DUCK_STOP_LOCATION.y, DUCK_STOP_LOCATION.z));
-        duck.setNpcTransformationId(DUCK_NPC_ID);
-        stoppedDucks.add(duck);
-        player.sendMessage("The current duck comes to a stop.");
-        return;
-      }
-      const [x, y] = path[index++];
-      duck.moveTo(new Location(x, y, DUCK_RELEASE_LOCATION.z));
-      api.core.TaskManager.submit(new api.core.CountdownTask(key, 1, step));
-    };
-    step();
-  }
-
-  function trackCurrent(event) {
-    const { player } = event;
-    event.handled = true;
-    if (quest.isComplete(player) || quest.getStage(player) < STAGE_DUCK_GIVEN) return;
-    if (!aboard(player)) {
-      player.sendMessage("You need to be on your boat to release the duck.");
-      return;
-    }
-    if (distanceFrom(worldTile(player), DUCK_RELEASE_LOCATION) > 8) {
-      player.sendMessage("The duck should be released by the island east of Catherby.");
-      return;
-    }
-    const existing = deployedDuckByPlayer.get(player);
-    if (existing?.isRegistered?.()) {
-      player.sendMessage("The duck is already tracking the currents.");
-      return;
-    }
-    const duck = api.spawnNpc({
-      id: DUCK_MOVING_NPC_ID,
-      x: DUCK_RELEASE_LOCATION.x,
-      y: DUCK_RELEASE_LOCATION.y,
-      z: DUCK_RELEASE_LOCATION.z,
-      wanderRadius: 0,
-      owner: player,
-      ownerOnly: true,
-    });
-    if (duck) {
-      deployedDuckByPlayer.set(player, duck);
-      startDuckJourney(player, duck);
-    }
+  function duckReleased({ player, spot }) {
+    if (spot !== CATHERBY_CURRENT || !inDuckStep(player)) return;
     startTranscript(api, player, ARHEIN_NPC_ID, PAGE, DUCK_DEPLOY_VARIANT);
   }
 
-  /**
-   * Widen only the owned, stopped duck's actual Collect click while aboard. Every
-   * other NPC route keeps the normal range 1 (owner/LOS checks still run in core).
-   */
-  function widenDuckCollectRange(event) {
-    if (event.npcId !== DUCK_NPC_ID || !event.npc) return;
-    const { player } = event;
-    if (deployedDuckByPlayer.get(player) !== event.npc) return;
-    if (!stoppedDucks.has(event.npc)) return;
-    if (!aboard(player)) return;
-    const stage = quest.getStage(player);
-    if (stage < STAGE_DUCK_GIVEN || quest.isComplete(player)) return;
-    const actions = event.definition?.getActions?.() ?? event.definition?.getInteractions?.();
-    if (String(actions?.[event.clickType - 1] ?? "").toLowerCase() !== "collect") return;
-    event.range = DUCK_COLLECT_RANGE;
+  function currentCharted({ player, spot }) {
+    if (spot !== CATHERBY_CURRENT) return;
+    player.setAttribute(CURRENTS_CHARTED_ATTRIBUTE, true);
   }
 
-  function collectDuck(event) {
-    const { player } = event;
-    const duck = deployedDuckByPlayer.get(player);
-    if (!duck || event.npc !== duck) return false;
-    if (!stoppedDucks.has(duck)) {
-      event.handled = true;
-      player.sendMessage("The duck is still tracking the currents.");
-      return true;
-    }
+  /** The duck back aboard during the quest: the quest's own retrieval lines instead of the plain box. */
+  function duckCollected(event) {
+    const { player, spot } = event;
+    if (spot !== CATHERBY_CURRENT || !inDuckStep(player)) return;
     event.handled = true;
-    if (!aboard(player)) {
-      player.sendMessage("The duck recognises your boat and climbs aboard. You need to be on your boat.");
-      return true;
-    }
-    if (distanceFrom(worldTile(player), DUCK_STOP_LOCATION) > DUCK_COLLECT_RANGE) {
-      player.sendMessage("You need to sail closer to the duck.");
-      return true;
-    }
-    api.removeNpc(duck);
-    deployedDuckByPlayer.delete(player);
-    stoppedDucks.delete(duck);
-    const journey = duckJourneys.get(player);
-    if (journey) api.core.TaskManager.cancelTasks?.(journey);
-    duckJourneys.delete(player);
-    if (!held(player, CURRENT_DUCK_ITEM_ID)) player.getInventory().adds(CURRENT_DUCK_ITEM_ID, 1);
-    player.setAttribute(CURRENTS_CHARTED_ATTRIBUTE, true);
-    player.getPacketSender().sendVarbit(VARBIT_CATHERBY_CHARTED, 1);
     startTranscript(api, player, ARHEIN_NPC_ID, PAGE, DUCK_COLLECT_VARIANT);
-    return true;
   }
 
   // ==========================================================================
@@ -1015,7 +882,6 @@ module.exports = function registerCurrentAffairsQuest(api) {
     if (mapped === undefined) return; // already a captured stage, leave it
     if (legacy >= 10) {
       player.setAttribute(CURRENTS_CHARTED_ATTRIBUTE, true);
-      player.getPacketSender().sendVarbit(VARBIT_CATHERBY_CHARTED, 1);
     }
     quest.setStage(player, mapped); // setStage only: no second reward on legacy completion
   }
@@ -1029,7 +895,8 @@ module.exports = function registerCurrentAffairsQuest(api) {
     packet.sendVarbit(VARBIT_KIT_PURCHASED, player.getAttribute(KIT_BOUGHT_ATTRIBUTE) === true ? 1 : 0);
     packet.sendVarbit(VARBIT_AUDIT_START, quest.getStage(player) >= STAGE_MAYOR_CHAINED ? 1 : 0);
     packet.sendVarbit(VARBIT_FORM2_GIVEN, quest.getStage(player) >= STAGE_FORM2_GIVEN ? 1 : 0);
-    packet.sendVarbit(VARBIT_CATHERBY_CHARTED, currentsCharted(player) ? 1 : 0);
+    // Charted before sea charting kept the charts: the task counts as charted there too.
+    if (currentsCharted(player)) api.emitCustomEvent("charting:mark", { player, spot: CATHERBY_CURRENT });
     ensureCatherine(player);
   }
 
@@ -1038,13 +905,6 @@ module.exports = function registerCurrentAffairsQuest(api) {
     const catherine = catherineByPlayer.get(player);
     if (catherine) api.removeNpc(catherine);
     catherineByPlayer.delete(player);
-    const duck = deployedDuckByPlayer.get(player);
-    if (duck) api.removeNpc(duck);
-    const journey = duckJourneys.get(player);
-    if (journey) api.core.TaskManager.cancelTasks?.(journey);
-    duckJourneys.delete(player);
-    if (duck) stoppedDucks.delete(duck);
-    deployedDuckByPlayer.delete(player);
     fillStates.delete(player);
     audits.delete(player);
   }
@@ -1197,7 +1057,6 @@ module.exports = function registerCurrentAffairsQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onItemAction("Form cr-4p", { "Fill-in": fillForm });
   api.onItemAction("Mayor of Catherby", { Consult: consultMayor, Feed: feedMayor });
-  api.onItemAction("Current duck", { "Track-current": trackCurrent });
   api.onItemDropPolicy(handleItemDropPolicy);
   api.onItemOnItem("Form 7r4-5h", "Mayor of Catherby", handleSignForm);
   api.onItemOnItem("Fish food", "Mayor of Catherby", handleSignForm);
@@ -1205,8 +1064,9 @@ module.exports = function registerCurrentAffairsQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onObjectRoute(routeAquariumClick);
   api.onNpcInteraction("Councillor Catherine", { "Talk-to": catherineTalkTo });
-  api.onNpcRoute(widenDuckCollectRange);
-  api.onNpcInteraction("Current duck", { Collect: collectDuck });
+  api.onCustomEvent("charting:duck-released", duckReleased);
+  api.onCustomEvent("charting:complete", currentCharted);
+  api.onCustomEvent("charting:duck-collected", duckCollected);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

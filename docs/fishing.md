@@ -46,12 +46,48 @@ minnows, karambwan vessels). Tests: `server/tests/fishing.test.cjs`.
   "A Karambwan deftly snatches the Karambwanji from your vessel!" on a miss, and the message box
   "You need a Karambwan vessel to fish here." without a vessel.
 
+## Messages, animations and timing (rsprox)
+
+From rsprox captures 75, 86, 543, 552, 1098, 1102, 1106, 1149, 1710, 1718, 1757, 1858, 3275, 3276
+and 3285 (all Leagues, Grid Master or event worlds). Rev 237 recordings 1098, 1102, 1106 and 1149
+roll at the Wiki's tick lengths, so their timing is used; the others are used for text only.
+
+- **Channel:** every start, catch and miss line is on the spam channel.
+- **Start lines:** nets "You cast out your net...", harpoons "You start harpooning fish.",
+  lobster pots "You attempt to catch a lobster.", fly rods, pike and barbarian rods one line
+  "You cast out your line...<br>You attempt to catch a fish.", sea bait "You cast out your
+  line..." and "You attempt to catch a fish." a tick later (casting again), infernal eels
+  "You cast out your line...". Spots of the same kind without captures (frog spawn, monkfish,
+  minnows, the other eels, anglerfish) use the same line as their kind; dark crabs keep
+  "You begin to fish..".
+- **First roll:** 3 ticks after the start line for nets and cages, 4 for harpoons and rods, then
+  every roll interval. The tool's animation restarts on every roll, caught or not (minnows'
+  2-tick rolls keep a 5-tick animation timer). Rods cast once (`human_fishing_casting`), then
+  play `human_fish_onspot` on each roll; barbarian rods use `human_fishing_casting_brut` and
+  `human_fishing_onspot_brut`. The infernal eel recording only repeats the cast animation.
+- **Catch lines:** "You catch a raw trout" and "You catch a raw salmon" have no full stop;
+  "You catch a pike.", "You catch a lobster.", "You catch a shark!", "You catch an infernal eel.
+  It hardens as you handle it with your ice gloves."
+- **Big net junk:** boots, seaweed, gloves, oyster and casket roll on their own with the Wiki's
+  charts ([Fishing spot (big net, harpoon)](https://oldschool.runescape.wiki/w/Fishing_spot_(big_net,_harpoon))):
+  10/10, 10/10, 5/5, 3/7, 1/2. The Wiki gives no XP for them; the recordings' XP drops give 1 for
+  boots, gloves and seaweed and 10 for oysters and caskets. Lines: "You catch some boots.",
+  "You catch some seaweed.", "You catch some gloves.", "You catch an oyster shell.",
+  "You catch a casket." They don't roll the heron.
+- **Message boxes:** "You can't carry any more fish." on the tick after the catch that fills the
+  inventory (or on the click), with the animation reset and sound 2277; "You don't have any
+  fishing bait.", "You don't have any feathers left." and "You don't have any suitable bait
+  left." (barbarian rod) without bait; "You need to be at least level # Fishing to harpoon these
+  fish." and "You need at least level # Fishing to bait these fish." below the level.
+  Tempoross uses the same full-inventory box.
+
 ## Not covered
 
 - Which quest step unlocks karambwan fishing (Lubufu's apprenticeship in Tai Bwo Wannai Trio) is
   not checked: no recording or Wiki page gives the refusal.
 - What live OSRS says when the karambwanji run out mid-session is not recorded; the loop stops
-  with the generic "You do not have the required bait."
+  with the generic "You do not have the required bait." So do sandworms and dark fishing bait.
+- The missing-tool line ("You don't have the right tool to fish there.") is not recorded.
 
 ## Crystal harpoon signets
 

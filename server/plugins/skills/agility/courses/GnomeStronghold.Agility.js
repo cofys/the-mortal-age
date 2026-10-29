@@ -20,6 +20,7 @@ function pipe({ pos }) {
 module.exports = {
   key: "gnome",
   name: "Gnome Stronghold Agility",
+  helper: 1, // the Agility helper's course (enum 3507: "Gnome Stronghold Course")
   lapXp: 110.5,
   petBase: 35609, // Giant squirrel base chance (Wiki)
   obstacles: [

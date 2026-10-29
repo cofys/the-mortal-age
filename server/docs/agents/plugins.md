@@ -116,6 +116,10 @@ api.onItemOnObject("Knife", "Web", slashWeb, { noted: false });
 `onNpcsInteraction` is the many-names-one-handler form: it registers the same actions for
 each exact, case-sensitive name, so a family of NPCs that share a transcript needs one line.
 
+`onItemOnObject(handler, { fallback: true })` runs after every other item-on-object handler and
+only when none of them took the use: an object's own refusal in place of "Nothing interesting
+happens." (Cooking's "You can't cook that." on a fire or range).
+
 Fall back to raw ids only when the name is genuinely ambiguous or the behaviour is
 id-specific (a single transformed variant, for example). When you do, use a named constant
 from `IdEnums` / the generated identifier files, never a bare number.

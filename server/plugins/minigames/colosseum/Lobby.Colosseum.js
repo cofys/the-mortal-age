@@ -35,6 +35,10 @@ function syncIntroOnLogin({ player }) {
   syncIntro(player);
 }
 
+function syncGloryOnLogin({ player }) {
+  Shared.syncGlory(player);
+}
+
 function goDown({ player }) {
   Shared.fadeMove(player, () => player.moveTo(Shared.loc(Shared.LOBBY)));
   return true;
@@ -125,6 +129,7 @@ module.exports = function registerColosseumLobby(api) {
   api.onCustomEvent("npc-dialogue:line", fillRank);
   api.onCustomEvent("colosseum:has-rank", answerHasRank);
   api.onPlayerLogin(syncIntroOnLogin);
+  api.onPlayerLogin(syncGloryOnLogin);
 };
 
 module.exports.tunnel = tunnel;

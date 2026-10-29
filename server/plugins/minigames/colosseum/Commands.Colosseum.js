@@ -31,6 +31,7 @@ function setGlory({ player, parts }) {
     return true;
   }
   player.setAttribute(Shared.ATTR.GLORY, Math.trunc(value));
+  Shared.syncGlory(player);
   player.sendMessage(`Your Glory is now ${Math.trunc(value)} (${Shared.rankOf(player)}).`);
   return true;
 }

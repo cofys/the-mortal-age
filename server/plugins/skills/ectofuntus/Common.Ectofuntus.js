@@ -101,12 +101,12 @@ function mesbox(player, text) {
   player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.StatementDialogue(0, text)));
 }
 
-function animate(player, seq) {
-  player.performAnimation(new core.Animation(gameval("seq", seq)));
+function animate(player, seq, delay = 0) {
+  player.performAnimation(new core.Animation(gameval("seq", seq), delay));
 }
 
-function sound(player, id) {
-  player.getPacketSender().sendSound(id, 1, 0);
+function sound(player, id, delay = 0) {
+  player.getPacketSender().sendSound(id, 1, delay);
 }
 
 /** Puts `toId` in `fromId`'s slot, as the server swaps a used bucket or pot in place. */

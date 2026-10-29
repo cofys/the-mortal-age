@@ -147,25 +147,32 @@ function canHarpoon(player) {
   return harpoon;
 }
 
+/** Spot lines go on the spam channel (rsprox captures 552, 1858, 3275). */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(Shared.core().ChatType.SPAM, text);
+}
+
+/** rsprox capture 552: a full inventory is a message box, a reset animation and a sound. */
+function inventoryFull(player) {
+  Shared.animate(player, -1);
+  player.getPacketSender().sendSoundEffect(SOUND.FULL_INVENTORY, 1, 0, 1);
+  Shared.statement(player, "You can't carry any more fish.");
+}
+
 function catchFish(player, fight, harpoon, special) {
   const inventory = player.getInventory();
-  if (inventory.getFreeSlots() <= 0) {
-    inventory.full();
-    return false;
-  }
   const crystallised = harpoon.tier === "crystal" && Math.random() < DATA.catch.crystallisedChance;
   inventory.adds(crystallised ? ITEM.CRYSTALLISED : ITEM.RAW, 1);
-  player.sendMessage("You catch a harpoonfish!");
+  spam(player, "You catch a harpoonfish!");
   Shared.addXp(player, "FISHING", Shared.xpBase(player) / 100);
   fight.addPoints(player, DATA.points.fish);
   if (special && inventory.getFreeSlots() > 0 && Math.random() < DATA.catch.bonusChance) {
     inventory.adds(ITEM.RAW, 1);
-    player.sendMessage("You manage to catch an extra harpoonfish as it jumps out of the water.");
+    spam(player, "You manage to catch an extra harpoonfish as it jumps out of the water.");
     fight.addPoints(player, DATA.points.fish);
   }
   inventory.refreshItems();
   Shared.api().emitCustomEvent("fishing:success", { player, skill: Shared.core().Skill.FISHING, petBase: null, stop: false });
-  return inventory.getFreeSlots() > 0;
 }
 
 function harpoonSpot(event) {
@@ -176,21 +183,28 @@ function harpoonSpot(event) {
   const harpoon = canHarpoon(player);
   if (!harpoon) return true;
   if (player.getInventory().getFreeSlots() <= 0) {
-    player.getInventory().full();
+    inventoryFull(player);
     return true;
   }
   const fight = cove.fight;
   const tile = npc.getLocation();
   const level = Math.min(99, player.getSkillManager().getCurrentLevel(Shared.core().Skill.FISHING));
   player.setPositionToFace(tile);
-  player.sendMessage("You start harpooning fish.");
+  spam(player, "You start harpooning fish.");
   Shared.animate(player, ANIM.HARPOON);
   Shared.startAction(player, "harpoon", (ticks) => {
     if (!npc.isRegistered() || !npc.getLocation().equals(tile) || fight.result) return false;
+    // The tick after the catch that fills the inventory, as in capture 552.
+    if (player.getInventory().getFreeSlots() <= 0) {
+      inventoryFull(player);
+      return false;
+    }
     if (ticks % DATA.ticks.harpoon !== 0) return true;
     Shared.animate(player, ANIM.HARPOON);
-    if (Math.random() >= catchChance(level, DATA.catch[harpoon.tier])) return true;
-    return catchFish(player, fight, harpoon, event.npcId === NPC.SPOT_SPECIAL);
+    if (Math.random() < catchChance(level, DATA.catch[harpoon.tier])) {
+      catchFish(player, fight, harpoon, event.npcId === NPC.SPOT_SPECIAL);
+    }
+    return true;
   });
   return true;
 }
@@ -205,7 +219,7 @@ function harpoonPool(event) {
   if (!canHarpoon(player)) return true;
   const fight = cove.fight;
   player.setPositionToFace(npc.getLocation());
-  player.sendMessage("You start harpooning fish.");
+  spam(player, "You start harpooning fish.");
   Shared.animate(player, ANIM.HARPOON);
   Shared.startAction(player, "pool", (ticks) => {
     if (fight.phase !== "submerged" || npc.getContentId() !== NPC.POOL) return false;
@@ -219,7 +233,7 @@ function harpoonPool(event) {
 
 /** One scatter: up to 12 essence (Wiki: the most anyone can deal), points, XP and run energy. */
 function scatter(player, fight, npc) {
-  player.sendMessage("The glowing fish scatter, shedding their magical scales.");
+  spam(player, "The glowing fish scatter, shedding their magical scales.");
   const here = npc.getLocation();
   player.getPacketSender().sendAreaSound(SOUND.POOL, here.getX(), here.getY(), here.getZ(), 1, 0, 11);
   Shared.addXp(player, "FISHING", (Shared.xpBase(player) * 11) / 100);

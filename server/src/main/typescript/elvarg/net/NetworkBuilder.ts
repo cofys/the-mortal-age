@@ -326,6 +326,11 @@ export class ClientConnection {
   private queuedInputFrames = 0;
   /** Packets received since this player's last turn (see IMMEDIATE_PACKETS). */
   private turnPackets: ClientMessages = [];
+  /**
+   * A click held while an attack animation stalls the player (Wiki: Animation stall). Only one
+   * is kept: the last click made during the lock is the one that runs, on the tick it releases.
+   */
+  private stalledInput: ClientMessages[number] | null = null;
 
   constructor(private readonly channel: BinaryChannel) {
     channel.onData((frame) => {
@@ -390,9 +395,15 @@ export class ClientConnection {
    * in the world.
    */
   public processTurnPackets(): void {
-    if (this.turnPackets.length === 0) return;
+    if (this.turnPackets.length === 0 && this.stalledInput == null) return;
     const packets = this.turnPackets;
     this.turnPackets = [];
+    // Retry a held click ahead of this turn's input, so it runs on the first tick the player is
+    // free; dispatch() puts it back if the stall has not released yet.
+    if (this.stalledInput != null) {
+      packets.unshift(this.stalledInput);
+      this.stalledInput = null;
+    }
     // None of these await, so they all run now, inside the player's turn.
     this.dispatch(packets, true).catch((error) => {
       console.warn("[network] client packet rejected", error);
@@ -419,6 +430,13 @@ export class ClientConnection {
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
       if (this.player && !NON_INPUT_PACKETS.has(packet.type)) this.player.lastInputCycle = World.getProcessCycle();
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
+        if (this.player.getCombat().isAnimationStalled()) {
+          // Wiki: Animation stall. A full stall does not let the player perform actions, so the
+          // click is held rather than dropped and runs on the tick the animation ends. The last
+          // one made during the lock is the one kept, as the client only ever has one queued.
+          this.stalledInput = packet;
+          continue;
+        }
         if (this.player.getStatus() === PlayerStatus.TRADING) continue;
         const input = { player: this.player, packet, handled: false };
         PluginManager.emitCustomEvent("player:world-input", input);
@@ -1452,6 +1470,7 @@ export class ClientConnection {
   private cleanup(source: string): void {
     if (this.closed) return;
     this.closed = true;
+    this.stalledInput = null;
     if (this.idleCheck) clearInterval(this.idleCheck);
     this.releasePendingName();
     if (!this.player) return;

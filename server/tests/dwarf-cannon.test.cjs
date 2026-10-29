@@ -60,6 +60,7 @@ function gunner({ at = CENTRE, parts = Cannon.KINDS.plain.parts, steel = 2641, g
       if (key === "sendVarbit") return (id, value) => (varbits.set(id, value), log(`varbit ${id}=${value}`), sender);
       if (key === "sendConfig") return (id, value) => (varps.set(id, value), log(`varp ${id}=${value}`), sender);
       if (key === "sendMessage") return (text) => (log(text), sender);
+      if (key === "sendTypedMessage") return (type, text) => (log(type === core.ChatType.SPAM ? `spam ${text}` : text), sender);
       if (key === "sendEnterAmountPrompt") return (title) => (log(`prompt ${title}`), sender);
       if (key === "sendSound") return (id) => (log(`synth ${id}`), sender);
       return () => sender;
@@ -126,13 +127,13 @@ test("setting up: the captured ticks, messages, sounds, locs and vars, then 30 b
     const at = (tick) => p.ticks[tick];
     const sw = CENTRE.transform(-1, -1);
     // Tick 2: the base, the player runs off to the tile south of the south-west corner.
-    assert.ok(at(2).includes("varbit 12393=0") && at(2).includes("You place the cannon base on the ground."));
+    assert.ok(at(2).includes("varbit 12393=0") && at(2).includes("spam You place the cannon base on the ground."));
     assert.ok(at(2).includes("anim 827") && at(2).includes("sound 2876"));
     assert.ok(at(2).includes(`varp 4=${Cannon.packCoord(sw)}`) && at(2).includes("varp 2=1"));
     assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [sw.getX(), sw.getY() - 1]);
-    assert.ok(at(4).includes("You add the stand.") && at(4).includes("varp 2=2"), "the stand 2 ticks later");
-    assert.ok(at(7).includes("You add the barrels."), "the barrels 3 ticks later");
-    assert.ok(at(10).includes("You add the furnace.") && at(10).includes("varp 2=4"), "the furnace 3 ticks later");
+    assert.ok(at(4).includes("spam You add the stand.") && at(4).includes("varp 2=2"), "the stand 2 ticks later");
+    assert.ok(at(7).includes("spam You add the barrels."), "the barrels 3 ticks later");
+    assert.ok(at(10).includes("spam You add the furnace.") && at(10).includes("varp 2=4"), "the furnace 3 ticks later");
     assert.ok(at(11).includes("You load the cannon with 30 cannonballs.") && at(11).includes("varp 3=30"), "loaded the tick after");
     assert.ok(locAt(sw).includes(core.ObjectIdentifiers.DWARF_MULTICANNON));
     assert.equal(p.getInventory().getAmount(Items.STEEL_CANNONBALL), 2611);
@@ -255,7 +256,7 @@ test("Pick-up: the captured message, vars cleared, parts and balls back, the loc
   const sw = cannon.sw;
   Decay.pickUp({ player: p, object: cannon.object });
   const now = p.ticks[p.ticks.length - 1];
-  assert.ok(now.includes("You pick up the cannon. It's really heavy.") && now.includes("synth 2581"));
+  assert.ok(now.includes("spam You pick up the cannon. It's really heavy.") && now.includes("synth 2581"));
   assert.ok(now.includes("varp 3551=-1") && now.includes("varp 2=0") && now.includes("varp 3=0"));
   for (const part of Cannon.KINDS.plain.parts) assert.ok(p.getInventory().contains(part));
   assert.equal(p.getInventory().getAmount(Items.STEEL_CANNONBALL), 2641);
@@ -312,7 +313,7 @@ test("a cannon saved on a player but not in the world (a restart) is lost to Nul
   p.setAttribute(Cannon.STATE_ATTRIBUTE, { kind: "ornament", x: 3259, y: 3259, z: 0, stage: 2, steel: 0, granite: 0 });
   Decay.reattach({ player: p });
   assert.deepEqual(p.getAttribute(Cannon.LOST_ATTRIBUTE), { kind: "ornament", stage: 2 });
-  assert.ok(p.ticks[0].includes(Decay.MESSAGE.LOST));
+  assert.ok(p.ticks[0].includes(Decay.LOST));
 });
 
 test("the ornament kit on each part, Dismantle back; an ornament cannon uses its own locs", () => {

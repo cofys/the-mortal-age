@@ -9,8 +9,8 @@ const Data = require("./Data.DwarfCannon");
 const Ammo = require("./Ammo.DwarfCannon");
 const Decay = require("./Decay.DwarfCannon");
 
-/** Ours (not captured). */
-const OUT_OF_AMMO = "Your cannon is out of ammo!";
+/** Captured once (rsprox 1510), red. */
+const OUT_OF_AMMO = "<col=ef1020>Your cannon is out of ammo.</col>";
 const SEARCH_RANGE = 20;
 
 let cannonballMethod = null;

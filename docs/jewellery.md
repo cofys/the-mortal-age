@@ -29,9 +29,11 @@ lists: rings, necklaces, bracelets and amulets, sapphire to zenyte plus opal (Lv
 - **A cast clicked during the 3-tick delay waits for it** and then goes off (and repeats).
 - **Look.** Gold amulets play the spell's own sequence, graphic and sound. Rings, necklaces
   and bracelets play `human_cast_enchantring` (931) with `enchant_ring` (238) at height 92.
-  Their sound is 147 for Lvl-1, 140 for Lvl-5 and 144 for Lvl-6 and Lvl-7; Lvl-2 to Lvl-4 keep
-  the spell's sound, as no capture has them. Silver amulets play the spell's sequence with
-  `enchant_ring`.
+  Their sound is 147 for Lvl-1, 142 for Lvl-2, 140 for Lvl-5 and 144 for Lvl-6 and Lvl-7; Lvl-3
+  and Lvl-4 keep the spell's sound, as no capture has them. Silver amulets play the spell's
+  sequence with `enchant_ring`; so does the jade bracelet, with the ring sound (rsprox 1846). The
+  ruby necklace plays the amulet cast (721, 116, 145; rsprox 1757). Every graphic is at height 92,
+  and the cast sends `toplevel_sidebutton_switch` [6], back to the spellbook, once per click.
 - **Ids.** The sapphire bracelet is `jewl_sapphire_bracelet` (11072) and the zenyte bracelet
   `zenyte_bracelet` (19532), as recorded; `ItemIds.SAPPHIRE_BRACELET` (11071) and
   `ItemIds.ZENYTE_BRACELET` (19492) are other items with the same names.

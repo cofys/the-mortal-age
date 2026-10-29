@@ -41,15 +41,27 @@ function findScrollLayer(
 ): ScrollLayer | undefined {
     if (!hits) return undefined;
     for (let i = hits.length - 1; i >= 0; i--) {
-        let current: ScrollLayer | undefined = hits[i];
-        for (let depth = 0; current && depth < MAX_PARENT_DEPTH; depth++) {
-            if (isScrollable(current)) return current as ScrollLayer;
-            const parentUid = current.parentUid;
-            if (typeof parentUid !== "number" || parentUid < 0) break;
-            current = widgetManager.getWidgetByUid(parentUid) as ScrollLayer | undefined;
-        }
+        const layer = scrollLayerOf(hits[i], widgetManager);
+        if (layer) return layer;
     }
     return undefined;
+}
+
+/** The widget itself or its nearest ancestor that a swipe scrolls. */
+function scrollLayerOf(widget: any, widgetManager: WidgetManager): ScrollLayer | undefined {
+    let current: ScrollLayer | undefined = widget;
+    for (let depth = 0; current && depth < MAX_PARENT_DEPTH; depth++) {
+        if (isScrollable(current)) return current;
+        const parentUid = current.parentUid;
+        if (typeof parentUid !== "number" || parentUid < 0) break;
+        current = widgetManager.getWidgetByUid(parentUid) as ScrollLayer | undefined;
+    }
+    return undefined;
+}
+
+/** Whether a swipe that starts on this widget scrolls a layer (bank, lists) instead of dragging. */
+export function isInTouchScrollLayer(widget: any, widgetManager: WidgetManager): boolean {
+    return scrollLayerOf(widget, widgetManager) !== undefined;
 }
 
 /** The scrollbar scrollbar_vertical wired to this layer, from the wheel listener it set. */

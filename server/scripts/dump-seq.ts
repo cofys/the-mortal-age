@@ -10,12 +10,19 @@
 // OUTPUT
 // One line per sequence:
 //
-//   seq 1234 frames=5 step=-1 priority=5 loops=99 frameIds=5678,5679,5680,5681,5682
+//   seq 1234 frames=5 step=-1 priority=5 standing=0 movement=-1 masks=0 loops=99 frameIds=5678,5679,5680,5681,5682
 //
 //   frames  Number of frames in the animation. A special attack animation must exist here
 //           before you can send it with an animate packet.
 //   step    frameStep - how the client advances the frames (-1 = follow the frame lengths).
 //   priority forcedPriority (attack animation is normally 5).
+//   standing SeqType.priority (opcode 10): -1 unset, which the client derives to 0 (steps are
+//           withheld while the animation plays) unless the seq carries masks - that is what
+//           makes an attack an animation stall. 1 means it drops the seq on a step, as skilling
+//           loops do. See the Wiki's Animation stall.
+//   movement SeqType.precedenceAnimating (opcode 9): the same check when the actor was already
+//           moving when the animation started.
+//   masks    Opcode 3 / 17 entries, which flip the client's derived priority from 0 to 2.
 //   loops   maxLoops (99 when the animation loops forever).
 //
 // A skeletal sequence (opcode 13/14) has no frames array; it renders from a model id
@@ -33,10 +40,14 @@ type SeqType = {
     frameLengths: number[];
     frameStep: number;
     forcedPriority: number;
+    standingPriority: number;
+    movementPriority: number;
+    masks: number;
     leftHandItem: number;
     rightHandItem: number;
     maxLoops: number;
     skeletalId: number;
+    skeletalLength: number;
     sounds: string[];
 };
 
@@ -50,10 +61,14 @@ function decodeSeq(id: number, data: Int8Array, revision: number): SeqType {
         frameLengths: [],
         frameStep: -1,
         forcedPriority: 5,
+        standingPriority: -1,
+        movementPriority: -1,
+        masks: 0,
         leftHandItem: -1,
         rightHandItem: -1,
         maxLoops: 99,
         skeletalId: -1,
+        skeletalLength: 0,
         sounds: [],
     };
     for (;;) {
@@ -71,6 +86,7 @@ function decodeSeq(id: number, data: Int8Array, revision: number): SeqType {
             seq.frameStep = buf.readUnsignedShort();
         } else if (opcode === 3) {
             const count = buf.readUnsignedByte();
+            seq.masks += count;
             for (let i = 0; i < count; i++) buf.readUnsignedByte();
         } else if (opcode === 4) {
             // stretches
@@ -83,9 +99,9 @@ function decodeSeq(id: number, data: Int8Array, revision: number): SeqType {
         } else if (opcode === 8) {
             seq.maxLoops = buf.readUnsignedByte();
         } else if (opcode === 9) {
-            buf.readUnsignedByte();
+            seq.movementPriority = buf.readUnsignedByte();
         } else if (opcode === 10) {
-            buf.readUnsignedByte();
+            seq.standingPriority = buf.readUnsignedByte();
         } else if (opcode === 11) {
             buf.readUnsignedByte();
         } else if (opcode === 12) {
@@ -113,12 +129,13 @@ function decodeSeq(id: number, data: Int8Array, revision: number): SeqType {
                 seq.sounds.push(`${frame}:${sound}`);
             }
         } else if (opcode === (rev226 ? 15 : 16)) {
-            buf.readUnsignedShort();
-            buf.readUnsignedShort();
+            const start = buf.readUnsignedShort();
+            seq.skeletalLength = buf.readUnsignedShort() - start;
         } else if (opcode === 16) {
             buf.readByte();
         } else if (opcode === 17) {
             const count = buf.readUnsignedByte();
+            seq.masks += count;
             for (let i = 0; i < count; i++) buf.readUnsignedByte();
         } else if (opcode === 18) {
             buf.readString();
@@ -141,10 +158,16 @@ function format(seq: SeqType): string {
         `frames=${seq.frameIds.length}`,
         `step=${seq.frameStep}`,
         `priority=${seq.forcedPriority}`,
+        `standing=${seq.standingPriority}`,
+        `movement=${seq.movementPriority}`,
+        `masks=${seq.masks}`,
         `loops=${seq.maxLoops}`,
     ];
     // Client cycles (20 ms) the frames last; a game tick is 30 cycles.
-    if (seq.frameLengths.length) bits.push(`length=${seq.frameLengths.reduce((sum, length) => sum + length, 0)}`);
+    const cycles = seq.frameLengths.length
+        ? seq.frameLengths.reduce((sum, length) => sum + length, 0)
+        : seq.skeletalLength;
+    if (cycles) bits.push(`length=${cycles}`, `ticks=${Math.ceil(cycles / 30)}`);
     if (seq.skeletalId >= 0) bits.push(`skeletal=${seq.skeletalId}`);
     else bits.push(`frameIds=${seq.frameIds.join(",")}`);
     bits.push(`sounds=${seq.sounds.join(",") || "none"}`);

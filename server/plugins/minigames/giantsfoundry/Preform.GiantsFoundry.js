@@ -6,7 +6,9 @@
  * whenever it is worn.
  *
  * rsprox captures (recording 101): Store-preform and Take-preform play human_furnace, flip
- * preform_stored, and close or reopen the HUD with the combat tab's header.
+ * preform_stored, and close or reopen the HUD with the combat tab's header. Picking the preform up
+ * from the jig in ice gloves plays synth 1051 with "Your Ice gloves cool the preform as you reach
+ * for it." on the spam channel (recordings 96, 100, 101, 565); the bucket line goes there too.
  */
 
 const Shared = require("./Shared.GiantsFoundry");
@@ -38,6 +40,10 @@ const MESSAGE = {
   BUCKET_COOLS: "You cool the preform with your bucket of water as you take it from the mould.",
   TOO_HOT: "The preform is too hot to pick up. You need ice gloves or a bucket of water.",
 };
+
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(Shared.core().ChatType.SPAM, text);
+}
 
 function hasFreeHands(player) {
   const { Equipment } = Shared.core();
@@ -150,12 +156,12 @@ function pickUp({ player }) {
   }
   Shared.set(player, Shared.VARBIT.MOULD_STATE, JIG.COOLED);
   if (gloves !== null) {
-    player.sendMessage(MESSAGE.GLOVES_COOL(Shared.itemName(gloves)));
+    spam(player, MESSAGE.GLOVES_COOL(Shared.itemName(gloves)));
   } else {
     player.getInventory().delete(Shared.ITEM.BUCKET_OF_WATER, 1);
     player.getInventory().adds(Shared.ITEM.BUCKET, 1);
     player.getInventory().refreshItems();
-    player.sendMessage(MESSAGE.BUCKET_COOLS);
+    spam(player, MESSAGE.BUCKET_COOLS);
   }
   const difficulty = Shared.get(player, Shared.VARBIT.ALLOY_DIFFICULTY);
   const quality = Math.max(0, difficulty + Mould.playerScore(player));

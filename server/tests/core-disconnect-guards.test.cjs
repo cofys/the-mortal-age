@@ -97,6 +97,45 @@ test('interaction stop cancels queued walking without routing back to an old til
   assert.deepEqual(stopped, ['route', 'walk-task']);
 });
 
+// Wiki: Animation stall. A full stall does not let the player perform actions, but OSRS does not
+// throw the click away either - it runs on the first tick the animation has finished (click-ahead).
+test('a walk click made during an animation stall runs when the stall releases', async () => {
+  const { PlayerStatus } = require('../dist/game/model/PlayerStatus');
+  const connection = new net.ClientConnection(stubChannel());
+  const walks = [];
+  let stalled = true;
+  connection.player = {
+    lastInputCycle: 0,
+    getAttribute: () => undefined,
+    getStatus: () => PlayerStatus.NONE,
+    getArea: () => null,
+    getCombat: () => ({ isAnimationStalled: () => stalled, reset() {} }),
+    getMovementQueue: () => ({
+      requestWalk: (destination) => walks.push(`${destination.getX()},${destination.getY()}`),
+      getMobility: () => ({ canMove: () => true }),
+    }),
+    getLocation: () => new Location(3222, 3218, 0),
+    isRunningReturn: () => false,
+    setRunning() {},
+    getPacketSender: () => ({ sendRunStatus() {} }),
+    closeInterruptibleInterfaces() {},
+  };
+
+  connection.inject([{ type: 'move', worldX: 3222, worldY: 3220, modifierFlags: 0, run: false }]);
+  await connection.idle();
+  connection.processTurnPackets();
+  assert.deepEqual(walks, [], 'the click waits out the swing');
+
+  connection.inject([{ type: 'move', worldX: 3224, worldY: 3220, modifierFlags: 0, run: false }]);
+  await connection.idle();
+  connection.processTurnPackets();
+  assert.deepEqual(walks, [], 'and so does the one made after it');
+
+  stalled = false;
+  connection.processTurnPackets();
+  assert.deepEqual(walks, ['3224,3220'], 'the last click made during the lock is the one that runs');
+});
+
 test('player teleports clear follow-owned interaction and facing across relocation paths', () => {
   const { Mobile } = require('../dist/game/entity/impl/Mobile');
   const { RegionManager } = require('../dist/game/collision/RegionManager');

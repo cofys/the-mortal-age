@@ -183,7 +183,8 @@ Ticks from the rift opening:
 - **Mining** guardian parts, guardian remains, large remains (past the rubble) and huge remains:
   - "You swing your pick at the rock." (spam) and the pickaxe animation. The first success comes
     two ticks later, then one every pickaxe interval (3 ticks with a dragon pickaxe; every attempt
-    succeeds).
+    succeeds). The interval comes from the Mining plugin (`mining:roll-interval`), so dragon,
+    infernal and crystal pickaxes sometimes take 2 (42 of 252 gaps in recordings 566 and 1840).
   - Each success: "You manage to mine some guardian fragments." / "You manage to mine some
     guardian essence." (spam), sound 3600, 5 Mining XP, and `gotr_mining_count` up by the amount.
   - Per success: parts and remains 1-3 fragments, large remains 2-4, huge remains 4-6 essence

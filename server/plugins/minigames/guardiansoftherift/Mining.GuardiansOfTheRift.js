@@ -5,7 +5,8 @@
  *
  * rsprox captures (rev 241):
  * - "You swing your pick at the rock." (spam) and the pickaxe's animation; the first success two
- *   ticks later, then one every pickaxe interval (3 ticks with a dragon pickaxe).
+ *   ticks later, then one every pickaxe interval (3 ticks with a dragon pickaxe, 2 on about one
+ *   in six: 42 of 252 gaps in captures 566 and 1840, the Mining plugin's "mining:roll-interval").
  * - Each success: "You manage to mine some guardian fragments." / "...guardian essence." (spam),
  *   sound 3600, 5 Mining XP, and `gotr_mining_count` up by what was mined.
  * - Large remains gave 2-4 fragments, parts and remains 1-3, huge remains 4-6 essence (Wiki agrees).
@@ -45,6 +46,13 @@ function bestPickaxe(player) {
   return request.pickaxe;
 }
 
+/** Ticks to the next success: the pickaxe's interval, sometimes one less (dragon, infernal, crystal). */
+function rollInterval(pickaxe) {
+  const request = { pickaxe, ticks: null };
+  Shared.api().emitCustomEvent("mining:roll-interval", request);
+  return request.ticks ?? pickaxe.attemptIntervalTicks;
+}
+
 function inventoryFull(player, rock) {
   const inventory = player.getInventory();
   if (rock.item === Shared.ITEM.FRAGMENTS) return inventory.getFreeSlots() <= 0 && Shared.count(player, rock.item) <= 0;
@@ -79,7 +87,7 @@ function mine(event) {
   Shared.startAction(player, "mining", (ticks) => {
     if (!Game.isRunning() || !Game.isPlaying(player)) return false;
     if (ticks < next) return true;
-    next = ticks + pickaxe.attemptIntervalTicks;
+    next = ticks + rollInterval(pickaxe);
     return success(player, rock, pickaxe);
   });
   return true;

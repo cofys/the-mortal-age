@@ -58,6 +58,13 @@ test("infernal pickaxe ore experience matches the Wiki halved-bar table", () => 
   assert.equal(InfernalPickaxe._test.oreXp(ItemIds.CLAY), undefined, "clay is not smeltable");
 });
 
+test("sandstone (rsprox capture 3162) and granite (Wiki) combust for their own Smithing XP", () => {
+  const xp = (id) => InfernalPickaxe._test.oreXp(id);
+  assert.deepEqual([ItemIdentifiers.SANDSTONE_1KG_, ItemIdentifiers.SANDSTONE_5KG_, ItemIdentifiers.SANDSTONE_10KG_].map(xp), [10.2, 19.2, 28.2]);
+  assert.equal(xp(ItemIdentifiers.SANDSTONE_2KG_), undefined, "no recording of a combusted 2kg piece");
+  assert.deepEqual([ItemIdentifiers.GRANITE_500G_, ItemIdentifiers.GRANITE_2KG_, ItemIdentifiers.GRANITE_5KG_].map(xp), [7.2, 13.2, 22.2]);
+});
+
 test("a charge is spent and the pickaxe turns uncharged at zero", () => {
   const item = pickaxe();
   assert.equal(InfernalPickaxe._test.charges(item), 5000, "new pickaxes start fully charged");
@@ -69,7 +76,7 @@ test("a charge is spent and the pickaxe turns uncharged at zero", () => {
   assert.equal(item.getMetaValue("infernal-pickaxe"), undefined);
 });
 
-test("the effect procs one in three, destroys the ore and grants half Smithing XP", () => {
+test("the effect procs one in three, destroys the ore and grants the Wiki table's Smithing XP", () => {
   const item = pickaxe();
   const player = createPlayer([item]);
   const originalRandom = Math.random;
@@ -79,7 +86,7 @@ test("the effect procs one in three, destroys the ore and grants half Smithing X
   } finally {
     Math.random = originalRandom;
   }
-  assert.deepEqual(player.xp, [[Skill.SMITHING, 1.8]], "half of 3.6");
+  assert.deepEqual(player.xp, [[Skill.SMITHING, 3.6]], "the table's 3.6, as recorded for iron's 5.5 (3139)");
   assert.equal(InfernalPickaxe._test.charges(item), 4999);
 
   const noProc = createPlayer([pickaxe()]);

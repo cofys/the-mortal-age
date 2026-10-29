@@ -68,7 +68,8 @@ function grind(event) {
     return;
   }
   if (!grindOne(player, found)) return;
-  let wait = 3;
+  // Common.run's first step is the tick after the click: the second grind is 2 ticks on.
+  let wait = 2;
   Common.run(player, () => {
     if (--wait > 0) return true;
     wait = 3;

@@ -12,7 +12,9 @@ const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
-const { content, setVarbit, playSound, animateDeckLoc } = require("./SailingContent.Sailing");
+const { DialogueChainBuilder } = require("../../../src/main/typescript/elvarg/game/model/dialogues/builders/DialogueChainBuilder");
+const { StatementDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/StatementDialogue");
+const { content, setVarbit, playSound, spam, animateDeckLoc } = require("./SailingContent.Sailing");
 const facilities = require("./BoatFacilities.Sailing");
 const shipwrecks = require("./Shipwrecks.Salvaging");
 
@@ -31,8 +33,11 @@ const HOOK_ANIMS = new Map([
 ]);
 const DEFAULT_HOOK_IDLE = 13572;
 const SEQ_SORT = 13599;
-const SOUND_SORT = 10864;
-const SOUND_SORT_NEXT = 10866;
+/**
+ * Each sort, the first included, plays one of three sounds; a find plays 10860 (rsprox captures,
+ * rev 235: 400 begins and 1639 finds, the three about equally often).
+ */
+const SOUNDS_SORT = [10864, 10865, 10866];
 const SOUND_SORTED = 10860;
 /** `sailing_sidepanel_player_at_facility_n`: 19193 + n for hotspots 0-10 (19200 is 7, as captured). */
 const VARBIT_AT_FACILITY0 = 19193;
@@ -53,7 +58,8 @@ const REELED = "You reel in some salvage.";
 const SUNK = "You salvage all you can from the shipwreck before it is reclaimed by the sea.";
 const FULL = "Your inventory is too full to hold any more salvage.";
 const SORT_BEGIN = "You begin sorting through your salvage...";
-const SORT_DONE = "You have no more salvage to sort.";
+/** A message box (rsprox captures, rev 235); live sends no line when the last salvage is sorted. */
+const NOTHING_TO_SORT = "You do not have any salvage to sort through.";
 
 /** Per player: what they're doing (salvaging or sorting), so a new action replaces the old. */
 const sessions = new Map();
@@ -240,13 +246,13 @@ function nextSalvage(player) {
 /** A salvaging station's Sort-salvage: sorts every salvage in the inventory, one each 3 ticks. */
 function sortSalvage({ player }) {
   if (!nextSalvage(player)) {
-    player.sendMessage(SORT_DONE);
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, NOTHING_TO_SORT)));
     return;
   }
   player.sendMessage(SORT_BEGIN);
   player.performAnimation(new Animation(SEQ_SORT));
-  playSound(player, SOUND_SORT);
-  const session = { ticks: 0, sorted: 0 };
+  playSortSound(player);
+  const session = { ticks: 0 };
   begin(player, session, () => sortTick(player, session));
 }
 
@@ -267,19 +273,19 @@ function sortTick(player, session) {
   if (loot) {
     player.getInventory().addItem(new Item(loot.item, loot.amount));
     const itemName = CacheDefinitions.getItem(loot.item)?.name ?? "something";
-    player.sendMessage(`You sort through the ${salvageName} and find: ${loot.amount} x ${itemName}.`);
+    spam(player, `You sort through the ${salvageName} and find: ${loot.amount} x ${itemName}.`);
   } else {
-    player.sendMessage(`You sort through the ${salvageName} and find nothing.`);
+    spam(player, `You sort through the ${salvageName} and find nothing.`);
   }
   player.getSkillManager().addExperiences(Skill.SAILING, next.data.xp);
   playSound(player, SOUND_SORTED);
-  session.sorted++;
-  if (!nextSalvage(player)) {
-    player.sendMessage(SORT_DONE);
-    return stop(player);
-  }
+  if (!nextSalvage(player)) return stop(player);
   player.performAnimation(new Animation(SEQ_SORT));
-  playSound(player, session.sorted === 1 ? SOUND_SORT : SOUND_SORT_NEXT);
+  playSortSound(player);
+}
+
+function playSortSound(player) {
+  playSound(player, SOUNDS_SORT[Math.floor(Math.random() * SOUNDS_SORT.length)]);
 }
 
 function startShipwrecks() {

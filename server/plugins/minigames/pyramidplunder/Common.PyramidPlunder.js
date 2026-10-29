@@ -11,6 +11,10 @@
  * client's own overlay (ntk_overlay) draws "Room n of 8", the Thieving level and the time bar
  * from ntk_room_number, ntk_thieving_required and ntk_player_timer_count (ticks elapsed).
  * Room data, loot and fitted success chances are in ./data/pyramid-plunder.json.
+ *
+ * rsprox captures (recordings 545, 549, 552, 1788, 1843, 1857): the tomb's lines are spam
+ * messages, except "This door leads to a dead end." and its "already opened" twin; each search,
+ * pick and push holds the `busy` varbit while it runs.
  */
 
 const DATA = require("./data/pyramid-plunder.json");
@@ -44,16 +48,16 @@ const MESSAGES = {
   leaveTomb: "Do you really want to leave the Tomb?",
   mummyVanishes: "The mummy you're fighting vanishes in a cloud of smoke.",
   scarabsLeave: "The scarabs scuttle away.",
-  // Not yet checked against a capture: the snake check/charm lines, the swarm, the lid, the
-  // mummy and the sceptre lines below.
+  deadEndOpened: "You've already opened this door and it leads to a dead end.",
+  sceptre: "You have found the Pharaoh's Sceptre.",
+  // Not yet checked against a capture: the snake check/charm lines, the swarm, the
+  // sarcophagus's Strength line, the mummy and the dropped sceptre below.
   snake: "There's a snake in the urn!",
   noCharm: "You need a snake charm to do this.",
   charmed: "You charm the snake.",
   swarm: "A swarm of scarabs emerges from the chest!",
-  sarcophagusOpen: "You push the heavy lid off the sarcophagus.",
   sarcophagusWeak: "You need more Strength to push the lid of this sarcophagus.",
   mummy: "A mummy awakens!",
-  sceptre: "You have found the Pharaoh's sceptre!",
   sceptreDropped: "You find a golden sceptre but have no space for it. It falls to the ground.",
   panelSearch: "You use your thieving skills to search the stone panel.",
 };
@@ -107,6 +111,9 @@ function resolveIds(cache) {
     varbit: {
       chest: varbit("ntk_golden_chest_state"),
       sarcophagus: varbit("ntk_sarcophagus_state"),
+      sarcophagusPush: varbit("ntk_sarcophagus_push"),
+      busy: varbit("busy"),
+      roomLevel: varbit("ntk_current_room_level"),
       trap: varbit("ntk_trap_active"),
       doors: [1, 2, 3, 4].map((n) => varbit(`ntk_door${n}_state`)),
       outerPanels: [1, 2, 3, 4].map((n) => varbit(`ntk_outside_door${n}_state`)),
@@ -131,8 +138,11 @@ function resolveIds(cache) {
       door: cache.getSeqId("ntk_tomb_door"),
       walk: cache.getSeqId("human_walk_f"),
     },
-    /** Captured synths (rsprox, see the review on #935): the trap's work and disarm, the chest, a door. */
-    sound: { trapWork: 1220, trapDisarmed: 2387, chest: 1215, door: 87 },
+    /**
+     * Captured synths (rsprox, see the review on #935): the trap's work and disarm (also a panel's
+     * search), the chest, a door, a looted urn, a bite; and the area sounds of a door and the lid.
+     */
+    sound: { trapWork: 1220, trapDisarmed: 2387, chest: 1215, door: 87, urnLooted: 1217, bitten: 797, doorArea: 54, lidArea: 1218 },
     npc: {
       guardian: cache.getNpcId("ntk_mummy_guardian"),
       scarabs: cache.getNpcId("ntk_scarab_swarm"),
@@ -261,6 +271,8 @@ function resetRoomVarbits(player) {
   send(player, v.sarcophagus, 0);
   send(player, v.trap, 0);
   for (const id of v.doors) send(player, id, 0);
+  send(player, v.sarcophagusPush, 0);
+  send(player, v.busy, 0);
 }
 
 /** Entering a room arms its speartrap (ntk_trap_active 1, as live sets it on entry). */
@@ -272,10 +284,29 @@ function sound(player, id) {
   player.getPacketSender().sendSound(id, 255, 0);
 }
 
+/** Captured range of the tomb's area sounds (a door, the lid). */
+const AREA_SOUND_RANGE = 5;
+
+function areaSound(player, id, at) {
+  player.getPacketSender().sendAreaSound(id, at.x, at.y, at.z ?? 0, 1, 0, AREA_SOUND_RANGE);
+}
+
+/** The tomb's chat lines are spam messages. */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(getCore().ChatType.SPAM, text);
+}
+
+/** The client's `busy` varbit, held while a search, pick or push runs. */
+function busy(player, on) {
+  send(player, ids().varbit.busy, on ? 1 : 0);
+}
+
+/** The room varbits; ntk_current_room_level runs one ahead of the room (2 in room 1, as captured). */
 function sendRoomHud(player, run) {
   const v = ids().varbit;
   send(player, v.room, run.room);
   send(player, v.level, roomData(run.room).level);
+  send(player, v.roomLevel, run.room + 1);
 }
 
 function elapsedTicks(run) {
@@ -339,6 +370,7 @@ function enterRoom(player, run, room) {
   run.cleared = new Set();
   run.lastSafe = null;
   run.trapDisarmed = false;
+  run.pushing = false;
   resetRoomVarbits(player);
   armTrap(player);
   sendRoomHud(player, run);
@@ -354,7 +386,7 @@ function endRun(player, { silent = false, keepPosition = false, timedOut = false
   const run = sessions.get(player);
   for (const npc of run?.hostiles ?? []) {
     if (!silent && npc.isRegistered?.() !== false && npc.getHitpoints?.() > 0) {
-      player.sendMessage(npc.getId?.() === ids().npc.scarabs ? MESSAGES.scarabsLeave : MESSAGES.mummyVanishes);
+      spam(player, npc.getId?.() === ids().npc.scarabs ? MESSAGES.scarabsLeave : MESSAGES.mummyVanishes);
     }
     getApi().removeNpc(npc);
   }
@@ -363,11 +395,15 @@ function endRun(player, { silent = false, keepPosition = false, timedOut = false
   if (!had) return false;
   resetRoomVarbits(player);
   send(player, ids().varbit.timer, 0);
+  // As captured on leaving: back to room 1's level, the entry panel shut again.
+  send(player, ids().varbit.roomLevel, 2);
+  send(player, ids().varbit.level, roomData(1).level);
+  for (const id of ids().varbit.outerPanels) send(player, id, 0);
   player.getPacketSender().closeSubInterface(OVERLAY_HUD_UID);
   if (timedOut) player.setAttribute(TIMED_OUT_ATTRIBUTE, true);
   if (!keepPosition) player.moveTo(location(DATA.outside));
   if (!silent && timedOut) {
-    player.sendMessage(MESSAGES.timeUp);
+    spam(player, MESSAGES.timeUp);
     guardianSays(player, MESSAGES.guardianTimeUp);
   }
   return true;
@@ -400,14 +436,14 @@ function giveArtefact(player, key) {
   return key;
 }
 
-/** Finding the sceptre ends the run at once; with a full pack it lands outside. */
+/** Finding the sceptre ends the run at once, in an item box (as captured); with a full pack it lands outside. */
 function awardSceptre(player) {
   endRun(player, { silent: true });
-  const { Item } = getCore();
+  const { Item, DialogueChainBuilder, ItemStatementDialogue } = getCore();
   const sceptre = ids().item.sceptre;
   if (player.getInventory().getFreeSlots() > 0) {
     player.getInventory().addItem(new Item(sceptre, 1));
-    player.sendMessage(MESSAGES.sceptre);
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0, sceptre, MESSAGES.sceptre)));
   } else {
     getCore().ItemOnGroundManager.registerLocation(player, new Item(sceptre, 1), location(DATA.outside));
     player.sendMessage(MESSAGES.sceptreDropped);
@@ -458,6 +494,9 @@ function claim(run, key) {
 module.exports = {
   armTrap,
   sound,
+  areaSound,
+  spam,
+  busy,
   DATA,
   ROOMS,
   LAST_ROOM,

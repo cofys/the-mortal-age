@@ -8,6 +8,12 @@ const Tools = require("./Tools.Farming");
 // underwater seaweed) and Cap'n Izzy No-Beard (agility arena, 12) also advertise Pay.
 const GARDENER_RANGE = 10;
 const COMPOST_NAMES = ["", "Compost", "Supercompost", "Ultracompost", "Rotten tomato"];
+// Rev 241 gamevals human_push and human_pickuptable, with the sounds captured on the bin (recording 1858).
+const BIN_LID_ANIMATION = 810;
+const BIN_TAKE_ANIMATION = 832;
+const BIN_CLOSE_SOUND = 2428;
+const BIN_OPEN_SOUND = 2429;
+const BIN_TAKE_SOUND = 2436;
 const SUPER = new Set(["Pineapple", "Tenti pineapple", "Watermelon", "Coconut", "Half coconut", "Coconut shell", "Papaya fruit", "Calquat fruit", "Poison ivy berries", "White berries", "Jangerberries", "Mushroom", "Dragonfruit", "Snape grass", "Celastrus bark", "White lily", "White tree fruit", "Oak roots", "Willow roots", "Maple roots", "Yew roots", "Magic roots"]);
 const COMPOST = new Set(["Weeds", "Grain", "Kebab", "Varlamorian kebab", "Flax", "Cotton boll", "Redberries", "Cadava berries", "Dwellberries", "Potato", "Onion", "Cabbage", "Tomato", "Sweetcorn", "Strawberry", "Lemon", "Lime", "Cooking apple", "Banana", "Orange", "Curry leaf", "Peach", "Watermelon slice", "Barley malt", "Hammerstone hops", "Asgarnian hops", "Jute fibre", "Kelda hops", "Yanillian hops", "Krandorian hops", "Wildblood hops", "Marigolds", "Rosemary", "Nasturtiums", "Woad leaf", "Limpwurt root", "Willow branch", "Rotten apple", "Apple mush", "Seaweed", "Edible seaweed", "Giant seaweed", "Potato cactus", "Leaves", "Oak leaves", "Willow leaves", "Maple leaves", "Yew leaves", "Magic leaves"]);
 const SUPER_HERBS = new Set(["TOADFLAX", "AVANTOE", "KWUARM", "SNAPDRAGON", "HUASCA", "CADANTINE", "LANTADYME", "DWARF_WEED", "TORSTOL"]);
@@ -55,15 +61,22 @@ function binAction(player, patch, action, usedId, usedSlot) {
     if (usedId && core.CacheDefinitions.getItem(usedId).noteTemplate >= 0) {
         player.sendMessage("You cannot use noted items on a compost bin."); return;
     }
+    // Captures (recording 1858): the push and its sound with the spam line, the bin changing a tick later.
     if (action === "close") {
         if (bin.count !== capacity) { player.sendMessage(`The bin needs ${capacity} items before you can close it.`); return; }
-        if (!bin.closedAt) bin.closedAt = Date.now();
-        bin.open = false;
+        pushLid(player, BIN_CLOSE_SOUND, "You close the compost bin.");
+        Patches.after(player, 1, () => {
+            if (!bin.closedAt) bin.closedAt = Date.now();
+            bin.open = false;
+            player.sendMessage("The contents have begun to rot.");
+            Patches.syncPatch(player, patch);
+        });
         return;
     }
     if (action === "open") {
         if (!bin.closedAt || Date.now() - bin.closedAt < (bin.tier === 2 ? 90 : 60) * Model.MINUTE) { player.sendMessage("The contents have not finished rotting."); return; }
-        bin.open = true;
+        pushLid(player, BIN_OPEN_SOUND, "You open the compost bin.");
+        Patches.after(player, 1, () => { bin.open = true; Patches.syncPatch(player, patch); });
         return;
     }
     if (usedId === Data.itemId("Volcanic ash")) {
@@ -85,13 +98,11 @@ function binAction(player, patch, action, usedId, usedSlot) {
         if (bottomless) {
             const bucket = inventory.forSlot(usedSlot);
             if (bucket?.getId() !== usedId || bin.tier === 4 || !chargeBottomless(player, bin.tier, bucket)) return;
-        } else {
-            if (!inventory.contains(Data.itemId("Bucket"))) { player.sendMessage("You need an empty bucket."); return; }
-            inventory.deleteNumber(Data.itemId("Bucket"), 1);
-            inventory.addItem(new core.Item(Data.itemId(COMPOST_NAMES[bin.tier])));
+            takenFromBin(player, patch, bin);
+            return;
         }
-        Patches.award(player, [0, 4.5, 8.5, 10, 4.5][bin.tier]);
-        if (--bin.count === 0) Patches.stateFor(player, patch).bin = undefined;
+        if (!inventory.contains(Data.itemId("Bucket"))) { player.sendMessage("You need an empty bucket."); return; }
+        Patches.startBinWork(player, patch, { bin }, "take-bin");
         return;
     }
     if (usedId) {
@@ -106,6 +117,33 @@ function binAction(player, patch, action, usedId, usedSlot) {
         return;
     }
     player.sendMessage(`The compost bin contains ${bin.count}/${capacity} items${bin.closedAt && !bin.open ? ", rotting" : ""}.`);
+}
+function pushLid(player, sound, line) {
+    player.performAnimation(new core.Animation(BIN_LID_ANIMATION));
+    Patches.sound(player, sound);
+    Patches.spam(player, line);
+}
+function takenFromBin(player, patch, bin) {
+    Patches.award(player, [0, 4.5, 8.5, 10, 4.5][bin.tier]);
+    if (--bin.count === 0) Patches.stateFor(player, patch).bin = undefined;
+    Patches.syncPatch(player, patch);
+}
+/** Captures: buckets are filled one at a time, the scoop and its sound, the bucket a tick later, every four ticks. */
+function takeBinStep(player, work) {
+    const { bin } = work.input;
+    const inventory = player.getInventory();
+    if (Patches.stateFor(player, work.patch).bin !== bin || !bin.open || !bin.count || !inventory.contains(Data.itemId("Bucket"))) return false;
+    if (!work.depositing) {
+        player.performAnimation(new core.Animation(BIN_TAKE_ANIMATION));
+        Patches.sound(player, BIN_TAKE_SOUND);
+        work.depositing = true;
+        return 1;
+    }
+    inventory.deleteNumber(Data.itemId("Bucket"), 1);
+    inventory.addItem(new core.Item(Data.itemId(COMPOST_NAMES[bin.tier])));
+    takenFromBin(player, work.patch, bin);
+    work.depositing = false;
+    return bin.count > 0 && inventory.contains(Data.itemId("Bucket")) ? 3 : false;
 }
 function dose(player, id) {
     const name = core.CacheDefinitions.getItem(id).name;
@@ -128,11 +166,14 @@ function useBottomless(player, patch, id, slot) {
     if (bucket?.getId() !== id) return;
     const charges = Number(bucket?.getMetaValue("farming:charges") ?? 0);
     if (!charges) { player.sendMessage("The bucket is empty."); return; }
-    if (Patches.fertilize(player, patch, Number(bucket.getMetaValue("farming:tier")), false)) {
-        bucket.setMetaValue("farming:charges", charges - 1);
-        if (charges === 1) bucket.setId(core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET);
+    Patches.pourCompost(player, patch, Number(bucket.getMetaValue("farming:tier")), () => {
+        const left = Number(bucket.getMetaValue("farming:charges") ?? 0);
+        if (!player.getInventory().getItems().includes(bucket) || !left) return false;
+        bucket.setMetaValue("farming:charges", left - 1);
+        if (left === 1) bucket.setId(core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET);
         player.getInventory().refreshItems();
-    }
+        return true;
+    });
 }
 function farmingItemPair(event) {
     const { player, usedItemId: a, usedWithItemId: b } = event;
@@ -381,43 +422,83 @@ function farmingNpc(event) {
     // Gardener NPCs advertise Pay; never hijack unrelated NPC conversations near a patch.
     if (!definition?.getActions()?.some(option => option?.toLowerCase() === "pay")) return;
     event.handled = true;
-    if (!relevant.length) { player.sendMessage("Plant a crop before asking me to look after it."); return; }
-    Patches.choose(player, relevant.map(p => {
-        const state = Patches.stateFor(player, p);
-        const crop = Data.CROPS.get(state.crop);
-        const remove = state.status === "grown" && (Data.WOOD_TREES.has(crop.type) || crop.type === "FRUIT_TREE");
-        return [`${remove ? "Clear" : "Protect"} ${crop.name} (${p.x}, ${p.y})`, () => {
+    if (!relevant.length) {
+        // Captured from the tree gardeners; the others keep the server's own line.
+        if (patches.some(p => ["TREE", "FRUIT_TREE", "HARDWOOD_TREE", "SPIRIT_TREE", "CALQUAT"].includes(p.type)))
+            gardenerSays(player, npc, "You don't have a sapling planted in that patch. Plant one and I might agree to look after it for you.");
+        else player.sendMessage("Plant a crop before asking me to look after it.");
+        return;
+    }
+    const entries = relevant.map(p => {
+        const crop = Data.CROPS.get(Patches.stateFor(player, p).crop);
+        return [`${Patches.stateFor(player, p).status === "grown" && (Data.WOOD_TREES.has(crop.type) || crop.type === "FRUIT_TREE") ? "Clear" : "Protect"} ${crop.name} (${p.x}, ${p.y})`,
+            () => askGardener(player, npc, p)];
+    });
+    if (entries.length === 1) entries[0][1]();
+    else Patches.choose(player, entries);
+}
+function gardenerSays(player, npc, text) {
+    player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.NpcDialogue(0, npc.getId(), text)));
+}
+/** "25 coconuts", "3 baskets of strawberries", as the gardeners name a payment. */
+function paymentText(payment) {
+    return payment.map(([id, count]) => {
+        const name = core.CacheDefinitions.getItem(id).name.toLowerCase();
+        const filled = name.match(/^(.+)\((\d+)\)$/);
+        if (filled) return `${count} ${+filled[2] === 10 ? "sack" : "basket"}${count === 1 ? "" : "s"} of ${filled[1]}`;
+        return count === 1 || name.endsWith("s") ? `${count} ${name}` : `${count} ${name}s`;
+    }).join(" and ");
+}
+/**
+ * Captures (gardeners Fayeth, Treznor, the fruit and farming guild gardeners): a grown tree is chopped
+ * for coins after "Pay 200 Coins to have your tree chopped down?"; protection asks "Pay <payment>?"
+ * (Yes./No./Yes and don't ask again.), or the gardener says "I want <payment> for that." without it.
+ */
+function askGardener(player, npc, p) {
+    if (!Patches.nearPatch(player, p)) return;
+    const state = Patches.stateFor(player, p);
+    const crop = Data.CROPS.get(state.crop);
+    if (!crop) return;
+    if (state.status === "grown" && (Data.WOOD_TREES.has(crop.type) || crop.type === "FRUIT_TREE")) {
+        const price = crop.type === "REDWOOD" ? 2000 : 200;
+        Patches.choose(player, [["Yes.", () => {
             if (!Patches.nearPatch(player, p) || Patches.stateFor(player, p) !== state) return;
-            if (remove) {
-                if (!state.checked) { player.sendMessage("Check the tree's health first."); return; }
-                const price = crop.type === "REDWOOD" ? 2000 : 200;
-                if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < price) { player.sendMessage(`You need ${price} coins.`); return; }
-                player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, price); Patches.clearPatch(player, p); return;
-            }
-            if (state.protected || state.status === "dead" || state.status === "grown" || !crop.payment.length) {
-                player.sendMessage("That crop does not need my protection."); return;
-            }
-            if (!pay(player, crop.payment)) return;
-            state.protected = true;
-            if (state.status === "diseased") { state.status = "growing"; state.nextAt = Model.nextGrowth(Date.now(), crop.minutes, Patches.farmFor(player).offset); }
-            player.sendMessage("I'll look after that patch for you.");
-        }];
-    }));
+            if (!state.checked) { player.sendMessage("Check the tree's health first."); return; }
+            if (player.getInventory().getAmount(core.ItemIdentifiers.COINS) < price) { gardenerSays(player, npc, `I'll want ${price} Coins to chop down your tree.`); return; }
+            player.getInventory().deleteNumber(core.ItemIdentifiers.COINS, price); Patches.clearPatch(player, p);
+        }], ["No.", () => {}]], 0, `Pay ${price} Coins to have your tree chopped down?`);
+        return;
+    }
+    if (state.status === "grown") { gardenerSays(player, npc, "That patch is already fully grown! I don't know what you want me to do with it!"); return; }
+    if (state.protected || state.status === "dead" || !crop.payment.length) { gardenerSays(player, npc, "That crop does not need my protection."); return; }
+    if (!canPay(player, crop.payment)) { gardenerSays(player, npc, `I want ${paymentText(crop.payment)} for that.`); return; }
+    const farm = Patches.farmFor(player);
+    const accept = () => {
+        if (!Patches.nearPatch(player, p) || Patches.stateFor(player, p) !== state || state.protected || !canPay(player, crop.payment)) return;
+        pay(player, crop.payment);
+        state.protected = true;
+        if (state.status === "diseased") { state.status = "growing"; state.nextAt = Model.nextGrowth(Date.now(), crop.minutes, farm.offset); }
+        Patches.spam(player, `You pay the gardener ${paymentText(crop.payment)} to protect the patch.`);
+        gardenerSays(player, npc, `That'll do nicely, ${player.getAppearance().isMale() ? "sir" : "madam"}. Leave it with me - I'll make sure that patch grows for you.`);
+    };
+    if (farm.gardenerNoAsk) { accept(); return; }
+    Patches.choose(player, [["Yes.", accept], ["No.", () => {}], ["Yes and don't ask again.", () => { farm.gardenerNoAsk = true; accept(); }]],
+        0, `Pay ${paymentText(crop.payment)}?`);
+}
+function canPay(player, payment) {
+    const inventory = player.getInventory();
+    return payment.every(([id, amount]) => {
+        const note = core.CacheDefinitions.getItem(id).note;
+        return inventory.getAmount(id) + (note >= 0 ? inventory.getAmount(note) : 0) >= amount;
+    });
 }
 function pay(player, payment) {
     const inventory = player.getInventory();
-    for (const [id, amount] of payment) {
-        const note = core.CacheDefinitions.getItem(id).note;
-        if (inventory.getAmount(id) + (note >= 0 ? inventory.getAmount(note) : 0) < amount) {
-            player.sendMessage(`Payment: ${payment.map(([i, n]) => `${n} ${core.CacheDefinitions.getItem(i).name}`).join(", ")}.`); return false;
-        }
-    }
     for (const [id, amount] of payment) {
         const unnoted = Math.min(amount, inventory.getAmount(id));
         if (unnoted) inventory.deleteNumber(id, unnoted);
         if (amount > unnoted) inventory.deleteNumber(core.CacheDefinitions.getItem(id).note, amount - unnoted);
     }
-    return true;
 }
 function farmingItemAction(event) {
     const { player, itemId: id } = event;
@@ -482,4 +563,4 @@ function farmingItemAction(event) {
     }
 }
 
-Object.assign(module.exports, { cropRewards, binValue, binAction, useBottomless, farmingItemPair, growSeedlings, waterContainers, humidified, farmingItemOnNpc, farmingNpc, farmingItemAction, storeTool });
+Object.assign(module.exports, { cropRewards, binValue, binAction, useBottomless, farmingItemPair, growSeedlings, waterContainers, humidified, farmingItemOnNpc, farmingNpc, farmingItemAction, storeTool, takeBinStep });

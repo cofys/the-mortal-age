@@ -85,11 +85,18 @@ function maxLevel(player, skill) {
   return player.getSkillManager().getMaxLevel?.(core.Skill[skill]) ?? level(player, skill);
 }
 
-/** The best pickaxe the player can use, answered by the Mining plugin: { id, animation, speed } or null. */
+/** The best pickaxe the player can use, answered by the Mining plugin: { id, animation, attemptIntervalTicks, ... } or null. */
 function bestPickaxe(player) {
   const request = { player, pickaxe: null };
   api.emitCustomEvent("mining:best-pickaxe", request);
   return request.pickaxe;
+}
+
+/** Ticks to the pickaxe's next roll, answered by the Mining plugin (dragon-tier pickaxes sometimes roll early). */
+function rollInterval(pickaxe) {
+  const request = { pickaxe, ticks: null };
+  api.emitCustomEvent("mining:roll-interval", request);
+  return request.ticks ?? pickaxe.attemptIntervalTicks;
 }
 
 /** A hit that lands this tick. */
@@ -159,7 +166,7 @@ function weighted(entries) {
 
 module.exports = {
   init, later, toLocation, key, varbit, seq, animate, sound, openHud, closeHud, song, message, spam,
-  xp, level, maxLevel, bestPickaxe, hurt, chat, box, itemBox, menu, closeChat, randomInt, weighted,
+  xp, level, maxLevel, bestPickaxe, rollInterval, hurt, chat, box, itemBox, menu, closeChat, randomInt, weighted,
   get api() {
     return api;
   },

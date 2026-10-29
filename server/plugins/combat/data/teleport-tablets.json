@@ -38,7 +38,7 @@
       "primary": "Varrock",
       "alternate": "Grand Exchange",
       "varbit": "varrock_ge_teleport",
-      "tile": [3165, 3477, 0],
+      "tile": [3163, 3478, 0],
       "diary": { "key": "varrock", "tier": "medium", "name": "Varrock" },
       "configure": {
         "primary": {
@@ -55,7 +55,7 @@
       "primary": "Camelot",
       "alternate": "Seers' Village",
       "varbit": "seers_camelot_teleport",
-      "tile": [2726, 3486, 0],
+      "tile": [2726, 3484, 0],
       "diary": { "key": "kandarin", "tier": "hard", "name": "Kandarin" },
       "configure": {
         "primary": {
@@ -72,7 +72,7 @@
       "primary": "Watchtower",
       "alternate": "Yanille",
       "varbit": "yanille_teleport_location",
-      "tile": [2583, 3095, 0],
+      "tile": [2584, 3098, 0],
       "diary": { "key": "ardougne", "tier": "hard", "name": "Ardougne" },
       "configure": {
         "primary": {

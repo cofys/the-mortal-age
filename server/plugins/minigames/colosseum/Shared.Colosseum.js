@@ -61,6 +61,8 @@ const VARP = {
   WAVE_START_TIME: 4133,
   WAVE_DAMAGE_TAKEN: 4134,
   LAST_MODIFIER_GLORY: 4135,
+  /** colosseum_glory: the best Glory. The emote tab's Fortis Salute reads it (cache script 4922). */
+  BEST_GLORY: 4130,
 };
 
 const VARBIT = {
@@ -123,6 +125,10 @@ function inArena(location) {
 
 function gloryOf(player) {
   return Math.max(0, Math.trunc(Number(player.getAttribute(ATTR.GLORY)) || 0));
+}
+
+function syncGlory(player) {
+  player.getPacketSender().sendConfig(VARP.BEST_GLORY, gloryOf(player));
 }
 
 function rankOf(player) {
@@ -202,5 +208,5 @@ module.exports = {
   LOBBY, CITY, LOBBY_RESPAWN, ARENA, ARENA_START, MINIMUS_START, ARRIVAL_WALK, SOL_SEAT,
   NPC, OBJECT, VARP, VARBIT, INTERFACE, COMPONENT, SCRIPT, RANKS, BANK_GLORY,
   FINAL_WAVE, WAVES_BEFORE_SOL, ATTR,
-  loc, inArena, gloryOf, rankOf, later, repeat, statement, options, minimusSays, fade, fadeMove,
+  loc, inArena, gloryOf, syncGlory, rankOf, later, repeat, statement, options, minimusSays, fade, fadeMove,
 };

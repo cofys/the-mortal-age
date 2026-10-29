@@ -22,7 +22,7 @@
 ## Setting up (captured)
 "Set-up" on the base marks the player busy (varbit 12393).
 - **The base:** two ticks after the click: "You place the cannon base on the ground.". The base (loc 7) appears with the player on its centre tile, and they run off to the tile south of its south-west corner.
-- **The other parts:** the stand 2 ticks later, then the barrels and the furnace 3 ticks apart: "You add the stand.", "You add the barrels.", "You add the furnace.". The furnace turns it into the cannon (loc 6).
+- **The other parts:** the stand 2 ticks later, then the barrels and the furnace 3 ticks apart: "You add the stand.", "You add the barrels.", "You add the furnace.", all spam lines, like the base's. The furnace turns it into the cannon (loc 6).
 - **Each part:** animation 827, area sound 2876, the part leaves the inventory, and the player faces the cannon.
 - **Auto-load:** the tick after the furnace, it loads up to 30 balls: "You load the cannon with 30 cannonballs.".
 
@@ -68,7 +68,7 @@ Only changed vars are sent, as in the capture; all of them are sent again on log
 
 **Ours or unverified:**
 - **Firing zones:** all 49 tiles in the Wiki's [Cannon Double Shot.png diagram](https://oldschool.runescape.wiki/images/Cannon_Double_Shot.png) match the implemented 0/1/2 shots per revolution, covered by a regression test. The original polygons came from Near-Reality; their direction assignment and shapes outside the diagram remain unverified. Both captured shots fall inside the expected directional zones.
-- **Running dry:** "Your cannon is out of ammo!" and the cannon stops.
+- **Running dry:** "<col=ef1020>Your cannon is out of ammo.</col>" (captured once, rsprox 1510) and the cannon stops.
 - **Fire with nothing to load:** "You need to load the cannon with cannonballs first.".
 - **Logging out:** the cannon stops firing.
 
@@ -80,7 +80,7 @@ The existing Combat Achievements tier event raises capacity to 35 (Medium), 45 (
 - **Load X:** the first time, a count prompt "Set load-x cannonballs (1 - 30):", then varbit 17870 and "You will now load 10 cannonballs when using Load-x.". After that it loads that many: "You load the cannon with 10 cannonballs.". Saved per player.
 
 ## Pick-up (captured)
-"You pick up the cannon. It's really heavy.", synth sound 2581.
+"You pick up the cannon. It's really heavy." (spam), synth sound 2581.
 - **Vars:** they clear, except that varp 4 keeps the player's tile, as captured.
 - **Items:** the parts added so far and every ball come back in the same tick.
 
@@ -90,7 +90,8 @@ Also works on a broken cannon or a part-built one. **Ours:** the no-space messag
 - **Breaking:** after 25 minutes set up it breaks: the broken multicannon (14916; ornament 43028), with "Repair" and "Pick-up". Repair starts the 25 minutes again.
 - **Loss:** 10 more minutes unrepaired and it's gone. Its parts and loaded balls wait at Nulodion; reclaimed ammunition loads into the next cannon that player sets up.
 - **Logout:** the cannon stays up while the owner is logged out. If the server restarts, a cannon saved on a player but missing from the world counts as lost.
-- **Messages (ours, unverified):** "Your cannon has broken!", "You repair your cannon, restoring it to working order.", "Your cannon has decayed. Speak to Nulodion to obtain a new one.".
+- **Lost:** "<col=ef1020>Your cannon has decayed. Speak to Nulodion to get a new one!", on the tick it goes or at the next login (rsprox 1511, 1512).
+- **Messages (ours, unverified):** "Your cannon has broken!", "You repair your cannon, restoring it to working order."
 - **Testing:** `::cannondecay` (developer) breaks your cannon, and on a broken one makes it disappear, each on the next tick.
 
 ## Nulodion (Wiki transcript)

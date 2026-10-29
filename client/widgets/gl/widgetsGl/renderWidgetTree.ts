@@ -3357,8 +3357,10 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         sequenceFrame,
                         depthTest: true,
                     },
-                    width,
-                    height,
+                    // The model is drawn in logical pixels: a model bigger than its widget is cut
+                    // to the larger of the logical and drawn sizes.
+                    Math.max(width, logicalWidth | 0),
+                    Math.max(height, logicalHeight | 0),
                 );
                 if (res) {
                     const can = res.canvas;

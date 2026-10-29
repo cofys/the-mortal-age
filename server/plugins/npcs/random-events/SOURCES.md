@@ -328,14 +328,16 @@ widget ops.
 Rewards follow each wiki page: outfit pieces are granted in the page's order and
 skipped when `Teleports.owns` finds them in inventory, equipment or bank; once
 the set is complete the event pays the fallback (flax/coins for the beekeeper,
-lamps elsewhere). Coins use the genuine item, the Prison Pete/maze/pillory gem
+lamps elsewhere). After the outfit, Drill Demon unlocks its four exercise emotes with
+the lamp, and the Mime and Gravedigger unlock one of their emotes per completion in
+the emote tab's order, before lamps; the unlocks go through `emotes:unlock` and the
+unlock messages are ours. Coins use the genuine item, the Prison Pete/maze/pillory gem
 and rune rewards use the noted cert ids so they stack. Lamps and the Book of
 Knowledge share the existing xpreward interface (10 x and 15 x level). Mystery
 boxes roll 1/256 stale baguette, then the F2P or members prize table; the
 members clue-scroll and rare-drop slots are represented by their common
 outcomes. Deliberate deviations, all noted here: Count Check passes because this
 server has no bank PIN feature and every account is effectively a Jagex account;
-Drill Demon's post-outfit exercise emotes are not modelled (the lamp is paid);
 Beekeeper placement is driven from the chatbox options while interface 420
 mirrors the parts, because the client cannot transmit the cache's drag; Mime
 counts four correct copies without resetting on a mistake, as the wiki does not

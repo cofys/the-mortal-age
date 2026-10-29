@@ -7,16 +7,20 @@ const PORTAL_VARBIT = 9298;
 const PORTAL_ATTRIBUTE = "agility.prifddinas.portal";
 
 /**
+ * From the first dark hole on, the course is played in the copy of its rooftops south-west of
+ * the city (1024 west, 2752 south), as live OSRS teleports there (rsprox capture 1149); the last
+ * dark hole brings the player back up to the city.
+ *
  * Each lap one portal may open. It appears after obstacle `after`, stands on `at`,
  * and drops the player at `exit`, continuing the lap as if obstacle `skipTo` was done.
  */
 const PORTALS = [
   { after: 1, at: [3257, 6111, 2], exit: [3275, 6105, 2], skipTo: 2 },
-  { after: 4, at: [3270, 6116, 0], exit: [3292, 6141, 2], skipTo: 6 },
-  { after: 7, at: [3282, 6138, 2], exit: [3268, 6146, 2], skipTo: 8 },
-  { after: 8, at: [3267, 6147, 2], exit: [3271, 6157, 2], skipTo: 9 },
-  { after: 9, at: [3272, 6157, 2], exit: [3277, 6167, 2], skipTo: 10 },
-  { after: 10, at: [3273, 6171, 2], exit: [3286, 6178, 0], skipTo: 11 },
+  { after: 4, at: [3270, 6116, 0], exit: [2268, 3389, 2], skipTo: 6 },
+  { after: 7, at: [2258, 3386, 2], exit: [2244, 3394, 2], skipTo: 8 },
+  { after: 8, at: [2243, 3395, 2], exit: [2247, 3405, 2], skipTo: 9 },
+  { after: 9, at: [2248, 3405, 2], exit: [2253, 3415, 2], skipTo: 10 },
+  { after: 10, at: [2249, 3419, 2], exit: [2262, 3426, 0], skipTo: 11 },
 ];
 
 function setPortal(player, portal) {
@@ -89,6 +93,7 @@ function darkHole(destination) {
 module.exports = {
   key: "prifddinas",
   name: "Prifddinas Agility",
+  helper: 18, // the Agility helper's course (enum 3507: "Prifddinas Agility Course")
   lapXp: 1337,
   petBase: 25146, // Giant squirrel base chance (Wiki)
   obstacles: [
@@ -139,25 +144,25 @@ module.exports = {
       { anim: Anim.LAND },
       { tele: [3269, 6117, 0] },
     ]),
-    obstacle(ObjectIds.DARK_HOLE_8, 5, 11.5, [3269, 6117, 0], darkHole([3293, 6141, 0])),
-    obstacle(ObjectIds.LADDER_393, 6, 0, [3295, 6145, 0], climb([3293, 6145, 2], Anim.CLIMB_UP, 2)),
-    obstacle(ObjectIds.ROPE_BRIDGE_17, 7, 25.6, [3289, 6142, 2], balance([3281, 6142]), {
+    obstacle(ObjectIds.DARK_HOLE_8, 5, 11.5, [3269, 6117, 0], darkHole([2269, 3389, 0])),
+    obstacle(ObjectIds.LADDER_393, 6, 0, [2271, 3393, 0], climb([2269, 3393, 2], Anim.CLIMB_UP, 2)),
+    obstacle(ObjectIds.ROPE_BRIDGE_17, 7, 25.6, [2265, 3390, 2], balance([2257, 3390]), {
       render: Anim.BALANCE_WALK,
     }),
-    obstacle(ObjectIds.TIGHTROPE_16, 8, 30.7, [3278, 6142, 2], balance([3271, 6149]), {
+    obstacle(ObjectIds.TIGHTROPE_16, 8, 30.7, [2254, 3390, 2], balance([2247, 3397]), {
       render: Anim.BALANCE_WALK,
-      fail: ropeFall([3274, 6146], "Gah!!!"),
+      fail: ropeFall([2250, 3394], "Gah!!!"),
     }),
-    obstacle(ObjectIds.ROPE_BRIDGE_18, 9, 25.6, [3270, 6150, 2], balance([3270, 6158]), {
-      render: Anim.BALANCE_WALK,
-    }),
-    obstacle(ObjectIds.TIGHTROPE_17, 10, 30.7, [3268, 6161, 2], balance([3268, 6162], [3274, 6168]), {
+    obstacle(ObjectIds.ROPE_BRIDGE_18, 9, 25.6, [2246, 3398, 2], balance([2246, 3406]), {
       render: Anim.BALANCE_WALK,
     }),
-    obstacle(ObjectIds.TIGHTROPE_18, 11, 30.7, [3277, 6170, 2], [{ walk: [[3284, 6177]] }, { tele: [3284, 6177, 0] }], {
+    obstacle(ObjectIds.TIGHTROPE_17, 10, 30.7, [2244, 3409, 2], balance([2244, 3410], [2250, 3416]), {
       render: Anim.BALANCE_WALK,
     }),
-    obstacle(ObjectIds.DARK_HOLE_9, 12, 1037.1, [3282, 6183, 0], darkHole([3240, 6109, 0]), {
+    obstacle(ObjectIds.TIGHTROPE_18, 11, 30.7, [2253, 3418, 2], [{ walk: [[2260, 3425]] }, { tele: [2260, 3425, 0] }], {
+      render: Anim.BALANCE_WALK,
+    }),
+    obstacle(ObjectIds.DARK_HOLE_9, 12, 1037.1, [2258, 3431, 0], darkHole([3240, 6109, 0]), {
       onSuccess: hidePortal,
     }),
     {
@@ -179,8 +184,8 @@ module.exports = {
       object: ObjectIds.LADDER_394,
       level: 75,
       xp: 0,
-      route: [3267, 6144, 0],
-      steps: climb([3267, 6146, 2], Anim.CLIMB_UP, 2),
+      route: [2243, 3392, 0],
+      steps: climb([2243, 3394, 2], Anim.CLIMB_UP, 2),
     },
   ],
 };

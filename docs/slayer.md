@@ -204,6 +204,15 @@ fail. The worktree client returned HTTP 200 on port 3149 and the game server lis
 ## Captured messages (rsprox captures)
 
 - **Assigning:** "Your new task is to kill # X."
+- **Assignment with a task** (recordings 424, 1445, 2965, 3434 and others): most masters say
+  "You're still hunting X; you have # to go. Come back when you've finished your task." Turael
+  and Aya say the short "You're still hunting X, you have # to go.", and for a task they wouldn't
+  give go on with their transcript's offer to replace it, naming the standard and the Wilderness
+  streak ("...standard task streak of 1. ... Wilderness task streak of 13."). Assignment plays that
+  branch of their transcript.
+- **Krystilia's first task** (recordings 3279, 3434): Assignment starts with her Wilderness warning
+  ("Before I assign you anything, ..."), her transcript's branch for a player who has never had a
+  Wilderness task.
 - **Slayer level:** "You need a higher Slayer level to know how to wound this monster."
 - **Completing:**
   - "You have completed your task! You killed # X. You gained # xp."

@@ -1,6 +1,6 @@
 /**
  * Infernal pickaxe (OSRS Wiki): a 1/3 chance that each ore is destroyed as it is
- * mined, granting half the Smithing experience a bar would give and using one of
+ * mined, granting about half the Smithing experience a bar would give and using one of
  * 5,000 charges. Mining experience is unaffected. An empty pickaxe turns into its
  * uncharged form, which mines like a dragon pickaxe. Created and recharged by
  * using a smouldering stone (or dragon pickaxe) on it at 85 Smithing.
@@ -16,7 +16,10 @@ let ItemIds = null;
 let unchargedByCharged = new Map();
 let chargedIds = new Set();
 let rechargeSourceIds = new Set();
-/** Wiki: Smithing experience per combusted ore, built once ItemIds is attached. */
+/**
+ * Wiki: Smithing experience per combusted ore (already the halved bar experience), built once ItemIds
+ * is attached. rsprox capture 3139 (rev 232): an iron combust gives 5.5.
+ */
 let oreXpByItem = new Map();
 
 function oreXp(oreId) {
@@ -59,7 +62,7 @@ function tryCombustOre(player, pickaxeId, oreId) {
   if (!item) {
     return false;
   }
-  player.getSkillManager().addExperiences(core.Skill.SMITHING, xp / 2);
+  player.getSkillManager().addExperiences(core.Skill.SMITHING, xp);
   useCharge(player, item);
   return true;
 }
@@ -113,6 +116,15 @@ function attach(pluginApi) {
     [ItemIds.MITHRIL_ORE, 12],
     [ItemIds.ADAMANTITE_ORE, 18.75],
     [ItemIds.RUNITE_ORE, 25],
+    // rsprox captures 3162 (rev 232): a combusted 1kg, 5kg and 10kg piece gave 10.2, 19.2 and 28.2
+    // Smithing (solved from the recorded drops). No recording combusts a 2kg piece, so it is kept.
+    [core.ItemIdentifiers.SANDSTONE_1KG_, 10.2],
+    [core.ItemIdentifiers.SANDSTONE_5KG_, 19.2],
+    [core.ItemIdentifiers.SANDSTONE_10KG_, 28.2],
+    // Wiki Infernal pickaxe: granite 500g, 2kg and 5kg.
+    [core.ItemIdentifiers.GRANITE_500G_, 7.2],
+    [core.ItemIdentifiers.GRANITE_2KG_, 13.2],
+    [core.ItemIdentifiers.GRANITE_5KG_, 22.2],
   ]);
 
   api.onItemOnItem((event) => {

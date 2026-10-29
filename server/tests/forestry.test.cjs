@@ -93,6 +93,7 @@ function fakePlayer({ at = new Location(3085, 3233, 0), level = 70, kit = true }
     getPacketSender() {
       const sender = {
         sendTypedMessage: (type, text) => { p.spam.push(text); return sender; },
+        sendSoundEffect: (id) => { (p.sounds ??= []).push(id); return sender; },
         sendAreaSound: () => sender, sendGraphic: () => sender, sendObjectAnimation: () => sender,
       };
       return sender;
@@ -281,11 +282,25 @@ test('feeding: the lines, the hint, the bark the next tick and the XP; a perfect
   assert.match(p.spam.at(-1), /^You've been awarded <col=3366ff>\d Anima-infused bark<\/col>\.$/);
   assert.ok(xp(p, 'Woodcutting') > 0 && xp(p, 'Farming') > 0);
 
+  assert.deepEqual(p.sounds.slice(-3), [2427, 7009, 7012], 'the add, the accept and the hint');
+
   feedWith(p, event, [0, 4, 1]);
-  assert.equal(p.messages.at(-2), 'It seems to like it. You estimate the nutritional value of the mulch to be <col=3366ff>50%</col>.');
+  assert.equal(p.messages.at(-1), 'It seems to like it. You estimate the nutritional value of the mulch to be <col=3366ff>50%</col>.', 'no hint for a slot already found');
   feedWith(p, event, [0, 0, 4]);
-  assert.deepEqual(p.messages.slice(-2), ['It seems to love it!', 'The sapling seems to love this combination of ingredients!']);
+  // rsprox 227/00083: the love line, a hint for each slot found with it, and the box the first time.
+  const love = 'It seems to love it! You estimate the nutritional value of the mulch to be <col=3366ff>100%</col>.';
+  assert.deepEqual(p.messages.slice(-4), [
+    love,
+    'The sapling seems to love <col=3366ff>rotting leaves</col> as the <col=3366ff>second ingredient</col>.',
+    'The sapling seems to love <col=3366ff>splintered bark</col> as the <col=3366ff>third ingredient</col>.',
+    'The sapling seems to love this combination of ingredients!',
+  ]);
   assert.equal(p.boxes.length, 1, 'the item box');
+  const sent = p.messages.length;
+  feedWith(p, event, [0, 0, 4]);
+  assert.equal(p.messages.length, sent, 'a second love in a row is spam only');
+  assert.equal(p.spam.at(-1), love);
+  assert.equal(p.boxes.length, 1, 'no second box');
 });
 
 test('saved: the thriving sapling, then bark, leaves and bonus XP; the tree back 14 ticks on', () => {
@@ -341,33 +356,104 @@ test('not saved in 400 ticks: it withers', () => {
 
 // ------------------------------------------------------------------ rising roots
 
-test('rising roots: six to start, a wave every 27 ticks with an anima root, over at 199', () => {
+/** Records the area sounds and loc anims the roots send (no real players are in the world). */
+function watchRoots() {
+  for (const event of Roots.events) Object.assign(event, { over: true, elapsed: Infinity });
+  ticks(1);
+  const seen = { sounds: [], anims: [] };
+  const { areaSound, locAnim } = Common;
+  Common.areaSound = (at, id, radius) => seen.sounds.push({ at: `${at.getX()},${at.getY()}`, id, radius });
+  Common.locAnim = (object, seq) => seen.anims.push({ at: `${object.getLocation().getX()},${object.getLocation().getY()}`, seq });
+  seen.restore = () => Object.assign(Common, { areaSound, locAnim });
+  return seen;
+}
+
+const tileOf = (root) => `${root.object.getLocation().getX()},${root.object.getLocation().getY()}`;
+
+test('rising roots (rsprox 227/01850): six with their rise sounds; 2-4 sink 7 ticks before each 21-29 tick wave, which replaces only them', () => {
   const p = fakePlayer();
-  const event = startEvent('roots', [p]);
-  assert.equal(event.roots.size, 6);
-  assert.ok([...event.roots].every((r) => r.kind === 'normal'));
-  ticks(27);
-  assert.ok(event.roots.size >= 2 && event.roots.size <= 4);
-  assert.equal([...event.roots].filter((r) => r.kind === 'anima').length, 1);
-  ticks(199 - 27);
-  assert.equal(Roots.events.has(event), false);
-  assert.equal(Spawns.active.has(event), false);
+  const seen = watchRoots();
+  try {
+    const event = startEvent('roots', [p]);
+    assert.equal(event.roots.size, 6);
+    assert.ok([...event.roots].every((r) => r.kind === 'normal'));
+    assert.deepEqual(seen.sounds.map((s) => [s.id, s.radius]), Array(6).fill([7002, 4]), 'a rise sound on each tile');
+    assert.deepEqual(seen.sounds.map((s) => s.at).sort(), [...event.roots].map(tileOf).sort());
+    assert.ok(event.nextWave >= 21 && event.nextWave <= 29);
+    const firstWave = event.nextWave;
+    ticks(firstWave - 8);
+    assert.equal(event.sinking.length, 0);
+    seen.sounds.length = 0;
+    ticks(1);
+    const sunk = [...event.sinking];
+    assert.ok(sunk.length >= 2 && sunk.length <= 4);
+    assert.deepEqual(seen.sounds.map((s) => [s.id, s.radius]), Array(sunk.length).fill([7007, 2]), 'a sink sound on each sinking root');
+    assert.deepEqual(seen.anims.filter((a) => a.seq === 10086).map((a) => a.at).sort(), sunk.map(tileOf).sort());
+    const kept = [...event.roots].filter((r) => !sunk.includes(r));
+    ticks(6);
+    assert.equal(event.waves, 1, 'no wave yet');
+    ticks(1);
+    assert.equal(event.waves, 2);
+    assert.equal(event.roots.size, 6, 'as many rise as sank');
+    assert.ok(sunk.every((r) => !event.roots.has(r)), 'the sunk roots are gone');
+    assert.ok(kept.every((r) => event.roots.has(r)), 'the rest stay');
+    const anima = [...event.roots].filter((r) => r.kind === 'anima');
+    assert.equal(anima.length, 1);
+    ticks(event.nextWave - event.elapsed - 7);
+    assert.ok(event.sinking.includes(anima[0]), "the last wave's anima root sinks with the next");
+  } finally {
+    seen.restore();
+  }
 });
 
-test('chopping a root: the swing line, a roll every 4 ticks, then the root goes with bark and XP', () => {
+test('rising roots end: every root sinks at 199 and goes 7 ticks later', () => {
+  const p = fakePlayer();
+  const seen = watchRoots();
+  try {
+    const event = startEvent('roots', [p]);
+    ticks(198);
+    assert.equal(Roots.events.has(event), true);
+    seen.anims.length = 0;
+    ticks(1);
+    assert.equal(Spawns.active.has(event), false, 'over at 199');
+    assert.equal(event.roots.size, 6, 'still standing while they sink');
+    assert.deepEqual(seen.anims.map((a) => a.at).sort(), [...event.roots].map(tileOf).sort());
+    ticks(6);
+    assert.equal(event.roots.size, 6);
+    ticks(1);
+    assert.equal(event.roots.size, 0);
+    assert.equal(Roots.events.has(event), false);
+  } finally {
+    seen.restore();
+  }
+});
+
+test('chopping a root: the swing, the anim again 2 ticks on and every 4, bark the tick after each; the root stays', () => {
   const p = fakePlayer({ level: 70 });
   const event = startEvent('roots', [p]);
   const root = [...event.roots][0];
   Math.random = () => 0;
-  hooks.objects.get('Tree roots:Chop down')({ player: p, object: root.object });
-  assert.equal(p.spam.at(-1), 'You swing your axe at the roots.');
-  ticks(3);
-  assert.equal(event.roots.has(root), true);
-  ticks(1);
-  Math.random = random;
-  assert.equal(event.roots.has(root), false);
-  assert.ok(bark(p) >= 3 && bark(p) <= 4, 'normal root at 41+');
-  assert.equal(Math.round(xp(p, 'Woodcutting')), Math.round(70 * 0.55));
+  try {
+    hooks.objects.get('Tree roots:Chop down')({ player: p, object: root.object });
+    assert.equal(p.spam.at(-1), 'You swing your axe at the roots.');
+    assert.deepEqual(p.anims, [867]);
+    ticks(1);
+    assert.deepEqual(p.anims, [867]);
+    ticks(1);
+    assert.deepEqual(p.anims, [867, 867], 'the anim 2 ticks after the swing');
+    assert.equal(bark(p), 0, 'not the same tick');
+    ticks(1);
+    assert.ok(bark(p) >= 3 && bark(p) <= 4, 'normal root at 41+, the tick after');
+    assert.equal(Math.round(xp(p, 'Woodcutting')), Math.round(70 * 0.55));
+    assert.equal(event.roots.has(root), true, 'the root stays');
+    ticks(3);
+    assert.equal(p.anims.length, 3, 'every 4 ticks');
+    ticks(1);
+    assert.equal(p.spam.filter((m) => m.includes('Anima-infused bark')).length, 2);
+    assert.equal(Roots.sessions.has(p), true, 'still chopping');
+  } finally {
+    Math.random = random;
+  }
 });
 
 test('a boosted Woodcutting level past 99 still pays the top band', () => {
@@ -376,9 +462,8 @@ test('a boosted Woodcutting level past 99 still pays the top band', () => {
   const root = [...event.roots][0];
   Math.random = () => 0;
   hooks.objects.get('Tree roots:Chop down')({ player: p, object: root.object });
-  ticks(4);
+  ticks(3);
   Math.random = random;
-  assert.equal(event.roots.has(root), false);
   assert.equal(bark(p), 3, 'the 41+ band');
 });
 
@@ -386,13 +471,13 @@ test('an anima root pays more; a late joiner gets 1 XP and no bark', () => {
   const p = fakePlayer({ level: 30 });
   const late = fakePlayer({ level: 30 });
   const event = startEvent('roots', [p]);
-  ticks(27);
+  ticks(event.nextWave);
   const anima = [...event.roots].find((r) => r.kind === 'anima');
   const other = [...event.roots].find((r) => r.kind === 'normal');
   Math.random = () => 0;
   hooks.objects.get('Anima-infused Tree roots:Chop down')({ player: p, object: anima.object });
   hooks.objects.get('Tree roots:Chop down')({ player: late, object: other.object });
-  ticks(4);
+  ticks(3);
   Math.random = random;
   assert.ok(bark(p) >= 8 && bark(p) <= 10);
   assert.equal(bark(late), 0);
@@ -406,7 +491,7 @@ test("the buffer after an event holds for everyone nearby, and survives a relog"
   const other = fakePlayer();
   Math.random = () => 0.999;
   const event = startEvent('roots', [p]);
-  for (let i = 0; i < 200; i++) ticks(1);
+  for (let i = 0; i < 206; i++) ticks(1);
   assert.equal(Roots.events.has(event), false);
   chop(other, tree({ id: 10833, x: 3090, y: 3240 }), 5);
   Spawns.treeFalling({ player: other, object: tree({ id: 10833, x: 3090, y: 3240 }), handled: false });

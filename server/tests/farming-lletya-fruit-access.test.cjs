@@ -47,6 +47,8 @@ function prepare(t, { started = false, crop = 'APPLE', patch = lletya, denied = 
     return { player, seed, messages, queries, event, clear,
         state: () => player.getAttribute(Patches.FARM_ATTRIBUTE)?.patches[Data.patchKey(patch)] };
 }
+// Farming actions finish on later farming ticks, as in the captures.
+const ticks = (n) => { for (let i = 0; i < n; i++) Patches.tick(); };
 test('locked Lletya patch rejects object, item and spell routes before creating Farming state', t => {
     for (const hook of ['onObjectInteraction', 'onItemOnObject', 'onSpellOnObject']) {
         const f = prepare(t), event = f.event();
@@ -60,6 +62,7 @@ test('locked Lletya patch rejects object, item and spell routes before creating 
 test('an unanswered quest query fails closed at the locked patch', t => {
     const f = prepare(t, { started: null });
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state(), undefined);
     assert.equal(f.player.getInventory().getAmount(f.seed), 1);
 });
@@ -67,12 +70,14 @@ test('started Mourning quest allows fruit-tree planting', t => {
     const f = prepare(t, { started: true });
     f.clear();
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state().crop, 'APPLE');
     assert.equal(f.player.getInventory().getAmount(f.seed), 0);
 });
 test('external patch restrictions still apply after the quest gate succeeds', t => {
     const f = prepare(t, { started: true, denied: true });
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state(), undefined);
     assert.equal(f.player.getInventory().getAmount(f.seed), 1);
 });
@@ -81,6 +86,7 @@ test('another fruit-tree patch accepts a sapling without querying the Lletya que
     const f = prepare(t, { patch });
     f.clear();
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state().crop, 'APPLE');
     assert.equal(f.player.getInventory().getAmount(f.seed), 0);
     assert.deepEqual(f.queries, []);

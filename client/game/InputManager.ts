@@ -1,6 +1,7 @@
 import { vec2 } from "gl-matrix";
 
 import { TouchInputAdapter } from "./input/TouchInputAdapter";
+import type { TouchItemDrag } from "./input/TouchGestureRecognizer";
 import { ClientState } from "./ClientState";
 
 /**
@@ -297,9 +298,10 @@ export class InputManager {
     isTouch: boolean = false;
 
     /**
-     * Reports whether this gesture starts on a draggable inventory item (canvas coordinates).
+     * Reports whether this gesture starts on a draggable item (canvas coordinates), and whether
+     * it drags at once or after a short hold (items in a scrolling list).
      */
-    onCanvasTouchStart?: (x: number, y: number) => boolean;
+    onCanvasTouchStart?: (x: number, y: number) => TouchItemDrag;
     /** A stationary tap inside the real touchend event, where iOS permits keyboard focus. */
     onCanvasTouchTap?: (x: number, y: number) => void;
     onCanvasTouchCancel?: () => void;
@@ -1006,9 +1008,9 @@ export class InputManager {
         this.prevTouchTime = performance.now();
         this.touchScrollVelocityY = 0;
         this.isTouchScrolling = false;
-        let widgetDrag = false;
+        let widgetDrag: TouchItemDrag = false;
         try {
-            widgetDrag = this.onCanvasTouchStart?.(x, y) === true;
+            widgetDrag = this.onCanvasTouchStart?.(x, y) ?? false;
         } catch {}
         this.touchAdapter.onFingerDown(x, y, this.lastInputTimeMs, false, widgetDrag);
         event.preventDefault();

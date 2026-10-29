@@ -12,6 +12,9 @@ export type TouchGestureIntent =
     | { type: "scrollSample"; y: number; deltaY: number; deltaTimeMs: number }
     | { type: "cancel" };
 
+/** How a touch on an item drags it: at once, after a short hold (scrolling lists), or not at all. */
+export type TouchItemDrag = boolean | "afterHold";
+
 type Phase = "idle" | "pending" | "longPressed" | "orbiting" | "dragging" | "widgetDragging";
 
 /**
@@ -27,6 +30,7 @@ export class TouchGestureRecognizer {
     private phase: Phase = "idle";
     private orbitOnly = false;
     private widgetDrag = false;
+    private dragAfterHold = false;
     private startX = 0;
     private startY = 0;
     private startTimeMs = 0;
@@ -58,12 +62,14 @@ export class TouchGestureRecognizer {
 
     /**
      * Finger down — draggable items hold LEFT; other gestures wait for release. `orbitOnly` (the finger left on
-     * the screen after a pinch) may still orbit or drag, but never taps or long-presses.
+     * the screen after a pinch) may still orbit or drag, but never taps or long-presses. Items in a scrolling
+     * list (`"afterHold"`) press LEFT only when the finger moves after resting for `itemDragHoldMs`.
      */
-    fingerDown(x: number, y: number, timeMs: number, orbitOnly = false, widgetDrag = false): TouchGestureIntent[] {
+    fingerDown(x: number, y: number, timeMs: number, orbitOnly = false, widgetDrag: TouchItemDrag = false): TouchGestureIntent[] {
         this.phase = "pending";
         this.orbitOnly = orbitOnly;
-        this.widgetDrag = widgetDrag && !orbitOnly;
+        this.widgetDrag = widgetDrag === true && !orbitOnly;
+        this.dragAfterHold = widgetDrag === "afterHold" && !orbitOnly;
         this.startX = x;
         this.startY = y;
         this.startTimeMs = timeMs;
@@ -110,6 +116,13 @@ export class TouchGestureRecognizer {
             if (dist >= this.config.dragThresholdPx) {
                 if (this.widgetDrag && this.phase === "pending") {
                     this.phase = "widgetDragging";
+                    return intents;
+                }
+                if (this.dragAfterHold && this.phase === "pending" && timeMs - this.startTimeMs >= this.config.itemDragHoldMs) {
+                    // Press where the finger rested; the move above already put the pointer here.
+                    this.phase = "widgetDragging";
+                    this.widgetDrag = true;
+                    intents.push({ type: "widgetPress", x: this.startX, y: this.startY });
                     return intents;
                 }
                 if (this.phase === "longPressed") {
@@ -197,6 +210,7 @@ export class TouchGestureRecognizer {
         this.phase = "idle";
         this.orbitOnly = false;
         this.widgetDrag = false;
+        this.dragAfterHold = false;
         this.startX = 0;
         this.startY = 0;
         this.startTimeMs = 0;

@@ -622,7 +622,10 @@ function sailor(sailing = emptySailingState()) {
     setMobileInteraction() {},
     getSailing: () => sailing,
     setSailing: (next) => { sailing = next; },
-    getPacketSender: () => new Proxy({}, { get: (_t, _k, proxy) => () => proxy }),
+    // Spam lines (sendTypedMessage) land in `messages` too, after `spam: `.
+    getPacketSender: () => new Proxy({}, {
+      get: (_t, key, proxy) => key === "sendTypedMessage" ? (_type, text) => { messages.push(`spam: ${text}`); return proxy; } : () => proxy,
+    }),
   });
   player.inventory = new Inventory(player);
   player.inventory.resetItems();
@@ -1995,11 +1998,17 @@ test("Sort-salvage sorts every salvage in the inventory, one each 3 ticks", () =
   // Rolls of 0.5 miss every pre-roll and land mid-table.
   withRandom(0.5, () => { for (let tick = 0; tick < 3; tick++) TaskManager.process(); });
   assert.equal(h.player.getInventory().getAmount(32847), 1);
-  assert.match(h.player.messages.at(-1), /^You sort through the small salvage and find: \d+ x .+\.$/);
+  assert.match(h.player.messages.at(-1), /^spam: You sort through the small salvage and find: \d+ x .+\.$/);
   withRandom(0.5, () => { for (let tick = 0; tick < 3; tick++) TaskManager.process(); });
   assert.equal(h.player.getInventory().getAmount(32847), 0);
-  assert.equal(h.player.messages.at(-1), "You have no more salvage to sort.");
+  assert.match(h.player.messages.at(-1), /^spam: You sort through/, "live sends no line after the last salvage");
   assert.deepEqual(h.xp, [["Sailing", 5.5], ["Sailing", 5.5]]);
+
+  // With no salvage: a message box (rsprox captures, rev 235).
+  const dialogues = [];
+  h.player.getDialogueManager = () => ({ startDialogues: (chain) => dialogues.push(chain.getDialogues().get(0).getText()) });
+  salvaging.objects["Salvaging station"]["Sort-salvage"]({ player: h.player });
+  assert.deepEqual(dialogues, ["You do not have any salvage to sort through."]);
   clearTasks();
 });
 
@@ -2059,7 +2068,11 @@ test("Dock on a port's buoy docks the boat there; Disembark at any port docks it
   player.getSkillManager = () => ({ getCurrentLevel: (skill) => levels.get(skill) ?? 1 });
   const varbits = new Map();
   const sender = new Proxy({}, {
-    get: (_t, key) => (...args) => { if (key === "sendVarbit") varbits.set(args[0], args[1]); return sender; },
+    get: (_t, key) => (...args) => {
+      if (key === "sendVarbit") varbits.set(args[0], args[1]);
+      if (key === "sendTypedMessage") player.messages.push(`spam: ${args[1]}`);
+      return sender;
+    },
   });
   player.getPacketSender = () => sender;
   Sailing.giveBoat(player, "raft", "the_pandemonium");
@@ -2079,14 +2092,15 @@ test("Dock on a port's buoy docks the boat there; Disembark at any port docks it
     assert.deepEqual(player.getSailing().returnPoint, musa.landing);
     assert.deepEqual([19145, 19146, 19258 + 2].map((id) => varbits.get(id)), [3, 3, 3], "last dock, last port, boat 1's port");
 
-    // Disembarking at the Pandemonium docks the boat there instead, where it is.
+    // Disembarking at the Pandemonium docks the boat there instead, where it is, and says so
+    // (rsprox captures, rev 235).
     const boat = BoatManager.getBoatAboard(player);
     const at = { fineX: boat.fineX, fineY: boat.fineY, level: boat.level, angle: boat.angle };
     const pandemonium = content().docks.find((dock) => dock.id === "the_pandemonium");
     plugin.objects.Gangplank.Disembark({ player, location: pandemonium.gangplank });
     TaskManager.process();
     TaskManager.process();
-    assert.equal(player.messages.at(-1), "You disembark at the Pandemonium.");
+    assert.equal(player.messages.at(-1), "spam: You dock the boat at the Pandemonium and disembark.");
     assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: "the_pandemonium", at });
     assert.deepEqual(tileOf(player), [3069, 2987, 0]);
     assert.equal(player.getSailing().lastDock, "the_pandemonium");
@@ -2122,7 +2136,7 @@ test("Last Light docks at Sailing 52 and disembarks on its captured landing", ()
     plugin.objects.Gangplank.Disembark({ player, location: lastLight.gangplank });
     TaskManager.process();
     TaskManager.process();
-    assert.equal(player.messages.at(-1), "You disembark at Last Light.");
+    assert.equal(player.messages.at(-1), "spam: You disembark at Last Light.", "docked at its buoy first");
     assert.deepEqual(tileOf(player), [2851, 2326, 0]);
   } finally {
     if (Sailing.instanceAboard(player)) Sailing.disembark(player, "last_light");
@@ -2280,9 +2294,10 @@ test("navigating plays each boat size's helm animations, looping every 10 ticks 
   clearTasks();
   const helm = registerPlugin("Helm.plugin");
   const expected = {
-    raft: { player: [13340, 13341], loc: [13335, 13336, 13334] },
-    skiff: { player: [13351, 13352], loc: [13346, 13347, 13345] },
-    sloop: { player: [13362, 13363], loc: [13357, 13358, 13356] },
+    // Sounds: taking and leaving the helm (rsprox, rev 235: 10792/10793 on the raft, 10807/10808 on the others).
+    raft: { player: [13340, 13341], loc: [13335, 13336, 13334], sounds: [10792, 10793] },
+    skiff: { player: [13351, 13352], loc: [13346, 13347, 13345], sounds: [10807, 10808] },
+    sloop: { player: [13362, 13363], loc: [13357, 13358, 13356], sounds: [10807, 10808] },
   };
   for (const [type, ids] of Object.entries(expected)) {
     const player = sailor();
@@ -2293,9 +2308,11 @@ test("navigating plays each boat size's helm animations, looping every 10 ticks 
     player.setPositionToFace = (location) => { facing = location; return player; };
     player.getPositionToFace = () => facing;
     const cameras = [];
+    const sounds = [];
     const sender = new Proxy({}, {
       get: (_t, key, proxy) => (...args) => {
         if (key === "sendObjectAnimation") locs.push(args[1].getId());
+        if (key === "sendSoundEffect") sounds.push(args[0]);
         if (key === "sendCameraTarget") cameras.push(args[0]);
         return proxy;
       },
@@ -2322,6 +2339,8 @@ test("navigating plays each boat size's helm animations, looping every 10 ticks 
       helm.objects.Helm["Stop-navigating"]({ player });
       assert.ok(locs.includes(ids.loc[2]), `${type}: the helm's inactive on leaving`);
       assert.deepEqual(cameras.splice(0), [{ player: player.getIndex() }], `${type}: and back on the player`);
+      assert.deepEqual(sounds.filter((id) => id >= 10792 && id <= 10808), ids.sounds, `${type}: the helm's sounds`);
+      assert.ok(!player.messages.includes("You take the helm. Click the water to steer."), `${type}: no chat line`);
       seqs.length = 0;
       for (let tick = 0; tick < 10; tick++) TaskManager.process();
       assert.deepEqual(seqs, [], `${type}: the loop stops`);
@@ -2460,10 +2479,27 @@ test("a courier crate withdrawn from the hold goes into the player's hands, from
     const crate = 32682; // Crate of jewellery
     h.boat().cargo[3] = { id: crate, amount: 1 };
     h.open();
+    const seqs = [];
+    h.player.performAnimation = (anim) => seqs.push(anim.getId());
     h.click(943, 10, 1, 3, undefined); // the client's Withdraw: slot 3, no item
     assert.equal(portTasks.heldCrate(h.player), crate, "in both hands");
     assert.equal(h.boat().cargo[3], null, "out of the hold");
     assert.equal(h.sent.varbits.get(19134), 1, "sailing_carrying_cargo");
+    // rsprox (rev 235): human_pickuptable with synths 10903 and 10908.
+    const pickup = require("../dist/game/cache/CacheDefinitions").CacheDefinitions.getSeqId("human_pickuptable");
+    assert.deepEqual(seqs, [pickup]);
+    assert.ok(h.sent.sounds.includes(10903) && h.sent.sounds.includes(10908));
+
+    // Deposit-held puts it back: human_pickuptable now, synth 10905 and the line a tick later (rsprox 3449, 3450).
+    seqs.length = 0;
+    h.sent.sounds.length = 0;
+    h.hold.objects["Basic cargo hold"]["Deposit-held"]({ player: h.player });
+    assert.equal(portTasks.heldCrate(h.player), undefined);
+    assert.deepEqual(seqs, [pickup]);
+    assert.deepEqual(h.sent.sounds, []);
+    TaskManager.process();
+    assert.deepEqual(h.sent.sounds, [10905]);
+    assert.equal(h.player.messages.at(-1), "You deposit some cargo into the cargo hold.");
   } finally {
     h.done();
   }

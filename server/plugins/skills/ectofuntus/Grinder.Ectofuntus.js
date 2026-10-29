@@ -4,20 +4,21 @@
  * round and starts the next bone after each pot, until bones or pots run out or the player clicks
  * (Wiki). The hopper and bin keep their bones between visits (ahoy_grinder_status).
  *
- * As captured (rsprox recordings 376, 377, rev 231), each part from the player's tile south of it:
- * - Loader (3660, 3524): ahoy_bone_dump, synth 1133, "You put some big bones in the grinder's
- *   hopper.", status 1. Three ticks later they step west, and two after that wind.
- * - Handle (3659, 3524): ahoy_bone_grind, synth 1131, "You wind the grinder handle."; three ticks
- *   later "Some crushed big bones pour into the bin.", status 2; three more and they step west,
- *   and two after that fill a pot.
- * - Bin (3658, 3524): ahoy_fillbucket_bonedust, synth 1136, "You fill a pot with crushed big
- *   bones.", the pot becomes bonemeal, status 0; five ticks later they run back to the loader and
- *   load the next bone two ticks after that.
+ * As captured (rsprox recordings 376, 377, rev 231), each part from the player's tile south of it,
+ * the first one two ticks after the player arrives:
+ * - Loader (3660, 3524): ahoy_bone_dump and synth 1133 (both delay 5), "You put some big bones in
+ *   the grinder's hopper.", status 1. Three ticks later they step west, and two after that wind.
+ * - Handle (3659, 3524): ahoy_bone_grind and synth 1131 (both delay 10), "You wind the grinder
+ *   handle."; three ticks later "Some crushed big bones pour into the bin.", status 2; three more
+ *   and they step west, and two after that fill a pot.
+ * - Bin (3658, 3524): ahoy_fillbucket_bonedust and synth 1136 (both delay 5), "You fill a pot
+ *   with crushed big bones.", the pot becomes bonemeal, status 0; five ticks later they run back
+ *   to the loader and load the next bone two ticks after that.
  * - Without a pot at the bin: "You need an empty pot to put the crushed big bones into." and the
  *   round stops with the bones in the bin. Bones on the loader while the bin is full: "You need to
  *   empty the grinder's bin before you put more bones in it."
- * - Status: "The grinder is empty." / "There are some big bones in the hopper." / "There are some
- *   crushed big bones in the bin." Empty: "The grinder is already empty." / "You need to wind the
+ * - Status, also two ticks after arrival: "The grinder is empty." / "There are some big bones in
+ *   the hopper." / "There are some crushed big bones in the bin." Empty: "The grinder is already empty." / "You need to wind the
  *   handle to grind the big bones." Winding an empty grinder only turns the handle.
  * Not captured: bones used on the loader while the hopper is full; they're wound like the handle.
  */
@@ -30,6 +31,12 @@ const LOAD_SOUND = 1133;
 const WIND_SOUND = 1131;
 const FILL_SOUND = 1136;
 const POUR_TICKS = 3;
+/** Each part is used, and Status and Empty answer, two ticks after the player arrives. */
+const FIRST_USE_TICKS = 2;
+/** Client-side delays the sequence and synth of each part carry. */
+const LOAD_DELAY = 5;
+const WIND_DELAY = 10;
+const FILL_DELAY = 5;
 
 /**
  * Each part's action, and what follows it: the next part, the ticks until the player steps to
@@ -67,8 +74,8 @@ function load(player, round) {
   round.bone = boneId;
   player.getInventory().deleteNumber(boneId, 1);
   faceNorth(player, "load");
-  Common.animate(player, "ahoy_bone_dump");
-  Common.sound(player, LOAD_SOUND);
+  Common.animate(player, "ahoy_bone_dump", LOAD_DELAY);
+  Common.sound(player, LOAD_SOUND, LOAD_DELAY);
   Common.spam(player, `You put some ${Common.boneName(boneId)} in the grinder's hopper.`);
   Common.setGrinder(player, Common.GRINDER_HOPPER, boneId);
   return true;
@@ -76,8 +83,8 @@ function load(player, round) {
 
 function wind(player, round) {
   faceNorth(player, "wind");
-  Common.animate(player, "ahoy_bone_grind");
-  Common.sound(player, WIND_SOUND);
+  Common.animate(player, "ahoy_bone_grind", WIND_DELAY);
+  Common.sound(player, WIND_SOUND, WIND_DELAY);
   Common.spam(player, "You wind the grinder handle.");
   if (Common.grinderStatus(player) !== Common.GRINDER_HOPPER) return false;
   round.pourAt = round.tick + POUR_TICKS;
@@ -102,8 +109,8 @@ function fill(player, round) {
   faceNorth(player, "fill");
   inventory.deleteNumber(ItemIdentifiers.POT, 1);
   inventory.adds(Common.bonemealFor(boneId), 1);
-  Common.animate(player, "ahoy_fillbucket_bonedust");
-  Common.sound(player, FILL_SOUND);
+  Common.animate(player, "ahoy_fillbucket_bonedust", FILL_DELAY);
+  Common.sound(player, FILL_SOUND, FILL_DELAY);
   Common.spam(player, `You fill a pot with crushed ${Common.boneName(boneId)}.`);
   Common.setGrinder(player, Common.GRINDER_EMPTY, 0);
   round.bone ??= boneId;
@@ -117,10 +124,10 @@ function walkTo(player, stage) {
   player.getMovementQueue().addSteps(new Common.core.Location(x, y, LEVEL));
 }
 
-/** Runs the round from `stage`, using it on the next tick, as the server answers a click. */
+/** Runs the round from `stage`, using it two ticks after the click, as the server answers it. */
 function grind(player, stage, bone = null) {
   faceNorth(player, stage);
-  const round = { stage, bone, tick: 0, useAt: 1, walkAt: -1, pourAt: -1 };
+  const round = { stage, bone, tick: 0, useAt: FIRST_USE_TICKS, walkAt: -1, pourAt: -1 };
   Common.run(player, (tick) => {
     round.tick = tick;
     if (tick === round.pourAt) pour(player);
@@ -147,7 +154,20 @@ function windHandle({ player }) {
   grind(player, "wind");
 }
 
+/** Answers a Status or Empty click two ticks later, unless a walk or click cancels it. */
+function answer(player, respond) {
+  Common.run(player, (tick) => {
+    if (tick < FIRST_USE_TICKS) return true;
+    respond();
+    return false;
+  });
+}
+
 function status({ player }) {
+  answer(player, () => statusMessage(player));
+}
+
+function statusMessage(player) {
   const boneId = Common.grinderBone(player);
   switch (Common.grinderStatus(player)) {
     case Common.GRINDER_HOPPER:
@@ -166,13 +186,13 @@ function emptyBin({ player, objectId }) {
   const boneId = Common.grinderBone(player);
   switch (Common.grinderStatus(player)) {
     case Common.GRINDER_HOPPER:
-      player.sendMessage(`You need to wind the handle to grind the ${Common.boneName(boneId)}.`);
+      answer(player, () => player.sendMessage(`You need to wind the handle to grind the ${Common.boneName(boneId)}.`));
       break;
     case Common.GRINDER_BIN:
       grind(player, "fill");
       break;
     default:
-      player.sendMessage("The grinder is already empty.");
+      answer(player, () => player.sendMessage("The grinder is already empty."));
   }
   return true;
 }

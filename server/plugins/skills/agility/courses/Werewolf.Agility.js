@@ -146,6 +146,7 @@ function deathslideEntry(object) {
 module.exports = {
   key: "werewolf",
   name: "Werewolf Agility",
+  helper: 14, // the Agility helper's course (enum 3507: "Werewolf Agility Course")
   lapXp: 730,
   petBase: 32597, // Giant squirrel base chance (Wiki)
   obstacles: [

@@ -7,9 +7,12 @@
 const Common = require("./Common.VolcanicMine");
 const Game = require("./Game.VolcanicMine");
 
-/** Clearing a blockage: a swing every 3 ticks, each with this chance to clear (recorded: at once to a few swings). */
+/**
+ * Clearing a blockage (recorded, rsprox 1858): the swing line and animation the tick after the
+ * click, the first roll a tick later, then one every pickaxe interval; a missed roll replays the
+ * swing, the clear stops it with sound 3600. Each roll has this chance (recorded: at once to a few rolls).
+ */
 const CLEAR_CHANCE = 1 / 3;
-const CLEAR_TICKS = 3;
 const CLEAR_TRIES = 8;
 
 function at(event) {
@@ -90,16 +93,16 @@ function clear(event) {
     player.sendMessage("You need a pickaxe to mine this rock. You do not have a pickaxe which you have the Mining level to use.");
     return true;
   }
-  Common.spam(player, Common.message("swing"));
   const from = player.getLocation();
   let tries = 0;
   const current = game.act(player);
   const token = game.actions.get(player);
-  const swing = () => {
-    if (!current(token) || Game.gameOf(player) !== game || !game.isBlocked(chamber) || !player.getLocation().equals(from)) return;
-    player.performAnimation(pickaxe.animation);
-    Common.sound(player, "pick");
+  const mining = () => current(token) && Game.gameOf(player) === game && game.isBlocked(chamber) && player.getLocation().equals(from);
+  const roll = () => {
+    if (!mining()) return;
     if (Math.random() < CLEAR_CHANCE || ++tries >= CLEAR_TRIES) {
+      player.performAnimation(Common.core.Animation.DEFAULT_RESET_ANIMATION);
+      Common.sound(player, "pick");
       player.sendMessage(Common.message("cleared"));
       game.setLoc(data.locs.chamberOpen, tile);
       game.setBlocked(chamber, false);
@@ -107,9 +110,15 @@ function clear(event) {
       Common.xp(player, "MINING", data.xp.clear);
       return;
     }
-    Common.later(CLEAR_TICKS, swing);
+    player.performAnimation(pickaxe.animation);
+    Common.later(Common.rollInterval(pickaxe), roll);
   };
-  Common.later(1, swing);
+  Common.later(1, () => {
+    if (!mining()) return;
+    Common.spam(player, Common.message("swing"));
+    player.performAnimation(pickaxe.animation);
+    Common.later(1, roll);
+  });
   return true;
 }
 
@@ -125,15 +134,23 @@ function takeRock(event) {
     player.sendMessage("You don't have enough inventory space.");
     return true;
   }
-  Common.animate(player, "pickupTable");
-  player.sendMessage(Common.message("takeRock"));
-  player.getInventory().adds(data.items.rock, 1);
-  game.rocks.set(key, true);
-  game.setLoc(data.locs.rockDepleted, tile);
-  Common.later(data.timing.rockRespawn, () => {
-    if (game.ended) return;
-    game.rocks.delete(key);
-    game.setLoc(data.locs.rock, tile);
+  // Recorded: like Block, the rock is taken two ticks after the click.
+  Common.later(2, () => {
+    if (Game.gameOf(player) !== game || game.ended || game.rocks.get(key)) return;
+    if (player.getInventory().getFreeSlots() <= 0) {
+      player.sendMessage("You don't have enough inventory space.");
+      return;
+    }
+    Common.animate(player, "pickupTable");
+    player.sendMessage(Common.message("takeRock"));
+    player.getInventory().adds(data.items.rock, 1);
+    game.rocks.set(key, true);
+    game.setLoc(data.locs.rockDepleted, tile);
+    Common.later(data.timing.rockRespawn, () => {
+      if (game.ended) return;
+      game.rocks.delete(key);
+      game.setLoc(data.locs.rock, tile);
+    });
   });
   return true;
 }

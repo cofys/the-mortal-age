@@ -57,7 +57,7 @@ function process() {
     const {player,trap}=run;
     if (!C.active(player) || !H.traps.has(trap) || trap.state !== "idle" || trap.area !== player.getPrivateArea() || C.level(player)<27) continue;
     const I=H.core.ItemIdentifiers;
-    Traps.setState(trap,"caught",{level:27,xp:144,caught:H.core.ObjectIdentifiers.RABBIT_SNARE_2,
+    Traps.setState(trap,"caught",{name:"rabbit",level:27,xp:144,caught:H.core.ObjectIdentifiers.RABBIT_SNARE_2,
       loot:[[I.BONES,1],[I.RAW_RABBIT,1],[I.RABBIT_FOOT,1]]});
     player.sendMessage("Your ferret flushes a rabbit into your snare.");
   }

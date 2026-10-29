@@ -9,9 +9,12 @@
  *   brazier changes gets the full reward.
  * - Fix: a hammer, 25 points and 4x Construction level XP for players who own a house.
  * - Feed: a root is 10 points and 3x Firemaking XP, kindling 25 and 3.8x.
- * Captures: lighting with a bruma torch is anim 7174 and takes 2 ticks ("You light the
- * brazier."); feeding is anim 832, one item every 3 ticks, until "You have run out of bruma
- * roots.". Near-Reality: the tinderbox anim (733), the fix anim (3676) and its messages.
+ * Captures (recordings 3254, 3262): lighting with a bruma torch is anim 7174 on the click and
+ * lights 3 ticks later with synth 2596 ("You light the brazier."). Fixing is anim 3676 and synth
+ * 930 a tick after the click, fixed on tick 3 ("You fix the brazier."). Feeding is anim 832 with
+ * synth 2596 (delay 15) on the click; every 3 ticks one item burns with synth 2596, and the
+ * animation starts again while fuel is left, or "You have run out of bruma roots." on that same
+ * tick. Near-Reality: the tinderbox anim (733).
  */
 
 const Shared = require("./Shared.Wintertodt");
@@ -19,9 +22,13 @@ const Round = require("./Round.Wintertodt");
 const Corners = require("./Corners.Wintertodt");
 const CombatAchievements = require("./CombatAchievements.Wintertodt");
 
-const LIGHT_TICKS = 2;
-const FIX_TICKS = 2;
+const LIGHT_TICKS = 3;
+/** The hammer comes down a tick after the click. */
+const FIX_START_TICK = 1;
+const FIX_TICKS = 3;
 const FEED_TICKS = 3;
+/** The feed animation's synth plays partway through it (client cycles). */
+const FEED_SOUND_DELAY = 15;
 const POINTS = { LIGHT: 25, FIX: 25, ROOT: 10, KINDLING: 25 };
 const XP = { LIGHT: 6, FIX: 4, ROOT: 3, KINDLING: 3.8 };
 /** The house's location varbit; 0 means no house (Construction). */
@@ -123,6 +130,7 @@ function finishLighting(player, index) {
     Corners.setBrazier(index, Shared.BRAZIER.LIT);
     Round.broadcast();
   }
+  Shared.sound(player, Shared.SOUND.FIRE);
   player.sendMessage("You light the brazier.");
   Round.addPoints(player, POINTS.LIGHT);
   Shared.addXp(player, "FIREMAKING", XP.LIGHT * Shared.level(player, "FIREMAKING"));
@@ -141,11 +149,14 @@ function fix(event) {
     return true;
   }
   Shared.startAction(player, "fix", (ticks) => {
+    if (ticks === FIX_START_TICK) {
+      Shared.animate(player, Shared.ANIM.FIX);
+      Shared.sound(player, Shared.SOUND.FIX);
+    }
     if (ticks < FIX_TICKS) return true;
     finishFixing(player, index);
     return false;
   });
-  Shared.animate(player, Shared.ANIM.FIX);
   return true;
 }
 
@@ -173,8 +184,14 @@ function fuelOf(player) {
   return -1;
 }
 
-/** Puts one root or kindling in; false when there is nothing left to burn. */
-function feedOne(player, index) {
+/** The feeding motion; the item it carries burns at the end of it. */
+function startFeeding(player) {
+  Shared.animate(player, Shared.ANIM.FEED);
+  Shared.sound(player, Shared.SOUND.FIRE, FEED_SOUND_DELAY);
+}
+
+/** Burns one root or kindling; false when that was the last, or there was none. */
+function feedOne(player) {
   const fuel = fuelOf(player);
   if (fuel < 0) {
     player.sendMessage("You have run out of bruma roots.");
@@ -183,9 +200,14 @@ function feedOne(player, index) {
   const kindling = fuel === Shared.ITEM.BRUMA_KINDLING;
   player.getInventory().delete(fuel, 1);
   player.getInventory().refreshItems();
-  Shared.animate(player, Shared.ANIM.FEED);
+  Shared.sound(player, Shared.SOUND.FIRE);
   Round.addPoints(player, kindling ? POINTS.KINDLING : POINTS.ROOT);
   Shared.addXp(player, "FIREMAKING", (kindling ? XP.KINDLING : XP.ROOT) * Shared.level(player, "FIREMAKING"));
+  if (fuelOf(player) < 0) {
+    player.sendMessage("You have run out of bruma roots.");
+    return false;
+  }
+  startFeeding(player);
   return true;
 }
 
@@ -205,9 +227,9 @@ function feed(event) {
   Shared.startAction(player, `feed:${index}`, (ticks) => {
     if (!Round.isActive() || Corners.corner(index).brazier !== Shared.BRAZIER.LIT) return false;
     if (ticks % FEED_TICKS !== 0) return true;
-    return feedOne(player, index);
+    return feedOne(player);
   });
-  feedOne(player, index);
+  startFeeding(player);
   return true;
 }
 

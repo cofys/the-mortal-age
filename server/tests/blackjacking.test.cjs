@@ -7,7 +7,8 @@ const Pickpocket = require('../plugins/skills/thieving/Pickpocket.Thieving');
 const attach = require('../plugins/skills/thieving/Blackjacking.Thieving');
 const base = PluginManager.getCoreApi();
 const tasks = [], log = [], listeners = new Map();
-const core = { ...base, World: { getNpcs: () => [] }, CombatFactory: { inCombat: () => false }, TaskManager: { submit: (task) => tasks.push(task) }, ItemDefinition: { forId: () => ({ getName: () => 'Maple blackjack(o)' }) } };
+const seqs = { human_blunt_pound: 401, human_unconscious: 838, human_ready: 808 };
+const core = { ...base, CacheDefinitions: { ...base.CacheDefinitions, getSeqId: (name) => seqs[name] }, World: { getNpcs: () => [] }, CombatFactory: { inCombat: () => false }, TaskManager: { submit: (task) => tasks.push(task) }, ItemDefinition: { forId: () => ({ getName: () => 'Maple blackjack(o)' }) } };
 const api = { core, onNpcsInteraction() {}, onNpcInteraction() {}, onCustomEvent: (name, handler) => listeners.set(name, handler), emitCustomEvent: (name, event) => {
   if (name === 'quest:get-stage') event.stage = event.player.questStage;
   else listeners.get(name)?.(event);
@@ -20,6 +21,7 @@ function event({ level = 65, stage = 9, id = core.NpcIdentifiers.MENAPHITE_THUG 
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }), getSkillManager: () => ({ getCurrentLevel: () => level, addExperiences: (_skill, amount) => log.push(['xp', amount]) }),
     getInventory: () => ({ isFull: () => true, getAmount: () => 100 }),
     performAnimation: (animation) => log.push(['player anim', animation.getId()]), sendMessage: (message) => log.push(message), isRegistered: () => true,
+    getPacketSender: () => ({ sendTypedMessage: (_type, message) => log.push(`spam: ${message}`), sendSound: (id) => log.push(['sound', id]) }),
   };
   const npc = { isRegistered: () => true, getCombat: () => ({ reset() {}, getTarget: () => null, attack: () => log.push('attack') }), getMovementQueue: () => ({ reset() {} }), getTimers: () => ({ registers() {} }), forceChat: (message) => log.push(message), setFollowing(target) { this.following = target; }, getFollowing() { return this.following; }, performAnimation: (animation) => log.push(['npc anim', animation.getId()]) };
   return { player, npc, npcId: id, definition: { getName: () => id === core.NpcIdentifiers.MENAPHITE_THUG ? 'Menaphite Thug' : 'Bandit' } };
@@ -78,4 +80,18 @@ test('cache bandit transforms keep Lure and Knock-Out after The Feud and use the
   stage = 0;
   login({ player });
   assert.equal(values.get(340), 0, 'untrained players retain the ordinary NPC options');
+});
+
+test('as captured: the swing and its sound, then the smack and the snore a tick later; a glance and the strike a tick later', () => {
+  clear(); const e = event(); withRandom(0, () => B.knockOut(e));
+  assert.deepEqual(log.filter((line) => Array.isArray(line) && line[0] !== 'xp'), [['player anim', 401], ['sound', 1842]]);
+  log.length = 0; tasks[0].execute();
+  assert.deepEqual(log, ['spam: You smack the bandit over the head and render them unconscious.', 'Zzzzzz', ['npc anim', 838]]);
+  log.length = 0; withRandom(0, () => B.knockOut(e));
+  assert.deepEqual(log, ["I can't do that. They're unconscious."]);
+  log.length = 0; tasks[1].execute();
+  assert.deepEqual(log, ['Arghh my head.', ['npc anim', 808]], 'it wakes');
+  clear(); const missed = event(); withRandom(1, () => B.knockOut(missed));
+  assert.deepEqual(log.slice(-2), ["spam: Your blow only glances off the bandit's head.", "I'll kill you for that!"]);
+  assert.equal(tasks.length, 1); tasks[0].execute(); assert.ok(log.includes('attack'), 'the strike comes a tick later');
 });

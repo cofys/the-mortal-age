@@ -3,6 +3,7 @@ import { DEFAULT_TOUCH_CONTROLS, type TouchControlsConfig } from "./TouchControl
 import {
     TouchGestureRecognizer,
     type TouchGestureIntent,
+    type TouchItemDrag,
 } from "./TouchGestureRecognizer";
 
 /**
@@ -29,7 +30,7 @@ export class TouchInputAdapter {
         this.recognizer.setConfig({ enableCameraOrbit: enabled });
     }
 
-    onFingerDown(x: number, y: number, timeMs: number, orbitOnly = false, widgetDrag = false): void {
+    onFingerDown(x: number, y: number, timeMs: number, orbitOnly = false, widgetDrag: TouchItemDrag = false): void {
         this.clearLongPressTimer();
         this.applyIntents(this.recognizer.fingerDown(x, y, timeMs, orbitOnly, widgetDrag));
         this.scheduleLongPressCheck();

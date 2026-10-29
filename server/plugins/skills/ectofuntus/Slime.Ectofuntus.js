@@ -2,16 +2,15 @@
  * A bucket used on the pool of slime under the Ectofuntus fills every bucket in the inventory, one
  * after another (Wiki). As captured (rsprox recording 377, rev 231): quest_ahoy_human_filling_bucket
  * on the use, and two ticks later a bucket becomes a bucket of slime with synth 1132 and, the first
- * time only, "You fill the bucket with ectoplasm."; the next bucket starts two ticks after that,
- * then each one a tick after the last fill.
+ * time only, "You fill the bucket with ectoplasm."; each next bucket starts two ticks after the
+ * last fill, so one fills every four ticks (rev 229's recording 2765 was every three).
  */
 const Common = require("./Common.Ectofuntus");
 
 const FILL_SEQ = "quest_ahoy_human_filling_bucket";
 const FILL_SOUND = 1132;
 const FILL_TICKS = 2;
-const FIRST_GAP = 2;
-const GAP = 1;
+const GAP = 2;
 
 /** Fills one bucket; false when none is left. */
 function fill(player, first) {
@@ -31,7 +30,7 @@ function fillBuckets({ player }) {
     if (tick === animateAt) Common.animate(player, FILL_SEQ);
     if (tick !== fillAt) return true;
     if (!fill(player, filled++ === 0)) return false;
-    animateAt = tick + (filled === 1 ? FIRST_GAP : GAP);
+    animateAt = tick + GAP;
     fillAt = animateAt + FILL_TICKS;
     return true;
   });

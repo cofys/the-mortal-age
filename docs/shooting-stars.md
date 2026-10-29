@@ -21,13 +21,13 @@ Like OSRS, it is free-to-play, with half experience on free-to-play worlds, wher
 
 ## Mining
 
-- **Mine:** the player turns to the star. A tick later comes "You swing your pick at the star." (spam), with the pickaxe's mining animation.
+- **Mine:** the player turns to the star. A tick later comes "You swing your pick at the star." (spam), with the pickaxe's `human_mining_<pickaxe>_pickaxe_noreachforward` swing (recording 3142: `human_mining_infernal_pickaxe_noreachforward`). Each attempt replays it.
   - **Level:** a layer needs Mining level size × 10. The text for being under the level isn't captured; this server says "You need a Mining level of at least N to mine this layer."
-  - **Pickaxe:** the Mining plugin answers which pickaxe to use (`mining:best-pickaxe`). The pickaxe's interval sets how often an attempt is made.
+  - **Pickaxe:** the Mining plugin answers which pickaxe to use (`mining:best-pickaxe`) and how long to the next attempt (`mining:roll-interval`): the pickaxe's interval, from the swing, with the dragon, infernal and crystal pickaxes' early rolls (recording 3142: attempts 3, 2, 2, 2 and 3 ticks apart with an infernal pickaxe).
 - **Each attempt** (Wiki):
   1. The uncut gem table is rolled first: 1 in 256, or 1 in 64.2 wearing a charged amulet of glory or the eternal glory. It gives a sapphire, emerald, ruby or diamond, or nothing (weights 32/16/8/2, and 70 for nothing). No stardust and no experience come with it.
   2. Otherwise, stardust is rolled: 29% at level 1 up to 46% at 99, the same for every size. Invisible boosts count.
-- **A success** gives 1 stardust and synth sound 3600. It gives 32 Mining xp, or 16 on free-to-play worlds.
+- **A success** gives 1 stardust and synth sound 3600. It gives 32 Mining xp, or 16 on free-to-play worlds (recording 3142, a members world: the stat packet says 32).
   - It emits `mining:success` with the star's base of 521,550. The Pets plugin rolls the rock golem from it, and the Mining plugin rolls clue geodes.
 - **Layers:**
   - While anyone mines (or tried to this tick: the Wiki says the timer is checked before the level), the layer drops 1% every 7 ticks. The headbar loses a pixel every 14 ticks. In the captures, each layer lasts about 702 ticks.
@@ -40,7 +40,9 @@ Like OSRS, it is free-to-play, with half experience on free-to-play worlds, wher
   - Each later success gives one extra stardust and counts it down. Every 50 there is a message: "Your star discovery bonus will grant you another N star dust before it runs out." At 0: "<col=ff3045>Your star discovery bonus has been used up."
   - The bonus is persisted and re-sent on login. Finding another star resets it to 300.
 - **Prospect:** synth sound 2661 and a message box, "This is a size-7 star. A Mining level of at least 70 is required to mine this layer. It has been mined 50% of the way to the next layer." On a size-1 star it ends "…of the way to the core."
-- **Varbits:** `star_mined` (11886) is set the first time a player mines or finds a star, and Dusuri's transcript asks about it. The captures also show `star_last_mined_size`, `star_last_mined_location` and `star_time_since_landed`, but no client script reads them, so they aren't sent.
+- **Varbits:** `star_mined` (11886) is set the first time a player mines or finds a star, and Dusuri's transcript asks about it.
+  - Mine sets `star_last_mined_size` (15353) to the star's size and `star_time_since_landed` (15354) to the ticks since it landed, again on the swing. Prospect sends the time too (recordings 3142, 1850, 1105 and the event worlds).
+  - `star_last_mined_location` (15352) is a landing-site index the cache has no table for, so it isn't sent. No client script reads any of the three.
 
 ## Dusuri
 

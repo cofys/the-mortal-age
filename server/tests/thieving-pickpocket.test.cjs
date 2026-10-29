@@ -99,6 +99,10 @@ function player({ level = 99, farming = 99, stunLeft = 0, worn = {}, inventory =
         performAnimation: (animation) => log.push(`anim ${animation.getId()}`),
         getBlockAnim: () => 420,
         sendMessage: (message) => log.push(message),
+        getPacketSender: () => ({
+            sendTypedMessage: (_type, message) => log.push(`spam: ${message}`),
+            sendSound: (id) => log.push(`sound ${id}`),
+        }),
         getAttribute: (key) => attrs.get(key),
         setAttribute: (key, value) => attrs.set(key, value),
         getIndex: () => 1,
@@ -187,17 +191,17 @@ test('success follows the Wiki chart; gloves of silence and the Thieving cape sc
 
 test('a success: the attempt message, then the animation, a coin pouch and the experience a tick later', (t) => {
     const { click, ticks } = attempt(t);
-    assert.deepEqual(click, ["You attempt to pick the man's pocket."]);
-    assert.deepEqual(ticks, [['anim 881', 'add Coin pouch x1', "You pick the man's pocket.", 'xp 8', 'thieving:success'], [], []]);
+    assert.deepEqual(click, ["spam: You attempt to pick the man's pocket."]);
+    assert.deepEqual(ticks, [['anim 881', 'add Coin pouch x1', "spam: You pick the man's pocket.", 'xp 8', 'thieving:success'], [], []]);
 });
 
 test('a failure, as captured on a hero: the message and line, then the strike and stun, then the stun message and damage', (t) => {
     const { click, ticks } = attempt(t, { random: 0.99 });
-    assert.deepEqual(click, ["You attempt to pick the man's pocket."]);
+    assert.deepEqual(click, ["spam: You attempt to pick the man's pocket."]);
     assert.deepEqual(ticks, [
-        ["You fail to pick the man's pocket.", "npc: What do you think you're doing?"],
+        ["spam: You fail to pick the man's pocket.", "npc: What do you think you're doing?"],
         ['npc anim 422', 'anim 420', 'stun 9 ticks, graphic 245/124, message false'],
-        ["You've been stunned!", 'hit 1'],
+        ["spam: You've been stunned!", 'hit 1'],
     ]);
 });
 
@@ -244,7 +248,7 @@ test("a new click can't cancel a pending outcome or stun, and a lost stun never 
     cycle += 3;
     log.length = 0;
     Thieving._test.pickpocket({ player: who, npc: npc(), npcId: 0, definition: { getName: () => 'Man' } });
-    assert.deepEqual(log, ["You attempt to pick the man's pocket."]);
+    assert.deepEqual(log, ["spam: You attempt to pick the man's pocket."]);
 });
 
 test('a stun blocks pickpocketing for 8 of its 9 ticks', (t) => {
@@ -257,7 +261,7 @@ test('a quest requirement blocks the target until the quest is complete', (t) =>
     const blocked = attempt(t, { name: 'Agnar', who: player() });
     assert.deepEqual([blocked.click, blocked.next], [['You need to complete The Fremennik Trials before you can do that.'], []]);
     const done = attempt(t, { name: 'Agnar', who: player({ attributes: { 'quest.fremennik_trials.stage': 2 } }) });
-    assert.deepEqual(done.click, ["You attempt to pick Agnar's pocket."], 'a named citizen keeps its name');
+    assert.deepEqual(done.click, ["spam: You attempt to pick Agnar's pocket."], 'a named citizen keeps its name');
     const elf = attempt(t, { name: 'Arvel', who: player() });
     assert.deepEqual(elf.click, ["You need to complete Mourning's End Part I before you can do that."], 'a quest not in the game yet stays locked');
 });
@@ -266,7 +270,7 @@ test('coin pouches: 28 of a kind block pickpocketing; a full inventory only allo
     const capped = attempt(t, { who: player({ inventory: { [I.COIN_POUCH]: 28 } }) });
     assert.deepEqual(capped.click, ['You need to empty your coin pouches before you can continue pickpocketing.']);
     const stacked = attempt(t, { who: player({ inventory: { [I.COIN_POUCH]: 5 }, full: true }) });
-    assert.deepEqual(stacked.click, ["You attempt to pick the man's pocket."]);
+    assert.deepEqual(stacked.click, ["spam: You attempt to pick the man's pocket."]);
     const empty = attempt(t, { who: player({ full: true }) });
     assert.deepEqual(empty.click, ['inventory full']);
     const farmer = attempt(t, { name: 'Farmer', who: player({ inventory: { [I.COIN_POUCH_2]: 5 }, full: true }) });
@@ -276,10 +280,10 @@ test('coin pouches: 28 of a kind block pickpocketing; a full inventory only allo
 test('opening coin pouches pays their coins', () => {
     const who = player({ inventory: { [I.COIN_POUCH]: 3 } });
     log.length = 0;
-    CoinPouch._test.open(who, I.COIN_POUCH, 3);
+    CoinPouch._test.open(who, I.COIN_POUCH, 3, true);
     assert.equal(who.inv.getAmount(I.COIN_POUCH), 0);
     assert.equal(who.inv.getAmount(I.COINS), 9);
-    assert.deepEqual(log.at(-1), 'You open all of the pouches and find 9 coins.');
+    assert.deepEqual(log.slice(-2), ['spam: You open all of the pouches and receive a total of 9 coins.', 'sound 2115']);
 });
 
 test('the rogue outfit: the full set doubles loot; a doubled coin pouch adds its coins', () => {
@@ -405,4 +409,44 @@ test("a repeat asked for after the outcome is the player's action: walking cance
     repeat.execute();
     assert.deepEqual(log, [], 'no new pickpocket from the old place');
     assert.equal(submitted.length, 0);
+});
+
+test('names as the rsprox captures show them: the Master Farmer, Martin, the H.A.M. man and woman, the Menaphite, the Bandit', (t) => {
+    const name = (npcName, npcId = 0) => attempt(t, { name: npcName, npcId, who: player() }).click.at(-1);
+    assert.equal(name('Master Farmer'), "spam: You attempt to pick the Master Farmer's pocket.");
+    assert.equal(name('Martin the Master Gardener'), "spam: You attempt to pick Martin's pocket.");
+    assert.equal(name('H.A.M. Member', 2540), "spam: You attempt to pick the man's pocket.");
+    assert.equal(name('H.A.M. Member', 2541), "spam: You attempt to pick the woman's pocket.");
+    assert.equal(name('Menaphite Thug', N.MENAPHITE_THUG), "spam: You attempt to pick the Menaphite's pocket.");
+    assert.equal(name('Bandit', 690), "spam: You attempt to pick the Bandit's pocket.");
+    assert.equal(name('Bandit', N.BANDIT_8), "spam: You attempt to pick the bandit's pocket.");
+});
+
+test('loot lines: seeds are counted, H.A.M. items named, a clue announced; the workman keeps the game channel', () => {
+    const { lootLine } = Pickpocket._test;
+    const target = (key) => DATA.targets.find((t) => t.key === key);
+    const entry = (key, id) => [...(target(key).always ?? []), ...(target(key).table ?? [])].find((e) => e.id === id);
+    const farmer = target('master_farmer');
+    const line = (key, id, amount) => lootLine(target(key), { ...entry(key, id), amount });
+    assert.equal(line('master_farmer', I.POTATO_SEED, 3), 'You steal 3 potato seeds.');
+    assert.equal(line('master_farmer', I.TOMATO_SEED, 1), 'You steal 1 tomato seed.');
+    assert.equal(line('master_farmer', I.REDBERRY_SEED, 1), 'You steal 1 redberry bush seed.');
+    assert.equal(line('master_farmer', I.KRANDORIAN_SEED, 6), 'You steal 6 Krandorian hop seeds.');
+    assert.equal(line('ham', I.BRONZE_ARROW, 1), 'You steal a bronze arrow.');
+    assert.equal(line('ham', I.BRONZE_ARROW, 7), 'You steal some bronze arrows.');
+    assert.equal(line('ham', I.COWHIDE, 1), 'You steal a piece of cow hide.');
+    assert.equal(line('ham', I.COINS, 1), 'You steal a coin pouch.');
+    assert.equal(line('man', I.COINS, 1) ?? null, null, "a man's coin pouch has no line");
+    assert.equal(lootLine(farmer, { id: I.CLUE_SCROLL_EASY_, amount: 1, clue: true }), 'You steal a clue scroll.');
+    assert.equal(line('digsite_workman', I.SPECIMEN_BRUSH, 1), 'You find a specimen brush.');
+});
+
+test('a workman, as captured: game-channel lines that trail off, and the brush found', (t) => {
+    const workman = DATA.targets.find((t) => t.key === 'digsite_workman');
+    const brush = workman.table.findIndex((e) => e.id === I.SPECIMEN_BRUSH);
+    const before = workman.table.slice(0, brush).reduce((sum, e) => sum + Pickpocket._test.rateOf(e.rate), 0);
+    const { click, next } = attempt(t, { name: 'Digsite workman', random: before + 0.01, who: player() });
+    assert.deepEqual(click, ["You attempt to pick the workman's pocket..."]);
+    assert.ok(next.includes("You pick the workman's pocket..."), next.join(' | '));
+    assert.ok(next.includes('You find a specimen brush.'), next.join(' | '));
 });

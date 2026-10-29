@@ -13,7 +13,14 @@
  * the main modal. Choosing an item closes it, plays human_furnace and sound 2725, and makes the
  * first item 2 ticks later, then one every 3 ticks with the animation and sound replayed; no
  * message. The gold menu (446) works the same way; both read the make-quantity from varp 2224
- * (cache scripts 429, 2928 and 3599). Silver products, levels and moulds are cache script
+ * (cache scripts 429, 2928 and 3599). The click also stores the button in
+ * `crafting_gold_item_lasttype` (gold) or `crafting_silver_item_lasttype` (silver) as its value in
+ * enum 4318 or 4319, which the menus' own scripts (crafting_gold_checkgem,
+ * silver_crafting_*_draw) read to highlight the last item and give it the space key
+ * (recordings 1851, 1102 and more).
+ *
+ * A ball of wool on an unstrung amulet strings it on the tick after the click, with "You put some
+ * string on your amulet." (spam) and no animation (recordings 91, 1105, 1135, 1843, 1854, 1858). Silver products, levels and moulds are cache script
  * 1596's; XP is the Wiki's (Crafting#Silver jewellery, Crafting#Silver, Silvthrill rod,
  * Demonic sigil, Conductor, Silver bolts (unf)). Recipes are in data/crafting.json.
  */
@@ -29,6 +36,11 @@ const SILVER_CRAFTING_INTERFACE = 6;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
 const MAKE_QUANTITY_VARP = 2224;
 const JEWELLERY_MENU_ATTRIBUTE = "crafting:jewellery-menu";
+/** Each menu's button -> last-item value enum and varbit (cache scripts 429 and silver_crafting_*_draw). */
+const LAST_ITEM = {
+  [GOLD_CRAFTING_INTERFACE]: { enumId: 4318, varbit: "crafting_gold_item_lasttype" },
+  [SILVER_CRAFTING_INTERFACE]: { enumId: 4319, varbit: "crafting_silver_item_lasttype" },
+};
 
 
 let tables = null;
@@ -103,12 +115,13 @@ function craftFurnaceProduct(player, product) {
  * The cache's menu (script 2940) only gives a product its Craft option when the player has the
  * level and materials, so this is a guard: refuse before the menu closes or anything animates.
  */
-function startFurnaceProduct(player, menu, product) {
+function startFurnaceProduct(player, menu, product, buttonId) {
   if (Shared.craftingLevel(player) < product.level) {
     player.sendMessage(`You need a Crafting level of at least ${product.level} to craft this.`);
     return;
   }
   if (!hasFurnaceMaterials(player, product)) return;
+  storeLastItem(player, buttonId);
   player.setAttribute(JEWELLERY_MENU_ATTRIBUTE, null);
   player.setInterfaceId(-1);
   player.getPacketSender().closeSubInterface(MAIN_MODAL_TARGET_UID);
@@ -119,6 +132,15 @@ function startFurnaceProduct(player, menu, product) {
     has: () => hasFurnaceMaterials(player, product),
     make: () => craftFurnaceProduct(player, product),
   });
+}
+
+/** The chosen button as the menu's last item, so it opens highlighted next time. */
+function storeLastItem(player, buttonId) {
+  const { CacheDefinitions } = Shared.getCore();
+  const { enumId, varbit } = LAST_ITEM[buttonId >>> 16];
+  const value = CacheDefinitions.getEnumValues(enumId).get(buttonId);
+  const varbitId = CacheDefinitions.getVarbitId(varbit);
+  if (Number.isInteger(value) && varbitId != null) player.getPacketSender().sendVarbit(varbitId, value);
 }
 
 function goldProduct(component) {
@@ -161,7 +183,7 @@ function handleJewelleryButton(event) {
     player.getPacketSender().sendConfig(MAKE_QUANTITY_VARP, amount === 28 ? 0 : amount);
   } else {
     const product = group === GOLD_CRAFTING_INTERFACE ? goldProduct(component) : silverProduct(component);
-    if (product) startFurnaceProduct(player, menu, product);
+    if (product) startFurnaceProduct(player, menu, product, buttonId);
   }
 }
 
@@ -262,13 +284,15 @@ function stringAmulet(event) {
   if (woolId !== I.BALL_OF_WOOL || strungId === undefined) return;
 
   event.handled = true;
-  const inventory = player.getInventory();
-  if (!inventory.contains(I.BALL_OF_WOOL) || !inventory.contains(unstrungId)) return;
-  inventory.deleteNumber(I.BALL_OF_WOOL, 1);
-  inventory.deleteNumber(unstrungId, 1);
-  inventory.addItem(new Item(strungId, 1));
-  Shared.addCraftingXp(player, data().stringXp);
-  player.sendMessage("You put some string on your amulet.");
+  Shared.nextTick(player, () => {
+    const inventory = player.getInventory();
+    if (!inventory.contains(I.BALL_OF_WOOL) || !inventory.contains(unstrungId)) return;
+    inventory.deleteNumber(I.BALL_OF_WOOL, 1);
+    inventory.deleteNumber(unstrungId, 1);
+    inventory.addItem(new Item(strungId, 1));
+    Shared.addCraftingXp(player, data().stringXp);
+    Shared.spam(player, "You put some string on your amulet.");
+  });
 }
 
 module.exports = function attach(api) {

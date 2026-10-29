@@ -6,7 +6,7 @@ const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
-const { content, dockAtGangplank, dockAtBuoy, fade, playSound } = require("./SailingContent.Sailing");
+const { content, dockAtGangplank, dockAtBuoy, fade, playSound, spam } = require("./SailingContent.Sailing");
 const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
 const { MODE, openBoatSelection } = require("./BoatSelection.plugin");
 
@@ -45,7 +45,7 @@ function boardSlot(player, dock, slot) {
       return;
     }
     playSound(player, SOUND_BOARD_BOAT);
-    player.sendMessage("You board your boat.");
+    spam(player, "You board your boat.");
     later(player, 1, () => fade(player, false));
   });
 }
@@ -72,7 +72,11 @@ function dockAtBuoyOp({ player, location }) {
   playSound(player, SOUND_DOCK);
 }
 
-/** A port's gangplank, from the boat: disembark there, which docks the boat if it wasn't. */
+/**
+ * A port's gangplank, from the boat: disembark there, which docks the boat if it wasn't. Both
+ * lines are spam; docking says so (rsprox captures, rev 235: both lines in the same recordings at
+ * Port Sarim, the Pandemonium and Musa Point).
+ */
 function disembarkBoat({ player, location }) {
   const dock = dockAtGangplank(location);
   if (!dock || !Sailing.instanceAboard(player)) return false;
@@ -88,7 +92,7 @@ function disembarkBoat({ player, location }) {
     if (refused) {
       player.sendMessage(refused);
     } else {
-      player.sendMessage(`You disembark at ${dock.theName}.`);
+      spam(player, docked ? `You disembark at ${dock.theName}.` : `You dock the boat at ${dock.theName} and disembark.`);
       playSound(player, SOUND_BOARD_BOAT);
     }
     later(player, 1, () => fade(player, false));

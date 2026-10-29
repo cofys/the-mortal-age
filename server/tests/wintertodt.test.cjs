@@ -99,7 +99,7 @@ function fakePlayer(name = 'Tester', { firemaking = 99, level = 99, x = 1631, y 
   const varbits = new Map();
   const attributes = new Map();
   const p = {
-    messages: [], statements: [], scripts: [], interfaces: [], animations: [], splats: [], damage: [],
+    messages: [], spam: [], sounds: [], statements: [], scripts: [], interfaces: [], animations: [], splats: [], damage: [],
     xp: 0, xpBySkill: {}, hp: 99,
     location: new Location(x, y, 0),
     inventory: container(28),
@@ -137,6 +137,8 @@ function fakePlayer(name = 'Tester', { firemaking = 99, level = 99, x = 1631, y 
         sendClientScript: (id, ...args) => { p.scripts.push([id, ...args]); return sender; },
         sendProjectile: () => sender,
         sendGraphic: () => sender,
+        sendSoundEffect: (id, loops, delay) => { p.sounds.push(delay ? [id, delay] : id); return sender; },
+        sendTypedMessage: (type, text) => { p.spam.push(text); return sender; },
       };
       return sender;
     },
@@ -409,6 +411,8 @@ test('warmth regenerates 8% a minute plus 1% per warm item; food and potions res
   hooks.items['Rejuvenation potion (2)'].Drink({ player, slot: 0, itemId: Shared.ITEM.REJUVENATION_2 });
   assert.equal(Warmth.warmthOf(player), 400);
   assert.equal(player.inventory.slots[0].id, Shared.ITEM.REJUVENATION_1);
+  assert.deepEqual(player.spam, ['You drink some of your potion.', 'You have 1 dose of potion left.'], 'capture: spam');
+  assert.deepEqual(player.sounds, [Shared.SOUND.DRINK]);
 });
 
 test('lighting needs a tinderbox or torch and a healthy pyromancer; it pays 25 points and 6x XP', () => {
@@ -423,11 +427,12 @@ test('lighting needs a tinderbox or torch and a healthy pyromancer; it pays 25 p
   Corners.healPyromancer(SW);
   hooks.objects.Brazier.Light({ player, object: swBrazier });
   assert.equal(player.animations.at(-1), Shared.ANIM.LIGHT_TINDERBOX);
-  ticks(1);
+  ticks(2);
   assert.equal(Corners.corner(SW).brazier, Shared.BRAZIER.UNLIT);
   ticks(1);
-  assert.equal(Corners.corner(SW).brazier, Shared.BRAZIER.LIT);
+  assert.equal(Corners.corner(SW).brazier, Shared.BRAZIER.LIT, 'capture: lit on tick 3');
   assert.equal(player.messages.at(-1), 'You light the brazier.');
+  assert.deepEqual(player.sounds, [Shared.SOUND.FIRE]);
   assert.equal(Round.pointsOf(player), 25);
   assert.equal(player.xp, 6 * 99);
   const torch = fighter('Torch');
@@ -444,11 +449,14 @@ test('feeding burns kindling first, then roots, one every 3 ticks, until they ru
   player.inventory.adds(Shared.ITEM.BRUMA_KINDLING, 1);
   player.inventory.adds(Shared.ITEM.BRUMA_ROOT, 1);
   hooks.objects['Burning brazier'].Feed({ player, object: swBrazier });
+  assert.equal(Round.pointsOf(player), 0, 'capture: nothing burns on the click');
+  assert.deepEqual(player.sounds, [[Shared.SOUND.FIRE, 15]]);
+  ticks(3);
   assert.equal(Round.pointsOf(player), 25, 'kindling first');
+  assert.deepEqual(player.sounds.slice(1), [Shared.SOUND.FIRE, [Shared.SOUND.FIRE, 15]]);
   ticks(3);
   assert.equal(Round.pointsOf(player), 35, 'then a root');
-  ticks(3);
-  assert.equal(player.messages.at(-1), 'You have run out of bruma roots.');
+  assert.equal(player.messages.at(-1), 'You have run out of bruma roots.', 'capture: on the last one\'s tick');
   assert.equal(player.xp, 99 * 3.8 + 99 * 3);
 });
 
@@ -482,7 +490,12 @@ test('a large attack breaks the brazier and its shrapnel hits players beside it;
   assert.equal(near.messages.at(-1), 'You need a hammer to fix this brazier.');
   near.inventory.adds(Shared.ITEM.HAMMER);
   hooks.objects.Brazier.Fix({ player: near, object: swBrazier });
-  ticks(2);
+  ticks(1);
+  assert.equal(near.animations.at(-1), Shared.ANIM.FIX, 'capture: the hammer a tick after the click');
+  assert.deepEqual(near.sounds, [Shared.SOUND.FIX]);
+  ticks(1);
+  assert.equal(Corners.corner(SW).brazier, Shared.BRAZIER.BROKEN);
+  ticks(1);
   assert.equal(Corners.corner(SW).brazier, Shared.BRAZIER.UNLIT);
   assert.equal(near.messages.at(-1), 'You fix the brazier.');
   assert.equal(Round.pointsOf(near), 25);
@@ -512,8 +525,14 @@ test('roots come every 3 ticks at 99 with a dragon axe; kindling every 4 outside
   assert.equal(player.messages.at(-1), 'You do not have an axe which you have the woodcutting level to use.');
   player.inventory.adds(I.DRAGON_AXE);
   hooks.objects['Bruma roots'].Chop({ player });
-  assert.equal(player.messages.at(-1), 'You swing your axe at the roots.');
-  ticks(9);
+  ticks(1);
+  assert.deepEqual(player.spam, []);
+  ticks(1);
+  assert.deepEqual(player.spam, ['You swing your axe at the roots.'], 'capture: tick 2, spam');
+  ticks(1);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_ROOT), 1, 'capture: first root on tick 3');
+  assert.equal(player.spam.at(-1), 'You get a bruma root.');
+  ticks(6);
   assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_ROOT), 3);
 
   player.inventory.adds(Shared.ITEM.KNIFE);
@@ -527,7 +546,7 @@ test('roots come every 3 ticks at 99 with a dragon axe; kindling every 4 outside
   assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 1);
   ticks(4);
   assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 2);
-  assert.equal(player.messages.at(-1), 'You carefully fletch the root into a bundle of kindling.');
+  assert.equal(player.spam.at(-1), 'You carefully fletch the root into a bundle of kindling.');
 });
 
 test('the crates give one tool while you have none, and up to ten concoctions', () => {
@@ -538,9 +557,16 @@ test('the crates give one tool while you have none, and up to ten concoctions', 
   assert.equal(player.messages.at(-1), 'You already have a knife.');
   hooks.objects.Crate['Take-10 concoctions']({ player });
   assert.equal(player.inventory.getAmount(Shared.ITEM.REJUVENATION_UNF), 10);
-  player.inventory.adds(Shared.ITEM.BRUMA_HERB);
+  for (let i = 0; i < 3; i++) player.inventory.adds(Shared.ITEM.BRUMA_HERB);
   hooks.itemOnItem['Bruma herb|Rejuvenation potion (unf)']({ player });
   assert.equal(player.inventory.getAmount(Shared.ITEM.REJUVENATION_4), 1);
+  assert.equal(player.spam.at(-1), 'You combine the bruma herb into the unfinished potion.');
+  ticks(2);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.REJUVENATION_4), 2, 'capture: the second 2 ticks later');
+  ticks(2);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.REJUVENATION_4), 2);
+  ticks(1);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.REJUVENATION_4), 3, 'then every 3');
   const outside = fakePlayer('Outside');
   hooks.itemOnItem['Bruma herb|Rejuvenation potion (unf)']({ player: outside });
   assert.equal(outside.messages.at(-1), 'You can only do that within the influence of the Bruma tree.');
@@ -584,6 +610,8 @@ test('the cart: Check counts, Search takes one every 3 ticks, and the last ends 
   const player = fakePlayer('Searcher');
   Cart.check({ player });
   assert.equal(player.messages.at(-1), "You aren't owed any rewards from the cart.");
+  Cart.search({ player });
+  assert.equal(player.statements.length, 1, 'There are no rewards here for you...');
   Round.setRewardsOwed(player, 2);
   assert.equal(player.varbits.get(Shared.VARBIT.REWARDS_OWED), 2, 'the cart multiloc');
   Cart.check({ player });
@@ -592,11 +620,13 @@ test('the cart: Check counts, Search takes one every 3 ticks, and the last ends 
   assert.equal(player.animations.at(-1), Shared.ANIM.CART_SEARCH);
   ticks(3);
   assert.equal(Round.rewardsOwed(player), 1);
-  assert.match(player.messages.at(-1), /^You found some loot: \d+ x .+/);
-  Cart.bigSearch({ player });
+  assert.match(player.spam.at(-1), /^You found some loot: \d+ x .+/);
+  assert.deepEqual(player.sounds, [Shared.SOUND.PICK]);
+  Cart.check({ player });
+  assert.equal(player.messages.at(-1), 'You are owed one more reward from the cart.', 'capture');
   ticks(3);
-  assert.equal(Round.rewardsOwed(player), 0, 'the last one');
-  assert.equal(player.statements.length, 1, "You think you've taken as much as you're owed...");
+  assert.equal(Round.rewardsOwed(player), 0, 'capture: Search keeps going, one every 3 ticks');
+  assert.equal(player.statements.length, 2, "You think you've taken as much as you're owed...");
 
   player.inventory.slots.fill(null);
   Round.setRewardsOwed(player, 25);
@@ -604,12 +634,22 @@ test('the cart: Check counts, Search takes one every 3 ticks, and the last ends 
   ticks(2);
   assert.equal(Round.rewardsOwed(player), 25);
   ticks(1);
-  assert.equal(Round.rewardsOwed(player), 15, 'ten in one search');
-  player.inventory.slots.fill(null);
-  Round.setRewardsOwed(player, 9);
-  Cart.bigSearch({ player });
+  assert.equal(Round.rewardsOwed(player), 20, 'capture and Wiki: five at a time');
   ticks(3);
-  assert.equal(Round.rewardsOwed(player), 0, 'all nine when fewer than ten are owed');
+  assert.equal(Round.rewardsOwed(player), 15, 'and again 3 ticks later');
+  Shared.stopAction(player);
+  player.inventory.slots.fill(null);
+  Round.setRewardsOwed(player, 7);
+  Cart.bigSearch({ player });
+  ticks(6);
+  assert.equal(Round.rewardsOwed(player), 0, 'five, then the two left');
+
+  for (let i = 0; i < 28; i++) player.inventory.slots[i] = { id: I.SHARK, amount: 1 };
+  Round.setRewardsOwed(player, 3);
+  const before = player.statements.length;
+  Cart.search({ player });
+  assert.equal(player.statements.length, before + 1, 'You need at least one free inventory space...');
+  assert.equal(Shared.actionOf(player), null);
 });
 
 test('a brazier click walks to the nearest open tile beside it, walled side included (as live)', () => {
@@ -648,4 +688,29 @@ test('bruma roots and kindling go at the end of a round; every prison supply on 
   returning.inventory.adds(Shared.ITEM.BRUMA_KINDLING);
   hooks.login[0]({ player: returning });
   assert.equal(returning.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 0);
+});
+
+test('herbs, a healthy pyromancer and the torch swap follow the captures', () => {
+  startRound();
+  const player = fighter('Picker');
+  hooks.objects['Sprouting Roots'].Pick({ player });
+  assert.equal(player.animations.at(-1), Shared.ANIM.PICK);
+  ticks(3);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_HERB), 1);
+  assert.deepEqual(player.spam, ['You pick a bruma herb.'], 'capture: spam');
+  assert.deepEqual(player.sounds, [Shared.SOUND.PICK]);
+  Shared.stopAction(player);
+
+  Corners.healPyromancer(SW);
+  const npc = { getId: () => Shared.NPC.PYROMANCER, getLocation: () => new Location(1619, 3996, 0) };
+  hooks.npcs.Pyromancer.Help({ player, npc });
+  assert.equal(player.messages.at(-1), "You don't need to do that.");
+  assert.equal(player.statements.length, 1, "No need! I'm fine, thanks.");
+
+  player.inventory.slots.fill(null);
+  player.inventory.adds(Shared.ITEM.BRUMA_TORCH);
+  hooks.items['Bruma torch'].Swap({ player, slot: 0, itemId: Shared.ITEM.BRUMA_TORCH });
+  assert.equal(player.inventory.slots[0].id, Shared.ITEM.BRUMA_TORCH_OFFHAND);
+  hooks.items['Bruma torch (off-hand)'].Swap({ player, slot: 0, itemId: Shared.ITEM.BRUMA_TORCH_OFFHAND });
+  assert.equal(player.inventory.slots[0].id, Shared.ITEM.BRUMA_TORCH);
 });

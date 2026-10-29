@@ -6,7 +6,11 @@ import { CacheSystem } from "../../../../rs/cache/CacheSystem";
 import { IndexType } from "../../../../rs/cache/IndexType";
 import { retryOnMissingGroup } from "../../../../rs/cache/js5/retryOnMissingGroup";
 import { ByteBuffer } from "../../../../rs/io/ByteBuffer";
-import { ensureSharedMusicWorklet, resumeAudioContextIfNeeded } from "../../audioContext";
+import {
+    ensureSharedMusicWorklet,
+    getMusicWorkletUnsupportedReason,
+    resumeAudioContextIfNeeded,
+} from "../../audioContext";
 import { MusicPatch } from "../patch/MusicPatch";
 import { MusicTrack } from "../patch/MusicTrack";
 import { SoundCache } from "../patch/SoundCache";
@@ -78,6 +82,8 @@ type MidiEvent = (
     MidiEventBase;
 
 export class RealtimeMidiSynth {
+    private static warnedUnsupported = false;
+
     private cache: CacheSystem;
     private soundCache: SoundCache;
     private context: AudioContext | null = null;
@@ -137,6 +143,15 @@ export class RealtimeMidiSynth {
      */
     async initialize(): Promise<boolean> {
         if (this.workletReady) return true;
+
+        const unsupported = getMusicWorkletUnsupportedReason();
+        if (unsupported) {
+            if (!RealtimeMidiSynth.warnedUnsupported) {
+                RealtimeMidiSynth.warnedUnsupported = true;
+                console.warn(`[RealtimeMidiSynth] Music disabled: ${unsupported}`);
+            }
+            return false;
+        }
 
         try {
             // Share one device-rate AudioContext across all synths (no forced 44100).

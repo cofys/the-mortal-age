@@ -394,6 +394,12 @@ export class Player extends Mobile {
         }
         this.arrivalAnimation = null;
         super.performAnimation(animation);
+        // Wiki: Animation stall. A swing's animation is measured here, the one place every
+        // source of one (styles, specials, spells) arrives. A seq turned away by priority was
+        // never started, so it must not be measured.
+        if (animation != null && this.getAnimation() === animation) {
+            this.getCombat().onAnimationStarted(animation.getId());
+        }
     }
 
     /** The hitpoints orb's poison state as last sent (varp 102); undefined sends it on the first tick. */

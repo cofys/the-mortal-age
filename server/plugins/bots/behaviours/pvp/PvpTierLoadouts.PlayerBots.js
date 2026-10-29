@@ -81,9 +81,9 @@ function getArchetypeChoices() {
  * leaves out the free-to-play presets (members-only minigames). Returns null for an unknown
  * tier.
  */
-function pickTierChoice(tier, { index = 0, style = null, band = TIER_BANDS[tier], excludeF2p = false } = {}) {
-  const profileId = TIER_PROFILE_IDS[tier];
-  if (!profileId || !band) {
+function pickTierChoice(tier, { index = 0, style = null, band = TIER_BANDS[tier], excludeF2p = false,
+  profileId = TIER_PROFILE_IDS[tier] } = {}) {
+  if (!TIER_PROFILE_IDS[tier] || !band) {
     return null;
   }
   const profile = getPvpProfile(profileId);

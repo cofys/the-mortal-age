@@ -40,8 +40,6 @@ const HELM_LOCKED_IN = 3;
 const HELM_STATUS_CREW = 3;
 /** While navigating, the helm and the helmsman replay their loop every 10 ticks (rsprox). */
 const HELM_LOOP_TICKS = 10;
-const SOUND_HELM_ENTER = 10792;
-const SOUND_HELM_EXIT = 10793;
 const SOUND_SAIL_RAISE = 10831;
 const SOUND_SAIL_LOWER = 10833;
 
@@ -124,6 +122,16 @@ function playHelm(player, boat, name, actor = player) {
   if (helm[name] !== undefined) animateDeckLocs(player, boat, isHelm, helm[name]);
 }
 
+/**
+ * Taking and leaving the helm sound by the boat's size (boats.json `anims.helm.sounds`, rsprox
+ * captures, rev 235): the raft's 1x3 helm 10792 and 10793 (49 recordings), the skiff's 2x5 and
+ * the sloop's 3x8 helms 10807 and 10808 (210 and 35 recordings).
+ */
+function playHelmSound(player, boat, name) {
+  const sound = boatAnim(boat, "helm")?.sounds?.[name];
+  if (sound !== undefined) playSound(player, sound);
+}
+
 function loopHelm(player, boat) {
   let ticks = 0;
   TaskManager.submit(new (class extends Task {
@@ -182,14 +190,13 @@ function takeHelm(player, boat) {
   faceBow(player);
   loopHelm(player, boat);
   sender.sendInterfaceScript(SCRIPT_SIDEBUTTON_SWITCH, [0]);
-  playSound(player, SOUND_HELM_ENTER);
+  playHelmSound(player, boat, "enter");
   if (getVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE) === MOVE_MODE.STOPPED) {
     setVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE, MOVE_MODE.MOORED);
   }
   setVarbit(player, VARBIT.SIDEPANEL_PLAYER_AT_HELM, 1);
   setVarbit(player, VARBIT.SIDEPANEL_HELM_STATUS, HELM_STATUS.NAVIGATING);
   sender.sendInterfaceScript(SCRIPT_HELM_UPDATE, ["", 0, player.getUsername(), 1]);
-  player.sendMessage("You take the helm. Click the water to steer.");
   reportWind(player);
 }
 
@@ -198,7 +205,7 @@ function leaveHelm(player, boat) {
   setVarbit(player, VARBIT.FACILITY_LOCKEDIN, 0);
   stopNavigating(player, boat);
   player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
-  playSound(player, SOUND_HELM_EXIT);
+  playHelmSound(player, boat, "exit");
   setVarbit(player, VARBIT.SIDEPANEL_PLAYER_AT_HELM, 0);
 }
 
@@ -300,6 +307,22 @@ function leaveHelmForOtherLoc(event) {
   // The wind catcher is worked from the helm too (rsprox 907 11533).
   if (require("./WindCatcher.Helm").isCatcherLoc(event.objectId)) return;
   leaveHelm(player, boat);
+}
+
+/**
+ * Another plugin's action takes the player away from the helm (a charting spot, the spyglass):
+ * the same as letting go of it. `left` tells the caller whether they were at the helm, as live
+ * answers a tick later then (rsprox 1009: the helm released on the click, the charting next tick).
+ *
+ *   api.emitCustomEvent("sailing:leave-helm", { player }) -> { left }
+ */
+function leaveHelmFor(event) {
+  const { player } = event;
+  const boat = Sailing.instanceAboard(player);
+  event.left = false;
+  if (!boat || boat.helmPlayerId !== player.getIndex()) return;
+  leaveHelm(player, boat);
+  event.left = true;
 }
 
 function toggleHelm({ player, object }) {
@@ -439,6 +462,7 @@ module.exports = {
     api.onObjectInteraction("Sails", { Trim: trim, Set: adjustSails("full"), "Un-set": adjustSails("stop") });
     api.onObjectRoute(routeOnDeck);
     api.onCustomEvent("sailing:left", walkAfterLeaving);
+    api.onCustomEvent("sailing:leave-helm", leaveHelmFor);
     api.onInterfaceActionClick(clickSailButton);
     require("./WindCatcher.Helm").attach(api);
     BoatManager.onHeadingSet(raiseSailForHeading);

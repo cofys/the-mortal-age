@@ -1351,15 +1351,11 @@ class PvpController {
     if ((player.getHitpoints?.() ?? 0) <= 0 || player.isDyingReturn?.() === true) {
       return false;
     }
-    const hasInventory = player
-      .getInventory?.()
-      .getItems?.()
-      .some((item) => item?.getId?.() > 0);
     const hasEquipment = player
       .getEquipment?.()
       .getItems?.()
       .some((item) => item?.getId?.() > 0);
-    if (hasInventory || hasEquipment) {
+    if (hasEquipment && !state.pvp.loadoutPending) {
       return false;
     }
     const applied = applyGeneratedPvpLoadout(player, state, { api: this.api });

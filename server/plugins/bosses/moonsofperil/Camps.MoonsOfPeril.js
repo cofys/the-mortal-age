@@ -5,7 +5,7 @@
  *   human_cooking_walkmerge_norestart, sound 2577). 30 Cooking, 45 / 60 xp, nothing burns; a second
  *   bream, or extra lizard meat, by Cooking level (Wiki). "You haven't got anything to cook."
  * - Cooking stove, Make-cuppa: full run energy, "You drink the tea and find yourself feeling
- *   energised!".
+ *   energised!" (spam).
  * - Supply crates: each kit hands over the tools the player lacks (and two vials of water every
  *   time), named in an object box.
  * - Grubby sapling: a moonlight grub two ticks after arriving, sometimes two ("Your hunting
@@ -124,7 +124,8 @@ function cuppa({ player, objectId }) {
   Common.sound(player, spec.sound);
   player.setRunEnergy(100);
   player.getPacketSender().sendRunEnergy();
-  player.getPacketSender().sendMessage(spec.message);
+  // A spam line (rsprox captures 1104, 1693, 3276).
+  player.getPacketSender().sendTypedMessage(Common.core.ChatType.SPAM, spec.message);
   return true;
 }
 

@@ -57,6 +57,7 @@ function realPlayer(t, thieving = 99) {
   const sender = p.getPacketSender();
   p.sent = { interfaces: [], texts: new Map(), messages: [] };
   t.mock.method(p, 'sendMessage', (message) => p.sent.messages.push(message));
+  t.mock.method(sender, 'sendTypedMessage', (_type, message) => p.sent.messages.push(message));
   const original = { sendInterface: sender.sendInterface, sendString: sender.sendString };
   t.mock.method(sender, 'sendInterface', function (id) { p.sent.interfaces.push(id); return original.sendInterface.apply(this, arguments); });
   t.mock.method(sender, 'sendString', function (text, uid) { p.sent.texts.set(uid, text); return original.sendString.apply(this, arguments); });
@@ -83,13 +84,15 @@ function visit(player, room) {
 
 /**
  * The room's Grand Gold Chest searched, through Containers.PyramidPlunder.js. 0.5 rolls no swarm
- * at 99 Thieving and no sceptre; `idle` lets the last search's ticks pass first.
+ * at 99 Thieving and no sceptre; `idle` lets the last search's ticks pass first. The chest opens
+ * a tick after the click (rsprox captures), so a tick passes after it.
  */
 function searchChest(player, room, { roll = 0.5, idle = true } = {}) {
   const run = C.sessionOf(player)?.room === room ? C.sessionOf(player) : visit(player, room);
   if (idle) run.busyUntil = 0;
   const b = C.roomData(room).bounds;
   T.Containers.searchChest({ player, objectId: C.ids().chest, location: { x: b.minX + 2, y: b.minY + 2, z: 0 } }, () => roll);
+  for (let i = 0; i < 2; i++) C.getCore().TaskManager.process();
 }
 
 const text = (p, n) => p.sent.texts.get(LINE(n));

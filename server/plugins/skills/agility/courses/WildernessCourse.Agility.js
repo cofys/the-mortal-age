@@ -18,6 +18,7 @@ function steppingStones({ pos }) {
 module.exports = {
   key: "wilderness",
   name: "Wilderness Agility",
+  helper: 13, // the Agility helper's course (enum 3507: "Wilderness Agility Course")
   lapXp: 571.4,
   petBase: 34666, // Giant squirrel base chance (Wiki)
   obstacles: [

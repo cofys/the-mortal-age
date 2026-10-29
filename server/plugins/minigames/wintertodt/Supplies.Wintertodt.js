@@ -4,16 +4,21 @@
  * Everything gathered and made inside the prison: bruma roots, kindling, bruma herbs, the
  * crates by the doors and rejuvenation potions.
  *
- * Captures: chopping says "You swing your axe at the roots." and gives a root every 3 ticks
- * ("You get a bruma root."); fletching is anim 1248, a kindling every 4 ticks ("You carefully
- * fletch the root into a bundle of kindling."), refused in the safe area ("Your hands are too
- * cold to fletch here - move closer to the braziers."); "You take a knife from the crate."
+ * Captures (recordings 3254, 3262): chopping swings on tick 2 ("You swing your axe at the
+ * roots.") and gives a root every 3 ticks from tick 3 ("You get a bruma root."); fletching is
+ * anim 1248, a kindling every 4 ticks ("You carefully fletch the root into a bundle of
+ * kindling."), refused in the safe area ("Your hands are too cold to fletch here - move closer
+ * to the braziers."); picking is anim 2282 and a herb every 3 ticks with synth 2581 ("You pick a
+ * bruma herb."); potions are mixed on the click, 2 ticks later, then every 3; drinking is anim
+ * 829 and synth 2401 ("You drink some of your potion.", "You have 3 doses of potion left.");
+ * these skilling lines are all on the spam channel. "You take a knife from the crate."; Swap
+ * turns the bruma torch into its off-hand form and back.
  * Wiki: roots give 0.3x Woodcutting level XP, kindling 0.6x Fletching, a potion 0.1x Herblore;
  * herbs no longer give Farming XP; a dose of rejuvenation potion restores 30% warmth; potions
  * can only be made "within the influence of the Bruma tree"; the hammer, knife, axe and
  * tinderbox crates give one only while you have none; Brew'ma makes every potion you can.
- * Near-Reality: the crate messages besides the knife's, the herb picking anim (2282), the potion
- * message, and roots, kindling, herbs and potions shattering when dropped.
+ * Near-Reality: the crate messages besides the knife's, and roots, kindling, herbs and potions
+ * shattering when dropped.
  */
 
 const Shared = require("./Shared.Wintertodt");
@@ -22,9 +27,13 @@ const Warmth = require("./Warmth.Wintertodt");
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 
 const CHOP_TICKS = 3;
+/** The swing (animation and line) comes on tick 2, a tick before the first root. */
+const SWING_TICK = 2;
 const FLETCH_TICKS = 4;
 const PICK_TICKS = 3;
-const MIX_TICKS = 2;
+/** The second potion is mixed 2 ticks after the first, then one every 3 ticks. */
+const MIX_SECOND_TICK = 2;
+const MIX_TICKS = 3;
 const DRINK_DELAY = 3;
 const XP = { ROOT: 0.3, KINDLING: 0.6, POTION: 0.1 };
 
@@ -68,20 +77,22 @@ function chop(event) {
     player.sendMessage("Your inventory is too full to hold any more roots.");
     return true;
   }
-  player.sendMessage("You swing your axe at the roots.");
   Shared.startAction(player, "chop", (ticks) => {
     if (!Round.isActive()) return false;
+    if (ticks === SWING_TICK) {
+      Shared.animate(player, axe.animationId);
+      Shared.spam(player, "You swing your axe at the roots.");
+    }
     if (ticks % CHOP_TICKS !== 0) return true;
     Shared.animate(player, axe.animationId);
     if (Math.random() >= chopChance(player, axe)) return true;
     give(player, Shared.ITEM.BRUMA_ROOT);
-    player.sendMessage("You get a bruma root.");
+    Shared.spam(player, "You get a bruma root.");
     Shared.addXp(player, "WOODCUTTING", XP.ROOT * Shared.level(player, "WOODCUTTING"));
     if (!isFull(player)) return true;
     player.sendMessage("Your inventory is too full to hold any more roots.");
     return false;
   });
-  Shared.animate(player, axe.animationId);
   return true;
 }
 
@@ -91,7 +102,7 @@ function fletchOne(player) {
   const slot = slotOf(player, Shared.ITEM.BRUMA_ROOT);
   if (slot < 0 || !player.getInventory().contains(Shared.ITEM.KNIFE)) return false;
   player.getInventory().setItem(slot, newItem(Shared.ITEM.BRUMA_KINDLING)).refreshItems();
-  player.sendMessage("You carefully fletch the root into a bundle of kindling.");
+  Shared.spam(player, "You carefully fletch the root into a bundle of kindling.");
   Shared.addXp(player, "FLETCHING", XP.KINDLING * Shared.level(player, "FLETCHING"));
   return true;
 }
@@ -128,6 +139,8 @@ function pick(event) {
   Shared.startAction(player, "pick", (ticks) => {
     if (ticks % PICK_TICKS !== 0) return true;
     give(player, Shared.ITEM.BRUMA_HERB);
+    Shared.sound(player, Shared.SOUND.PICK);
+    Shared.spam(player, "You pick a bruma herb.");
     if (isFull(player)) return false;
     Shared.animate(player, Shared.ANIM.PICK);
     return true;
@@ -197,7 +210,7 @@ function mixOne(player) {
   player.getInventory().setItem(unf, newItem(Shared.ITEM.REJUVENATION_4));
   player.getInventory().setItem(herb, newItem(-1, 0));
   player.getInventory().refreshItems();
-  player.sendMessage("You combine the bruma herb into the unfinished potion.");
+  Shared.spam(player, "You combine the bruma herb into the unfinished potion.");
   Shared.addXp(player, "HERBLORE", XP.POTION * Shared.level(player, "HERBLORE"));
   return true;
 }
@@ -209,7 +222,8 @@ function mix(event) {
     return true;
   }
   if (!mixOne(player)) return true;
-  Shared.startAction(player, "mix", (ticks) => ticks % MIX_TICKS !== 0 || mixOne(player));
+  Shared.startAction(player, "mix", (ticks) => ticks < MIX_SECOND_TICK
+    || (ticks - MIX_SECOND_TICK) % MIX_TICKS !== 0 || mixOne(player));
   return true;
 }
 
@@ -241,9 +255,18 @@ function drink(event) {
   const next = nextDose(itemId);
   player.getInventory().setItem(slot, newItem(next, next > 0 ? 1 : 0)).refreshItems();
   Shared.animate(player, Shared.ANIM.DRINK);
+  Shared.sound(player, Shared.SOUND.DRINK);
   Warmth.restore(player, Warmth.POTION_RESTORE);
-  player.sendMessage("You drink some of your rejuvenation potion.");
+  Shared.spam(player, "You drink some of your potion.");
+  Shared.spam(player, dosesLeftLine(next));
   return true;
+}
+
+/** The dose line after a drink; the last dose has the usual potion line (no capture of it). */
+function dosesLeftLine(next) {
+  const left = next > 0 ? Shared.POTIONS.length - Shared.POTIONS.indexOf(next) : 0;
+  if (left === 0) return "You have finished your potion.";
+  return `You have ${left} ${left === 1 ? "dose" : "doses"} of potion left.`;
 }
 
 /** Takes one dose from the potion with the fewest left (Wiki); false with none. */
@@ -261,6 +284,22 @@ function useDose(player) {
 /** Wiki: food healing 4 or more restores 35% warmth in the prison. */
 function ateFood({ player, itemId, heal }) {
   if (Round.inPrison(player)) Warmth.ateFood(player, itemId, heal);
+}
+
+// ------------------------------------------------------------------ torch
+
+const TORCH_SWAP = new Map([
+  [Shared.ITEM.BRUMA_TORCH, Shared.ITEM.BRUMA_TORCH_OFFHAND],
+  [Shared.ITEM.BRUMA_TORCH_OFFHAND, Shared.ITEM.BRUMA_TORCH],
+]);
+
+/** "Swap" turns the bruma torch between its weapon and off-hand forms, in the same slot. */
+function swapTorch(event) {
+  const { player, slot, itemId } = event;
+  const other = TORCH_SWAP.get(itemId);
+  if (other == null) return false;
+  player.getInventory().setItem(slot, newItem(other)).refreshItems();
+  return true;
 }
 
 // ------------------------------------------------------------------ drops
@@ -289,6 +328,8 @@ module.exports = function registerWintertodtSupplies(api) {
   api.onItemOnItem("Knife", "Bruma root", fletch);
   api.onItemOnItem("Bruma herb", "Rejuvenation potion (unf)", mix);
   for (let dose = 1; dose <= 4; dose++) api.onItemAction(`Rejuvenation potion (${dose})`, { Drink: drink });
+  api.onItemAction("Bruma torch", { Swap: swapTorch });
+  api.onItemAction("Bruma torch (off-hand)", { Swap: swapTorch });
   api.onItemOnNpc(brewma);
   api.onItemDropPolicy(shatter);
   api.onCustomEvent("food:eaten", ateFood);
@@ -300,5 +341,6 @@ module.exports.chop = chop;
 module.exports.fletch = fletch;
 module.exports.mix = mix;
 module.exports.drink = drink;
+module.exports.swapTorch = swapTorch;
 module.exports.crateActions = crateActions;
 module.exports.chopChance = chopChance;

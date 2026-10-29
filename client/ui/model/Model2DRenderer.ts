@@ -118,8 +118,8 @@ export class Model2DRenderer {
     renderToCanvasExtents(
         modelId: number,
         params: Model2DParams,
-        _widgetWidth: number,
-        _widgetHeight: number,
+        widgetWidth: number,
+        widgetHeight: number,
     ): { canvas: HTMLCanvasElement; offsetX: number; offsetY: number } | undefined {
         const md = this.modelLoader.getModel(modelId);
         if (!md) return undefined;
@@ -132,7 +132,10 @@ export class Model2DRenderer {
 
         let model = md.light(this.textureLoader, ambient, contrast, lx, ly, lz) as Model;
         model = this.applySequence(model, params.sequenceId, params.sequenceFrame);
-        return this.renderModelExtents(model, params, modelId);
+        return this.renderModelExtents(model, params, modelId, undefined, {
+            width: widgetWidth,
+            height: widgetHeight,
+        });
     }
 
     renderItemToCanvasExtents(
@@ -273,6 +276,7 @@ export class Model2DRenderer {
         params: Model2DParams,
         modelIdOverride?: number,
         reuseCanvas?: HTMLCanvasElement,
+        widget?: { width: number; height: number },
     ): { canvas: HTMLCanvasElement; offsetX: number; offsetY: number } | undefined {
         const it = {
             id: modelIdOverride ?? 0,
@@ -379,16 +383,31 @@ export class Model2DRenderer {
         // (e.g., vertices very close to near plane causing huge screen coords)
         // Account for border in the max (2048 - 6 = 2042 for bbox, 2048 total)
         const MAX_BBOX = 1024; // UI models (chatheads, quest journal) can reach ~600px
+        // A model larger than that which fills its widget (the spyglass's frame, a full-screen
+        // overlay) is cut to what the widget shows, around the widget's centre where it is
+        // drawn, rather than to its first 1024 pixels from the left (which drew half the frame).
+        let maxW = MAX_BBOX;
+        let maxH = MAX_BBOX;
+        if (widget && (maxX - minX > MAX_BBOX || maxY - minY > MAX_BBOX)) {
+            const halfW = Math.ceil(Math.max(1, widget.width | 0) / 2) + BORDER;
+            const halfH = Math.ceil(Math.max(1, widget.height | 0) / 2) + BORDER;
+            minX = Math.max(minX, -halfW);
+            maxX = Math.min(maxX, halfW);
+            minY = Math.max(minY, -halfH);
+            maxY = Math.min(maxY, halfH);
+            maxW = Math.max(MAX_BBOX, halfW * 2);
+            maxH = Math.max(MAX_BBOX, halfH * 2);
+        }
         const rawBboxW = Math.ceil(maxX - minX);
         const rawBboxH = Math.ceil(maxY - minY);
-        if (rawBboxW > MAX_BBOX || rawBboxH > MAX_BBOX) {
+        if (rawBboxW > maxW || rawBboxH > maxH) {
             console.warn(
-                `[Model2DRenderer] Clamping extreme bbox ${rawBboxW}x${rawBboxH} to ${MAX_BBOX}`,
+                `[Model2DRenderer] Clamping extreme bbox ${rawBboxW}x${rawBboxH} to ${maxW}x${maxH}`,
                 { modelId: modelIdOverride, params, minX, maxX, minY, maxY },
             );
         }
-        const bboxW = Math.min(MAX_BBOX, Math.max(1, rawBboxW));
-        const bboxH = Math.min(MAX_BBOX, Math.max(1, rawBboxH));
+        const bboxW = Math.min(maxW, Math.max(1, rawBboxW));
+        const bboxH = Math.min(maxH, Math.max(1, rawBboxH));
         const sw = bboxW + BORDER * 2;
         const sh = bboxH + BORDER * 2;
         const dx = Math.floor(-minX) + BORDER;
@@ -453,8 +472,9 @@ export class Model2DRenderer {
         depthTest: boolean = false,
     ): Uint8ClampedArray {
         // Sanity check: prevent OOM from extreme dimensions
-        // Max 1030x1030 = ~4MB for Int32Array (matches MAX_BBOX=1024 + BORDER*2=6)
-        const MAX_PIXELS = 1030 * 1030;
+        // Up to a 4K screen's worth (a full-screen overlay model cut to its widget); ~38 MB at most
+        // for the Int32Array, and the scratch buffers below are reused.
+        const MAX_PIXELS = 4096 * 2304;
         if (sw * sh > MAX_PIXELS || sw <= 0 || sh <= 0) {
             console.warn(
                 `[Model2DRenderer] Refusing to allocate ${sw}x${sh} (${

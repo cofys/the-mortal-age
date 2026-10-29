@@ -42,7 +42,7 @@ function fakeApi() {
 
 function player({ level = 99, items = {}, at = [3000, 3000] } = {}) {
   const counts = new Map(Object.entries(items).map(([name, n]) => [I[name], n]));
-  const attrs = new Map(), varbits = new Map(), messages = [], animations = [];
+  const attrs = new Map(), varbits = new Map(), messages = [], spam = [], sounds = [], animations = [];
   let menu = null, xp = 0;
   const inventory = {
     contains: (id) => (counts.get(id) ?? 0) > 0,
@@ -55,9 +55,11 @@ function player({ level = 99, items = {}, at = [3000, 3000] } = {}) {
     sendCreationMenu(value) { menu = value; return sender; },
     getVarbit: (id) => varbits.get(id) ?? 0,
     sendVarbit(id, value) { varbits.set(id, value); return sender; },
+    sendTypedMessage(type, message) { messages.push(message); if (type === core.ChatType.SPAM) spam.push(message); return sender; },
+    sendSoundEffect(id) { sounds.push(id); return sender; },
   }, { get: (target, key) => target[key] ?? (() => sender) });
   return {
-    counts, messages, animations, varbits, menu: () => menu, xp: () => xp,
+    counts, messages, spam, sounds, animations, varbits, menu: () => menu, xp: () => xp,
     count: (name) => counts.get(I[name]) ?? 0,
     getInventory: () => inventory,
     getEquipment: () => ({ contains: () => false }),
@@ -68,6 +70,8 @@ function player({ level = 99, items = {}, at = [3000, 3000] } = {}) {
     isRegistered: () => true,
     getHitpoints: () => 99,
     getIndex: () => 1,
+    getUsername: () => "tester",
+    isPlayerBot: () => false,
     performAnimation: (animation) => animations.push(animation.getId()),
     sendMessage: (message) => messages.push(message),
     getAttribute: (key) => attrs.get(key),
@@ -331,4 +335,112 @@ test("the Gnome Stronghold diary task counts stringing an oak shortbow there, no
   use(away, "BOW_STRING", "OAK_SHORTBOW_U_");
   runTask();
   assert.equal(diaryTasks.length, 1);
+});
+
+/** Runs the newest task and records the execute (capture tick) of each change it makes to `name`. */
+function ticksOf(p, name) {
+  const task = hooks.tasks.at(-1);
+  const made = [];
+  for (let tick = 1; tick < 100 && task.isRunning(); tick++) {
+    const before = p.count(name);
+    task.execute();
+    if (p.count(name) !== before) made.push(tick);
+  }
+  return made;
+}
+
+test("knife cuts: 2 ticks after the choice then every 3, each with its spam line (rsprox captures)", () => {
+  const p = player({ items: { KNIFE: 1, OAK_LOGS: 3 } });
+  use(p, "KNIFE", "OAK_LOGS");
+  p.menu().execute(I.ARROW_SHAFT, 28);
+  assert.deepEqual(ticksOf(p, "ARROW_SHAFT"), [2, 5, 8]);
+  assert.deepEqual(p.spam, Array(3).fill("You carefully cut the wood into 30 arrow shafts."));
+
+  for (const [log, output, line] of [
+    ["LOGS", "JAVELIN_SHAFT", "You carefully cut the wood into some javelin shafts."],
+    ["MAPLE_LOGS", "MAPLE_SHORTBOW_U_", "You carefully cut the wood into a shortbow."],
+    ["YEW_LOGS", "YEW_LONGBOW_U_", "You carefully cut the wood into a longbow."],
+    ["MAGIC_LOGS", "MAGIC_STOCK", "You carefully cut the wood into a crossbow stock."],
+  ]) {
+    const q = player({ items: { KNIFE: 1, [log]: 2 } });
+    use(q, "KNIFE", log);
+    q.menu().execute(I[output], 1);
+    runTask();
+    assert.deepEqual(q.spam, [line], output);
+  }
+});
+
+test("shields: the animation a tick after the choice, the shield 6 ticks after it, then every 7", () => {
+  const p = player({ items: { KNIFE: 1, MAPLE_LOGS: 4 } });
+  use(p, "KNIFE", "MAPLE_LOGS");
+  p.menu().execute(I.MAPLE_SHIELD, 28);
+  assert.deepEqual(p.animations, [], "nothing on the choice's tick");
+  hooks.tasks.at(-1).execute();
+  assert.equal(p.animations.length, 1, "the animation on tick 1");
+  assert.deepEqual([1, ...ticksOf(p, "MAPLE_SHIELD").map((tick) => tick + 1)].slice(1), [6, 13]);
+  assert.deepEqual(p.spam, Array(2).fill("You carefully cut the pieces of wood into a shield."));
+});
+
+test("stringing from the menu: no opening animation, a bow and its line every 2 ticks from tick 1", () => {
+  const p = player({ items: { OAK_SHORTBOW_U_: 3, BOW_STRING: 3 } });
+  use(p, "BOW_STRING", "OAK_SHORTBOW_U_");
+  assert.equal(p.menu().getTitle(), "How many would you like to string?");
+  p.menu().execute(I.OAK_SHORTBOW, 28);
+  assert.deepEqual(p.animations, []);
+  assert.deepEqual(ticksOf(p, "OAK_SHORTBOW"), [1, 3, 5]);
+  assert.equal(p.animations.length, 3);
+  assert.deepEqual(p.spam, Array(3).fill("You add a string to the bow."));
+
+  const one = player({ items: { YEW_LONGBOW_U_: 1, BOW_STRING: 1 } });
+  use(one, "YEW_LONGBOW_U_", "BOW_STRING");
+  assert.equal(one.menu(), null, "a single bow is strung without a menu");
+  assert.deepEqual(ticksOf(one, "YEW_LONGBOW"), [1]);
+});
+
+test("arrows: sound 2605 and a spam line with every set; arrowtips use the complete menu", () => {
+  const p = player({ items: { ARROW_SHAFT: 30, FEATHER: 30 } });
+  use(p, "FEATHER", "ARROW_SHAFT");
+  assert.equal(p.menu().getTitle(), "How many sets of 15 do you wish to feather?");
+  p.menu().execute(I.HEADLESS_ARROW, 28);
+  assert.deepEqual(ticksOf(p, "HEADLESS_ARROW"), [1, 3]);
+  assert.deepEqual(p.spam, Array(2).fill("You attach feathers to 15 arrow shafts."));
+  assert.deepEqual(p.sounds, [2605, 2605]);
+
+  const q = player({ items: { HEADLESS_ARROW: 30, BROAD_ARROWHEADS: 30 } });
+  answers.unlocks.add("Broader Fletching");
+  use(q, "BROAD_ARROWHEADS", "HEADLESS_ARROW");
+  assert.equal(q.menu().getTitle(), "How many sets of 15 do you wish to complete?");
+  q.menu().execute(I.BROAD_ARROWS, 28);
+  runTask();
+  assert.deepEqual(q.spam, Array(2).fill("You attach broad arrowheads to 15 headless arrows."));
+});
+
+test("gem bolt tips: the sets menu, animation and sound on the choice, tips at 4 then every 5", () => {
+  const p = player({ items: { CHISEL: 1, RUBY: 2 } });
+  use(p, "CHISEL", "RUBY");
+  assert.equal(p.menu().getTitle(), "How many sets of 12 will you make?");
+  assert.equal(p.menu().getOptions().mode, 2);
+  p.menu().execute(I.RUBY_BOLT_TIPS, 28);
+  assert.equal(p.animations.length, 1);
+  assert.deepEqual(p.sounds, [2586]);
+  assert.deepEqual(ticksOf(p, "RUBY_BOLT_TIPS"), [4, 9]);
+  assert.deepEqual(p.sounds, [2586, 2586, 2586]);
+  assert.deepEqual(p.spam, Array(2).fill("You use your chisel to fletch small bolt tips."));
+
+  const pearls = player({ items: { CHISEL: 1, OYSTER_PEARL: 2 } });
+  use(pearls, "CHISEL", "OYSTER_PEARL");
+  assert.equal(pearls.menu().getTitle(), "How many sets of 6 will you make?");
+});
+
+test("tipping bolts: sound 2605 and \"You fletch 10 bolts.\"; javelins use their own sets title", () => {
+  const p = player({ items: { RUBY_BOLT_TIPS: 20, ADAMANT_BOLTS: 20 } });
+  use(p, "RUBY_BOLT_TIPS", "ADAMANT_BOLTS");
+  p.menu().execute(I.RUBY_BOLTS, 28);
+  assert.deepEqual(ticksOf(p, "RUBY_BOLTS"), [1, 3]);
+  assert.deepEqual(p.spam, Array(2).fill("You fletch 10 bolts."));
+  assert.deepEqual(p.sounds, [2605, 2605]);
+
+  const j = player({ items: { JAVELIN_SHAFT: 30, DRAGON_JAVELIN_TIPS: 30 } });
+  use(j, "DRAGON_JAVELIN_TIPS", "JAVELIN_SHAFT");
+  assert.equal(j.menu().getTitle(), "How many sets of 15 do you wish to make?");
 });

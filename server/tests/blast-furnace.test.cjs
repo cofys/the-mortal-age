@@ -18,7 +18,7 @@ let giantDwarfStarted = false;
 let dwarfOperated = true;
 let playerIndex = 0;
 const prompts = [];
-const { init, tick, stateOf, putOre, takeBars, take, foremanCondition, foremanPaid, coolWithWater, stairs } = BlastFurnace._test;
+const { init, tick, stateOf, putOre, takeBars, take, fillBucket, foremanCondition, foremanPaid, coolWithWater, stairs } = BlastFurnace._test;
 before(async () => {
  await require("../dist/game/cache/CachePipeline").CachePipeline.initialize(process.cwd());
  PluginManager.getCoreApi().RegionManager.init();
@@ -46,7 +46,7 @@ function player({ smithing = 99, items = {}, hands = -1 } = {}) {
   const equipment = new Array(14).fill(null);
   if (hands !== -1) equipment[Equipment.HANDS_SLOT] = { getId: () => hands };
   const p = {
-    messages: [], xp: 0, varbits: new Map(), dialogues: 0, statement: null, sounds: [], menu: null, inventory,
+    messages: [], spam: [], xp: 0, varbits: new Map(), dialogues: 0, statement: null, sounds: [], menu: null, inventory,
     index: ++playerIndex, location: new Location(1940, 4960, 0), runEnergy: 100, moving: false,
     getIndex: () => p.index,
     getLocation: () => p.location,
@@ -79,6 +79,7 @@ function player({ smithing = 99, items = {}, hands = -1 } = {}) {
           if (name === "sendVarbit") p.varbits.set(args[0], args[1]);
           if (name === "sendCreationMenu") p.menu = args[0];
           if (name === "sendSound") p.sounds.push(args[0]);
+          if (name === "sendTypedMessage") p.spam.push(args[1]);
           return sender;
         };
       } });
@@ -332,6 +333,24 @@ test("pouring bars and a stale hot-bar menu cannot bypass cooling", () => {
   assert.equal(stateOf(p).bars[ItemIds.IRON_BAR], 5);
 });
 
+// Captured (rsprox, recs 96, 1757, 3278): the belt and sink lines are spam; taking bars names the
+// count in a message box (Wiki changelog: "A message displaying the numbers of bars withdrawn").
+test("the belt, sink and dispenser give the recorded feedback", () => {
+  const p = player({ items: { [ItemIds.MITHRIL_ORE]: 3, [ItemIds.BUCKET]: 1 } });
+  stateOf(p).coffer = 1000;
+  putOre(p);
+  assert.equal(p.spam.at(-1), "All your ore goes onto the conveyor belt.");
+  fillBucket({ player: p });
+  assert.equal(p.spam.at(-1), "You fill the bucket from the sink.");
+  assert.deepEqual(p.sounds, [2609]);
+  assert.equal(p.inventory.get(ItemIds.BUCKET_OF_WATER), 1);
+  stateOf(p).bars[ItemIds.MITHRIL_BAR] = 23;
+  p.varbits.set(DISPENSER, 3);
+  take(p, ItemIds.MITHRIL_BAR, 23);
+  assert.equal(p.statement, "You take 23 mithril bars from the dispenser.");
+  assert.equal(p.messages.length, 0);
+});
+
 test("water cools other hot bars within five tiles", () => {
   const p = player({ items: { [ItemIds.BUCKET_OF_WATER]: 1 } }), nearby = player(), distant = player();
   distant.location = new Location(1955, 4975, 0);
@@ -578,7 +597,7 @@ test("water cooling gives the recorded feedback once, only when bars are cooled"
   const p = player({ items: { [ItemIds.BUCKET_OF_WATER]: 1 } });
   p.varbits.set(DISPENSER, 2);
   coolWithWater({ player: p, objectId: 9092, itemId: ItemIds.BUCKET_OF_WATER });
-  assert.equal(p.messages.at(-1), "You throw the water over the bars.");
+  assert.equal(p.spam.at(-1), "You throw the water over the bars.");
   assert.deepEqual(p.sounds, [1051]);
   coolWithWater({ player: p, objectId: 9092, itemId: ItemIds.BUCKET_OF_WATER });
   assert.deepEqual(p.sounds, [1051]);

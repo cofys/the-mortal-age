@@ -10,6 +10,7 @@ const { Animation } = require("../../../src/main/typescript/elvarg/game/model/An
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
+const { ChatType } = require("../../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
 
 const VARBIT = {
   // The Pandemonium is done (50): the boat customisation refuses every build below it (9022).
@@ -173,6 +174,11 @@ function playSound(player, soundId, delay = 0) {
   player.getPacketSender().sendSoundEffect(soundId, 1, delay, 10);
 }
 
+/** A line on the spam chat channel (105), as live sends sailing's repeated lines. */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(ChatType.SPAM, text);
+}
+
 /** Plays a loc animation on the boat's deck for the player and everyone who sees them. */
 function animateDeckLocs(player, boat, isLoc, animId) {
   const type = boatType(BoatManager.getSpec(boat)?.type);
@@ -295,6 +301,7 @@ module.exports = {
   setVarbit,
   getVarbit,
   playSound,
+  spam,
   fade,
   animateDeckLocs,
   animateDeckLoc,

@@ -271,7 +271,8 @@ test('deck-to-world loc clicks keep their route hook; ordinary clicks delegate t
     routes.length = 0;
     root = new Location(3300, 3300, 0);
     listener.executeAction(player, 1535, 3226, 3214, 2);
-    assert.equal(routes.length, 1, 'route side effects also precede an out-of-range deck refusal');
+    // Out of reach, live keeps the player at the helm (rsprox 3455: five refusals at the helm, released on the in-reach click).
+    assert.equal(routes.length, 0, 'an out-of-range deck refusal has no route side effects');
     assert.equal(interactions.length, 1, 'the unreachable loc is not operated');
     assert.deepEqual(messages, ["I can't reach that!"]);
 

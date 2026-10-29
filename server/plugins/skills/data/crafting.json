@@ -536,11 +536,12 @@
     ]
   },
   "gems": {
-    "$comment": "`crush`: the Wiki's success chart (low/high out of 256 at levels 1/99) and the XP of a crushed gem.",
+    "$comment": "`crush`: the Wiki's success chart (low/high out of 256 at levels 1/99) and the XP of a crushed gem. `plural`: the gem in the level refusal, \"You need a Crafting level of 20 to cut sapphires.\" (rsprox captures 1102 and 1846 for sapphires and jade; the other plurals follow them).",
     "recipes": [
       {
         "uncut": "UNCUT_OPAL",
         "cut": "OPAL",
+        "plural": "opals",
         "level": 1,
         "xp": 15,
         "seq": 890,
@@ -555,6 +556,7 @@
       {
         "uncut": "UNCUT_JADE",
         "cut": "JADE",
+        "plural": "jade",
         "level": 13,
         "xp": 20,
         "seq": 891,
@@ -569,6 +571,7 @@
       {
         "uncut": "UNCUT_RED_TOPAZ",
         "cut": "RED_TOPAZ",
+        "plural": "red topaz",
         "level": 16,
         "xp": 25,
         "seq": 892,
@@ -583,6 +586,7 @@
       {
         "uncut": "UNCUT_SAPPHIRE",
         "cut": "SAPPHIRE",
+        "plural": "sapphires",
         "level": 20,
         "xp": 50,
         "seq": 888,
@@ -592,6 +596,7 @@
       {
         "uncut": "UNCUT_EMERALD",
         "cut": "EMERALD",
+        "plural": "emeralds",
         "level": 27,
         "xp": 67.5,
         "seq": 889,
@@ -601,6 +606,7 @@
       {
         "uncut": "UNCUT_RUBY",
         "cut": "RUBY",
+        "plural": "rubies",
         "level": 34,
         "xp": 85,
         "seq": 887,
@@ -610,6 +616,7 @@
       {
         "uncut": "UNCUT_DIAMOND",
         "cut": "DIAMOND",
+        "plural": "diamonds",
         "level": 43,
         "xp": 107.5,
         "seq": 886,
@@ -619,6 +626,7 @@
       {
         "uncut": "UNCUT_DRAGONSTONE",
         "cut": "DRAGONSTONE",
+        "plural": "dragonstones",
         "level": 55,
         "xp": 137.5,
         "seq": 885,
@@ -628,6 +636,7 @@
       {
         "uncut": "UNCUT_ONYX",
         "cut": "ONYX",
+        "plural": "onyx",
         "level": 67,
         "xp": 167.5,
         "seq": 2717,
@@ -637,6 +646,7 @@
       {
         "uncut": "UNCUT_ZENYTE",
         "cut": "ZENYTE",
+        "plural": "zenyte",
         "level": 89,
         "xp": 50,
         "seq": 7185,
@@ -754,7 +764,7 @@
     ]
   },
   "pottery": {
-    "$comment": "One soft clay shapes `shaped` unfired items (default 1).",
+    "$comment": "One soft clay shapes `shaped` unfired items (default 1). `plural` names the item in the oven's \"You don't have any ... which need firing.\" (captured for pots and bowls).",
     "seq": 883,
     "seqName": "human_potterywheel",
     "ovenSeq": 1317,
@@ -764,6 +774,7 @@
     "recipes": [
       {
         "name": "pot",
+        "plural": "pots",
         "unfired": "UNFIRED_POT",
         "fired": "POT",
         "level": 1,
@@ -772,6 +783,7 @@
       },
       {
         "name": "pie dish",
+        "plural": "pie dishes",
         "unfired": "UNFIRED_PIE_DISH",
         "fired": "PIE_DISH",
         "level": 7,
@@ -780,6 +792,7 @@
       },
       {
         "name": "bowl",
+        "plural": "bowls",
         "unfired": "UNFIRED_BOWL",
         "fired": "BOWL",
         "level": 8,
@@ -791,6 +804,7 @@
       },
       {
         "name": "plant pot",
+        "plural": "plant pots",
         "unfired": "UNFIRED_PLANT_POT",
         "fired": "EMPTY_PLANT_POT",
         "level": 19,
@@ -800,6 +814,7 @@
       },
       {
         "name": "cup",
+        "plural": "cups",
         "unfired": "UNFIRED_CUP",
         "fired": "EMPTY_CUP",
         "level": 3,
@@ -815,6 +830,7 @@
       },
       {
         "name": "pot lid",
+        "plural": "pot lids",
         "unfired": "UNFIRED_POT_LID",
         "fired": "POT_LID",
         "level": 25,
@@ -844,7 +860,7 @@
     ]
   },
   "spinning": {
-    "$comment": "`materials`: any one of them makes the product, in order of preference; `amount` of it per item.",
+    "$comment": "`materials`: any one of them makes the product, in order of preference; `amount` of it per item. Recipes are in menu order (linen yarn before bow string, recording 3467).",
     "seq": 13139,
     "seqName": "human_spinningwheel_60",
     "wheelSeq": 466,
@@ -859,6 +875,16 @@
         "amount": 1,
         "level": 1,
         "xp": 2.5
+      },
+      {
+        "item": "LINEN_YARN",
+        "materials": [
+          "FLAX"
+        ],
+        "amount": 1,
+        "level": 12,
+        "xp": 16,
+        "members": true
       },
       {
         "item": "BOW_STRING",
@@ -882,16 +908,6 @@
         "amount": 1,
         "level": 10,
         "xp": 15,
-        "members": true
-      },
-      {
-        "item": "LINEN_YARN",
-        "materials": [
-          "FLAX"
-        ],
-        "amount": 1,
-        "level": 12,
-        "xp": 16,
         "members": true
       },
       {

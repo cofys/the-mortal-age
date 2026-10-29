@@ -34,8 +34,8 @@ The shop is Petrified Pete's Ore Shop (1457, generated data, opened by Shopkeepe
   - At 50 left: "The volcano is going to erupt soon!", and stability drops to 5.
   - At 0 the volcano erupts and kills anyone still inside (Wiki).
 - **Chambers.**
-  - Take a large rock (it's back in 24 ticks) and block a chamber: +50.
-  - Mine the blocked one clear: +50 and 25 Mining XP.
+  - Take a large rock (two ticks after the click, like Block; it's back in 24 ticks) and block a chamber: +50.
+  - Mine the blocked one clear: +50 and 25 Mining XP. The swing comes the tick after the click, the first roll a tick later, then one every pickaxe interval; a missed roll replays the swing, and the clear stops it with sound 3600 (recording 1858).
   - These points stop at 300 a player (Wiki).
 - **Vents.** Inspecting one gives the recorded box with the gas % and shows it on everyone's HUD (+50, once until the gas next shifts). A vent belongs to the chamber with the nearest x.
 - **Gas drift and stability** (calibrated).
@@ -48,7 +48,7 @@ The shop is Petrified Pete's Ore Shop (1457, generated data, opened by Shopkeepe
   - The crust lasts 74 + 65 + 10 ticks, then is lava again. Hardened lava can be walked on.
 - **The boulder.**
   - Five stages of 40 HP a player (the small one 60).
-  - A chip every 3 ticks: +1 point and 5 XP. A fragment by the Wiki's per-stage chance, with the ore by Mining level. A fragment's side find is calcite, pyrophosphite, Numulite or a fossil.
+  - The swing the tick after the click, then a chip with sound 3600 every pickaxe interval (3 ticks with a dragon pickaxe, sometimes 2; recording 1858): +1 point and 5 XP. A fragment by the Wiki's per-stage chance, with the ore by Mining level. A fragment's side find is calcite, pyrophosphite, Numulite or a fossil.
   - When it reaches the vortex, everyone gets +100.
 - **Leaving.**
   - The exit ladder: the HUD reset, Pete's "I'll give you a bit of minin' trainin'…", out at (3816,3808,0).

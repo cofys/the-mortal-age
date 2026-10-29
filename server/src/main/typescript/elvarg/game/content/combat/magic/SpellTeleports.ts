@@ -45,19 +45,23 @@ const rune = (id: number, amount = 1) => new Item(id, amount);
 const teleport = (spellbook: MagicSpellbook, level: number, experience: number, runes: Item[], x: number, y: number, z = 0) =>
     new TeleportSpell({ spellbook, level, experience, runes, destination: new Location(x, y, z) });
 
-/** Normal and Ancient spellbook teleports not handled by the combat spell engine. */
+/**
+ * Normal and Ancient spellbook teleports not handled by the combat spell engine. A standard
+ * teleport's destination is the centre of the 5x5 square it lands in (rsprox captures; the
+ * SpellTeleports plugin picks the tile).
+ */
 export class SpellTeleports {
     private static readonly SPELLS = new Map<string, TeleportSpell>([
         ["varrock teleport", teleport(MagicSpellbook.NORMAL, 25, 35, [rune(563), rune(556, 3), rune(554)], 3213, 3424)],
-        ["lumbridge teleport", teleport(MagicSpellbook.NORMAL, 31, 41, [rune(563), rune(556, 3), rune(557)], 3222, 3218)],
-        ["falador teleport", teleport(MagicSpellbook.NORMAL, 37, 48, [rune(563), rune(556, 3), rune(555)], 2964, 3378)],
+        ["lumbridge teleport", teleport(MagicSpellbook.NORMAL, 31, 41, [rune(563), rune(556, 3), rune(557)], 3221, 3218)],
+        ["falador teleport", teleport(MagicSpellbook.NORMAL, 37, 48, [rune(563), rune(556, 3), rune(555)], 2965, 3378)],
         ["teleport to house", teleport(MagicSpellbook.NORMAL, 40, 30, [rune(563), rune(556), rune(557)], 2953, 3224)],
         ["camelot teleport", teleport(MagicSpellbook.NORMAL, 45, 55.5, [rune(563), rune(556, 5)], 2757, 3478)],
-        ["kourend castle teleport", teleport(MagicSpellbook.NORMAL, 48, 58, [rune(563, 2), rune(555), rune(554)], 1643, 3672)],
-        ["ardougne teleport", teleport(MagicSpellbook.NORMAL, 51, 61, [rune(563, 2), rune(555, 2)], 2661, 3301)],
-        ["civitas illa fortis teleport", teleport(MagicSpellbook.NORMAL, 54, 64, [rune(563, 2), rune(557), rune(554)], 1680, 3130)],
+        ["kourend castle teleport", teleport(MagicSpellbook.NORMAL, 48, 58, [rune(563, 2), rune(555), rune(554)], 1641, 3673)],
+        ["ardougne teleport", teleport(MagicSpellbook.NORMAL, 51, 61, [rune(563, 2), rune(555, 2)], 2661, 3302)],
+        ["civitas illa fortis teleport", teleport(MagicSpellbook.NORMAL, 54, 64, [rune(563, 2), rune(557), rune(554)], 1681, 3133)],
         ["watchtower teleport", teleport(MagicSpellbook.NORMAL, 58, 68, [rune(563, 2), rune(557, 2)], 2549, 3112, 2)],
-        ["trollheim teleport", teleport(MagicSpellbook.NORMAL, 61, 68, [rune(563, 2), rune(554, 2)], 2891, 3678)],
+        ["trollheim teleport", teleport(MagicSpellbook.NORMAL, 61, 68, [rune(563, 2), rune(554, 2)], 2890, 3679)],
         ["ape atoll teleport", teleport(MagicSpellbook.NORMAL, 64, 74, [rune(563, 2), rune(555, 2), rune(554, 2), rune(1963)], 2796, 2798)],
         ["paddewwa teleport", teleport(MagicSpellbook.ANCIENT, 54, 64, [rune(563, 2), rune(556), rune(554)], 3097, 9880)],
         ["senntisten teleport", teleport(MagicSpellbook.ANCIENT, 60, 70, [rune(563, 2), rune(566)], 3320, 3338)],

@@ -50,14 +50,13 @@ and say what is still a guess in `unverified`.
 | Climbing rocks (Yanille, Taverley), log balance (Fremennik) | only the sound and messages: walks and their animations are not in the recordings, so the movement stays a guess |
 | Grapple walls (Falador, Yanille) | rev 237 (the newest): fire and climb in one animation (1779) with its graphic (3575) and sound 2928, a screen fade, the teleport onto the wall 7 ticks in (rev 230 took 10, with 4455/760). The fade isn't sent yet |
 | Pillar (Ruins of Mokhaiotl) | a 3-tile jump (12196) in 27 cycles, sound 2461; a tick later varbit 16716 (`moki_agil_shortcut_side`) flips, so only the far pillar shows "Jump-to" (the runner's `varbit` step) |
+| Gaps (Chasm of Fire) | two gaps (event-world recordings): the west one a 6-tile jump (12196, sound 2461) from 1440,10098 to 1446,10097; the east one two hops a tick apart, onto 1453 then 1456. The exact moves are drawn a tile or two short of the server position; the entries land where the server puts the player. The way back mirrors it |
 
 ## Still unverified, with what the captures show
 
 - **Broken Raft, Crossbow Tree:** grapple, the rope added as scenery, the side panels hidden, a
   swim along the rope (their own swimming animations) and a chance the grapple breaks. Needs its
   own script.
-- **Gap (Chasm of Fire):** only event-world recordings, and the recorded moves and the server
-  position disagree by a tile or two.
 - **Mysterious pipe (Mount Karuulm):** its messages are chatbox message boxes and the minimap is
   hidden, which the step format can't express yet.
 - **Wall (Darkmeyer):** recorded climbing up (39173, `human_reachforladder`, then a teleport to

@@ -69,6 +69,20 @@ function spam(player, text) {
   player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
 }
 
+function sound(player, id, delay = 0) {
+  player.getPacketSender().sendSoundEffect(id, 1, delay, 1);
+}
+
+/** A message box (live "mesbox"). */
+function messageBox(player, text) {
+  player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.StatementDialogue(0, text)));
+}
+
+/** An item box (live "objectbox"). */
+function objectBox(player, itemId, text) {
+  player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.ItemStatementDialogue(0, itemId, text)));
+}
+
 function level(player, skill) {
   return player.getSkillManager().getCurrentLevel(core.Skill[skill]);
 }
@@ -112,9 +126,9 @@ function nearbyPlayers(location, range) {
   return players;
 }
 
-function areaSound(location, id, radius = 10) {
+function areaSound(location, id, radius = 10, delay = 0) {
   for (const player of nearbyPlayers(location, 15)) {
-    player.getPacketSender().sendAreaSound(id, location.getX(), location.getY(), location.getZ(), 1, 0, radius);
+    player.getPacketSender().sendAreaSound(id, location.getX(), location.getY(), location.getZ(), 1, delay, radius);
   }
 }
 
@@ -146,11 +160,12 @@ function walkable(x, y, z) {
 }
 
 /** An event's npc: no respawn, no wandering. */
-function spawnNpc(id, location, graphic = -1) {
+/** An event npc; it stands still unless `wander` gives it a roaming radius. */
+function spawnNpc(id, location, graphic = -1, wander = 0) {
   const { NPC, World } = core;
   const npc = NPC.create(id, location.clone());
   npc.__skipDefaultRespawn = true;
-  npc.getMovementCoordinator?.().setRadius?.(0);
+  npc.getMovementCoordinator?.().setRadius?.(wander);
   World.getAddNPCQueue().push(npc);
   if (graphic >= 0) npc.performGraphic?.(new core.Graphic(graphic));
   return npc;
@@ -189,7 +204,12 @@ function chat(player, npcId, lines, onEnd = null) {
   const { ActionDialogue, DialogueChainBuilder, EndDialogue, NpcDialogue, PlayerDialogue } = core;
   const builder = new DialogueChainBuilder();
   let index = 0;
-  for (const [who, text] of lines) builder.add(who === "npc" ? new NpcDialogue(index++, npcId, text) : new PlayerDialogue(index++, text));
+  // A line is [who, text] or [who, text, chathead seq id] (live chatheads such as chatquiz1, from forestry.json).
+  for (const [who, text, face] of lines) {
+    builder.add(who === "npc"
+      ? (face === undefined ? new NpcDialogue(index++, npcId, text) : new NpcDialogue(index++, npcId, text, undefined, face))
+      : (face === undefined ? new PlayerDialogue(index++, text) : new PlayerDialogue(index++, text, face)));
+  }
   builder.add(onEnd ? new ActionDialogue(index, { execute: onEnd }) : new EndDialogue(index));
   player.getDialogueManager().startDialogues(builder);
 }
@@ -219,6 +239,9 @@ module.exports = {
   pick,
   message,
   spam,
+  sound,
+  messageBox,
+  objectBox,
   level,
   xp,
   bark,

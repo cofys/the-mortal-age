@@ -35,6 +35,8 @@ function fixture(t, tier = 'medium') {
     return { player, xp, fertilize };
 }
 const isFalador = p => p.z === 0 && ['ALLOTMENT', 'FLOWER', 'HERB'].includes(p.type) && p.x >= 3050 && p.x <= 3058 && p.y >= 3303 && p.y <= 3311;
+// Farming actions finish on later farming ticks, as in the captures.
+const ticks = (n) => { for (let i = 0; i < n; i++) Patches.tick(); };
 test('Medium Falador Diary boosts compost XP at each of the four South Falador patches', t => {
     const f = fixture(t), patches = Data.CACHE.patches.filter(isFalador);
     assert.equal(patches.length, 4);
@@ -80,6 +82,7 @@ test('planting and harvesting apply the patch reward, including deferred herb pl
         f.player.getInventory().add(new core.Item(crop.seed), false).add(new core.Item(Data.itemId('Seed dibber')), false).add(new core.Item(Data.itemId('Spade')), false);
         const event = { player: f.player, object: { getId: () => patch.id }, location: { x: patch.x, y: patch.y, z: 0 }, clickType: 1, itemId: crop.seed, itemSlot: 0 };
         hooks.onItemOnObject(event);
+        ticks(3);
         assert.equal(state.crop, key);
         if (key === 'GUAM') assert.deepEqual(f.xp, []);
         else assert.ok(Math.abs(f.xp.at(-1)[1] - crop.plant * 1.1) < 1e-9);
@@ -88,6 +91,7 @@ test('planting and harvesting apply the patch reward, including deferred herb pl
         t.mock.method(core.ObjectDefinition, 'forPlayer', () => ({ getInteractions: () => ['Pick'] }));
         t.mock.method(Math, 'random', () => 0.999999);
         hooks.onObjectInteraction({ ...event, handled: false });
+        ticks(3);
         const expected = (crop.harvest + (key === 'GUAM' ? crop.plant : 0)) * 1.1;
         assert.ok(Math.abs(f.xp.reduce((sum, [, amount]) => sum + amount, 0) - expected) < 1e-9, key);
     }
@@ -98,6 +102,7 @@ test('raking weeds receives the same diary bonus', t => {
     f.player.getInventory().add(new core.Item(Data.itemId('Rake')), false);
     t.mock.method(core.ObjectDefinition, 'forPlayer', () => ({ getInteractions: () => ['Rake'] }));
     hooks.onObjectInteraction({ player: f.player, object: { getId: () => patch.id }, location: { x: patch.x, y: patch.y, z: 0 }, clickType: 1 });
+    ticks(6);
     assert.equal(Patches.stateFor(f.player, patch).weeds, 2);
     assert.ok(Math.abs(f.xp.at(-1)[1] - 4.4) < 1e-9);
 });

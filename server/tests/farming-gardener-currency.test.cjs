@@ -31,7 +31,7 @@ function prepare(t, key = 'OAK', { coins = 3000, checked = true } = {}) {
     let options;
     t.mock.method(Patches, 'choose', (_p, entries) => { options = entries; });
     t.mock.method(FarmingCore.MapObjects, 'get', () => null);
-    const event = { player: p, npc: { getLocation: () => new core.Location(patch.x, patch.y, patch.z) },
+    const event = { player: p, npc: { getId: () => 0, getLocation: () => new core.Location(patch.x, patch.y, patch.z) },
         definition: { getName: () => 'Gardener', getActions: () => ['Talk-to', 'Pay'] }, clickType: 2 };
     Services.farmingNpc(event);
     assert.equal(event.handled, true);

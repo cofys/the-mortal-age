@@ -2,10 +2,12 @@
 
 // Drill Demon (random event, Sergeant Damien): perform four ordered exercises in a row on the
 // mat whose sign matches the order. Wrong mats only break the streak. Camouflage outfit
-// pieces, then lamps. The training area, mats and sign posts ship in the world data; the
-// posts are swapped to the four exercise signs after every attempt. See SOURCES.md.
+// pieces, then the four exercise emotes with a lamp, then lamps. The training area, mats and
+// sign posts ship in the world data; the posts are swapped to the four exercise signs after
+// every attempt. See SOURCES.md.
 const Flow = require("./DialogueFlow.RandomEvents");
 const Teleports = require("./Teleports.RandomEvents");
+const Rewards = require("./Rewards.RandomEvents");
 
 const EXERCISES = [
   { name: "star jumps", sign: 16506, animation: 870 },
@@ -140,6 +142,9 @@ module.exports = function attach(api, Events) {
       const missing = OUTFIT.find(piece => !Teleports.owns(player, piece));
       if (missing === undefined) {
         player.sendMessage("Well I'll be, you actually did it, Private. Take this and get out of my sight.");
+        if (Rewards.unlockEmote(api, player, ["emote_drilldemon"])) {
+          player.sendMessage("You have unlocked the Sit up, Push up, Star jump and Jog emotes.");
+        }
       } else {
         rewards.push({ id: missing, amount: 1 });
         player.sendMessage("Well I'll be, you actually did it, Private. Take this and get out of my sight.");

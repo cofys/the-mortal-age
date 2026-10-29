@@ -1,5 +1,12 @@
 import { Priority } from "./Priority";
 
+/**
+ * How much an animation holds the character playing it (Wiki: Animation stall).
+ * `full` blocks their actions and movement and stacks incoming hits until it ends;
+ * `partial` only keeps a click from cutting the animation away; `none` is not tracked.
+ */
+export type AnimationStallKind = "none" | "partial" | "full";
+
 export class Animation {
     public static DEFAULT_RESET_ANIMATION: Animation;
     public id: number;

@@ -3,10 +3,11 @@
 // Mime (random event, Mysterious Old Man): copy the mime's emote four times. The eight
 // buttons of cache interface 188 (macro_mime_emotes) are built by the cache's own onLoad;
 // the server only enables them and receives the "Perform" clicks. Outfit pieces in order,
-// then lamps. See SOURCES.md.
+// then one mime emote at a time, then lamps. See SOURCES.md.
 // Copy / Cheer / Cry behaviour: https://oldschool.runescape.wiki/w/Mime_(Random_Event)
 const Flow = require("./DialogueFlow.RandomEvents");
 const Teleports = require("./Teleports.RandomEvents");
+const Rewards = require("./Rewards.RandomEvents");
 
 const GROUP = 188;
 const FIRST_BUTTON = 2;
@@ -29,6 +30,11 @@ const CRY = 860;
 const CHEER_CYCLES = 120;
 const CRY_CYCLES = 88;
 const OUTFIT = [3057, 3058, 3059, 3060, 3061];
+/** The mime emotes' varbits, in the emote tab's order (cache script 702). */
+const EMOTE_UNLOCKS = new Map([
+  ["emote_glassbox", "Glass Box"], ["emote_climbrope", "Climb Rope"],
+  ["emote_lean", "Lean"], ["emote_glasswall", "Glass Wall"],
+]);
 const NEEDED = 4;
 // Cache 241 region 8010: macro_spotlight (15625) is 3x3 at (2007,4761), physical plane 1;
 // its center is (2008,4762). The other spotlight centers on the static Mime at (2011,4762).
@@ -140,9 +146,12 @@ module.exports = function attach(api, Events) {
     const player = session.player;
     const rewards = [];
     const missing = OUTFIT.find(piece => !Teleports.owns(player, piece));
+    const emote = missing === undefined ? Rewards.unlockEmote(api, player, [...EMOTE_UNLOCKS.keys()]) : undefined;
     if (missing !== undefined) {
       rewards.push({ id: missing, amount: 1 });
       player.sendMessage("The mime gives you a piece of the mime outfit.");
+    } else if (emote) {
+      player.sendMessage(`You have unlocked the ${EMOTE_UNLOCKS.get(emote)} emote.`);
     } else {
       rewards.push({ id: I.LAMP, amount: 1 });
       player.sendMessage("The mime gives you a lamp.");

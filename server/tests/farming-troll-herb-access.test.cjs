@@ -47,6 +47,8 @@ function prepare(t, { complete = false, crop = 'GUAM', patch = troll, denied = f
     return { player, seed, messages, queries, event, clear,
         state: () => player.getAttribute(Patches.FARM_ATTRIBUTE)?.patches[Data.patchKey(patch)] };
 }
+// Farming actions finish on later farming ticks, as in the captures.
+const ticks = (n) => { for (let i = 0; i < n; i++) Patches.tick(); };
 test('locked Troll patch rejects object, item and spell routes before creating Farming state', t => {
     for (const hook of ['onObjectInteraction', 'onItemOnObject', 'onSpellOnObject']) {
         const f = prepare(t), event = f.event();
@@ -60,6 +62,7 @@ test('locked Troll patch rejects object, item and spell routes before creating F
 test('an unanswered quest query fails closed at the locked patch', t => {
     const f = prepare(t, { complete: null });
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state(), undefined);
     assert.equal(f.player.getInventory().getAmount(f.seed), 1);
 });
@@ -67,6 +70,7 @@ test('completed My Arm quest allows ordinary herb planting', t => {
     const f = prepare(t, { complete: true });
     f.clear();
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state().crop, 'GUAM');
     assert.equal(f.player.getInventory().getAmount(f.seed), 0);
 });
@@ -74,6 +78,7 @@ test('regular goutweed is refused at Troll Stronghold without consuming the tube
     const f = prepare(t, { complete: true, crop: 'GOUTWEED' });
     f.clear();
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state()?.crop, undefined);
     assert.equal(f.player.getInventory().getAmount(f.seed), 1);
 });
@@ -82,6 +87,7 @@ test('ordinary herb patches still accept goutweed without a Troll quest query', 
     const f = prepare(t, { crop: 'GOUTWEED', patch });
     f.clear();
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state().crop, 'GOUTWEED');
     assert.equal(f.player.getInventory().getAmount(f.seed), 0);
     assert.deepEqual(f.queries, []);
@@ -89,6 +95,7 @@ test('ordinary herb patches still accept goutweed without a Troll quest query', 
 test('external patch restrictions still apply after the quest gate succeeds', t => {
     const f = prepare(t, { complete: true, denied: true });
     hooks.onItemOnObject(f.event());
+    ticks(3);
     assert.equal(f.state(), undefined);
     assert.equal(f.player.getInventory().getAmount(f.seed), 1);
 });

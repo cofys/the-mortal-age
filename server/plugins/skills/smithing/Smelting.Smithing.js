@@ -5,9 +5,10 @@
  *
  * Captured (rsprox, docs/smithing.md): choosing a bar plays human_furnace (899) with sound 2725
  * and the "You smelt ..." message on the same tick; the bar, "You retrieve a bar of ..." and
- * the XP come 4 ticks later, and the next ore starts on the 5th. Iron fails half the time:
- * "The ore is too impure and you fail to refine it." With no ore at all the furnace says "You
- * don't have any ore to smelt." in a message box.
+ * the XP come 4 ticks later with human_furnace again, and the next ore starts on the 5th. Iron
+ * fails half the time: "The ore is too impure and you fail to refine it." These lines are on the
+ * spam channel. With no ore at all the furnace says "You don't have any ore to smelt." in a
+ * message box.
  *
  * Smithing catalyst (https://oldschool.runescape.wiki/w/Smithing_catalyst): carried while
  * smelting a bar that uses coal, at a furnace or with Superheat Item, one catalyst per bar
@@ -18,7 +19,7 @@ const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
 const Common = require("./Common.Smithing");
-const { animation } = Common;
+const { animation, spam } = Common;
 
 // Wiki: goldsmith gauntlets (or the Smithing or max cape) raise gold bar XP from 22.5 to 56.2.
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
@@ -129,7 +130,7 @@ function beginSmelt(player, recipe) {
     player.sendMessage(recipe.missingMessage);
     return false;
   }
-  if (recipe.smeltMessage) player.sendMessage(recipe.smeltMessage);
+  if (recipe.smeltMessage) spam(player, recipe.smeltMessage);
   player.performAnimation(animation("human_furnace"));
   Core.Sounds.sendSound(player, Core.Sound.SMELTING);
   return true;
@@ -142,20 +143,21 @@ function finishSmelt(player, chosen, furnaceId) {
     return false;
   }
   consumeIngredients(player, recipe);
+  player.performAnimation(animation("human_furnace"));
   const inventory = player.getInventory();
   for (const [itemId, amount] of recipe.byproducts ?? []) inventory.addItem(new Core.Item(itemId, amount));
   // A second bar (Varrock armour) sets `secondRecipe`, the recipe its ingredients were taken by.
   const outcome = { player, recipe, base: chosen, furnaceId, success: Math.random() < (recipe.successChance ?? 1), bars: 1 };
   Core.api.emitCustomEvent("smithing:smelt-outcome", outcome);
   if (!outcome.success) {
-    player.sendMessage(recipe.failMessage);
+    spam(player, recipe.failMessage);
     return true;
   }
   const skill = recipe.skill ?? Core.Skill.SMITHING;
   inventory.addItem(new Core.Item(recipe.barId, outcome.bars));
   const extraXp = (outcome.bars - 1) * smeltingXp(player, outcome.secondRecipe ?? recipe);
   player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe) + extraXp);
-  if (recipe.retrieveMessage) player.sendMessage(recipe.retrieveMessage);
+  if (recipe.retrieveMessage) spam(player, recipe.retrieveMessage);
   Core.api.emitCustomEvent("smelting:success", { player, skill, itemId: recipe.barId });
   Common.produced(player, skill, recipe.barId, outcome.bars, smeltingXp(player, recipe) + extraXp, "smelt");
   return true;

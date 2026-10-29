@@ -12,6 +12,9 @@
  *   a lockpick, which halves the XP. One door per room leads on (drawn when the run starts);
  *   after three dead ends the fourth always leads on. The
  *   next room needs its Thieving level. In room 8 the doors lead out, after a confirmation.
+ *   Captured (rsprox, recordings 545, 549, 552, 1843, 1857): a pick that works opens the door on
+ *   its tick (synth 87, area sound 54), holds `busy` from the next, and three ticks later says
+ *   "This door leads to a dead end." or moves the player on; a failed pick says so at once.
  * - **Tomb door exits** (ntk_tomb_door_exit, Leave Tomb / Quick-leave) end the run outside, and
  *   the antechamber exits (ntk_antechamber_exit) take the player out of a lobby.
  *
@@ -21,8 +24,9 @@
 const Common = require("./Common.PyramidPlunder");
 
 const TRAP_XP = 10;
-/** Ticks a lock pick takes. */
+/** Ticks a lock pick takes; an opened door leads on (or doesn't) three ticks after the pick. */
 const ACTION_TICKS = 2;
+const DOOR_RESULT_TICKS = 3;
 /** The captured disarm: the first line, the two work animations, the result, the trap down. */
 const DISARM = { tryAt: 1, workAt: [2, 4], resultAt: 6, downAt: 8 };
 
@@ -51,7 +55,7 @@ function onTrap(trap, x, y) {
 
 /** Walking onto an armed trap: the spears hit and the player is pushed back where they came from. */
 function springTrap(player, run, random = Math.random) {
-  player.sendMessage(Common.MESSAGES.trapFail);
+  Common.spam(player, Common.MESSAGES.trapFail);
   Common.hit(player, Common.rollHit(random));
   const back = run.lastSafe ?? Common.roomData(run.room).entry;
   player.moveTo(Common.location(back));
@@ -75,7 +79,7 @@ function passTrap(event, random = Math.random) {
     const now = player.getLocation();
     return now.getX() === origin.x && now.getY() === origin.y;
   };
-  Common.later(DISARM.tryAt, () => still() && player.sendMessage(Common.MESSAGES.trapTry));
+  Common.later(DISARM.tryAt, () => still() && Common.spam(player, Common.MESSAGES.trapTry));
   for (const tick of DISARM.workAt) {
     Common.later(tick, () => {
       if (!still()) return;
@@ -86,12 +90,12 @@ function passTrap(event, random = Math.random) {
   Common.later(DISARM.resultAt, () => {
     if (!still()) return;
     if (!Common.roll(Common.chanceOf("speartrap", Common.thievingLevel(player), run.room), random)) {
-      player.sendMessage(Common.MESSAGES.trapFail);
+      Common.spam(player, Common.MESSAGES.trapFail);
       Common.hit(player, Common.rollHit(random));
       return;
     }
     run.trapDisarmed = true;
-    player.sendMessage(Common.MESSAGES.trapDisarmed);
+    Common.spam(player, Common.MESSAGES.trapDisarmed);
     Common.sound(player, Common.ids().sound.trapDisarmed);
     Common.addXp(player, "THIEVING", TRAP_XP);
     walkAcross(player, run);
@@ -135,10 +139,10 @@ function leadsOn(player, run, door) {
   return opened.length === 3;
 }
 
-function nextRoom(player, run) {
+function nextRoom(player, run, ticks = 1) {
   const next = run.room + 1;
-  Common.later(1, () => {
-    if (Common.sessionOf(player) === run) Common.enterRoom(player, run, next);
+  Common.later(ticks, () => {
+    if (Common.sessionOf(player) === run && run.room === next - 1) Common.enterRoom(player, run, next);
   });
 }
 
@@ -160,27 +164,39 @@ function pickLock(event, random = Math.random) {
   const varbit = Common.ids().varbit.doors[door - 1];
   if (Common.varbitOf(player, varbit) === 1) {
     if (leadsOn(player, run, door)) nextRoom(player, run);
-    else player.sendMessage(Common.MESSAGES.deadEnd);
+    else player.sendMessage(Common.MESSAGES.deadEndOpened);
     return true;
   }
   if (!Common.takeAction(run, ACTION_TICKS)) return true;
   const lockpick = player.getInventory().getAmount(Common.ids().item.lockpick) > 0;
-  player.sendMessage(lockpick ? Common.MESSAGES.lockpick : Common.MESSAGES.noLockpick);
   player.performAnimation(new (Common.getCore().Animation)(Common.ids().anim.pick));
+  Common.sound(player, Common.ids().sound.door);
+  Common.spam(player, lockpick ? Common.MESSAGES.lockpick : Common.MESSAGES.noLockpick);
   const chance = Common.chanceOf(lockpick ? "doorLockpick" : "door", Common.thievingLevel(player), run.room);
   if (!Common.roll(chance, random)) {
-    player.sendMessage(Common.MESSAGES.doorFail);
+    Common.spam(player, Common.MESSAGES.doorFail);
     return true;
   }
+  run.busyUntil = Math.max(run.busyUntil, Common.getCore().World.getProcessCycle() + DOOR_RESULT_TICKS);
   Common.send(player, varbit, 1);
-  Common.sound(player, Common.ids().sound.door);
+  Common.areaSound(player, Common.ids().sound.doorArea, event.location);
   if (event.object && Common.ids().anim.door !== null) {
     player.getPacketSender().sendObjectAnimation(event.object, new (Common.getCore().Animation)(Common.ids().anim.door));
   }
   const xp = Common.roomData(run.room).doorXp;
   Common.addXp(player, "THIEVING", lockpick ? xp / 2 : xp);
-  if (leadsOn(player, run, door)) nextRoom(player, run);
-  else player.sendMessage(Common.MESSAGES.deadEnd);
+  const room = run.room;
+  Common.later(1, () => Common.sessionOf(player) === run && run.room === room && Common.busy(player, true));
+  if (leadsOn(player, run, door)) {
+    nextRoom(player, run, DOOR_RESULT_TICKS);
+    Common.later(DOOR_RESULT_TICKS, () => Common.sessionOf(player) === run && Common.busy(player, false));
+    return true;
+  }
+  Common.later(DOOR_RESULT_TICKS, () => {
+    if (Common.sessionOf(player) !== run || run.room !== room) return;
+    player.sendMessage(Common.MESSAGES.deadEnd);
+    Common.busy(player, false);
+  });
   return true;
 }
 
@@ -223,4 +239,4 @@ module.exports = function registerPassages(api) {
 
 module.exports.onTrap = onTrap;
 module.exports.springTrap = springTrap;
-module.exports._test = { TRAP_XP, ACTION_TICKS, DISARM, walkAcross, confirmLeave, leaveNow, crossingTile, onTrap, springTrap, passTrap, leadsOn, pickLock, leaveTomb };
+module.exports._test = { TRAP_XP, ACTION_TICKS, DOOR_RESULT_TICKS, DISARM, walkAcross, confirmLeave, leaveNow, crossingTile, onTrap, springTrap, passTrap, leadsOn, pickLock, leaveTomb };

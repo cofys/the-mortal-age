@@ -6,8 +6,9 @@
  * chance per chip by stage and the ore by Mining level, and +100 points for everyone when the
  * last of it falls into the lava vortex.
  *
- * Mining: "You swing your pick at the rock.", then a chip about every 3 ticks (recorded): +1 point,
- * 5 Mining XP, and sometimes a fragment with its points, XP and a side find.
+ * Mining (recorded): "You swing your pick at the rock." and the swing the tick after the click, then
+ * a chip with sound 3600 every pickaxe interval (3 ticks with a dragon pickaxe, sometimes 2): +1
+ * point, 5 Mining XP, and sometimes a fragment with its points, XP and a side find.
  */
 const Common = require("./Common.VolcanicMine");
 const Game = require("./Game.VolcanicMine");
@@ -174,21 +175,25 @@ function mine(event) {
     player.sendMessage("You need a pickaxe to mine this rock. You do not have a pickaxe which you have the Mining level to use.");
     return true;
   }
-  Common.spam(player, Common.message("swing"));
   const from = player.getLocation();
   const stageAt = game.boulder.stage;
   const current = game.act(player);
   const token = game.actions.get(player);
+  const mining = () => current(token) && Game.gameOf(player) === game && game.phase === "running"
+    && !game.boulder.moving && game.boulder.stage === stageAt && player.getLocation().equals(from);
   const swing = () => {
-    if (!current(token) || Game.gameOf(player) !== game || game.phase !== "running" || game.boulder.moving || game.boulder.stage !== stageAt) return;
-    if (!player.getLocation().equals(from)) return;
+    if (!mining()) return;
     player.performAnimation(pickaxe.animation);
     Common.sound(player, "pick");
     chip(game, player);
-    Common.later(Common.data.boulder.chipTicks, swing);
+    Common.later(Common.rollInterval(pickaxe), swing);
   };
-  Common.later(Common.data.boulder.chipTicks, swing);
-  player.performAnimation(pickaxe.animation);
+  Common.later(1, () => {
+    if (!mining()) return;
+    Common.spam(player, Common.message("swing"));
+    player.performAnimation(pickaxe.animation);
+    Common.later(Common.rollInterval(pickaxe), swing);
+  });
   return true;
 }
 

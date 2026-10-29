@@ -46,7 +46,9 @@ function heal(player, npc) {
     return true;
   }
   if (c.pyromancerHealthy && c.pyromancerHp >= Corners.PYROMANCER_HITPOINTS) {
-    npcSay(player, npcId, "No need! I'm fine thanks.");
+    // Captures (recordings 3254, 3262): a game line, then the pyromancer's answer.
+    player.sendMessage("You don't need to do that.");
+    npcSay(player, npcId, "No need! I'm fine, thanks.");
     return true;
   }
   if (!hasPotion(player)) {

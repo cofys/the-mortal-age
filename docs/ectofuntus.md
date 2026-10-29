@@ -58,22 +58,25 @@ the launch/impact execution path, rather than a live two-player combat test.
 
 Recording 377. A bucket used on the pool fills every bucket carried (Wiki). It plays
 `quest_ahoy_human_filling_bucket` (4471) at once. Two ticks later a bucket becomes a bucket of slime
-with synth 1132; the first fill also says "You fill the bucket with ectoplasm." The next bucket's
-animation comes two ticks after that, then a tick after each fill.
+with synth 1132; the first fill also says "You fill the bucket with ectoplasm." Each next bucket's
+animation comes two ticks after the last fill, so a bucket fills every four ticks (+2, +6, +10,
++14). The older recording 2765 (rev 229) filled every three ticks; tsps follows rev 231.
 
 ## Bone grinder
 
 Recordings 376, 377 (rev 231). Bones on the loader run the whole round, then start the next bone
 after each pot, until bones or pots run out or the player clicks. The player walks between the
-three parts:
+three parts. The first part is used two ticks after the player arrives, whichever option or item
+started the round (the loader with bones, Wind, Empty or a pot on the bin), and the sequence and
+synth of each part carry the same client delay:
 
 | Part (player's tile, facing north) | Captured | Then |
 | --- | --- | --- |
-| Loader (3660, 3524, 1) | `ahoy_bone_dump` (1649), synth 1133, "You put some big bones in the grinder's hopper.", `ahoy_grinder_status` 1 | +3 steps west, +5 winds |
-| Handle (3659, 3524, 1) | `ahoy_bone_grind` (1648), synth 1131, "You wind the grinder handle."; +3 "Some crushed big bones pour into the bin.", status 2 | +6 steps west, +8 fills |
-| Bin (3658, 3524, 1) | `ahoy_fillbucket_bonedust` (1650), synth 1136, "You fill a pot with crushed big bones.", the pot becomes bonemeal, status 0 | +5 runs to the loader, +7 loads the next bone |
+| Loader (3660, 3524, 1) | `ahoy_bone_dump` (1649) and synth 1133, both delay 5, "You put some big bones in the grinder's hopper.", `ahoy_grinder_status` 1 | +3 steps west, +5 winds |
+| Handle (3659, 3524, 1) | `ahoy_bone_grind` (1648) and synth 1131, both delay 10, "You wind the grinder handle."; +3 "Some crushed big bones pour into the bin.", status 2 | +6 steps west, +8 fills |
+| Bin (3658, 3524, 1) | `ahoy_fillbucket_bonedust` (1650) and synth 1136, both delay 5, "You fill a pot with crushed big bones.", the pot becomes bonemeal, status 0 | +5 runs to the loader, +7 loads the next bone |
 
-The other answers, also captured:
+The other answers, also captured, are game messages two ticks after the player arrives:
 
 - No pot at the bin: "You need an empty pot to put the crushed big bones into." The round stops
   with the bones in the bin.

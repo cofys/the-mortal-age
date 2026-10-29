@@ -24,7 +24,8 @@ Burying sends "You dig a hole in the ground..." and "You bury the bones." for ev
 bone's name. Live OSRS answers the Bury click on its own tick with the dig message, the bone's
 removal, the Prayer experience, the sequence (827, `human_pickupfloor`) and synth 2738, then sends
 "You bury the bones." on the next tick (rsprox captures, for example recordings 901, 3455 and 3461,
-revision 235; the transcripts hold no variant naming a bone). tsps does the same, so walking away
+revision 235; the transcripts hold no variant naming a bone). Both lines are spam messages (chat
+type 105), as "You scatter the ashes." is. tsps does the same, so walking away
 after the click does not give the bone back.
 
 ### Sequential burial (opt-in)
@@ -65,7 +66,7 @@ on free worlds by `FreeToPlay` through the item's members flag, so the data hold
 
 Captured from live OSRS (rsprox.net recordings 2123, revision 227, and 3013, revision 231): each
 Scatter click on an ash (`IF_BUTTON2`/`IF_BUTTONX` on the inventory) is answered on the next server
-tick, in one batch, by the game message "You scatter the ashes." (chat type 105), the slot emptied,
+tick, in one batch, by the spam message "You scatter the ashes." (chat type 105), the slot emptied,
 the Prayer experience (Vile ashes +25 on a normal world), the sequence (delay 0, no spotanim flag) and
 the synth (one loop, no delay). Of the 11 recordings rsprox holds with that message, 10 contain seq
 2295. A scatter can lack it when another animation replaces it in the same tick: one of 2123's three

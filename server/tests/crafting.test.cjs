@@ -74,8 +74,10 @@ function playerWith(entries = [], { level = 99, threadUses } = {}) {
       return packetSender;
     },
     sendSoundEffect(id) { log.push(['sound', id]); return packetSender; },
+    sendTypedMessage(type, text) { log.push(['message', text, type]); return packetSender; },
     sendObjectAnimation(object, animation) { log.push(['loc-animation', animation.getId()]); return packetSender; },
     sendConfig(id, value) { log.push(['config', id, value]); return packetSender; },
+    sendVarbit(id, value) { log.push(['varbit', id, value]); return packetSender; },
     sendSubInterface(uid, group) { log.push(['open', group]); return packetSender; },
     closeSubInterface() { log.push(['close']); return packetSender; },
   };
@@ -103,6 +105,7 @@ function playerWith(entries = [], { level = 99, threadUses } = {}) {
     isRegistered: () => true,
     isPlayerBot: () => false,
     getUsername: () => 'CraftingTest',
+    getIndex: () => 7,
     getLocation: () => location,
     getHitpoints: () => 99,
     getMovementQueue: () => ({ size: () => player.moving ? 1 : 0 }),
@@ -318,7 +321,32 @@ test('chisel on an uncut gem opens the captured menu and cuts one gem the tick a
   assert.ok(byTick[1].some(row => row[0] === 'animation' && row[1] === 886));
   assert.ok(byTick[1].some(row => row[0] === 'sound' && row[1] === 2586));
   assert.deepEqual(xpOn(byTick, 1), [107.5]);
+  assert.ok(byTick[1].some(row => row[0] === 'message' && row[2] === PluginManager.getCoreApi().ChatType.SPAM), 'a spam line');
   assert.equal(player.amounts.get(ItemIds.DIAMOND), 3);
+});
+
+test('below the level, the tick after the click brings an item box naming the gem (rsprox 1102, 1723)', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.CHISEL, 1], [ItemIds.UNCUT_SAPPHIRE, 2]], { level: 19 });
+  assert.equal(use(player, 'cutGem', ItemIds.CHISEL, ItemIds.UNCUT_SAPPHIRE).handled, true);
+  assert.equal(getMenu(), undefined, 'no menu');
+  assert.equal(player.log.length, 0, 'nothing on the click tick');
+  tasks.at(-1).execute();
+  assert.deepEqual(player.log, [['statement', 'You need a Crafting level of 20 to cut sapphires.']]);
+});
+
+test('another action cancels the delayed refusal: it is keyed by the player index, as combat cancels', t => {
+  membersWorld(t, true);
+  const { TaskManager } = PluginManager.getCoreApi();
+  const { player } = playerWith([[ItemIds.CHISEL, 1], [ItemIds.UNCUT_SAPPHIRE, 1]], { level: 1 });
+  use(player, 'cutGem', ItemIds.CHISEL, ItemIds.UNCUT_SAPPHIRE);
+  const task = tasks.at(-1);
+  assert.equal(task.key, player.getIndex());
+  TaskManager.submit(task);
+  TaskManager.cancelTasks(player.getIndex());
+  TaskManager.process();
+  assert.equal(task.isRunning(), false);
+  assert.deepEqual(player.log, []);
 });
 
 test('a failed cut smashes a semi-precious gem into a crushed gem with the captured message', t => {
@@ -354,17 +382,20 @@ test('glassblowing lists all eight items and makes one every 3 ticks from the se
   assert.equal(player.amounts.get(ItemIds.GLASSBLOWING_PIPE), 1);
 });
 
-test('the wheel offers what the carried materials spin into and spins one every 2 ticks from the third', t => {
+test('the wheel offers what the carried materials spin into, starts on the choice and spins one every 2 ticks from the second', t => {
   membersWorld(t, true);
   const { player, getMenu } = playerWith([[ItemIds.FLAX, 2]], { level: 12 });
   namedObjects['Spinning wheel'].Spin({ player, object: {}, handled: false });
   assert.equal(getMenu().getTitle(), 'What would you like to spin?');
   assert.equal(getMenu().getOptions().mode, 16);
-  assert.deepEqual(getMenu().getItems(), [ItemIds.BOW_STRING, ItemIds.LINEN_YARN]);
+  assert.deepEqual(getMenu().getItems(), [ItemIds.LINEN_YARN, ItemIds.BOW_STRING]);
   const byTick = make(player, getMenu(), ItemIds.LINEN_YARN, 2, 6);
-  assert.ok(byTick[1].some(row => row[0] === 'animation' && row[1] === 13139));
-  assert.ok(byTick[1].some(row => row[0] === 'loc-animation' && row[1] === 466));
-  assert.deepEqual(byTick.flatMap((rows, tick) => rows.some(row => row[0] === 'xp') ? [tick] : []), [3, 5]);
+  assert.ok(byTick[0].some(row => row[0] === 'animation' && row[1] === 13139));
+  assert.ok(byTick[0].some(row => row[0] === 'loc-animation' && row[1] === 466));
+  assert.equal(byTick[1].some(row => row[0] === 'animation'), false);
+  assert.ok(byTick[2].some(row => row[0] === 'animation' && row[1] === 13139));
+  assert.deepEqual(byTick.flatMap((rows, tick) => rows.some(row => row[0] === 'xp') ? [tick] : []), [2, 4]);
+  assert.deepEqual(xpOn(byTick, 2), [16]);
   assert.equal(player.amounts.get(ItemIds.LINEN_YARN), 2);
   assert.equal(player.amounts.get(ItemIds.FLAX), 0);
 });
@@ -376,9 +407,10 @@ test('free-to-play wheels only spin wool, and wool used on the wheel opens the m
   handlers.handleMaterialOnStation(event);
   assert.equal(event.handled, true);
   assert.deepEqual(getMenu().getItems(), [ItemIds.BALL_OF_WOOL]);
+  assert.equal(getMenu().getTitle(), 'How many would you like to spin?');
 });
 
-test('the loom weaves drift nets from two jute fibres every 3 ticks from the fourth', t => {
+test('the loom starts on the choice and weaves drift nets from two jute fibres every 3 ticks from the third', t => {
   membersWorld(t, true);
   const { player, getMenu } = playerWith([[ItemIds.JUTE_FIBRE, 4]], { level: 26 });
   namedObjects.Loom.Weave({ player, object: {}, handled: false });
@@ -386,9 +418,9 @@ test('the loom weaves drift nets from two jute fibres every 3 ticks from the fou
   assert.equal(getMenu().getOptions().mode, 35);
   assert.deepEqual(getMenu().getItems(), [ItemIds.EMPTY_SACK, ItemIds.DRIFT_NET]);
   const byTick = make(player, getMenu(), ItemIds.DRIFT_NET, 2, 8);
-  assert.ok(byTick[1].some(row => row[0] === 'animation' && row[1] === 2270));
-  assert.deepEqual(xpOn(byTick, 4), [55]);
-  assert.deepEqual(xpOn(byTick, 7), [55]);
+  assert.ok(byTick[0].some(row => row[0] === 'animation' && row[1] === 2270));
+  assert.deepEqual(xpOn(byTick, 3), [55]);
+  assert.deepEqual(xpOn(byTick, 6), [55]);
   assert.equal(player.amounts.get(ItemIds.DRIFT_NET), 2);
 });
 
@@ -534,6 +566,7 @@ test('shaping repeats at three ticks, with first result two ticks after starting
   openPottery(player);
   const rows = craft(player, getMenu(), ItemIds.UNFIRED_BOWL, 2, 9);
   assert.deepEqual(madeOn(rows, 'You make the clay into a bowl.'), [2, 5]);
+  assert.ok(rows[2].some(row => row[0] === 'message' && row[2] === PluginManager.getCoreApi().ChatType.SPAM));
   assert.ok(rows[0].some(row => row[0] === 'animation' && row[1] === 883));
   assert.ok(rows[0].some(row => row[0] === 'sound' && row[1] === 2588));
   assert.deepEqual(xpOn(rows, 2), [18]);
@@ -553,6 +586,8 @@ test('oven always opens its quantity menu and fires at six ticks then every seve
   const rows = craft(player, getMenu(), ItemIds.UNFIRED_BOWL, 2, 16);
   assert.deepEqual(madeOn(rows, 'You put a bowl in the oven.'), [0, 7]);
   assert.deepEqual(madeOn(rows, 'You remove the bowl from the oven.'), [6, 13]);
+  const SPAM = PluginManager.getCoreApi().ChatType.SPAM;
+  assert.ok([rows[0], rows[6]].every(tick => tick.some(row => row[0] === 'message' && row[2] === SPAM)));
   assert.ok(rows[0].some(row => row[0] === 'animation' && row[1] === 1317));
   assert.ok(rows[0].some(row => row[0] === 'sound' && row[1] === 2725));
   assert.deepEqual(xpOn(rows, 6), [15]);
@@ -677,4 +712,34 @@ test('a completed one-step move cancels pottery even after the movement queue em
   task.execute();
   assert.equal(player.getAttribute(TASK_ATTRIBUTE), null);
   assert.equal(player.amounts.get(ItemIds.UNFIRED_BOWL), 2);
+});
+
+test('water on clay makes soft clay with the captured spam line', () => {
+  const { player } = playerWith([[ItemIds.CLAY, 1], [ItemIds.JUG_OF_WATER, 1]]);
+  const event = use(player, 'makeSoftClay', ItemIds.JUG_OF_WATER, ItemIds.CLAY);
+  assert.equal(event.handled, true);
+  assert.equal(player.amounts.get(ItemIds.SOFT_CLAY), 1);
+  assert.equal(player.amounts.get(ItemIds.JUG), 1);
+  assert.deepEqual(player.log.filter(row => row[0] === 'message'),
+    [['message', 'You mix the clay and water.<br>You now have some soft workable clay.', PluginManager.getCoreApi().ChatType.SPAM]]);
+});
+
+test('an oven choice the player does not carry names it in a message box', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.UNFIRED_POT, 1]]);
+  openPottery(player, true);
+  player.log.length = 0;
+  getMenu().execute(ItemIds.UNFIRED_BOWL, 1);
+  assert.deepEqual(player.log, [['statement', "You don't have any bowls which need firing."]]);
+  assert.equal(player.getAttribute(TASK_ATTRIBUTE) ?? null, null);
+});
+
+test('the oven leaves pot lids out until One Small Favour teaches them, as the wheel does', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.UNFIRED_POT, 1]]);
+  openPottery(player, true);
+  assert.deepEqual(getMenu().getOptions().labels, ['Pot', 'Pie dish', 'Bowl', 'Plant pot', 'Cup']);
+  player.questStage = 34;
+  openPottery(player, true);
+  assert.equal(getMenu().getItems().at(-1), ItemIds.UNFIRED_POT_LID);
 });

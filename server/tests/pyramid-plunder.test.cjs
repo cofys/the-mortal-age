@@ -81,6 +81,8 @@ function player({ thieving = 99, strength = 99, items = {}, at = { x: 3289, y: 2
     overlay: null,
     poisoned: 0,
     sounds: [],
+    areaSounds: [],
+    spam: [],
     dialogues: [],
     varbits,
     inventory,
@@ -97,6 +99,8 @@ function player({ thieving = 99, strength = 99, items = {}, at = { x: 3289, y: 2
       sendSubInterface: (uid, id) => { p.overlay = id; },
       closeSubInterface: () => { p.overlay = null; },
       sendSound: (id) => p.sounds.push(id),
+      sendAreaSound: (id, x, y, z, loops, delay, range) => p.areaSounds.push({ id, x, y, z, range }),
+      sendTypedMessage: (_type, message) => { p.messages.push(message); p.spam.push(message); },
       sendObjectAnimation: () => {},
     }),
     getDialogueManager: () => ({ startDialogues: (chain) => p.dialogues.push(chain) }),
@@ -209,10 +213,14 @@ test("rooms advance in order through the right door, and only with the level", (
   T.Entrance.tryStart(p, () => 0);
   C.sessionOf(p).exits = [2, 2, 2, 2, 2, 2, 2, 2];
   T.Passages.pickLock({ player: p, ...objectAt(1, doorId(1)) }, always);
-  assert.ok(p.messages.includes(C.MESSAGES.deadEnd));
+  assert.ok(!p.messages.includes(C.MESSAGES.deadEnd), "not on the pick's tick");
+  flush(3);
+  assert.ok(p.messages.includes(C.MESSAGES.deadEnd), "three ticks after the pick");
   next();
   T.Passages.pickLock({ player: p, ...objectAt(1, doorId(2)) }, always);
   flush(2);
+  assert.equal(C.sessionOf(p).room, 1, "still in room 1 two ticks after the pick");
+  flush(1);
   assert.equal(C.sessionOf(p).room, 2);
   assert.equal(roomOf(p), 2);
   assert.equal(p.varbits.get(ids().varbit.doors[0]), 0, "doors closed again in the new room");
@@ -235,9 +243,8 @@ test("after three dead ends the fourth door always leads on; a lockpick halves t
   run.exits = [3, 4, 4, 4, 4, 4, 4, 4];
   for (const n of [1, 2, 4]) {
     T.Passages.pickLock({ player: p, ...objectAt(1, doorId(n)) }, always);
-    next();
+    flush(3);
   }
-  flush(2);
   assert.equal(C.sessionOf(p).room, 1, "doors 1, 2 and 4 were dead ends");
   run.exits = [1, 4, 4, 4, 4, 4, 4, 4];
   assert.equal(T.Passages.leadsOn(p, C.sessionOf(p), 3), true, "doors 1, 2 and 4 failed: 3 leads on");
@@ -298,6 +305,7 @@ test("an urn gives its XP and one artefact once", () => {
   T.Entrance.tryStart(p, () => 0);
   const urn = { player: p, ...objectAt(1, firstUrn()) };
   T.Containers.searchUrn(urn, always);
+  flush(5);
   assert.equal(p.xp.THIEVING, 60);
   assert.equal(artefactCount(p), 1);
   T.Containers.searchUrn(urn, always);
@@ -311,16 +319,18 @@ test("a failed urn search bites and poisons; a charmed snake makes it safe", () 
   T.Entrance.tryStart(p, () => 0);
   const urn = { player: p, ...objectAt(1, firstUrn()) };
   T.Containers.searchUrn(urn, never);
+  flush(5);
   assert.equal(p.hits.length, 1);
   assert.ok(p.poisoned >= 1 && p.poisoned <= 4);
   assert.equal(artefactCount(p), 0);
   next();
   T.Containers.checkUrn(urn, always);
-  assert.equal(p.varbits.get(ids().urns.get(firstUrn())), T.Containers.URN.SNAKE);
+  assert.equal(p.varbits.get(ids().urns.get(firstUrn())), T.Containers.URN_STATE.SNAKE);
   assert.equal(p.xp.THIEVING, 20, "a third of the urn's XP for the check");
   T.Containers.charmUrn(urn);
   next();
   T.Containers.searchUrn(urn, never);
+  flush(5);
   assert.equal(artefactCount(p), 1, "charmed: no roll to fail");
   C.endRun(p);
 });
@@ -330,6 +340,8 @@ test("the chest always gives its artefact; a scarab swarm takes the XP instead",
   T.Entrance.tryStart(p, () => 0);
   // 0.5: no swarm at 99 Thieving, no sceptre.
   T.Containers.searchChest({ player: p, ...objectAt(1, ids().chest) }, () => 0.5);
+  assert.equal(artefactCount(p), 0, "the chest opens a tick after the click");
+  flush(1);
   assert.equal(p.xp.THIEVING, 40);
   assert.equal(artefactCount(p), 1);
   T.Containers.searchChest({ player: p, ...objectAt(1, ids().chest) }, () => 0.5);
@@ -339,6 +351,7 @@ test("the chest always gives its artefact; a scarab swarm takes the XP instead",
   T.Entrance.tryStart(q, () => 0);
   spawned.length = 0;
   T.Containers.searchChest({ player: q, ...objectAt(1, ids().chest) }, () => 0.9);
+  flush(1);
   assert.equal(q.xp.THIEVING, 0, "the swarm takes the XP");
   assert.equal(artefactCount(q), 1);
   assert.deepEqual(q.hits, [3]);
@@ -353,8 +366,10 @@ test("the sceptre ends the run, and lands outside with a full pack", () => {
   const p = player({ thieving: 99 });
   T.Entrance.tryStart(p, () => 0);
   T.Containers.searchChest({ player: p, ...objectAt(1, ids().chest) }, () => 0);
+  flush(1);
   assert.equal(C.sessionOf(p), null);
   assert.equal(p.inventory.get(ids().item.sceptre), 1);
+  assert.equal(p.dialogues.length, 1, "the sceptre is shown in an item box");
   assert.deepEqual(p.at, C.DATA.outside);
 
   const full = {};
@@ -362,6 +377,7 @@ test("the sceptre ends the run, and lands outside with a full pack", () => {
   const q = player({ thieving: 99, items: full });
   T.Entrance.tryStart(q, () => 0);
   T.Containers.searchChest({ player: q, ...objectAt(1, ids().chest) }, () => 0);
+  flush(1);
   assert.equal(q.inventory.get(ids().item.sceptre) ?? 0, 0);
   assert.ok(q.ground.some(([id]) => id === ids().item.sceptre));
 });
@@ -378,6 +394,7 @@ test("the sarcophagus opens on Strength and gives Strength XP", () => {
   T.Entrance.tryStart(p, () => 0);
   // 0.5: opens, no mummy in room 1 (1/9), no sceptre.
   T.Containers.openSarcophagus({ player: p, ...objectAt(1, ids().sarcophagus) }, () => 0.5);
+  flush(10);
   assert.equal(p.xp.STRENGTH, 20);
   assert.equal(artefactCount(p), 1);
   assert.equal(p.varbits.get(ids().varbit.sarcophagus), T.Containers.SARCOPHAGUS.OPEN);
@@ -517,6 +534,7 @@ test("a search takes its ticks: an immediate second click is ignored", () => {
   const urn = { player: p, ...objectAt(1, firstUrn()) };
   T.Containers.searchUrn(urn, never);
   T.Containers.searchUrn(urn, never);
+  flush(5);
   assert.equal(p.hits.length, 1, "one bite, not two");
   C.endRun(p);
 });
@@ -539,6 +557,7 @@ test("with a full pack, the artefact found with the sceptre lands outside too", 
   const p = player({ thieving: 99, items: full });
   T.Entrance.tryStart(p, () => 0);
   T.Containers.searchChest({ player: p, ...objectAt(1, ids().chest) }, () => 0);
+  flush(1);
   const outside = p.ground.filter(([, at]) => at.x === C.DATA.outside.x && at.y === C.DATA.outside.y);
   assert.equal(outside.length, 2, "the sceptre and the artefact, both outside");
 });
@@ -595,4 +614,108 @@ test("ending a run with a mummy or swarm out tells the player they go", () => {
   C.endRun(p);
   assert.ok(p.messages.includes(C.MESSAGES.mummyVanishes));
   assert.ok(p.messages.includes(C.MESSAGES.scarabsLeave));
+});
+
+// --- Timing from the rsprox captures (recordings 545, 549, 552, 1788, 1843, 1857)
+
+/** Runs `ticks` ticks and returns what each one showed: animations, synths, area sounds, spam and game lines, varbits. */
+function watch(p, ticks) {
+  const seen = [];
+  for (let i = 0; i < ticks; i++) {
+    const before = { anims: p.anims.length, sounds: p.sounds.length, area: p.areaSounds.length, messages: p.messages.length, varbits: new Map(p.varbits) };
+    flush(1);
+    const varbits = [...p.varbits].filter(([id, value]) => before.varbits.get(id) !== value).map(([id, value]) => [id, value]);
+    seen.push({
+      anims: p.anims.slice(before.anims).map((a) => a.getId()),
+      sounds: p.sounds.slice(before.sounds),
+      area: p.areaSounds.slice(before.area).map((s) => s.id),
+      messages: p.messages.slice(before.messages),
+      varbits,
+    });
+  }
+  return seen;
+}
+const seq = (name) => C.getCore().CacheDefinitions.getSeqId(name);
+const has = (tick, id, value) => tick.varbits.some(([v, x]) => v === id && x === value);
+
+test("captured urn search: search at 1, loot at 2, synth 1217 at 4, artefact and varbit at 5; spam lines", () => {
+  const p = player({ thieving: 99 });
+  T.Entrance.tryStart(p, () => 0);
+  const urn = { player: p, ...objectAt(1, firstUrn()) };
+  T.Containers.searchUrn(urn, always);
+  assert.equal(p.anims.length, 0, "nothing on the click");
+  const [t1, t2, , t4, t5] = watch(p, 5);
+  assert.deepEqual(t1.anims, [seq("urn_search")]);
+  assert.ok(has(t1, ids().varbit.busy, 1));
+  assert.deepEqual(t2.anims, [seq("urn_search_success")]);
+  assert.deepEqual(t2.messages, [C.MESSAGES.urnLooted]);
+  assert.deepEqual(p.spam, [C.MESSAGES.urnLooted], "a spam message");
+  assert.deepEqual(t4.sounds, [1217]);
+  assert.ok(has(t5, ids().urns.get(firstUrn()), 1) && has(t5, ids().varbit.busy, 0));
+  assert.equal(artefactCount(p), 1);
+  C.endRun(p);
+
+  const q = player({ thieving: 21 });
+  T.Entrance.tryStart(q, () => 0);
+  T.Containers.searchUrn({ player: q, ...objectAt(1, firstUrn()) }, never);
+  const [, b2, , b4] = watch(q, 4);
+  assert.deepEqual(b2.anims, [seq("urn_search_bit")]);
+  assert.equal(b4.sounds[0], 797);
+  assert.equal(b4.messages[0], C.MESSAGES.bitten);
+  assert.equal(q.hits.length, 1);
+  C.endRun(q);
+});
+
+test("captured lock pick: open with synth 87 and area sound 54, busy, and the dead end three ticks later", () => {
+  const p = player({ thieving: 99 });
+  T.Entrance.tryStart(p, () => 0);
+  C.sessionOf(p).exits = [2, 2, 2, 2, 2, 2, 2, 2];
+  T.Passages.pickLock({ player: p, ...objectAt(1, doorId(1)) }, always);
+  assert.deepEqual(p.sounds.slice(-1), [87]);
+  assert.deepEqual(p.areaSounds.map((s) => [s.id, s.range]), [[54, 5]]);
+  assert.deepEqual(p.spam, [C.MESSAGES.noLockpick]);
+  const [t1, , t3] = watch(p, 3);
+  assert.ok(has(t1, ids().varbit.busy, 1));
+  assert.deepEqual(t3.messages, [C.MESSAGES.deadEnd]);
+  assert.ok(!p.spam.includes(C.MESSAGES.deadEnd), "the dead end is a game message");
+  next();
+  T.Passages.pickLock({ player: p, ...objectAt(1, doorId(1)) }, always);
+  assert.equal(p.messages.at(-1), C.MESSAGES.deadEndOpened);
+  C.endRun(p);
+});
+
+test("captured sarcophagus: a push every tick, the lid with area sound 1218 and state 2, the artefact five ticks later; no line", () => {
+  const p = player({ thieving: 99, strength: 99 });
+  T.Entrance.tryStart(p, () => 0);
+  let rolls = 0;
+  // Two failed rolls, then the lid moves; 0.5 afterwards: no mummy, no sceptre.
+  const random = () => (++rolls <= 2 ? 0.999 : 0.5);
+  T.Containers.openSarcophagus({ player: p, ...objectAt(1, ids().sarcophagus) }, random);
+  const ticks = watch(p, 10);
+  assert.ok(has(ticks[0], ids().varbit.busy, 1));
+  assert.deepEqual(ticks[1].anims, [seq("ntk_tomb_push_loop")]);
+  assert.ok(has(ticks[1], ids().varbit.sarcophagusPush, 1));
+  assert.deepEqual([ticks[2].anims, ticks[3].anims], [[seq("ntk_tomb_push_loop")], [seq("ntk_tomb_push_loop")]]);
+  assert.deepEqual(ticks[4].anims, [seq("ntk_tomb_open")]);
+  assert.deepEqual(ticks[4].area, [1218]);
+  assert.ok(has(ticks[4], ids().varbit.sarcophagus, 2));
+  assert.equal(artefactCount(p), 1);
+  assert.ok(has(ticks[9], ids().varbit.sarcophagus, 1) && has(ticks[9], ids().varbit.sarcophagusPush, 0));
+  assert.deepEqual(p.messages, [], "no message");
+  C.endRun(p);
+});
+
+test("captured panel search: three pulls a tick apart, synth 1220 on the first and third, and the way in opens its door", () => {
+  C.state.entrance = 2;
+  C.state.entranceChangesAt = clock.cycle + 100000;
+  const p = player({ thieving: 99 });
+  T.Entrance.searchPanel({ player: p, objectId: ids().outerPanels[2] });
+  assert.deepEqual(p.sounds, [1220]);
+  assert.deepEqual(p.spam, [C.MESSAGES.panelSearch]);
+  const [t1, t2, t3] = watch(p, 3);
+  assert.equal(t1.anims.length, 1);
+  assert.ok(has(t1, ids().varbit.busy, 1));
+  assert.deepEqual(t2.sounds, [1220]);
+  assert.deepEqual(t3.messages, ["You find a door! You open it successfully."]);
+  assert.ok(has(t3, ids().varbit.outerPanels[2], 2) && has(t3, ids().varbit.busy, 0));
 });

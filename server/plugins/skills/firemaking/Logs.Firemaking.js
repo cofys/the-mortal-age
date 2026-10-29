@@ -1,5 +1,5 @@
 /** Forester campfire tending and the existing log-lighting loop. Evidence: docs/firemaking.md. */
-let Skill, Equipment, Animation, Task, Location, Item, GameObject, MapObjects, RegionManager, Sound, Sounds, ItemIds, ObjectIds;
+let ChatType, Skill, Equipment, Animation, Task, Location, Item, GameObject, MapObjects, RegionManager, Sound, Sounds, ItemIds, ObjectIds;
 const { pauseForLevelUp } = require("../SkillActions");
 
 const SESSION_MODE = Object.freeze({
@@ -19,8 +19,12 @@ let CreationMenu, Graphic, DialogueChainBuilder, StatementDialogue;
 const TENDING_ANIMATIONS = new Map();
 const CAMPFIRE_BURN_GRAPHIC = 2582; // forestry_campfire_burning_spotanim
 
-// Lighting rolls once per 4-tick attempt; tending a campfire adds a log every 9 ticks.
+// Lighting rolls once per 4-tick attempt, a tick before the fire would appear (rsprox captures,
+// recording 1035): the first roll is 3 ticks after the click and a hit lights 1 tick later.
+// Tending a campfire adds a log every 9 ticks.
 const LIGHT_ATTEMPT_INTERVAL_TICKS = 4;
+const FIRST_LIGHT_ROLL_TICKS = 3;
+const FIRE_CATCH_DELAY_TICKS = 1;
 const TEND_INTERVAL_TICKS = 9;
 const MAX_ACTION_DISTANCE = 25;
 // Ground logs are "Take" (op3) and "Light" (op4) in the cache.
@@ -54,6 +58,10 @@ let sessionTick = 0;
 
 // Runtime fires and campfires owned by this plugin, keyed by GameObject instance.
 const activeFires = new Map();
+
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(ChatType.SPAM, text);
+}
 
 function randomIntInclusive(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -249,7 +257,7 @@ function canLightFireAt(player, location, privateArea) {
       handled: false,
     });
     if (!handled) {
-      player.sendMessage("You cannot light a fire here. Try moving around a bit.");
+      player.sendMessage("You can't light a fire here.");
     }
     return false;
   }
@@ -292,6 +300,8 @@ function spawnFire(player, location) {
   if (player.getLocation().equals(location)) {
     stepAwayFromFire(player);
   }
+  // Live turns the player back to the fire as they step off it (face_angle 1536 after a step west).
+  player.setPositionToFace(location);
   return fire;
 }
 
@@ -367,15 +377,25 @@ function startFiremakingAttempt(player, log, source, activeSessions) {
   player.getSkillManager()?.stopSkillable?.();
   stopFiremaking(activeSessions, player, false);
 
+  // A log from the inventory goes on the ground at once and is lit there (rsprox captures,
+  // recording 1035: the log leaves the inventory and appears underfoot on the click tick).
+  const fromInventory = source.mode === SESSION_MODE.INVENTORY;
+  if (fromInventory) {
+    inventory.deleteNumber(log.itemId, 1);
+    ItemOnGroundManager.registerLocation(player, new Item(log.itemId, 1), sessionLocation, privateArea);
+  }
+
   activeSessions.set(player, {
-    mode: source.mode,
+    mode: SESSION_MODE.GROUND,
+    fromInventory,
     log,
     location: sessionLocation,
     privateArea,
-    nextActionTick: sessionTick + LIGHT_ATTEMPT_INTERVAL_TICKS,
+    nextActionTick: sessionTick + FIRST_LIGHT_ROLL_TICKS,
+    catchTick: null,
   });
 
-  player.sendMessage("You attempt to light the logs..");
+  spam(player, "You attempt to light the logs.");
   // No explicit FIRE_LIGHT here: animation 733 has sound 2597 baked into
   // frames 8 and 10 in the cache, so sending it too made lighting a fire
   // play three overlapping "strike" sounds instead of one.
@@ -431,34 +451,32 @@ function completeInventoryOrGroundFire(player, state) {
     return false;
   }
 
+  const groundLog = ItemOnGroundManager.getGroundItem(
+    player.getUsername(),
+    state.log.itemId,
+    state.location,
+    state.privateArea
+  );
+  if (!groundLog) {
+    return false;
+  }
+  ItemOnGroundManager.deregister(groundLog);
+
   let logs = 1;
-  if (state.mode === SESSION_MODE.INVENTORY) {
-    if (!player.getInventory().contains(state.log.itemId)) {
-      player.sendMessage("You've run out of logs.");
-      return false;
-    }
-    // Content may burn several logs in the one action ("firemaking:logs-per-action", a league relic's nine).
+  if (state.fromInventory) {
+    // Content may burn several logs in the one action ("firemaking:logs-per-action", a league relic's
+    // nine): the one on the ground and the rest from the inventory.
     const burn = { player, logId: state.log.itemId, amount: 1 };
     pluginApi.emitCustomEvent("firemaking:logs-per-action", burn);
-    logs = burn.amount > 1 ? Math.max(1, Math.min(burn.amount | 0, player.getInventory().getAmount(state.log.itemId))) : 1;
-    player.getInventory().deleteNumber(state.log.itemId, logs);
-  } else {
-    const groundLog = ItemOnGroundManager.getGroundItem(
-      player.getUsername(),
-      state.log.itemId,
-      state.location,
-      state.privateArea
-    );
-    if (!groundLog) {
-      return false;
-    }
-    ItemOnGroundManager.deregister(groundLog);
+    const extra = burn.amount > 1 ? Math.min((burn.amount | 0) - 1, player.getInventory().getAmount(state.log.itemId)) : 0;
+    if (extra > 0) player.getInventory().deleteNumber(state.log.itemId, extra);
+    logs += extra;
   }
 
   spawnFire(player, state.location);
   for (let burnt = 0; burnt < logs; burnt++) grantFiremakingLogXp(player, state.log);
   Sounds.sendSound(player, Sound.FIRE_SUCCESSFUL);
-  player.sendMessage("The logs catch fire and begin to burn.");
+  spam(player, "The fire catches and the logs begin to burn.");
   return true;
 }
 
@@ -595,21 +613,29 @@ function processFiremakingTick(activeSessions, currentTick) {
       }
     }
 
+    if (session.catchTick != null) {
+      if (currentTick < session.catchTick) continue;
+      completeInventoryOrGroundFire(player, session);
+      stopFiremaking(activeSessions, player, false);
+      continue;
+    }
+
     if (currentTick < session.nextActionTick) {
       continue;
     }
 
-    player.performAnimation(LIGHT_FIRE_ANIMATION);
     // Content may make the roll succeed ("firemaking:light-roll", a league relic that never fails to light).
     const light = { player, success: Math.random() < lightingSuccessChance(getFiremakingLevel(player)) };
     pluginApi.emitCustomEvent("firemaking:light-roll", light);
     if (!light.success) {
+      player.performAnimation(LIGHT_FIRE_ANIMATION);
       session.nextActionTick = currentTick + LIGHT_ATTEMPT_INTERVAL_TICKS;
       continue;
     }
 
-    completeInventoryOrGroundFire(player, session);
-    stopFiremaking(activeSessions, player);
+    // A hit stops the animation; the fire catches on the next tick.
+    player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+    session.catchTick = currentTick + FIRE_CATCH_DELAY_TICKS;
   }
 }
 
@@ -916,7 +942,7 @@ module.exports = {
 };
 
 function attach(api) {
-  ({ Skill, Equipment, Animation, Task, Location, Item, GameObject, MapObjects, RegionManager,
+  ({ ChatType, Skill, Equipment, Animation, Task, Location, Item, GameObject, MapObjects, RegionManager,
      Sound, Sounds, CreationMenu, Graphic, DialogueChainBuilder, StatementDialogue, ItemIdentifiers: ItemIds, ObjectIdentifiers: ObjectIds } = api.core);
   TINDERBOX_ID = ItemIds.TINDERBOX;
   FIRE_OBJECT_ID = ObjectIds.FIRE_23; // cache gameval fire: ordinary player-made and permanent fires

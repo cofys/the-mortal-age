@@ -204,7 +204,7 @@ test('seed collection uses the last free slot and does not change the other 27 i
   assert.equal(f.p.getInventory().getFreeSlots(), 0);
 });
 
-test('native gardener Pay -> first choice takes payment and protects the planted tree once', async t => {
+test('native gardener Pay -> Yes takes payment and protects the planted tree once', async t => {
   const f = actor(t, 2435, 3415);
   const patch = Data.CACHE.patches.find(p => p.x === 2435 && p.y === 3414);
   const state = Patches.stateFor(f.p, patch);
@@ -217,10 +217,11 @@ test('native gardener Pay -> first choice takes payment and protects the planted
   const pay = gardener.getCurrentDefinition(f.p).getActions().findIndex(a => a?.toLowerCase() === 'pay') + 1;
   assert.ok(pay > 0);
   await input(f, { type: 'npc_option', index: gardener.getIndex(), clickType: pay });
-  assert.match(options(f)[0], /^Protect Magic/);
-  await resume(f, 1);
+  // rsprox captures: the gardener asks "Pay 25 coconuts?" (Yes./No./Yes and don't ask again.).
+  assert.equal(f.p.getDialogueManager().getCurrent().getTitle(), 'Pay 25 coconuts?');
+  assert.deepEqual(options(f), ['Yes.', 'No.', "Yes and don't ask again."]);
   await resume(f, 1);
   assert.equal(state.protected, true);
   assert.equal(f.p.getInventory().getAmount(coconutNote), 0);
-  assert.ok(f.messages.includes("I'll look after that patch for you."));
+  assert.match(f.p.getDialogueManager().getCurrent().getText(), /^That'll do nicely, (sir|madam)\. Leave it with me/);
 });

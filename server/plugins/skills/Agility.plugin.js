@@ -30,6 +30,21 @@ const MARK_SHORT_COOLDOWN_MINUTES = 2;
 const MARK_DESPAWN_TICKS = 1000;
 const MINUTE_MS = 60_000;
 
+/**
+ * The Agility course helper (rsprox captures). A lap's first obstacle sets
+ * `helper_agility_highlighted_course` to the course's `helper` id (enum 3507) as it starts, which
+ * highlights the course, and runs `helper_agility_start_lap` with the clock when it ends. Every
+ * course obstacle runs `helper_agility_add_xp` with the XP it gave, in tenths. The last one clears
+ * the varbit and runs `helper_agility_end_lap` with the clock and the extra laps counted.
+ */
+const HIGHLIGHTED_COURSE_VARBIT = 13140;
+const START_LAP_SCRIPT = 5173;
+const END_LAP_SCRIPT = 5174;
+const ADD_XP_SCRIPT = 5175;
+/** The lap clock counts game ticks; the client only reads differences. From 2024 so it fits an int. */
+const LAP_CLOCK_EPOCH_MS = Date.UTC(2024, 0, 1);
+const TICK_MS = 600;
+
 /** objectId -> obstacle entries; entries with `at` only match that object tile. */
 const OBSTACLES_BY_OBJECT = new Map();
 /** npcId -> the course obstacle done on that NPC (Werewolf's stick hand-in). */
@@ -163,6 +178,41 @@ function rollSuccess(player, obstacle, requirement) {
   return Math.random() * 100 < chance;
 }
 
+function lapClock() {
+  return Math.floor((Date.now() - LAP_CLOCK_EPOCH_MS) / TICK_MS);
+}
+
+/** Agility XP; on a course, the helper is told what was actually gained (in tenths, after rates). */
+function addAgilityXp(player, xp, course = null) {
+  const skills = player.getSkillManager();
+  const before = skills.getExperience(core.Skill.AGILITY);
+  skills.addExperiences(core.Skill.AGILITY, xp);
+  const gained = Math.round((skills.getExperience(core.Skill.AGILITY) - before) * 10);
+  if (course?.helper != null && gained > 0) {
+    player.getPacketSender().sendClientScript(ADD_XP_SCRIPT, gained);
+  }
+}
+
+/** Whether `obstacle` begins a lap: obstacle 1, unless the course says otherwise (`startsLap`). */
+function startsLap(obstacle, context) {
+  if (!obstacle.course) return false;
+  return obstacle.startsLap !== undefined ? resolve(obstacle.startsLap, context) === true : obstacle.index === 1;
+}
+
+/** The course highlight goes on with the obstacle's first visible step, after any wait or turn. */
+function withHighlight(steps, helper) {
+  const highlight = { varbit: [HIGHLIGHTED_COURSE_VARBIT, helper] };
+  const at = steps.findIndex((step) => step && step.wait == null && !step.face && !step.faceDir);
+  return at < 0 ? [...steps, highlight] : [...steps.slice(0, at), highlight, ...steps.slice(at)];
+}
+
+/** A course's own progress varbit (Shayzien's), set to the obstacle the lap has reached. */
+function setProgressVarbit(player, course, index) {
+  if (course.progressVarbit != null) {
+    player.getPacketSender().sendVarbit(course.progressVarbit, index);
+  }
+}
+
 function getLaps(player) {
   const laps = player.getAttribute(LAPS_ATTRIBUTE);
   return laps && typeof laps === "object" ? laps : {};
@@ -177,10 +227,15 @@ function completeLap(player, course) {
   player.setAttribute(LAPS_ATTRIBUTE, laps);
   rollMarkOfGrace(player, course);
   if (reward.xp > 0) {
-    player.getSkillManager().addExperiences(core.Skill.AGILITY, reward.xp);
+    addAgilityXp(player, reward.xp, course);
   }
   if (!player.getAttribute(LAP_COUNTER_OFF_ATTRIBUTE)) {
     player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
+  }
+  setProgressVarbit(player, course, 0);
+  if (course.helper != null) {
+    player.getPacketSender().sendVarbit(HIGHLIGHTED_COURSE_VARBIT, 0);
+    player.getPacketSender().sendClientScript(END_LAP_SCRIPT, lapClock(), Math.max(1, reward.count | 0) - 1);
   }
   pluginApi.emitCustomEvent("agility:lap", { player, course: course.key, laps: laps[course.key] });
   if (course.diaryTask) {
@@ -218,6 +273,7 @@ function advanceCourse(player, obstacle) {
     return;
   }
   player.setAttribute(PROGRESS_ATTRIBUTE, next);
+  setProgressVarbit(player, course, next?.index ?? 0);
 }
 
 function clockMinute() {
@@ -276,18 +332,21 @@ function resumeMarksOnLogin({ player }) {
   spawnedMarks(player.getUsername()).forEach((item) => item.setAgingPaused(false));
 }
 
-function finishObstacle(player, obstacle, success, completed, fail = obstacle.fail) {
+function finishObstacle(player, obstacle, success, completed, fail = obstacle.fail, lapStart = false) {
   if (!completed) {
     return;
+  }
+  if (success && lapStart && obstacle.course.helper != null) {
+    player.getPacketSender().sendClientScript(START_LAP_SCRIPT, lapClock());
   }
   const reward = success ? obstacle.xp : fail?.xp;
   const xp = typeof reward === "function" ? reward(player) : reward;
   if (xp > 0) {
-    player.getSkillManager().addExperiences(core.Skill.AGILITY, xp);
+    addAgilityXp(player, xp, obstacle.course);
   }
   const endMessage = success ? obstacle.end : fail?.end;
   if (endMessage) {
-    player.sendMessage(endMessage);
+    ObstacleRunner.sendMessage(player, endMessage);
   }
   if (!success) {
     return;
@@ -394,17 +453,19 @@ function attemptObstacle(player, object, entry) {
   const roll = { player, objectId: object.getId(), success: !forced && rollSuccess(player, obstacle, level) };
   if (!forced) pluginApi.emitCustomEvent("agility:roll", roll);
   const success = roll.success;
-  const steps = resolve(success ? obstacle.steps : fail.steps, context);
-  if (!steps) return;
+  const resolved = resolve(success ? obstacle.steps : fail.steps, context);
+  if (!resolved) return;
+  const lapStart = success && startsLap(obstacle, context);
+  const steps = lapStart && obstacle.course.helper != null ? withHighlight(resolved, obstacle.course.helper) : resolved;
   pluginApi.emitCustomEvent("agility:obstacle-start", { player, objectId: object.getId(), location: context.obj, success });
   const startMessage = success ? obstacle.start : fail?.start ?? obstacle.start;
   if (startMessage) {
-    player.sendMessage(startMessage);
+    ObstacleRunner.sendMessage(player, startMessage);
   }
   ObstacleRunner.run(context, steps, {
     render: success ? obstacle.render : fail?.render ?? obstacle.render,
     onFinish: (completed) => {
-      finishObstacle(player, obstacle, success, completed, fail);
+      finishObstacle(player, obstacle, success, completed, fail, lapStart);
       if (completed && success) {
         pluginApi.emitCustomEvent("agility:obstacle", { player, objectId: object.getId(), location: context.obj });
       }

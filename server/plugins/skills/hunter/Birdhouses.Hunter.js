@@ -107,9 +107,15 @@ function seed(player, object, itemId) {
   if (!amount || !exchange(player, [[itemId, amount]], [])) return;
   state.seeds = Math.min(SEEDS, state.seeds + amount * value);
   if (state.seeds === SEEDS) state.filled = Date.now();
+  // rsprox captures (545-572, 1835-1851): seeding is a pick-up with its sound; a full house sends the
+  // line as spam and in a message box.
+  pickup(player);
   sync({ player });
-  if (state.seeds === SEEDS) statement(player, "Your birdhouse trap is now full of seed and will start to catch birds.");
-  else player.sendMessage("You add some seeds to the birdhouse.");
+  if (state.seeds === SEEDS) {
+    const full = "Your birdhouse trap is now full of seed and will start to catch birds.";
+    player.getPacketSender().sendTypedMessage(H.core.ChatType.SPAM, full);
+    statement(player, full);
+  } else player.sendMessage("You add some seeds to the birdhouse.");
 }
 
 function use(event) {

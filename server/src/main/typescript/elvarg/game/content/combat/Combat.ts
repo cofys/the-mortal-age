@@ -21,6 +21,9 @@ import type { CombatSpell } from "./magic/CombatSpell";
 import type { CombatMethod } from "./method/CombatMethod";
 import { Ammunition, RangedData, RangedWeapon } from "./ranged/RangedData";
 import { Animation } from "../../model/Animation";
+import type { AnimationStallKind } from "../../model/Animation";
+import type { PluginAnimationStallEvent } from "../../../plugins/PluginTypes";
+import { getSequenceStall } from "../../cache/NpcAnimationScanner";
 import { PathFinder } from "../../model/movement/path/PathFinder";
 import type { MovementQueue } from "../../model/movement/MovementQueue";
 import type { Location } from "../../model/Location";
@@ -43,6 +46,9 @@ type CombatCycleState = {
 };
 
 const COMBAT_TARGET_PLAYER_VARP = 1075;
+
+/** No attack animation may hold a player longer than this; guards a bad seq decode. */
+const MAX_ANIMATION_STALL_TICKS = 5;
 
 /** Owns one character's target, attack deadline, approach route, and delayed hits. */
 export class Combat {
@@ -123,10 +129,111 @@ export class Combat {
     private lastPreMovementCycle = -1;
     private lastPostMovementCycle = -1;
     private manualMovementUntilCycle = -1;
+    /** Cycles spent out of reach with no distance closed and no step taken. */
+    private unreachableCycles = 0;
+    /** The gap last cycle, or -1 before the first cycle measured against a new target. */
+    private unreachableDistance = -1;
+    /** 20 cycles (10 s) of no progress: an actor is not held in combat with a target it can never hit. */
+    private static readonly UNREACHABLE_GIVE_UP_CYCLES = 20;
 
     public preserveMovementForTicks(ticks = 1): void {
         this.manualMovementUntilCycle = World.getProcessCycle() + Math.max(0, ticks) - 1;
     }
+
+    /**
+     * Wiki: Animation stall. The cycle this character's swing animation releases them. A
+     * `partial` stall only keeps a click from cutting the animation away; a `full` stall also
+     * holds their clicks, their movement and any hit coming in, all released together on the
+     * cycle the client finishes playing the animation.
+     */
+    private animationStall: {
+        untilCycle: number;
+        kind: AnimationStallKind;
+        holdsHits: boolean;
+    } | null = null;
+    /**
+     * The cycle a swing was armed on, or -1. Armed so only the animations of an actual attack are
+     * measured; bounded by cycle so a throw between arming and disarming cannot leak the arm into
+     * some later animation.
+     */
+    private measureAnimationCycle = -1;
+
+    public expectAttackAnimation(): void {
+        this.measureAnimationCycle = World.getProcessCycle();
+    }
+
+    /**
+     * Measures the animation a character just started, from Player.performAnimation — the one
+     * place every source of one (styles, specials, spells) arrives. Only an animation an armed
+     * swing performed is measured, so a block flinch or a hit effect never stalls anybody, and only
+     * one that actually took the place of the previous seq: Player.performAnimation asks here, and
+     * not at all for a seq the cache's interrupt priority turned away.
+     */
+    public onAnimationStarted(animationId: number): void {
+        if (animationId === Animation.DEFAULT_RESET_ANIMATION.getId()) {
+            // Content cut the animation, so the stall measured from it goes with it.
+            this.animationStall = null;
+            return;
+        }
+        if (this.measureAnimationCycle !== World.getProcessCycle()) return;
+        // The arm is deliberately not spent here. A special plays its swing through super.start()
+        // and then replaces it (Dragon2hSword.SpecialAttack.start), so measuring the first seq held
+        // the player for an animation the client had already covered, and the next click cut the
+        // special off mid-play. Every seq accepted inside the armed window re-measures, the last
+        // one wins, and the caller that armed it disarms as soon as start() returns.
+        if (!this.character.isPlayer()) return;
+
+        const sequence = getSequenceStall(animationId);
+        const stepped = this.character.getMovementQueue().steppedThisWorldCycle();
+        const event: PluginAnimationStallEvent = {
+            player: this.character.getAsPlayer(),
+            animationId,
+            ticks: Math.min(Math.max(0, sequence.ticks), MAX_ANIMATION_STALL_TICKS),
+            // Someone who stepped this cycle keeps their steps: the client plays the animation
+            // over a true tile that has already moved, the rubber band the Wiki calls partial.
+            kind: sequence.cancelsOnStep || stepped || !sequence.blocks ? "partial" : "full",
+            holdsHits: true,
+        };
+        PluginManager.emitAnimationStall(event);
+        this.animationStall = event.kind === "none" || event.ticks <= 0 ? null : {
+            untilCycle: World.getProcessCycle() + event.ticks,
+            kind: event.kind,
+            holdsHits: event.kind === "full" && event.holdsHits,
+        };
+    }
+
+    /** Ticks before this character may act again; only a full stall holds them at all. */
+    public getAnimationStallTicks(): number {
+        const stall = this.animationStall;
+        if (stall == null || stall.kind !== "full" || stall.untilCycle <= World.getProcessCycle()) return 0;
+        return stall.untilCycle - World.getProcessCycle();
+    }
+
+    public isAnimationStalled(): boolean {
+        return this.getAnimationStallTicks() > 0;
+    }
+
+    /**
+     * The last cycle a hit on this character is held to, or -1 when nothing holds it. HitQueue
+     * consults it as each hit comes due rather than when the hit is queued, so a shot already in
+     * the air when the swing starts waits with the ones loosed after it - and a stall stopped short
+     * stops holding anything from that tick.
+     */
+    public getIncomingHitCycle(): number {
+        const stall = this.animationStall;
+        if (stall == null || !stall.holdsHits || stall.untilCycle <= World.getProcessCycle()) return -1;
+        return stall.untilCycle;
+    }
+
+    /**
+     * True while the swing's animation is still meant to be on screen, whatever has been played
+     * over it since: OSRS answers a click that drops the target with no animation at all.
+     */
+    private animationStillPlaying(): boolean {
+        const stall = this.animationStall;
+        return stall != null && World.getProcessCycle() < stall.untilCycle;
+    }
+
     private cycleState: CombatCycleState | null = null;
     public rangedWeapon: RangedWeapon | null = null;
     public ammunition: Ammunition | null = null;
@@ -138,7 +245,10 @@ export class Combat {
             return;
         }
         const previousTarget = this.target;
-        if (previousTarget !== target) this.manualMovementUntilCycle = -1;
+        if (previousTarget !== target) {
+            this.manualMovementUntilCycle = -1;
+            this.resetUnreachableTracking();
+        }
         if (previousTarget && previousTarget !== target && this.method) {
             this.method.onCombatEnded(this.character, previousTarget);
         }
@@ -236,15 +346,22 @@ export class Combat {
 
         this.faceTarget(target);
 
+        const reachable = CombatRange.canReach(this.character, method, target);
+        if (reachable) {
+            this.resetUnreachableTracking();
+        } else if (this.giveUpUnreachableTarget(target, generation)) {
+            return;
+        }
+
         // An overlapped NPC that can still reach its target (a large NPC fighting
         // underfoot) attacks in place; one that cannot steps aside below.
         if (this.character.isNpc() && CombatRange.overlapsEntities(this.character, target)
-            && !CombatRange.canReach(this.character, method, target)) {
+            && !reachable) {
             this.processNpcUnderTarget(state);
             return;
         }
 
-        if (CombatRange.canReach(this.character, method, target)) {
+        if (reachable) {
             this.trace("inRange", target);
             // An NPC flagged combat:close-in (ToA's Akkha) keeps walking in while it attacks
             // from range, until it stands beside its target.
@@ -472,6 +589,7 @@ export class Combat {
      */
     public clearInteraction(resetAnimation = true): void {
         this.manualMovementUntilCycle = -1;
+        this.resetUnreachableTracking();
         const previousTarget = this.target;
         this.generation++;
         this.target = null;
@@ -482,7 +600,11 @@ export class Combat {
         this.character.setMobileInteraction(null);
         this.character.setPositionToFace(null);
         if (this.character.isPlayer()) {
-            if (previousTarget && resetAnimation) this.character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+            // OSRS never answers a click that drops the target by cutting the attack
+            // animation: the client plays it out, which is what an animation stall is.
+            if (previousTarget && resetAnimation && !this.animationStillPlaying()) {
+                this.character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+            }
             this.character.getAsPlayer().getPacketSender().sendConfig(COMBAT_TARGET_PLAYER_VARP, -1);
         }
         this.specialAttackQueued = false;
@@ -635,6 +757,49 @@ export class Combat {
         movement.setPursuitCheckpoint(this.character.getLocation().transform(offsetX, offsetY));
     }
 
+    /**
+     * Ends combat with a target the actor has stopped trying to get to. Both give-up paths in
+     * postMovementProcess are skipped by an actor that cannot move (a stun, a placement, a
+     * teleport in transit - `setBlockMovement`) and by a route whose step the mover rejects,
+     * which keeps its checkpoint (`MovementQueue.process`), so the queue never empties; without
+     * this deadline either side stays in combat with an unreachable target indefinitely.
+     *
+     * Progress is the gap closing - whoever is closing it - or a step the mover actually accepted
+     * last cycle, which out of reach is the pursuit itself. A step counts because the mover is the
+     * only one that knows whether the pursuit is still going: a target walked away at the same
+     * speed holds the gap open forever on an open route, and live keeps chasing. What spends the
+     * budget is the actor getting nowhere - frozen in place, or its step refused - which is how an
+     * engagement stuck behind a wall or a crowd finally ends.
+     *
+     * @return true when the interaction was dropped, so this cycle does nothing else.
+     */
+    private giveUpUnreachableTarget(target: Mobile, generation: number): boolean {
+        const distance = this.character.getLocation().getDistance(target.getLocation());
+        // The first cycle measured only records the starting gap; it is not progress.
+        const closing = this.unreachableDistance >= 0 && distance < this.unreachableDistance;
+        // Read before this cycle's movement: preMovementProcess runs after beginCycle() has
+        // cleared didMoveThisCycle(), so the last cycle's step is the one in question.
+        const stepping = this.character.getMovementQueue().didMovePreviousCycle();
+        this.unreachableDistance = distance;
+        this.unreachableCycles = closing || stepping ? 0 : this.unreachableCycles + 1;
+        if (this.unreachableCycles < Combat.UNREACHABLE_GIVE_UP_CYCLES) {
+            return false;
+        }
+        this.trace("bail=unreachableDeadline", target);
+        if (this.character.isPlayer() && this.character.getAsPlayer().isPlayerBot?.() !== true) {
+            this.character.getAsPlayer().sendMessage("I can't reach that!");
+        }
+        this.resetUnreachableTracking();
+        this.cancelIfCurrent(target, generation);
+        return true;
+    }
+
+    /** Every new engagement, and every actor with no engagement, starts with full patience. */
+    private resetUnreachableTracking(): void {
+        this.unreachableCycles = 0;
+        this.unreachableDistance = -1;
+    }
+
     private executeAttack(
         method: CombatMethod,
         target: Mobile,
@@ -675,7 +840,12 @@ export class Combat {
         }
         this.lastAttackTarget = target;
 
+        // The swing's own animation is what may stall the character; specials override start() and
+        // perform it themselves - many through super.start() first - so the arm stays open across
+        // the whole call, and the seq left standing when it returns is the one that is measured.
+        this.expectAttackAnimation();
         method.start(this.character, target);
+        this.measureAnimationCycle = -1;
         const hits = method.hits(this.character, target);
         if (hits == null) {
             this.trace("hits=null", target);

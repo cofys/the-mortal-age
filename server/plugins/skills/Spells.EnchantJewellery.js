@@ -16,6 +16,11 @@ const SHARED_CAST_ATTRIBUTE = "magic:next-cast-at";
 /** Rings, necklaces, bracelets and silver amulets: human_cast_enchantring, enchant_ring (rsprox). */
 const JEWELLERY_ANIMATION = 931;
 const JEWELLERY_GRAPHIC = 238;
+/** Every enchant graphic sits at height 92 (rsprox: enchant_ring, enchant_amulet_lvl3, enchant_amulet2_lvl4 and _lvl6). */
+const GRAPHIC_HEIGHT = 92;
+/** toplevel_sidebutton_switch: the cast brings the spellbook back (rsprox: [6] on every enchant click). */
+const SIDE_BUTTON_SWITCH_SCRIPT = 915;
+const MAGIC_TAB = 6;
 
 /** Each player's repeating enchant, retained while the level-up dialogue is open. */
 const repeats = new WeakMap();
@@ -40,7 +45,7 @@ function enchant(player, spell, itemId) {
   if (slot < 0 || !spell.canCast(player, true)) return false;
   const look = spell.looks.get(itemId) ?? spell.data;
   player.performAnimation(new core.Animation(look.animation));
-  player.performGraphic(new core.Graphic(look.graphic, 0, core.GraphicHeight.HIGH));
+  player.performGraphic(new core.Graphic(look.graphic, 0, GRAPHIC_HEIGHT));
   player.getPacketSender().sendSound(look.sound);
   // Content may enchant more than one piece a cast ("magic:enchant-pieces", a league fragment), each with its XP.
   const pieces = { player, spellName: spell.data.name, itemId, pieces: 1 };
@@ -117,12 +122,23 @@ function handleSpellOnItem(event) {
   // Wiki: enchant spells "queue up one spell if you cast them too quickly".
   const wait = ticksUntilCast(player);
   if (wait > 0) {
-    if (spell.canCast(player, false)) keepEnchanting(player, spell, itemId, wait);
+    if (!spell.canCast(player, false)) return;
+    keepEnchanting(player, spell, itemId, wait);
+    returnToSpellbook(player);
     return;
   }
   // Register the loop before the cast so its first XP drop can pause it too.
   keepEnchanting(player, spell, itemId, REPEAT_TICKS);
-  if (!enchant(player, spell, itemId)) stopEnchanting(player);
+  if (!enchant(player, spell, itemId)) {
+    stopEnchanting(player);
+    return;
+  }
+  returnToSpellbook(player);
+}
+
+/** Once per accepted click, cast now or queued; the automatic repeats don't send it (rsprox 4119). */
+function returnToSpellbook(player) {
+  player.getPacketSender().sendClientScript(SIDE_BUTTON_SWITCH_SCRIPT, MAGIC_TAB);
 }
 
 module.exports = function attach(api) {
@@ -132,7 +148,8 @@ module.exports = function attach(api) {
   // Wiki Lvl-1–7 Enchant and Enchant_jewellery. Gold amulets play the spell's own sequence,
   // graphic and sound (Wiki GIFs/sound files, rsprox); every other piece plays the ring cast
   // with `jewellerySound` where a capture has it. Sequences and graphics verified in cache 241.
-  // Silver amulets play the spell's sequence with the ring graphic (rsprox, jade amulet).
+  // Silver amulets play the spell's sequence with the ring graphic (rsprox, jade amulet); the
+  // captured silver bracelet does too, with the jewellery sound (rsprox, jade bracelet: 720, 238, 142).
   const ENCHANT_SPELLS = [
     {
       name: "Lvl-1 Enchant", animation: 719, graphic: 114, sound: 136, jewellerySound: 147, level: 7, xp: 17.5,
@@ -150,27 +167,27 @@ module.exports = function attach(api) {
       ],
     },
     {
-      name: "Lvl-2 Enchant", animation: 720, graphic: 115, sound: 141, level: 27, xp: 37,
+      name: "Lvl-2 Enchant", animation: 720, graphic: 115, sound: 141, jewellerySound: 142, level: 27, xp: 37,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.AIR_RUNE, 3]],
       amulets: [[ItemIds.EMERALD_AMULET, ItemIds.AMULET_OF_DEFENCE]],
       silverAmulets: [[ItemIds.JADE_AMULET, ItemIds.AMULET_OF_CHEMISTRY]],
+      silverJewellery: [[ItemIds.JADE_BRACELET, ItemIds.FLAMTAER_BRACELET]],
       jewellery: [
         [ItemIds.EMERALD_RING, ItemIds.RING_OF_DUELING_8_],
         [ItemIds.EMERALD_NECKLACE, ItemIds.BINDING_NECKLACE],
         [ItemIds.EMERALD_BRACELET, ItemIds.CASTLE_WARS_BRACELET_3_],
         [ItemIds.JADE_RING, ItemIds.RING_OF_RETURNING_5_],
         [ItemIds.JADE_NECKLACE, ItemIds.NECKLACE_OF_PASSAGE_5_],
-        [ItemIds.JADE_BRACELET, ItemIds.FLAMTAER_BRACELET],
       ],
     },
     {
       name: "Lvl-3 Enchant", animation: 721, graphic: 116, sound: 145, level: 49, xp: 59,
       runes: [[ItemIds.COSMIC_RUNE, 1], [ItemIds.FIRE_RUNE, 5]],
-      amulets: [[ItemIds.RUBY_AMULET, ItemIds.AMULET_OF_STRENGTH]],
+      // The ruby necklace plays the amulet cast (rsprox: human_enchantamuletlvl3, enchant_amulet_lvl3).
+      amulets: [[ItemIds.RUBY_AMULET, ItemIds.AMULET_OF_STRENGTH], [ItemIds.RUBY_NECKLACE, ItemIds.DIGSITE_PENDANT_5_]],
       silverAmulets: [[ItemIds.TOPAZ_AMULET, ItemIds.BURNING_AMULET_5_]],
       jewellery: [
         [ItemIds.RUBY_RING, ItemIds.RING_OF_FORGING],
-        [ItemIds.RUBY_NECKLACE, ItemIds.DIGSITE_PENDANT_5_],
         [ItemIds.RUBY_BRACELET, ItemIds.INOCULATION_BRACELET],
         [ItemIds.TOPAZ_RING, ItemIds.EFARITAYS_AID],
         [ItemIds.TOPAZ_NECKLACE, ItemIds.NECKLACE_OF_FAITH],
@@ -225,10 +242,15 @@ module.exports = function attach(api) {
       super();
       this.data = data;
       const silverAmulets = data.silverAmulets ?? [];
-      this.results = new Map([...data.amulets, ...silverAmulets, ...data.jewellery]);
+      const silverJewellery = data.silverJewellery ?? [];
+      this.results = new Map([...data.amulets, ...silverAmulets, ...silverJewellery, ...data.jewellery]);
       const ring = { animation: JEWELLERY_ANIMATION, graphic: JEWELLERY_GRAPHIC, sound: data.jewellerySound ?? data.sound };
       const silver = { animation: data.animation, graphic: JEWELLERY_GRAPHIC, sound: data.sound };
-      this.looks = new Map([...data.jewellery.map(([id]) => [id, ring]), ...silverAmulets.map(([id]) => [id, silver])]);
+      this.looks = new Map([
+        ...data.jewellery.map(([id]) => [id, ring]),
+        ...silverAmulets.map(([id]) => [id, silver]),
+        ...silverJewellery.map(([id]) => [id, { ...ring, animation: data.animation }]),
+      ]);
       this.members = data.level >= 68;
       const widget = core.CacheDefinitions.getSpellByName(data.name);
       if (!widget) throw new Error(`Missing cache spell: ${data.name}`);

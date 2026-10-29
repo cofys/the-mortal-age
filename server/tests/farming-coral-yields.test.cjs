@@ -17,6 +17,8 @@ before(async () => {
     hooks = {};
     Patches.attach(new Proxy({}, { get: (_, name) => (...args) => { hooks[name] = args[0]; } }));
 });
+// Farming actions finish on later farming ticks, as in the captures.
+const ticks = (n) => { for (let i = 0; i < n; i++) Patches.tick(); };
 test('all three coral species start with six lives, independently of compost', () => {
     for (const [key] of CORALS) for (const tier of [0, 1, 2, 3]) {
         assert.equal(Model.startingLives(Data.CROPS.get(key), tier), 6, `${key} tier ${tier}`);
@@ -86,8 +88,8 @@ test('six failed life-save rolls produce six coral before clearing the patch', t
         farm.patches[Data.patchKey(patch)] = { ...Model.emptyPatch(Date.now(), farm), crop: key,
             status: 'grown', stage: crop.stages, lives: Model.startingLives(crop, 0) };
         player.setAttribute(Patches.FARM_ATTRIBUTE, farm);
-        const pick = () => hooks.onObjectInteraction({ player, object: { getId: () => patch.id },
-            location: { x: patch.x, y: patch.y, z: patch.z }, clickType: 1 });
+        const pick = () => { hooks.onObjectInteraction({ player, object: { getId: () => patch.id },
+            location: { x: patch.x, y: patch.y, z: patch.z }, clickType: 1 }); ticks(1); };
         for (let i = 0; i < 6; i++) pick();
         assert.equal(player.getInventory().getAmount(crop.produce), 6, key);
         assert.equal(farm.patches[Data.patchKey(patch)].crop, undefined, key);

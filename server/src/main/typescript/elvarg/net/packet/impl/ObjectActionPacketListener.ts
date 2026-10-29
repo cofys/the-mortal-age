@@ -137,8 +137,17 @@ export class ObjectActionPacketListener {
       const source = player.getLocation();
       const reach = PluginManager.deckReach.get(object.getId());
       // Live answers a land loc clicked from a boat (a tree, a sign) with this (rsprox 901, 347).
-      if (reach === undefined && !PluginManager.usableFromDeck.has(definition.getName?.() ?? "")) {
+      if (reach === undefined && !PluginManager.usableFromDeck.has(definition.getName?.() ?? "")
+        && !PluginManager.usableFromDeck.has(object.getId())) {
         player.sendMessage("I can't do that from here!");
+        return;
+      }
+      const root = BoatManager.rootLocation(player);
+      const location = object.getLocation();
+      const inReach = Math.max(Math.abs(location.getX() - root.getX()), Math.abs(location.getY() - root.getY())) <= (reach ?? DECK_REACH_TILES);
+      // Too far: the player stays at the helm (rsprox 3455, a charting spot: the message alone).
+      if (!inReach) {
+        if (reach === undefined) player.sendMessage("I can't reach that!");
         return;
       }
       // Route hooks also release the helm, even when no land route can be built; locs used from
@@ -150,13 +159,7 @@ export class ObjectActionPacketListener {
           destination: null,
         });
       }
-      const root = BoatManager.rootLocation(player);
-      const location = object.getLocation();
-      if (Math.max(Math.abs(location.getX() - root.getX()), Math.abs(location.getY() - root.getY())) <= (reach ?? DECK_REACH_TILES)) {
-        executeInteraction();
-      } else if (reach === undefined) {
-        player.sendMessage("I can't reach that!");
-      }
+      executeInteraction();
       return;
     }
 

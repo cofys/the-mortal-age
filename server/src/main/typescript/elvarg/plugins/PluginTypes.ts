@@ -528,6 +528,24 @@ export interface PluginAttackTimingEvent {
 }
 
 /**
+ * Raised once per attack to say how much the swing's animation holds the attacker
+ * (Wiki: Animation stall). Core measures it from the cache's own seq config: an animation
+ * with no masks and no priority of its own withholds the actor's steps in the client, which
+ * is a `full` stall when they were standing still; one they started mid-path is `partial`,
+ * because their true tile keeps moving under the animation (the PvP rubber band).
+ */
+export interface PluginAnimationStallEvent {
+  player: any;
+  /** The seq id the character just started playing; core has already measured it. */
+  animationId: number;
+  /** Ticks the client keeps it playing (cache frame lengths / 30), capped by core at 5. */
+  ticks: number;
+  kind: "none" | "partial" | "full";
+  /** Stack incoming hits until the stall releases (false for a teleport, Wiki: Animation stall). */
+  holdsHits: boolean;
+}
+
+/**
  * Asked for the ticks until an attacker's next attack, after the weapon's or spell's own speed
  * (and a special's) is known; handlers may change `speed` (a relic's magic speed). Never below 1.
  */
@@ -613,6 +631,11 @@ export interface PluginPlayerDefeatedEvent {
 export interface PluginItemUseFilter {
   /** Omit to accept both noted and unnoted items. */
   noted?: boolean;
+  /**
+   * Item on object only: run after every other handler, and only when none handled the use. For an
+   * object's own refusal in place of "Nothing interesting happens." ("You can't cook that.").
+   */
+  fallback?: boolean;
 }
 
 export interface PluginItemOnObjectEvent {
@@ -940,10 +963,11 @@ export interface PluginApi {
    */
   setDeckReach(objectIds: number[], tiles: number): void;
   /**
-   * Main-world locs (by name) a player on a boat deck can use, within the deck's usual reach (a
-   * dock's gangplank, a buoy). Any other land loc clicked from a deck: "I can't do that from here!"
+   * Main-world locs (by name, or by id) a player on a boat deck can use, within the deck's usual
+   * reach (a dock's gangplank, a buoy, a charting spot). Any other land loc clicked from a deck:
+   * "I can't do that from here!"; one too far off: "I can't reach that!", and the helm is kept.
    */
-  setUsableFromDeck(names: string[]): void;
+  setUsableFromDeck(namesOrIds: Array<string | number>): void;
   onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */
@@ -1045,6 +1069,8 @@ export interface PluginApi {
   onCombatHitDamage(handler: (event: PluginCombatHitDamageEvent) => void): void;
   /** Lets an attack ignore the attack timer, or leave it untouched (see PluginAttackTimingEvent). */
   onAttackTiming(handler: (event: PluginAttackTimingEvent) => void): void;
+  /** Says how much a swing's animation holds the attacker, if at all (see PluginAnimationStallEvent). */
+  onAnimationStall(handler: (event: PluginAnimationStallEvent) => void): void;
   /** Lets a plugin change the ticks until the next attack (see PluginAttackSpeedEvent). */
   onAttackSpeed(handler: (event: PluginAttackSpeedEvent) => void): void;
   onCombatHitResolved(handler: (event: PluginCombatHitResolvedEvent) => void): void;

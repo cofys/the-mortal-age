@@ -64,7 +64,26 @@ export function getSequenceFrameIds(data: Int8Array, revision = 237): number[] {
     return [];
 }
 
-const sequencePriorities = new Map<number, number>();
+/**
+ * The seq fields that say how long the client keeps an animation on screen and whether it
+ * withholds the actor's steps while it plays. Names follow the client's own `SeqType`
+ * (client/rs/config/seqtype/SeqType.ts) so Animation stall can be compared between the two
+ * sides without translating opcodes twice.
+ */
+export type SequenceDefinition = {
+    /** SeqType.priority (opcode 10); -1 when the cache doesn't set it. */
+    priority: number;
+    /** SeqType.precedenceAnimating (opcode 9); -1 when unset. */
+    movementPriority: number;
+    /** SeqType.forcedPriority (opcode 5); -1 when unset. */
+    forcedPriority: number;
+    /** Opcode 3 or 17 present: the client derives 2 for unset priorities instead of 0. */
+    masked: boolean;
+    /** Client cycles one pass of the animation takes; 0 when the sequence has no frames. */
+    clientCycles: number;
+};
+
+const sequenceDefinitions = new Map<number, SequenceDefinition>();
 
 /** The decoded sequence archive: decompressing it took ~100 ms, once per animation looked up. */
 let sequenceArchive: ReturnType<CacheIndexDat2["getArchive"]> | null = null;
@@ -86,52 +105,125 @@ export function preloadSequences(): void {
     }
 }
 
+/** One game tick is 30 client cycles, as scripts/dump-seq.ts counts them. */
+const CLIENT_CYCLES_PER_TICK = 30;
+
+/**
+ * Reads the seq config once per id. An unknown opcode ends the walk: the fields after it are
+ * then left at their defaults, which is what the previous priority-only decoder did.
+ */
+function decodeSequence(id: number): SequenceDefinition {
+    const cached = sequenceDefinitions.get(id);
+    if (cached !== undefined) return cached;
+    const definition: SequenceDefinition = {
+        priority: -1,
+        movementPriority: -1,
+        forcedPriority: -1,
+        masked: false,
+        clientCycles: 0,
+    };
+    try {
+        const data = sequences().getFile(id)?.data;
+        const revision = CachePipeline.getActive().revision;
+        const rev226 = revision >= 226;
+        const rev220 = revision >= 220;
+        const buffer = new ByteBuffer(data ?? new Int8Array());
+        while (buffer.remaining > 0) {
+            const opcode = buffer.readUnsignedByte();
+            if (opcode === 0) break;
+            if (opcode === 1) {
+                const count = buffer.readUnsignedShort();
+                if (buffer.remaining < count * 6) break;
+                for (let frame = 0; frame < count; frame++) {
+                    definition.clientCycles += buffer.readUnsignedShort();
+                }
+                buffer.offset += count * 4;
+                continue;
+            }
+            if (opcode === 3 || opcode === 17) {
+                const count = buffer.readUnsignedByte();
+                if (buffer.remaining < count) break;
+                buffer.offset += count;
+                definition.masked = true;
+                continue;
+            }
+            if (opcode === 5 || opcode === 9 || opcode === 10) {
+                const value = buffer.readUnsignedByte();
+                if (opcode === 5) definition.forcedPriority = value;
+                else if (opcode === 9) definition.movementPriority = value;
+                else definition.priority = value;
+                continue;
+            }
+            // cachedModelId: the animation renders from a skeleton, so its length is the
+            // frame range below rather than a per-frame list.
+            if (opcode === (rev226 ? 13 : 14) && buffer.remaining >= 4) {
+                buffer.offset += 4;
+                definition.clientCycles = -1;
+                continue;
+            }
+            // skeletalStart, skeletalEnd.
+            if (opcode === (rev226 ? 15 : 16) && definition.clientCycles === -1 &&
+                buffer.remaining >= 4) {
+                const start = buffer.readUnsignedShort();
+                definition.clientCycles = buffer.readUnsignedShort() - start;
+                continue;
+            }
+            if (opcode === 14 && rev226) {
+                const entries = buffer.readUnsignedShort();
+                const stride = rev220 ? 8 : 4;
+                if (buffer.remaining < entries * stride) break;
+                buffer.offset += entries * stride;
+                continue;
+            }
+            if (opcode === 16 && rev226) {
+                buffer.offset += 1;
+                continue;
+            }
+            if (!skipSequenceOpcode(buffer, opcode, revision)) break;
+        }
+        if (definition.clientCycles < 0) definition.clientCycles = 0;
+    } catch {
+        // No cache (tests, tools): treat as unset.
+    }
+    sequenceDefinitions.set(id, definition);
+    return definition;
+}
+
 /**
  * SeqType.priority (opcode 10; -1 when unset): 1 means the client drops the seq
  * when the actor takes a step, as skilling loops do.
  */
 export function getSequencePriority(id: number): number {
-    return readSequenceByte(sequencePriorities, id, 10, -1);
+    return decodeSequence(id).priority;
 }
-
-const sequenceForcedPriorities = new Map<number, number>();
 
 /**
  * SeqType.forcedPriority (opcode 5; 5 when unset): a sequence can't replace one with a higher
  * value (attacks are 6, blocks 5, so a block never cuts a swing short).
  */
 export function getSequenceForcedPriority(id: number): number {
-    return readSequenceByte(sequenceForcedPriorities, id, 5, 5);
+    const forced = decodeSequence(id).forcedPriority;
+    return forced === -1 ? 5 : forced;
 }
 
-/** One single-byte field of a sequence, or `fallback` when it is unset (or there is no cache). */
-function readSequenceByte(cache: Map<number, number>, id: number, wanted: number, fallback: number): number {
-    const cached = cache.get(id);
-    if (cached !== undefined) return cached;
-    let value = fallback;
-    try {
-        const data = sequences().getFile(id)?.data;
-        const revision = CachePipeline.getActive().revision;
-        const buffer = new ByteBuffer(data ?? new Int8Array());
-        while (buffer.remaining > 0) {
-            const opcode = buffer.readUnsignedByte();
-            if (opcode === 0) break;
-            if (opcode === wanted) {
-                value = buffer.readUnsignedByte();
-                break;
-            }
-            if (opcode === 1) {
-                const count = buffer.readUnsignedShort();
-                buffer.offset += count * 6;
-                continue;
-            }
-            if (!skipSequenceOpcode(buffer, opcode, revision)) break;
-        }
-    } catch {
-        // No cache (tests, tools): treat as unset.
-    }
-    cache.set(id, value);
-    return value;
+/**
+ * How long an animation holds the actor, and whether it holds their actions too.
+ *
+ * The client decides both from the same config: `SeqType.post()` turns an unset priority into
+ * 0 (steps withheld) unless the sequence carries masks, and 1 is its "drop me on a step"
+ * marker. Deriving it here too means the server never locks a player the client would let
+ * move, or frees one the client is still holding. Wiki: Animation stall.
+ */
+export function getSequenceStall(id: number): { ticks: number; blocks: boolean; cancelsOnStep: boolean } {
+    const definition = decodeSequence(id);
+    const priority = definition.priority === -1
+        ? (definition.masked ? 2 : 0)
+        : definition.priority;
+    return {
+        ticks: Math.ceil(definition.clientCycles / CLIENT_CYCLES_PER_TICK),
+        blocks: priority === 0,
+        cancelsOnStep: priority === 1,
+    };
 }
 
 export function getLastSequenceId(): number {

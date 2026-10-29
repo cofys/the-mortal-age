@@ -20,6 +20,14 @@
  * click while the last one is still going is ignored. When the sceptre turns up, the run ends
  * first, so the artefact found with it lands outside rather than on the tomb floor.
  *
+ * Timing from rsprox captures (recordings 545, 549, 552, 1788, 1843, 1857), in ticks after the
+ * click: an urn search plays urn_search (busy on) at 1, the result at 2 (urn_search_success and
+ * "You successfully loot the urn!", or urn_search_bit), then a loot's synth 1217 at 4 and the
+ * artefact and the urn's varbit at 5 (busy off), or a bite's damage, synth 797 and line at 4.
+ * The Grand Gold Chest opens a tick after the click. The sarcophagus: busy at 1, the first push
+ * at 2 (ntk_sarcophagus_push on), a push every tick until the lid moves (ntk_tomb_open, area
+ * sound 1218, state 2), and the artefact five ticks later (state 1, push off), with no message.
+ *
  * Wiki: https://oldschool.runescape.wiki/w/Urn_(Pyramid_Plunder),
  * https://oldschool.runescape.wiki/w/Grand_Gold_Chest,
  * https://oldschool.runescape.wiki/w/Sarcophagus_(Pyramid_Plunder)
@@ -28,14 +36,18 @@
 const Common = require("./Common.PyramidPlunder");
 const Mural = require("./Mural.PyramidPlunder");
 
-const URN = { CLOSED: 0, SEARCHED: 1, SNAKE: 2, CHARMED: 3 };
+const URN_STATE = { CLOSED: 0, SEARCHED: 1, SNAKE: 2, CHARMED: 3 };
 const SARCOPHAGUS = { CLOSED: 0, OPEN: 1, OPENING: 2 };
 /** Ticks between sarcophagus pushes, and the most a single Open keeps pushing. */
-const PUSH_TICKS = 3;
+const PUSH_TICKS = 1;
 const MAX_PUSHES = 20;
+/** The captured sarcophagus: busy a tick after the click, the first push a tick later, the loot five ticks after the lid. */
+const LID = { busyAt: 1, firstPushAt: 2, lootAfter: 5 };
 const SWARM_DAMAGE = 3;
-/** Ticks an urn search, a snake check or a chest search takes. */
+/** Ticks a snake check or a chest search takes. */
 const SEARCH_TICKS = 3;
+/** The captured urn search, in ticks after the click. */
+const URN = { searchAt: 1, resultAt: 2, biteAt: 4, soundAt: 4, lootAt: 5 };
 const MUMMY_CHANCE_DIVISOR = 9;
 
 /** The run and room this object belongs to, or null (and a message) when it isn't this run's. */
@@ -51,13 +63,19 @@ function animate(player, animation) {
   player.performAnimation(new (Common.getCore().Animation)(animation));
 }
 
+/** The bite itself: the damage, synth 797, the line and the poison. */
 function bite(player, random) {
   const { CombatFactory } = Common.getCore();
-  animate(player, Common.ids().anim.urnBitten);
-  player.sendMessage(Common.MESSAGES.bitten);
   Common.hit(player, Common.rollHit(random));
-  player.sendMessage(Common.MESSAGES.urnPoisoned);
+  Common.sound(player, Common.ids().sound.bitten);
+  Common.spam(player, Common.MESSAGES.bitten);
+  Common.spam(player, Common.MESSAGES.urnPoisoned);
   CombatFactory.poisonEntity(player, Common.rollHit(random));
+}
+
+/** A step of a search that is still this run's room: nothing happens once the player has left it. */
+function inRoom(player, run, room) {
+  return Common.sessionOf(player) === run && run.room === room;
 }
 
 // --- Urns
@@ -74,30 +92,45 @@ function searchUrn(event, random = Math.random) {
   if (!run) return true;
   const player = event.player;
   const stage = Common.varbitOf(player, varbit);
-  if (stage === URN.SEARCHED || run.cleared.has(`urn:${varbit}`)) {
-    player.sendMessage(Common.MESSAGES.looted);
+  if (stage === URN_STATE.SEARCHED || run.cleared.has(`urn:${varbit}`)) {
+    Common.spam(player, Common.MESSAGES.looted);
     return true;
   }
-  if (!Common.takeAction(run, SEARCH_TICKS)) return true;
-  const room = Common.roomData(run.room);
+  if (!Common.takeAction(run, URN.lootAt)) return true;
+  const roomNumber = run.room;
+  const room = Common.roomData(roomNumber);
   const level = Common.thievingLevel(player);
-  const chance = stage === URN.CHARMED ? 1
-    : stage === URN.SNAKE ? Common.chanceOf("searchPastSnake", level, run.room)
-      : Common.chanceOf("urnSearch", level, run.room);
-  animate(player, Common.ids().anim.urnSearch);
-  if (!Common.roll(chance, random)) {
-    bite(player, random);
-    return true;
-  }
-  if (!Common.claim(run, `urn:${varbit}`)) return true;
-  const xp = stage === URN.CLOSED ? room.urnXp
-    : stage === URN.SNAKE ? (room.urnXp * 2) / 3
-      : (room.urnXp * 4) / 9;
-  Common.send(player, varbit, URN.SEARCHED);
-  animate(player, Common.ids().anim.urnSuccess);
-  player.sendMessage(Common.MESSAGES.urnLooted);
-  Common.addXp(player, "THIEVING", xp);
-  Common.giveArtefact(player, Common.rollUrnArtefact(run.room, random));
+  const chance = stage === URN_STATE.CHARMED ? 1
+    : stage === URN_STATE.SNAKE ? Common.chanceOf("searchPastSnake", level, roomNumber)
+      : Common.chanceOf("urnSearch", level, roomNumber);
+  const step = (ticks, action) => Common.later(ticks, () => inRoom(player, run, roomNumber) && action());
+  step(URN.searchAt, () => {
+    animate(player, Common.ids().anim.urnSearch);
+    Common.busy(player, true);
+  });
+  step(URN.resultAt, () => {
+    if (!Common.roll(chance, random)) {
+      animate(player, Common.ids().anim.urnBitten);
+      step(URN.biteAt - URN.resultAt, () => {
+        bite(player, random);
+        Common.busy(player, false);
+      });
+      return;
+    }
+    if (!Common.claim(run, `urn:${varbit}`)) return;
+    animate(player, Common.ids().anim.urnSuccess);
+    Common.spam(player, Common.MESSAGES.urnLooted);
+    step(URN.soundAt - URN.resultAt, () => Common.sound(player, Common.ids().sound.urnLooted));
+    step(URN.lootAt - URN.resultAt, () => {
+      const xp = stage === URN_STATE.CLOSED ? room.urnXp
+        : stage === URN_STATE.SNAKE ? (room.urnXp * 2) / 3
+          : (room.urnXp * 4) / 9;
+      Common.send(player, varbit, URN_STATE.SEARCHED);
+      Common.addXp(player, "THIEVING", xp);
+      Common.giveArtefact(player, Common.rollUrnArtefact(roomNumber, random));
+      Common.busy(player, false);
+    });
+  });
   return true;
 }
 
@@ -108,14 +141,15 @@ function checkUrn(event, random = Math.random) {
   const run = runFor(event);
   if (!run) return true;
   const player = event.player;
-  if (Common.varbitOf(player, varbit) !== URN.CLOSED) return true;
+  if (Common.varbitOf(player, varbit) !== URN_STATE.CLOSED) return true;
   if (!Common.takeAction(run, SEARCH_TICKS)) return true;
   if (!Common.roll(Common.chanceOf("checkForSnakes", Common.thievingLevel(player), run.room), random)) {
+    animate(player, Common.ids().anim.urnBitten);
     bite(player, random);
     return true;
   }
-  Common.send(player, varbit, URN.SNAKE);
-  player.sendMessage(Common.MESSAGES.snake);
+  Common.send(player, varbit, URN_STATE.SNAKE);
+  Common.spam(player, Common.MESSAGES.snake);
   Common.addXp(player, "THIEVING", Common.roomData(run.room).urnXp / 3);
   return true;
 }
@@ -127,14 +161,14 @@ function charmUrn(event) {
   const run = runFor(event);
   if (!run) return true;
   const player = event.player;
-  if (Common.varbitOf(player, varbit) !== URN.SNAKE) return true;
+  if (Common.varbitOf(player, varbit) !== URN_STATE.SNAKE) return true;
   if (player.getInventory().getAmount(Common.ids().item.snakeCharm) <= 0) {
-    player.sendMessage(Common.MESSAGES.noCharm);
+    Common.spam(player, Common.MESSAGES.noCharm);
     return true;
   }
   animate(player, Common.ids().anim.charm);
-  Common.send(player, varbit, URN.CHARMED);
-  player.sendMessage(Common.MESSAGES.charmed);
+  Common.send(player, varbit, URN_STATE.CHARMED);
+  Common.spam(player, Common.MESSAGES.charmed);
   return true;
 }
 
@@ -147,10 +181,18 @@ function searchChest(event, random = Math.random) {
   const player = event.player;
   const v = Common.ids().varbit;
   if (Common.varbitOf(player, v.chest) !== 0 || run.cleared.has("chest")) {
-    player.sendMessage(Common.MESSAGES.looted);
+    Common.spam(player, Common.MESSAGES.looted);
     return true;
   }
   if (!Common.takeAction(run, SEARCH_TICKS) || !Common.claim(run, "chest")) return true;
+  const roomNumber = run.room;
+  // Captured: the chest opens a tick after the click.
+  Common.later(1, () => inRoom(player, run, roomNumber) && openChest(player, run, random));
+  return true;
+}
+
+function openChest(player, run, random) {
+  const v = Common.ids().varbit;
   animate(player, Common.ids().anim.chest);
   Common.sound(player, Common.ids().sound.chest);
   Common.send(player, v.chest, 1);
@@ -158,14 +200,13 @@ function searchChest(event, random = Math.random) {
   const room = Common.roomData(run.room);
   const swarm = !Common.roll(Common.chanceOf("chestNoSwarm", Common.thievingLevel(player), run.room), random);
   if (swarm) {
-    player.sendMessage(Common.MESSAGES.swarm);
+    Common.spam(player, Common.MESSAGES.swarm);
     Common.hit(player, SWARM_DAMAGE);
     spawnHostile(player, Common.ids().npc.scarabs);
   } else {
     Common.addXp(player, "THIEVING", room.chestXp);
   }
   loot(player, run, Common.rollChestArtefact(run.room, random), random);
-  return true;
 }
 
 /** The sceptre roll comes first: finding it ends the run, then the artefact follows outside. */
@@ -184,64 +225,89 @@ function openSarcophagus(event, random = Math.random) {
   const v = Common.ids().varbit;
   const stage = Common.varbitOf(player, v.sarcophagus);
   if (stage === SARCOPHAGUS.OPEN || run.cleared.has("sarcophagus")) {
-    player.sendMessage(Common.MESSAGES.looted);
+    Common.spam(player, Common.MESSAGES.looted);
     return true;
   }
-  if (stage === SARCOPHAGUS.OPENING) return true;
+  if (stage === SARCOPHAGUS.OPENING || run.pushing) return true;
   if (Common.sarcophagusChance(Common.strengthLevel(player), run.room) <= 0) {
     player.sendMessage(Common.MESSAGES.sarcophagusWeak);
     return true;
   }
-  Common.send(player, v.sarcophagus, SARCOPHAGUS.OPENING);
+  run.pushing = true;
   const at = player.getLocation();
-  push(player, run, { x: at.getX(), y: at.getY() }, 0, random);
+  const tile = { x: at.getX(), y: at.getY() };
+  const lid = { x: event.location.x, y: event.location.y, z: event.location.z };
+  Common.later(LID.busyAt, () => Common.sessionOf(player) === run && Common.busy(player, true));
+  Common.later(LID.firstPushAt, () => push(player, run, tile, lid, 0, random));
   return true;
 }
 
 /** The open lid's Search: it's been looted. */
 function searchOpenSarcophagus(event) {
   if (event.objectId !== Common.ids().sarcophagus) return false;
-  event.player.sendMessage(Common.MESSAGES.looted);
+  Common.spam(event.player, Common.MESSAGES.looted);
   return true;
 }
 
-/** One push; keeps going until the lid moves, the player walks off or the run ends. */
-function push(player, run, tile, attempt, random) {
-  const v = Common.ids().varbit;
+/** Stops pushing: walked off, gave up or the run ended. */
+function stopPushing(player, run) {
+  run.pushing = false;
   if (Common.sessionOf(player) !== run) return;
+  Common.send(player, Common.ids().varbit.sarcophagusPush, 0);
+  Common.busy(player, false);
+}
+
+/**
+ * One push a tick, until the lid moves, the player walks off or the run ends. The first push
+ * only pushes (and sets ntk_sarcophagus_push); each later tick rolls, and a hit opens the lid
+ * instead of pushing again.
+ */
+function push(player, run, tile, lid, attempt, random) {
+  if (Common.sessionOf(player) !== run || !run.pushing) return;
   const at = player.getLocation();
   if (at.getX() !== tile.x || at.getY() !== tile.y) {
-    Common.send(player, v.sarcophagus, SARCOPHAGUS.CLOSED);
+    stopPushing(player, run);
+    return;
+  }
+  if (attempt > 0 && Common.roll(Common.sarcophagusChance(Common.strengthLevel(player), run.room), random)) {
+    lidOff(player, run, lid, random);
+    return;
+  }
+  if (attempt >= MAX_PUSHES) {
+    stopPushing(player, run);
     return;
   }
   animate(player, Common.ids().anim.push);
-  if (Common.roll(Common.sarcophagusChance(Common.strengthLevel(player), run.room), random)) {
-    lidOff(player, run, random);
-    return;
+  if (attempt === 0) {
+    Common.send(player, Common.ids().varbit.sarcophagusPush, 1);
+    Common.busy(player, false);
   }
-  if (attempt + 1 >= MAX_PUSHES) {
-    Common.send(player, v.sarcophagus, SARCOPHAGUS.CLOSED);
-    return;
-  }
-  Common.later(PUSH_TICKS, () => {
-    if (Common.varbitOf(player, v.sarcophagus) !== SARCOPHAGUS.OPENING) return;
-    push(player, run, tile, attempt + 1, random);
-  });
+  Common.later(PUSH_TICKS, () => push(player, run, tile, lid, attempt + 1, random));
 }
 
-function lidOff(player, run, random) {
+/** The lid moves (state 2, Strength XP); the artefact comes five ticks later with the open lid (state 1). */
+function lidOff(player, run, lid, random) {
   const v = Common.ids().varbit;
+  run.pushing = false;
   if (!Common.claim(run, "sarcophagus")) return;
-  Common.send(player, v.sarcophagus, SARCOPHAGUS.OPEN);
+  const room = run.room;
+  Common.send(player, v.sarcophagus, SARCOPHAGUS.OPENING);
   animate(player, Common.ids().anim.lidOff);
-  player.sendMessage(Common.MESSAGES.sarcophagusOpen);
-  Common.addXp(player, "STRENGTH", Common.roomData(run.room).sarcophagusXp);
-  const artefact = Common.rollSarcophagusArtefact(run.room, random);
-  if (Common.roll(run.room / MUMMY_CHANCE_DIVISOR, random)) {
-    player.sendMessage(Common.MESSAGES.mummy);
-    spawnHostile(player, Common.ids().npc.mummy);
-  }
-  loot(player, run, artefact, random);
+  Common.areaSound(player, Common.ids().sound.lidArea, lid);
+  Common.busy(player, true);
+  Common.addXp(player, "STRENGTH", Common.roomData(room).sarcophagusXp);
+  Common.later(LID.lootAfter, () => {
+    if (!inRoom(player, run, room)) return;
+    Common.send(player, v.sarcophagus, SARCOPHAGUS.OPEN);
+    Common.send(player, v.sarcophagusPush, 0);
+    Common.busy(player, false);
+    const artefact = Common.rollSarcophagusArtefact(room, random);
+    if (Common.roll(room / MUMMY_CHANCE_DIVISOR, random)) {
+      Common.spam(player, Common.MESSAGES.mummy);
+      spawnHostile(player, Common.ids().npc.mummy);
+    }
+    loot(player, run, artefact, random);
+  });
 }
 
 /** A swarm or mummy beside the player, attacking only them; it goes when the run ends. */
@@ -263,4 +329,4 @@ module.exports = function registerContainers(api) {
   api.onObjectInteraction("Sarcophagus", { Open: openSarcophagus, Search: searchOpenSarcophagus });
 };
 
-module.exports._test = { URN, SARCOPHAGUS, SEARCH_TICKS, searchUrn, searchOpenSarcophagus, checkUrn, charmUrn, searchChest, openSarcophagus, spawnHostile };
+module.exports._test = { URN, URN_STATE, LID, SARCOPHAGUS, SEARCH_TICKS, searchUrn, searchOpenSarcophagus, checkUrn, charmUrn, searchChest, openSarcophagus, spawnHostile };

@@ -2,6 +2,8 @@
   "$comment": "Mahogany Homes: what the cache does not hold. Each home's client NPC (by gameval name; the one living there), and the Wiki's planks per piece of furniture (repair-only pieces take one plank, or a steel bar for the sink, range and bath).",
   "planks": {"bookcase": 2, "cabinet": 2, "chair": 1, "cupboard": 2, "diningtable": 3, "doublebed": 3, "drawers": 2, "dresser": 2, "longtable": 4, "shelves": 2, "sidetable": 2, "singlebed": 2, "table": 3, "wardrobe": 2},
   "steelRepairs": ["sink", "range", "bath"],
+  "$pronouns": "How the last-job line refers to each client (Wiki infobox genders; rsprox captures show Jeff and Bob as him, Sarah as her).",
+  "pronouns": {"Bob": "him", "Jeff": "him", "Sarah": "her", "Barbara": "her", "Leela": "her", "Mariah": "her", "Jess": "her", "Noella": "her", "Ross": "him", "Larry": "him", "Norman": "him", "Tau": "her"},
   "clients": {
     "varrock_north": "con_contract_client_1",
     "varrock_mid": "con_contract_client_2",

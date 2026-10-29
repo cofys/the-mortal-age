@@ -1,11 +1,22 @@
-/** OSRS Wiki: Blackjack, Bandit (Pollnivneach), Menaphite Thug and Thieving training. */
+/**
+ * OSRS Wiki: Blackjack, Bandit (Pollnivneach), Menaphite Thug and Thieving training.
+ *
+ * rsprox captures (recordings 1788, 1858, Leagues V): the swing is human_blunt_pound with synth
+ * 1842; a tick later "You smack the bandit over the head and render them unconscious." (spam)
+ * and "Zzzzzz" as it falls. It wakes with "Arghh my head." and human_ready. A failed swing says "Your blow
+ * only glances off the bandit's head." (spam) and the target, "I'll kill you for that!", strikes
+ * a tick later. An unconscious target can't be knocked out again.
+ */
 let core;
 let api;
 const unconscious = new WeakMap();
 const aggression = new WeakMap();
-// RuneLite gameval AnimationID: HUMAN_BLUNT_POUND, STUNNED_BLACKJACK.
-const KNOCKOUT_ANIMATION = 401;
-const UNCONSCIOUS_ANIMATION = 1874;
+const KNOCKOUT_ANIMATION = "human_blunt_pound";
+const UNCONSCIOUS_ANIMATION = "human_unconscious";
+const WAKE_ANIMATION = "human_ready";
+const KNOCKOUT_SOUND = 1842;
+/** Ticks from a failed swing to the target's strike. */
+const STRIKE_TICKS = 1;
 const UNCONSCIOUS_PICKPOCKET_ANIMATION = 827;
 // shortcut: Wiki gives two pickpockets but no exact window, calibrate these timings from an OSRS capture.
 const KNOCKOUT_TICKS = 6;
@@ -46,6 +57,10 @@ function ready(event) {
   return true;
 }
 
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
+}
+
 function later(ticks, run) {
   core.TaskManager.submit(new (class extends core.Task {
     constructor() { super(ticks); }
@@ -72,7 +87,11 @@ function knockOut(event) {
   if (!ready(event)) return event.handled ? true : false;
   const { player, npc } = event;
   if (!player.getClickDelay().elapsedTime(1200)) return;
-  if (unconscious.has(npc) || core.CombatFactory.inCombat(player) || core.CombatFactory.inCombat(npc)) {
+  if (unconscious.has(npc)) {
+    player.sendMessage("I can't do that. They're unconscious.");
+    return;
+  }
+  if (core.CombatFactory.inCombat(player) || core.CombatFactory.inCombat(npc)) {
     player.sendMessage("You can't knock-out the bandit during combat.");
     return;
   }
@@ -87,13 +106,14 @@ function knockOut(event) {
   aggression.delete(npc);
   npc.setFollowing(null);
   player.getClickDelay().reset();
-  player.performAnimation(new core.Animation(KNOCKOUT_ANIMATION));
+  player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId(KNOCKOUT_ANIMATION)));
+  player.getPacketSender().sendSound(KNOCKOUT_SOUND, 1, 0);
   if (Math.random() >= successChance(player.getSkillManager().getCurrentLevel(core.Skill.THIEVING))) {
-    player.sendMessage("You fail to knock the bandit out.");
+    spam(player, "Your blow only glances off the bandit's head.");
     npc.forceChat("I'll kill you for that!");
     const attempt = {};
     aggression.set(npc, attempt);
-    later(3, () => {
+    later(STRIKE_TICKS, () => {
       if (aggression.get(npc) !== attempt || !npc.isRegistered() || !player.isRegistered()) return;
       aggression.delete(npc);
       npc.getCombat().attack(player);
@@ -105,11 +125,19 @@ function knockOut(event) {
   npc.getMovementQueue().reset();
   npc.getTimers().registers(core.TimerKey.STUN, KNOCKOUT_TICKS);
   npc.getTimers().registers(core.TimerKey.ATTACK_IMMUNITY, KNOCKOUT_TICKS);
-  npc.performAnimation(new core.Animation(UNCONSCIOUS_ANIMATION));
   player.getSkillManager().addExperiences(core.Skill.THIEVING, 10);
-  player.sendMessage("You knock the bandit unconscious.");
+  later(1, () => {
+    if (unconscious.get(npc) !== state) return;
+    spam(player, "You smack the bandit over the head and render them unconscious.");
+    npc.forceChat("Zzzzzz");
+    npc.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId(UNCONSCIOUS_ANIMATION)));
+  });
   later(KNOCKOUT_TICKS, () => {
-    if (unconscious.get(npc) === state) unconscious.delete(npc);
+    if (unconscious.get(npc) !== state) return;
+    unconscious.delete(npc);
+    if (!npc.isRegistered()) return;
+    npc.forceChat("Arghh my head.");
+    npc.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId(WAKE_ANIMATION)));
   });
 }
 

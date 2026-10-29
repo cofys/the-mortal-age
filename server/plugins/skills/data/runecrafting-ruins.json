@@ -1,9 +1,9 @@
 [
   {"name": "Air", "ruinsId": 34813, "talismanId": 1438, "tiaraId": 5527, "elemental": true},
   {"name": "Mind", "ruinsId": 34814, "talismanId": 1448, "tiaraId": 5529, "elemental": false},
-  {"name": "Water", "ruinsId": 34815, "talismanId": 1444, "tiaraId": 5531, "elemental": true},
-  {"name": "Earth", "ruinsId": 34816, "talismanId": 1440, "tiaraId": 5535, "elemental": true},
-  {"name": "Fire", "ruinsId": 34817, "talismanId": 1442, "tiaraId": 5537, "elemental": true},
+  {"name": "Water", "ruinsId": 34815, "talismanId": 1444, "tiaraId": 5531, "elemental": true, "destination": [2725, 4832, 0]},
+  {"name": "Earth", "ruinsId": 34816, "talismanId": 1440, "tiaraId": 5535, "elemental": true, "destination": [2657, 4830, 0]},
+  {"name": "Fire", "ruinsId": 34817, "talismanId": 1442, "tiaraId": 5537, "elemental": true, "destination": [2576, 4848, 0]},
   {"name": "Body", "ruinsId": 34818, "talismanId": 1446, "tiaraId": 5533, "elemental": false},
   {"name": "Cosmic", "ruinsId": 34819, "talismanId": 1454, "tiaraId": 5539, "elemental": false},
   {"name": "Law", "ruinsId": 34820, "talismanId": 1458, "tiaraId": 5545, "elemental": false},

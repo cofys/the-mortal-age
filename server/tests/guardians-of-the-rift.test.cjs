@@ -487,6 +487,24 @@ test('large remains give 2-4 fragments a success, 5 XP each, and the count stops
   Shared.stopAction(player);
 });
 
+test('the pickaxe interval comes from the Mining plugin, so a dragon pickaxe sometimes mines a tick early', () => {
+  const player = fakePlayer('Miner');
+  player.pickaxe = DRAGON_PICKAXE;
+  openGame(player);
+  const early = (request) => { request.ticks = 2; };
+  (hooks.custom['mining:roll-interval'] ??= []).push(early);
+  try {
+    mine(player, 'gotr_essence_tier_2');
+    ticks(2);
+    assert.equal(player.xpBySkill.Mining, 5);
+    ticks(2);
+    assert.equal(player.xpBySkill.Mining, 10, 'the next success 2 ticks on');
+  } finally {
+    hooks.custom['mining:roll-interval'].splice(hooks.custom['mining:roll-interval'].indexOf(early), 1);
+    Shared.stopAction(player);
+  }
+});
+
 test('huge remains give 4-6 essence until the inventory is full', () => {
   const player = fakePlayer('Miner');
   player.pickaxe = DRAGON_PICKAXE;
@@ -577,6 +595,30 @@ test('pouches hold one kind of essence, shown on their varbits; Fill empties a f
   assert.equal(player.varbit('colossal_essence_pouch'), 24);
   for (const handler of hooks.custom['runecrafting:remove-guardian-essence']) handler({ player });
   assert.equal(player.varbit('colossal_essence_pouch'), 0, 'guardian essence never leaves the game');
+});
+
+test('emptying into a full inventory is a message box with synth 2277; the colossal pouch names its essence (rsprox 1840)', () => {
+  const statement = (player) => player.statements.at(-1).getDialogues().get(0).getText();
+  const player = fakePlayer('Full', { runecraft: 85 });
+  const colossal = Shared.core().CacheDefinitions.getObjId('rcu_pouch_colossal');
+  player.inventory.adds(colossal, 1);
+  player.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 10);
+  pouch(player, 'Fill');
+  player.inventory.adds(995, 1);
+  while (player.inventory.getFreeSlots() > 0) player.inventory.adds(1511, 1);
+  const before = player.messages.length;
+  pouch(player, 'Empty');
+  assert.equal(statement(player), 'Your inventory is too full to hold any more guardian essence.');
+  assert.ok(player.sounds.includes(2277));
+  assert.equal(player.messages.length, before, 'no chat line');
+
+  const small = fakePlayer('Small', { runecraft: 85 });
+  small.inventory.adds(Shared.core().CacheDefinitions.getObjId('rcu_pouch_small'), 1);
+  small.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 3);
+  pouch(small, 'Fill', 'Small pouch');
+  while (small.inventory.getFreeSlots() > 0) small.inventory.adds(1511, 1);
+  pouch(small, 'Empty', 'Small pouch');
+  assert.equal(statement(small), 'Your inventory is too full to hold any more essence.');
 });
 
 test('the colossal pouch holds 8/16/27/40 by Runecraft level, and pouches decay with use', () => {

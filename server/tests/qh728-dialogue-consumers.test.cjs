@@ -253,9 +253,12 @@ test('PryingTimes applies drink, troll and charting effects on the new message i
   assert.equal(drinker.items.get(core.ItemIdentifiers.BOTTLE_OF_FISH_BLADDER_STOUT), 0);
   assert.equal(drinker.getAttribute('prying-times:drank-stout'), true);
 
+  // The grog's charting goes to sea charting, which charts drink_crate_prying_times.
+  const charts = [];
+  (h.events['charting:chart'] ??= []).push((event) => charts.push(event));
   const charted = makePlayer();
   h.action(charted, null, 'IygfmJ');
-  assert.equal(charted.varbits.get(18585), 1);
+  assert.deepEqual(charts, [{ player: charted, spot: 'drink_crate_prying_times' }]);
 
   const trolled = makePlayer();
   h.action(trolled, null, '0OeEX0');

@@ -1,6 +1,6 @@
 "use strict";
 
-const { api, Skill, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, ActionDialogue, EndDialogue } = require("./Core.Construction");
+const { api, Skill, ItemDefinition, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, StatementDialogue, ActionDialogue, EndDialogue } = require("./Core.Construction");
 const Data = require("./Data.Construction");
 const Ids = require("./Ids.Construction");
 const Estate = require("./Estate.Construction");
@@ -31,10 +31,10 @@ function saveHouse(player) {
   House.syncHouseOptions(player);
 }
 
-function pay(event, amount) {
+function pay(event, amount, refusal = `You need ${amount.toLocaleString("en-US")} coins to do that.`) {
   if (!stillAtAgent(event)) return false;
   if (event.player.getInventory().getAmount(Items.COINS) < amount) {
-    say(event, `You need ${amount.toLocaleString("en-US")} coins to do that.`);
+    say(event, refusal);
     return false;
   }
   if (amount) event.player.getInventory().delete(Items.COINS, amount);
@@ -107,18 +107,56 @@ function offerCape(event) {
     "Yes, please.", () => buyCape(event), "No, thanks.", () => {});
 }
 
+// rsprox captures (Redecorate and Relocate on poh_estate_agent, rev 229-236): the styles in this
+// order, Canifis before Civitas (saved styles keep their house-styles.json index).
+const STYLE_MENU_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 10, 12];
+const WILDERNESS_STYLE = 12;
+const TWISTED_STYLE = 7;
+const LOCKED_COLOUR = "5f5f5f";
+
+function styleUnlocked(player, saved, index) {
+  return saved.unlockedStyles?.includes(index) || (index === 9 && player.getPacketSender().getVarbit(CHRISTMAS_STYLE_VARBIT) === 1)
+    || (index === WILDERNESS_STYLE && player.getPacketSender().getVarbit(DEADMAN_STYLE_VARBIT) === 1);
+}
+
+/** Whether a style can be picked now: unlocked, or its blueprints carried (Twisted always takes them). */
+function styleAvailable(player, saved, index) {
+  const style = Estate.HOUSE_STYLES[index];
+  if (style.blueprint && (index === TWISTED_STYLE || !styleUnlocked(player, saved, index))) return player.getInventory().contains(style.blueprint);
+  return !style.holiday || styleUnlocked(player, saved, index);
+}
+
+/**
+ * rsprox captures: Relocate is "Select a New Location" with "Rimmington (5,000)" rows; Redecorate is
+ * "Choose a style:" with "Basic wood - 5,000 coins", "Twisted theme - Twisted blueprints" for a
+ * blueprint style, grey while it can't be picked, and Cancel. The Wilderness theme is only listed
+ * once it can be used.
+ */
 function showMenu(event, kind) {
-  if (House.houseStateFor(event.player).owned === false) { offerHouse(event); return true; }
-  const choices = kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
-  Menu.openMenu(event.player, kind === "location" ? "Move house" : "Redecorate house",
-    choices.map(choice => `${choice.name} (level ${choice.level}) - ${choice.cost.toLocaleString("en-US")} coins`),
-    index => selectMenu(event, kind, index));
+  const player = event.player, saved = House.houseStateFor(player);
+  if (saved.owned === false) { offerHouse(event); return true; }
+  if (kind === "location") {
+    Menu.openMenu(player, "Select a New Location",
+      Estate.HOUSE_LOCATIONS.map(choice => `${choice.name} (${choice.cost.toLocaleString("en-US")})`),
+      index => changeHouse(event, kind, index));
+    return true;
+  }
+  const order = STYLE_MENU_ORDER.filter(index => index !== WILDERNESS_STYLE || styleAvailable(player, saved, index));
+  const labels = order.map(index => {
+    const style = Estate.HOUSE_STYLES[index];
+    const label = `${style.name} - ${style.blueprint ? ItemDefinition.forId(style.blueprint).getName() : `${style.cost.toLocaleString("en-US")} coins`}`;
+    return styleAvailable(player, saved, index) ? label : `<col=${LOCKED_COLOUR}>${label}</col>`;
+  });
+  Menu.openMenu(player, "Choose a style:", [...labels, "Cancel"], index => {
+    if (index < order.length) changeHouse(event, kind, order[index]);
+  });
   return true;
 }
 
 function relocate(event) { return showMenu(event, "location"); }
 function redecorate(event) { return showMenu(event, "style"); }
 
+/** rsprox captures (menu:lj_layer1 after Relocate/Redecorate, rev 229): no confirmation; the coins go and the agent says so. */
 function changeHouse(event, kind, index) {
   if (!stillAtAgent(event)) return;
   const player = event.player, saved = House.houseStateFor(player);
@@ -129,9 +167,11 @@ function changeHouse(event, kind, index) {
     say(event, `You need a Construction level of ${choice.level} for that. A temporary boost will not help.`);
     return;
   }
+  const noCoins = `Hmph. Come back when you have ${choice.cost.toLocaleString("en-US")} coins.`;
+  const lines = [];
   if (kind === "location") {
     const destination = Estate.HOUSE_LOCATIONS[index];
-    if ((saved.location ?? 1) === destination.id) { say(event, "Your house is already there."); return; }
+    if ((saved.location ?? 1) === destination.id) { say(event, "Your house is already there!"); return; }
     if (destination.id === 8 && !saved.visitedKourend && player.getPacketSender().getVarbit(KOUREND_VISITED_VARBIT) === 0) {
       say(event, "You must visit Great Kourend before moving your house to Hosidius."); return;
     }
@@ -141,45 +181,39 @@ function changeHouse(event, kind, index) {
     if (destination.id === 9 && player.getPacketSender().getVarbit(SONG_OF_THE_ELVES_VARBIT) < 200) {
       say(event, "Prifddinas? I've never heard of it. Are you sure it's a real place?"); return;
     }
-    if (!pay(event, choice.cost)) return;
+    if (!pay(event, choice.cost, noCoins)) return;
     House.releaseHouse(player, false);
     saved.location = destination.id;
+    lines.push({ npc: `Your house has been moved to ${choice.name}.` });
   } else {
     const style = Estate.HOUSE_STYLES[index], oldStyle = Estate.houseStyleIndex(saved);
     if (oldStyle === index) { say(event, "Your house is already decorated in that style."); return; }
-    const unlocked = saved.unlockedStyles?.includes(index) || (index === 9 && player.getPacketSender().getVarbit(CHRISTMAS_STYLE_VARBIT) === 1)
-      || (index === 12 && player.getPacketSender().getVarbit(DEADMAN_STYLE_VARBIT) === 1);
+    const unlocked = styleUnlocked(player, saved, index);
     if (style.holiday && !unlocked) { say(event, `You must complete a ${style.holiday} event to unlock that house style.`); return; }
     const inventory = player.getInventory();
-    const blueprint = style.blueprint && (index === 7 || !unlocked) ? style.blueprint : 0;
+    const blueprint = style.blueprint && (index === TWISTED_STYLE || !unlocked) ? style.blueprint : 0;
     if (blueprint && !inventory.contains(blueprint)) { say(event, "Bring me the blueprints for that style first."); return; }
-    const returnedBlueprint = oldStyle === 7;
+    const returnedBlueprint = oldStyle === TWISTED_STYLE;
     const freedSlots = (blueprint && inventory.getAmount(blueprint) === 1 ? 1 : 0)
       + (choice.cost > 0 && inventory.getAmount(Items.COINS) === choice.cost ? 1 : 0);
     if (returnedBlueprint && inventory.getFreeSlots() + freedSlots < 1) {
       say(event, "Make room for me to return your Twisted blueprints before changing styles."); return;
     }
-    if (!pay(event, choice.cost)) return;
+    if (!pay(event, choice.cost, noCoins)) return;
     House.releaseHouse(player, false);
     if (blueprint) inventory.delete(blueprint, 1);
     if (returnedBlueprint) inventory.adds(Items.TWISTED_BLUEPRINTS, 1);
-    if ((style.blueprint && index !== 7) || style.holiday) saved.unlockedStyles = [...new Set([...(saved.unlockedStyles ?? []), index])];
+    if ((style.blueprint && index !== TWISTED_STYLE) || style.holiday) saved.unlockedStyles = [...new Set([...(saved.unlockedStyles ?? []), index])];
     saved.style = index;
+    if (index === TWISTED_STYLE) lines.push({ npc: "Absolutely, let me borrow your blueprints and I'll make it happen! You will get them back if you redecorate your house to a different theme." });
+    if (returnedBlueprint) lines.push({ statement: "The Estate agent returns your blueprints." });
+    lines.push({ npc: "Your house has been redecorated." });
   }
   saveHouse(player);
-  say(event, kind === "location" ? `Your house has been moved to ${choice.name}.` : `Your house has been redecorated in the ${choice.name} style.`);
-}
-
-function selectMenu(event, kind, index) {
-  if (!stillAtAgent(event)) return;
-  const choices = kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
-  const choice = choices[index];
-  const style = kind === "style" ? Estate.HOUSE_STYLES[index] : undefined;
-  const usesBlueprint = style?.blueprint && (index === 7 || (!House.houseStateFor(event.player).unlockedStyles?.includes(index)
-    && !(index === 12 && event.player.getPacketSender().getVarbit(DEADMAN_STYLE_VARBIT) === 1)));
-  api.sendMultiChatboxPrompt(event.player, `${kind === "location" ? "Move" : "Redecorate"} your house: ${choice.name}?`,
-    `Yes (${choice.cost.toLocaleString("en-US")} coins${usesBlueprint ? " and blueprints" : ""}).`, () => changeHouse(event, kind, index),
-    "No, thanks.", () => {});
+  const chain = new DialogueChainBuilder();
+  lines.forEach((line, step) => chain.add(line.npc ? new NpcDialogue(step, event.npcId, line.npc) : new StatementDialogue(step, line.statement)));
+  chain.add(new EndDialogue(lines.length));
+  player.getDialogueManager().startDialogues(chain);
 }
 
 function talk(event) {

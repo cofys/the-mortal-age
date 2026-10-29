@@ -116,8 +116,8 @@ function makeable(inventory, recipe) {
  * Makes `amount` (rsprox captures): the animation and sound as the menu closes, the first potion
  * a tick later and the next every `ticks` (1 for unfinished potions, 2 for most, 3 for forgotten
  * brew and extended anti-venom+). A grimy herb the cape cleans starts at once and goes every tick
- * (its recipes are unfinished potions, 1 tick), without the animation. `wait` counts from the
- * cycle that shows the click (Common.run), so 2 is tick 1.
+ * (its recipes are unfinished potions, 1 tick), without the animation. Common.run's first step is
+ * the tick after the confirm, so a `wait` of 1 makes the first potion there.
  */
 function start(player, recipe, amount) {
   Common.core.TaskManager.cancelTasks(player.getIndex());
@@ -128,7 +128,7 @@ function start(player, recipe, amount) {
     Common.animate(player, Common.MIX_ANIMATION);
     Common.sound(player, Common.MIX_SOUND);
   }
-  let wait = 2;
+  let wait = 1;
   Common.run(player, () => {
     if (--wait > 0) return true;
     // Content may make several potions in the one cycle ("skills:actions-per-cycle").
@@ -143,10 +143,15 @@ function start(player, recipe, amount) {
 }
 
 /**
- * The skillmulti menu as captured: "How many do you wish to make?", clientscript 2046's first
- * argument 0, and the most the inventory makes as both the limit and the amount it opens on.
- * With only one to make, or a manual recipe such as a Sanfew step, it is made at once.
+ * The skillmulti menus as captured: "How many do you wish to make?" (clientscript 2046's first
+ * argument 0) showing the product, or for a recipe with `"menu": "upgrade"` (amylase, crushed
+ * crystal) "How many would you like to upgrade?" (15) showing the potion it upgrades; the most
+ * the inventory makes is both the limit and the amount it opens on. With only one to make, or a
+ * manual recipe such as a Sanfew step, it is made at once.
  */
+const MAKE_MENU = { title: "How many do you wish to make?", mode: 0 };
+const UPGRADE_MENU = { title: "How many would you like to upgrade?", mode: 15 };
+
 function offer(player, recipe) {
   const most = makeable(player.getInventory(), recipe);
   if (recipe.manual || most <= 1) {
@@ -154,11 +159,14 @@ function offer(player, recipe) {
     return;
   }
   const { CreationMenu } = Common.core;
+  const upgrade = recipe.menu === "upgrade";
+  const { title, mode } = upgrade ? UPGRADE_MENU : MAKE_MENU;
+  const shownId = upgrade ? recipe.ingredients[0].id : recipe.productId;
   player.getPacketSender().sendCreationMenu(new CreationMenu(
-    "How many do you wish to make?",
-    [recipe.productId],
-    { execute: (productId, amount) => start(player, recipe, Math.min(amount, makeable(player.getInventory(), recipe))) },
-    { mode: 0, maxAmount: most, lastAmount: most },
+    title,
+    [shownId],
+    { execute: (_itemId, amount) => start(player, recipe, Math.min(amount, makeable(player.getInventory(), recipe))) },
+    { mode, maxAmount: most, lastAmount: most },
   ));
 }
 

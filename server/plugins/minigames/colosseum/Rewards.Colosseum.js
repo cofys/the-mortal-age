@@ -118,7 +118,10 @@ function waveCompleted(run) {
 /** Only the best run's Glory counts. */
 function keepGlory(run) {
   const player = run.player;
-  if (run.glory > Shared.gloryOf(player)) player.setAttribute(Shared.ATTR.GLORY, run.glory);
+  if (run.glory > Shared.gloryOf(player)) {
+    player.setAttribute(Shared.ATTR.GLORY, run.glory);
+    Shared.syncGlory(player);
+  }
   Scoreboard.gloryKept(run);
 }
 

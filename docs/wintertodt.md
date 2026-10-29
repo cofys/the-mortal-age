@@ -151,19 +151,20 @@ The brazier locs are 29312 (unlit, Light), 29313 (broken, Fix) and 29314 (burnin
 **Light:**
 - Needs a tinderbox or bruma torch, carried or worn (Wiki).
 - The brazier can't be lit while its pyromancer is down: "Heal the Pyromancer before lighting the brazier." (Near-Reality).
-- It takes 2 ticks: anim 7174 with a bruma torch (capture), 733 with a tinderbox (Near-Reality).
+- Anim 7174 with a bruma torch on the click (capture), 733 with a tinderbox (Near-Reality). It lights on tick 3, with the animation reset and synth 2596 (rsprox captures, recordings 3254 and 3262).
 - Reward: "You light the brazier.", 25 points and 6x Firemaking level XP.
 - Everyone who starts lighting before the brazier changes gets the reward (Wiki).
 
 **Fix:**
 - Needs a hammer: "You need a hammer to fix this brazier.".
-- Takes 2 ticks with anim 3676 (Near-Reality): "You fix the brazier." and 25 points.
+- Anim 3676 and synth 930 a tick after the click, then on tick 3 "You fix the brazier." and 25 points (rsprox captures, recordings 3254 and 3262).
 - 4x Construction level XP only for players who own a house (Wiki), read from the house location varbit 2187.
 
 **Feed:**
-- Anim 832, one item every 3 ticks, kindling first (capture).
+- Anim 832 and synth 2596 (delay 15) on the click; nothing burns yet (rsprox captures, recordings 3254 and 3262).
+- Every 3 ticks one item burns, kindling first, with synth 2596; the animation and its delayed synth start again while fuel is left.
 - A root gives 10 points and 3x Firemaking XP; kindling gives 25 points and 3.8x.
-- Ends with "You have run out of bruma roots.".
+- "You have run out of bruma roots." comes on the tick the last one burns.
 
 **Pyromancer:**
 - 14 health (Wiki). She waits 2-8 ticks after her brazier is lit or she is healed before she drains again (Wiki: "roughly 1-5 seconds").
@@ -176,24 +177,24 @@ The brazier locs are 29312 (unlit, Light), 29313 (broken, Fix) and 29314 (burnin
 ## Healing pyromancers
 
 - "Help", or a rejuvenation potion used on her, heals her fully for one dose, taken from the potion with the fewest doses (Wiki). It earns 75 points.
-- Other items: "That's no use!". At full health: "No need! I'm fine thanks.". Between rounds: "Looks like it's quiet for now. I don't need help, but thank you." (transcript).
+- Other items: "That's no use!". At full health: the game message "You don't need to do that." and "No need! I'm fine, thanks." (capture). Between rounds: "Looks like it's quiet for now. I don't need help, but thank you." (transcript).
 - Help without a potion opens Near-Reality's statement.
 
 ## Roots, kindling, herbs and the crates
 
 **Bruma roots** (loc 29311, Chop):
-- "You swing your axe at the roots." then "You get a bruma root." every 3 ticks (capture), with 0.3x Woodcutting level XP.
+- The swing and "You swing your axe at the roots." on tick 2, then "You get a bruma root." every 3 ticks from tick 3, both on the spam channel (rsprox captures, recordings 3254 and 3262), with 0.3x Woodcutting level XP.
 - Better levels and axes succeed more often, reaching every try at 99 with a dragon axe.
 - Uses the Woodcutting plugin's best usable axe; without one: "You do not have an axe which you have the woodcutting level to use.".
 - When the inventory is full: "Your inventory is too full to hold any more roots.".
 - Between rounds: "There's no use for bruma roots at this time." (capture).
 
 **Kindling** (knife on a root):
-- One every 4 ticks with anim 1248, 0.6x Fletching level XP, and "You carefully fletch the root into a bundle of kindling." (capture).
+- One every 4 ticks with anim 1248, 0.6x Fletching level XP, and "You carefully fletch the root into a bundle of kindling." on the spam channel (capture).
 - Refused in the safe area: "Your hands are too cold to fletch here - move closer to the braziers.".
 
 **Sprouting Roots** (29315, Pick):
-- A bruma herb every 3 ticks with anim 2282 (Near-Reality).
+- A bruma herb every 3 ticks with anim 2282, synth 2581 and "You pick a bruma herb." on the spam channel (rsprox captures, recordings 3254 and 3262).
 - No Farming XP since the rework (Wiki).
 
 **Crates:**
@@ -211,8 +212,11 @@ The brazier locs are 29312 (unlit, Light), 29313 (broken, Fix) and 29314 (burnin
 
 **Rejuvenation potions:**
 - A herb on an unfinished potion makes a (4), with 0.1x Herblore level XP. Outside the prison: "You can only do that within the influence of the Bruma tree." (Wiki).
-- Brew'ma mixes every pair at once when you use either ingredient on them.
-- Drink restores 30% warmth.
+- The first is made on the click, the second 2 ticks later, then one every 3 ticks, each with "You combine the bruma herb into the unfinished potion." on the spam channel (capture).
+- Brew'ma mixes every pair at once when you use either ingredient on them. Live then opens a two-item box ("Brew'ma quickly mixes two Rejuvenation potions."), seen once; tsps does not yet.
+- Drink restores 30% warmth: anim 829, synth 2401, "You drink some of your potion." and "You have 3 doses of potion left." on the spam channel (capture). The last dose says "You have finished your potion.", as other potions do; it isn't captured.
+
+**Bruma torch:** "Swap" turns it into the off-hand torch and back, in the same slot (capture).
 
 **Dropping:** roots, kindling, herbs and potions shatter instead of landing (Near-Reality).
 
@@ -274,9 +278,11 @@ The cart is loc 55423 in the camp, a multiloc on varbit 11435:
 | 50-99 | 55415 |
 | 100 | 55416 |
 
-- **Search:** anim 11758, one reward 3 ticks later: "You found some loot: 11 x Raw shark" (capture).
-- **Big-search:** up to 10 rewards in one search, or every reward left when fewer are owed.
-- **Check:** "You are owed 2 more rewards from the cart." or "You aren't owed any rewards from the cart.".
+- **Search:** anim 11758, then a reward every 3 ticks until nothing is owed, each with the animation, synth 2581 and "You found some loot: 11 x Raw shark" on the spam channel (rsprox captures, recording 3264; Wiki: "1 reward for every 3 ticks").
+- **Big-search:** the same, five rewards at a time (capture; Wiki: "batches of 5").
+- **Nothing owed:** the message box "There are no rewards here for you. Maybe you could help subdue the Wintertodt....".
+- **Full inventory:** the message box "You need at least one free inventory space to take from the reward cart.".
+- **Check:** "You are owed 2 more rewards from the cart.", "You are owed one more reward from the cart." or "You aren't owed any rewards from the cart.".
 - **Taking the last one:** the message box "You think you've taken as much as you're owed from the reward cart.".
 
 **Loot (Wiki, "Reward Cart" and the Module:Wintertodt supply crate behind its calculator).** Uniques are tried in order, stopping at the first hit:
@@ -302,9 +308,8 @@ A skill table tries its items best first, each at `interpolate(level, low, high)
 
 These follow the Wiki and Near-Reality until a capture says otherwise:
 - **Pyromancer:** her fall and healing. The 7-13 damage per hit is chosen so that two hits take her 14 health, as the Wiki says.
-- **Fixing:** the fix animation.
 - **Warmth restore:** the exact values from food and potions.
-- **Text:** the drink message ("You drink some of your rejuvenation potion."), the crate messages other than the knife's, and Brew'ma's.
+- **Text:** the crate messages other than the knife's.
 
 ## Developer commands
 

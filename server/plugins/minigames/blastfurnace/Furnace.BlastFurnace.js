@@ -53,6 +53,8 @@ const THROW_WATER_ANIMATION = 2450;
 /** rsprox 3278; sound-effect archive 1051 exists in the active cache. */
 const COOL_BARS_SOUND = 1051;
 const FILL_ANIMATION = 832;
+/** rsprox 3278: the sink's tap. */
+const FILL_SOUND = 2609;
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
 
 /** The stairs between Keldagrim and the furnace. */
@@ -178,6 +180,11 @@ function statement(player, text) {
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
 }
 
+/** The chat's filterable spam channel, which the belt, sink and water lines use (rsprox captures). */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
+}
+
 function coinsStatement(player, text) {
   const { DialogueChainBuilder, ItemStatementDialogue } = core;
   player.getDialogueManager().startDialogues(
@@ -269,7 +276,7 @@ function useCoffer({ player }) {
     coinsStatement(player, "There are no coins in the coffer or your inventory.");
     return;
   }
-  pluginApi.sendMultiChatboxPrompt(player, "Select an Option",
+  pluginApi.sendMultiChatboxPrompt(player, "Select an option",
     "Deposit coins.", () => askAmount(player, "Deposit how many coins?", depositCoins),
     "Withdraw coins.", () => askAmount(player, "Withdraw how many coins?", withdrawCoins),
     "Cancel.", () => player.getPacketSender().sendInterfaceRemoval());
@@ -401,7 +408,7 @@ function putOre(player, onlyItemId = null) {
   if (overflow) {
     statement(player, "You should make sure all your ore smelts before adding any more.");
   } else if (moved) {
-    player.sendMessage("All your ore goes onto the conveyor belt.");
+    spam(player, "All your ore goes onto the conveyor belt.");
   }
   if (moved) syncContents(player);
 }
@@ -529,6 +536,8 @@ function take(player, barId, amount) {
   state.bars[barId] -= count;
   player.getInventory().addItem(new core.Item(barId, count));
   syncContents(player);
+  const name = itemName(barId).toLowerCase();
+  statement(player, `You take ${count} ${count === 1 ? name : `${name}s`} from the dispenser.`);
   if (!Object.values(state.bars).some((left) => left > 0)) setDispenser(player, DISPENSER_EMPTY);
   // Ore held back by a full dispenser smelts now there's room.
   smelt(player);
@@ -555,7 +564,7 @@ function coolWithWater(event) {
   player.getInventory().deleteNumber(core.ItemIdentifiers.BUCKET_OF_WATER, 1);
   player.getInventory().addItem(new core.Item(core.ItemIdentifiers.BUCKET, 1));
   player.getPacketSender().sendSound(COOL_BARS_SOUND);
-  player.sendMessage("You throw the water over the bars.");
+  spam(player, "You throw the water over the bars.");
   for (const recipient of recipients) cool(recipient);
 }
 
@@ -567,9 +576,10 @@ function fillBucket({ player }) {
     return;
   }
   player.performAnimation(new core.Animation(FILL_ANIMATION));
+  player.getPacketSender().sendSound(FILL_SOUND);
   inventory.deleteNumber(Items.BUCKET, 1);
   inventory.addItem(new core.Item(Items.BUCKET_OF_WATER, 1));
-  player.sendMessage("You fill the bucket from the sink.");
+  spam(player, "You fill the bucket from the sink.");
 }
 
 function readGauge({ player }) {
@@ -679,4 +689,4 @@ function attachFurnace(api) {
 }
 
 module.exports = attachFurnace;
-module.exports._test = { init, tick, stateOf, putOre, smelt, takeBars, take, foremanCondition, foremanPaid, enterRoom, leaveRoom, logout, coolWithWater, stairs, checkPot, useOreOnBelt };
+module.exports._test = { init, tick, stateOf, putOre, smelt, takeBars, take, fillBucket, foremanCondition, foremanPaid, enterRoom, leaveRoom, logout, coolWithWater, stairs, checkPot, useOreOnBelt };

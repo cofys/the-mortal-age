@@ -4,13 +4,17 @@
  * Wiki (Crafting#Pottery): soft clay is shaped on a potter's wheel and the unfired piece
  * fired in a pottery oven, which has no Crafting level requirement. One soft clay shapes four
  * unfired cups. One Small Favour teaches pot lids.
- * rsprox captures 3121, 1757, 1858, 1098: quantity menus and delayed shaping/firing.
+ * rsprox captures 3121, 1757, 1858, 1098: quantity menus and delayed shaping/firing, the
+ * shaping and oven lines on the spam channel, and a message box naming the pottery when an oven
+ * choice isn't carried. 1692, 73, 86, 1098: the soft clay line.
  * See docs/crafting.md for source details and the unconfirmed cup crack rate.
  */
 const Shared = require("./Shared.Crafting");
 
 const POTTER_WHEEL_NAMES = new Set(["Potter's Wheel", "Potter's wheel"]);
 const POTTERY_OVEN_NAMES = new Set(["Pottery Oven"]);
+
+const SOFT_CLAY_MESSAGE = "You mix the clay and water.<br>You now have some soft workable clay.";
 
 const SHAPE_MENU_MODE = 0;
 const FIRE_MENU_MODE = 9;
@@ -37,6 +41,10 @@ function data() {
   };
 }
 
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(Shared.getCore().ChatType.SPAM, text);
+}
+
 /** Using a container of water on clay softens it and returns the empty container. */
 function makeSoftClay(event) {
   const { player, usedItemId, usedWithItemId } = event;
@@ -55,6 +63,7 @@ function makeSoftClay(event) {
   inventory.deleteNumber(waterId, 1);
   inventory.addItem(new Item(I.SOFT_CLAY, 1));
   inventory.addItem(new Item(waterContainers.get(waterId), 1));
+  spam(player, SOFT_CLAY_MESSAGE);
   event.handled = true;
 }
 
@@ -94,7 +103,7 @@ function makePottery(player, recipe, firing) {
   Shared.addCraftingXp(player, firing ? recipe.firingXp : recipe.shapingXp);
   Shared.produced(player, firing ? recipe.firedId : recipe.unfiredId, firing ? 1 : recipe.shaped ?? 1, firing ? recipe.firingXp : recipe.shapingXp, "pottery");
   const message = firing ? recipe.removeMessage : recipe.shapeMessage;
-  if (message) player.sendMessage(message);
+  if (message) spam(player, message);
   return true;
 }
 
@@ -108,11 +117,14 @@ function startPottery(player, station, recipe, amount, firing) {
   const interval = firing ? 7 : 3;
   const delay = interval - 1;
   const has = () => player.getInventory().contains(input) && (firing || canShape(player, recipe));
-  if (!has()) return;
+  if (!has()) {
+    if (firing) statement(player, `You don't have any ${recipe.plural} which need firing.`);
+    return;
+  }
   const animate = () => {
     Shared.animate(player, firing ? data().ovenAnimation : data().wheelAnimation,
       firing ? data().ovenSound : data().wheelSound);
-    if (firing && recipe.putMessage) player.sendMessage(recipe.putMessage);
+    if (firing && recipe.putMessage) spam(player, recipe.putMessage);
   };
   class PotteryTask extends Task {
     constructor() {
@@ -156,8 +168,8 @@ function startPottery(player, station, recipe, amount, firing) {
 function openPotteryMenu({ player, object }, firing) {
   Shared.stopCrafting(player);
   const inventory = player.getInventory();
-  const recipes = Shared.available(data().pottery).filter(recipe =>
-    firing || recipeUnlocked(player, recipe));
+  // Both menus leave pot lids out until One Small Favour teaches them (recording 1098).
+  const recipes = Shared.available(data().pottery).filter(recipe => recipeUnlocked(player, recipe));
   const maxAmount = firing ? Math.max(...recipes.map(recipe => inventory.getAmount(recipe.unfiredId))) :
     inventory.getAmount(Shared.getCore().ItemIds.SOFT_CLAY);
   if (maxAmount === 0) {

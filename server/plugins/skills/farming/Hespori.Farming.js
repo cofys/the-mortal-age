@@ -50,26 +50,47 @@ function challengeHespori(event) {
     fight.boss.getCombat().attack(fight.player);
     event.handled = true;
 }
+// Capture (recording 3282): the harvest is refused on the next tick as the player is moved in front of
+// the patch, the fight's sound playing; a defeated Hespori's patch is dug clear with the loot.
+const HARVEST_TILE = new core.Location(1246, 10085, 0);
+const HARVEST_SOUND = 4059;
 function harvestHespori(player, patch) {
-    if (!Patches.requireTool(player, "Spade")) return;
     const state = Patches.stateFor(player, patch);
     if (state.hesporiLoot) {
-        while (state.hesporiLoot.length) {
-            const drop = state.hesporiLoot[0];
-            if (!Patches.give(player, drop.itemId, drop.amount)) return;
-            state.hesporiLoot.shift();
+        if (!Patches.requireTool(player, "Spade", "You need a spade to clear a farming patch.")) return;
+        if (player.getInventory().getFreeSlots() < 2) {
+            player.getDialogueManager().startDialogues(new core.DialogueChainBuilder()
+                .add(new core.StatementDialogue(0, "You need at least two free spaces in your inventory to clear this patch.")));
+            return;
         }
-        Patches.award(player, Data.CROPS.get("HESPORI").harvest);
-        Services.cropRewards(player, Data.CROPS.get("HESPORI"));
-        Patches.clearPatch(player, patch);
+        Patches.startClear(player, patch, "You start digging the farming patch...", () => {
+            if (Patches.stateFor(player, patch) !== state) return;
+            while (state.hesporiLoot.length) {
+                const drop = state.hesporiLoot[0];
+                if (!Patches.give(player, drop.itemId, drop.amount)) return;
+                state.hesporiLoot.shift();
+            }
+            Patches.spam(player, "You have successfully cleared this patch for new crops.");
+            Patches.award(player, Data.CROPS.get("HESPORI").harvest);
+            Services.cropRewards(player, Data.CROPS.get("HESPORI"));
+            Patches.clearPatch(player, patch);
+        });
         return;
     }
+    if (FIGHTS.has(player) || state.status !== "grown") return;
+    Patches.after(player, 1, () => startFight(player, patch));
+}
+function startFight(player, patch) {
+    const state = Patches.stateFor(player, patch);
     if (FIGHTS.has(player) || state.status !== "grown") return;
     if (Patches.farmFor(player).deathbank?.length) {
         player.sendMessage("Collect your items from Arno before starting another fight."); return;
     }
     const area = player.getArea() instanceof HesporiArea ? player.getArea()  : new HesporiArea();
     if (player.getArea() !== area) { player.getArea()?.leave(player, false); area.enter(player); }
+    player.sendMessage("The Hespori doesn't take kindly to your attempt to harvest it.");
+    player.getPacketSender().sendSound(HARVEST_SOUND, 1, 0);
+    player.moveTo(HARVEST_TILE.clone());
     const fight = { player, patch, area, boss: null, flowers: [], phase: 0, attacks: 0, vinesUntil: 0, escapeClicks: 0 };
     FIGHTS.set(player, fight);
     fight.boss = spawn(fight, core.NpcIdentifiers.HESPORI, patch.x, patch.y);

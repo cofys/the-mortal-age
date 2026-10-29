@@ -3262,13 +3262,42 @@
       "between": {"ends":[[3025,9571,0],[3034,9558,0]],"cross":[{"use":"tunnel","args":["to"]}]}
     },
     {
-      "name": "Gap (Chasm of Fire)",
+      "name": "Gap (Chasm of Fire, west)",
       "object": 56372,
-      "at": [[1443,10097,1],[1450,10097,1]],
+      "at": [[1443,10097,1]],
       "level": 73,
       "xp": 2.5,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[1442,10097,1],[1449,10097,1]],"cross":[{"use":"jump","args":["to"]}]}
+      "unverified": "the reverse direction (only eastward was captured; it mirrors that one)",
+      "note": "rsprox captures 817, 819: the server position lands 6 tiles on, though the exact move is drawn 4",
+      "between": {
+        "ends": [[1440,10098,1],[1446,10097,1]],
+        "cross": [
+          {"anim":"SHORT_JUMP","delay":13},
+          {"sound":2461,"delay":13},
+          {"move":"to","speed":[17,35],"ticks":1}
+        ]
+      }
+    },
+    {
+      "name": "Gap (Chasm of Fire, east)",
+      "object": 56372,
+      "at": [[1450,10097,1]],
+      "level": 73,
+      "xp": 2.5,
+      "unverified": "the reverse direction (only eastward was captured; it mirrors that one)",
+      "note": "rsprox captures 817, 819: two jumps a tick apart, onto 1453 and then the far side",
+      "between": {
+        "ends": [[1448,10097,1],[1456,10097,1]],
+        "via": [[1453,10097,1]],
+        "cross": [
+          {"anim":"SHORT_JUMP","delay":13},
+          {"sound":2461,"delay":13},
+          {"move":"via0","speed":[17,35],"ticks":1},
+          {"anim":"SHORT_JUMP","delay":6},
+          {"sound":2461,"delay":6},
+          {"move":"to","speed":[10,30],"ticks":1}
+        ]
+      }
     },
     {
       "name": "Pillar (Ruins of Mokhaiotl)",

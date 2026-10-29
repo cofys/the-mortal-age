@@ -1,6 +1,6 @@
 "use strict";
 
-const { CacheDefinitions, Location, Skill, TeleportHandler } = require("./Core.Construction");
+const { CacheDefinitions, CountdownTask, Location, Skill, TaskManager, TeleportHandler } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Portals = require("./Portals.Construction");
@@ -38,6 +38,7 @@ const SPELL_NAMES = {
   "barbarian outpost": "barbarian", "port khazard": "khazard", "ape atoll dungeon": "ape atoll dungeon",
 };
 const STATE_ATTRIBUTE = "construction:nexus";
+const LEFT_CLICK_DELAY_TICKS = 2;
 const PAUSEBUTTON = 1, OP1 = 1 << 1, OP10 = 1 << 10, DEPTH5 = 5 << 17, DRAG_TARGET = 1 << 20;
 
 let destinationsById = null;
@@ -97,12 +98,23 @@ function teleportTo(player, house, id) {
   house.exitHouse(player, destination.tile.clone());
 }
 
+/**
+ * rsprox captures ("Teleport" on poh_nexus_portal_3 and _league_5, rev 228-239): the player faces
+ * the portal and leaves two ticks after arriving, with poh_nexus_id set to the portal's tier. A
+ * click meanwhile stops it. A pick in the Teleport Menu leaves at once.
+ */
 function teleport(event) {
   const found = nexusAt(event);
   if (!found) return false;
-  const state = stateOf(event.player, found.furniture);
-  if (!state.left) return openMenu(event.player, found), true;
-  teleportTo(event.player, found.house, state.left);
+  const player = event.player;
+  const state = stateOf(player, found.furniture);
+  if (!state.left) return openMenu(player, found), true;
+  player.setPositionToFace(event.location);
+  TaskManager.submit(new CountdownTask(player.getIndex(), LEFT_CLICK_DELAY_TICKS, () => {
+    if (House.houseFor(player) !== found.house) return;
+    player.getPacketSender().sendVarbit(NEXUS_ID, found.tier.id);
+    teleportTo(player, found.house, state.left);
+  }));
   return true;
 }
 

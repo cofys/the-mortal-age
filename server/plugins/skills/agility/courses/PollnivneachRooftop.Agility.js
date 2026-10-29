@@ -5,6 +5,7 @@ const { climb } = require("../Steps.Agility");
 module.exports = {
   key: "pollnivneach",
   name: "Pollnivneach Rooftop",
+  helper: 17, // the Agility helper's course (enum 3507: "Pollnivneach Rooftops")
   lapXp: 890,
   petBase: 33422, // Giant squirrel base chance (Wiki)
   // The hard Desert diary makes 1 cooldown in 3 two minutes (Wiki: Mark of Grace).

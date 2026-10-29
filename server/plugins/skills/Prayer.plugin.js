@@ -137,6 +137,11 @@ function ashFor(itemId) {
   return ashes.get(itemId) ?? null;
 }
 
+/** Burying and scattering lines are on the spam channel (rsprox captures). */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(api.core.ChatType.SPAM, text);
+}
+
 /** SkillManager preserves tenths; do not round up bone or bonecrusher rewards here. */
 const experience = (xp, scale) => xp * scale;
 
@@ -212,7 +217,7 @@ function consumeBone(player, itemId, slot, bone) {
   const inventory = player.getInventory();
   if (inventory.get(slot)?.getId() !== itemId) return false;
   inventory.deleteAtSlot(slot, 1);
-  player.sendMessage(DIG_MESSAGE);
+  spam(player, DIG_MESSAGE);
   award(player, itemId, bone, 1);
   return true;
 }
@@ -220,7 +225,7 @@ function consumeBone(player, itemId, slot, bone) {
 /** Sequential burial: the bone with both messages, on the resolving tick. */
 function resolveBurial(player, itemId, slot, bone) {
   if (!consumeBone(player, itemId, slot, bone)) return false;
-  player.sendMessage(BURY_MESSAGE);
+  spam(player, BURY_MESSAGE);
   return true;
 }
 
@@ -236,7 +241,7 @@ function buryOnce(player, itemId, slot, bone) {
   player.performAnimation(new core.Animation(BURY_ANIMATION));
   core.Sounds.sendSound(player, core.Sound.BURY_BONES);
   api.getTaskManager().submit(new core.CountdownTask(player, 1, () => {
-    if (player.isRegistered()) player.sendMessage(BURY_MESSAGE);
+    if (player.isRegistered()) spam(player, BURY_MESSAGE);
   }));
   player.getClickDelay().reset();
 }
@@ -320,7 +325,7 @@ function scatterAshes({ player, itemId, slot }) {
   inventory.deleteAtSlot(slot, 1);
   player.performAnimation(new core.Animation(SCATTER_ANIMATION));
   core.Sounds.sendSound(player, new core.Sound(SCATTER_SOUND, 1, 0, 0));
-  player.sendMessage("You scatter the ashes.");
+  spam(player, "You scatter the ashes.");
   player.getSkillManager().addExperiences(core.Skill.PRAYER, ash.xp);
   player.getClickDelay().reset();
   return true;

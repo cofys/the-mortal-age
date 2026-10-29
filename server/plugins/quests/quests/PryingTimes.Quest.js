@@ -95,7 +95,8 @@ module.exports = function registerPryingTimesQuest(api) {
   const VARBIT_STEVE_LOG = 18318; // quest_pry_steve_log, bit 7
   const VARBIT_THURGO_MET = 18319; // quest_pry_thurgo_met, bit 8
   const VARBIT_REWARD = 18320; // quest_pry_reward, bit 9
-  const VARBIT_CHARTED_DRINK = 18585; // sailing charting: prying times drink complete
+  /** The sea charting task the grog charts (cache table 154). */
+  const CHARTED_DRINK = "drink_crate_prying_times";
 
   const STAGE_ACCEPTED = 5;
   const STAGE_DELIVERED = 10;
@@ -482,7 +483,7 @@ module.exports = function registerPryingTimesQuest(api) {
         spawnDrinkTroll(player);
         return;
       case GROG_CHARTED_MESSAGE_ID:
-        player.getPacketSender().sendVarbit(VARBIT_CHARTED_DRINK, 1);
+        api.emitCustomEvent("charting:chart", { player, spot: CHARTED_DRINK });
         return;
       case FINAL_CROWBAR_MESSAGE_ID:
         if (freeSlots(player) >= 1) player.getInventory().adds(CROWBAR_ITEM_ID, 1);
@@ -596,6 +597,8 @@ module.exports = function registerPryingTimesQuest(api) {
         openGrogCrate(event);
         return;
       case STEVE_CRATE_ID:
+        // Sea charting's drink crates are this loc too; only Steve's is the quest's.
+        if (event.location?.x !== STEVE_CRATE_TILE.x || event.location?.y !== STEVE_CRATE_TILE.y) return;
         openFinalCrate(event);
         return;
       case CROWBAR_CRATE_ID:
@@ -659,12 +662,14 @@ module.exports = function registerPryingTimesQuest(api) {
     startTranscript(api, player, STEVE_NPC_ID, PAGE, INSPECT_CROWBAR_VARIANT);
   }
 
+  /** During the quest the stout plays the quest's drinking; afterwards it's sea charting's drink. */
   function drinkStout(event) {
-    event.handled = true;
     const { player } = event;
-    if (!held(player, STOUT_ITEM_ID)) return;
-    if (!questActive(player) && !quest.isComplete(player)) return;
+    if (!questActive(player)) return false;
+    event.handled = true;
+    if (!held(player, STOUT_ITEM_ID)) return true;
     playDrinkTranscript(player);
+    return true;
   }
 
   function retryDrinkTroll(player, retries) {
@@ -763,6 +768,8 @@ module.exports = function registerPryingTimesQuest(api) {
     installQuestObjects();
     ensureSteve(player);
     player.getPacketSender().sendVarbit(VARBIT_REWARD, quest.isComplete(player) ? 1 : 0);
+    // Drunk before sea charting kept the charts: the task counts as charted there too.
+    if (drankStout(player)) api.emitCustomEvent("charting:mark", { player, spot: CHARTED_DRINK });
     const stage = quest.getStage(player);
     if (drankStout(player) && stage >= STAGE_TEST_KEY && stage < STAGE_OPEN_CRATE) {
       spawnDrinkTroll(player);

@@ -8,7 +8,7 @@ import type { PendingHit } from "../../content/combat/hit/PendingHit";
 import type { NPC } from "./npc/NPC";
 import type { Player } from "./player/Player";
 import type { Combat } from "../../content/combat/Combat";
-import type { Animation } from "../../model/Animation";
+import { Animation } from "../../model/Animation";
 import { Direction } from "../../model/Direction";
 import { Flag } from "../../model/Flag";
 import type { Graphic } from "../../model/Graphic";
@@ -338,7 +338,11 @@ export abstract class Mobile extends Entity {
             }
             // Two on one tick at the same priority: the cache's interrupt priority decides, as the
             // client does for one already playing, so a block never replaces this tick's swing.
+            // The reset marker is not a sequence the cache has a config for, so it has nothing to
+            // arbitrate with: content that asks for one (a teleport, a death) means to stop what
+            // plays, and the stall measured from the swing it clears ends with it.
             if (this.animation.getPriority() === animation.getPriority() && animation.getId() >= 0 &&
+                animation.getId() !== Animation.DEFAULT_RESET_ANIMATION.getId() &&
                 this.animation.getId() >= 0 &&
                 getSequenceForcedPriority(animation.getId()) < getSequenceForcedPriority(this.animation.getId())) {
                 return;

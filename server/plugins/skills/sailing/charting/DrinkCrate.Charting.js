@@ -1,0 +1,159 @@
+// Drink crates (rsprox, 24 recordings): a sealed crate (59283) at each drink task's spot, pried
+// open from the deck with a crowbar for that spot's drink; drinking it charts the task (75 XP).
+//   Pry-open: the helm let go of; with no crowbar: "You require a crowbar to do that."; else
+//   sound 67 and the drink with "You pry open the crate and take a bottle of {drink} to sample.",
+//   or "The crate contains a bottle of {drink}, but you don't take it as you already have one."
+//   Drink: unless told not to ask again, the box "This drink has been sealed in a crate for an
+//   unknown amount of time. It could do anything to you, good or bad. Are you sure you want to
+//   drink it?" and the choice "Yes. / Yes, and don't ask again. / No." Then "You drink the bottle
+//   of {drink}." with the drink's own lines, the drinking animation and graphic, sound 2401, the
+//   bottle gone, and the charting.
+const common = require("./Common.Charting");
+
+const LOC_CRATE = 59283;
+const ITEM_CROWBAR = 31807;
+const SEQ_DRINK = 11288; // wgs_thaersk_drinks_potion
+const SPOTANIM_DRINK = 2871; // wgs_truth_potion_spot
+const SPOTANIM_HEIGHT = 92;
+const SOUND_PRY = 67;
+const SOUND_DRINK = 2401;
+const VARBIT_NO_WARNING = 19609; // sailing_charting_drink_crate_warning
+const LEVEL = 12;
+const PRYING_TIMES_DRINK = "drink_crate_prying_times";
+/** Drinking warns until told not to (persisted, sent at login as its varbit). */
+const NO_WARNING_ATTRIBUTE = "charting:drink-no-warning";
+
+const NO_CROWBAR = "You require a crowbar to do that.";
+const WARNING = "This drink has been sealed in a crate for an unknown amount of time. It could do anything to you, good or bad. Are you sure you want to drink it?";
+const CHOICE = "Are you sure you want to drink this?";
+
+let byItem;
+
+/** Each drink task's crate tile and drink item: the item named after the task (31831-31905). */
+function drinks() {
+  if (byItem) return byItem;
+  const { CacheDefinitions } = common.core();
+  byItem = new Map();
+  for (const spot of common.spotsOfType("drink_crate")) {
+    const item = CacheDefinitions.getObjId(`sailing_charting_${spot.key}`);
+    if (item === null || item === undefined) continue;
+    spot.item = item;
+    byItem.set(item, spot);
+  }
+  return byItem;
+}
+
+function drinkName(spot) {
+  return spot.drink?.name ?? (common.core().CacheDefinitions.getItem(spot.item)?.name ?? "drink").replace(/^Bottle of /, "").toLowerCase();
+}
+
+function crateAt(x, y) {
+  return common.spotsOfType("drink_crate").find((spot) => spot.location?.[0] === x && spot.location?.[1] === y);
+}
+
+function itemBox(player, item, text) {
+  const { DialogueChainBuilder, ItemStatementDialogue } = common.core();
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0, item, text)));
+}
+
+function questComplete(player, key) {
+  const request = { player, key, complete: null };
+  common.api().emitCustomEvent("quest:is-complete", request);
+  return request.complete === true;
+}
+
+function pryOpen(event) {
+  if (event.objectId !== LOC_CRATE || event.clickType !== 1) return;
+  const spot = crateAt(event.location.x, event.location.y);
+  if (!spot) return;
+  event.handled = true;
+  const { player } = event;
+  drinks();
+  common.leaveHelm(player);
+  if (!player.getInventory().contains(ITEM_CROWBAR)) {
+    common.core().StatementDialogue.send(player, NO_CROWBAR);
+    return;
+  }
+  // Prying Times unlocks the crates; ours: under it or 12 Sailing, the crate stays shut.
+  if (!questComplete(player, "prying_times") || player.getSkillManager().getCurrentLevel(common.core().Skill.SAILING) < LEVEL) {
+    common.core().StatementDialogue.send(player, NO_CROWBAR);
+    return;
+  }
+  const name = drinkName(spot);
+  if (player.getInventory().contains(spot.item)) {
+    itemBox(player, spot.item, `The crate contains a bottle of ${name}, but you don't take it as you already have one.`);
+    return;
+  }
+  player.getPacketSender().sendSoundEffect(SOUND_PRY, 1, 0);
+  player.getInventory().add(new (common.core().Item)(spot.item, 1), true);
+  itemBox(player, spot.item, `You pry open the crate and take a bottle of ${name} to sample.`);
+}
+
+function drink(event) {
+  const spot = drinks().get(event.itemId);
+  if (!spot || event.option !== "Drink") return;
+  const { player } = event;
+  // Until Prying Times is done its stout is the quest's to drink.
+  if (spot.key === PRYING_TIMES_DRINK && !questComplete(player, "prying_times")) return;
+  event.handled = true;
+  if (player.getAttribute(NO_WARNING_ATTRIBUTE) === true) {
+    swallow(player, spot);
+    return;
+  }
+  const { DialogueChainBuilder, StatementDialogue, ActionDialogue } = common.core();
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder()
+    .add(new StatementDialogue(0, WARNING))
+    .add(new ActionDialogue(1, { execute: () => choose(player, spot) })));
+}
+
+function choose(player, spot) {
+  common.api().sendMultiChatboxPrompt(player, CHOICE,
+    "Yes.", () => swallow(player, spot),
+    "Yes, and don't ask again.", () => {
+      player.setAttribute(NO_WARNING_ATTRIBUTE, true);
+      player.getPacketSender().sendVarbit(VARBIT_NO_WARNING, 1);
+      swallow(player, spot);
+    },
+    "No.", () => {});
+}
+
+function swallow(player, spot) {
+  if (!player.getInventory().contains(spot.item)) return;
+  const { Animation, Graphic } = common.core();
+  player.getInventory().delete(spot.item, 1);
+  player.performAnimation(new Animation(SEQ_DRINK));
+  player.performGraphic(new Graphic(SPOTANIM_DRINK, 0, SPOTANIM_HEIGHT));
+  player.getPacketSender().sendSoundEffect(SOUND_DRINK, 1, 0);
+  common.complete(player, spot, { lines: [`You drink the bottle of ${drinkName(spot)}.`, ...(spot.drink?.lines ?? [])] });
+}
+
+/** The crates, placed where every drink task's crate floats (rsprox: the Wiki's tiles, shape 10). */
+function placeCrates() {
+  const { GameObject, Location, ObjectManager } = common.core();
+  for (const spot of common.spotsOfType("drink_crate")) {
+    // Prying Times keeps its own crate (58405) on the grog's tile.
+    if (!spot.location || spot.key === PRYING_TIMES_DRINK) continue;
+    ObjectManager.register(new GameObject(LOC_CRATE, new Location(spot.location[0], spot.location[1], 0), 10, 0, null), true);
+  }
+}
+
+function onLogin({ player }) {
+  if (player.getAttribute(NO_WARNING_ATTRIBUTE) === true) player.getPacketSender().sendVarbit(VARBIT_NO_WARNING, 1);
+}
+
+function attach(api) {
+  common.init(api);
+  api.persistAttribute(NO_WARNING_ATTRIBUTE, false);
+  api.setUsableFromDeck([LOC_CRATE]);
+  api.onObjectInteraction(pryOpen);
+  api.onItemAction(drink);
+  api.onServerStartup(placeCrates);
+  api.onPlayerLogin(onLogin);
+}
+
+module.exports = attach;
+module.exports.pryOpen = pryOpen;
+module.exports.drink = drink;
+module.exports.swallow = swallow;
+module.exports.drinks = drinks;
+module.exports.NO_WARNING_ATTRIBUTE = NO_WARNING_ATTRIBUTE;

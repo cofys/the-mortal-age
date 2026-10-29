@@ -1,6 +1,6 @@
 # Fletching
 
-Every Fletching recipe on the OSRS Wiki (the Fletching page, "Fletching training" and each product's recipe infobox), built from those pages, rsprox captures (recordings 96, 239, 1749, 1757, 3280 and 4167 on https://rsprox.net/database) and the cache. It is one plugin, `server/plugins/skills/Fletching.plugin.js`, with its units in `server/plugins/skills/fletching/` and every recipe in `server/plugins/skills/data/fletching.json`.
+Every Fletching recipe on the OSRS Wiki (the Fletching page, "Fletching training" and each product's recipe infobox), built from those pages, rsprox captures (recordings 70, 75, 83, 89, 96, 100, 239, 1098, 1718, 1723, 1749, 1757, 1827, 1857, 3280, 4167 and 4308 on https://rsprox.net/database) and the cache. It is one plugin, `server/plugins/skills/Fletching.plugin.js`, with its units in `server/plugins/skills/fletching/` and every recipe in `server/plugins/skills/data/fletching.json`.
 
 Status:
 - **Done:**
@@ -37,7 +37,6 @@ Status:
   - **Achievement diaries:** stringing an oak shortbow in the Gnome Stronghold and a magic longbow in Tirannwn (Western Provinces), and dragon darts at the Bedabin Camp (Desert). The Wiki lists each bow task's items as the unstrung bow and a bow string, so cutting the unstrung bow doesn't count. The Wiki gives no bounds for these places: the Bedabin Camp box is the one desert heat uses, and the Gnome Stronghold and Tirannwn (with Prifddinas) boxes are our estimates around their walls and towns.
 - **Not done:**
   - "Smith and fletch ten rune darts within Varrock" (Varrock elite): there is no Smithing signal to pair it with yet.
-  - Filterable ("spam") chat messages, which the server doesn't support yet.
 - **Elsewhere:**
   - the bone shortbow: `items/ratboneweapons`;
   - the scorching bow: `quests/wgs/Rewards.WhileGuthixSleeps.js`;
@@ -65,24 +64,29 @@ From the captures:
 | --- | --- |
 | Feather on dart tips | On the click's tick: the tier's `human_fletching_add_dart_feathers_*`, "You finish making 10 darts.", tips and feathers out, darts in. No menu. |
 | Feather on unfinished bolts | On the click's tick: `human_fletching_add_bolt_feathers_*`, synth sound 2605, "You fletch 10 bolts.". No menu. |
-| Feather on arrow shafts | skillmulti mode 3, "How many sets of 15 do you wish to feather?", offering up to 10 sets. |
-| Bolt tips on bolts | skillmulti mode 3, "How many sets of 10 would you like to tip?", up to 10 sets, or fewer when fewer can be made. |
-| Bow string on an unstrung bow | skillmulti mode 10, "How many would you like to string?", offering what can be made. |
+| Knife on logs | skillmulti mode 0, "What would you like to make?". `human_fletching` on the choice, the first item 2 ticks later and one every 3, each with the animation and "You carefully cut the wood into 30 arrow shafts." (or "some javelin shafts.", "a shortbow.", "a longbow.", "a crossbow stock."). |
+| Knife on two logs: a shield | `human_fletching` a tick after the choice, the shield 6 ticks after the choice and one every 7, with "You carefully cut the pieces of wood into a shield.". |
+| Feather on arrow shafts | skillmulti mode 3, "How many sets of 15 do you wish to feather?", offering up to 10 sets. `human_fletching_add_feather` on the choice, a set a tick later and one every 2, each with sound 2605 and "You attach feathers to 15 arrow shafts.". |
+| Arrowtips on headless arrows | skillmulti mode 3, "How many sets of 15 do you wish to complete?". The same timing and sound, "You attach steel arrowtips to 15 headless arrows." ("broad arrowheads" for broad arrows). |
+| Bolt tips on bolts | skillmulti mode 3, "How many sets of 10 would you like to tip?", up to 10 sets, or fewer when fewer can be made. A set a tick after the choice and one every 2, each with `human_fletching_add_bolt_tips_*`, sound 2605 and "You fletch 10 bolts.". |
+| Chisel on a cut gem or pearls | skillmulti mode 2, "How many sets of 12 will you make?" (6 for an oyster pearl). The gem's cutting animation and sound 2586 on the choice, the tips 4 ticks later and every 5, each with the animation, the sound and "You use your chisel to fletch small bolt tips.". |
+| Javelin heads on shafts | skillmulti mode 3, "How many sets of 15 do you wish to make?". |
+| Bow string on an unstrung bow | skillmulti mode 10, "How many would you like to string?", offering what can be made. Nothing on the choice; a bow a tick later and one every 2, each with `stringing_*` and "You add a string to the bow.". A single bow is strung a tick after the click, with no menu. |
 | Crossbow string on the only unstrung crossbow | No menu; on the next tick `xbows_stringing_crossbow_*` and "You add a string to the crossbow.". |
 | Limbs on a stock | Without a hammer: "You'll need a hammer to do that.". With one, on the next tick: `xbows_fletching_*`, synth sound 2922, "You attach the stock to the limbs and create an unstrung crossbow.". |
 
-Every capture of darts and bolts was on Leagues worlds, where a click made 20 or 30. The main game makes one set of 10 per click (Wiki, Darts and Bolts).
+Every Fletching line is a spam (filterable) message. Every capture of darts and bolts was on Leagues worlds, where a click made 20 or 30. The main game makes one set of 10 per click (Wiki, Darts and Bolts).
+
+A task submitted from a click first runs on the next game cycle, so a recipe's `firstTick` n is the capture's tick +n after the choice.
 
 From the Wiki recipes:
 - **Logs:** the first item after 2 ticks, then one every 3 ("Make-X is 2, then 3 ticks").
-- **Shields:** 7 ticks.
 - **Battlestaves:** 4 ticks.
-- **Gem tips:** 5 ticks.
 - **Javelins:** 1 tick.
 - **Darts and bolts in Make-X:** 2 ticks.
 - **Ogre arrow shafts and wolfbone tips:** 2 to 6 per log or bone.
 
-No capture covers knife on logs, gem tips, javelins, shields, the spool or the Varlamore and Sailing recipes. Their timing follows the Wiki, and the spool's messages are our own. Where no animation is recorded, the generic `human_fletching` plays.
+No capture covers javelin timing, the spool or the Varlamore and Sailing recipes, nor messages for the other knife products, crossbows, ogre arrows or kebbit and antler bolts. Their timing follows the Wiki, and the spool's messages are our own. Where no animation is recorded, the generic `human_fletching` plays.
 
 ## Testing
 
@@ -93,6 +97,7 @@ No capture covers knife on logs, gem tips, javelins, shields, the spool or the V
 - instant and Make-X darts;
 - feathers;
 - gem tips and tipping;
+- the captured tick, message, sound and menu of knife cuts, shields, menu stringing, arrows, tipping and gem bolt tips;
 - the Broader Fletching and quest gates;
 - the spool;
 - the fletching knife's timing;

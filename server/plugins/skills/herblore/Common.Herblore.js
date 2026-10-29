@@ -170,9 +170,9 @@ function addXp(player, xp) {
 
 /**
  * Runs `step(tick)` every tick, as a task keyed to the player so a walk or a click cancels it.
- * Clicks are handled between game cycles, so tick 1 is the cycle that shows the click's own
- * response: something captured `n` ticks after the click happens on tick `n + 1`. `step` returns
- * false to stop.
+ * Clicks are handled in the player's turn, after the cycle's tasks have run, so tick 1 is the
+ * cycle after the click: something captured `n` ticks after the click happens on tick `n`.
+ * `step` returns false to stop.
  */
 function run(player, step) {
   let tick = 0;

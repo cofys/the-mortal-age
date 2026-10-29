@@ -289,7 +289,8 @@ test('PvP melee on the same tick: the player processed first lands now, the othe
   let cycle = 100;
   t.mock.method(CombatFactory, 'executeHit', (pending) => landed.push([pending.name, cycle]));
   const fighter = (name) => {
-    const player = { name, isRegistered: () => true, getHitpoints: () => 99, isUntargetable: () => false, isNpc: () => false, isPlayer: () => true };
+    // getIncomingHitCycle(): -1, nobody is held by an animation stall, so each hit keeps its own tick.
+    const player = { name, isRegistered: () => true, getHitpoints: () => 99, isUntargetable: () => false, isNpc: () => false, isPlayer: () => true, getCombat: () => ({ getIncomingHitCycle: () => -1 }) };
     player.queue = new HitQueue(player);
     return player;
   };

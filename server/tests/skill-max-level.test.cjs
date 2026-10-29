@@ -77,6 +77,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
       adds(id, n) { counts.set(id, (counts.get(id) ?? 0) + n); },
       deleteNumber(id, n) { const next = (counts.get(id) ?? 0) - n; if (next > 0) counts.set(id, next); else counts.delete(id); },
     };
+    const messages = [];
     const skillManager = {
       getCurrentLevel: s => levels.get(s) ?? 99, getMaxLevel: s => baseLevels.get(s) ?? 99, stopSkillable() {},
       setCurrentLevels: (s, n) => levels.set(s, n),
@@ -91,24 +92,32 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
       getPrivateArea: () => area, setArea(a) {area=a;}, getWildernessLevel: () => 0,
       getLocation: () => location, moveTo(p) { location = p; },
       getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-      getPacketSender: () => ({ sendConfig: (id, value) => configs.set(id, value), sendVarbit: (id,value) => configs.set(id,value), sendProjectile() {}, sendGraphic() {}, sendSound() {} }),
+      getPacketSender: () => ({ sendConfig: (id, value) => configs.set(id, value), sendVarbit: (id,value) => configs.set(id,value), sendProjectile() {}, sendGraphic() {}, sendSound() {},
+        sendTypedMessage: (type, text) => messages.push(text), sendClientScript() {}, sendObjectAnimation() {} }),
       getCombat: () => ({ getTarget: () => null, getAttacker: () => null, getHitQueue: () => ({ addPendingDamage() {} }) }),
       getPrayerActive: () => ({}),
       getMovementQueue: () => ({ canWalk: () => false, reset() {} }),
       getForceMovement: () => force, setForceMovement(f) {force=f;}, getUpdateFlag: () => ({flag(){}}), getRunEnergy: () => 50, setRunEnergy() {},
       performAnimation(a) { this.animations.push(a.getId()); }, sendMessage(text) { this.messages.push(text); },
-      animations: [], messages: [], statements: [],
+      animations: [], messages, statements: [],
       getDialogueManager() { const statements = this.statements; return { startDialogues(chain) { statements.push(chain); } }; },
     };
   }
   const p = player(), stranger = player();
-  const objects = new Set(), drops = [];
+  const objects = new Set(), drops = [], grounds = [];
   let npcs = [];
   H.core = { ...core,
     ObjectManager: { register(o) { objects.add(o); }, deregister(o) { objects.delete(o); } },
     MapObjects: { exists: o => objects.has(o), getType: () => null },
     RegionManager: { blocked: () => false },
-    ItemOnGroundManager: { registerLocation: (...args) => drops.push(args) },
+    ItemOnGroundManager: {
+      registerLocation(...args) {
+        drops.push(args);
+        const ground = { removed: false, getItem: () => args[1], isPendingRemoval() { return this.removed; } };
+        grounds.push(ground); return ground;
+      },
+      deregister(ground) { ground.removed = true; },
+    },
     World: { getRemovedObjects: () => [], getNearbyNpcsForUpdate: () => npcs },
     PathFinder: { calculateWalkRoute(npc, x, y) { npc.moveTo(new core.Location(x, y, npc.getLocation().getZ())); } },
   };
@@ -124,8 +133,11 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     p.counts.clear(); p.setSize(28); p.counts.set(I.BIRD_SNARE, 1);
     Traps.activate({ player: p, itemId: I.BIRD_SNARE });
     p.moveTo(new core.Location(3001, 3000, 0)); advance(3);
-    assert.equal(H.traps.size, 0, "moving cancels before consumption");
-    assert.equal(p.counts.get(I.BIRD_SNARE), 1);
+    // The snare goes on the floor as the lay starts (rsprox captures); walking off leaves it there.
+    assert.equal(H.traps.size, 0, "moving cancels the lay");
+    assert.equal(p.counts.has(I.BIRD_SNARE), false); assert.equal(grounds.at(-1).getItem().getId(), I.BIRD_SNARE);
+    assert.equal(p.messages.at(-1), "You begin setting up the trap.");
+    p.counts.set(I.BIRD_SNARE, 1);
     Traps.activate({ player: p, itemId: I.BIRD_SNARE }); advance(3);
     const trap = [...H.traps][0]; assert.ok(trap); assert.equal(p.counts.has(I.BIRD_SNARE), false);
     assert.equal(Traps.limit(p, "box"), 5);
@@ -143,6 +155,8 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
       getCombat: () => ({ getTarget: () => null, getAttacker: () => null, reset() {} }),
     };
     p.moveTo(trap.location.clone().add(1, 0)); npcs = [npc]; advance(6);
+    assert.equal(trap.state, "closing", "the trapping loc shows for two ticks");
+    advance(2);
     assert.equal(trap.state, "caught"); assert.equal(visible, false);
     const object = trap.objects[0];
     Traps.check({ player: stranger, object }); advance(2);
@@ -152,6 +166,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     p.setSize(28); Traps.check({ player: p, object }); advance(2);
     assert.equal(H.traps.size, 0); assert.equal(p.counts.get(I.BIRD_SNARE), 1);
     assert.equal(p.experience.get(Skill.HUNTER), 34);
+    assert.deepEqual(p.messages.slice(-2), ["You dismantle the trap.", "You've caught a crimson swift."]);
     Traps.check({ player: p, object }); advance(4);
     assert.equal(p.experience.get(Skill.HUNTER), 34, "stale clicks cannot duplicate XP");
     assert.equal(visible, true, "caught NPC respawns");
@@ -450,12 +465,12 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     q.counts.clear();Math.random=()=>0.5;q.attrs.set('quest.bone_voyage.stage',2);
     q.moveTo(new core.Location(...Herbi.data.starts[0],0));
     const startObject=new core.GameObject(core.ObjectIdentifiers.ROCK_72,q.getLocation().clone(),10,0,null);
-    Herbi.inspect({player:q,object:startObject});
+    Herbi.inspect({player:q,object:startObject});advance(2);
     q.levels.set(Skill.HUNTER,70);
     for(let step=0;!q.configs.get(5766)&&step<8;step++){
       const [varbit,value]=[...q.configs].find(([v,value])=>Herbi.data.edges.some(e=>e[0]===v)&&value>=3);
       const edge=Herbi.data.edges.find(e=>e[0]===varbit),point=edge[value===4?2:1].slice(1);
-      q.moveTo(new core.Location(...point,0));Herbi.inspect({player:q,object:new core.GameObject(core.ObjectIdentifiers.MUDDY_PATCH,q.getLocation().clone(),10,0,null)});
+      q.moveTo(new core.Location(...point,0));Herbi.inspect({player:q,object:new core.GameObject(core.ObjectIdentifiers.MUDDY_PATCH,q.getLocation().clone(),10,0,null)});advance(2);
     }
     assert.ok(q.configs.get(5766)>0,"visible cache trails lead to a final tunnel");
     const end=Herbi.data.ends[q.configs.get(5766)-1];q.moveTo(new core.Location(...end,0));

@@ -9,6 +9,11 @@
  * one recipe and only one batch to make skips the menu (rsprox captures 1749: a crossbow string
  * on the only unstrung crossbow strings it on the next tick).
  *
+ * The task's first execute is the cycle after the click, so `firstTick` n is capture tick +n. The
+ * recipe's animation (and its sound with `startSound`) opens the loop on the click's own tick, or
+ * on `startTick` when the group sets one (null: no opening, the first batch animates).
+ * Every recipe message is a spam line (rsprox captures).
+ *
  * The task keeps going while the player walks, as live does, and is keyed to the player so their
  * next interaction cancels it. A carried or worn fletching knife takes a tick off every knife
  * action after the first (Wiki, Fletching knife).
@@ -112,6 +117,8 @@ function resolveRecipe(entry) {
     xp: recipe.xp,
     ticks,
     firstTick: recipe.firstTick ?? 1,
+    startTick: recipe.startTick === undefined ? 0 : recipe.startTick,
+    startSound: recipe.startSound === true,
     jewellersTicks: recipe.jewellersTicks ?? null,
     knifeBonus: recipe.knifeBonus === true,
     tool: recipe.tool ?? null,
@@ -312,7 +319,7 @@ function makeBatch(player, recipe, via) {
   player.getInventory().addItem(fletched);
   player.performAnimation(animationOf(recipe));
   if (recipe.sound) core.Sounds.sendSound(player, recipe.sound);
-  if (recipe.message) player.sendMessage(formatMessage(recipe.message, amount));
+  if (recipe.message) player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, formatMessage(recipe.message, amount));
   if (recipe.xp > 0) player.getSkillManager().addExperiences(core.Skill.FLETCHING, recipe.xp);
   api.emitCustomEvent("fletching:made", { player, itemId: recipe.outputId, amount });
   api.emitCustomEvent("skills:produced", { player, skill: core.Skill.FLETCHING, itemId: recipe.outputId, amount, xp: recipe.xp, kind: recipe.group });
@@ -323,6 +330,12 @@ function interval(player, recipe) {
   if (recipe.jewellersTicks && player.getInventory().contains(jewellersChiselId)) return recipe.jewellersTicks;
   if (recipe.knifeBonus && carries(player, [fletchingKnifeId])) return recipe.ticks - 1;
   return recipe.ticks;
+}
+
+/** The animation (and the sound, with `startSound`) that opens the loop before the first batch. */
+function playOpening(player, recipe) {
+  player.performAnimation(animationOf(recipe));
+  if (recipe.startSound && recipe.sound) core.Sounds.sendSound(player, recipe.sound);
 }
 
 function stopFletching(player, resetAnimation = false) {
@@ -365,7 +378,8 @@ function createTask(player, recipe, batches, via) {
         return;
       }
       if (this.levelUpPaused) return;
-      if (++this.ticks < this.nextTick) return;
+      if (++this.ticks === recipe.startTick) playOpening(player, recipe);
+      if (this.ticks < this.nextTick) return;
       this.nextTick = this.ticks + interval(player, recipe);
       const actions = actionsPerCycle(player, recipe);
       for (let done = 0; done < actions; done++) {
@@ -400,7 +414,7 @@ function startFletching(player, recipe, requested, via) {
   const task = createTask(player, recipe, batches, via);
   tasks.set(player, task);
   api.getTaskManager().submit(task);
-  player.performAnimation(animationOf(recipe));
+  if (recipe.startTick === 0) playOpening(player, recipe);
 }
 
 /** The skillmulti menu for the recipes a pair starts, each offered up to what can be made. */
@@ -410,7 +424,7 @@ function openMenu(player, choices, via) {
   const maxAmount = Math.max(...choices.map((recipe) => Math.min(batchesAvailable(player, recipe), recipe.maxSets)), 1);
   const { title, mode } = choices[0].menu;
   player.getPacketSender().sendCreationMenu(new core.CreationMenu(
-    title,
+    formatMessage(title, choices[0].amount),
     choices.map((recipe) => recipe.outputId),
     {
       execute: (outputId, amount) => {

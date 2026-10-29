@@ -23,6 +23,7 @@ const MINING_SUCCESS_SOUND = 3600;
 const SMELT_SOUND = 2725;
 const RESPAWN_TIMER_SCRIPT = 5474;
 const ORE_MINED_VARP = 4526; // tracking_ore_mined
+const RESET_ANIMATION = core.Animation.DEFAULT_RESET_ANIMATION.getId();
 const noop = () => {};
 
 before(async () => {
@@ -43,9 +44,14 @@ function createPlayer({ pickaxe = ItemIds.RUNE_PICKAXE, level = 99, full = false
     sendSoundEffect: (id) => packets.sounds.push(id),
     sendConfig: (id, value) => packets.configs.push([id, value]),
     sendClientScript: (...args) => packets.scripts.push(args),
+    // Spam lines land in `messages` too; `spam` keeps which ones went to that channel.
+    sendTypedMessage: (type, text) => {
+      player.messages.push(text);
+      if (type === core.ChatType.SPAM) player.spam.push(text);
+    },
   };
   const player = {
-    packets, added, dialogues, xp, messages: [], animations: [], graphics: [],
+    packets, added, dialogues, xp, messages: [], spam: [], animations: [], graphics: [],
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getPacketSender: () => sender,
@@ -96,7 +102,7 @@ function harness({ emit = noop } = {}) {
   Mining = require(MINING_PLUGIN);
   Mining.register(api);
   return {
-    interactions, hooks, registered,
+    interactions, hooks, registered, events,
     tick(count = 1) { while (count-- > 0) [...tasks].forEach((task) => task.tick()); },
   };
 }
@@ -419,6 +425,29 @@ test("dragon, infernal and crystal pickaxes sometimes roll a tick early on membe
   assert.deepEqual(rollTicks({ pickaxe: ItemIds.CRYSTAL_PICKAXE, rest: face(50) }), [2, 4, 6, 8, 10, 12]);
 });
 
+test("\"mining:roll-interval\" answers other mining content with the pickaxe's interval and its early rolls", () => {
+  const { WorldDefinition } = core;
+  const originalMembers = WorldDefinition.isMembersWorld;
+  const originalRandom = Math.random;
+  WorldDefinition.isMembersWorld = () => true;
+  const h = harness();
+  const ask = (pickaxe) => {
+    const request = { pickaxe, ticks: null };
+    h.events["mining:roll-interval"](request);
+    return request.ticks;
+  };
+  try {
+    Math.random = () => 0.1;
+    assert.equal(ask({ attemptIntervalTicks: 3, fastRollChance: 1 / 6 }), 2, "a dragon pickaxe's early roll");
+    assert.equal(ask({ attemptIntervalTicks: 3 }), 3, "a rune pickaxe never rolls early");
+    Math.random = () => 0.5;
+    assert.equal(ask({ attemptIntervalTicks: 3, fastRollChance: 1 / 6 }), 3);
+  } finally {
+    Math.random = originalRandom;
+    WorldDefinition.isMembersWorld = originalMembers;
+  }
+});
+
 test("the skilling timer carries over to the next rock: no fresh roll before the last interval ends", () => {
   const h = harness();
   const player = createPlayer({ pickaxe: ItemIds.BRONZE_PICKAXE });
@@ -557,6 +586,181 @@ function mineAll(h, player, name, rockId) {
   h.interactions.get(name).Mine({ player, object: rock, definition: { getName: () => name } });
   return { rock, restore: () => { MapObjects.get = original; } };
 }
+
+test("rune essence (70, 3027): sound 3600 and the ore counter with each essence, and no chat line", () => {
+  const h = harness();
+  const player = createPlayer({ level: 1, pickaxe: ItemIds.BRONZE_PICKAXE });
+  const restoreRandom = scriptRandom([], 0.999);
+  const { restore } = mineRock(h, player, "Rune essence", core.ObjectIdentifiers.RUNE_ESSENCE);
+  try {
+    h.tick(2);
+    assert.deepEqual(player.added, [[ItemIds.PURE_ESSENCE, 1]]);
+    assert.deepEqual(player.messages, ["You swing your pick at the rock."], "no essence line");
+    assert.deepEqual(player.packets.sounds, [MINING_SUCCESS_SOUND]);
+    assert.deepEqual(player.packets.configs, [[ORE_MINED_VARP, 1]]);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
+test("mining lines are spam, and each roll replays the swing (3139, 3162, 468)", () => {
+  const h = harness();
+  const player = createPlayer({ pickaxe: ItemIds.BRONZE_PICKAXE });
+  const swing = 625; // human_mining_bronze_pickaxe
+  const restoreRandom = scriptRandom([], face(100));
+  const { restore } = mineRock(h, player, "Runite rocks", loc("runiterock1"));
+  try {
+    h.tick(18);
+    // The swing at +1, then a roll at +2, +10 and +18 (bronze: 8 ticks), each resending the sequence.
+    assert.deepEqual(player.animations, [swing, swing, swing, swing]);
+    assert.deepEqual(player.spam, ["You swing your pick at the rock."]);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+  const miner = createPlayer();
+  const h2 = harness();
+  const restoreHit = scriptRandom([], 0);
+  const mined = mineRock(h2, miner, "Iron rocks", loc("ironrock1"));
+  try {
+    h2.tick(2);
+    assert.deepEqual(miner.spam, ["You swing your pick at the rock.", "You manage to mine some iron."]);
+    assert.equal(miner.animations.at(-1), RESET_ANIMATION, "the ore that empties the rock stops the swing");
+  } finally {
+    restoreHit();
+    mined.restore();
+  }
+});
+
+test("Mine on a mined-out rock stops the swing and plays 2661 (3139)", () => {
+  const h = harness();
+  const player = createPlayer();
+  const event = { player, object: { getId: () => loc("rocks2") } };
+  h.interactions.get("Rocks").Mine(event);
+  assert.deepEqual(player.animations, [RESET_ANIMATION]);
+  assert.deepEqual(player.packets.sounds, [2661]);
+  assert.deepEqual(player.messages, ["There is currently no ore available in this rock."]);
+  assert.deepEqual(player.spam, [], "a game message");
+});
+
+test("barronite (1636; Wiki): wall swings, the rock stays through its ores, then runs out after 20 seconds", () => {
+  const { Sounds } = core;
+  const original = Sounds.playAreaSound;
+  const areaSounds = [];
+  Sounds.playAreaSound = (options) => areaSounds.push(options);
+  const h = harness();
+  const player = createPlayer({ pickaxe: ItemIds.INFERNAL_PICKAXE });
+  const item = { getId: () => ItemIds.INFERNAL_PICKAXE, getMetaValue: () => undefined };
+  const inventory = player.getInventory();
+  player.getInventory = () => ({ ...inventory, contains: (id) => id === ItemIds.INFERNAL_PICKAXE, getItems: () => [item] });
+  // Face 50: no gem, under barronite's 101/256 at 99, and past the infernal's 1/6 early roll.
+  const restoreRandom = scriptRandom([], face(50));
+  const { rock, restore } = mineRock(h, player, "Barronite rocks", loc("camdozaalrock1"));
+  try {
+    h.tick(2);
+    assert.equal(player.animations[0], core.CacheDefinitions.getSeqId("human_mining_infernal_pickaxe_wall"));
+    assert.equal(player.added.length, 1, "an ore at +2");
+    assert.deepEqual(h.registered, [], "the rock stays standing");
+    assert.equal(Mining.isMiningActive(player), true);
+    h.tick(30);
+    assert.deepEqual(h.registered, [], "still standing at +32");
+    h.tick(1);
+    assert.equal(h.registered[0].getId(), loc("camdozaalrock1_empty"), "runs out 33 ticks (20 s) in");
+    assert.deepEqual(areaSounds.map((sound) => [sound.soundId, sound.delay, sound.radius, sound.x, sound.y]), [[2661, 10, 1, rock.getLocation().getX(), rock.getLocation().getY()]]);
+    assert.equal(player.animations.at(-1), RESET_ANIMATION);
+    assert.equal(Mining.isMiningActive(player), false);
+  } finally {
+    Sounds.playAreaSound = original;
+    restoreRandom();
+    restore();
+  }
+});
+
+test("a respawned barronite rock gets a fresh 20 seconds, and so does one content keeps standing", () => {
+  const { Sounds } = core;
+  const original = Sounds.playAreaSound;
+  Sounds.playAreaSound = noop;
+  const restoreRandom = scriptRandom([], 0.99);
+  try {
+    // Two full cycles on one rock: run out at 33, respawn after 100, run out again 33 mining ticks later.
+    const h = harness();
+    const player = createPlayer();
+    const { rock, restore } = mineRock(h, player, "Barronite rocks", loc("camdozaalrock1"));
+    try {
+      h.tick(33);
+      assert.equal(h.registered.length, 1, "first cycle runs out at 33");
+      h.tick(100);
+      assert.equal(h.registered.at(-1), rock, "the same rock respawns");
+      h.interactions.get("Barronite rocks").Mine({ player, object: rock, definition: { getName: () => "Barronite rocks" } });
+      h.tick(32);
+      assert.equal(h.registered.length, 2, "standing through the second cycle's tick 32");
+      assert.equal(Mining.isMiningActive(player), true);
+      h.tick(1);
+      assert.equal(h.registered.at(-1).getId(), loc("camdozaalrock1_empty"), "second cycle runs out at 33");
+    } finally {
+      restore();
+    }
+
+    // "mining:deplete-rock" keeps it standing: mining goes on, and the next try is 33 ticks later.
+    const kept = [];
+    const keeper = harness({ emit: (key, event) => { if (key === "mining:deplete-rock") { kept.push(event); event.handled = true; } } });
+    const miner = createPlayer();
+    const mined = mineRock(keeper, miner, "Barronite rocks", loc("camdozaalrock1"));
+    try {
+      keeper.tick(33);
+      assert.equal(kept.length, 1);
+      assert.equal(Mining.isMiningActive(miner), true, "a kept rock is mined on");
+      keeper.tick(32);
+      assert.equal(kept.length, 1, "no depletion every tick after the first");
+      keeper.tick(1);
+      assert.equal(kept.length, 2);
+      assert.deepEqual(keeper.registered, []);
+    } finally {
+      mined.restore();
+    }
+  } finally {
+    Sounds.playAreaSound = original;
+    restoreRandom();
+  }
+});
+
+test("a Mining cape's extra sandstone is the same size, with its line, XP and count (3165)", () => {
+  const cape = "Your cape allows you to mine an additional ore.";
+  const h = harness({ emit: (key, request) => { if (key === "mining:extra-ore") Object.assign(request, { extra: true, message: cape }); } });
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([0.99, 0.99, 0.99, 0], 0.99);
+  const { restore } = mineRock(h, player, "Sandstone rocks", loc("enakh_sandstone_rocks"));
+  try {
+    h.tick(2);
+    assert.deepEqual(player.spam.slice(-2), ["You manage to quarry some sandstone.", cape]);
+    assert.deepEqual(player.added.map(([id, amount]) => [itemName(id), amount]), [["Sandstone (1kg)", 1], ["Sandstone (1kg)", 1]]);
+    assert.deepEqual(player.xp.map(([, amount]) => amount), [30, 30]);
+    assert.deepEqual(player.packets.configs, [[ORE_MINED_VARP, 1], [ORE_MINED_VARP, 2]]);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
+test("an ore handed over as it is mined (\"mining:hand-over\"): the line names who took it, no ore, sound or count (1757)", () => {
+  const h = harness({ emit: (key, request) => { if (key === "mining:hand-over") request.taker = "Miner Magnus"; } });
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineRock(h, player, "Coal rocks", loc("coalrock2"));
+  try {
+    h.tick(2);
+    assert.equal(player.spam.at(-1), "You manage to mine some coal, and give it to Miner Magnus.");
+    assert.deepEqual(player.added, []);
+    assert.deepEqual(player.packets.sounds, []);
+    assert.deepEqual(player.packets.configs, []);
+    assert.equal(player.xp.at(-1)[1], 50, "the XP is still given");
+    assert.equal(h.registered[0].getId(), loc("rocks2"));
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
 
 test("lead rocks (Wiki): 25 Mining, 40.5 XP, mined out as their own leadrock1_empty, which says it is empty", () => {
   const h = harness();

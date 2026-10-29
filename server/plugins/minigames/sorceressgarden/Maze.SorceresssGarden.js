@@ -11,8 +11,8 @@
  * round trip).
  *
  * A player within two tiles (chebyshev) of an elemental with the hedge line clear is
- * caught: the elemental stops for a tick, then the player is put back in the central
- * garden. Picking a fruit grants exactly one sq'irk and the Wiki's Farming XP, then also
+ * caught: the elemental stops for a tick, and two ticks after the message the player is put
+ * outside that maze's gate. Picking a fruit grants exactly one sq'irk and the Wiki's Farming XP, then also
  * teleports the player to the central garden, so one fruit per trip by construction.
  */
 
@@ -29,8 +29,10 @@ const {
 
 /** Tiles a patrol track may run from its spawn. */
 const PATROL_MAX = 6;
-/** The Wiki does not quote the catch line; this is the wording this plugin uses. */
-const CAUGHT_MESSAGE = "The elemental spots you and teleports you out of the garden!";
+/** The catch line, as live OSRS sends it (rsprox captures). */
+const CAUGHT_MESSAGE = "You've been spotted by an elemental and teleported out of its garden.";
+/** Ticks from the catch line to the teleport out (rsprox captures). */
+const CAUGHT_TICKS = 2;
 const LEVEL_MESSAGE = (season) => `You need a Thieving level of ${season.level} to enter this garden.`;
 const PICK_LEVEL_MESSAGE = (season) => `You need a Thieving level of ${season.level} to pick fruit from this garden.`;
 
@@ -100,11 +102,11 @@ function catchPlayer(player, garden, npc) {
   const token = {};
   sessions.set(player, token);
   player.sendMessage(CAUGHT_MESSAGE);
-  later(1, () => {
+  later(CAUGHT_TICKS, () => {
     if (sessions.get(player) !== token) return;
     sessions.delete(player);
     if (player.isRegistered?.() === false) return;
-    player.moveTo(centralGarden());
+    player.moveTo(tile(garden.season.caught[0], garden.season.caught[1]));
   });
 }
 
@@ -208,6 +210,7 @@ function createGarden(season) {
     constructor() {
       super([new core.Boundary(season.area[0], season.area[1], season.area[2], season.area[3], PLANE)]);
       this.patrols = new Map();
+      this.season = season;
     }
 
     process(mobile) {
@@ -261,6 +264,7 @@ module.exports._test = {
     core = value;
   },
   CAUGHT_MESSAGE,
+  CAUGHT_TICKS,
   PATROL_MAX,
   withinCatchRange,
   lineOfSightBlocked,
@@ -268,6 +272,7 @@ module.exports._test = {
   buildTrack,
   entryBlocked,
   pickFruit,
+  catchPlayer,
   createGarden,
   sessions,
   _setApi(value) {

@@ -20,6 +20,7 @@ function crumblingWall(x, index) {
 module.exports = {
   key: "barbarian",
   name: "Barbarian Outpost",
+  helper: 9, // the Agility helper's course (enum 3507: "Barbarian Agility Course")
   lapXp: 153.2,
   petBase: 44376, // Giant squirrel base chance (Wiki)
   obstacles: [

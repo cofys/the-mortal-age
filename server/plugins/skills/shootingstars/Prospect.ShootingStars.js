@@ -4,6 +4,7 @@
  * Prospect on a crashed star (captures): synth sound 2661 and a message box, "This is a size-7
  * star. A Mining level of at least 70 is required to mine this layer. It has been mined 50% of
  * the way to the next layer." On a size-1 star the last words are "...of the way to the core."
+ * star_time_since_landed is sent with it.
  */
 
 const Common = require("./Common.ShootingStars");
@@ -24,6 +25,7 @@ function prospect(event) {
   event.handled = true;
   player.setPositionToFace(Common.starCentre(star));
   player.getPacketSender().sendSound(DATA.sounds.prospect, 1, 0);
+  Common.sendTimeSinceLanded(player, star);
   Common.mesbox(player, prospectText(star));
 }
 

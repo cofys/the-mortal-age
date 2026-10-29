@@ -22,10 +22,10 @@
 
 const PLANE = 0;
 
-/** Where picking a fruit and an elemental's catch teleport a player. */
-const CENTRAL_GARDEN = { x: 2912, y: 5472 };
-/** Where drinking from the fountain takes the player, by the Apprentice. */
-const APPRENTICE_TILE = { x: 3321, y: 3139 };
+/** Where picking a fruit teleports a player (rsprox captures). */
+const CENTRAL_GARDEN = { x: 2911, y: 5470 };
+/** Where drinking from the fountain takes the player, beside the Apprentice (rsprox captures). */
+const APPRENTICE_TILE = { x: 3321, y: 3141 };
 
 const FOUNTAIN_ID = 12941;
 
@@ -34,6 +34,7 @@ const BEER_GLASS_ID = 1919;
 const COOKING_XP_PER_BREW = 5;
 
 /**
+ * `caught` is where an elemental's catch puts the player, outside the maze's gate (rsprox captures).
  * `area` is the maze's walkable bounding box (from a flood fill of the cache's clipping
  * with the gate tiles removed); `elementals` are its spawned patrol NPC ids.
  */
@@ -54,6 +55,7 @@ const SEASONS = {
     boost: 0,
     energy: 5,
     area: [2887, 2902, 5466, 5485],
+    caught: [2905, 5470],
     elementals: [5796, 5797, 5798, 5799, 5800, 5801],
   },
   spring: {
@@ -72,6 +74,7 @@ const SEASONS = {
     boost: 1,
     energy: 10,
     area: [2921, 2936, 5458, 5477],
+    caught: [2918, 5473],
     elementals: [2956, 2957, 2958, 2959, 2960, 2961, 2962, 2963],
   },
   autumn: {
@@ -90,6 +93,7 @@ const SEASONS = {
     boost: 2,
     energy: 15,
     area: [2897, 2918, 5448, 5462],
+    caught: [2913, 5465],
     elementals: [5802, 5803, 5804, 5805, 5806, 5807],
   },
   summer: {
@@ -108,6 +112,7 @@ const SEASONS = {
     boost: 3,
     energy: 20,
     area: [2905, 2926, 5482, 5495],
+    caught: [2910, 5478],
     elementals: [1801, 1802, 1803, 1804, 1805, 1806],
   },
 };

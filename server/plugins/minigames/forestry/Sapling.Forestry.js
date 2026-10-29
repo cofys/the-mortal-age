@@ -7,9 +7,12 @@
  * - Collect builds mulch from three ingredients ("You create some mulch using droppings as the
  *   first ingredient.", "...as the second ingredient.", "...third..."); a fourth is refused;
  * - Add-mulch scores it against the sapling's recipe of one ingredient per slot, then gives:
- *   - the nutrition line and the hitsplat of 0.6 x the nutrition;
- *   - a hint for a slot that's right, or "The sapling seems to love this combination of
- *     ingredients!" when all three are;
+ *   - the reach (pickup seq) and sound 2427, then sound 7004 (7009 below 70%) with the
+ *     nutrition line, and the hitsplat of 0.6 x the nutrition; "It seems to love it!" (100%) is
+ *     spam when the player's last feed was also loved, a game message otherwise;
+ *   - a hint, with sound 7012, for each right slot not hinted to the player before (a perfect
+ *     mulch can give two); "The sapling seems to love this combination of ingredients!" the first
+ *     time the player gets all three;
  *   - bark the next tick, and Woodcutting and Farming XP;
  * - saved: "Well done, you've saved the sapling and allowed it to flourish! It appears to have a
  *   gift for you...", the thriving sapling, then bark, leaves and bonus XP the next tick; the tree
@@ -148,6 +151,7 @@ function collect({ player, object }) {
   const mulch = [...mulchOf(player), pile.index];
   const name = S().ingredients[pile.index].name;
   player.performAnimation(new Common.core.Animation(S().pickup));
+  Common.sound(player, S().sounds.collect);
   if (stage > 0) inventory.delete(ids[stage - 1], 1);
   inventory.add(new Common.core.Item(ids[mulch.length - 1], 1), true);
   player.setAttribute(MULCH_ATTRIBUTE, mulch);
@@ -204,18 +208,37 @@ function addMulch({ player, object }) {
   return true;
 }
 
+/** Per player: the slots already hinted, whether the last feed was loved, and whether they've had the perfect box. */
+function feedback(event, player) {
+  event.feedback ??= new Map();
+  if (!event.feedback.has(player)) event.feedback.set(player, { hinted: new Set(), loved: false, perfect: false });
+  return event.feedback.get(player);
+}
+
 function feed(event, player, mulch, percent) {
+  const { sounds } = S();
+  const seen = feedback(event, player);
+  player.performAnimation(new Common.core.Animation(S().pickup));
+  Common.sound(player, sounds.addMulch);
   Common.spam(player, Common.message("addMulch"));
-  player.sendMessage(percent >= 100 ? Common.message("love") : Common.message(percent >= 50 ? "like" : "accept", { percent }));
-  if (percent >= 100) {
+  Common.sound(player, percent >= 70 ? sounds.liked : sounds.accepted);
+  const line = Common.message(percent >= 100 ? "love" : percent >= 50 ? "like" : "accept", { percent });
+  if (percent >= 100 && seen.loved) Common.spam(player, line);
+  else player.sendMessage(line);
+  seen.loved = percent >= 100;
+  mulch.forEach((index, slot) => {
+    if (event.recipe[slot] !== index || seen.hinted.has(slot)) return;
+    seen.hinted.add(slot);
+    Common.sound(player, sounds.hint);
+    player.sendMessage(Common.message("hint", { ingredient: S().ingredients[index].name, ordinal: Common.ORDINALS[slot] }));
+  });
+  if (percent >= 100 && !seen.perfect) {
+    seen.perfect = true;
     player.sendMessage(Common.message("perfect"));
     const { DialogueChainBuilder, EndDialogue, ItemStatementDialogue } = Common.core;
     player.getDialogueManager().startDialogues(new DialogueChainBuilder()
       .add(new ItemStatementDialogue(0, Common.data.items.mulch[2], Common.message("perfectBox")))
       .add(new EndDialogue(1)));
-  } else {
-    const slot = mulch.findIndex((index, at) => event.recipe[at] === index);
-    if (slot >= 0) player.sendMessage(Common.message("hint", { ingredient: S().ingredients[event.recipe[slot]].name, ordinal: Common.ORDINALS[slot] }));
   }
   const heal = Math.round(0.6 * percent);
   event.progress = Math.min(event.target, event.progress + heal);

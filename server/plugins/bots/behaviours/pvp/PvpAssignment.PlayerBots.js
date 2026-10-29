@@ -201,6 +201,8 @@ function assignPvpMetadata(state, options = {}) {
   state.pvp.escapeThreshold = metadata.escapeThreshold;
   state.pvp.riskTolerance = metadata.riskTolerance;
   state.pvp.confidenceTier = metadata.confidenceTier;
+  if (metadata.combatLevelRange) state.pvp.combatLevelRange = metadata.combatLevelRange;
+  if (metadata.generatedArchetypeId) state.pvp.generatedArchetypeId = metadata.generatedArchetypeId;
   return state;
 }
 

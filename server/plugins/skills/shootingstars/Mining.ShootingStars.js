@@ -4,8 +4,12 @@
  * Mining a crashed star.
  *
  * Captures: the player turns to the star, and a tick later "You swing your pick at the star."
- * (spam) with the pickaxe's mining animation. A successful attempt gives stardust with synth
- * sound 3600. The first player to mine a newly landed star gets a message box instead
+ * (spam) with the pickaxe's noreachforward swing (human_mining_infernal_pickaxe_noreachforward,
+ * rsprox capture 3142). Each attempt replays the swing; the first is the pickaxe's interval after
+ * it, and dragon, infernal and crystal pickaxes sometimes roll a tick early (Mining plugin,
+ * "mining:roll-interval"). A successful attempt gives stardust with synth sound 3600. Mine sets
+ * star_last_mined_size and star_time_since_landed (ticks since the star landed), and Prospect the
+ * time again. The first player to mine a newly landed star gets a message box instead
  * ("Congratulations! You were the first person to find this star! ...", jingle 287) and
  * star_bonus_dust set to 300; each later success then gives one extra stardust and counts it down,
  * with a game message every 50 ("Your star discovery bonus will grant you another N star dust
@@ -23,9 +27,11 @@ const Noticeboard = require("./Noticeboard.ShootingStars");
 
 const { DATA, world } = Common;
 const BONUS_USED_UP = "<col=ff3045>Your star discovery bonus has been used up.";
+const SWING_MESSAGE = "You swing your pick at the star.";
 
-/** player -> { star, pickaxe, nextAttemptTick } */
+/** player -> { star, pickaxe, swingTick, nextAttemptTick } */
 const sessions = new Map();
+const swingAnimations = new Map();
 
 function discoveryMessage(bonus) {
   return `Congratulations! You were the first person to find this star! Your star dust gain will be doubled for the next ${bonus} dust you mine!`;
@@ -33,6 +39,17 @@ function discoveryMessage(bonus) {
 
 function bonusLeftMessage(left) {
   return `Your star discovery bonus will grant you another ${left} star dust before it runs out.`;
+}
+
+/** The star's swing: the pickaxe's human_mining_<key>_pickaxe_noreachforward, else its own. */
+function swingAnimation(pickaxe) {
+  if (!pickaxe.key) return pickaxe.animation;
+  const sequence = `human_mining_${pickaxe.key}_pickaxe_noreachforward`;
+  if (!swingAnimations.has(sequence)) {
+    const id = Common.core.CacheDefinitions.getSeqId(sequence);
+    swingAnimations.set(sequence, id == null ? pickaxe.animation : new Common.core.Animation(id));
+  }
+  return swingAnimations.get(sequence);
 }
 
 function levelRequired(star) {
@@ -71,6 +88,7 @@ function isMined(star) {
 /** The first Mine on a newly landed star: the discovery, before any mining (captures). */
 function discover(player, star) {
   star.discoveredBy = player.getUsername();
+  Common.sendLastMined(player, star);
   Common.markMined(player);
   Common.setBonusDust(player, DATA.mining.bonusDust);
   player.getPacketSender().sendJingle(DATA.jingles.discovery, 0);
@@ -96,9 +114,16 @@ function startMining(player, star) {
   }
   Common.markMined(player);
   player.setPositionToFace(Common.starCentre(star));
-  player.sendMessage("You swing your pick at the star.");
-  player.performAnimation(pickaxe.animation);
-  sessions.set(player, { star, pickaxe, nextAttemptTick: world.tick + pickaxe.attemptIntervalTicks });
+  sessions.set(player, { star, pickaxe, swingTick: world.tick + 1, nextAttemptTick: Infinity });
+}
+
+/** The tick after the click: the swing line and animation, then the first attempt one interval on. */
+function swing(player, session) {
+  session.swingTick = undefined;
+  player.getPacketSender().sendTypedMessage(Common.core.ChatType.SPAM, SWING_MESSAGE);
+  player.performAnimation(swingAnimation(session.pickaxe));
+  Common.sendTimeSinceLanded(player, session.star);
+  session.nextAttemptTick = world.tick + Common.rollInterval(session.pickaxe);
 }
 
 function mine(event) {
@@ -113,6 +138,7 @@ function mine(event) {
   }
   // The layer timer counts this tick even if the level check below fails (Wiki).
   star.pokedTick = world.tick;
+  Common.sendLastMined(player, star);
   startMining(player, star);
 }
 
@@ -137,7 +163,7 @@ function giveDust(player) {
 }
 
 function attempt(player, session, random) {
-  player.performAnimation(session.pickaxe.animation);
+  player.performAnimation(swingAnimation(session.pickaxe));
   if (Rewards.rollGemTable(player, random)) return;
   if (random() * 100 < dustChance(Common.rollMiningLevel(player))) giveDust(player);
 }
@@ -167,8 +193,12 @@ function tick(random = Math.random) {
       stop(player);
       continue;
     }
+    if (session.swingTick !== undefined) {
+      if (world.tick >= session.swingTick) swing(player, session);
+      continue;
+    }
     if (world.tick < session.nextAttemptTick) continue;
-    session.nextAttemptTick = world.tick + session.pickaxe.attemptIntervalTicks;
+    session.nextAttemptTick = world.tick + Common.rollInterval(session.pickaxe);
     attempt(player, session, random);
   }
 }
@@ -196,5 +226,7 @@ Object.assign(module.exports, {
   levelRequired,
   discoveryMessage,
   bonusLeftMessage,
+  swingAnimation,
   BONUS_USED_UP,
+  SWING_MESSAGE,
 });

@@ -128,7 +128,13 @@ export class TeleportHandler {
         player.setUntargetable(true);
         player.setTeleporting(true);
         const options = teleportType.getOptions();
-        Sounds.sendSound(player, options.sound ?? Sound.TELEPORT);
+        const sound = options.sound ?? Sound.TELEPORT;
+        const at = options.areaSoundRange ? player.getLocation?.() : null;
+        if (at) {
+            Sounds.playAreaSound({ soundId: sound.getId(), x: at.getX(), y: at.getY(), level: at.getZ(), loops: sound.getLoopType(), delay: sound.getDelay(), radius: options.areaSoundRange! });
+        } else {
+            Sounds.sendSound(player, sound);
+        }
         if (options.busy) player.getPacketSender().sendVarbit(BUSY_VARBIT, 1);
         TaskManager.submit(new TeleportTask(player, targetLocation, teleportType, onArrival, onMiddle));
         player.getClickDelay().reset();

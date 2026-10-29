@@ -62,6 +62,8 @@ module.exports = {
     obstacleXp: Obstacles.obstacleXp,
     familyAt: Obstacles.familyAt,
     crossingTarget: Obstacles.crossingTarget,
+    ropeSwingSteps: Obstacles.ropeSwingSteps,
+    routeToObstacle: Obstacles.routeToObstacle,
   },
   register(api) {
     Shared.init(api);

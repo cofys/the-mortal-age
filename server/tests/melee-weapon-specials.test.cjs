@@ -303,9 +303,11 @@ test("Lumber Up and Fishstabber boost three levels, burn all the energy and neve
 
 test("the infernal axe burns a third of its logs for half Firemaking XP and spends one charge", () => {
   const InfernalAxe = require("../plugins/skills/woodcutting/InfernalAxe.Woodcutting");
+  const actions = new Map();
   InfernalAxe.attach({
     core: { ...core, ItemIdentifiers },
     emitCustomEvent: (_name, request) => { request.xp = 100; },
+    onItemAction: (name, handlers) => actions.set(name, handlers),
   });
   const axe = {
     id: ItemIdentifiers.INFERNAL_AXE,
@@ -315,10 +317,16 @@ test("the infernal axe burns a third of its logs for half Firemaking XP and spen
     setMetaValue(key, value) { this.meta[key] = value; },
   };
   const xp = [];
+  const graphics = [];
+  const sounds = [];
+  const messages = [];
   const player = {
     getEquipment: () => ({ getItems: () => Object.assign(new Array(14).fill(null), { [Equipment.WEAPON_SLOT]: axe }) }),
     getInventory: () => ({ getItems: () => [] }),
     getSkillManager: () => ({ addExperiences: (skill, amount) => xp.push([skill, amount]) }),
+    performGraphic: (graphic) => graphics.push([graphic.id, graphic.height]),
+    getPacketSender: () => ({ sendSoundEffect: (id) => sounds.push(id) }),
+    sendMessage: (text) => messages.push(text),
   };
   const random = Math.random;
   try {
@@ -331,6 +339,11 @@ test("the infernal axe burns a third of its logs for half Firemaking XP and spen
   }
   assert.deepEqual(xp, [[Skill.FIREMAKING, 50]]);
   assert.equal(axe.meta["infernal-axe"].charges, 4999);
+  assert.deepEqual(graphics, [[86, 150]], "rsprox: smokepuff at height 150");
+  assert.deepEqual(sounds, [2596], "rsprox: the fire sound");
+  axe.meta["infernal-axe"] = { charges: 3460 };
+  assert.equal(actions.get("Infernal axe").Check({ player, item: axe }), true);
+  assert.deepEqual(messages, ["Infernal axe: 69.2% remaining."]);
 });
 
 test("Smash lowers Defence by 30% (Statius 75%) on a successful hit, for players and NPCs", () => {

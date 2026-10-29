@@ -155,7 +155,7 @@ function begin(player, ticks, animation, finish, onCancel) {
   player.getSkillManager().stopSkillable();
   H.players.add(player);
   H.actions.set(player, { due: H.tick + ticks, location: player.getLocation().clone(), area: player.getPrivateArea(), finish, cancel: onCancel });
-  player.performAnimation(new H.core.Animation(animation));
+  if (animation != null) player.performAnimation(new H.core.Animation(animation));
   return true;
 }
 

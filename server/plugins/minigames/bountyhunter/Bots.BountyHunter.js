@@ -20,12 +20,21 @@ const { startActivity } = require("../../bots/brain/BrainActivities.PlayerBots")
 const { setModePvp } = require("../../bots/behaviours/state/State.PlayerBots");
 const { clearMovementRequest, queueRouteAndFlagAppearance } = require("../../bots/behaviours/navigation/Navigation.PlayerBots");
 const { getPvpProfile } = require("../../bots/behaviours/pvp/PvpProfileRegistry.PlayerBots");
+const { applyGeneratedPvpLoadout } = require("../../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
+const { buildRoamingPvpMetadata } = require("../../bots/behaviours/pvp/PvpAssignment.PlayerBots");
+const { pickTierChoice, TIER_PROFILE_IDS } = require("../../bots/behaviours/pvp/PvpTierLoadouts.PlayerBots");
 const { isFoodItem } = require("../../items/Food.plugin");
 const Entry = require("./Entry.BountyHunter");
 const Coffer = require("./Coffer.BountyHunter");
 
-const MIN_BOTS = 30;
-const MAX_BOTS = 50;
+const MAX_BOTS = 60;
+const BOT_BANDS = [
+  { min: 32, max: 80, tier: "novice" },
+  { min: 81, max: 100, tier: "intermediate" },
+  { min: 101, max: 110, tier: "veteran" },
+  { min: 111, max: 120, tier: "veteran" },
+  { min: 121, max: 126, tier: "veteran" },
+];
 const BOT_ATTRIBUTE = "bounty-hunter:bot";
 const PVP_ACTIVITY = "pvp";
 const TARGET_HOLD_MS = 30 * 60 * 1000; // the target is the crater's to clear, not the engine's timer
@@ -42,6 +51,7 @@ let bh;
 
 /** The live bot players. */
 const bots = new Set();
+const botBands = new WeakMap();
 /** Numbers each spawn: bots despawned a moment ago may still be online under their names. */
 let spawnedBots = 0;
 let populationTarget = 0;
@@ -71,25 +81,39 @@ function prepareBot(player) {
 }
 
 function spawnBot(runtime, behaviorMode) {
+  const counts = BOT_BANDS.map((band) => [...bots].filter((bot) => botBands.get(bot) === band).length);
+  const bandIndex = counts.indexOf(Math.min(...counts));
+  const band = BOT_BANDS[bandIndex];
+  const profileId = band.min >= 111 && counts[bandIndex] % 2 === 0 ? "elite" : TIER_PROFILE_IDS[band.tier];
+  const choice = pickTierChoice(band.tier, { index: counts[bandIndex], band, profileId, excludeF2p: true });
+  if (!choice) return;
+  const pvpMetadata = {
+    ...buildRoamingPvpMetadata({ config: { pvp: {
+      profileWeights: [{ value: profileId, weight: 1 }],
+      loadoutWeights: [{ value: choice.loadoutId, weight: 1 }],
+    } } }),
+    combatLevelRange: band,
+    generatedArchetypeId: choice.archetypeId,
+  };
   const spawn = Entry.spawnTile();
-  const bot = runtime.spawnPvpBot(spawn, { username: `BhBot${++spawnedBots}`, mode: behaviorMode.PVP });
+  const bot = runtime.spawnPvpBot(spawn, { username: `BhBot${++spawnedBots}`, mode: behaviorMode.PVP, pvpMetadata });
   const state = bot && stateOf(bot);
   if (!state?.pvp) return;
   bot.setAttribute(BOT_ATTRIBUTE, true);
   prepareBot(bot);
   startActivity(bot, PVP_ACTIVITY, { home: { x: spawn.getX(), y: spawn.getY(), z: spawn.getZ() } });
   bots.add(bot);
+  botBands.set(bot, band);
 }
 
 function populate({ player }) {
   if (player.isPlayerBot?.() === true || populationTarget > 0) return;
-  const { runtime, behaviorMode } = getActiveBotRuntime();
+  const { runtime } = getActiveBotRuntime();
   if (!runtime) {
     player.sendMessage("Bots are unavailable on this world.");
     return;
   }
-  populationTarget = core.Misc.random(MIN_BOTS, MAX_BOTS);
-  for (let index = 0; index < populationTarget; index++) spawnBot(runtime, behaviorMode);
+  populationTarget = MAX_BOTS;
 }
 
 function despawnAll() {
@@ -213,10 +237,14 @@ function defensiveAction(request) {
   if (!isBot(player) || !onCraterTile(player)) return;
   const pvp = state.pvp;
   if (pvp.retreat && !pvp.retreat.exit) return;
-  // A fresh spawn or death with no kit still uses the PvP engine's existing regear.
+  // Death can leave coins or one protected item; neither is a usable PvP kit.
   if (!pvp.retreat && !retreatDecisions.has(player) &&
-      !player.getInventory().getItems().some((item) => item?.getId?.() > 0) &&
-      !player.getEquipment().getItems().some((item) => item?.getId?.() > 0)) return;
+      (pvp.loadoutPending || !player.getEquipment().getItems().some((item) => item?.getId?.() > 0))) {
+    const applied = applyGeneratedPvpLoadout(player, state, { api });
+    if (!applied) pvp.loadoutPending = true;
+    request.result = { handled: true, status: applied ? "success" : "running" };
+    return;
+  }
   request.result = { handled: false, status: "running" };
   if (!pvp.retreat) {
     const food = player.getInventory().getItems().filter((item) => isFoodItem(item?.getId?.())).length;
@@ -227,7 +255,7 @@ function defensiveAction(request) {
     if (!retreatDecisions.has(player)) {
       retreatDecisions.set(player, Math.random() >= getPvpProfile(pvp.profileId).riskTolerance);
     }
-    if (!retreatDecisions.get(player)) return;
+    if (food > 0 && !retreatDecisions.get(player)) return;
     const here = player.getLocation();
     const distanceTo = (exit) => Math.max(Math.abs(here.getX() - exit.x), Math.abs(here.getY() - exit.y));
     const exit = bh.CRATER.exits.reduce((best, next) => distanceTo(next) < distanceTo(best) ? next : best);
@@ -267,7 +295,9 @@ function clearRetreat({ player }) {
   if (!isBot(player)) return;
   retreatDecisions.delete(player);
   const pvp = stateOf(player)?.pvp;
-  if (!pvp?.retreat) return;
+  if (!pvp) return;
+  if (player.getHitpoints() <= 0 || player.isDyingReturn?.()) pvp.loadoutPending = true;
+  if (!pvp.retreat) return;
   player.setAutoRetaliate(pvp.retreat.autoRetaliate);
   pvp.retreat = null;
   clearMovementRequest(player);
@@ -317,4 +347,4 @@ module.exports = function attachBots(pluginApi, state) {
   api.onServerStartup(startTask);
 };
 
-Object.assign(module.exports, { _test: { huntTarget, dropTarget } });
+Object.assign(module.exports, { _test: { huntTarget, dropTarget, BOT_BANDS, MAX_BOTS } });

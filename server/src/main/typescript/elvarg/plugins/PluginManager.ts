@@ -100,6 +100,7 @@ import {
   PluginCombatHitRollEvent,
   PluginCombatHitDamageEvent,
   PluginAttackTimingEvent,
+  PluginAnimationStallEvent,
   PluginAttackSpeedEvent,
   PluginCombatHitResolvedEvent,
   PluginCombatAttackDistanceEvent,
@@ -268,7 +269,7 @@ export class PluginManager {
   /** Main-world locs used from a boat deck from further than usual, by id (setDeckReach). */
   public static readonly deckReach = new Map<number, number>();
   /** Main-world loc names usable from a boat deck (setUsableFromDeck). */
-  public static readonly usableFromDeck = new Set<string>();
+  public static readonly usableFromDeck = new Set<string | number>();
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -328,6 +329,7 @@ export class PluginManager {
   private static combatHitRollHooks: PluginHook<PluginCombatHitRollEvent>[] = [];
   private static combatHitDamageHooks: PluginHook<PluginCombatHitDamageEvent>[] = [];
   private static attackTimingHooks: PluginHook<PluginAttackTimingEvent>[] = [];
+  private static animationStallHooks: PluginHook<PluginAnimationStallEvent>[] = [];
   private static attackSpeedHooks: PluginHook<PluginAttackSpeedEvent>[] = [];
   private static combatHitResolvedHooks: PluginHook<PluginCombatHitResolvedEvent>[] = [];
   private static combatAttackDistanceHooks: PluginHook<PluginCombatAttackDistanceEvent>[] = [];
@@ -336,6 +338,8 @@ export class PluginManager {
   private static npcAggressionToleranceHooks: PluginHook<PluginNpcAggressionToleranceEvent>[] = [];
   private static playerDefeatedHooks: PluginHook<PluginPlayerDefeatedEvent>[] = [];
   private static itemOnObjectHooks: PluginHook<PluginItemOnObjectEvent>[] = [];
+  /** Item-on-object handlers registered with `fallback`: run when no other handler took the use. */
+  private static itemOnObjectFallbackHooks: PluginHook<PluginItemOnObjectEvent>[] = [];
   private static itemOnItemHooks: PluginHook<PluginItemOnItemEvent>[] = [];
   private static itemOnNpcHooks: PluginHook<PluginItemOnNpcEvent>[] = [];
   private static itemOnPlayerHooks: PluginHook<PluginItemOnPlayerEvent>[] = [];
@@ -1660,6 +1664,14 @@ export class PluginManager {
     }
   }
 
+  public static emitAnimationStall(event: PluginAnimationStallEvent): void {
+    if (PluginManager.animationStallHooks.length === 0) return;
+    if (!event?.player) return;
+    for (const hook of PluginManager.animationStallHooks) {
+      PluginManager.executeHook(hook, event, "animation_stall", "animation_stall");
+    }
+  }
+
   /** The ticks until the attacker's next attack after the hooks had their say (at least 1). */
   public static emitAttackSpeed(attacker: any, target: any, combatType: any, speed: number): number {
     if (PluginManager.attackSpeedHooks.length === 0 || !attacker) return speed;
@@ -1791,6 +1803,9 @@ export class PluginManager {
 
   public static emitItemOnObject(event: PluginItemOnObjectEvent): boolean {
     for (const hook of PluginManager.itemOnObjectHooks) {
+      PluginManager.executeHook(hook, event, "item_on_object", "item_on_object");
+    }
+    for (const hook of PluginManager.itemOnObjectFallbackHooks) {
       PluginManager.executeHook(hook, event, "item_on_object", "item_on_object");
     }
     return event.handled === true;
@@ -3122,8 +3137,8 @@ export class PluginManager {
       setDeckReach: (objectIds, tiles) => {
         for (const id of objectIds ?? []) PluginManager.deckReach.set(id, tiles);
       },
-      setUsableFromDeck: (names) => {
-        for (const name of names ?? []) PluginManager.usableFromDeck.add(name);
+      setUsableFromDeck: (namesOrIds) => {
+        for (const entry of namesOrIds ?? []) PluginManager.usableFromDeck.add(entry);
       },
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {
@@ -3618,6 +3633,10 @@ export class PluginManager {
         if (typeof handler !== "function") return;
         PluginManager.attackSpeedHooks.push({ ...hookProfile(handler), handler });
       },
+      onAnimationStall: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.animationStallHooks.push({ pluginName, handler });
+      },
       onCombatHitResolved: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.combatHitResolvedHooks.push({ ...hookProfile(handler), handler });
@@ -3738,7 +3757,7 @@ export class PluginManager {
         if (typeof handler !== "function") {
           return;
         }
-        PluginManager.itemOnObjectHooks.push({
+        (filter?.fallback ? PluginManager.itemOnObjectFallbackHooks : PluginManager.itemOnObjectHooks).push({
           ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.object) {

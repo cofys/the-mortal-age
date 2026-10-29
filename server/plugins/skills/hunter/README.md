@@ -61,6 +61,36 @@ interpolation in `Context.probability`. Where the Wiki publishes no numbers, the
   `quest.<key>.stage >= 2`. Tracking, box traps, Herbiboar and a full drift-net cycle have been
   played through with the agent MCP; most other methods have not.
 
+## Trap, catch and trail feedback
+
+From rsprox captures (box traps 119, 120, 1104, 1108, 1871, 4002, 4051; bird snares 70, 1102, 1788;
+net traps 1108, 1115, 1128, 1858; deadfalls 1105, 1757; pitfalls 1108, 1757, 1858; broav pit 1698;
+butterflies and moths 95, 1634, 3279, 4051; herbiboar 127, 552, 554, 1858; bird houses 545-572):
+
+- Laying: the lay animation, the set-up sound (box 2636, bird snare 2646, net 2644, deadfall 2645)
+  and `You begin setting up the trap.` (`... a trap.` for nets and deadfalls) come at once, all
+  spam. A box trap or snare goes on the floor until its loc replaces it (2 and 3 ticks); a tree or
+  boulder shows its setting loc and the trap stands a tick later. Reset lays again three ticks
+  after the dismantle.
+- Each trap state sends the cache's `add_overlaytimer_loc` timer: yellow while it waits, green on a
+  catch, red when it failed.
+- A catch shows the creature's trapping loc (the cache's `_full_` loc renamed `_trapping_`, or
+  `_catching_` for saplings; box traps add the side the creature came from) and a miss the failing
+  loc, with the trap's sound; the full or failed loc follows two ticks later. No message is sent.
+- Check and Dismantle: the trap's own animation (5212, or 5207 for snares and nets), then two ticks
+  later sound 2632, `You dismantle the trap.` and `You've caught a <creature>.` (spam). Pitfalls
+  send the dismantle line at once and `You've caught a <creature>!` a tick later. Collapses:
+  `The box trap that you laid has collapsed.`, `The net trap that you set has collapsed.` (spam),
+  `The bird snare that you laid has fallen over.` (game).
+- Barehanded butterflies and moths resolve on arrival: `hunting_impling_catch`, the creature's
+  `_out_spot_anim` graphic and sound 7870 (45 cycles late), `You catch and release the <name>.`
+- Herbiboar trails: the bush-search animation, then the object's line two ticks later; the harvest is
+  `pruning_high` with the herbiboar waking, then sound 1641, the herbs and two game messages.
+
+Not in yet: live pitfalls are one varbit-driven loc per spot (`hunt_pitfall_state<n>`) with a coord
+timer, and the creature falls in about 8 ticks after the jump; here the pit is replaced by spawned
+locs and the catch lands on the jump.
+
 ## Impling catching
 
 From rsprox captures (main game 1342, 1389, 1510, 2520; Leagues 92, 95, 164, 1757, 1823, 1858)

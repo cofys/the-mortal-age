@@ -11,10 +11,11 @@ const Ammo = require("./Ammo.DwarfCannon");
 const MESSAGE = {
   BROKEN: "Your cannon has broken!",
   REPAIRED: "You repair your cannon, restoring it to working order.",
-  LOST: "Your cannon has decayed. Speak to Nulodion to obtain a new one.",
   NO_SPACE: "You need more inventory space to pick up your cannon.",
 };
+/** Captured: the pick-up line is spam; the decay line is red, on the tick it goes or at login (rsprox 1511, 1512). */
 const PICKED_UP = "You pick up the cannon. It's really heavy.";
+const LOST = "<col=ef1020>Your cannon has decayed. Speak to Nulodion to get a new one!";
 
 /** Every tick the cannon stands. */
 function tick(cannon) {
@@ -41,7 +42,7 @@ function markLost(player, kind, stage, steel = 0, granite = 0) {
   player.setAttribute(Cannon.LOST_ATTRIBUTE, steel || granite ? { kind, stage, steel, granite } : { kind, stage });
   player.setAttribute(Cannon.STATE_ATTRIBUTE, null);
   Cannon.clearVars(player);
-  player.sendMessage(MESSAGE.LOST);
+  player.sendMessage(LOST);
 }
 
 /** "Repair" on the owner's broken cannon. */
@@ -69,7 +70,7 @@ function pickUp({ player, object }) {
     player.sendMessage(MESSAGE.NO_SPACE);
     return true;
   }
-  player.sendMessage(PICKED_UP);
+  player.getPacketSender().sendTypedMessage(Cannon.core.ChatType.SPAM, PICKED_UP);
   Cannon.forget(cannon);
   player.setAttribute(Cannon.STATE_ATTRIBUTE, null);
   Cannon.clearVars(player);
@@ -126,4 +127,4 @@ module.exports = function attachDecay(api) {
   api.registerCommand("cannondecay", fastForwardDecay, api.core.PlayerRights.DEVELOPER, "Break your cannon, or make a broken one disappear");
 };
 
-Object.assign(module.exports, { tick, breakDown, lose, repair, pickUp, reattach, detach, fastForwardDecay, MESSAGE, PICKED_UP });
+Object.assign(module.exports, { tick, breakDown, lose, repair, pickUp, reattach, detach, fastForwardDecay, MESSAGE, PICKED_UP, LOST });

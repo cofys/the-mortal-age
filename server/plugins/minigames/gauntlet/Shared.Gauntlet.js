@@ -23,6 +23,8 @@ function api() {
 
 // The lobby beneath Prifddinas, where runs start and end, and the way up to the city.
 const LOBBY = { x: 3032, y: 6127, z: 1 };
+// Where the Gauntlet Portal down from Prifddinas lands, two tiles south of where runs end (rsprox captures).
+const LOBBY_ENTRY = { x: 3032, y: 6125, z: 1 };
 const LOBBY_ZONE = { minX: 3016, maxX: 3047, minY: 6112, maxY: 6143, levels: [1] };
 // Beside the Gauntlet Portal (36081) in Prifddinas.
 const PRIFDDINAS = { x: 3227, y: 6114, z: 0 };
@@ -169,7 +171,7 @@ function clearItems(player) {
 
 module.exports = {
   bind, core, api,
-  LOBBY, LOBBY_ZONE, PRIFDDINAS, PLANE, PREP_TICKS, NPC, OBJECT, VARP, VARBIT, INTERFACE, SCRIPT,
+  LOBBY, LOBBY_ENTRY, LOBBY_ZONE, PRIFDDINAS, PLANE, PREP_TICKS, NPC, OBJECT, VARP, VARBIT, INTERFACE, SCRIPT,
   OVERLAY_HUD_UID,
   loc, later, repeat, statement, npcSay, options, fade, fadeMove, isEmptyHanded, clearItems,
 };

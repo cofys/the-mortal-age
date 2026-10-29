@@ -155,7 +155,7 @@ The client draws everything from varbits; the server keeps them right.
 **Picking up the preform** (recording 565)
 - The jig goes 1→2 on pouring and 2→3 two ticks later.
 - On pickup:
-  - "Your Ice gloves cool the preform as you reach for it.";
+  - "Your Ice gloves cool the preform as you reach for it." on the spam channel (recordings 96, 100, 101, 565);
   - preform difficulty, quality and start quality are set;
   - seeds 1-6 are set, temperature becomes about 990, and alloy difficulty and the selected parts clear;
   - the jig returns to 0;

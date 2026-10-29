@@ -1,8 +1,19 @@
+/**
+ * Stalls (Wiki: Thieving#Stalls and each stall's page).
+ *
+ * rsprox captures (recordings 1554, 3220 and Leagues/Grid Master 1098, 1102, 1104, 1105, 3275):
+ * every attempt and steal line is a spam message. The pickup animation and synth 2581 play on the
+ * click; a tick later the item, the line and the empty stall. A stolen item is "You steal a cake.",
+ * "an uncut emerald", "a silver bar", "a banana"; a few have their own line (bread, silver ore,
+ * silk, tea). Items not seen in a capture follow the same rule ("some" for a plural name).
+ */
 let core;
 const THEFT_ATTRIBUTE = "thieving:stall-thefts";
 const theftTimers = new WeakMap();
 const THIEVING_SOUND = 2581;
-const GUARDS = new Set(["guard", "market guard", "black guard", "knight of ardougne", "paladin", "hero"]);
+const GUARDS = new Set(["guard", "market guard", "black guard", "knight of ardougne", "paladin", "hero", "guard dog"]);
+/** Lookouts that attack without the guards' line (Hosidius's guard dogs). */
+const SILENT_GUARDS = new Set(["guard dog"]);
 // shortcut: a five-tile lookout range, verify the exact radius against a live stall capture.
 const LOOKOUT_RADIUS = 5;
 const depleted = new WeakMap();
@@ -23,7 +34,8 @@ const STALLS = new Map([
       ],
     },
   ],
-  ["Silk stall", { theft: "silk", respawnTicks: 8, owners: ["Silk merchant", "Silk Merchant", "Anwen"], petBase: 68926, level: 20, xp: 24, rewards: [["SILK", 1, 1]] }],
+  ["Silk stall", { theft: "silk", attemptMessage: "You attempt to steal some silk from the silk stall.", respawnTicks: 8, owners: ["Silk merchant", "Silk Merchant", "Anwen"], petBase: 68926, level: 20, xp: 24,
+    rewards: [["SILK", 1, 1, "You steal a piece of silk."]] }],
   ["Tea stall", { theft: "tea", attemptMessage: "You attempt to steal a cup of tea...", respawnTicks: 4, owners: ["Tea Seller"], petBase: 68926, level: 5, xp: 16, rewards: [["CUP_OF_TEA", 1, 1, "You steal a cup of tea."]] }],
   ["Fur stall", { theft: "fur", respawnTicks: 12, owners: ["Fur trader", "Fur Merchant"], petBase: 36490, level: 35, xp: 45, rewards: [["GREY_WOLF_FUR", 1, 1]] }],
   [
@@ -77,6 +89,10 @@ STALLS.set("Spice stall", { theft: "spice", minutes: 6, respawnTicks: 10, owners
 STALLS.set("Market stall", { theft: "wine", respawnTicks: 8, owners: ["Fortunato"], petBase: 36490, level: 22, xp: 27,
   rewards: [["BOTTLE_OF_WINE", 1, 11], ["GRAPES", 1, 17], ["JUG", 1, 39], ["JUG_OF_WATER", 1, 20], ["JUG_OF_WINE", 1, 13]] });
 
+// Hosidius (Wiki: Fruit Stall): restocks in 2.4 seconds; guard dogs watch the town square's.
+STALLS.set("Fruit Stall", { theft: "hosidius", respawnTicks: 4, owners: [], petBase: 124066, level: 25, xp: 28.5,
+  rewards: [["COOKING_APPLE", 1, 40], ["BANANA", 1, 20], ["STRAWBERRY", 1, 7], ["JANGERBERRIES", 1, 5], ["LEMON", 1, 5], ["REDBERRIES", 1, 5],
+    ["PINEAPPLE", 1, 5], ["LIME", 1, 5], ["STRANGE_FRUIT", 1, 5], ["GOLOVANOVA_FRUIT_TOP", 1, 2], ["PAPAYA_FRUIT", 1, 1]] });
 STALLS.set("Baker's stall", STALLS.get("Bakery stall"));
 STALLS.set("Baker's Stall", STALLS.get("Bakery stall"));
 STALLS.set("Gem Stall", STALLS.get("Gem stall"));
@@ -96,6 +112,17 @@ function randomReward(rewards) {
 
 let pluginApi;
 
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
+}
+
+/** "You steal a cake.", "an uncut emerald", "some jangerberries" (a plural name), as live names a stolen item. */
+function stealLine(item) {
+  const name = String(item.getDefinition().getName() ?? "").toLowerCase();
+  const article = /[^s]s$/.test(name) ? "some" : /^[aeiou]/.test(name) ? "an" : "a";
+  return `You steal ${article} ${name}.`;
+}
+
 /** The cache's empty counterpart, preserving each market's stall model and footprint. */
 function emptyStallId(object) {
   const ids = core.ObjectIdentifiers;
@@ -103,6 +130,7 @@ function emptyStallId(object) {
   if (id === ids.MARKET_STALL_14) return ids.MARKET_STALL_15;
   if (id === ids.BAKERS_STALL_2) return ids.EMPTY_STALL;
   if ([ids.GEM_STALL_2, ids.BAKERY_STALL_2, ids.SILVER_STALL_2].includes(id)) return ids.MARKET_STALL_12;
+  if (id === ids.FRUIT_STALL_3) return ids.FRUIT_STALL;
   if ([ids.SILK_STALL_5, ids.SILVER_STALL_4, ids.GEM_STALL_6, ids.SPICE_STALL_5].includes(id)) return ids.MARKET_STALL_25;
   if ([ids.SILK_STALL_7, ids.FUR_STALL_7, ids.GEM_STALL_8, ids.SPICE_STALL_6, ids.BAKERS_STALL_4].includes(id)) return ids.MARKET_STALL_28;
   return ids.MARKET_STALL;
@@ -136,7 +164,7 @@ function caughtStealing(player, stall) {
     ?? nearby.find((npc) => stall.owners.includes(npc.getDefinition().getName()) && npc.getHitpoints() > 0
       && (!stall.safeUnderOwner || !npc.getLocation().equals(player.getLocation())) && seesPlayer(npc));
   if (!lookout) return false;
-  lookout.forceChat("Hey! Get your hands off there!");
+  if (!SILENT_GUARDS.has(String(lookout.getDefinition().getName() ?? "").toLowerCase())) lookout.forceChat("Hey! Get your hands off there!");
   const guard = guards.includes(lookout) ? lookout : guards[0];
   if (guard) guard.getCombat().attack(player);
   return true;
@@ -229,7 +257,7 @@ function finishTheft(event, stall) {
   pluginApi.emitCustomEvent("storage:gather", request);
   if (reward.getAmount() > request.stored) player.getInventory().addItem(new core.Item(reward.getId(), reward.getAmount() - request.stored));
   player.getSkillManager().addExperiences(core.Skill.THIEVING, stall.xp);
-  player.sendMessage(message ?? `You steal ${reward.getAmount()} x ${reward.getDefinition().getName()}.`);
+  spam(player, message ?? stealLine(reward));
   rememberTheft(player, stall, theftVarbitKey(object, stall));
   pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: stall.petBase, method: "stall",
     stall: event.definition.getName(), itemId: reward.getId(), location: object.getLocation() });
@@ -276,7 +304,7 @@ function handleStealFromStall(event) {
 
   player.setPositionToFace(event.object.getLocation());
   const attempt = stall.attemptMessage;
-  if (attempt) player.sendMessage(attempt);
+  if (attempt) spam(player, attempt);
   if (caughtStealing(player, stall)) return;
   player.getClickDelay().reset();
   player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId("human_pickuptable")));
@@ -305,7 +333,8 @@ function attach(api) {
   api.onObjectInteraction("Baker's stall", { "Steal-from": handleStealFromStall });
   api.onObjectInteraction("Baker's Stall", { "Steal-from": handleStealFromStall });
   api.onObjectInteraction("Seed Stall", { "Steal from": handleStealFromStall });
+  api.onObjectInteraction("Fruit Stall", { "Steal-from": handleStealFromStall });
 }
 
 module.exports = attach;
-module.exports._test = { handleStealFromStall, STALLS, depleted, emptyStallId, merchantInteraction, login, logout, THEFT_ATTRIBUTE };
+module.exports._test = { handleStealFromStall, stealLine, STALLS, depleted, emptyStallId, merchantInteraction, login, logout, THEFT_ATTRIBUTE };

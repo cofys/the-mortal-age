@@ -11,6 +11,9 @@
  *   { anim: id, delay? }              play an animation (delay in client cycles)
  *   { render: id | null }             walk/stand animation override, null restores it
  *   { walk: [[x, y], ...] }           forced walk, one tile per tick, ignoring clipping
+ *   { walk: [[x, y], ...], arrive: true }
+ *                                     the steps after it run on the tick the last tile is
+ *                                     reached (a tightrope's XP), not the tick after
  *   { move: [x, y, z?], anim?, speed?, dir?, ticks? }
  *                                     exact-move to a tile, landing after `ticks` ticks;
  *                                     `ticks: 0` starts the move and leaves landing to a `tele`
@@ -18,11 +21,15 @@
  *   { wait: ticks }                   continue after this many ticks
  *   { face: [x, y] } | { faceDir: "north" | ... }
  *   { hit: n | [min, max] }           damage the player
- *   { msg: text } | { say: text }     game message / overhead text
+ *   { msg: message } | { say: text }  chat message (see `sendMessage`) / overhead text
  *   { varbit: [id, value] }           set a player varbit (a multiloc's side, say)
  *   { sound: id, loops?, delay? }     sound effect (delay in client cycles)
+ *   { areaSound: id, at: [x, y, z], radius? }
+ *                                     a sound at a tile, for every player near it
  *   { gfx: id, delay?, height? }      play a graphic on the player (delay in client cycles)
  *   { objAnim: id }                   animate the obstacle object
+ *   { complete: true }                the obstacle counts as done here (XP, messages, the lap);
+ *                                     the steps after it still play (a step off the landing)
  *   { run: (ctx) => void }            escape hatch for one-off behaviour
  *
  * Coordinates are absolute tiles; an omitted plane means the player's current plane.
@@ -48,6 +55,10 @@ const MAX_WALK_TILES = 64;
 const BUSY_ATTRIBUTE = "agility.obstacle";
 
 let TaskManager;
+let ChatType;
+let Sounds;
+let StatementDialogue;
+let DialogueChainBuilder;
 let Location;
 let Animation;
 let Graphic;
@@ -62,6 +73,7 @@ let ObstacleTask = null;
 function init(api) {
   TaskManager = api.getTaskManager();
   ({ Location, Animation, Graphic, Direction, Flag, ForceMovement, HitDamage, HitMask } = api.core);
+  ({ ChatType, Sounds, StatementDialogue, DialogueChainBuilder } = api.core);
   ObstacleTask = createObstacleTask(api.core.Task);
 }
 
@@ -90,6 +102,20 @@ function setRender(player, animationId) {
 
 function animate(player, id, delay = 0) {
   player.performAnimation(new Animation(id < 0 ? Animation.DEFAULT_RESET_ANIMATION.getId() : id, delay));
+}
+
+/**
+ * An obstacle's message: a string is a game message, `{ spam: text }` goes to the filterable spam
+ * channel, and `{ mesbox: text }` is a message box (live sends most obstacle lines as spam).
+ */
+function sendMessage(player, message) {
+  if (typeof message === "string") {
+    player.sendMessage(message);
+  } else if (message?.spam) {
+    player.getPacketSender().sendTypedMessage(ChatType.SPAM, message.spam);
+  } else if (message?.mesbox) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, message.mesbox)));
+  }
 }
 
 function hit(player, amount) {
@@ -150,7 +176,12 @@ function createObstacleTask(Task) {
       this.waitTicks = 0;
       this.walkPath = null;
       this.walkedTiles = 0;
+      this.walkArrives = false;
       this.finished = false;
+      this.completed = false;
+      // Ticks run, and the tick this obstacle last started an animation on.
+      this.ticksRun = 0;
+      this.animatedTick = -1;
     }
 
     execute() {
@@ -158,6 +189,7 @@ function createObstacleTask(Task) {
         this.stop();
         return;
       }
+      this.ticksRun++;
       if (!this.player.isRegistered?.() || this.player.getHitpoints() <= 0) {
         this.finish(false);
         return;
@@ -179,6 +211,9 @@ function createObstacleTask(Task) {
     advanceWalk() {
       while (this.walkPath.length > 0) {
         if (this.walkedTiles++ < MAX_WALK_TILES && stepTowards(this.player, this.walkPath[0])) {
+          if (this.walkArrives && this.walkPath.length === 1 && this.atTile(this.walkPath[0])) {
+            this.walkPath = null;
+          }
           return;
         }
         this.walkPath.shift();
@@ -186,17 +221,28 @@ function createObstacleTask(Task) {
       this.walkPath = null;
     }
 
+    atTile(tile) {
+      const location = this.player.getLocation();
+      return location.getX() === tile[0] && location.getY() === tile[1];
+    }
+
+    animate(id, delay = 0) {
+      animate(this.player, id, delay);
+      if (id >= 0) this.animatedTick = this.ticksRun;
+    }
+
     applyStep(step) {
       const player = this.player;
       if (step.wait != null) {
         this.waitTicks = step.wait;
       } else if (step.anim != null) {
-        animate(player, step.anim, step.delay ?? 0);
+        this.animate(step.anim, step.delay ?? 0);
       } else if ("render" in step) {
         setRender(player, step.render);
       } else if (step.walk) {
         this.walkPath = step.walk.map((tile) => [tile[0], tile[1]]);
         this.walkedTiles = 0;
+        this.walkArrives = step.arrive === true;
         this.advanceWalk();
       } else if (step.moveStart) {
         this.startMove(step.moveStart);
@@ -215,13 +261,18 @@ function createObstacleTask(Task) {
       } else if (step.hit != null) {
         hit(player, step.hit);
       } else if (step.msg) {
-        player.sendMessage(step.msg);
+        sendMessage(player, step.msg);
       } else if (step.say) {
         player.forceChat(step.say);
       } else if (step.varbit) {
         player.getPacketSender().sendVarbit(step.varbit[0], step.varbit[1]);
       } else if (step.sound != null) {
         player.getPacketSender().sendSoundEffect(step.sound, step.loops ?? 1, step.delay ?? 0);
+      } else if (step.areaSound != null) {
+        const [x, y, z] = step.at;
+        Sounds.playAreaSound({ soundId: step.areaSound, x, y, level: z, radius: step.radius ?? 0 });
+      } else if (step.complete) {
+        this.complete();
       } else if (step.gfx != null) {
         // Graphic reads a third argument of 0-2 as a Priority, so a height is only passed when set.
         player.performGraphic(step.height
@@ -255,7 +306,7 @@ function createObstacleTask(Task) {
       );
       player.getMovementQueue().reset();
       if (step.anim != null) {
-        animate(player, step.anim, step.delay ?? 0);
+        this.animate(step.anim, step.delay ?? 0);
       }
       player.setForceMovement(forceMovement);
     }
@@ -279,12 +330,20 @@ function createObstacleTask(Task) {
       this.finish(true);
     }
 
+    /** The obstacle's outcome (XP, messages, the lap), once: at a `complete` step or the end. */
+    complete(completed = true) {
+      if (this.completed) return;
+      this.completed = true;
+      this.onFinish?.(completed);
+    }
+
     finish(completed) {
       if (this.finished) return;
       this.finished = true;
       super.stop();
-      release(this.player);
-      this.onFinish?.(completed);
+      // A landing animation started on the last tick plays out; resetting it would cut it off.
+      release(this.player, this.animatedTick === this.ticksRun);
+      this.complete(completed);
     }
 
     /** Anything that cancels this task (teleports, logout sweeps) must still unlock the player. */
@@ -304,7 +363,7 @@ function lock(player, task) {
   player.getMovementQueue().setBlockMovement(true);
 }
 
-function release(player) {
+function release(player, keepAnimation = false) {
   if (player.getAttribute(BUSY_ATTRIBUTE) == null) return;
   player.setAttribute(BUSY_ATTRIBUTE, null);
   player.getMovementQueue().setBlockMovement(false);
@@ -312,7 +371,9 @@ function release(player) {
     player.setForceMovement(null);
   }
   setRender(player, null);
-  animate(player, RESET_ANIMATION);
+  if (!keepAnimation) {
+    animate(player, RESET_ANIMATION);
+  }
 }
 
 /**
@@ -344,4 +405,5 @@ module.exports = {
   run,
   completeNow,
   directionBetween,
+  sendMessage,
 };

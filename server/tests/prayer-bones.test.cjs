@@ -32,6 +32,7 @@ const configReads = [];
 const api = {
   core: {
     Bank: require("../dist/game/model/container/impl/Bank").Bank,
+    ChatType: require("../dist/net/protocol/ClientProtocol").ChatType,
     Skill, Location, Equipment, ItemIdentifiers: Items, ObjectIdentifiers: Objects, CacheDefinitions, Animation, Sound,
     Task, CountdownTask, ItemDefinition,
     WorldDefinition: { isMembersWorld: () => membersWorld },
@@ -105,6 +106,12 @@ function player({ at = [3222, 3218], prayer = 50, maxPrayer = 70, amulet = null,
     }),
   };
 }
+
+/** Records spam lines (rsprox captures: burying and scattering never send game messages). */
+const spamTo = (who) => (type, text) => {
+  assert.equal(type, api.core.ChatType.SPAM, text);
+  who.messages.push(text);
+};
 
 const bury = (who, itemId, extra = {}) => {
   const request = { player: who, itemId, handled: false, ...extra };
@@ -226,7 +233,8 @@ test("a scatter resolves on the click, with the sequence, synth, message and exp
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
     getInventory: () => ({ get: (slot) => slots[slot] ?? null, deleteAtSlot: (slot) => { slots[slot] = null; } }),
     getSkillManager: () => ({ ...skills, stopSkillable() {} }),
-    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage: (text) => assert.fail(`game message: ${text}`),
+    getPacketSender: () => ({ sendInterfaceRemoval() {}, sendTypedMessage: spamTo(who) }),
     performAnimation: (animation) => animations.push(animation),
   });
   // This api has no CountdownTask or task manager, so a scatter that waited for a later tick throws.
@@ -259,7 +267,8 @@ function burialPlayer(ids, maxPrayer = 70) {
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
     getSkill: () => state.skill, setSkill: skill => { state.skill = skill; },
     getSkillManager: () => ({ ...skills, stopSkillable() { state.skill?.cancel(who); state.skill = null; } }),
-    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage: (text) => assert.fail(`game message: ${text}`),
+    getPacketSender: () => ({ sendInterfaceRemoval() {}, sendTypedMessage: spamTo(who) }),
     performAnimation: animation => who.animations.push(animation),
   });
   return who;

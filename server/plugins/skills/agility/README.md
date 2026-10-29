@@ -54,7 +54,8 @@ With `low` and `high`, success is the OSRS skilling roll the Wiki's success char
 ### Steps
 
 The runner's steps (see the top of `ObstacleRunner.Agility.js`): `anim`, `render`, `walk`, `move`, `tele`,
-`wait`, `face`, `faceDir`, `hit`, `msg`, `sound`, `gfx`, `objAnim`, `varbit`. In the data:
+`wait`, `face`, `faceDir`, `hit`, `msg`, `sound`, `areaSound`, `gfx`, `objAnim`, `varbit`, `complete`. A `msg`,
+and an obstacle's `start` and `end`, is a game message, or `{ "spam": text }` or `{ "mesbox": text }`. In the data:
 
 - **Animations by name**, from `Constants.Agility.js` (`Anim`) and `shortcuts/Builders.Agility.js` (`ShortcutAnim`):
   `{ "anim": "CLIMB_ROCKS" }`; `-1` resets.

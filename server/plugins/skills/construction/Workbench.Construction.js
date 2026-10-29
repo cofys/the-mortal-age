@@ -1,9 +1,10 @@
 "use strict";
 
-const { api, Animation, Item, Skill } = require("./Core.Construction");
+const { api, Animation, Item, ItemIdentifiers, Skill } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const Data = require("./Data.Construction");
 const House = require("./House.Construction");
+const Menu = require("./Menu.Construction");
 const WORKBENCH = require("./data/workbench.json");
 
 // rsprox captures: Work-at opens poh_furniture_creation_menu, laid out by its own script from the
@@ -47,7 +48,7 @@ function openCategory(player, bench, index) {
   sender.sendInterface(FURNITURE_INTERFACE);
   benches.set(player, bench); // replacing the category menu closed it
   bench.choices.forEach((buildable, slot) => sender.sendClientScript(ENTRY_SCRIPT, slot + 1, buildable.menuRowId, buildable.level,
-    House.furnitureCreationText(buildable), typeof House.getBuildMaterials(player, bench.house, null, buildable) === "string" ? 0 : 1));
+    House.furnitureCreationText(buildable), House.getBuildMaterials(player, bench.house, null, buildable) instanceof Map ? 1 : 0));
   sender.sendClientScript(LIST_SCRIPT, bench.choices.length, 1)
     .sendInterfaceFlagsRange(FURNITURE_LIST, 1, bench.choices.length, PAUSE_BUTTON_EVENTS);
 }
@@ -56,7 +57,7 @@ function makeFlatpack(player, bench, buildable) {
   if (House.houseFor(player) !== bench.house) return;
   if (buildable.level > bench.limit) return player.sendMessage(`This workbench can only make furniture up to level ${bench.limit}.`);
   const materials = House.getBuildMaterials(player, bench.house, null, buildable);
-  if (typeof materials === "string") return player.sendMessage(materials);
+  if (!(materials instanceof Map)) return Menu.refuse(player, materials);
   House.useMaterials(player, buildable, materials);
   player.performAnimation(new Animation(BUILD_ANIMATION));
   // Kept materials (a league fragment's planks) may leave no slot free: the flatpack then falls to the floor.
@@ -80,7 +81,11 @@ function interfaceClick(event) {
   }
 }
 
-/** A flatpack used on a hotspot that takes it installs the furniture, in building mode. */
+/**
+ * A flatpack used on a hotspot that takes it installs the furniture, in building mode. rsprox
+ * captures (recording 2605, rev 229): it needs a hammer, plays the build animation with the hammer
+ * sound, gives no XP and says nothing; a space that doesn't take it says "You can't place that there."
+ */
 function installFlatpack(event) {
   const key = FURNITURE_OF_FLATPACK.get(event.itemId);
   const house = key && House.houseFor(event.player);
@@ -90,13 +95,14 @@ function installFlatpack(event) {
   if (!House.isBuildingMode(player)) return player.sendMessage("You must be in building mode to try installing furniture.");
   const target = house.getFurnitureTarget(event.location, event.objectId);
   const buildable = Data.BUILDABLE_BY_KEY.get(key);
-  if (!target || !House.hotspotChoices(target.hotspotKey).includes(buildable)) return player.sendMessage("You can't build that here.");
+  if (!target || !House.hotspotChoices(target.hotspotKey).includes(buildable)) return player.sendMessage("You can't place that there.");
   if (house.getFurnitureAtTarget(target)) {
     return player.sendMessage("This furniture cannot be upgraded. Remove the previous furniture if you wish to install a flatpack here.");
   }
   if (House.constructionLevel(player) < buildable.level) return player.sendMessage(`You need Construction level ${buildable.level} to build that.`);
+  if (!player.getInventory().contains(ItemIdentifiers.HAMMER)) return player.sendMessage("You need a hammer in order to install flatpack furniture.");
   player.getInventory().delete(event.itemId, 1);
-  player.performAnimation(new Animation(BUILD_ANIMATION));
+  House.hammer(player);
   house.setFurniture(target, buildable);
   House.rebuildHouse(player, house);
 }

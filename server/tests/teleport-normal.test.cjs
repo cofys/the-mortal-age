@@ -35,14 +35,16 @@ function recordingPlayer() {
         setUntargetable: () => {},
         setTeleporting: () => {},
         moveTo: (location) => log(`teleport ${location.getX()},${location.getY()}`),
+        getLocation: () => new Location(3164, 3487, 0),
     };
     return { player, ticks, log, nextTick: () => ticks.push([]) };
 }
 
 test('the standard teleport plays out as in the OSRS captures, tick by tick', (t) => {
-    const sendSound = Sounds.sendSound;
+    const { sendSound, playAreaSound } = Sounds;
     Sounds.sendSound = (_player, sound) => log(`sound ${sound.getId()} delay ${sound.getDelay()}`);
-    t.after(() => { Sounds.sendSound = sendSound; });
+    Sounds.playAreaSound = ({ soundId, x, y, delay, radius }) => log(`area sound ${soundId} at ${x},${y} delay ${delay} range ${radius}`);
+    t.after(() => Object.assign(Sounds, { sendSound, playAreaSound }));
     const { player, ticks, log, nextTick } = recordingPlayer();
 
     // World.process runs the task pass before packets, so the click is handled after tick 0's
@@ -55,9 +57,10 @@ test('the standard teleport plays out as in the OSRS captures, tick by tick', (t
         nextTick();
     }
 
-    // Varrock Teleport and necklace of passage captures (docs/teleport-tablets.md).
+    // Varrock Teleport and necklace of passage captures (docs/teleport-tablets.md); the sound is
+    // sound_area 200, range 10, on the caster's tile (Grand Exchange captures).
     assert.deepEqual(ticks.slice(0, 5), [
-        ['locked', 'anim 714', 'spotanim 111', 'sound 200 delay 0', 'varbit 12393=1'],
+        ['locked', 'anim 714', 'spotanim 111', 'area sound 200 at 3164,3487 delay 0 range 10', 'varbit 12393=1'],
         [],
         [],
         ['anim 65535', 'varbit 12393=0', 'teleport 3213,3424', 'free', 'arrived'],

@@ -11,8 +11,11 @@
  *   left-click swaps between Fill and Empty, Wiki: 8 January 2025).
  * - Messages: "You do not have any essence to fill your pouch with.", "The pouch contains pure
  *   essence, so you can fill it only with more pure essence.", "There is no essence in this
- *   pouch.", "There are forty guardian essences in this pouch.", "You do not have any free
- *   space in your inventory.", "Your pouch has decayed through use."
+ *   pouch.", "There are forty guardian essences in this pouch.", "Your pouch has decayed
+ *   through use."
+ * - Empty with a full inventory is a message box with synth 2277 (rsprox capture 1840): "Your
+ *   inventory is too full to hold any more essence.", the colossal pouch naming its essence
+ *   ("... any more guardian essence.").
  * Wiki: capacities 3/6/9/12; the colossal pouch holds 8/16/27/40 at 25/50/75/85 Runecraft. Pouches
  * decay with essence stored (medium ~270, large ~261, giant ~120, colossal ~320), never while a
  * Runecraft or max cape is worn; a decayed pouch holds 3/7/9/35 until it is repaired.
@@ -37,6 +40,7 @@ const ESSENCES = [
   { type: 4, item: "gotr_guardian_essence", name: "guardian essence" },
 ];
 const GUARDIAN_ESSENCE_TYPE = 4;
+const SOUND_INVENTORY_FULL = 2277;
 
 const POUCHES = [
   { key: "small", item: "rcu_pouch_small", level: 1, capacity: 3, varbit: "small_essence_pouch", typeVarbit: "small_essence_pouch_type" },
@@ -57,7 +61,7 @@ const POUCHES = [
   },
   {
     key: "colossal", item: "rcu_pouch_colossal", degraded: "rcu_pouch_colossal_degrade", level: 25,
-    capacityByLevel: [[85, 40], [75, 27], [50, 16], [25, 8]],
+    capacityByLevel: [[85, 40], [75, 27], [50, 16], [25, 8]], namesEssence: true,
     varbit: "colossal_essence_pouch", typeVarbit: "colossal_essence_pouch_type",
     decayVarbit: "rcu_pouch_degradation_colossal", decaysAfter: 320, decayedCapacity: 35,
   },
@@ -243,7 +247,11 @@ function empty(event) {
   const inventory = player.getInventory();
   const space = inventory.getFreeSlots();
   if (space <= 0) {
-    player.sendMessage("You do not have any free space in your inventory.");
+    const essence = pouch.namesEssence ? essenceOfType(state.type)?.name ?? "essence" : "essence";
+    player.getPacketSender().sendSound(SOUND_INVENTORY_FULL, 1, 0);
+    const { DialogueChainBuilder, StatementDialogue } = core;
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder()
+      .add(new StatementDialogue(0, `Your inventory is too full to hold any more ${essence}.`)));
     return true;
   }
   const moved = Math.min(space, state.amount);

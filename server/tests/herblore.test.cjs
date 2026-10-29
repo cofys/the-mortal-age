@@ -116,8 +116,8 @@ function click(who, name) {
 }
 
 /**
- * Game cycles. A click is handled between cycles, so the first cycle after it is the tick the
- * capture calls 0, the second tick 1, and so on.
+ * Game cycles. A click is handled in the player's turn, after that cycle's tasks have run, so the
+ * first cycle after it is the tick the capture calls 1, the second tick 2, and so on.
  */
 function ticks(count) {
   for (let i = 0; i < count; i++) core.TaskManager.process();
@@ -250,12 +250,27 @@ test("more than one opens the captured skillmulti menu", () => {
   assert.equal(who.inv.count("ranarrvial"), 0);
 });
 
+test("amylase and crushed crystal open the upgrade menu on the potion they upgrade", () => {
+  const who = player([...Array(3).fill(["4dose2energy"]), ["amylase", 12]], 77);
+  use(who, "amylase", "4dose2energy");
+  const menu = who.sent.menu;
+  assert.equal(menu.getTitle(), "How many would you like to upgrade?");
+  assert.deepEqual(menu.getItems(), [obj("4dose2energy")]);
+  assert.deepEqual(menu.getOptions(), { mode: 15, maxAmount: 3, lastAmount: 3 });
+  choose(who, 3);
+  ticks(5);
+  assert.equal(who.inv.count("4dosestamina"), 3);
+  const fins = player([...Array(2).fill(["4dose2energy"]), ["yellow_fin", 8]], 77);
+  use(fins, "yellow_fin", "4dose2energy");
+  assert.equal(fins.sent.menu.getTitle(), "How many do you wish to make?");
+  assert.deepEqual(fins.sent.menu.getItems(), [obj("4dose3energy")]);
+});
+
 test("unfinished potions come a tick after the menu closes, then one a tick", () => {
   const who = player([...Array(14).fill(["ranarr_weed"]), ...Array(14).fill(["vial_water"])]);
   use(who, "vial_water", "ranarr_weed");
   choose(who, 14);
   assert.deepEqual(who.sent.sounds, [2608], "the animation and sound as the menu closes");
-  ticks(1);
   assert.equal(who.inv.count("ranarrvial"), 0, "tick 0");
   ticks(1);
   assert.equal(who.inv.count("ranarrvial"), 1, "tick 1");
@@ -270,7 +285,7 @@ test("finished potions come every two ticks, and stop at the amount chosen", () 
   const who = player([...Array(5).fill(["ranarrvial"]), ...Array(5).fill(["snape_grass"])]);
   use(who, "snape_grass", "ranarrvial");
   choose(who, 3);
-  ticks(2);
+  ticks(1);
   assert.equal(who.inv.count("3doseprayerrestore"), 1, "tick 1");
   ticks(1);
   assert.equal(who.inv.count("3doseprayerrestore"), 1, "tick 2");
@@ -286,8 +301,6 @@ test("the Herblore cape's grimy herbs start at once and go every tick", () => {
   const who = player([...Array(3).fill(["unidentified_marentill"]), ...Array(3).fill(["vial_water"])]);
   use(who, "unidentified_marentill", "vial_water");
   choose(who, 3);
-  assert.equal(who.inv.count("marrentillvial"), 1);
-  ticks(1);
   assert.equal(who.inv.count("marrentillvial"), 1, "tick 0");
   ticks(1);
   assert.equal(who.inv.count("marrentillvial"), 2, "tick 1");
@@ -439,7 +452,7 @@ test("a pestle and mortar grinds at once, two ticks later, then every three", ()
   assert.equal(who.inv.count("unicorn_horn_dust"), 1);
   assert.deepEqual(who.sent.animations, [core.CacheDefinitions.getSeqId("human_herbing_grind")]);
   assert.deepEqual(who.sent.spam, ["You grind the unicorn horn to dust."]);
-  ticks(2);
+  ticks(1);
   assert.equal(who.inv.count("unicorn_horn_dust"), 1, "tick 1");
   ticks(1);
   assert.equal(who.inv.count("unicorn_horn_dust"), 2, "tick 2");
@@ -518,7 +531,7 @@ test("nihil shards grind one at a time: at once, two ticks later, then every thr
   use(who, "pestle_and_mortar", "nihil_shard");
   assert.equal(who.inv.count("nihil_dust"), 1);
   assert.equal(who.inv.count("nihil_shard"), 3);
-  ticks(2);
+  ticks(1);
   assert.equal(who.inv.count("nihil_dust"), 1);
   ticks(1);
   assert.equal(who.inv.count("nihil_dust"), 2);

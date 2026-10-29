@@ -298,8 +298,8 @@ Hotspot bots count towards that region's target. Persistent Wilderness clusters 
 12 low-level, 10 mid-level and 14 main bots at Edgeville, 40 at Varrock Ditch, and 4 each at
 Green Dragons and the Revenant Caves entrance. Safe tiles and buildings still cannot spawn bots.
 
-Regional bots and Bounty Hunter give the low-level pure and rusher loadouts higher weights, so
-roughly a third of their members-world population is one Defence with no protection prayers.
+Regional bots give the low-level pure and rusher loadouts higher weights, so roughly a third
+of their members-world population is one Defence with no protection prayers.
 Novice and standard bots eat at 35% and 40% HP and use single food; veterans and elites can
 combo eat and react to imminent lethal damage, with elites reacting more reliably. Restores
 are consumed at 8%/15%/24%/30% Prayer by tier, through real doses and potion cooldowns;
@@ -308,6 +308,26 @@ one-Prayer builds do not waste them. Free-to-play food timing keeps its existing
 Regional bots and hotspot bots both draw from the gear catalogue, including its random equipment
 pools and profile-gated valuable weapons. Hotspots keep their combat bands, and Varrock Ditch
 uses only free-to-play loadouts. A bot keeps its selected archetype when it regears.
+Equipment pools select only gear the archetype's stats can wear, so a rejected random armour
+choice cannot leave a slot empty when a wearable alternative exists.
+
+Bounty Hunter fills a capped roster of 60 bots, one per tick, while a real player is in the
+fort or arena. Twelve bots occupy each combat band: 32–80, 81–100, 101–110, 111–120 and
+121–126, using eligible members-world archetypes from the existing catalogue. Departures
+refill the least-populated band. Profiles progress from novice and standard to veteran, with
+half the two highest bands using elite behaviour. All use the same `pvp` brain as Wilderness
+bots, including real food, prayers, gear switches and special attacks.
+
+Crater spawns cache tiles beside each sigil with an exact route to the fort, avoiding the
+claws' enclosed pockets. Death marks the kit for recovery even when coins or a protected item
+remain. Bots can choose to fight with their last meals, but zero food always commits them to
+walking through an arena gate and logging out; escaping never gives free supplies.
+
+The shared `player-bots:pvp-loadout` event lets the Bounty Hunter loadout unit upgrade eligible
+crater kits before they are equipped and their special weapons/ammo are indexed. The mappings
+in `bountyhunter/data/bot-gear.json` add BH dark bows, abyssal daggers, Vesta's longswords,
+Statius's warhammers and Ancient Warriors armour, respecting the preset's equipment requirements.
+Other areas retain their ordinary kits.
 
 Bot gear is lootable under the usual skull/protection rules, including gear loaded through a
 player preset while PvpMode is enabled. Eligible kills put the loot on the ground or in a Loot

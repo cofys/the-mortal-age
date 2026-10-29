@@ -10,6 +10,7 @@ function hop(destination, jump = Anim.LEAP) {
 module.exports = {
   key: "ardougne",
   name: "Ardougne Rooftop",
+  helper: 20, // the Agility helper's course (enum 3507: "Ardougne Rooftops")
   lapXp: 889,
   petBase: 34440, // Giant squirrel base chance (Wiki)
   // 2/3 a lap; the elite diary rerolls a miss at 25%, and half its cooldowns are 2 minutes

@@ -44,6 +44,7 @@ function useOnPatch(f, type = 'HERB') {
     const event = { player: f.player, itemId: f.selected.getId(), itemSlot: 1,
         object: { getId: () => patch.id }, location: { x: patch.x, y: patch.y, z: patch.z } };
     hooks.onItemOnObject(event);
+    for (let i = 0; i < 2; i++) Patches.tick();
     assert.equal(event.handled, true);
     return state;
 }

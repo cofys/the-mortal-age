@@ -44,6 +44,7 @@ function jump(landing) {
 module.exports = {
   key: "shayzien-advanced",
   name: "Shayzien Advanced Agility Course",
+  helper: 21, // the Agility helper's course (enum 3507: "Shayzien Agility Course")
   lapXp: 507.5,
   petBase: 29738, // Giant squirrel base chance (Wiki)
   sharesWith: { course: "shayzien-basic", through: 3 },

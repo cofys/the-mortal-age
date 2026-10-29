@@ -20,6 +20,8 @@ const ANNOUNCE_CONFIG = "ShootingStars:announce";
 const TICKS_PER_MINUTE = 100;
 // shortcut: use the star's existing 15-tile vicinity; replace when the OSRS exclusion radius is captured.
 const RANDOM_EVENT_RADIUS = 15;
+// star_time_since_landed is bits 14-31 of its varp (rev 241 cache).
+const MAX_TIME_SINCE_LANDED = (1 << 18) - 1;
 
 let api = null;
 let core = null;
@@ -126,6 +128,18 @@ function markMined(player) {
   player.getPacketSender().sendVarbit(DATA.varbits.mined, 1);
 }
 
+/** star_time_since_landed (captures: ticks since the star landed, sent on Mine, the swing and Prospect). */
+function sendTimeSinceLanded(player, star) {
+  const ticks = Math.max(0, world.tick - (star.landedTick ?? world.tick));
+  player.getPacketSender().sendVarbit(DATA.varbits.timeSinceLanded, Math.min(ticks, MAX_TIME_SINCE_LANDED));
+}
+
+/** Mine on a star: star_last_mined_size and star_time_since_landed (captures). */
+function sendLastMined(player, star) {
+  player.getPacketSender().sendVarbit(DATA.varbits.lastMinedSize, star.size);
+  sendTimeSinceLanded(player, star);
+}
+
 function hasMined(player) {
   return player.getAttribute(MINED_ATTRIBUTE) === true;
 }
@@ -160,6 +174,13 @@ function bestPickaxe(player) {
   const request = { player, pickaxe: null };
   api.emitCustomEvent("mining:best-pickaxe", request);
   return request.pickaxe;
+}
+
+/** Ticks to the pickaxe's next attempt, answered by the Mining plugin (dragon-tier pickaxes sometimes roll early). */
+function rollInterval(pickaxe) {
+  const request = { pickaxe, ticks: null };
+  api.emitCustomEvent("mining:roll-interval", request);
+  return request.ticks ?? pickaxe.attemptIntervalTicks;
 }
 
 function persistAttributes(pluginApi) {
@@ -200,6 +221,9 @@ module.exports = {
   restoreVarbits,
   rollMiningLevel,
   bestPickaxe,
+  rollInterval,
+  sendLastMined,
+  sendTimeSinceLanded,
   persistAttributes,
   get api() { return api; },
   get core() { return core; },

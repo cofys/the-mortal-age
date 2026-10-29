@@ -409,7 +409,7 @@ test("Homewrecker: Woodcutting's own nest roll is x2 likelier and the nest goes 
   Math.random = () => 1.5 / 256; // past 1/256, inside 2/256
   Woodcutting._test.maybeDropBirdNest(owner);
   Woodcutting._test.maybeDropBirdNest(main);
-  const nests = [I.BIRD_NEST, I.BIRD_NEST_2, I.BIRD_NEST_3, I.BIRD_NEST_4, I.BIRD_NEST_5];
+  const nests = [I.BIRD_NEST, I.BIRD_NEST_2, I.BIRD_NEST_3, I.BIRD_NEST_10, I.BIRD_NEST_5];
   assert.equal(nests.reduce((sum, id) => sum + banked(owner, id), 0), 1, "a nest in the bank");
   assert.equal(ground.length, 0, "nothing on the floor, and nothing for the main character");
   assert.match(owner.messages.at(-1), /sent to your bank/);

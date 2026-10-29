@@ -12,6 +12,7 @@ const { Loc, WyrmAnim, FIRST_PAUSE, LONGJUMP_SOUND, tightrope, hurdles, ledge, z
 module.exports = {
   key: "wyrm-basic",
   name: "Colossal Wyrm Agility Course (Basic)",
+  helper: 22, // the Agility helper's course (enum 3507: "Colossal Wyrm Agility Course")
   lapXp: 601.6,
   obstacles: [
     {

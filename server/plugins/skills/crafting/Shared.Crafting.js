@@ -89,6 +89,29 @@ function animate(player, animation, sound) {
   if (sound) core.Sounds.sendSound(player, sound);
 }
 
+/** A filterable ("spam") chat line, the channel live uses for Crafting's action lines. */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
+}
+
+/**
+ * Runs `fn` on the tick after the click, the one-tick delay live gives a single item-on-item
+ * action (a chisel on a gem too low to cut, a ball of wool on an amulet).
+ */
+function nextTick(player, fn) {
+  class NextTick extends core.Task {
+    constructor() {
+      // Keyed by index, as combat and other actions cancel a player's tasks by it.
+      super(1, player.getIndex(), false);
+    }
+    execute() {
+      this.stop();
+      if (player.isRegistered()) fn();
+    }
+  }
+  api.getTaskManager().submit(new NextTick());
+}
+
 function stopCrafting(player) {
   player.getAttribute(CRAFTING_TASK_ATTRIBUTE)?.stop();
 }
@@ -191,6 +214,8 @@ module.exports = {
   itemName,
   withArticle,
   animate,
+  spam,
+  nextTick,
   stopCrafting,
   openMakeMenu,
   startMaking,

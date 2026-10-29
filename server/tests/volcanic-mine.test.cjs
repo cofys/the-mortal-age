@@ -38,7 +38,7 @@ before(() => {
     onPlayerDeathDrops: (handler) => { (hooks.deathDrops ??= []).push(handler); },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     emitCustomEvent: (name, request) => {
-      if (name === 'mining:best-pickaxe') request.pickaxe = { id: 11920, animation: new core.Animation(7139) };
+      if (name === 'mining:best-pickaxe') request.pickaxe = { id: 11920, attemptIntervalTicks: 3, animation: new core.Animation(7139) };
     },
     spawnNpc: ({ id, x, y, z }) => {
       const npc = { id, location: new Location(x, y, z), glides: [], registered: true, area: null };
@@ -93,7 +93,7 @@ function fakePlayer({ mining = 99 } = {}) {
   const attributes = new Map();
   const id = ++index;
   const p = {
-    location: new Location(3816, 3808, 0), area: null, messages: [], spam: [], chats: [], boxes: [], anims: [], hits: [],
+    location: new Location(3816, 3808, 0), area: null, messages: [], spam: [], sounds: [], chats: [], boxes: [], anims: [], hits: [],
     varbits: new Map(), subs: [], xp: {}, songs: [], said: [], blocked: false, hp: 99,
     inventory: container(),
     getIndex: () => id, getUsername: () => `Tester${id}`,
@@ -124,7 +124,7 @@ function fakePlayer({ mining = 99 } = {}) {
         closeSubInterface: (uid) => { p.subs.push(-uid); return sender; },
         sendTypedMessage: (type, text) => { p.spam.push(text); return sender; },
         sendSong: (sid) => { p.songs.push(sid); return sender; },
-        sendSound: () => sender, sendGraphic: () => sender, sendObjectAnimation: () => sender,
+        sendSound: (id) => { p.sounds.push(id); return sender; }, sendGraphic: () => sender, sendObjectAnimation: () => sender,
         sendInterfaceRemoval: () => sender,
       };
       return sender;
@@ -264,6 +264,9 @@ test('chambers: a large rock blocks one (+50); mining it clears it (+50, Mining 
   game.setBlocked('B', false);
   const rockTile = data.chambers.B.rock;
   click(p, data.locs.rock, 1, locOf(game, data.locs.rock, rockTile));
+  ticks(1);
+  assert.equal(p.inventory.getAmount(21540), 0, 'taken two ticks after the click (recorded)');
+  ticks(1);
   assert.equal(p.inventory.getAmount(21540), 1);
   assert.ok(p.messages.includes('You take the large rock.'));
   assert.equal(game.rocks.size, 1);
@@ -276,10 +279,18 @@ test('chambers: a large rock blocks one (+50); mining it clears it (+50, Mining 
   assert.equal(game.isBlocked('B'), true);
   assert.equal(varbit(p, 'points'), 50);
   Math.random = () => 0;
+  p.sounds.length = 0;
   click(p, data.locs.chamberBlocked, 1, chamber);
+  assert.equal(p.spam.includes('You swing your pick at the rock.'), false, 'the swing is the next tick (recorded)');
+  ticks(1);
+  assert.ok(p.spam.includes('You swing your pick at the rock.'));
+  assert.equal(p.messages.includes('You manage to clear the blockage.'), false);
+  assert.deepEqual(p.sounds, [], 'no success sound on the swing');
   ticks(1);
   Math.random = random;
   assert.ok(p.messages.includes('You manage to clear the blockage.'));
+  assert.deepEqual(p.sounds, [3600]);
+  assert.equal(p.anims.at(-1), Common.core.Animation.DEFAULT_RESET_ANIMATION.getId(), 'the clear stops the swing');
   assert.equal(game.isBlocked('B'), false);
   assert.equal(varbit(p, 'points'), 100);
   assert.equal(xpOf(p), 25);
@@ -491,6 +502,8 @@ test('vents pay once until the gas shifts; repeated clicks do not stack actions'
   Math.random = () => 0.99;
   for (let i = 0; i < 5; i++) click(p, 31034, 1, null);
   ticks(3);
+  assert.equal(p.spam.filter((m) => m === 'You chip off a part of the boulder.').length, 0, 'the first chip is a pickaxe interval after the swing (recorded)');
+  ticks(1);
   Math.random = random;
   const chips = p.spam.filter((m) => m === 'You chip off a part of the boulder.').length;
   assert.equal(chips, 1, 'one chip a swing, however often clicked');

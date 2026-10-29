@@ -3,8 +3,24 @@ const { Item } = require("../../../../src/main/typescript/elvarg/game/model/Item
 const { Skill } = require("../../../../src/main/typescript/elvarg/game/model/Skill");
 const { Anim } = require("../Constants.Agility");
 
-/** RuneLite: AGILITY_PYRAMID_TOP - 1 while the golden pyramid has been taken this lap. */
+/**
+ * Agility Pyramid. The obstacles' sounds, messages and ticks follow rsprox captures 2932 (rev 230,
+ * main game) and 1757 (Leagues V, rev 227); XP is the Wiki's.
+ */
+/** agility_pyramid_top: 1 while the golden pyramid has been taken this lap. */
 const PYRAMID_TOP_VARBIT = 1556;
+/**
+ * agility_pyramid_level: the floor the player is on, 0 to 5 (the top two are the separate map
+ * square). On floors 1 and 3 it swaps the static pyramid block for the moving one (locs 10872 and
+ * 10873). Set on every floor change; the stairs and the doorway are captured, falls follow them.
+ */
+const PYRAMID_LEVEL_VARBIT = 1550;
+const LOW_WALL_SOUND = 2453;
+const LEDGE_SOUND = 2451;
+const WALL_GAP_SOUND = 2450;
+const PLANK_SOUND = 2470;
+const JUMP_SOUND = 2465;
+const TOP_CLIMB_SOUND = 2454;
 const PYRAMID_TOP_ATTRIBUTE = "agility.pyramid.top";
 const COMPLETION_BASE_XP = 300;
 const COMPLETION_XP_PER_LEVEL = 8;
@@ -18,11 +34,24 @@ function higherTile(x, y, z) {
   return z === 3 ? [x - 320, y + 1856, 2] : [x, y, z + 1];
 }
 
+function onTopSquare(y) {
+  return y >= 4686 && y <= 4709;
+}
+
 function lowerTile(x, y, z) {
-  if (z === 2 && y >= 4686 && y <= 4709) {
+  if (z === 2 && onTopSquare(y)) {
     return [x + 320, y - 1856, 3];
   }
   return [x, y, z - 1];
+}
+
+/** The floor `tile` is on, for agility_pyramid_level. */
+function pyramidLevel([, y, z]) {
+  return onTopSquare(y) ? z + 2 : z;
+}
+
+function levelStep(tile) {
+  return { varbit: [PYRAMID_LEVEL_VARBIT, pyramidLevel(tile)] };
 }
 
 /** Vector `quarterTurns` clockwise from the object's facing. */
@@ -46,26 +75,28 @@ function edgeStart({ obj }) {
   }
 }
 
-/** Ledge and wall-gap crossings: edge along the wall; a slip drops a floor. */
-function edgeCrossing({ startAnim, slideAnim, finishAnim, fallAnim, xp, damage, successTicks = 1 }) {
+/**
+ * Ledge and wall-gap crossings: edge along the wall; a slip drops a floor. On, five tiles a tick
+ * from the tick after, and off (with the XP) the tick after the last (rsprox 2932).
+ */
+function edgeCrossing({ startAnim, slideAnim, finishAnim, fallAnim, sound, start, end, xp, damage }) {
   const walkDirection = ({ obj }) => turned(obj.face, 1);
   return {
     level: 30,
     xp,
     route: edgeStart,
-    start: "You put your foot on the ledge and try to edge across...",
-    end: "You skillfully edge across the gap.",
+    start,
+    end,
     steps: (context) => {
       const [dx, dy] = walkDirection(context);
       const { x, y } = context.pos;
       return [
         { face: [x + dx * 5, y + dy * 5] },
-        { anim: startAnim, delay: 10 },
+        { anim: startAnim },
+        sound,
         { wait: 1 },
-        { anim: -1 },
         { render: slideAnim },
         { walk: [[x + dx * 5, y + dy * 5]] },
-        { wait: successTicks },
         { render: null },
         { anim: finishAnim },
       ];
@@ -81,17 +112,19 @@ function edgeCrossing({ startAnim, slideAnim, finishAnim, fallAnim, xp, damage, 
         const { x, y, z } = context.pos;
         const slipX = x + dx * 2;
         const slipY = y + dy * 2;
+        const below = lowerTile(slipX + fx * 2, slipY + fy * 2, z);
         return [
           { face: [x + dx * 5, y + dy * 5] },
-          { anim: startAnim, delay: 10 },
+          { anim: startAnim },
+          sound,
           { wait: 1 },
-          { anim: -1 },
           { render: slideAnim },
           { walk: [[slipX, slipY]] },
           { render: null },
           { anim: fallAnim },
           { wait: 1 },
-          { move: lowerTile(slipX + fx * 2, slipY + fy * 2, z), speed: [0, 30] },
+          { move: below, speed: [0, 30] },
+          levelStep(below),
           { hit: damage },
         ];
       },
@@ -106,13 +139,13 @@ function plankCrossing() {
     xp: 56.4,
     route: ({ obj }) => [obj.x, obj.y, obj.z],
     render: Anim.BALANCE_WALK,
-    start: "You walk carefully across the slippery plank...",
+    // The line and the creak on the plank's first tile, the XP the tick after the last (rsprox 2932).
+    start: { spam: "You walk carefully across the slippery plank..." },
     steps: (context) => {
       const [dx, dy] = walkDirection(context);
       const { x, y } = context.pos;
       return [
-        { anim: Anim.BALANCE_STAND, delay: 10 },
-        { wait: 1 },
+        { sound: PLANK_SOUND, loops: 3 },
         { walk: [[x + dx * 5, y + dy * 5]] },
       ];
     },
@@ -127,14 +160,15 @@ function plankCrossing() {
         const { x, y, z } = context.pos;
         const slipX = x + dx * 2;
         const slipY = y + dy * 2;
+        const below = [slipX + fx * 2, slipY + fy * 2, z - 1];
         return [
-          { anim: Anim.BALANCE_STAND, delay: 10 },
-          { wait: 1 },
+          { sound: PLANK_SOUND, loops: 3 },
           { walk: [[slipX, slipY]] },
           { render: null },
           { anim: Anim.BALANCE_FALL },
           { wait: 1 },
-          { move: [slipX + fx * 2, slipY + fy * 2, z - 1], speed: [0, 30] },
+          { move: below, speed: [0, 30] },
+          levelStep(below),
           { hit: 10 },
         ];
       },
@@ -142,18 +176,21 @@ function plankCrossing() {
   };
 }
 
+const JUMP_START = [{ wait: 1 }, { msg: { spam: "You jump the gap..." } }, { sound: JUMP_SOUND, delay: 20 }];
+
 function jumpGap() {
   return {
     object: ObjectIds.GAP_17,
     index: 5,
     level: 30,
     xp: 22,
-    start: "You jump the gap...",
+    // The jump the tick after arriving, three tiles, landing three ticks later (rsprox 2932, 1757).
     steps: (context) => {
       const [dx, dy] = toward(context);
       const { x, y } = context.pos;
       return [
-        { move: [x + dx * 3, y + dy * 3], anim: Anim.PYRAMID_JUMP, speed: [0, 30] },
+        ...JUMP_START,
+        { move: [x + dx * 3, y + dy * 3], anim: Anim.PYRAMID_JUMP, delay: 20, speed: [53, 85], ticks: 3 },
       ];
     },
     fail: {
@@ -165,12 +202,15 @@ function jumpGap() {
         const [dx, dy] = toward(context);
         const [fx, fy] = ROTATION_VECTORS[context.obj.face];
         const { x, y, z } = context.pos;
+        const below = lowerTile(x + dx + fx * 2, y + dy + fy * 2, z);
         return [
+          ...JUMP_START,
           { anim: Anim.PYRAMID_JUMP_FALL },
           { move: [x + dx, y + dy], speed: [0, 30] },
           { wait: 5 },
           { anim: -1 },
-          { tele: lowerTile(x + dx + fx * 2, y + dy + fy * 2, z) },
+          { tele: below },
+          levelStep(below),
           { hit: 8 },
         ];
       },
@@ -178,7 +218,7 @@ function jumpGap() {
   };
 }
 
-function takePyramidTop(player) {
+function takePyramidTop({ player, core }) {
   if (player.getAttribute(PYRAMID_TOP_ATTRIBUTE) === true) {
     player.sendMessage("You find nothing on top of the pyramid.");
     return;
@@ -190,12 +230,16 @@ function takePyramidTop(player) {
   player.getInventory().addItem(new Item(ItemIds.PYRAMID_TOP, 1));
   player.setAttribute(PYRAMID_TOP_ATTRIBUTE, true);
   player.getPacketSender().sendVarbit(PYRAMID_TOP_VARBIT, 1);
-  player.sendMessage("You find a golden pyramid!");
+  // In an item box, the top beside the line (rsprox 1757).
+  player.getDialogueManager().startDialogues(new core.DialogueChainBuilder()
+    .add(new core.ItemStatementDialogue(0, ItemIds.PYRAMID_TOP, "You find a golden pyramid!")));
 }
 
-function resetPyramidTop(player) {
+/** Out through the doorway: the top can be taken again, and the player is back on the ground. */
+function leavePyramid(player) {
   player.setAttribute(PYRAMID_TOP_ATTRIBUTE, false);
   player.getPacketSender().sendVarbit(PYRAMID_TOP_VARBIT, 0);
+  player.getPacketSender().sendVarbit(PYRAMID_LEVEL_VARBIT, 0);
 }
 
 function completionXp(player) {
@@ -203,14 +247,17 @@ function completionXp(player) {
   return Math.min(COMPLETION_MAX_XP, COMPLETION_BASE_XP + level * COMPLETION_XP_PER_LEVEL);
 }
 
+/** Stairs: up or down a floor at once. Up from the ground starts a lap (rsprox 2932, 1757). */
 function stairs(object, delta) {
   return {
     object,
     level: 30,
     xp: 0,
-    steps: ({ pos }) => [
-      { tele: delta > 0 ? higherTile(pos.x, pos.y + 3, pos.z) : lowerTile(pos.x, pos.y - 3, pos.z) },
-    ],
+    startsLap: ({ pos }) => delta > 0 && pos.z === 0,
+    steps: ({ pos }) => {
+      const tile = delta > 0 ? higherTile(pos.x, pos.y + 3, pos.z) : lowerTile(pos.x, pos.y - 3, pos.z);
+      return [{ tele: tile }, levelStep(tile)];
+    },
   };
 }
 
@@ -219,15 +266,20 @@ const ledge = edgeCrossing({
   slideAnim: Anim.LEDGE_WALK,
   finishAnim: Anim.LEDGE_TURN_BACK,
   fallAnim: Anim.PYRAMID_LEDGE_FALL,
+  sound: { sound: LEDGE_SOUND, loops: 5 },
+  start: { spam: "You put your foot on the ledge and try to edge across..." },
+  end: { spam: "You skillfully edge across the gap." },
   xp: 52,
   damage: 10,
 });
 
+// The wall gap's hand-holds say nothing (rsprox 2932, 1757).
 const wallGap = edgeCrossing({
   startAnim: Anim.PYRAMID_GAP_START,
   slideAnim: Anim.PYRAMID_GAP_SLIDE,
   finishAnim: Anim.PYRAMID_GAP_FINISH,
   fallAnim: Anim.PYRAMID_GAP_FALL,
+  sound: { sound: WALL_GAP_SOUND },
   xp: 56.4,
   damage: 8,
 });
@@ -237,6 +289,7 @@ const plank = plankCrossing();
 module.exports = {
   key: "pyramid",
   name: "Agility Pyramid",
+  helper: 6, // the Agility helper's course (enum 3507: "Agility Pyramid")
   lapXp: 0,
   petBase: 9901, // Giant squirrel base chance (Wiki)
   obstacles: [
@@ -245,15 +298,20 @@ module.exports = {
     {
       object: ObjectIds.LOW_WALL_3,
       index: 1,
+      // The lap starts on the stairs; a low wall is on every floor.
+      startsLap: false,
       level: 30,
       xp: 8,
-      start: "You climb the low wall...",
-      end: "... and make it over.",
+      end: { spam: "... and make it over." },
+      // Over the wall the tick after arriving, two tiles in 100 cycles, the XP three ticks later (rsprox 2932).
       steps: (context) => {
         const [dx, dy] = toward(context);
         const { x, y } = context.pos;
         return [
-          { move: [x + dx * 2, y + dy * 2], anim: Anim.CLIMB_LOW_WALL_PYRAMID, delay: 15, speed: [0, 60], ticks: 2 },
+          { wait: 1 },
+          { msg: { spam: "You climb the low wall..." } },
+          { sound: LOW_WALL_SOUND, delay: 30 },
+          { move: [x + dx * 2, y + dy * 2], anim: Anim.CLIMB_LOW_WALL_PYRAMID, delay: 30, speed: [30, 100], ticks: 3 },
         ];
       },
     },
@@ -266,16 +324,16 @@ module.exports = {
       index: 6,
       level: 30,
       xp: 0,
-      steps: [{ anim: Anim.CLIMB_ROCKS_DOWN }, { wait: 2 }, { run: ({ player }) => takePyramidTop(player) }],
+      steps: [{ anim: Anim.CLIMB_ROCKS_DOWN }, { sound: TOP_CLIMB_SOUND, loops: 4 }, { wait: 1 }, { run: takePyramidTop }],
     },
     ...[ObjectIds.DOORWAY_15, ObjectIds.DOORWAY_16].map((object) => ({
       object,
       index: 7,
       level: 30,
       xp: completionXp,
-      end: "You climb down the steep passage. It leads to the base of the pyramid.",
+      end: { mesbox: "You climb down the steep passage. It leads to the base of the pyramid." },
       steps: [{ tele: [3364, 2830, 0] }],
-      onSuccess: resetPyramidTop,
+      onSuccess: leavePyramid,
     })),
   ],
 };

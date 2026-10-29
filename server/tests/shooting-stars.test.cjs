@@ -98,6 +98,7 @@ function miner({ level = 99, x = 3257, y = 3408 } = {}) {
       if (key === "sendString") return (text) => (log.push(`text ${text}`), sender);
       if (key === "sendJingle") return (id) => (log.push(`jingle ${id}`), sender);
       if (key === "sendSound") return (id) => (log.push(`synth ${id}`), sender);
+      if (key === "sendTypedMessage") return (type, text) => (log.push(text), sender);
       return () => sender;
     },
   });
@@ -254,7 +255,10 @@ test("mining: swing message, dust each success, 32 xp (16 on free-to-play), bonu
   const p = miner();
   Common.setBonusDust(p, 2);
   click(p, star, "Mine");
-  assert.ok(p.log.includes("You swing your pick at the star."));
+  assert.equal(p.log.includes(Mining.SWING_MESSAGE), false, "the swing is the tick after the click (captures)");
+  assert.equal(p.varbits.get(DATA.varbits.lastMinedSize), 9);
+  runTicks(1);
+  assert.ok(p.log.includes(Mining.SWING_MESSAGE));
   const xpBefore = p.getSkillManager().getExperience(core.Skill.MINING);
   runTicks(3, () => 0.5); // misses the gem table and the 46% dust roll
   assert.equal(p.getInventory().getAmount(core.ItemIdentifiers.STARDUST), 0);
@@ -275,6 +279,22 @@ test("mining: swing message, dust each success, 32 xp (16 on free-to-play), bonu
   assert.equal(success.payload.petBase, 521550);
 });
 
+test("the swing is the pickaxe's noreachforward sequence; Mine and Prospect send the size and time since landing", () => {
+  const star = landedStar(9);
+  star.discoveredBy = "someone";
+  runTicks(5);
+  const p = miner();
+  const infernal = { key: "infernal", attemptIntervalTicks: 3, animation: new core.Animation(4482) };
+  assert.equal(Mining.swingAnimation(infernal).getId(), core.CacheDefinitions.getSeqId("human_mining_infernal_pickaxe_noreachforward"));
+  assert.equal(Mining.swingAnimation({ attemptIntervalTicks: 3, animation: new core.Animation(624) }).getId(), 624, "no key: the pickaxe's own swing");
+  click(p, star, "Prospect");
+  assert.equal(p.varbits.get(DATA.varbits.timeSinceLanded), 5);
+  click(p, star, "Mine");
+  assert.equal(p.varbits.get(DATA.varbits.lastMinedSize), 9);
+  runTicks(1);
+  assert.equal(p.varbits.get(DATA.varbits.timeSinceLanded), 6, "sent again with the swing");
+});
+
 test("bonus messages every 50 dust", () => {
   const p = miner();
   assert.equal(Mining.bonusLeftMessage(250), "Your star discovery bonus will grant you another 250 star dust before it runs out.");
@@ -282,7 +302,7 @@ test("bonus messages every 50 dust", () => {
   star.discoveredBy = "someone";
   Common.setBonusDust(p, 251);
   click(p, star, "Mine");
-  runTicks(3, () => 0.1);
+  runTicks(4, () => 0.1);
   assert.ok(p.log.includes(Mining.bonusLeftMessage(250)));
 });
 

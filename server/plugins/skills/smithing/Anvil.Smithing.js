@@ -7,8 +7,10 @@
  * (the remembered quantity, All when none has been chosen yet); a click sets
  * smithing_bar_lasttype/smithing_item_lasttype, closes the interface and plays human_smithing
  * (898) on the same tick, then each item comes 3 ticks later and every 5 after, with "You hammer
- * the steel and make ten dart tips." Smith with no bar: a message box "You should select an item
- * from your inventory and use it on the anvil."
+ * the steel and make ten dart tips." on the spam channel and human_smithing again, 15 client
+ * cycles late. Smith with no bar: a message box "You should select an item from your inventory
+ * and use it on the anvil." A product above the player's level closes the interface with a
+ * message box: "You need a Smithing level of 7 to make a Bronze Full Helm."
  *
  * The Smiths' uniform (Wiki): each piece is a 20% chance (the full set 100%) that an item takes
  * 4 ticks instead of 5.
@@ -19,12 +21,14 @@ const Sessions = require("./Sessions.Smithing");
 const Godswords = require("./Godswords.Smithing");
 const DragonShields = require("./DragonShields.Smithing");
 const Common = require("./Common.Smithing");
-const { hasHammer, messageBox, varbit, varp, hammering, smithsUniformChance } = Common;
+const { hasHammer, messageBox, spam, varbit, varp, hammering, smithsUniformChance } = Common;
 
 const MAIN_MODAL = "toplevel_osrs_stretch:mainmodal";
 const SMITHING_INTERVAL_TICKS = 5;
 const UNIFORM_INTERVAL_TICKS = 4;
 const FIRST_DELAY_TICKS = 3;
+/** Each item's hammering starts this many client cycles into its tick. */
+const ITEM_ANIMATION_DELAY = 15;
 const NO_BAR_MESSAGE = "You should select an item from your inventory and use it on the anvil.";
 const ALL_QUANTITY_CAP = 28;
 /** The quantity row left of the products: components 3-7 select 1, 5, 10, X and All. */
@@ -69,7 +73,8 @@ function canSmith(player, product) {
     return false;
   }
   if (smithingLevel(player) < product.level) {
-    player.sendMessage(`You need a Smithing level of at least ${product.level} to smith this item.`);
+    closeInterface(player);
+    messageBox(player, `You need a Smithing level of ${product.level} to make a ${titleCase(Core.ItemDefinition.forId(product.itemId).getName())}.`);
     return false;
   }
   if (inventory.getAmount(product.barId) < product.bars) {
@@ -77,6 +82,11 @@ function canSmith(player, product) {
     return false;
   }
   return true;
+}
+
+/** "Bronze full helm" -> "Bronze Full Helm", as the level refusal names the product. */
+function titleCase(name) {
+  return name.replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
 }
 
 function smithOnce(player, product) {
@@ -93,9 +103,9 @@ function smithOnce(player, product) {
     requiredLevel: product.level,
   });
   inventory.addItem(smithed);
-  player.performAnimation(hammering());
+  player.performAnimation(hammering(ITEM_ANIMATION_DELAY));
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, product.xp);
-  player.sendMessage(`You hammer the ${product.metal} and make ${product.phrase}.`);
+  spam(player, `You hammer the ${product.metal} and make ${product.phrase}.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: product.itemId });
   Common.produced(player, Core.Skill.SMITHING, product.itemId, product.amount, product.xp, "smith");
   return true;

@@ -31,7 +31,7 @@ There is no teleport sound of the player's own: a `sound_area` 200 on tick 1 of 
 
 - **Spell tablets** land where their spell does, from the standard, Lunar and Arceuus spell tables. The Ape Atoll tablet (`teletab_ape`) is the Arceuus one, so it goes to the Ape Atoll Dungeon, not the town.
 - **Redirected house tablets** (`redirects`) land at that town's house portal; Trollheim's lands where the Trollheim spell does. Revert turns one back into a Teleport to house tablet; the scroll of redirection isn't returned (Wiki).
-- **Varrock, Camelot and Watchtower** (`alternates`) have their own options: the town, its alternate (Grand Exchange, Seers' Village, Yanille) and Toggle. The alternate and Toggle need the medium Varrock, hard Kandarin or hard Ardougne Diary (Wiki). Toggle makes Break go to the alternate and sets the varbit the spellbook reads for it (`varrock_ge_teleport`, `seers_camelot_teleport`, `yanille_teleport_location`; client script 2615 treats 1 as the alternate). The alternate tiles are the middles of the captured spell landings the portal nexus already uses (GE around 3162-3165, 3476-3480; Seers' 2724-2727, 3483-3486).
+- **Varrock, Camelot and Watchtower** (`alternates`) have their own options: the town, its alternate (Grand Exchange, Seers' Village, Yanille) and Toggle. The alternate and Toggle need the medium Varrock, hard Kandarin or hard Ardougne Diary (Wiki). Toggle makes Break go to the alternate and sets the varbit the spellbook reads for it (`varrock_ge_teleport`, `seers_camelot_teleport`, `yanille_teleport_location`; client script 2615 treats 1 as the alternate). The alternate tiles are the centres of their captured landing squares (see Landing square below).
 - **The spells** share this: Varrock, Camelot and Watchtower Teleport's op2 casts to the alternate behind the same diary, and op10 (Configure) changes the default. Client script 2615 sets the other options from the varbit: op1 "Cast" goes to the town, and once the alternate is the default op1 is hidden and op3 "Cast" goes to the town instead. Core already casts op1 and op3; `SpellCast` events now carry the op so the plugin can take op2 and op10 (`PluginSpellCastEvent.opId`).
   - Configure, as captured: a chat menu "Spellbook/portal default: Varrock" with "Change to the Grand Exchange." and "Cancel."; choosing it sets the varbit and says "Your default option is now the Grand Exchange teleport." (back: "Change to Varrock." and "Your default option is now the central Varrock teleport."). Watchtower's menu is "Spellbook/portal default: Yanille" / "Change to the Watchtower" / "Cancel."; its other lines and Camelot's follow the Varrock ones.
   - Without the diary, op2 is refused with "You must complete the medium, hard or elite tier of the Varrock achievement diary to use this feature." (captured); the tablets and the other two spells use the same line with their own tiers and diary.
@@ -55,7 +55,7 @@ Facts from rsprox captures of teleport scrolls (Spider cave, 20 attempts in 14 r
 
 | Tick | Sent |
 | --- | --- |
-| 0 | animation `human_castteleport` (714); spotanim `teleport_casting` (111) at height 92; sound 200; varbit `busy` = 1 (from rev 236); jewellery: "You rub the necklace..." |
+| 0 | animation `human_castteleport` (714); spotanim `teleport_casting` (111) at height 92; `sound_area` 200, range 10, on the caster's tile (heard by players nearby; Grand Exchange and amulet of glory captures); varbit `busy` = 1 (from rev 236); jewellery: "You rub the necklace..." |
 | 3 | the teleport; animation reset; varbit `busy` = 0; jewellery uses its charge here ("<col=7f007f>Your necklace of passage crumbles away.</col>" on the last) |
 | 4 | animation reset again |
 
@@ -71,6 +71,22 @@ Jewellery charge messages are all `7f007f` and spell the count out ("Your ring o
 - The tablets' Toggle message isn't captured; the text is ours. So are Camelot's Configure lines and Watchtower's beyond its menu.
 - The house portals that "Spellbook/portal default" also sets.
 
-## Not yet checked
+## Landing square
 
-The landing tile: the capture landed one tile from our fixed Varrock teleport destination (3213, 3424). OSRS may pick a random tile around the destination; one capture can't tell.
+A standard spellbook teleport lands on a random tile of the 5x5 square around its destination, as do its tablet and the Varrock, Camelot and Watchtower alternates (`SpellTeleports.plugin.js`; blocked tiles are skipped). Every own cast in the rsprox captures, followed to its landing:
+
+| Spell | Landings | x | y | Centre |
+| --- | ---: | --- | --- | --- |
+| Varrock | 36 | 3211-3215 | 3422-3426 | 3213, 3424 |
+| Grand Exchange | 334 | 3161-3165 | 3476-3480 | 3163, 3478 |
+| Lumbridge | 45 | 3219-3223 | 3216-3220 | 3221, 3218 |
+| Falador | 22 | 2963-2967 | 3376-3380 | 2965, 3378 |
+| Camelot | 29 | 2755-2759 | 3476-3480 | 2757, 3478 |
+| Seers' | 25 | 2724-2728 | 3482-3486 | 2726, 3484 |
+| Kourend Castle | 12 | 1639-1643 | 3671-3675 | 1641, 3673 |
+| Ardougne | 8 | 2659-2663 | 3300-3304 | 2661, 3302 |
+| Civitas illa Fortis | 70 | 1679-1683 | 3131-3135 | 1681, 3133 |
+| Trollheim | 9 | 2889-2892 | 3677-3681 | 2890, 3679 (Wiki: square of radius 2) |
+| Yanille | 2 | 2583-2585 | 3097-3099 | 2584, 3098 |
+
+The Varrock tablet's Grand Exchange option lands in the same square. Watchtower and Ape Atoll keep their tiles: their captures are too few to place a centre. The Ancient spellbook's teleports land spread out too (Paddewwa 3097-3098, 9881-9884; Kharyrll 3492-3494, 3471-3474), but on too few landings to place their squares; they stay on one tile.

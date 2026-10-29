@@ -32,6 +32,11 @@ Walls, windows and scenery collide as the cache's template chunks place them (ea
 with its rotation), with the chunks' blocked tiles; doors and furniture add their own collision.
 Before this every wall could be walked through.
 
+Empty slots take each floor's filler chunk: the basement and ground floor templates, and upstairs
+the blank chunk, whose tiles all block, one slot past the grid too. Live sends the blank chunk
+upstairs whether or not building mode is on (rsprox captures: 1,463 of 1,470 house rebuilds), so
+an upstairs doorway into nothing can't be walked through.
+
 The house runs as an `Area`: per-tick work (chairs, servants, burners, the owner's Kick option,
 combat dummies, dungeon traps and guards) happens in `PlayerHouseInstance.process` for
 occupants only. Its `canAttack` lets players fight only inside a ring, and `canCastOnNpc`
@@ -79,9 +84,11 @@ placement of it in the room (all tiles of a rug, every window's curtains); Remov
   name, requirement bits); a pick is `resume_pausebutton` on 590:0 with the slot (captures). The
   teleport lands on the third tick and sets varbit 2308 to slot + 1, which picks the box's
   multiloc and so names its quick-teleport op (last destination). Tiles are the jewellery's own
-  (`plugins/items/Teleports.Jewellery.js`). The requirement bits (Tears of Guthix, Kourend,
-  Miscellania, Dondakan's Rock, Fortis Colosseum) are all sent set, as the jewellery itself
-  doesn't gate them here.
+  (`plugins/items/Teleports.Jewellery.js`). Of the requirement bits (Tears of Guthix, Kourend,
+  Miscellania, Dondakan's Rock, Fortis Colosseum), the first four are sent set, as the jewellery
+  doesn't gate them here; captures (rev 224-239, 61 of 62 recordings) send 15, and Fortis
+  Colosseum's bit is set only with the Colosseum's Hero title (`colosseum:has-rank`; Wiki, Ring
+  of dueling). A struck-out row shows the jewellery's own locked message.
 - **Mounted amulet of glory, mythical cape:** one op per destination.
 - **Mounted Xeric's talisman and digsite pendant** (portal nexus room): Teleport menu and
   Configuration use the generic menu ("Xeric's Talisman teleports" / "... left click", from
@@ -103,7 +110,9 @@ Its interfaces are the live ones (rsprox captures; cache enums 1375 and 1377 and
 give each destination's name, runes, Magic level and alternate). The player's slots are varbits
 `poh_nexus_tele_<n>` and `poh_nexus_left_click`; the interfaces work on their `_temp` copies.
 
-- **Teleport** goes to the left-click destination (the menu when there is none).
+- **Teleport** goes to the left-click destination (the menu when there is none): the player
+  faces the portal and leaves two ticks after arriving, with `poh_nexus_id` set (captures,
+  revisions 228-239).
 - **Teleport Menu** opens `telenexus_teleport` (17); a row teleports at once, and the second
   list gives the Grand Exchange, Seers' Village and Yanille (landings from captures).
 - **Configuration** opens `telenexus` (19). Dragging a slot onto the portal makes it the
@@ -241,9 +250,14 @@ client's home. Each home's hotspots show, per player, broken (Repair: a plank, o
 for a sink, range or bath), old (Remove), empty (Build: the Wiki's planks) or the new piece.
 The client pays the tier's experience and Carpenter points and restores run energy; the full
 Carpenter's outfit adds 2.5%. Last-tier contract repeats the last tier; Rewards opens the shop
-(673) with the Wiki's prices; the supply crate rolls the Wiki's table. There are no captures
-of it, so its dialogue and messages are ours (except "I'd better leave this alone right now."),
-and which pieces need work approximates the Wiki's per-client layouts.
+(673) with the Wiki's prices; the supply crate rolls the Wiki's table. One Leagues capture
+(recording 1863, rev 227) gives the tier menu ("Select an option": "Beginner Contract", "Novice
+Contract (Requires 20 Construction)" ... "I'll pass actually.", every tier listed), Repair and
+Build playing `human_poh_build` with synth 938, Remove playing `human_throw_away` with synth 2097
+or 2098 (delay 20), and the last job's `<col=229628>Jeff seems happy with your work. Talk to him
+for your reward.</col>` (him/her from the Wiki's client genders). The rest of its dialogue and
+messages are ours (except "I'd better leave this alone right now."), and which pieces need work
+approximates the Wiki's per-client layouts.
 
 ### Adding a room
 
@@ -259,7 +273,64 @@ Rsprox captures of picking a room in the room menu (212, rev 229-236):
   Cancel goes back to the plain viewer.
 
 Either way the room starts turned so one of its doorways meets a neighbour's. Rooms built
-through a staircase or trapdoor ask Yes/No instead (captures).
+through a staircase or trapdoor ask Yes/No instead (captures). No room build sends a "You build"
+line.
+
+Refusals (captures, rev 229-235): "You can't afford to build that room." is a chat line on the
+pick; the rest are message boxes: "You can only build 38 rooms with your Construction level."
+(the player's cap), "That room can only be built underground." / "... on ground level.", "You
+can't build a room that would have no room to support it.", "Your house is already the maximum
+length.". A costume room, portal nexus or menagerie the house already has asks "You can only
+build one of those rooms." ("You can only build one menagerie.") with "Move the room here." /
+"Cancel."; the move goes through the same rotate menu and is free. If it can't move, the box says
+"You already have one of those rooms. " and why.
+
+Moving a room in the viewer refuses with message boxes: "That room can only go underground." /
+"... on ground level.", "That room is supporting something else, so it can't be moved.", "You
+can't move it above itself. It would fall down.", "You can't put it above that room.".
+
+### Removing a room
+
+Build on a door hotspot into a built room, or Delete in the viewer, asks "Remove the parlour?"
+Yes / No (captures, 14 of 16 recordings); Yes says "Room deleted!". The door removes the room on
+the far side from the player. "You can't remove a room that is supporting another room." and
+"Your house must have at least one exit portal." are message boxes.
+
+### Building furniture
+
+Captures of the build menu (`poh_furniture_creation`, 542 picks in 123 recordings, rev 226-239):
+
+- Each row's text is the name, then four lines whatever the count
+  (`Oak chair|Oak plank: 2<br><br><br>`).
+- A pick plays the piece's animation with synth 938 (111 of 123 recordings). Without nails it
+  takes the materials and gives the XP on that tick; the piece shows a tick later.
+- With nails nothing goes on the pick; each tick after it uses one nail ("You use a nail.", spam),
+  the animation every tick and the sound every second tick, and the last nail takes the rest and
+  gives the XP (recording 268). The best nails go first (Wiki). Live nails also bend ("You
+  accidentally bend a nail.", recording 2594) at a rate neither the captures nor the Wiki give,
+  so they don't bend here; running out mid-build says "You don't have enough nails left.".
+- No "You build ..." line.
+- Refusals: "You need a saw and a hammer in order to make furniture." (rev 236), "That can only
+  be built by upgrading the previous piece of furniture.", "That can only be built if the hotspot
+  is empty.", "You already have a tool store of that level in the room.", and a message box
+  listing every material with the missing ones red: "You don't have the right materials: 2 x
+  Plank, <col=ef1020>2 x Nails</col>".
+- Remove asks "Really remove it?" Yes / No and the Yes is silent (recordings 257, 2594).
+- A flatpack installs with the animation and synth 938, no XP or message, and needs a hammer
+  ("You need a hammer in order to install flatpack furniture."); a space that doesn't take it says
+  "You can't place that there." (recording 2605).
+
+### Estate agent
+
+Captures (rev 229-236): Relocate opens "Select a New Location" with "Rimmington (5,000)" rows;
+Redecorate opens "Choose a style:" with "Basic wood - 5,000 coins", "Twisted theme - Twisted
+blueprints" for blueprint styles, grey (`<col=5f5f5f>`) while a style can't be picked, Canifis
+before Civitas, and Cancel. A pick has no confirmation: the coins go and the agent says "Your
+house has been moved to Taverley." or "Your house has been redecorated.", "Your house is already
+there!", or "Hmph. Come back when you have 5,000 coins.". Twisted theme first says "Absolutely,
+let me borrow your blueprints ..."; leaving it shows "The Estate agent returns your blueprints."
+(message box). The Wilderness theme is only listed once it can be used (the captures show it
+rarely, so when it shows otherwise isn't known).
 
 A new house's save lists its garden's exit portal by hotspot only; loading a house now places
 such furniture, so the portal shows, and you arrive in front of it.

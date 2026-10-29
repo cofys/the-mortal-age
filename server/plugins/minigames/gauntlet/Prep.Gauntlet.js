@@ -9,7 +9,9 @@
  * a grym potion (unf); the pestle and mortar grinds 10 shards into 10 dust; 10 dust in the
  * potion makes an Egniol potion (3) for 10 Herblore XP. Raw paddlefish cook into paddlefish
  * for 15 Cooking XP; the burn chance and the one-a-tick pace of the pump and range are
- * Near-Reality's, as the Wiki gives neither.
+ * Near-Reality's, as the Wiki gives neither. The range's first fish, its sound, its spam-channel
+ * line, the cooking_success_count it moves and its empty-handed message box are from rsprox
+ * captures (recordings 1158, 3276, 3285).
  */
 
 const Shared = require("./Shared.Gauntlet");
@@ -19,6 +21,10 @@ const Resources = require("./Resources.Gauntlet");
 const Rewards = require("./Rewards.Gauntlet");
 
 const ANIMATION = { FILL: 827, COOK: 896, GRIND: 364, MIX: 363 };
+/** synth_sound 2577 with each cooked fish (rsprox captures). */
+const COOK_SOUND = 2577;
+/** The first fish is two ticks after the player reaches the range (rsprox captures). */
+const FIRST_COOK_TICKS = 2;
 /** A weapon made at this tier is attuned (0 basic, 2 perfected). */
 const ATTUNED_TIER = 1;
 const TOOL_NAMES = [["sceptre", "a sceptre"], ["axe", "an axe"], ["pickaxe", "a pickaxe"], ["harpoon", "a harpoon"], ["pestle", "a pestle and mortar"]];
@@ -130,19 +136,23 @@ function cook(event) {
   if (!run) return false;
   const items = itemsOf(run);
   if (!player.getInventory().contains(items.rawPaddlefish)) {
-    player.sendMessage("You have nothing to cook at the moment.");
+    Shared.statement(player, "You haven't got anything to cook.");
     return true;
   }
-  const { Skill } = Shared.core();
+  const { Skill, ChatType } = Shared.core();
+  let wait = FIRST_COOK_TICKS;
   repeatEachTick(player, () => {
     if (!player.getInventory().contains(items.rawPaddlefish)) return false;
+    if (wait-- > 0) return true;
     animate(player, ANIMATION.COOK);
+    player.getPacketSender().sendSound(COOK_SOUND, 1, 0);
     const level = player.getSkillManager().getCurrentLevel(Skill.COOKING);
     const burnt = Math.floor(run.random() * 100) < Math.min(48 - level, 34);
     player.getInventory().delete(items.rawPaddlefish, 1);
     player.getInventory().adds(burnt ? items.burntPaddlefish : items.paddlefish, 1);
     player.getInventory().refreshItems();
-    player.sendMessage(burnt ? "You accidentally burn the paddlefish." : "You successfully cook a paddlefish.");
+    player.getPacketSender().sendTypedMessage(ChatType.SPAM, burnt ? "You accidentally burn the paddlefish." : "You successfully cook a paddlefish.");
+    Shared.api().emitCustomEvent("cooking:count", { player, burnt });
     run.addPoints(Rewards.POINTS.cook);
     if (!burnt) player.getSkillManager().addExperiences(Skill.COOKING, 15);
     return true;

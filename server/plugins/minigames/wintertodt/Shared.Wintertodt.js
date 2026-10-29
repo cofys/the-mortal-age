@@ -163,6 +163,14 @@ const ANIM = {
   PYROMANCER_FALL: 7627,
 };
 
+/** Synths sent with the brazier, herb, cart and potion actions (rsprox captures, docs/wintertodt.md). */
+const SOUND = {
+  FIRE: 2596,
+  FIX: 930,
+  PICK: 2581,
+  DRINK: 2401,
+};
+
 const GFX = {
   SNOW_IMPACT: 502,
   AREA_IMPACT: 1311,
@@ -275,6 +283,16 @@ function addXp(player, skill, amount) {
   player.getSkillManager().addExperiences(core().Skill[skill], amount);
 }
 
+/** A synth for this player only; `delay` is in client cycles, as the packet carries it. */
+function sound(player, id, delay = 0) {
+  player.getPacketSender().sendSoundEffect(id, 1, delay, 1);
+}
+
+/** A line on the spam (filtered) chat channel, as the skilling lines are sent live. */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(core().ChatType.SPAM, text);
+}
+
 function animate(player, id) {
   const { Animation } = core();
   player.performAnimation(new Animation(id));
@@ -355,8 +373,8 @@ module.exports = {
   PRISON_ZONE, CAMP_ZONE, ENTER_AREA, EXIT_AREA, FIREMAKING_REQUIRED,
   MAX_ENERGY, MAX_WARMTH, DRAIN_PER_PYROMANCER, RECOVERY_PER_TICK, BREAK_TICKS, HUD_PERIOD,
   REWARD_POINTS, MAX_REWARDS, CORNERS, BRAZIER, STORM_TILE, STORM_SOURCE, SAFE_AREA,
-  OBJECT, NPC, ITEM, POTIONS, FUEL_ITEMS, PRISON_ITEMS, VARP, VARBIT, INTERFACE, SCRIPT, ANIM, GFX, PROJECTILE,
+  OBJECT, NPC, ITEM, POTIONS, FUEL_ITEMS, PRISON_ITEMS, VARP, VARBIT, INTERFACE, SCRIPT, ANIM, SOUND, GFX, PROJECTILE,
   COLD_SPLAT, WARMTH_BAR, OVERLAY_HUD_UID,
   loc, inZone, inSafeArea, distance, randomTile, later, repeat, statement, options, fade, fadeMove,
-  hasItem, removeItems, level, addXp, animate, startAction, stopAction, actionOf, firemakingLevel,
+  hasItem, removeItems, level, addXp, sound, spam, animate, startAction, stopAction, actionOf, firemakingLevel,
 };

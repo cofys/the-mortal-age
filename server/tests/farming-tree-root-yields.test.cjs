@@ -27,6 +27,7 @@ function prepare(t, { key = 'MAGIC', level = 99, base = level, free = 27, spade 
     player.getPacketSender = () => sender;
     player.sendMessage = text => messages.push(text);
     player.performAnimation = () => {};
+    player.busy = () => false;
     player.getClickDelay = () => ({ elapsedTime: () => true, reset() {} });
     player.getSkillManager().setMaxLevels(core.Skill.FARMING, base, false).setCurrentLevels(core.Skill.FARMING, level, false);
     const patch = Data.CACHE.patches.find(p => p.type === Data.CROPS.get(key).type);
@@ -43,7 +44,7 @@ function prepare(t, { key = 'MAGIC', level = 99, base = level, free = 27, spade 
     if (filler > 0) inventory.add(new core.Item(core.ItemIdentifiers.BRONZE_AXE, filler), false);
     const event = { player, object: { getId: () => patch.id }, clickType: 1,
         location: { x: patch.x, y: patch.y, z: patch.z } };
-    return { player, inventory, messages, farm, patch, dig: () => dig(event),
+    return { player, inventory, messages, farm, patch, dig: () => { dig(event); ticks(5); },
         state: () => farm.patches[Data.patchKey(patch)],
         roots: name => inventory.getAmount(Data.itemId(name)) };
 }
@@ -58,6 +59,8 @@ for (const [key, rootName, planting] of TREES) test(`${key} roots follow every p
         assert.equal(f.roots(rootName), expected, 'an emptied patch cannot award roots twice');
     }
 });
+// Farming actions finish on later farming ticks, as in the captures.
+const ticks = (n) => { for (let i = 0; i < n; i++) Patches.tick(); };
 test('root quantity uses the current boosted or drained level when the stump is dug', t => {
     for (const [base, level, expected] of [[96, 99, 4], [99, 98, 3], [75, 83, 2]]) {
         const f = prepare(t, { base, level });

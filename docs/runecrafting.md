@@ -31,6 +31,29 @@ On the click (or on arrival): sequence `human_runecraft` (791), spotanim `runecr
 height 92, sound 2710 (rsprox capture 1693, crafting at the water and mind altars in Guardians
 of the Rift).
 
+## Ruins, portals and tiaras
+
+- A worn tiara (or the Runecraft cape) shows Enter on the ruins; it takes the player in at once with
+  sound 200 and "You feel a powerful force take hold of you..." as spam (rsprox captures 1549,
+  1632, 1636).
+- A talisman used on the ruins is held up first (rsprox captures 1636, 1757, 1840, 1850): a tick
+  after the click `human_pickupfloor`, sound 200, varbit `busy` on and "You hold the <talisman>
+  towards the mysterious ruins.<br>You feel a powerful force take hold of you..." as spam (the
+  blood talisman is "Blood Talisman" there); two ticks later the teleport and `busy` off.
+- Landing tiles are the captured ones: water (2725, 4832), earth (2657, 4830) and fire
+  (2576, 4848) (rsprox captures 90, 91, 1549, 1757, 1858; `runecrafting-ruins.json` `destination`).
+- An altar's exit portal: the teleport outside its ruins, sound 200 and "You step through the
+  portal..." as spam, on the click. The Blood Altar's (loc 43478) leads to (3559, 9780) (rsprox
+  capture 1636).
+- Tiaras: the talisman or a tiara used on its altar with both in the inventory makes the tiara,
+  with "You bind the power of the talisman into your Tiara." as spam and no animation (rsprox
+  capture 1636). XP is the Wiki's (Tiara: 25 for air up to 52.5 for blood and wrath); the one
+  captured drop (+32 for a blood tiara) is not used.
+- The essence-mine wizards (rsprox captures 1628, 2280): the wizard says "Senventior Disthine
+  Molenko!" overhead and casts Curse (108 on them, projectile 109 from 61 to 100 cycles, 110 on the
+  player, area sounds 127 and 126), and the player lands in the mine four ticks later. Live's
+  mine is an instance with several landing tiles; here it is the fixed mine and its middle.
+
 ## Not done yet
 
 - Daeyalt essence (pure essence's runes at 1.5 times the XP) needs the Daeyalt essence mine.
@@ -38,6 +61,6 @@ of the Rift).
   which exist here yet; the Soul Altar has no handler.
 - The Wrath Altar's Dragon Slayer II requirement and the true Blood Altar's Sins of the Father
   requirement: no capture of the refusal.
-- Talisman and tiara enchanting at the altars, combination runes and the Ourania Altar.
+- Combination runes (captured: mud and lava runes, rev 227) and the Ourania Altar.
 - The level and rune essence refusals ("You need a Runecrafting level of at least # to craft
   this.", "You don't have any essence in your inventory.") have no capture.

@@ -5,6 +5,10 @@ const Traps = require("./Traps.Hunter");
 const teased = new Map();
 const lastPit = new WeakMap();
 const leaps = new Map();
+// rsprox captures 1108, 1757, 1858: the jump plays sound 2635 at the pit and the pit collapsing on a
+// creature plays 2638; neither sends a message.
+const JUMP_SOUND = 2635;
+const COLLAPSE_SOUND = 2638;
 // RuneLite SpotanimID, validated with dump:spotanim against rev237.
 const LEAP_GRAPHICS = { SABRE_TOOTHED_KYATT: [937,938], SPINED_LARUPIA: [939,940], HORNED_GRAAHK: [941,942],
   SUNLIGHT_ANTELOPE: [2800,2801], MOONLIGHT_ANTELOPE: [2802,2803] };
@@ -65,6 +69,7 @@ function jump({ player, object }) {
       state.npc.performAnimation(new H.core.Animation(state.creature.npc === H.core.NpcIdentifiers.SUNLIGHT_ANTELOPE
         || state.creature.npc === H.core.NpcIdentifiers.MOONLIGHT_ANTELOPE ? ANIM.ANTELOPE_FALL : ANIM.CAT_FALL));
       Traps.setState(trap, "caught", state.creature);
+      pitSound(trap, COLLAPSE_SOUND);
       hide(state.npc, 10, 2);
     } else {
       const npc=state.npc, queue=npc.getMovementQueue(), start=npc.getLocation().clone();
@@ -75,15 +80,20 @@ function jump({ player, object }) {
       leaps.set(npc,{due:H.tick+3,destination,blocked:queue.isMovementBlocked()});
       queue.reset();queue.setBlockMovement(true);npc.setVisible(false);
     }
-    player.sendMessage(success ? "The creature falls into your pit!" : "The creature leaps over your trap.");
   }, () => player.setForceMovement(null));
   if (started) {
+    pitSound(trap, JUMP_SOUND);
     const delta = new H.core.Location(destination.getX() - from.getX(), destination.getY() - from.getY());
     player.getMovementQueue().reset();
     player.setForceMovement(new H.core.ForceMovement(from.clone(), delta, 0, 60,
       dx > dy ? (delta.getX() > 0 ? 1 : 3) : (delta.getY() > 0 ? 0 : 2), ANIM.JUMP));
   }
   return true;
+}
+
+function pitSound(trap, soundId) {
+  const at = trap.location;
+  H.core.Sounds.playAreaSound({ soundId, x: at.getX(), y: at.getY(), level: at.getZ(), radius: 10 });
 }
 
 function land(npc,leap) {

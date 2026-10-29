@@ -11,6 +11,8 @@ before(async () => { await CachePipeline.initialize(path.resolve(__dirname,'..')
 after(() => PM.emitServerShutdown({}));
 const item = name => core.CacheDefinitions.getObjId(name);
 const npcId = name => core.CacheDefinitions.getNpcId(name);
+// A nest takes the place of a roll's log, so the fixed draws below let the nest roll miss.
+function missNest(value) {return ()=>new Error().stack.includes('maybeDropBirdNest')?0.99:value;}
 function actor(t) {
   const channel={kind:'test',remoteAddress:'127.0.0.1',isOpen:()=>true,send:()=>true,close(){},onData(){},onError(){},onClose(){}};
   const p=new Player(new PlayerSession(channel)); p.setIndex(next++); p.setUsername('beaverqa'+next); p.setRegistered(true); p.setLocation(new core.Location(3222,3218,0)); p.needsPlacement=false;
@@ -33,7 +35,7 @@ async function summon(f,name='skillpetwc') {const id=item(name);f.p.getInventory
 
 test('native Beaver Drop uses the current cache follower, not Cordelia',async t=>{const f=actor(t),n=await summon(f);assert.equal(n.getId(),npcId('skillpetwc'));assert.equal(n.getDefinition().getName(),'Beaver');assert.ok(n.getDefinition().getActions().includes('Pick-up'));await action(f,n,'Pick-up');assert.equal(f.p.getInventory().getAmount(item('skillpetwc')),1);});
 test('real native Woodcutting success awards the Beaver follower with one insured base item',async t=>{
- const f=actor(t);f.p.getInventory().add(new core.Item(core.ItemIdentifiers.BRONZE_AXE),true);const tree=new core.GameObject(core.ObjectIdentifiers.TREE,new core.Location(3223,3218,0),10,0,null);core.ObjectManager.register(tree,true);t.after(()=>core.ObjectManager.deregister(tree,true));t.mock.method(Math,'random',()=>0);
+ const f=actor(t);f.p.getInventory().add(new core.Item(core.ItemIdentifiers.BRONZE_AXE),true);const tree=new core.GameObject(core.ObjectIdentifiers.TREE,new core.Location(3223,3218,0),10,0,null);core.ObjectManager.register(tree,true);t.after(()=>core.ObjectManager.deregister(tree,true));t.mock.method(Math,'random',missNest(0));
  await send(f,{type:'object_option',id:tree.getId(),x:3223,y:3218,action:'Chop down'});for(let i=0;i<20;i++)core.TaskManager.process();assert.ok(f.p.getInventory().getAmount(core.ItemIdentifiers.LOGS)>0,'real chopping must yield logs');const n=f.p.getAttribute('pets:current');assert.equal(n?.getId(),npcId('skillpetwc'));assert.equal(n.getOwner(),f.p);assert.deepEqual(f.p.getAttribute('pets.owned'),[item('skillpetwc')]);assert.equal(f.p.getInventory().getAmount(item('skillpetwc')),0);
 });
 test('legacy Beaver active descriptor ignores obsolete NPC variant and survives actual save/login',async t=>{

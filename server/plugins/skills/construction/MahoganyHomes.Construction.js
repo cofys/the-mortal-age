@@ -7,7 +7,8 @@ const {
 const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
-// Mahogany Homes (Wiki; no rsprox captures, so every dialogue line and message here is ours
+// Mahogany Homes (Wiki, and one Leagues rsprox capture, recording 1863, for the tier menu, the
+// hotspot sounds and the last-job line; the other dialogue lines and messages here are ours
 // except "I'd better leave this alone right now."): Amy in Falador, then also Marlo (Varrock),
 // Ellie (East Ardougne) and Angelo (Hosidius) give contracts at four tiers (Beginner, Novice,
 // Adept, Expert: levels 1/20/50/70, planks, oak, teak, mahogany) for a random client's home in
@@ -53,8 +54,8 @@ const TIERS = [
 const STEEL_BAR = Items.STEEL_BAR;
 const STEEL_REPAIR_XP = 120;
 const BROKEN = 1, OLD = 3, EMPTY = 4, BUILT = 5;
-const BUILD = Ids.seq("human_poh_build");
 const REMOVE = Ids.seq("human_throw_away");
+const REMOVE_SOUNDS = [2097, 2098];
 const DISCUSSED_VARBIT = Ids.varbit("con_contract_discussed");
 const HOTSPOT_VARBITS = Array.from({ length: 8 }, (_, index) => Ids.varbit(`con_contract_hotspot_${index + 1}_display`));
 const AMY = ["con_contractor", "con_contractor_1op", "con_contractor_3op"].map(Ids.npc); // and the forms it shows
@@ -161,6 +162,11 @@ function lastTier(event) {
   return true;
 }
 
+/**
+ * rsprox captures (Contract on con_contractor_varrock, recording 1863, Leagues): every tier is
+ * offered, "Select an option", with the levels in the labels and "I'll pass actually." last, as
+ * the Wiki transcripts (npc-dialogues.json) have it. A tier above the player's level is refused on the pick.
+ */
 function chooseTier(player, npcId) {
   const current = contractOf(player);
   if (current) {
@@ -170,10 +176,9 @@ function chooseTier(player, npcId) {
   if (House.houseStateFor(player).owned === false) {
     return say(player, npcId, ["You'll need a house of your own before we can give you work."]);
   }
-  const level = player.getSkillManager().getCurrentLevel(Skill.CONSTRUCTION);
-  const open = TIERS.map((tier, index) => ({ tier, index })).filter(({ tier }) => level >= tier.level);
-  api.sendMultiChatboxPrompt(player, "What kind of contract would you like?",
-    ...open.flatMap(({ tier, index }) => [`${tier.name} (${planksName(tier)})`, () => assign(player, npcId, index)]));
+  api.sendMultiChatboxPrompt(player, "Select an option",
+    ...TIERS.flatMap((tier, index) => [`${tier.name} Contract${tier.level > 1 ? ` (Requires ${tier.level} Construction)` : ""}`, () => assign(player, npcId, index)]),
+    "I'll pass actually.", () => {});
 }
 
 function planksName(tier) {
@@ -219,20 +224,22 @@ function hotspotOption(event) {
   const tier = TIERS[contract.tier];
   if (!hasTools(player)) return player.sendMessage("You need a hammer and a saw to do that."), true;
   if (state === OLD) {
+    // rsprox captures (recording 1863): human_throw_away with synth 2097 or 2098, 20 client ticks late.
     player.performAnimation(new Animation(REMOVE));
+    player.getPacketSender().sendSound(REMOVE_SOUNDS[Math.floor(Math.random() * REMOVE_SOUNDS.length)], 0, 20);
     return finishJob(player, contract, hotspot, EMPTY, 0), true;
   }
   if (state === BROKEN) {
     const material = hotspot.repair === "steel bar" ? STEEL_BAR : tier.plank;
     if (!take(player, material, 1)) return player.sendMessage(`You need ${material === STEEL_BAR ? "a steel bar" : `a ${planksName(tier).replace(/s$/, "")}`} to repair that.`), true;
-    player.performAnimation(new Animation(BUILD));
+    House.hammer(player);
     return finishJob(player, contract, hotspot, 0, material === STEEL_BAR ? STEEL_REPAIR_XP : tier.repairXp), true;
   }
   if (player.getSkillManager().getCurrentLevel(Skill.CONSTRUCTION) < tier.level) {
     return player.sendMessage(`You need a Construction level of ${tier.level} to build that.`), true;
   }
   if (!take(player, tier.plank, hotspot.planks)) return player.sendMessage(`You need ${hotspot.planks} ${planksName(tier)} to build that.`), true;
-  player.performAnimation(new Animation(BUILD));
+  House.hammer(player);
   finishJob(player, contract, hotspot, BUILT + contract.tier, hotspot.planks * tier.buildXp);
   return true;
 }
@@ -260,7 +267,10 @@ function finishJob(player, contract, hotspot, state, experience) {
   if (state === 0) delete contract.states[hotspot.index];
   setContract(player, contract);
   if (experience) player.getSkillManager().addExperiences(Skill.CONSTRUCTION, experience * outfitBonus(player));
-  if (!remaining(contract)) player.sendMessage(`That's everything. Speak to ${clientName(HOME_BY_KEY.get(contract.home))} for your payment.`);
+  if (remaining(contract)) return;
+  // rsprox captures (recording 1863 and the message index): the client, in green.
+  const client = clientName(HOME_BY_KEY.get(contract.home));
+  player.sendMessage(`<col=229628>${client} seems happy with your work. Talk to ${MAHOGANY.pronouns[client] ?? "them"} for your reward.</col>`);
 }
 
 function remaining(contract) {

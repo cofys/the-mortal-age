@@ -69,11 +69,12 @@ let index = 0;
 function fakePlayer({ at = new Location(3085, 3233, 0), level = 70 } = {}) {
   const id = ++index;
   const timers = new Map();
+  const attributes = new Map();
   const p = {
-    location: at, messages: [], spam: [], anims: [], xp: {}, chats: [], graphics: [], inventory: container(),
+    location: at, messages: [], spam: [], anims: [], xp: {}, chats: [], graphics: [], sounds: [], inventory: container(),
     getIndex: () => id, getUsername: () => `Tester${id}`, isPlayer: () => true, isRegistered: () => true,
     getLocation: () => p.location,
-    getAttribute: () => null, setAttribute() {},
+    getAttribute: (k) => attributes.get(k), setAttribute: (k, v) => attributes.set(k, v),
     getInventory: () => p.inventory,
     sendMessage: (m) => p.messages.push(m),
     performAnimation: (a) => p.anims.push(a.getId()),
@@ -91,7 +92,8 @@ function fakePlayer({ at = new Location(3085, 3233, 0), level = 70 } = {}) {
       const sender = {
         sendTypedMessage: (type, text) => { p.spam.push(text); return sender; },
         sendAreaSound: () => sender, sendGraphic: () => sender, sendObjectAnimation: () => sender,
-        sendVarbit: (id, value) => { (p.varbits ??= new Map()).set(id, value); return sender; },
+        sendSoundEffect: (id) => { p.sounds.push(id); return sender; },
+        sendVarbit: (id, value) => { (p.varbits ??= new Map()).set(id, value); (p.varbitLog ??= []).push([id, value]); return sender; },
       };
       return sender;
     },
@@ -124,51 +126,101 @@ function log(player) {
   for (const fn of hooks.events['woodcutting:success']) fn({ player, logId: 1519 });
 }
 
-test('the leprechaun on his clover; a rainbow every 37 ticks, fading 17-20 later', () => {
+/** Records the area sounds, tile graphics and loc anims he sends (no real players are in the world). */
+function watch() {
+  const seen = { sounds: [], graphics: [], anims: [] };
+  const C = Common();
+  const { areaSound, locAnim, nearbyPlayers } = C;
+  const viewer = { getPacketSender: () => ({ sendGraphic: (g, at) => seen.graphics.push({ id: g.getId(), height: g.height, at: `${at.getX()},${at.getY()}` }) }) };
+  C.areaSound = (at, id, radius) => seen.sounds.push({ at: `${at.getX()},${at.getY()}`, id, radius });
+  C.locAnim = (object, seq) => seen.anims.push(seq);
+  C.nearbyPlayers = (at, range) => (range === 15 ? [viewer] : nearbyPlayers(at, range));
+  seen.restore = () => Object.assign(C, { areaSound, locAnim, nearbyPlayers });
+  return seen;
+}
+
+const tile = (at) => `${at.getX()},${at.getY()}`;
+
+test('the leprechaun on his clover in smoke; a rainbow every 37 ticks, fading at 17 and gone at 20, with its sounds', () => {
   const p = fakePlayer();
-  const event = startEvent('leprechaun', [p]);
-  assert.equal(event.npc.getId(), 12163);
-  assert.equal(event.clover.getId(), 49935);
-  ticks(1);
-  assert.equal(event.rainbows.length, 1);
-  assert.equal(event.rainbows[0].object.getId(), 49934);
-  const d = Common().distance(event.rainbows[0].at, event.npc.getLocation());
-  assert.ok(d >= 1 && d <= 9);
-  ticks(20);
-  assert.equal(event.rainbows.length, 0, 'gone within 20 ticks');
-  ticks(17);
-  assert.equal(event.rainbows.length, 1, 'the next 37 ticks on');
-  assert.equal(event.made, 2);
+  const seen = watch();
+  try {
+    const event = startEvent('leprechaun', [p]);
+    assert.equal(event.npc.getId(), 12163);
+    assert.equal(event.clover.getId(), 49935);
+    const here = tile(event.npc.getLocation());
+    assert.deepEqual(seen.graphics, [{ id: 1180, height: 124, at: here }], 'the smoke');
+    assert.deepEqual(seen.sounds, [{ at: here, id: 1930, radius: 5 }]);
+    seen.sounds.length = 0;
+    ticks(1);
+    assert.equal(event.rainbows.length, 1);
+    const bow = event.rainbows[0];
+    assert.equal(bow.object.getId(), 49934);
+    assert.ok(bow.object.getFace() >= 0 && bow.object.getFace() <= 3);
+    const d = Common().distance(bow.at, event.npc.getLocation());
+    assert.ok(d >= 1 && d <= 9);
+    assert.deepEqual(seen.sounds, [{ at: tile(bow.at), id: 7545, radius: 7 }]);
+    ticks(16);
+    assert.deepEqual(seen.anims, []);
+    ticks(1);
+    assert.deepEqual(seen.anims, [10606], 'the despawn anim at 17');
+    assert.deepEqual(seen.sounds.at(-1), { at: tile(bow.at), id: 7544, radius: 7 });
+    ticks(2);
+    assert.equal(event.rainbows.length, 1, 'still there at 19');
+    ticks(1);
+    assert.equal(event.rainbows.length, 0, 'gone at 20');
+    ticks(17);
+    assert.equal(event.rainbows.length, 1, 'the next 37 ticks on');
+    assert.equal(event.made, 2);
+    seen.graphics.length = 0;
+    seen.sounds.length = 0;
+    for (let i = 0; i < 230 && Leprechaun.events.has(event); i++) ticks(1);
+    assert.deepEqual(seen.graphics, [{ id: 1180, height: 124, at: here }], 'smoke as he goes');
+    assert.deepEqual(seen.sounds.filter((s) => s.id === 1930), [{ at: here, id: 1930, radius: 5 }]);
+  } finally {
+    seen.restore();
+  }
 });
 
 function Common() {
   return require('../plugins/minigames/forestry/Common.Forestry');
 }
 
-test('standing in a rainbow: the line and 12 luck, once; each log spends 5 on 22-23 bark', () => {
+test('standing in a rainbow: the line, spotanim, sound and 12 more luck, once; slot 6 minus its number; each log spends 5 on 22-23 bark the tick after', () => {
   const p = fakePlayer({ level: 80 });
   const event = startEvent('leprechaun', [p]);
   Spawns.choppers.set(p, { name: 'Willow tree', location: new Location(3083, 3237, 0) });
   ticks(1);
   stand(p, event);
   assert.equal(p.messages.at(-1), 'You feel more in touch with the trees after standing in the rainbow.');
-  assert.equal(Leprechaun.luckOf(p), 13);
-  assert.equal(p.varbits.get(15344), 13);
+  assert.deepEqual(p.graphics, [2580]);
+  assert.deepEqual(p.sounds, [7551]);
+  assert.equal(Leprechaun.luckOf(p), 12, '0 -> 12');
+  assert.equal(p.varbits.get(15344), 12);
+  assert.deepEqual(p.varbitLog.filter(([id]) => id === 15343), [[15343, 6], [15343, 5]], 'first contact 6, then 6 - 1');
   ticks(1);
   assert.equal(p.messages.filter((m) => m.includes('rainbow')).length, 1, 'once a rainbow');
   log(p);
-  assert.equal(p.spam.at(-2), "You use your leprechaun's luck to gather some Anima-infused bark.");
+  assert.equal(p.spam.at(-1), "You use your leprechaun's luck to gather some Anima-infused bark.");
+  assert.equal(bark(p), 0, 'not the same tick');
+  ticks(1);
   assert.ok(bark(p) >= 22 && bark(p) <= 23);
   assert.equal(Math.round(xp(p, 'Woodcutting') * 100), Math.round((1.33 * 80 + 38.7) * 100));
   log(p);
-  assert.equal(p.spam.at(-2), "You use the last of your leprechaun's luck to gather some Anima-infused bark.");
-  assert.equal(Leprechaun.luckOf(p), 3);
+  assert.equal(p.messages.at(-1), "You use the last of your leprechaun's luck to gather some Anima-infused bark.", 'a game message');
+  ticks(1);
+  assert.equal(Leprechaun.luckOf(p), 2);
   const before = bark(p);
   log(p);
+  ticks(1);
   assert.equal(bark(p), before, 'not enough luck left');
+  for (let i = 0; i < 60 && event.made < 2; i++) ticks(1);
+  stand(p, event);
+  assert.equal(Leprechaun.luckOf(p), 14, 'the leftover 2 -> 14');
+  assert.equal(p.varbits.get(15343), 4, 'the second rainbow: 6 - 2');
 });
 
-test('a late joiner gets no luck; he leaves at 224 and the luck goes with him', () => {
+test('a late joiner gets no luck; luck outlives him and keeps being spent on later logs', () => {
   const p = fakePlayer();
   const late = fakePlayer();
   const event = startEvent('leprechaun', [p]);
@@ -178,8 +230,14 @@ test('a late joiner gets no luck; he leaves at 224 and the luck goes with him', 
   stand(p, event);
   ticks(222);
   assert.equal(Leprechaun.events.has(event), false);
-  assert.equal(Leprechaun.luckOf(p), 0);
-  assert.equal(p.varbits.get(15344), 0);
+  assert.equal(Leprechaun.luckOf(p), 12, 'not cleared when he leaves');
+  assert.equal(p.varbits.get(15344), 12);
+  assert.equal(p.getAttribute(Leprechaun.LUCK_ATTRIBUTE), 12, 'kept in the saved attribute');
+  Spawns.choppers.set(p, { name: 'Willow tree', location: new Location(3083, 3237, 0) });
+  log(p);
+  ticks(1);
+  assert.equal(Leprechaun.luckOf(p), 7);
+  assert.ok(bark(p) >= 22 && bark(p) <= 23, 'spent after he has gone');
 });
 
 test('Deposit: the recorded menu; banking all for a chopper, the deposit box, nothing', () => {
@@ -201,6 +259,7 @@ test('Deposit: the recorded menu; banking all for a chopper, the deposit box, no
   assert.deepEqual(deposited, [1519], 'resources only: the logs');
   menu.args[1]();
   assert.deepEqual(deposited, [1519, 1519, 1359], 'all of it');
+  assert.deepEqual(p.anims, [], 'no animation for options 1 and 2');
   menu.args[7]();
   assert.deepEqual(hooks.emitted.at(-1)[0], 'bank:open-deposit-box');
   core.Bank.deposit = realDeposit;
@@ -208,21 +267,13 @@ test('Deposit: the recorded menu; banking all for a chopper, the deposit box, no
   assert.deepEqual(lines(p.chats.at(-1)), ["Grand job, what an obnoxious tree, spreading rumours 'bout other trees and sucking up all the water.", "As a reward, I'll let ye use me full banking services!"]);
 });
 
-test("luck from one leprechaun ends with him, even with another still out; no banking once he's gone", () => {
+test("no banking once he's gone", () => {
   const p = fakePlayer();
   const first = startEvent('leprechaun', [p]);
-  ticks(1);
-  stand(p, first);
-  assert.equal(Leprechaun.luckOf(p), 13);
   hooks.npcs.get('Woodcutting Leprechaun:Deposit')({ player: p, npc: first.npc });
   const menu = hooks.prompts.at(-1);
-  const object = new core.GameObject(10833, new Location(3200, 3300, 0), 10, 0, null);
-  Spawns.quiet.length = 0;
-  const second = Spawns.spawn({ object, location: object.getLocation().clone(), name: 'Willow tree', size: 2 }, [p], 'leprechaun');
-  assert.ok(second);
   for (let i = 0; i < 230 && Leprechaun.events.has(first); i++) ticks(1);
   assert.equal(Leprechaun.events.has(first), false);
-  assert.equal(Leprechaun.luckOf(p), 0, "the first one's luck is gone");
   const deposited = [];
   const realDeposit = core.Bank.deposit;
   core.Bank.deposit = (player, id) => deposited.push(id);

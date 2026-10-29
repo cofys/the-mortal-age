@@ -9,6 +9,7 @@ const Restrictions = require("./Restrictions.DwarfCannon");
 const Ammo = require("./Ammo.DwarfCannon");
 const Firing = require("./Firing.DwarfCannon");
 
+/** Spam lines (rsprox captures). */
 const PART_MESSAGES = [
   "You place the cannon base on the ground.",
   "You add the stand.",
@@ -102,7 +103,7 @@ function addPart(cannon) {
   const kind = Cannon.KINDS[cannon.kind];
   const part = kind.parts[cannon.stage];
   player.getInventory().delete(part, 1);
-  player.sendMessage(PART_MESSAGES[cannon.stage]);
+  player.getPacketSender().sendTypedMessage(Cannon.core.ChatType.SPAM, PART_MESSAGES[cannon.stage]);
   cannon.stage++;
   cannon.setupTime = Cannon.core.World.getProcessCycle();
   Cannon.setLoc(cannon, kind.locs[cannon.stage - 1]);

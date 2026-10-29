@@ -1,6 +1,7 @@
 "use strict";
 
-const { api, World, Animation, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition, PlayerRights, EffectSpells } = require("./Core.Construction");
+const { api, World, Animation, ChatType, CountdownTask, EffectSpells, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers,
+  ItemDefinition, PlayerRights, Task, TaskManager } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
@@ -41,9 +42,14 @@ const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
 const SAWS = [ItemIdentifiers.SAW, ItemIdentifiers.CRYSTAL_SAW, ItemIdentifiers.AMYS_SAW];
 const TINDERBOX_ID = ItemIdentifiers.TINDERBOX;
-const NAIL_IDS = [ItemIdentifiers.BRONZE_NAILS, ItemIdentifiers.IRON_NAILS, ItemIdentifiers.STEEL_NAILS,
-  ItemIdentifiers.BLACK_NAILS, ItemIdentifiers.MITHRIL_NAILS, ItemIdentifiers.ADAMANTITE_NAILS,
-  ItemIdentifiers.RUNE_NAILS, ItemIdentifiers.DRAGON_NAILS];
+// Wiki (Nails): with several kinds carried, the higher tier goes first.
+const NAIL_IDS = [ItemIdentifiers.DRAGON_NAILS, ItemIdentifiers.RUNE_NAILS, ItemIdentifiers.ADAMANTITE_NAILS,
+  ItemIdentifiers.MITHRIL_NAILS, ItemIdentifiers.BLACK_NAILS, ItemIdentifiers.STEEL_NAILS,
+  ItemIdentifiers.IRON_NAILS, ItemIdentifiers.BRONZE_NAILS];
+// The workshop's tool stores, in upgrade order.
+const TOOL_STORES = ["TOOL_STORE_1", "TOOL_STORE_2", "TOOL_STORE_3", "TOOL_STORE_4", "TOOL_STORE_5"];
+const BUILD_ANIMATION = Ids.seq("human_poh_build");
+const BUILD_SOUND = 938;
 // poh_portal_op: Yanille's portal once the Ardougne diary has changed it.
 const DIARY_PORTAL_ID = Ids.loc("poh_portal_op");
 const HOUSE_PORTAL_IDS = [...Estate.HOUSE_LOCATIONS.map(location => location.portal), DIARY_PORTAL_ID];
@@ -364,6 +370,8 @@ function selectRoomFromInterface(event) {
   const room = Data.CONSTRUCTION_ROOMS.find(candidate => candidate.id === id);
   if (!room) { event.player.sendMessage("That room is not available yet."); return true; }
   pendingRoomMenus.delete(event.player);
+  const copy = pending.house.getOnlyCopy(room);
+  if (copy) return offerRoomMove(event.player, pending.house, pending.target, room, copy, pending.viewer), true;
   if (pending.viewer) previewRoom(event.player, pending.house, pending.target, room);
   else roomMenu(event.player, pending.house, pending.target, room, startingRotation(pending.house, pending.target, room));
   return true;
@@ -379,28 +387,55 @@ function startingRotation(house, target, room) {
  * rsprox captures (poh_add_room:list, rev 229-236): a room picked at a door hotspot is built from
  * the chatbox, "Select an option" with Rotate clockwise / Rotate anticlockwise / Build / Cancel
  * (Build / Cancel for a one-door room). The room shows in place meanwhile (previewObjects).
- * Rotating sends the menu again; Build takes the coins and rebuilds the house.
+ * Rotating sends the menu again; Build takes the coins and rebuilds the house. With `moving` (the
+ * one copy of a room the house may only have one of) Build moves that room here instead, for free.
  */
-function roomMenu(player, house, target, room, rotation) {
+function roomMenu(player, house, target, room, rotation, moving = null) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
-  const problem = house.canPlaceRoom(room, target, constructionLevel(player));
-  if (problem) {
-    player.getPacketSender().sendInterfaceRemoval();
-    return player.sendMessage(problem);
-  }
+  const problem = moving ? house.canMoveRoom(moving, target) : roomProblem(player, house, target, room);
   player.getPacketSender().sendInterfaceRemoval();
+  if (problem) return Menu.refuse(player, problem);
   showRoomPreview(player, house.previewObjects(room.key, target, rotation));
-  const viewer = { house, destination: target, newRoom: room, rotation };
+  const viewer = { house, destination: target, newRoom: room, rotation, moving };
   const build = () => { clearRoomPreview(player); buildRoom(player, viewer, false); };
   const cancel = () => clearRoomPreview(player);
   // One-door rooms (portal chamber, throne room, treasure room) only face their door (captures).
   const doors = house.templateDoorMask(room.key);
   if ((doors & (doors - 1)) === 0) return api.sendMultiChatboxPrompt(player, "Select an option", "Build", build, "Cancel", cancel);
   api.sendMultiChatboxPrompt(player, "Select an option",
-    "Rotate clockwise", () => roomMenu(player, house, target, room, (rotation + 1) & 3),
-    "Rotate anticlockwise", () => roomMenu(player, house, target, room, (rotation + 3) & 3),
+    "Rotate clockwise", () => roomMenu(player, house, target, room, (rotation + 1) & 3, moving),
+    "Rotate anticlockwise", () => roomMenu(player, house, target, room, (rotation + 3) & 3, moving),
     "Build", build,
     "Cancel", cancel);
+}
+
+/** rsprox captures (poh_add_room:list): the coins are checked when the room is picked, in the chat. */
+function roomProblem(player, house, target, room) {
+  return house.canPlaceRoom(room, target, constructionLevel(player))
+    ?? (player.getInventory().getAmount(COINS_ID) < room.cost ? "You can't afford to build that room." : null);
+}
+
+/**
+ * rsprox captures (poh_add_room:list, rev 229): picking a room the house may only have one of
+ * offers to move that one here ("You can only build one of those rooms." / "Move the room here.",
+ * the menagerie in its own words), or says in a message box why it can't move.
+ */
+function offerRoomMove(player, house, target, room, copy, fromViewer) {
+  player.getPacketSender().sendInterfaceRemoval();
+  const problem = house.canMoveRoom(copy, target);
+  if (problem) return Menu.refuse(player, Menu.messageBox(`You already have one of those rooms. ${problem.messageBox ?? problem}`));
+  const menagerie = room.key === "MENAGERIE_INDOORS" || room.key === "MENAGERIE_OUTDOORS";
+  const existing = Data.ROOM_BY_KEY.get(house.getRoom(copy).roomKey);
+  api.sendMultiChatboxPrompt(player, menagerie ? "You can only build one menagerie." : "You can only build one of those rooms.",
+    menagerie ? "Move your menagerie here." : "Move the room here.", () => {
+      if (!fromViewer) return roomMenu(player, house, target, existing, startingRotation(house, target, existing), copy);
+      openHouseViewer(player);
+      const viewer = houseViewers.get(player);
+      if (!viewer) return;
+      Object.assign(viewer, { selected: copy, destination: target, mode: "rotate", rotation: startingRotation(house, target, existing) });
+      syncViewerSelection(player, viewer);
+    },
+    "Cancel.", () => {});
 }
 
 /** player -> the preview locs on show */
@@ -432,10 +467,10 @@ function rotatedDoors(doors, rotation) {
  */
 function previewRoom(player, house, target, room) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
-  const problem = house.canPlaceRoom(room, target, constructionLevel(player));
+  const problem = roomProblem(player, house, target, room);
   if (problem) {
     player.getPacketSender().sendInterfaceRemoval();
-    return player.sendMessage(problem);
+    return Menu.refuse(player, problem);
   }
   const rotation = startingRotation(house, target, room);
   player.getPacketSender().sendInterface(HOUSE_VIEWER_INTERFACE);
@@ -444,41 +479,43 @@ function previewRoom(player, house, target, room) {
   refreshHouseViewer(player, viewer);
 }
 
+/** rsprox captures (poh_viewer:done, chatmenu Build): the house is rebuilt with no message. */
 function buildRoom(player, viewer, reopenViewer = true) {
-  const { house, destination: target, newRoom: room, rotation } = viewer;
+  const { house, destination: target, newRoom: room, rotation, moving } = viewer;
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
-  const problem = house.canPlaceRoom(room, target, constructionLevel(player));
-  if (problem) return player.sendMessage(problem);
-  if (player.getInventory().getAmount(COINS_ID) < room.cost) return player.sendMessage("You don't have enough coins to build that room.");
-  player.getInventory().delete(COINS_ID, room.cost);
-  house.placeRoom(target, room, rotation);
+  if (moving) {
+    if (!house.moveRoom(moving, target, rotation)) return Menu.refuse(player, house.canMoveRoom(moving, target));
+  } else {
+    const problem = roomProblem(player, house, target, room);
+    if (problem) return Menu.refuse(player, problem);
+    player.getInventory().delete(COINS_ID, room.cost);
+    house.placeRoom(target, room, rotation);
+  }
   rebuildHouse(player, house);
-  player.sendMessage(`You build ${withArticle(room.name)}.`);
   if (reopenViewer) openHouseViewer(player);
 }
 
-function manageRoom(player, house, target) {
+/**
+ * rsprox captures (poh_viewer:delete, door hotspots into a built room, rev 229-235):
+ * "Remove the parlour?" with Yes / No; the Yes says "Room deleted!". Refusals are message boxes.
+ */
+function removeRoomPrompt(player, house, target, onNo = () => {}, onRemoved = () => {}) {
   const room = house.getRoom(target);
   if (!room) return;
-  const name = room.roomKey.replace(/_/g, " ").toLowerCase();
-  api.sendMultiChatboxPrompt(player, `Manage ${name}`, "Rotate clockwise", () => {
-    if (houseFor(player) !== house || !isBuildingMode(player) || !house.rotateRoom(target)) return;
+  const problem = house.canRemoveRoom(target);
+  if (problem) return Menu.refuse(player, problem);
+  api.sendMultiChatboxPrompt(player, `Remove the ${Data.ROOM_BY_KEY.get(room.roomKey).name}?`, "Yes", () => {
+    if (houseFor(player) !== house || !isBuildingMode(player) || house.getRoom(target) !== room) return;
+    const currentProblem = house.canRemoveRoom(target);
+    if (currentProblem) return Menu.refuse(player, currentProblem);
+    house.removeRoom(target);
     rebuildHouse(player, house);
-    player.sendMessage(`You rotate the ${name}.`);
-  }, "Remove room", () => {
-    const problem = house.canRemoveRoom(target);
-    if (problem) return player.sendMessage(problem);
-    api.sendMultiChatboxPrompt(player, `Remove the ${name}?`, "Yes, remove it", () => {
-      if (houseFor(player) !== house || !isBuildingMode(player)) return;
-      const currentProblem = house.canRemoveRoom(target);
-      if (currentProblem) return player.sendMessage(currentProblem);
-      house.removeRoom(target);
-      rebuildHouse(player, house);
-      player.sendMessage(`You remove the ${name}.`);
-    }, "No", () => {});
-  }, "Cancel", () => {});
+    player.sendMessage("Room deleted!");
+    onRemoved();
+  }, "No", onNo);
 }
 
+/** Build on a door hotspot: a new room through an empty doorway, else removing the room beyond it. */
 function openRoomDoor(event) {
   const player = event.player;
   const house = houseFor(player);
@@ -489,19 +526,11 @@ function openRoomDoor(event) {
     chooseRoom(player, house, target);
     return true;
   }
+  // A shared doorway belongs to two rooms; the one to remove is the one the player isn't in.
   const doorRoom = house.getRoomPositionAt(event.location);
-  if (doorRoom && house.getRoom(doorRoom)) {
-    // A shared doorway belongs to two rooms. Do not silently select the
-    // adjoining room when the player intends to remove the room they are in.
-    const playerRoom = house.getRoomPositionAt(event.sourceLocation ?? event.location);
-    const onTargetSide = playerRoom?.x === target.x && playerRoom.y === target.y && playerRoom.plane === target.plane;
-    const current = onTargetSide ? target : doorRoom;
-    const adjoining = onTargetSide ? doorRoom : target;
-    api.sendMultiChatboxPrompt(player, "Which room do you want to manage?",
-      "Room on this side", () => manageRoom(player, house, current),
-      "Room on the other side", () => manageRoom(player, house, adjoining),
-      "Cancel", () => {});
-  } else manageRoom(player, house, target);
+  const playerRoom = house.getRoomPositionAt(event.sourceLocation ?? player.getLocation());
+  const inTarget = playerRoom?.x === target.x && playerRoom.y === target.y && playerRoom.plane === target.plane;
+  removeRoomPrompt(player, house, inTarget && doorRoom && house.getRoom(doorRoom) ? doorRoom : target);
   return true;
 }
 
@@ -757,7 +786,7 @@ function handleHouseViewer(event) {
       chooseRoom(player, viewer.house, target);
     } else if (action === 1 && viewer.mode === "move" && viewer.selected) {
       const problem = viewer.house.canMoveRoom(viewer.selected, target);
-      if (problem) player.sendMessage(problem);
+      if (problem) Menu.refuse(player, problem);
       else { viewer.destination = target; viewer.mode = "rotate"; syncViewerSelection(player, viewer); }
     }
     return true;
@@ -776,24 +805,14 @@ function handleHouseViewer(event) {
     else if (childId === 69 && viewer.mode === "rotate") {
       if (viewer.destination) {
         const problem = viewer.house.canMoveRoom(viewer.selected, viewer.destination);
-        if (problem) { player.sendMessage(problem); syncViewerSelection(player, viewer); return true; }
+        if (problem) { Menu.refuse(player, problem); syncViewerSelection(player, viewer); return true; }
         viewer.house.moveRoom(viewer.selected, viewer.destination, viewer.rotation);
       } else viewer.house.rotateRoom(viewer.selected, viewer.rotation);
       rebuildHouse(player, viewer.house);
       openHouseViewer(player);
       return true;
     } else if (childId === 67 && !viewer.mode) {
-      const selected = viewer.selected, room = viewer.house.getRoom(selected);
-      const problem = viewer.house.canRemoveRoom(selected);
-      if (problem) player.sendMessage(problem);
-      else api.sendMultiChatboxPrompt(player, "Delete this room and its furniture?", "Yes, delete it", () => {
-        if (houseFor(player) !== viewer.house || !isBuildingMode(player) || viewer.house.getRoom(selected) !== room) return;
-        const currentProblem = viewer.house.canRemoveRoom(selected);
-        if (currentProblem) { player.sendMessage(currentProblem); return; }
-        viewer.house.removeRoom(selected);
-        rebuildHouse(player, viewer.house);
-        openHouseViewer(player);
-      }, "No", () => openHouseViewer(player));
+      removeRoomPrompt(player, viewer.house, viewer.selected, () => openHouseViewer(player), () => openHouseViewer(player));
     }
   }
   syncViewerSelection(player, viewer);
@@ -805,17 +824,28 @@ function formatBuildable(buildable) {
   return name.toLowerCase();
 }
 
-function withArticle(name) {
-  return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
-}
-
+/**
+ * What a build takes (item id -> amount), or why it can't happen: a string for the chat, or a
+ * Menu.messageBox. rsprox captures (poh_furniture_creation:contents, rev 226-236): the tools line,
+ * the upgrade and occupied-hotspot lines (gamemessage), and a message box listing every material
+ * with the missing ones in red ("You don't have the right materials: 2 x Plank, <col=ef1020>2 x Nails</col>").
+ */
 function getBuildMaterials(player, house, target, buildable) {
   if (constructionLevel(player) < buildable.level) return `You need Construction level ${buildable.level} to build that.`;
-  if (!player.getInventory().contains(HAMMER_ID) || !hasSaw(player)) return "You need a hammer and a saw to build that.";
+  if (!player.getInventory().contains(HAMMER_ID) || !hasSaw(player)) return "You need a saw and a hammer in order to make furniture.";
   // A flatpack is made away from any hotspot: no furniture there to upgrade.
-  const existing = target ? house.getFurnitureAtTarget(target) : null;
-  if (existing && !buildable.materials.some(material => material.source === existing.buildableKey)) return "Remove the existing furniture first, or select its next upgrade.";
+  const existing = target ? house.getFurnitureAtTarget(target)?.buildableKey : undefined;
+  const previous = buildable.materials.find(material => Data.BUILDABLE_BY_KEY.has(material.source))?.source;
+  if (existing && existing !== previous) {
+    if (TOOL_STORES.includes(existing) && TOOL_STORES.includes(buildable.key)) {
+      if (TOOL_STORES.indexOf(existing) >= TOOL_STORES.indexOf(buildable.key)) return "You already have a tool store of that level in the room.";
+      return "That can only be built by upgrading the previous piece of furniture.";
+    }
+    return "That can only be built if the hotspot is empty.";
+  }
+  if (target && previous && existing !== previous) return "That can only be built by upgrading the previous piece of furniture.";
   const requiredItems = new Map();
+  const listed = [];
   for (const material of buildable.materials) {
     if (material.source === "NAILS") {
       let remaining = material.amount;
@@ -826,16 +856,20 @@ function getBuildMaterials(player, house, target, buildable) {
         remaining -= amount;
         if (remaining === 0) break;
       }
-      if (remaining > 0) return "You do not have enough nails.";
-    } else if (material.itemId != null) requiredItems.set(material.itemId, (requiredItems.get(material.itemId) ?? 0) + material.amount);
-    else if (material.source === "Tool.TINDER_BOX") {
+      listed.push({ material, missing: remaining > 0 });
+    } else if (material.itemId != null) {
+      const amount = (requiredItems.get(material.itemId) ?? 0) + material.amount;
+      requiredItems.set(material.itemId, amount);
+      listed.push({ material, missing: player.getInventory().getAmount(material.itemId) + storedAmount(player, material.itemId) < amount });
+    } else if (material.source === "Tool.TINDER_BOX") {
       if (!player.getInventory().contains(TINDERBOX_ID)) return "You need a tinderbox to build that.";
-    } else if (material.source && Data.BUILDABLE_BY_KEY.has(material.source)) {
-      if (target && house.getFurnitureAtTarget(target)?.buildableKey !== material.source) return `You need the ${material.source.replace(/_/g, " ").toLowerCase()} already built there.`;
-    } else return "This build has an unsupported material requirement.";
+    } else if (!Data.BUILDABLE_BY_KEY.has(material.source)) return "This build has an unsupported material requirement.";
   }
-  for (const [itemId, amount] of requiredItems) {
-    if (player.getInventory().getAmount(itemId) + storedAmount(player, itemId) < amount) return "You do not have the required materials.";
+  if (listed.some(entry => entry.missing)) {
+    return Menu.messageBox(`You don't have the right materials: ${listed.map(({ material, missing }) => {
+      const label = `${material.amount} x ${materialName(material)}`;
+      return missing ? `<col=ef1020>${label}</col>` : label;
+    }).join(", ")}`);
   }
   return requiredItems;
 }
@@ -874,16 +908,59 @@ function useMaterials(player, buildable, materials) {
   }
 }
 
+/** The hammer: the piece's build animation with synth 938 (rsprox captures, every build). */
+function hammer(player, animationId = BUILD_ANIMATION) {
+  if (animationId >= 0) player.performAnimation(new Animation(animationId));
+  player.getPacketSender().sendSound(BUILD_SOUND, 0, 0);
+}
+
+/**
+ * rsprox captures (poh_furniture_creation:contents, rev 226-239): a piece without nails takes its
+ * materials and gives its XP on the pick, and shows a tick later. With nails, nothing goes on the
+ * pick; each tick after it hammers in one nail ("You use a nail.", spam), the best nails first
+ * (Wiki), with the sound every second tick, and the last nail takes the rest and gives the XP.
+ * No build sentence. Nails also bend in live OSRS, at a rate neither the captures nor the Wiki give,
+ * so they don't here.
+ */
 function buildFurniture(player, house, target, buildable) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const materials = getBuildMaterials(player, house, target, buildable);
-  if (typeof materials === "string") return player.sendMessage(materials);
+  if (!(materials instanceof Map)) return Menu.refuse(player, materials);
+  hammer(player, buildable.buildAnimationId);
+  const nails = buildable.materials.find(material => material.source === "NAILS")?.amount ?? 0;
+  if (nails === 0) return completeFurniture(player, house, target, buildable, materials);
+  let used = 0;
+  TaskManager.submit(new (class extends Task {
+    constructor() { super(1, player.getIndex(), false); }
+    execute() {
+      if (!player.isRegistered() || houseFor(player) !== house || !isBuildingMode(player)) return this.stop();
+      const nail = NAIL_IDS.find(id => player.getInventory().contains(id));
+      if (nail == null) {
+        player.sendMessage("You don't have enough nails left.");
+        return this.stop();
+      }
+      player.getInventory().delete(nail, 1);
+      player.getPacketSender().sendTypedMessage(ChatType.SPAM, "You use a nail.");
+      used++;
+      if (buildable.buildAnimationId >= 0) player.performAnimation(new Animation(buildable.buildAnimationId));
+      if (used % 2 === 0) player.getPacketSender().sendSound(BUILD_SOUND, 0, 0);
+      if (used < nails) return;
+      this.stop();
+      const rest = getBuildMaterials(player, house, target, { ...buildable, materials: buildable.materials.filter(material => material.source !== "NAILS") });
+      if (!(rest instanceof Map)) return Menu.refuse(player, rest);
+      completeFurniture(player, house, target, buildable, rest);
+    }
+  })());
+}
+
+function completeFurniture(player, house, target, buildable, materials) {
   useMaterials(player, buildable, materials);
-  if (buildable.buildAnimationId >= 0) player.performAnimation(new Animation(buildable.buildAnimationId));
-  house.setFurniture(target, buildable);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
-  rebuildHouse(player, house);
-  player.sendMessage(`You build ${withArticle(formatBuildable(buildable))}.`);
+  house.setFurniture(target, buildable);
+  // Keyed to the house, so a click straight after the build doesn't cancel the redraw.
+  TaskManager.submit(new CountdownTask(house, 1, () => {
+    if (houseFor(player) === house) rebuildHouse(player, house);
+  }));
 }
 
 function materialName(material) {
@@ -897,7 +974,8 @@ function furnitureCreationText(buildable) {
   // The build menu shows the cache's own name ("Crude wooden chair|Plank: 2<br>Nails: 2<br><br>").
   const name = buildable.name ?? formatBuildable(buildable);
   const materials = buildable.materials.slice(0, 4).map((material) => `${materialName(material)}: ${material.amount.toLocaleString()}`);
-  return `${name}|${[...materials, "", "", "", ""].slice(0, 4).join("<br>")}<br>`;
+  // Four lines whatever the count: "Oak chair|Oak plank: 2<br><br><br>" (rsprox captures, rev 229).
+  return `${name}|${[...materials, "", "", "", ""].slice(0, 4).join("<br>")}`;
 }
 
 /** What a hotspot offers in its build menu, named groups expanded. */
@@ -928,7 +1006,7 @@ function chooseFurniture(player, house, target) {
       buildable.menuRowId,
       buildable.level,
       furnitureCreationText(buildable),
-      typeof getBuildMaterials(player, house, target, buildable) === "string" ? 0 : 1,
+      getBuildMaterials(player, house, target, buildable) instanceof Map ? 1 : 0,
     );
   });
   sender
@@ -968,18 +1046,17 @@ function tryRemoveFurniture(event) {
   if (!house || !isBuildingMode(player) || !house.getFurnitureAt(event.location, event.objectId, type)) return false;
   const problem = house.canRemoveFurniture(event.location, event.objectId, type);
   if (problem) {
-    player.sendMessage(problem);
+    Menu.refuse(player, problem);
     return true;
   }
-  api.sendMultiChatboxPrompt(player, "Remove this furniture?", "Yes, remove it", () => {
+  // rsprox captures ("Remove" on poh_chair1, rev 229): "Really remove it?", and the Yes is silent.
+  api.sendMultiChatboxPrompt(player, "Really remove it?", "Yes", () => {
     if (houseFor(player) !== house || !isBuildingMode(player)) return;
     const currentProblem = house.canRemoveFurniture(event.location, event.objectId, type);
-    if (currentProblem) return player.sendMessage(currentProblem);
-    const removed = house.removeFurniture(event.location, event.objectId, type);
-    if (!removed) return;
+    if (currentProblem) return Menu.refuse(player, currentProblem);
+    if (!house.removeFurniture(event.location, event.objectId, type)) return;
     player.performAnimation(new Animation(REMOVE_ANIMATION));
     rebuildHouse(player, house);
-    player.sendMessage(`You remove the ${formatBuildable({ key: removed.buildableKey })}.`);
   }, "No", () => {});
   return true;
 }
@@ -1286,4 +1363,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, useMaterials, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, useMaterials, hammer, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });

@@ -1,4 +1,4 @@
-# Firemaking: tending Forester's Campfires
+# Firemaking: Forester's Campfires and lighting logs
 
 ## Confirmed behaviour
 
@@ -61,6 +61,22 @@ The existing interpolated campfire durations for jatoba, camphor, ironwood and r
 remain unchanged: the inspected Wiki does not publish their durations. These values need
 additional evidence before changing them.
 
-Normal tinderbox lighting is a separate interaction. Recording **1035** shows logs move
-from inventory to the ground at the start of lighting, whereas this server consumes them
-on success. Its lighting messages also differ; that path is outside this tending fix.
+## Lighting logs
+
+From rsprox captures: recording **1035** (main game, rev 235) for the lines and the log on
+the ground, and leagues recordings 1098, 1108, 1718, 1788, 1843 and 1846 for the timing only
+(their relics change the success chance, not the order of events).
+
+- **The click:** anim 733 (`human_createfire`), "You attempt to light the logs." on the
+  spam channel, and the log leaves the inventory and lands underfoot on the same tick.
+  Lighting a log already on the ground ("Light", or a tinderbox on it) goes the same way.
+- **Rolls:** the first is 3 ticks after the click, then every 4 ticks. A miss restarts
+  the animation; a hit stops it, and the fire replaces the ground log on the next tick
+  (tick 4, 8, 12 ...).
+- **The fire:** synth 2596, "The fire catches and the logs begin to burn." on the spam
+  channel, and the XP. The player steps west off the fire and turns back to face it.
+- **Blocked tile:** "You can't light a fire here." (game message), seen in recording 1035
+  and once on each of the yew, willow, maple and magic log sheets.
+- Not done: an Ironman lighting another player's dropped log gets "You're an Ironman, so
+  you can't take items that other players have dropped." in one recording (1613, rev 225);
+  tsps lights it.

@@ -4,9 +4,10 @@
  * rsprox captures (recordings 1875, 2246, 4211): a chisel on an uncut gem opens skillmulti mode
  * 12, "How many gems would you like to cut?", offering the gem up to the number carried. The
  * first gem is cut on the tick after the choice and one more every 2 ticks, each with the
- * gem's cutting animation, sound 2586 and "You cut the diamond.". A semi-precious gem can be
- * smashed instead: "You mis-hit the chisel and smash the jade to pieces!", a crushed gem and
- * sound 2589 as well.
+ * gem's cutting animation, sound 2586 and "You cut the diamond." (spam). A semi-precious gem can
+ * be smashed instead: "You mis-hit the chisel and smash the jade to pieces!" (spam), a crushed
+ * gem and sound 2589 as well. Below the level, the tick after the click brings an item box with
+ * the uncut gem: "You need a Crafting level of 20 to cut sapphires." (recordings 1102, 1723).
  *
  * Wiki (Crafting#Gems, Crushed gem, Jeweller's chisel): levels and XP; the crush chance is the
  * skilling curve between the Wiki's low and high values, and a Jeweller's chisel adds 20% to it
@@ -82,20 +83,26 @@ function cutOne(player, gem) {
       inventory.addItem(new Item(I.CRUSHED_GEM, 1));
       Shared.addCraftingXp(player, gem.crush.xp);
       Shared.animate(player, null, crushedSound);
-      player.sendMessage(`You mis-hit the chisel and smash the ${gemName(gem)} to pieces!`);
+      Shared.spam(player, `You mis-hit the chisel and smash the ${gemName(gem)} to pieces!`);
       return true;
     }
   }
   inventory.addItem(new Item(gem.cut, 1));
   Shared.addCraftingXp(player, gem.xp);
   Shared.produced(player, gem.cut, 1, gem.xp, "gems");
-  player.sendMessage(`You cut the ${gemName(gem)}.`);
+  Shared.spam(player, `You cut the ${gemName(gem)}.`);
   if (jewellers && inventory.contains(gem.uncut) && Math.random() < JEWELLERS_CHISEL_DOUBLE_CHANCE) {
     inventory.deleteNumber(gem.uncut, 1);
     inventory.addItem(new Item(gem.cut, 1));
     Shared.addCraftingXp(player, gem.xp);
   }
   return true;
+}
+
+function tooLowToCut(player, gem) {
+  const { DialogueChainBuilder, ItemStatementDialogue } = Shared.getCore();
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+    new ItemStatementDialogue(0, gem.uncut, `You need a Crafting level of ${gem.level} to cut ${gem.plural}.`)));
 }
 
 function cutGem(event) {
@@ -105,8 +112,8 @@ function cutGem(event) {
   event.handled = true;
 
   if (Shared.craftingLevel(player) < gem.level) {
-    // ponytail: not captured; the live text may differ.
-    player.sendMessage(`You need a Crafting level of at least ${gem.level} to cut this gem.`);
+    Shared.stopCrafting(player);
+    Shared.nextTick(player, () => tooLowToCut(player, gem));
     return;
   }
   Shared.stopCrafting(player);

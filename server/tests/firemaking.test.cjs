@@ -171,7 +171,8 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
     getForceMovement: () => null,
     getMovementQueue: () => ({ size: () => 0, canWalk: () => false, walkStep: () => {}, reset: () => {} }),
     performAnimation: () => {},
-    getPacketSender: () => ({ sendGlobalGraphic() {} }),
+    setPositionToFace: () => {},
+    getPacketSender: () => ({ sendGlobalGraphic() {}, sendTypedMessage: (_type, message) => messages.push(message) }),
     sendMessage: (message) => messages.push(message),
     isRegistered: () => true,
     getHitpoints: () => 99,
@@ -183,11 +184,18 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
   Math.random = () => 0;
   try {
     Firemaking.startBotInventoryFiremaking(player, I.LOGS);
-    for (let i = 0; i < 4; i++) task.execute();
+    // rsprox captures, recording 1035: the log goes underfoot on the click and the fire catches 4 ticks later.
+    assert.equal(inventory.get(I.LOGS), 4, "log leaves the inventory on the click");
+    assert.ok(ItemOnGroundManager.getGroundItem("tester", I.LOGS, location, null), "and lies on the ground");
+    assert.deepEqual(messages, ["You attempt to light the logs."]);
+    for (let i = 0; i < 3; i++) task.execute();
+    assert.ok(!World.getObjects().some((object) => object.getId() === O.FIRE_23), "no fire on the roll tick");
+    task.execute();
     const fire = World.getObjects().find((object) => object.getId() === O.FIRE_23);
     assert.ok(fire, "fire spawned");
     assert.equal(xp, 40, "one log of XP");
-    assert.equal(inventory.get(I.LOGS), 4, "log consumed on success");
+    assert.equal(messages.at(-1), "The fire catches and the logs begin to burn.");
+    assert.equal(ItemOnGroundManager.getGroundItem("tester", I.LOGS, location, null), null, "ground log burnt");
 
     hooks.itemOnObject({ player, object: fire, objectId: fire.getId(), itemId: I.LOGS, handled: false });
     for (let i = 0; i < 9; i++) task.execute();
@@ -220,6 +228,7 @@ async function campfireHarness(t) {
   const tasks = [];
   const objects = new Set();
   const ashes = [];
+  const ground = [];
   const api = {
     core,
     getTaskManager: () => ({ submit: t => tasks.push(t) }),
@@ -228,8 +237,9 @@ async function campfireHarness(t) {
       objectsAt: () => [],
     }),
     getItemOnGroundManager: () => ({
-      getGroundItem: () => null,
-      registerLocation: (p, item, loc) => ashes.push({ item, loc }),
+      getGroundItem: (_owner, id, loc) => ground.find(g => g.item.getId() === id && g.loc.equals(loc)) ?? null,
+      registerLocation: (p, item, loc) => (item.getId() === core.ItemIdentifiers.ASHES ? ashes : ground).push({ item, loc }),
+      deregister: g => ground.splice(ground.indexOf(g), 1),
     }),
     getWorld: () => ({ getObjects: () => [...objects] }),
     onCustomEvent() {}, emitCustomEvent() {}, emitFiremakingBlocked: () => false,
@@ -259,7 +269,8 @@ async function campfireHarness(t) {
     getLocation: () => loc, getPrivateArea: () => null, getForceMovement: () => null,
     getMovementQueue: () => ({ size: () => 0, canWalk: () => false }),
     performAnimation: a => animations.push(a.getId()), sendMessage: text => messages.push(text),
-    getPacketSender: () => ({ sendCreationMenu: m => menu = m, sendInterfaceRemoval() {}, sendGlobalGraphic: (graphic, tile) => graphics.push({ graphic, tile }) }),
+    setPositionToFace() {},
+    getPacketSender: () => ({ sendCreationMenu: m => menu = m, sendInterfaceRemoval() {}, sendTypedMessage: (_type, text) => messages.push(text), sendGlobalGraphic: (graphic, tile) => graphics.push({ graphic, tile }) }),
     isRegistered: () => true, isPlayerBot: () => true, getHitpoints: () => 99, getUsername: () => 'campfiretest',
   };
   const tick = n => { for (let i=0; i<n; i++) tasks[0].execute(); };
@@ -395,4 +406,17 @@ test("tending rejects unrelated Cook fires and low levels without consuming logs
   h.tick(9);
   assert.equal(h.inventory.get(h.I.OAK_LOGS), 1);
   assert.ok(h.messages.includes('You need a Firemaking level of at least 15 to light those logs.'));
+});
+
+test("a hit stops the lighting animation a tick before the fire catches (rsprox captures, recording 1035)", async t => {
+  const h = await campfireHarness(t);
+  h.hooks.combine({ player: h.player, usedItemId: h.I.TINDERBOX, usedWithItemId: h.I.LOGS });
+  assert.deepEqual(h.animations, [733]);
+  assert.equal(h.inventory.get(h.I.LOGS), 2, 'the log goes on the ground at once');
+  h.tick(3);
+  assert.equal(h.animations.at(-1), core.Animation.DEFAULT_RESET_ANIMATION.getId());
+  assert.equal(h.objects.size, 0);
+  h.tick(1);
+  assert.equal(h.objects.size, 1, 'the fire on tick 4');
+  assert.deepEqual(h.messages, ['You attempt to light the logs.', 'The fire catches and the logs begin to burn.']);
 });

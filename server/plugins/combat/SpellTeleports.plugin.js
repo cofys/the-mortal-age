@@ -23,6 +23,10 @@ function spellName(event) {
 }
 
 let spellDestinations = null;
+let standardCentres = null;
+
+/** A standard teleport lands on a random free tile within this many of its destination (rsprox captures). */
+const LANDING_RADIUS = 2;
 
 /**
  * Tablets share their spell's name ("Varrock teleport") and destination. Arceuus comes last
@@ -38,6 +42,32 @@ function spellDestination(name) {
 }
 
 const tile = (coordinates) => coordinates && new core.Location(...coordinates);
+
+/**
+ * Standard spellbook teleports (and their tablets) land anywhere in the 5x5 square around their
+ * destination: rsprox captures of the Grand Exchange option (334 landings, x 3161-3165,
+ * y 3476-3480) and of Varrock, Lumbridge, Falador, Camelot, Seers', Ardougne, Kourend and
+ * Civitas illa Fortis; the Wiki maps Trollheim's as a square of radius 2. Blocked tiles are skipped.
+ */
+function landing(centre) {
+  if (!centre) return centre;
+  const tiles = [];
+  for (let dx = -LANDING_RADIUS; dx <= LANDING_RADIUS; dx++) {
+    for (let dy = -LANDING_RADIUS; dy <= LANDING_RADIUS; dy++) {
+      const at = centre.transform(dx, dy);
+      if (!core.RegionManager.blocked(at, null)) tiles.push(at);
+    }
+  }
+  return tiles.length ? tiles[Math.floor(Math.random() * tiles.length)] : centre;
+}
+
+/** Where a standard spellbook teleport lands around, by spell name (not the house). */
+function standardCentre(name) {
+  standardCentres ??= new Map(core.SpellTeleports.getTeleportDestinations()
+    .filter((spell) => spell.spellbook === core.MagicSpellbook.NORMAL && spell.name !== HOUSE_TABLET)
+    .map((spell) => [spell.name, spell.destination]));
+  return standardCentres.get(name);
+}
 
 function diaryComplete(player, diary) {
   const request = { player, diary: diary.key, tier: diary.tier, complete: false };
@@ -124,7 +154,9 @@ function tabletDestination(event, name, option) {
     ? alternateDestination(event.player, name, option, alternate)
     : spellDestination(name) ?? tile(TABLETS.redirects[name]) ?? tile(TABLETS.tablets[name]);
   if (destination !== undefined) event.handled = true;
-  return destination && { destination };
+  // A tablet lands like its spell: the alternates' towns, and the standard spells' (not the Arceuus Ape Atoll).
+  const square = alternate || standardCentre(name)?.equals(destination);
+  return destination && { destination: square ? landing(destination) : destination };
 }
 
 /**
@@ -188,26 +220,37 @@ function configureSpell(player, alternate) {
 
 /**
  * Varrock, Camelot and Watchtower Teleport (client script 2615): op1 and op3 cast to the town
- * (op3 stands in for op1 once the alternate is the default) and are left to the usual cast;
- * op2 casts to the alternate, behind the tablet's diary, and op10 configures.
+ * (op3 stands in for op1 once the alternate is the default), landing as every standard teleport
+ * does; op2 casts to the alternate, behind the tablet's diary, and op10 configures.
  */
 function castAlternate(event) {
   const { player } = event;
   const name = event.spellName?.trim().toLowerCase();
   const alternate = ALTERNATES.get(name);
-  if (!alternate || (event.opId !== SPELL_ALTERNATE_OP && event.opId !== SPELL_CONFIGURE_OP)) return;
+  if (!alternate || (event.opId !== SPELL_ALTERNATE_OP && event.opId !== SPELL_CONFIGURE_OP)) {
+    castStandard(event, name);
+    return;
+  }
   event.handled = true;
   if (event.opId === SPELL_CONFIGURE_OP) {
     configureSpell(player, alternate);
   } else if (diaryComplete(player, alternate.diary)) {
-    core.SpellTeleports.handleSelf(player, name, tile(alternate.tile));
+    core.SpellTeleports.handleSelf(player, name, landing(tile(alternate.tile)));
   } else {
     diaryMessage(player, alternate.diary);
   }
 }
 
+/** A standard spellbook teleport, on a tile of its landing square; anything else is left to the usual cast. */
+function castStandard(event, name) {
+  const centre = standardCentre(name);
+  if (centre && core.SpellTeleports.handleSelf(event.player, name, landing(centre))) event.handled = true;
+}
+
 function castSpell(event) {
-  if (core.SpellTeleports.handleSelf(event.player, spellName(event))) {
+  const name = spellName(event)?.trim().toLowerCase();
+  const destination = landing(standardCentre(name));
+  if (core.SpellTeleports.handleSelf(event.player, name, destination)) {
     event.handled = true;
   }
 }

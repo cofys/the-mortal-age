@@ -37,4 +37,17 @@ function give(api, player, rewards, { alwaysPrivate = false } = {}) {
   }
 }
 
-module.exports = { give, LIFETIME_TICKS };
+/**
+ * Unlocks the first emote varbit of `varbits` (cache names) not already unlocked, through the
+ * Emotes plugin, and returns its name; undefined when all of them already are.
+ */
+function unlockEmote(api, player, varbits) {
+  for (const varbit of varbits) {
+    const request = { player, varbit, unlocked: false };
+    api.emitCustomEvent("emotes:unlock", request);
+    if (request.unlocked) return varbit;
+  }
+  return undefined;
+}
+
+module.exports = { give, unlockEmote, LIFETIME_TICKS };

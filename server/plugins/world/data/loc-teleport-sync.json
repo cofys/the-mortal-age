@@ -17,7 +17,14 @@
     "tapoyauik_main_entrance": "Tapoyauik's lift platform.",
     "tapoyauik_main_exit": "Tapoyauik's lift platform.",
     "dt2_war_room_exit": "Desert Treasure II's war-room exit.",
-    "ii_magic_wheat_m_zanaris": "Zanaris's crop circle to Puro-Puro (the wandering ones are hidden by a varbit here)."
+    "ii_magic_wheat_m_zanaris": "Zanaris's crop circle to Puro-Puro (the wandering ones are hidden by a varbit here).",
+    "pandemonium_cave_exit": "The Pandemonium cave's exit.",
+    "wyvern_snow_cave_entrance": "The Asgarnian Ice Dungeon's icy cavern to the skeletal wyverns.",
+    "wyvern_snow_cave_exit": "The Asgarnian Ice Dungeon's icy cavern back from the skeletal wyverns.",
+    "molch_temple_lizard_dwelling": "The Lizardman Caves' entrance (the northern one, the only one that lets players in).",
+    "zeah_cata_exit_giants_den": "The Catacombs of Kourend's vine up to the Giants' Den.",
+    "fossil_flora_swamp_bellshroom_return": "The Tar Swamp bellshroom's exit (Fossil Island).",
+    "rc_zmi_dungeon_wall_crack_entrance": "The Ourania Cave's crack into the altar room (no Agility requirement)."
   },
   "skip": {
     "locs": [
@@ -54,7 +61,16 @@
       "requires": [
         {"tied": 954, "refuse": {"mesbox": "That looks too steep to safely climb down with just your bare hands."}}
       ],
-      "mesbox": "You climb down the rope."}
+      "mesbox": "You climb down the rope."},
+    {"name": "ds2_mithril_door_enter_orb_room", "x": 1759, "y": 5343, "z": 1, "source": "https://oldschool.runescape.wiki/w/Ancient_key",
+      "requires": [
+        {"item": 22093, "refuse": {"message": "You need the ancient key to open the Mithril door."}}
+      ]},
+    {"name": "ancient_cavern_whirlpool", "x": 2510, "y": 3506, "z": 0, "source": "https://oldschool.runescape.wiki/w/Ancient_Cavern",
+      "requires": [
+        {"varbit": 3759, "atLeast": 3, "refuse": {"message": "You must learn barbarian firemaking from Otto before diving into the Ancient Cavern."}},
+        {"varbit": 3764, "atLeast": 1, "refuse": {"message": "You must speak to Otto about pyre ships before diving into the Ancient Cavern."}}
+      ]}
   ],
   "dialogues": [
     {"name": "varlamore_thieving_house_window_multi", "prompt": "Climb out of the window?", "options": ["Yes.", "No."], "go": ["Yes."], "answer": {"animTick": 1, "tick": 2}},

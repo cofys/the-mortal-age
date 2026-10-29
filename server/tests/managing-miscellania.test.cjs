@@ -315,3 +315,25 @@ test('approval rises from coal, maples and big fish on the islands only', () => 
   Approval.onMined({ player: away, itemId: i.COAL });
   assert.equal(away.favourValue, 50);
 });
+
+test('a regent\'s coal goes to Miner Magnus, who thanks them (rsprox capture 1757)', () => {
+  install();
+  const i = Common.items();
+  const today = Common.today();
+  const said = [];
+  const magnus = { getDefinition: () => ({ getName: () => 'Miner Magnus' }), forceChat: (text) => said.push(text) };
+  const p = Object.assign(player({ favour: 100 }), { getLocalNpcs: () => [magnus] });
+  p.setAttribute(Common.KINGDOM_ATTRIBUTE, kingdom({ lastDay: today, lastVisitDay: today }));
+  const coal = { player: p, itemId: i.COAL, taker: null };
+  Approval.handOverCoal(coal);
+  assert.equal(coal.taker, 'Miner Magnus');
+  assert.deepEqual(said, ['Thanks!']);
+  const logs = { player: p, itemId: i.MAPLE_LOGS, taker: null };
+  Approval.handOverCoal(logs);
+  assert.equal(logs.taker, null, 'only coal');
+  const away = Object.assign(player({ at: LUMBRIDGE }), { getLocalNpcs: () => [] });
+  away.setAttribute(Common.KINGDOM_ATTRIBUTE, kingdom({ lastDay: today, lastVisitDay: today }));
+  const elsewhere = { player: away, itemId: i.COAL, taker: null };
+  Approval.handOverCoal(elsewhere);
+  assert.equal(elsewhere.taker, null, 'coal mined off the islands is kept');
+});

@@ -26,7 +26,15 @@ const VARIANT = {
   timedOut: "standard-dialogue-after-time-runs-out",
 };
 const QUEST_KEY = "ictlharins_little_helper";
+/**
+ * Captured (rsprox, recordings 545, 549, 552, 1788, 1843, 1857): three pulls a tick apart, synth
+ * 1220 with the first and third, `busy` from the second, and the door three ticks after the click,
+ * its ntk_outside_doorN_state 2 when it is the way in.
+ */
 const SEARCH_TICKS = 3;
+const PULLS = [0, 1, 2];
+const PULL_SOUNDS = [0, 2];
+const PANEL_OPEN = 2;
 
 const isGuardian = (npcId) => npcId === Common.ids().npc.guardian;
 
@@ -36,16 +44,27 @@ function searchPanel(event, random = Math.random) {
   const index = Common.ids().outerPanels.indexOf(event.objectId);
   if (index < 0) return false;
   const player = event.player;
-  player.performAnimation(new (Common.getCore().Animation)(Common.ids().anim.pick));
-  player.sendMessage(Common.MESSAGES.panelSearch);
   const correct = index === Common.currentEntrance(random);
   const at = player.getLocation();
   const from = { x: at.getX(), y: at.getY(), z: at.getZ() };
-  Common.later(SEARCH_TICKS, () => {
+  // Walked off, teleported or logged out while searching: the panel stays shut.
+  const still = () => {
     const now = player.getLocation();
-    // Walked off, teleported or logged out while searching: the panel stays shut.
-    if (now.getX() !== from.x || now.getY() !== from.y || now.getZ() !== from.z || player.isRegistered?.() === false) return;
-    player.sendMessage(correct ? "You find a door! You open it successfully." : "You find a door! You open it.");
+    return now.getX() === from.x && now.getY() === from.y && now.getZ() === from.z && player.isRegistered?.() !== false;
+  };
+  const pull = (tick) => {
+    player.performAnimation(new (Common.getCore().Animation)(Common.ids().anim.pick));
+    if (PULL_SOUNDS.includes(tick)) Common.sound(player, Common.ids().sound.trapWork);
+    if (tick === 1) Common.busy(player, true);
+  };
+  pull(0);
+  Common.spam(player, Common.MESSAGES.panelSearch);
+  for (const tick of PULLS.slice(1)) Common.later(tick, () => still() && pull(tick));
+  Common.later(SEARCH_TICKS, () => {
+    if (player.isRegistered?.() !== false) Common.busy(player, false);
+    if (!still()) return;
+    Common.spam(player, correct ? "You find a door! You open it successfully." : "You find a door! You open it.");
+    if (correct) Common.send(player, Common.ids().varbit.outerPanels[index], PANEL_OPEN);
     player.moveTo(Common.location(correct ? Common.DATA.mummyLobby : Common.DATA.abandonedLobby));
   });
   return true;

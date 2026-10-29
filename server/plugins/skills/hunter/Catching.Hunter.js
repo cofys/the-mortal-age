@@ -17,6 +17,13 @@ const JAR_MESSAGE = "You manage to catch the impling and squeeze it into a jar."
 const LOOT_MESSAGE = "You manage to catch the impling and acquire some loot.";
 const NO_JAR_MESSAGE = "You don't have an empty impling jar in which to keep an impling.";
 const NO_SPACE_MESSAGE = "You'll need to clear some space in your pack to catch this impling without a jar.";
+// A barehanded butterfly or moth (rsprox captures 95, 1634, 3279, 4051): the grab, the creature's
+// out-of-hands graphic and sound 7870 (45 cycles late) and the spam line on the tick the player
+// reaches it; it is gone a tick later.
+const RELEASE_SOUND = 7870;
+const RELEASE_DELAY = 45;
+const RELEASE_HEIGHT = 190;
+const RELEASED_TICKS = 1;
 
 function gloves(player, id) {
   if (id > 0) gloved.add(player);
@@ -109,28 +116,63 @@ function catchNpc({ player, npc, npcId }) {
   const weapon = player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId();
   const net = [I.BUTTERFLY_NET, I.MAGIC_BUTTERFLY_NET].includes(weapon);
   const def = butterfly;
+  const name = creatureName(def);
+  const required = net ? def.level : def.hands;
+  if (level(player) < required) {
+    player.sendMessage(`You need a Hunter level of at least ${required} to catch this ${name.endsWith(" moth") ? "moth" : "butterfly"}${net ? "" : " barehanded"}.`);
+    return true;
+  }
+  if (!net) { catchBarehanded(player, npc, npcId, def, name); return true; }
   const jar = I.BUTTERFLY_JAR;
   const jarred = player.getInventory().contains(jar);
-  const required = net ? def.level : def.hands;
-  if (!requireLevel(player, required)) return true;
   const inputs = jarred ? [[jar, 1]] : [];
   const outputs = jarred ? [[def.jar, 1]] : [];
   if (!exchange(player, inputs, outputs, false)) { player.getInventory().full(); return true; }
-  begin(player, 2, net ? weapon === I.MAGIC_BUTTERFLY_NET ? ANIM.NET : ANIM.BUTTERFLY : ANIM.HANDS, () => {
+  begin(player, 2, weapon === I.MAGIC_BUTTERFLY_NET ? ANIM.NET : ANIM.BUTTERFLY, () => {
     if (!available(npc) || !nearby(player, npc) || !requireLevel(player, required)
       || player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId() !== weapon) return;
-    const improved = !net || weapon === I.MAGIC_BUTTERFLY_NET;
+    const improved = weapon === I.MAGIC_BUTTERFLY_NET;
     const curve = improved && def.handsLow !== undefined ? { ...def, low: def.handsLow, high: def.handsHigh } : def;
-    const catchBonus = improved && def.handsLow === undefined || net && weapon === I.MAGIC_BUTTERFLY_NET && def.boost === "restore" ? 20 / 256 : 0;
+    const catchBonus = improved && (def.handsLow === undefined || def.boost === "restore") ? 20 / 256 : 0;
     if (!chance(player, curve, catchBonus, required)) {
       player.sendMessage("The creature slips away."); return;
     }
     if (!exchange(player, inputs, outputs)) return;
-    xp(player, net ? def.xp : def.handsXp, "butterfly", npcId);
-    if (!jarred) { bonus(player, def); if (def.boost === "restore") player.setRunEnergy(Math.min(100, player.getRunEnergy() + 5)); }
+    xp(player, def.xp, "butterfly", npcId);
+    if (!jarred) freed(player, def);
     player.sendMessage(jarred ? "You catch the creature in a jar." : "You catch the creature barehanded and release it.");
   });
   return true;
+}
+
+/** "snowy knight butterfly", "moonlight moth": the creature as catch lines name it. */
+function creatureName(def) {
+  const name = String(H.core.CacheDefinitions.getNpc(def.npc)?.name ?? "").toLowerCase();
+  return name.endsWith(" moth") ? name : `${name} butterfly`;
+}
+
+function catchBarehanded(player, npc, npcId, def, name) {
+  if (!active(player) || player.busy()) return;
+  C.cancel(player);
+  player.getSkillManager().stopSkillable();
+  player.performAnimation(new H.core.Animation(ANIM.IMPLING_HANDS));
+  const curve = def.handsLow !== undefined ? { ...def, low: def.handsLow, high: def.handsHigh } : def;
+  if (!chance(player, curve, def.handsLow === undefined ? 20 / 256 : 0, def.hands)) {
+    player.sendMessage("The creature slips away."); return;
+  }
+  const graphic = H.core.CacheDefinitions.getSpotanimId(def.release);
+  if (graphic != null) player.performGraphic(new H.core.Graphic(graphic, RELEASE_DELAY, RELEASE_HEIGHT));
+  player.getPacketSender().sendSound(RELEASE_SOUND, 1, RELEASE_DELAY);
+  player.getPacketSender().sendTypedMessage(H.core.ChatType.SPAM, `You catch and release the ${name}.`);
+  xp(player, def.handsXp, "butterfly", npcId);
+  freed(player, def);
+  hide(npc, RELEASED_TICKS + 10, RELEASED_TICKS);
+}
+
+/** A butterfly let go straight from the hands or net gives its boost (sunlight moths also restore run energy). */
+function freed(player, def) {
+  bonus(player, def);
+  if (def.boost === "restore") player.setRunEnergy(Math.min(100, player.getRunEnergy() + 5));
 }
 
 /**

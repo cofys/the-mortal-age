@@ -18,6 +18,11 @@ function messageBox(player, text, then) {
   show(player, new Core.StatementDialogue(0, text), then);
 }
 
+/** A filterable game line: the chat's spam channel, as captured for the smithing and smelting lines. */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(Core.ChatType.SPAM, text);
+}
+
 function itemBox(player, itemId, text, then) {
   show(player, new Core.ItemStatementDialogue(0, itemId, text), then);
 }
@@ -80,14 +85,14 @@ function varp(name) {
   return required("varp", name, Core.CacheDefinitions.getVarpId(name));
 }
 
-/** An Animation of a seq gameval, e.g. "human_smithing". */
-function animation(name) {
-  return new Core.Animation(required("seq", name, Core.CacheDefinitions.getSeqId(name)));
+/** An Animation of a seq gameval, e.g. "human_smithing", optionally delayed by `delay` client cycles. */
+function animation(name, delay = 0) {
+  return new Core.Animation(required("seq", name, Core.CacheDefinitions.getSeqId(name)), delay);
 }
 
-/** The anvil and repair hammering. */
-function hammering() {
-  return animation("human_smithing");
+/** The anvil and repair hammering; `delay` in client cycles. */
+function hammering(delay = 0) {
+  return animation("human_smithing", delay);
 }
 
-module.exports = { messageBox, itemBox, hasHammer, smithsUniformChance, smithingLevel, actionsPerCycle, produced, obj, varbit, varp, animation, hammering };
+module.exports = { messageBox, spam, itemBox, hasHammer, smithsUniformChance, smithingLevel, actionsPerCycle, produced, obj, varbit, varp, animation, hammering };

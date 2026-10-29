@@ -12,6 +12,7 @@ let ItemIdentifiers;
 let ObjectIdentifiers;
 
 let RUNES_BY_ALTAR_ID;
+let TIARAS_BY_TALISMAN;
 let TALISMANS;
 let ALTAR_DESTINATIONS;
 let EXIT_PORTALS;
@@ -51,6 +52,29 @@ const ESSENCE_MINE_DEFAULT_RETURN = Object.freeze([3252, 3400, 0]);
 /** The Curse the portal casts on the player: projectile 109, graphic 110 (rsprox captures). */
 const ESSENCE_PORTAL_PROJECTILE = 109;
 const ESSENCE_PORTAL_IMPACT = 110;
+/**
+ * A wizard's teleport into the mine is the same Curse, cast by the wizard (rsprox captures 1628,
+ * 2280): the overhead line, graphic 108 on the wizard, the projectile from 61 to 100 cycles, 110 on
+ * the player after 100 cycles, area sounds 127 and 126, and the landing four ticks later.
+ */
+const ESSENCE_TELEPORT_LINE = "Senventior Disthine Molenko!";
+const CURSE_CASTING = 108;
+const CURSE_SOUND_CAST = 127;
+const CURSE_SOUND_IMPACT = 126;
+const ESSENCE_TELEPORT_TICKS = 4;
+/**
+ * The player's delayed move in progress (a wizard's Curse, a talisman held to the ruins), so a
+ * second click waits and a death can cancel it. Not saved.
+ */
+const TRAVEL_ATTRIBUTE = "runecrafting:travel";
+/** Holding a talisman to the ruins (rsprox captures): human_pickupfloor a tick after the click, the teleport two after that. */
+const HOLD_TALISMAN_ANIMATION = 827;
+const HOLD_TALISMAN_TICKS = 2;
+/** Tiaras bound at their altar: the talisman's rune names the altar (Wiki: Tiara, XP per tiara). */
+const TIARA_XP = new Map([
+  ["Air", 25], ["Mind", 27.5], ["Water", 30], ["Earth", 32.5], ["Fire", 35], ["Body", 37.5], ["Cosmic", 40],
+  ["Chaos", 42.5], ["Nature", 45], ["Law", 47.5], ["Death", 50], ["Blood", 52.5], ["Wrath", 52.5],
+]);
 
 const RUNE_ESSENCE_TELEPORT_NPCS = [
   "Aubury",
@@ -158,7 +182,9 @@ function initialize(api) {
     [ItemIdentifiers.NATURE_TALISMAN, { name: "Nature talisman", runeId: ItemIdentifiers.NATURE_RUNE, x: 2400, y: 4835, ruinX: 2865, ruinY: 3022 }],
     [ItemIdentifiers.LAW_TALISMAN, { name: "Law talisman", runeId: ItemIdentifiers.LAW_RUNE, x: 2464, y: 4818, ruinX: 2858, ruinY: 3378 }],
     [ItemIdentifiers.DEATH_TALISMAN, { name: "Death talisman", runeId: ItemIdentifiers.DEATH_RUNE, x: 2208, y: 4830, ruinX: 1863, ruinY: 4639 }],
-    [ItemIdentifiers.BLOOD_TALISMAN, { name: "Blood talisman", runeId: ItemIdentifiers.BLOOD_RUNE, x: 1722, y: 3826, locateMessage: "The talisman doesn't seem to work. Maybe the ruins are deep underground." }],
+    // The ruins say "Blood Talisman" when it's held to them (rsprox captures 1636, 1840, 1850); the
+    // altar's exit portal leads to (3559, 9780), beside the ruins under Mort'ton (rsprox capture 1636).
+    [ItemIdentifiers.BLOOD_TALISMAN, { name: "Blood talisman", holdName: "Blood Talisman", runeId: ItemIdentifiers.BLOOD_RUNE, x: 1722, y: 3826, ruinX: 3559, ruinY: 9780, locateMessage: "The talisman doesn't seem to work. Maybe the ruins are deep underground." }],
   ]);
 
   // Ruins are unnamed base locs; the cache supplies their named variants and tiara varbits.
@@ -174,6 +200,12 @@ function initialize(api) {
       if (id !== -1) RUINS_BY_ID.set(id, ruins);
     }
   }
+
+  TIARAS_BY_TALISMAN = new Map(RUINS_DATA.map((ruins) => [ruins.talismanId, {
+    tiaraId: ruins.tiaraId,
+    runeId: TALISMANS.get(ruins.talismanId)?.runeId ?? ItemIdentifiers.WRATH_RUNE,
+    xp: TIARA_XP.get(ruins.name),
+  }]));
 
   ALTAR_DESTINATIONS = new Map(
     [...TALISMANS.values()].map((talisman) => [
@@ -196,6 +228,7 @@ function initialize(api) {
     [ObjectIdentifiers.PORTAL_47, ItemIdentifiers.NATURE_TALISMAN],
     [ObjectIdentifiers.PORTAL_48, ItemIdentifiers.CHAOS_TALISMAN],
     [ObjectIdentifiers.PORTAL_49, ItemIdentifiers.DEATH_TALISMAN],
+    [ObjectIdentifiers.PORTAL_100, ItemIdentifiers.BLOOD_TALISMAN],
   ].map(([portal, talisman]) => [portal, TALISMANS.get(talisman)]));
 
   RIFT_RUNES = new Map([
@@ -446,17 +479,64 @@ function syncTiaraOptions({ player }) {
   }
 }
 
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(pluginApi.core.ChatType.SPAM, text);
+}
+
+/** With a tiara (or the cape) the ruins take the player at once (rsprox captures 1549, 1632, 1636). */
 function enterRuins(player, ruins) {
   player.moveTo(new Location(...ruins.destination));
   player.getPacketSender().sendSound(EXIT_PORTAL_SOUND, 1, 0);
-  player.sendMessage("You feel a powerful force take hold of you...");
+  spam(player, "You feel a powerful force take hold of you...");
 }
 
+/**
+ * A talisman held to the ruins (rsprox captures 1636, 1757, 1840, 1850): a tick after the click
+ * human_pickupfloor, the portal sound, the hold line and varbit busy; two ticks later the teleport.
+ */
 function handleTalismanOnRuins(event) {
-  const ruins = RUINS_BY_ID.get(event.objectId);
+  const ruins = event.handled ? undefined : RUINS_BY_ID.get(event.objectId);
   if (!ruins || !matchesRuins(ruins, event.itemId, false)) return;
-  enterRuins(event.player, ruins);
   event.handled = true;
+  const { player, itemId } = event;
+  if (player.getAttribute(TRAVEL_ATTRIBUTE)) return;
+  const name = TALISMANS.get(itemId)?.holdName ?? pluginApi.core.CacheDefinitions.getItem(itemId)?.name ?? "talisman";
+  const busy = pluginApi.core.CacheDefinitions.getVarbitId("busy");
+  let held = false;
+  travel(player, 1 + HOLD_TALISMAN_TICKS, new Location(...ruins.destination), {
+    1: () => {
+      held = true;
+      player.performAnimation(new Animation(HOLD_TALISMAN_ANIMATION));
+      player.getPacketSender().sendSound(EXIT_PORTAL_SOUND, 1, 0);
+      spam(player, `You hold the ${name} towards the mysterious ruins.<br>You feel a powerful force take hold of you...`);
+      player.getPacketSender().sendVarbit(busy, 1);
+    },
+  }, () => {
+    if (held) player.getPacketSender().sendVarbit(busy, 0);
+  });
+}
+
+/**
+ * A talisman (or the tiara) used on its own altar with both in the inventory binds the tiara
+ * (Wiki: Tiara; rsprox capture 1636: the line on the click, as spam, with no animation).
+ */
+function handleBindTiara(event) {
+  const runeData = event.handled ? undefined : RUNES_BY_ALTAR_ID.get(event.objectId);
+  // Kourend's Blood Altar binds dark essence, not tiaras; the blood tiara is the true Blood Altar's.
+  if (!runeData || runeData.essence.ids.includes(ItemIdentifiers.DARK_ESSENCE_FRAGMENTS)) return;
+  const { player } = event;
+  const inventory = player.getInventory();
+  const talismanId = event.itemId === ItemIdentifiers.TIARA
+    ? [...TIARAS_BY_TALISMAN.keys()].find((id) => TIARAS_BY_TALISMAN.get(id).runeId === runeData.runeId && inventory.contains(id))
+    : event.itemId;
+  const tiara = TIARAS_BY_TALISMAN.get(talismanId);
+  if (!tiara || tiara.runeId !== runeData.runeId || !inventory.contains(ItemIdentifiers.TIARA) || !inventory.contains(talismanId)) return;
+  event.handled = true;
+  inventory.delete(talismanId, 1);
+  inventory.delete(ItemIdentifiers.TIARA, 1);
+  inventory.addItem(new Item(tiara.tiaraId, 1));
+  player.getSkillManager().addExperiences(Skill.RUNECRAFTING, tiara.xp);
+  spam(player, "You bind the power of the talisman into your Tiara.");
 }
 
 function handleEnterRuins({ player, objectId }) {
@@ -474,16 +554,98 @@ function handleRuneEssenceTeleport(event) {
     player.sendMessage("You need to complete Rune Mysteries before using this teleport.");
     return true;
   }
-  player.sendMessage("Senventior disthine molenko!");
-  teleportToEssenceMine(player);
+  teleportToEssenceMine(player, event.npc);
   return true;
 }
 
-/** Into the mine, remembering where the player stood so the portals can send them back. */
-function teleportToEssenceMine(player) {
+/**
+ * Into the mine on the wizard's Curse, remembering where the player stood so the portals can send
+ * them back.
+ */
+function teleportToEssenceMine(player, wizard) {
+  if (player.getAttribute(TRAVEL_ATTRIBUTE)) return;
+  if (!TeleportHandler.checkReqs(player, RUNE_ESSENCE_MINE, Infinity)) return;
   const at = player.getLocation();
   player.setAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE, [at.getX(), at.getY(), at.getZ()]);
-  requestTeleport(player, RUNE_ESSENCE_MINE.clone());
+  player.getPacketSender().sendInterfaceRemoval();
+  travel(player, ESSENCE_TELEPORT_TICKS, RUNE_ESSENCE_MINE.clone());
+  if (wizard) {
+    wizard.forceChat?.(ESSENCE_TELEPORT_LINE);
+    wizard.setPositionToFace?.(at);
+    wizard.performGraphic?.(new Graphic(CURSE_CASTING, 0, 92));
+    player.getPacketSender().sendProjectile(wizard.getLocation(), at, 0, 100, ESSENCE_PORTAL_PROJECTILE, 31, 31, player, 61, 16, 128);
+  }
+  player.performGraphic(new Graphic(ESSENCE_PORTAL_IMPACT, 100, 124));
+  player.getPacketSender()
+    .sendAreaSound(CURSE_SOUND_CAST, at.getX(), at.getY(), at.getZ())
+    .sendAreaSound(CURSE_SOUND_IMPACT, at.getX(), at.getY(), at.getZ());
+}
+
+/**
+ * Moves the player to `destination` after `ticks`, running `steps[n]` on tick n first, held as
+ * the core's teleports hold them (TeleportHandler): movement blocked, untargetable and
+ * teleporting until the landing. The landing emits "teleport:landed" with where the travel began,
+ * as the core's teleports do. A death (dying, or the respawn's onPlayerDeath), a logout or a later
+ * travel cancels it; `onRelease` runs whenever the hold ends, landed or not. A death leaves the
+ * movement and targeting holds to the death sequence, which resets them on respawn.
+ */
+function travel(player, ticks, destination, steps = {}, onRelease = undefined) {
+  const { Task } = pluginApi.core;
+  const token = { from: player.getLocation?.()?.clone?.() ?? null, fromInstance: player.getPrivateArea?.() != null, onRelease };
+  player.setAttribute(TRAVEL_ATTRIBUTE, token);
+  player.getMovementQueue().reset();
+  player.getMovementQueue().setBlockMovement(true);
+  player.setUntargetable?.(true);
+  player.setTeleporting?.(true);
+  let tick = 0;
+  pluginApi.getTaskManager().submit(new (class extends Task {
+    constructor() {
+      super(1, player, false);
+    }
+    execute() {
+      if (player.getAttribute(TRAVEL_ATTRIBUTE) !== token || player.isRegistered?.() === false) {
+        this.stop();
+        return;
+      }
+      if (player.isDyingReturn?.() || player.getHitpoints?.() <= 0) {
+        releaseTravel(player, token, false);
+        this.stop();
+        return;
+      }
+      tick++;
+      steps[tick]?.();
+      if (tick < ticks) return;
+      releaseTravel(player, token);
+      player.moveTo(destination);
+      pluginApi.emitCustomEvent("teleport:landed", { player, from: token.from, fromInstance: token.fromInstance, to: destination });
+      this.stop();
+    }
+    stop() {
+      releaseTravel(player, token);
+      super.stop();
+    }
+  })());
+}
+
+/**
+ * Ends a travel's hold, once, and only while it is still the player's current one; `restore`
+ * false (a death) leaves movement and targeting to the death sequence.
+ */
+function releaseTravel(player, token, restore = true) {
+  if (player.getAttribute(TRAVEL_ATTRIBUTE) !== token) return;
+  player.setAttribute(TRAVEL_ATTRIBUTE, null);
+  player.setTeleporting?.(false);
+  if (restore) {
+    player.getMovementQueue().setBlockMovement(false);
+    player.setUntargetable?.(false);
+  }
+  token.onRelease?.();
+}
+
+/** A death cancels a travel in progress: the respawned player stays where they respawn. */
+function cancelTravelOnDeath({ player }) {
+  const token = player?.getAttribute?.(TRAVEL_ATTRIBUTE);
+  if (token) releaseTravel(player, token, false);
 }
 
 /**
@@ -498,7 +660,7 @@ function handleEssenceMinePortal(event) {
   const saved = player.getAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE);
   const [x, y, z] = Array.isArray(saved) && saved.length === 3 ? saved : ESSENCE_MINE_DEFAULT_RETURN;
   const here = player.getLocation();
-  player.sendMessage("You step through the portal...");
+  spam(player, "You step through the portal...");
   player.getPacketSender().sendProjectile(
     new Location(location.x, location.y, location.z), here, 0, 30, ESSENCE_PORTAL_PROJECTILE, 15, 31, player, 0, 16, 128
   );
@@ -553,7 +715,7 @@ function handleDialogueAction(event) {
     if (!hasCompletedRuneMysteries(player)) {
       player.sendMessage("You need to complete Rune Mysteries before using this teleport.");
     } else {
-      teleportToEssenceMine(player);
+      teleportToEssenceMine(player, event.npc);
     }
   } else {
     return;
@@ -606,7 +768,7 @@ function handleExitPortal(event) {
   const { player } = event;
   player.moveTo(new Location(talisman.ruinX, talisman.ruinY, 0));
   player.getPacketSender().sendSound(EXIT_PORTAL_SOUND, 1, 0);
-  player.sendMessage("You step through the portal...");
+  spam(player, "You step through the portal...");
   return true;
 }
 
@@ -646,8 +808,10 @@ module.exports = {
     api.persistAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE);
 
     api.onPlayerLogin(syncTiaraOptions);
+    api.onPlayerDeath(cancelTravelOnDeath);
     api.onCustomEvent("equipment:changed", syncTiaraOptions);
     api.onItemOnObject(handleTalismanOnRuins, { noted: false });
+    api.onItemOnObject(handleBindTiara, { noted: false });
     api.onObjectInteraction("Mysterious ruins", { Enter: handleEnterRuins });
     api.onObjectInteraction("Altar", { "Craft-rune": handleCraftRunes });
     api.onObjectInteraction("Blood Altar", { Bind: handleCraftRunes });

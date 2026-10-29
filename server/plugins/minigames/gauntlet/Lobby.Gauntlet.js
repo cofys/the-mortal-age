@@ -57,7 +57,7 @@ function startRun(player, corrupted) {
 
 /** Down from Prifddinas. */
 function enterPortal(event) {
-  Shared.fadeMove(event.player, () => event.player.moveTo(Shared.loc(Shared.LOBBY)));
+  Shared.fadeMove(event.player, () => event.player.moveTo(Shared.loc(Shared.LOBBY_ENTRY)));
   return true;
 }
 

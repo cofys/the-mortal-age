@@ -173,6 +173,43 @@ Locs of other kinds that are a plain move are taken by name, under `include` in 
     - the Wise Old Man's telescope;
     - Sarachnis's web (needs slashing).
 
+## More exits, and wrong landings (2026-10-27)
+
+**Seven more locs taken by name** (`include`), 447 entries in all. They were captured but left out as "not a ladder, stair, cave or hole", so clicking them did nothing:
+- the Pandemonium cave's Opening (Exit), back beside its entrance;
+- the Asgarnian Ice Dungeon's icy cavern to the skeletal wyverns, both ways;
+- the Lizardman Caves' entrance (Lizard dwelling);
+- the Catacombs of Kourend's vine up to the Giants' Den;
+- the Tar Swamp bellshroom's Exit;
+- the Ourania Cave's crack into the altar room (no Agility requirement, per the Wiki).
+
+**Left out after a Wiki check:**
+- Vet'ion's Memorial needs the medium Wilderness Diary or a boss task, which the gate kinds can't express;
+- the Dig Site winches belong to their quests;
+- the Jungle Potion cave's hand holds are already the Quests plugin's.
+
+**Gates moved into the decisions:** the DS2 mithril door's ancient key and the Ancient Cavern whirlpool's Otto steps had been added to the data by hand. A sync would have dropped them, so they are now `requirements` in `loc-teleport-sync.json`.
+
+**Wrong landings.** The sync also flagged 77 sides of other kinds where tsps lands somewhere other than the capture. A capture's destination is the *first* teleport after the click, and the sync's probe plays 15 ticks, so multi-step obstacles often look wrong when they aren't. Each was checked against where the player settled in the recordings:
+
+| Outcome | Locs |
+| --- | --- |
+| **Right already:** the capture stops mid-obstacle (51) | stepping stones, pipes, rooftop gaps, GWD's ice bridge, the Wilderness cave pillars (two hops per click) |
+| **Right already:** the probe was cut short or started mid-move | the Colossal Wyrm tightropes (20+ ticks), Pollnivneach's tree (the capture's start tile is mid-jump on plane 3) |
+| **Failures captured, not crossings** | the Agility Arena's planks, the third Prifddinas tightrope's fall |
+| **Intended** | the Runecrafting altars' exit portals lead to the Temple of the Eye only during Guardians of the Rift |
+| **Fixed** | below |
+
+- **Chasm of Fire gaps** (`agility-shortcuts.json`): two gaps, not one shortcut. The west gap jumps 1440,10098 to 1446; the east one hops 1448 to 1453 to 1456, a tick apart.
+- **Prifddinas Agility Course:** from the first dark hole on, the course is played in the copy of its rooftops south-west of the city (2269,3389 onward), and the last dark hole climbs back up. tsps ran it in the other copy. Every captured tile there (the dark holes, the tree ladder, portal 6, the last tightrope) is tsps's old tile moved 1024 west and 2752 south. The only recording is from an event world.
+- **Brimhaven Agility Arena rope swing:** one 5-tile swing to three tiles past the rope (751, rope animation 497, sound 2494), not a single step. A click also walks the player to two tiles before the rope on its own axis (cache rotation 0/2 north-south, 1/3 east-west), as captured, even from a diagonal corner; before, it routed onto the gap under the rope and never arrived, so the swing did nothing.
+- **Gauntlet Portal:** down from Prifddinas lands on 3032,6125. Runs still end on 3032,6127 (136 captured exits).
+- **Sorceress's Garden:**
+  - a picked fruit lands on 2911,5470;
+  - the fountain lands on 3321,3141, beside the Apprentice;
+  - an elemental's catch puts the player outside that garden's gate, two ticks after "You've been spotted by an elemental and teleported out of its garden." The gates are winter 2905,5470, spring 2918,5473, autumn 2913,5465 and summer 2910,5478.
+  - Still to do: the fountain's drink animation and teleport cast.
+
 ## Quest plugins that took every copy of a loc
 
 Two quest plugins handled a loc by id alone, so every placement of it went to the quest's spot:

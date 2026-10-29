@@ -240,6 +240,23 @@ export function getSharedMusicAudioContext(): AudioContext | null {
 }
 
 /**
+ * Why music cannot play here, or null when it can. AudioWorklet only exists in a secure
+ * context (HTTPS or localhost), so a client opened over plain HTTP on a LAN or tailnet
+ * hostname has Web Audio but no music worklet.
+ */
+export function getMusicWorkletUnsupportedReason(): string | null {
+    if (!getAudioContextConstructor()) {
+        return "Web Audio is not supported";
+    }
+    if (typeof AudioWorkletNode === "undefined") {
+        return window.isSecureContext === false
+            ? `music needs HTTPS or localhost (page is ${window.location.origin})`
+            : "AudioWorklet is not supported";
+    }
+    return null;
+}
+
+/**
  * Register the music worklet module once on the shared context.
  */
 export async function ensureSharedMusicWorklet(

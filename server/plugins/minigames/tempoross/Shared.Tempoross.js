@@ -167,6 +167,7 @@ const SOUND = {
   STRIKE: 4433,
   FIRE: 159,
   MAST_BREAK: 4954,
+  FULL_INVENTORY: 2277,
 };
 
 const JINGLE = {

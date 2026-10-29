@@ -1,5 +1,6 @@
 "use strict";
 
+const { DialogueChainBuilder, StatementDialogue } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 
 // The cache's generic option menu (interface "menu", script 217: title, "a|b|c", show numbers).
@@ -19,6 +20,17 @@ function openMenu(player, title, labels, choose) {
   sender.sendClientScript(MENU_SCRIPT, 1, title, labels.join("|"));
   sender.sendInterfaceFlagsRange(MENU_OPTIONS, 0, labels.length - 1, PAUSE_BUTTON_EVENTS);
   pendingMenus.set(player, { count: labels.length, choose });
+}
+
+/** A refusal live OSRS shows in a message box rather than the chat (rsprox captures: mesbox). */
+function messageBox(text) {
+  return { messageBox: text };
+}
+
+/** Sends a refusal from a check: a plain string goes to the chat, a messageBox() opens the box. */
+function refuse(player, problem) {
+  if (typeof problem === "string") return player.sendMessage(problem);
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, problem.messageBox)));
 }
 
 function chooseOption(event) {
@@ -43,4 +55,4 @@ function attachMenus(api) {
   api.onPlayerLogout(closeMenu);
 }
 
-Object.assign(module.exports, { openMenu, attachMenus });
+Object.assign(module.exports, { openMenu, messageBox, refuse, attachMenus });

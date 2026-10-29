@@ -127,6 +127,7 @@ function monkeybars() {
 module.exports = {
   key: "ape-atoll",
   name: "Ape Atoll Agility",
+  helper: 11, // the Agility helper's course (enum 3507: "Ape Atoll Agility Course")
   lapXp: 580,
   petBase: 37720, // Giant squirrel base chance (Wiki)
   // 5-6 marks an hour at 95 laps an hour (Wiki). The Wiki gives no roll chance; with the 3-minute

@@ -23,9 +23,9 @@ The dwarven furnace under Keldagrim (`server/plugins/minigames/BlastFurnace.plug
   - The pot's ore and the dispenser's bars are sent as varbits 941-959 (RuneLite `BLAST_FURNACE_*`). Melting Pot and Bar dispenser "Check" list them.
 - **The bar dispenser** is loc 9092, a multiloc on varbit 936: 0 empty, 1 pouring, 2 hot, 3 cooled. It pours for 2 ticks, then the bars stay molten for 16 ticks before they cool **(RSPS: timings)**.
   - Molten bars need ice gloves or smiths gloves (i), or a bucket of water thrown on them (animation 2450).
-  - Take opens the skillmulti "How many would you like to take?" menu, using take mode 17 and an available-quantity limit, and gives as many as fit in the free inventory slots.
+  - Take opens the skillmulti "How many would you like to take?" menu, using take mode 17 and an available-quantity limit, and gives as many as fit in the free inventory slots, with a message box "You take 23 mithril bars from the dispenser."
 - **Also:**
-  - The sink fills a bucket of water.
+  - The sink fills a bucket of water (`human_pickuptable`, sound 2609, "You fill the bucket from the sink.").
   - The temperature gauge opens interface 30.
   - The machinery's looping animations (belt 2435, cogs 2436) are sent when you enter.
   - The anvil gate (9141) needs 60 Smithing; below that, Jorzik's transcript line plays instead.
@@ -114,7 +114,13 @@ Rsprox captures establish the following additional facts:
   noted-mithril-ore refusal “There would be no point in smelting that.”
 - Recordings **96**, **1757** and **3278** show the take quantity menu with mode 17 and
   the title “How many would you like to take?”. A five-bar runite example offers five.
-  Empty-dispenser responses say “The dispenser doesn't contain any bars.”
+  Empty-dispenser responses say “The dispenser doesn't contain any bars.” Recording **3278**
+  shows the take itself: “You take 23 mithril bars from the dispenser.” in a message box (the Wiki
+  changelog: “A message displaying the numbers of bars withdrawn now appears”).
+- “All your ore goes onto the conveyor belt.”, “You throw the water over the bars.” and
+  “You fill the bucket from the sink.” are spam-channel lines (recordings 96, 1757, 3278); the
+  sink also plays `human_pickuptable` and sound 2609. The coffer's menu is titled
+  “Select an option” (recordings 96, 3278).
 - Recording **3278** shows water cooling on the same response tick: the throw animation,
   sound 1051, “You throw the water over the bars.”, one water bucket exchanged for an empty
   bucket, and hot state 2 becoming cooled state 3. Sound 1051 exists in the active cache.

@@ -4,6 +4,7 @@ const { api, Animation, CountdownTask, ItemIdentifiers, Location, Skill, TaskMan
 const Ids = require("./Ids.Construction");
 const Data = require("./Data.Construction");
 const House = require("./House.Construction");
+const Menu = require("./Menu.Construction");
 
 // Floors: plane 0 is the basement, 1 the ground floor, 2 the upper floor. Staircases join a hall
 // to the hall above or below it, the garden's dungeon entrance or a hall's spiral staircase to
@@ -128,8 +129,8 @@ function offerRoom(player, house, room, furniture, next, up) {
 function buildRoomThrough(player, house, room, furniture, next, template) {
   if (House.houseFor(player) !== house || !House.isBuildingMode(player)) return;
   const problem = house.canPlaceRoom(template, next, House.constructionLevel(player));
-  if (problem) return player.sendMessage(problem);
-  if (player.getInventory().getAmount(COINS) < template.cost) return player.sendMessage("You don't have enough coins to build that room.");
+  if (problem) return Menu.refuse(player, problem);
+  if (player.getInventory().getAmount(COINS) < template.cost) return player.sendMessage("You can't afford to build that room.");
   const candidates = STAIRS[furniture.buildableKey].pair ? [STAIRS[furniture.buildableKey].pair] : DUNGEON_STAIRCASES;
   // Place the room to test its stair space, and take it back out if no staircase can be built.
   house.placeRoom(next, template, room.rotation);
@@ -137,7 +138,7 @@ function buildRoomThrough(player, house, room, furniture, next, template) {
   const placement = hotspot && house.hotspotPlacements(template.key, hotspot)[0];
   const target = placement && { position: next, hotspotKey: hotspot, sourceObjectId: placement.id, localX: placement.localX, localY: placement.localY, type: placement.type, face: placement.face };
   const staircase = target && candidates.map(key => Data.BUILDABLE_BY_KEY.get(key))
-    .find(buildable => buildable && typeof House.getBuildMaterials(player, house, target, buildable) !== "string");
+    .find(buildable => buildable && House.getBuildMaterials(player, house, target, buildable) instanceof Map);
   if (!staircase) {
     house.removeRoom(next);
     say(player, `You don't have the right materials to build any staircase in the room ${next.plane > room.plane ? "above" : "below"}.`);
@@ -148,7 +149,6 @@ function buildRoomThrough(player, house, room, furniture, next, template) {
   house.setFurniture(target, staircase);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, staircase.experience);
   House.rebuildHouse(player, house);
-  player.sendMessage(`You build ${House.withArticle(template.name)}.`);
 }
 
 function climbUp(event) { return climb(event, "up"); }

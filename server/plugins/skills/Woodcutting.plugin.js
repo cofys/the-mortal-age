@@ -49,10 +49,26 @@ const NORMAL_TREE_STUMP_BY_MODEL = new Map([
   [16293, ObjectIds.TREE_STUMP_49],
   [33650, ObjectIds.DEAD_TREE_STUMP],
   [33625, ObjectIds.DEAD_TREE_STUMP_2],
+  // willow_tree2/3/4 fall to willow_tree2or3or4_stump (rsprox recording 293).
+  [5528, ObjectIds.TREE_STUMP_33],
+  [5530, ObjectIds.TREE_STUMP_33],
 ]);
 const stumpIdByTreeId = new Map();
+// rsprox captures (oak 1297, willow 293, maple/yew 1850): the swing animates, the first roll and
+// animation follow 2 ticks later, then both repeat every 4 ticks.
 const WOODCUTTING_ACTION_INTERVAL_TICKS = 4;
 const CHOP_ANIMATION_INTERVAL_TICKS = 4;
+const FIRST_ROLL_DELAY_TICKS = 2;
+const SWING_MESSAGE = "You swing your axe at the tree.";
+const NO_AXE_MESSAGE = "You need an axe to chop down this tree.<br>You do not have an axe which you have the woodcutting level to use.";
+const INVENTORY_FULL_SOUND = 2277;
+// The client draws a depleted tree's respawn countdown over its stump (cache script add_overlaytimer_loc).
+const RESPAWN_TIMER_SCRIPT = 5474; // coord, loc, shape, timer id, ticks, colour, 0
+const RESPAWN_TIMER_ID = 2;
+const RESPAWN_TIMER_COLOUR = 16765184;
+// Every log gained counts towards the client's logs-chopped tracker.
+const LOGS_CHOPPED_VARP = "tracking_logs_chopped";
+const LOGS_CHOPPED_ATTRIBUTE = "woodcutting:logs-chopped";
 // Fallback for multi-log trees without a known Forestry despawn timer: 1/8 per log.
 const MULTI_TREE_DEPLETION_ROLL_MAX = 15;
 const MULTI_TREE_DEPLETION_THRESHOLD = 2;
@@ -90,18 +106,27 @@ const BIRD_NESTS = Object.freeze({
   RED_EGG_NEST: ItemIds.BIRD_NEST,
   GREEN_EGG_NEST: ItemIds.BIRD_NEST_2,
   BLUE_EGG_NEST: ItemIds.BIRD_NEST_3,
-  SEED_NEST: ItemIds.BIRD_NEST_4,
+  // bird_nest_seeds_jan2019: trees drop the 2019 seed nest (rsprox captures 293, 1098, 1723).
+  SEED_NEST: ItemIds.BIRD_NEST_10,
+  // bird_nest_seeds: the pre-2019 nest, still searchable where one is kept.
+  LEGACY_SEED_NEST: ItemIds.BIRD_NEST_4,
   RING_NEST: ItemIds.BIRD_NEST_5,
   EMPTY_NEST: ItemIds.BIRD_NEST_6,
 });
+
+const SEED_NEST_IDS = new Set([BIRD_NESTS.SEED_NEST, BIRD_NESTS.LEGACY_SEED_NEST]);
 
 const SEARCHABLE_NEST_IDS = new Set([
   BIRD_NESTS.RED_EGG_NEST,
   BIRD_NESTS.GREEN_EGG_NEST,
   BIRD_NESTS.BLUE_EGG_NEST,
-  BIRD_NESTS.SEED_NEST,
+  ...SEED_NEST_IDS,
   BIRD_NESTS.RING_NEST,
 ]);
+
+// The nest's fall, with its red line (rsprox captures 293, 1098).
+const NEST_FALL_SOUND = 1516;
+const NEST_FULL_MESSAGE = "Your inventory is too full to take anything out of the bird's nest.";
 
 const WOODCUTTING_CAPE_NEST_MULTIPLIER = 1.1;
 
@@ -113,27 +138,29 @@ const LUMBERJACK_OUTFIT = [
 ];
 const LUMBERJACK_SET_BONUS = 0.005;
 
-// OSRS Wiki seed nest table (1,011 slots).
+// OSRS Wiki seed nest table (1,011 slots). `text` is the seed as the search line names it (rsprox
+// captures 549, 552, 1723 and others); magic, mahogany and redwood are unrecorded and follow the
+// yew and teak lines.
 const NEST_SEEDS = [
-  { id: ItemIds.ACORN, name: "acorn", weight: 214 },
-  { id: ItemIds.APPLE_TREE_SEED, name: "apple", weight: 170 },
-  { id: ItemIds.WILLOW_SEED, name: "willow", weight: 135 },
-  { id: ItemIds.BANANA_TREE_SEED, name: "banana", weight: 108 },
-  { id: ItemIds.ORANGE_TREE_SEED, name: "orange", weight: 85 },
-  { id: ItemIds.CURRY_TREE_SEED, name: "curry", weight: 68 },
-  { id: ItemIds.MAPLE_SEED, name: "maple", weight: 54 },
-  { id: ItemIds.PINEAPPLE_SEED, name: "pineapple", weight: 42 },
-  { id: ItemIds.PAPAYA_TREE_SEED, name: "papaya", weight: 34 },
-  { id: ItemIds.YEW_SEED, name: "yew", weight: 27 },
-  { id: ItemIds.PALM_TREE_SEED, name: "palm", weight: 22 },
-  { id: ItemIds.CALQUAT_TREE_SEED, name: "calquat", weight: 17 },
-  { id: ItemIds.SPIRIT_SEED, name: "spirit", weight: 11 },
-  { id: ItemIds.DRAGONFRUIT_TREE_SEED, name: "dragonfruit", weight: 6 },
-  { id: ItemIds.MAGIC_SEED, name: "magic", weight: 5 },
-  { id: ItemIds.TEAK_SEED, name: "teak", weight: 4 },
-  { id: ItemIds.MAHOGANY_SEED, name: "mahogany", weight: 4 },
-  { id: ItemIds.CELASTRUS_SEED, name: "celastrus", weight: 3 },
-  { id: ItemIds.REDWOOD_TREE_SEED, name: "redwood", weight: 2 },
+  { id: ItemIds.ACORN, text: "an acorn", weight: 214 },
+  { id: ItemIds.APPLE_TREE_SEED, text: "an apple tree seed", weight: 170 },
+  { id: ItemIds.WILLOW_SEED, text: "a willow tree seed", weight: 135 },
+  { id: ItemIds.BANANA_TREE_SEED, text: "a banana tree seed", weight: 108 },
+  { id: ItemIds.ORANGE_TREE_SEED, text: "an orange tree seed", weight: 85 },
+  { id: ItemIds.CURRY_TREE_SEED, text: "a curry tree seed", weight: 68 },
+  { id: ItemIds.MAPLE_SEED, text: "a maple tree seed", weight: 54 },
+  { id: ItemIds.PINEAPPLE_SEED, text: "a pineapple plant seed", weight: 42 },
+  { id: ItemIds.PAPAYA_TREE_SEED, text: "a papaya tree seed", weight: 34 },
+  { id: ItemIds.YEW_SEED, text: "a yew tree seed", weight: 27 },
+  { id: ItemIds.PALM_TREE_SEED, text: "a palm tree seed", weight: 22 },
+  { id: ItemIds.CALQUAT_TREE_SEED, text: "a calquat tree seed", weight: 17 },
+  { id: ItemIds.SPIRIT_SEED, text: "a Spirit Tree seed", weight: 11 },
+  { id: ItemIds.DRAGONFRUIT_TREE_SEED, text: "a dragonfruit tree seed", weight: 6 },
+  { id: ItemIds.MAGIC_SEED, text: "a magic tree seed", weight: 5 },
+  { id: ItemIds.TEAK_SEED, text: "a teak seed", weight: 4 },
+  { id: ItemIds.MAHOGANY_SEED, text: "a mahogany seed", weight: 4 },
+  { id: ItemIds.CELASTRUS_SEED, text: "a celastrus tree seed", weight: 3 },
+  { id: ItemIds.REDWOOD_TREE_SEED, text: "a redwood tree seed", weight: 2 },
 ];
 
 // OSRS Wiki ring nest table.
@@ -539,7 +566,10 @@ const TREES = [
     multi: true,
     depleteChance: 10,
     // OSRS: a spider jumps out instead of the tree falling; the player just has to click again.
+    // rsprox recording 1637: the player steps back with sound 3604 on the log's tick.
     interruptMessage: "A small spider jumps at you from the log you just cut.",
+    interruptAnimation: "tbw_cleanup_player_surprise_stepback",
+    interruptSound: 3604,
   },
   {
     name: "burnt tree",
@@ -716,6 +746,41 @@ function logMessage(tree) {
   return `You get some ${name}.`;
 }
 
+function sendSpam(player, text) {
+  player.getPacketSender().sendTypedMessage(pluginApi.core.ChatType.SPAM, text);
+}
+
+/** Live names what didn't fit, with the full-inventory sound (rsprox recordings 293, 1302, 1850). */
+function sendInventoryFull(player, logId) {
+  const name = pluginApi.core.ItemDefinition.forId(logId).getName().toLowerCase();
+  player.getPacketSender().sendSoundEffect(INVENTORY_FULL_SOUND, 1, 0, 1);
+  player.sendMessage(`Your inventory is too full to hold any more ${name}.`);
+}
+
+function countLog(player) {
+  const chopped = (player.getAttribute(LOGS_CHOPPED_ATTRIBUTE) ?? 0) + 1;
+  player.setAttribute(LOGS_CHOPPED_ATTRIBUTE, chopped);
+  player.getPacketSender().sendConfig(pluginApi.core.CacheDefinitions.getVarpId(LOGS_CHOPPED_VARP), chopped);
+}
+
+function sendLogsChopped({ player }) {
+  const chopped = player.getAttribute(LOGS_CHOPPED_ATTRIBUTE);
+  if (chopped > 0) {
+    player.getPacketSender().sendConfig(pluginApi.core.CacheDefinitions.getVarpId(LOGS_CHOPPED_VARP), chopped);
+  }
+}
+
+/** The stump's countdown goes to everyone who can see it, not only the chopper (recording 293). */
+function sendRespawnTimer(player, stump, ticks) {
+  const location = stump.getLocation();
+  const coordinate = (location.getZ() << 28) | (location.getX() << 14) | location.getY();
+  for (const viewer of [player, ...player.getLocalPlayers()]) {
+    viewer
+      .getPacketSender()
+      .sendClientScript(RESPAWN_TIMER_SCRIPT, coordinate, stump.getId(), stump.getType(), RESPAWN_TIMER_ID, ticks, RESPAWN_TIMER_COLOUR, 0);
+  }
+}
+
 function treeTimerKey(objectId, location) {
   return `${objectId}:${location.getX()},${location.getY()},${location.getZ()}`;
 }
@@ -807,10 +872,11 @@ function wearsWoodcuttingCape(player) {
 /**
  * Woodcutting depth seam: "woodcutting:nest-roll" lets depth modules scale the bird-nest
  * drop chance (storms shake nests loose, dawn wakes the birds). Additive only.
+ * Returns true when a nest fell to the ground.
  */
 function maybeDropBirdNest(player, nestMultiplier = 1) {
   if (!player) {
-    return;
+    return false;
   }
   const event = { player, multiplier: nestMultiplier };
   pluginApi.emitCustomEvent("woodcutting:nest-roll", event);
@@ -823,16 +889,19 @@ function maybeDropBirdNest(player, nestMultiplier = 1) {
     ? WOODCUTTING_CAPE_NEST_MULTIPLIER / BIRD_NEST_DROP_CHANCE
     : 1 / BIRD_NEST_DROP_CHANCE) * depthMultiplier * boostMultiplier;
   if (Math.random() >= chance) {
-    return;
+    return false;
   }
 
   const nestId = rollBirdNestId(player);
-  // Content may take the nest before it falls ("woodcutting:nest-drop", a league fragment's banked nests).
+  // Content may take the nest before it falls ("woodcutting:nest-drop", a league fragment's banked nests);
+  // the log still comes then, as on Leagues worlds.
   const drop = { player, itemId: nestId, handled: false };
   pluginApi?.emitCustomEvent("woodcutting:nest-drop", drop);
-  if (drop.handled) return;
+  if (drop.handled) return false;
   ItemOnGroundManager.registers(player, new Item(nestId, 1));
-  player.sendMessage("<col=ff0000>A bird's nest falls out of the tree.");
+  player.getPacketSender().sendSoundEffect(NEST_FALL_SOUND, 1, 0, 1);
+  player.sendMessage("<col=ff0000>A bird's nest falls out of the tree.</col>");
+  return true;
 }
 
 function rollNestSeed() {
@@ -843,30 +912,31 @@ function rollNestRing() {
   return rollWeighted(NEST_RINGS);
 }
 
+// Live: the seed line is spam; rings and eggs arrive without a line (rsprox captures 549, 1098, 1107).
 function searchBirdNest(player, nestId) {
   if (!SEARCHABLE_NEST_IDS.has(nestId)) {
     return false;
   }
 
   if (player.getInventory().getFreeSlots() <= 0) {
-    player.sendMessage("Your inventory is too full to search the bird's nest.");
+    player.getDialogueManager().startDialogues(
+      new pluginApi.core.DialogueChainBuilder().add(new pluginApi.core.StatementDialogue(0, NEST_FULL_MESSAGE))
+    );
     return true;
   }
 
   player.getInventory().deleteNumber(nestId, 1);
   player.getInventory().adds(BIRD_NESTS.EMPTY_NEST, 1);
 
-  if (nestId === BIRD_NESTS.SEED_NEST) {
+  if (SEED_NEST_IDS.has(nestId)) {
     const seed = rollNestSeed();
     player.getInventory().adds(seed.id, 1);
-    player.sendMessage(`You take a ${seed.name} seed out of the bird's nest.`);
+    sendSpam(player, `You take ${seed.text} out of the bird's nest.`);
     return true;
   }
 
   if (nestId === BIRD_NESTS.RING_NEST) {
-    const ring = rollNestRing();
-    player.getInventory().adds(ring.id, 1);
-    player.sendMessage(`You take a ${ring.name} ring out of the bird's nest.`);
+    player.getInventory().adds(rollNestRing().id, 1);
     return true;
   }
 
@@ -877,7 +947,6 @@ function searchBirdNest(player, nestId) {
         ? ItemIds.BIRDS_EGG_3
         : ItemIds.BIRDS_EGG_2;
   player.getInventory().adds(eggId, 1);
-  player.sendMessage("You take the bird's egg out of the bird's nest.");
   return true;
 }
 
@@ -968,6 +1037,7 @@ function depleteTree(player, treeObject, tree) {
   );
   ObjectManager.deregister(treeObject, true);
   ObjectManager.register(stump, true);
+  sendRespawnTimer(player, stump, respawnTicks);
   TaskManager.submit(new TreeRespawnTask(respawnTicks, treeObject, stump));
 }
 
@@ -977,20 +1047,18 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
   if (!request.allow) return false;
   const axe = findBestUsableAxe(player);
   if (!axe) {
-    player.sendMessage("You don't have an axe which you can use.");
+    player.sendMessage(NO_AXE_MESSAGE);
     return false;
   }
 
   const woodcuttingLevel = getWoodcuttingLevel(player);
   if (woodcuttingLevel < tree.requiredLevel) {
-    player.sendMessage(
-      `You need a Woodcutting level of at least ${tree.requiredLevel} to cut this tree.`
-    );
+    player.sendMessage(`You need a Woodcutting level of ${tree.requiredLevel} to chop down this tree.`);
     return false;
   }
 
   if (tree.logId >= 0 && inventoryBlocks(player, tree.logId)) {
-    player.getInventory().full();
+    sendInventoryFull(player, tree.logId);
     return false;
   }
 
@@ -1022,11 +1090,11 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
     objectId: treeObject.getId(),
     location,
     privateArea: treeObject.getPrivateArea(),
-    nextActionTick: woodcuttingTick + WOODCUTTING_ACTION_INTERVAL_TICKS,
-    nextAnimationTick: woodcuttingTick + CHOP_ANIMATION_INTERVAL_TICKS,
+    nextActionTick: woodcuttingTick + FIRST_ROLL_DELAY_TICKS,
+    nextAnimationTick: woodcuttingTick + FIRST_ROLL_DELAY_TICKS,
   });
 
-  player.sendMessage("You swing your axe at the tree..");
+  sendSpam(player, SWING_MESSAGE);
   player.performAnimation(new Animation(axe.animationId));
   return true;
 }
@@ -1073,24 +1141,20 @@ function processWoodcuttingTick(activeSessions, currentTick) {
 
     const axe = findBestUsableAxe(player);
     if (!axe) {
-      player.sendMessage("You don't have an axe which you can use.");
+      player.sendMessage(NO_AXE_MESSAGE);
       stopWoodcutting(activeSessions, player);
       continue;
     }
 
     const woodcuttingLevel = getWoodcuttingLevel(player);
     if (woodcuttingLevel < axe.requiredLevel) {
-      player.sendMessage(
-        "You don't have an axe which you have the required Woodcutting level to use."
-      );
+      player.sendMessage(NO_AXE_MESSAGE);
       stopWoodcutting(activeSessions, player);
       continue;
     }
 
     if (woodcuttingLevel < state.tree.requiredLevel) {
-      player.sendMessage(
-        `You need a Woodcutting level of at least ${state.tree.requiredLevel} to cut this tree.`
-      );
+      player.sendMessage(`You need a Woodcutting level of ${state.tree.requiredLevel} to chop down this tree.`);
       stopWoodcutting(activeSessions, player);
       continue;
     }
@@ -1098,8 +1162,9 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     state.axe = axe;
 
     if (state.tree.logId >= 0 && inventoryBlocks(player, state.tree.logId)) {
-      player.getInventory().full();
-      stopWoodcutting(activeSessions, player);
+      // Live keeps the last chop animation running.
+      sendInventoryFull(player, state.tree.logId);
+      stopWoodcutting(activeSessions, player, false);
       continue;
     }
 
@@ -1127,12 +1192,15 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       continue;
     }
 
-    if (state.tree.logId >= 0) {
+    // A nest falls instead of that roll's log: no log, line or XP (rsprox capture 293, five nests).
+    if (state.tree.logId >= 0 && !maybeDropBirdNest(player)) {
       let pendingLog = null;
       if (!InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
         pendingLog = prepareLog(player, state.tree.logId, state.tree.xpReward * lumberjackXpMultiplier(player));
-        player.sendMessage(logMessage(state.tree));
+        countLog(player);
       }
+      // A burnt log still says it was cut (rsprox captures 1637, 3996).
+      sendSpam(player, logMessage(state.tree));
       CrystalAxe.tryUseCharge(player);
       player
         .getSkillManager()
@@ -1157,15 +1225,16 @@ function processWoodcuttingTick(activeSessions, currentTick) {
           z: state.location.getZ(),
         },
       });
-      maybeDropBirdNest(player);
       ClueNests.rollClueNests(player, state.tree);
     }
 
     if (shouldDepleteTree(state)) {
       treeDespawnTimers.delete(treeTimerKey(state.objectId, state.location));
       if (state.tree.interruptMessage) {
-        player.sendMessage(state.tree.interruptMessage);
-        stopWoodcutting(activeSessions, player);
+        player.performAnimation(new Animation(pluginApi.core.CacheDefinitions.getSeqId(state.tree.interruptAnimation)));
+        player.getPacketSender().sendSoundEffect(state.tree.interruptSound, 1, 0, 1);
+        sendSpam(player, state.tree.interruptMessage);
+        stopWoodcutting(activeSessions, player, false);
         continue;
       }
       Sounds.sendSound(player, Sound.WOODCUTTING_TREE_DOWN);
@@ -1255,6 +1324,8 @@ module.exports = {
       stopWoodcutting(activeSessions, player, false);
     });
     api.onCustomEvent("level-up:popup-opened", pauseWoodcutting);
+    api.persistAttribute(LOGS_CHOPPED_ATTRIBUTE, 0);
+    api.onPlayerLogin(sendLogsChopped);
 
     api.onItemFirstAction((event) => {
       if (searchBirdNest(event.player, event.itemId)) {

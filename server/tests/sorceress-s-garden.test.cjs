@@ -103,7 +103,7 @@ test("a garden refuses entry below its current Thieving level", () => {
   const low = player({ level: 64 });
   assert.equal(plugin._test.entryBlocked(low, plugin._test.SEASONS.summer), true);
   assert.match(low.messages[0], /Thieving level of 65/);
-  assert.deepEqual(low.moves.map((at) => [at.getX(), at.getY()]), [[2912, 5472]]);
+  assert.deepEqual(low.moves.map((at) => [at.getX(), at.getY()]), [[2911, 5470]]);
 
   const boosted = player({ level: 65 });
   assert.equal(plugin._test.entryBlocked(boosted, plugin._test.SEASONS.summer), false);
@@ -138,7 +138,7 @@ test("a safe pick grants exactly one sq'irk, its Farming XP and sends the player
   assert.equal(p.inventory.get(WINTER_FRUIT), 1);
   assert.equal(xpOf(p, core.Skill.FARMING), 30);
   assert.equal(xpOf(p, core.Skill.THIEVING), 0);
-  assert.deepEqual(p.moves.map((at) => [at.getX(), at.getY()]), [[2912, 5472]]);
+  assert.deepEqual(p.moves.map((at) => [at.getX(), at.getY()]), [[2911, 5470]]);
 
   const low = player({ level: 24 });
   plugin._test.pickFruit({ player: low, objectId: SPRING_TREE });
@@ -260,7 +260,7 @@ test("the Teleport option works once she has teleported you, and the fountain go
 
   const leaver = player();
   t.drinkFromFountain({ player: leaver, objectId: FOUNTAIN });
-  assert.deepEqual(leaver.moves.map((at) => [at.getX(), at.getY()]), [[3321, 3139]]);
+  assert.deepEqual(leaver.moves.map((at) => [at.getX(), at.getY()]), [[3321, 3141]]);
   assert.equal(t.drinkFromFountain({ player: leaver, objectId: 12940 }), false);
 });
 
@@ -301,4 +301,18 @@ test("the last player out clears the session and resets the patrol to its spawn"
   const state = garden.patrols.get(npc);
   assert.equal(state.forward, true);
   assert.equal(state.pause, 0);
+});
+
+test("a caught player hears the live line and lands outside that maze's gate two ticks later", () => {
+  const caught = { winter: [2905, 5470], spring: [2918, 5473], autumn: [2913, 5465], summer: [2910, 5478] };
+  for (const [key, landing] of Object.entries(caught)) {
+    const garden = plugin._test.createGarden(plugin._test.SEASONS[key]);
+    const p = player();
+    plugin._test.catchPlayer(p, garden, {});
+    assert.deepEqual(p.messages, ["You've been spotted by an elemental and teleported out of its garden."]);
+    for (let tick = 1; tick < plugin._test.CAUGHT_TICKS; tick++) core.TaskManager.process();
+    assert.equal(p.moves.length, 0, `${key}: not yet`);
+    core.TaskManager.process();
+    assert.deepEqual(p.moves.map((at) => [at.getX(), at.getY()]), [landing], key);
+  }
 });

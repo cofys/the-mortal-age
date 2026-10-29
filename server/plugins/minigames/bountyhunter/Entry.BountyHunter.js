@@ -20,6 +20,7 @@ const MIN_COMBAT_LEVEL = 32;
 // ponytail: the Wiki's PvP world rule says "a few seconds" after a special attack; 3 s here.
 const SPECIAL_EXIT_DELAY_TICKS = 5;
 const SPAWN_SEARCH_RADIUS = 2;
+const SPAWN_MAX_RADIUS = 10;
 const RULES_ATTRIBUTE = "bounty-hunter:rules-accepted";
 const VARBIT_ARENA_ENTER_WARNING = "bh_arena_enter_warning";
 
@@ -32,6 +33,7 @@ const RULES = [
 let api;
 let core;
 let bh;
+const spawnTiles = new Map();
 
 function tile({ x, y }) {
   return new core.Location(x, y, 0);
@@ -116,17 +118,32 @@ function answerArenaRefusal(request) {
   request.reason ??= arenaRefusal(request.player);
 }
 
-/** A walkable tile on or beside a random sigil (the sigils' own tiles hold candles). */
+/** Tile clipping alone misses the empty pockets enclosed by the sigils' claw objects. */
 function spawnTile() {
-  const { Misc, RegionManager } = core;
+  const { Misc, RegionManager, RsmodRouteFinding } = core;
   const sigil = Misc.randomElement(bh.CRATER.sigils);
-  const open = [];
-  for (let dx = -SPAWN_SEARCH_RADIUS; dx <= SPAWN_SEARCH_RADIUS + 1; dx++) {
-    for (let dy = -SPAWN_SEARCH_RADIUS; dy <= SPAWN_SEARCH_RADIUS + 1; dy++) {
-      if (RegionManager.getClipping(sigil.x + dx, sigil.y + dy, 0, null) === 0) open.push({ x: sigil.x + dx, y: sigil.y + dy });
+  let open = spawnTiles.get(sigil);
+  if (!open) {
+    const exits = bh.CRATER.exits.map((exit) => ({
+      x: exit.x + Math.sign(exit.x - exit.to.x) * 2,
+      y: exit.y + Math.sign(exit.y - exit.to.y) * 2,
+    }));
+    const routes = new RsmodRouteFinding();
+    open = [];
+    for (let radius = SPAWN_SEARCH_RADIUS; open.length === 0 && radius <= SPAWN_MAX_RADIUS; radius++) {
+      for (let dx = -radius; dx <= radius + 1; dx++) {
+        for (let dy = -radius; dy <= radius + 1; dy++) {
+          const x = sigil.x + dx, y = sigil.y + dy;
+          if (!bh.isArenaTile({ x, y }) || RegionManager.getClipping(x, y, 0, null) !== 0) continue;
+          if (exits.some((exit) => routes.findRoute({ level: 0, srcX: x, srcY: y, srcSize: 1,
+            destX: exit.x, destY: exit.y, moveNear: false }).success)) open.push({ x, y });
+        }
+      }
     }
+    if (open.length === 0) throw new Error(`No open Bounty Hunter spawn beside ${sigil.x},${sigil.y}`);
+    spawnTiles.set(sigil, open);
   }
-  return tile(open.length ? Misc.randomElement(open) : sigil);
+  return tile(Misc.randomElement(open));
 }
 
 function enterArena({ player, location }) {
@@ -155,6 +172,7 @@ module.exports = function attachEntry(pluginApi, state) {
   api = pluginApi;
   core = pluginApi.core;
   bh = state;
+  spawnTiles.clear();
   api.persistAttribute(RULES_ATTRIBUTE, false);
   api.onPlayerLogin(syncRules);
   api.onObjectInteraction("Bounty Hunter portal", { Enter: usePortal });

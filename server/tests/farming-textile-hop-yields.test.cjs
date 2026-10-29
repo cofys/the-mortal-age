@@ -18,6 +18,8 @@ before(async () => {
         if (name === 'onObjectInteraction') interact = args[0];
     } }));
 });
+// Farming actions finish on later farming ticks, as in the captures.
+const ticks = (n) => { for (let i = 0; i < n; i++) Patches.tick(); };
 test('flax, hemp and cotton use their published low/high endpoints and required-level interpolation', () => {
     for (const [key, low, high, required] of CROPS) {
         const crop = Data.CROPS.get(key);
@@ -65,6 +67,7 @@ test('actual harvesting uses the corrected life-save chances at each textile pla
         farm.patches[Data.patchKey(patch)] = state;
         player.setAttribute(Patches.FARM_ATTRIBUTE, farm);
         interact({ player, object: { getId: () => patch.id }, location: { x: patch.x, y: patch.y, z: patch.z }, clickType: 1 });
+        ticks(1);
         assert.equal(player.getInventory().getAmount(crop.produce), 1, key);
         assert.equal(state.lives, remaining, key);
     }

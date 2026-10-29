@@ -5,8 +5,15 @@
  * The click sends the attempt message and starts the two-tick cooldown. On the next tick a success
  * plays the animation with its loot; a failure sends its message, and the 9-tick stun (8 without
  * pickpocketing) lands a tick later, the stun message and damage a tick after that.
- * Not modelled: the Wealthy citizen's urchin distraction, and the Ardougne diary
- * (+10% success, 56/84/140 coin pouches) as there is no diary system yet.
+ * Not modelled: the Wealthy citizen's urchin distraction, the H.A.M. camp's concussion and
+ * ejection on a failure, and the Ardougne diary (+10% success, 56/84/140 coin pouches) as there
+ * is no diary system yet.
+ *
+ * rsprox captures (recordings 335, 338, 339, 691, 2601, 3059, 3228 and Leagues/Grid Master 95,
+ * 1723, 3275): every line is a spam message except a target's own `channel` (the Digsite
+ * workman's are game messages); the success line is followed by the loot's own lines: the
+ * Master Farmer counts his seeds (`lootLines: "count"`), an entry's `steal` names its item,
+ * and a clue scroll is always announced.
  */
 const fs = require("fs");
 const path = require("path");
@@ -16,6 +23,7 @@ const PICKPOCKET_COOLDOWN_MS = 1200;
 const PICKPOCKET_STUN_TICKS = 9;
 const PICKPOCKET_STUN_LOCK_TICKS = 8;
 const DEFAULT_CATCH_LINE = "What do you think you're doing?";
+const CLUE_LINE = "You steal a clue scroll.";
 // Capture (a hero, 2026-10-05): the stun graphic is stunned_thieving at height 124.
 const STUN_GRAPHIC_ID = 245;
 
@@ -108,10 +116,37 @@ function targetFor(name, npcId) {
   return targets.find((t) => t.ids?.includes(npcId)) ?? targets.find((t) => !t.ids) ?? null;
 }
 
-/** How the messages name the NPC: "the man", "the H.A.M. member", or a named NPC's own name. */
-function messageName(target, npcName) {
+/**
+ * How the messages name the NPC: "the man", "the Master Farmer", or a named NPC's own name.
+ * `messageNames` names single NPCs, by id or by name ("Martin", "the woman").
+ */
+function messageName(target, npcName, npcId) {
+  const named = target.messageNames?.[npcId] ?? target.messageNames?.[npcName];
+  if (named) return named;
   if (target.properNames) return npcName;
   return `the ${target.messageName ?? npcName.toLowerCase()}`;
+}
+
+/** A line in the target's channel: spam, or the game channel for a target with `channel: "game"`. */
+function say(player, target, text) {
+  if (target.channel === "game") player.sendMessage(text);
+  else player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
+}
+
+/** The line a piece of loot is announced with, or null. */
+function lootLine(target, given) {
+  if (given.clue) return CLUE_LINE;
+  if (given.steal) return Array.isArray(given.steal) ? given.steal[given.amount === 1 ? 0 : 1] : given.steal;
+  if (target.lootLines !== "count" || !given.name) return null;
+  const name = given.stealName ?? given.name.charAt(0).toLowerCase() + given.name.slice(1);
+  return `You steal ${given.amount} ${name}${given.amount === 1 ? "" : "s"}.`;
+}
+
+/** The loot entry's fields its line needs, carried with the rolled item. */
+function rolled(entry, amount) {
+  const item = { id: entry.id, amount };
+  for (const key of ["name", "steal", "stealName"]) if (entry[key] !== undefined) item[key] = entry[key];
+  return item;
 }
 
 /** Wiki (Module:Skilling success chart): low/high out of 256, scaled by each bonus and rounded down. */
@@ -169,7 +204,7 @@ function ownsClue(player, tier) {
 
 /** The loot of one successful pickpocket: [{ id, amount, clue? }]. */
 function rollLoot(player, target, random = Math.random) {
-  const loot = (target.always ?? []).map((entry) => ({ id: entry.id, amount: roll(entry.amount, random) }));
+  const loot = (target.always ?? []).map((entry) => rolled(entry, roll(entry.amount, random)));
   for (const entry of target.first ?? []) {
     if (random() >= rateOf(entry.rate)) continue;
     if (entry.clue) {
@@ -178,12 +213,12 @@ function rollLoot(player, target, random = Math.random) {
       const [scroll, box] = clueItems()[entry.clue];
       return [...loot, { id: questComplete(player, "x_marks_the_spot") ? box : scroll, amount: 1, clue: true }];
     }
-    return [...loot, { id: entry.id, amount: roll(entry.amount, random) }];
+    return [...loot, rolled(entry, roll(entry.amount, random))];
   }
   let pick = random();
   for (const entry of target.table ?? []) {
     pick -= tableRate(player, target, entry);
-    if (pick < 0) return [...loot, { id: entry.id, amount: roll(entry.amount, random) }];
+    if (pick < 0) return [...loot, rolled(entry, roll(entry.amount, random))];
   }
   return loot;
 }
@@ -197,20 +232,27 @@ function rogueDoubleChance(player) {
  * Hands the loot over: coins as the target's coin pouch; the rogue outfit may double it, and
  * content's `multiplier` (a league fragment's double loot) multiplies it again. Clues are never more.
  * What the inventory has no room for (a doubled pouch's coins, a doubled item) falls to the floor.
+ * Returns the loot as given (amounts doubled), for its lines.
  */
 function giveLoot(player, target, loot, random = Math.random, multiplier = 1) {
   const times = (random() < rogueDoubleChance(player) ? 2 : 1) * Math.max(1, multiplier | 0);
   const inventory = player.getInventory();
-  for (const { id, amount, clue } of loot) {
+  const given = [];
+  for (const item of loot) {
+    const { id, amount, clue } = item;
     if (id === core.ItemIdentifiers.COINS && target.coinPouch) {
       inventory.adds(target.coinPouch.id, 1);
       // Wiki (Coin pouch): a doubled pouch gives one pouch plus its coins directly.
       const coins = (times - 1) * (Array.isArray(target.coinPouch.coins) ? target.coinPouch.coins[0] : target.coinPouch.coins);
       if (coins > 0) inventory.forceAdd(player, new core.Item(core.ItemIdentifiers.COINS, coins));
+      given.push({ ...item, amount: 1 });
       continue;
     }
-    inventory.forceAdd(player, new core.Item(id, clue ? amount : amount * times));
+    const total = clue ? amount : amount * times;
+    inventory.forceAdd(player, new core.Item(id, total));
+    given.push({ ...item, amount: total });
   }
+  return given;
 }
 
 function wearOutGloves(player) {
@@ -249,8 +291,12 @@ function succeed(player, npc, target, name) {
   // or multiply it as the rogue outfit does (`multiplier`, a league fragment's double loot).
   const loot = { player, npc, target: target.name, loot: rollLoot(player, target), multiplier: 1 };
   pluginApi.emitCustomEvent("thieving:loot", loot);
-  giveLoot(player, target, loot.loot, Math.random, loot.multiplier);
-  player.sendMessage(`You pick ${name}'s pocket.`);
+  const given = giveLoot(player, target, loot.loot, Math.random, loot.multiplier);
+  say(player, target, target.successLine ?? `You pick ${name}'s pocket.`);
+  for (const item of given) {
+    const line = lootLine(target, item);
+    if (line) say(player, target, line);
+  }
   core.Sounds.sendSound(player, core.Sound.THIEVING_PICKPOCKET);
   player.getSkillManager().addExperiences(core.Skill.THIEVING, target.xp);
   pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: target.petBase, method: "pickpocket", target: target.name });
@@ -262,7 +308,7 @@ function fail(player, npc, target, name) {
     player.sendMessage("Your shadow veil prevents you from being noticed.");
     return;
   }
-  player.sendMessage(`You fail to pick ${name}'s pocket.`);
+  say(player, target, `You fail to pick ${name}'s pocket.`);
   npc.forceChat(target.catchLine ?? DEFAULT_CATCH_LINE);
   wearOutGloves(player);
   caughtAt.set(player, core.World.getProcessCycle());
@@ -293,7 +339,7 @@ function caughtTask(player, npc, target) { return new (class extends core.Task {
       return;
     }
     if (this.stunned) {
-      player.sendMessage("You've been stunned!");
+      player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, "You've been stunned!");
       if (!target.painless) player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(roll(target.stunDamage), core.HitMask.RED)]);
       this.stop();
       return;
@@ -406,8 +452,8 @@ function pickpocket(event) {
   request.onAttempt?.();
   player.getMovementQueue().reset();
   player.setPositionToFace(npc.getLocation());
-  const name = messageName(target, npcName);
-  player.sendMessage(`You attempt to pick ${name}'s pocket.`);
+  const name = messageName(target, npcName, event.npcId);
+  say(player, target, target.attemptLine ?? `You attempt to pick ${name}'s pocket.`);
   player.getClickDelay().reset();
   npc.getTimers().registers(core.TimerKey.ATTACK_IMMUNITY, 10);
   // `alwaysSucceeds` (a league relic) lands every attempt as an unconscious target does, coin pouches kept;
@@ -482,5 +528,5 @@ module.exports = {
   startBotPickpocket,
   pickpocketTargetsForLevel,
   targetFor,
-  _test: { pickpocket, successChance, rollLoot, giveLoot, targetFor, messageName, dodgyNecklaceProtects, wearOutGloves, rateOf },
+  _test: { pickpocket, successChance, rollLoot, giveLoot, lootLine, targetFor, messageName, dodgyNecklaceProtects, wearOutGloves, rateOf },
 };

@@ -7,6 +7,7 @@ Server.installProductionPathResolver();
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { ItemIdentifiers: I } = require("../dist/util/ItemIdentifiers");
 const { Skill } = require("../dist/game/model/Skill");
+const { ChatType } = require("../dist/net/protocol/ClientProtocol");
 const Smithing = require("../plugins/skills/Smithing.plugin");
 const Anvil = require("../plugins/skills/smithing/Anvil.Smithing");
 const Superheat = require("../plugins/skills/smithing/Superheat.Smithing");
@@ -46,8 +47,12 @@ afterEach(() => { for (const player of players.splice(0)) disconnect({ player })
 
 function playerWith(barId = I.BRONZE_BAR, bars = 27) {
   const items = new Map([[I.HAMMER, 1], [barId, bars]]);
-  const player = { items, xp: 0, level: 99, moving: false, interfaceId: -1, messages: [], sent: [], statements: [], equipped: new Map() };
-  const sender = new Proxy({}, { get: (_, name) => (...args) => { player.sent.push([name, ...args]); return sender; } });
+  const player = { items, xp: 0, level: 99, moving: false, interfaceId: -1, messages: [], spam: [], sent: [], statements: [], equipped: new Map() };
+  const sender = new Proxy({}, { get: (_, name) => (...args) => {
+    player.sent.push([name, ...args]);
+    if (name === "sendTypedMessage" && args[0] === ChatType.SPAM) player.spam.push(args[1]);
+    return sender;
+  } });
   Object.assign(player, {
     getInventory: () => ({
       contains: id => (items.get(id) ?? 0) > 0,
@@ -74,7 +79,7 @@ function playerWith(barId = I.BRONZE_BAR, bars = 27) {
     setEnteredAmountAction: action => { player.amountAction = action; },
     getMovementQueue: () => ({ size: () => player.moving ? 1 : 0 }),
     getForceMovement: () => null, isRegistered: () => true, getHitpoints: () => 99,
-    performAnimation(animation) { player.animation = animation?.getId?.(); },
+    performAnimation(animation) { player.animation = animation?.getId?.(); player.animationDelay = animation?.getDelay?.(); },
     sendMessage(message) { player.messages.push(message); },
   });
   players.push(player);
@@ -227,8 +232,9 @@ test("the rusted anvil only works bronze and ignores other items", () => {
   assert.equal(bronze.interfaceId, 312);
 });
 
-// Captured (rsprox, recs 1610, 3461): the click closes the interface on its tick, the first item
-// comes 3 ticks later and the next every 5, each with "You hammer the <metal> and make ...".
+// Captured (rsprox, recs 1610, 3461, 1757, 96): the click closes the interface on its tick, the first
+// item comes 3 ticks later and the next every 5, each with "You hammer the <metal> and make ..." on
+// the spam channel and human_smithing 15 client cycles into the tick.
 test("anvil timing, messages and the last-made varbits follow the captures", () => {
   const player = playerWith(I.STEEL_BAR, 3);
   player.quests = new Set(["the_tourist_trap"]);
@@ -244,11 +250,26 @@ test("anvil timing, messages and the last-made varbits follow the captures", () 
   assert.equal(player.items.get(I.STEEL_DART_TIP) ?? 0, 0);
   ticks(1);
   assert.equal(player.items.get(I.STEEL_DART_TIP), 10);
-  assert.equal(player.messages.at(-1), "You hammer the steel and make ten dart tips.");
+  assert.equal(player.spam.at(-1), "You hammer the steel and make ten dart tips.");
+  assert.equal(player.animation, CacheDefinitions.getSeqId("human_smithing"));
+  assert.equal(player.animationDelay, 15);
   ticks(4);
   assert.equal(player.items.get(I.STEEL_DART_TIP), 10);
   ticks(1);
   assert.equal(player.items.get(I.STEEL_DART_TIP), 20);
+});
+
+// Captured (rsprox, rec 68): a product above the player's level closes the interface with a message
+// box naming it in title case.
+test("a product above the player's level is refused in a message box", () => {
+  const player = playerWith(I.BRONZE_BAR, 5);
+  player.level = 1;
+  open(player);
+  assert.equal(click(player, 25), false);
+  assert.equal(player.interfaceId, -1);
+  const text = player.statements.at(-1).getDialogues().get(0).getText();
+  assert.equal(text, "You need a Smithing level of 7 to make a Bronze Full Helm.");
+  assert.equal(player.messages.length, 0);
 });
 
 test("Smith with no bar opens a message box instead of the interface", () => {
@@ -298,13 +319,15 @@ test("Smelt lists every bar, and smelts on the captured timing", () => {
     I.GOLD_BAR, I.MITHRIL_BAR, I.ADAMANTITE_BAR, I.CUPRONICKEL_BAR, I.RUNITE_BAR]);
   menu.execute(I.BRONZE_BAR, 2);
   ticks(1);
-  assert.equal(player.messages.at(-1), "You smelt the copper and tin together in the furnace.");
+  assert.equal(player.spam.at(-1), "You smelt the copper and tin together in the furnace.");
   assert.equal(player.animation, CacheDefinitions.getSeqId("human_furnace"));
   ticks(3);
   assert.equal(player.items.get(I.BRONZE_BAR) ?? 0, 0);
+  player.animation = null;
   ticks(1);
   assert.equal(player.items.get(I.BRONZE_BAR), 1);
-  assert.equal(player.messages.at(-1), "You retrieve a bar of bronze.");
+  assert.equal(player.spam.at(-1), "You retrieve a bar of bronze.");
+  assert.equal(player.animation, CacheDefinitions.getSeqId("human_furnace"), "the bar comes out with human_furnace again");
   assert.equal(player.xp, 6.2);
   ticks(5);
   assert.equal(player.items.get(I.BRONZE_BAR), 2);
@@ -348,7 +371,7 @@ test("too low a level is a message box; impure iron is lost", (t) => {
   ticks(6);
   assert.equal(player.items.get(I.IRON_ORE), 0);
   assert.equal(player.items.get(I.IRON_BAR) ?? 0, 0);
-  assert.equal(player.messages.at(-1), "The ore is too impure and you fail to refine it.");
+  assert.equal(player.spam.at(-1), "The ore is too impure and you fail to refine it.");
   assert.equal(player.xp, 0);
 });
 
@@ -431,7 +454,7 @@ test("Shayzien armour from lovakite and keel parts after Pandemonium use the Wik
   ticks(4);
   assert.equal(keel.items.get(I.STEEL_BAR), 0);
   assert.equal(keel.xp, 187.5);
-  assert.equal(keel.messages.at(-1), "You hammer the steel and make some keel parts.");
+  assert.equal(keel.spam.at(-1), "You hammer the steel and make some keel parts.");
 });
 
 test("the Lovakite furnace smelts lovakite, which other furnaces don't offer", () => {
@@ -470,7 +493,7 @@ test("a ring of forging makes iron certain and melts after its charges", (t) => 
   assert.equal(player.equipped.has(12), false);
   assert.match(player.messages.join("\n"), /Ring of Forging has melted/);
   assert.equal(player.attributes["smithing:ring-of-forging-charges"], 140);
-  assert.equal(player.messages.at(-1), "The ore is too impure and you fail to refine it.");
+  assert.equal(player.spam.at(-1), "The ore is too impure and you fail to refine it.");
 });
 
 test("Varrock armour smelts two bars at the Edgeville furnace", (t) => {

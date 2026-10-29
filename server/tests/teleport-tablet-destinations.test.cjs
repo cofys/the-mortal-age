@@ -109,9 +109,9 @@ test('every teleport tablet and scroll in the cache has a destination', () => {
 
 test('Arceuus and Lunar tablets land where their spells do; Ape Atoll is the Arceuus tablet', () => {
     diaries = new Set();
-    assert.deepEqual(use('barrows teleport', 'break').tile, [3565, 3315, 0]);
-    assert.deepEqual(use('moonclan teleport', 'break').tile, [2113, 3917, 0]);
-    assert.deepEqual(use('ape atoll teleport', 'break').tile, [2770, 9100, 0]);
+    assertLanding(use('barrows teleport', 'break').tile, [3565, 3315, 0]);
+    assertLanding(use('moonclan teleport', 'break').tile, [2113, 3917, 0]);
+    assertLanding(use('ape atoll teleport', 'break').tile, [2770, 9100, 0]);
 });
 
 test('a scroll is used up on the click, a tablet as it is absorbed', () => {
@@ -121,6 +121,11 @@ test('a scroll is used up on the click, a tablet as it is absorbed', () => {
     assert.equal(tablet.player.inventory.get(tabletIds.get('varrock teleport').id), 1, 'kept until tick 2');
 });
 
+/** Standard teleports land anywhere in the 5x5 square around their destination (rsprox captures). */
+function assertLanding(tile, [x, y, z]) {
+    assert.ok(tile && Math.abs(tile[0] - x) <= 2 && Math.abs(tile[1] - y) <= 2 && tile[2] === z, `${tile} within 2 of ${[x, y, z]}`);
+}
+
 test('the Grand Exchange option needs the medium Varrock Diary', () => {
     diaries = new Set();
     const refused = use('varrock teleport', 'grand exchange');
@@ -129,20 +134,23 @@ test('the Grand Exchange option needs the medium Varrock Diary', () => {
     assert.deepEqual(refused.player.messages, ['You must complete the medium, hard or elite tier of the Varrock achievement diary to use this feature.']);
 
     diaries = new Set(['varrock medium']);
-    assert.deepEqual(use('varrock teleport', 'grand exchange').tile, [3165, 3477, 0]);
-    assert.deepEqual(use('varrock teleport', 'varrock').tile, [3213, 3424, 0]);
+    assertLanding(use('varrock teleport', 'grand exchange').tile, [3163, 3478, 0]);
+    assertLanding(use('varrock teleport', 'varrock').tile, [3213, 3424, 0]);
+    const landed = new Set();
+    for (let i = 0; i < 400; i++) landed.add(String(use('varrock teleport', 'grand exchange').tile));
+    assert.equal(landed.size, 25, 'every tile of the square, x 3161-3165 and y 3476-3480 as captured');
 });
 
 test('Toggle makes Break go to the alternate, and sets the varbit the spell reads', () => {
     diaries = new Set(['kandarin hard']);
     const { player } = use('camelot teleport', 'toggle');
     assert.deepEqual(player.varbits, [[CacheDefinitions.getVarbitId('seers_camelot_teleport'), 1]]);
-    assert.deepEqual(use('camelot teleport', 'break', player).tile, [2726, 3486, 0]);
-    assert.deepEqual(use('camelot teleport', 'camelot', player).tile, [2757, 3478, 0]);
+    assertLanding(use('camelot teleport', 'break', player).tile, [2726, 3484, 0]);
+    assertLanding(use('camelot teleport', 'camelot', player).tile, [2757, 3478, 0]);
 
     use('camelot teleport', 'toggle', player);
     assert.deepEqual(player.varbits.at(-1), [CacheDefinitions.getVarbitId('seers_camelot_teleport'), 0]);
-    assert.deepEqual(use('camelot teleport', 'break', player).tile, [2757, 3478, 0]);
+    assertLanding(use('camelot teleport', 'break', player).tile, [2757, 3478, 0]);
 });
 
 test('Revert turns a redirected tablet back into a Teleport to house tablet', () => {
@@ -168,13 +176,15 @@ test('the spell alternate option needs the diary; Cast still goes to the town', 
     assert.equal(refused.event.handled, true);
     assert.equal(refused.cast, undefined);
     assert.deepEqual(refused.player.messages, ['You must complete the medium, hard or elite tier of the Varrock achievement diary to use this feature.']);
-    assert.equal(cast('Varrock Teleport', 1).event.handled, false, 'Cast is the usual cast');
+    const town = cast('Varrock Teleport', 1);
+    assert.equal(town.event.handled, true, 'Cast goes to the town, on a tile of its square');
+    assertLanding(town.cast.tile, [3213, 3424, 0]);
 
     diaries = new Set(['varrock medium', 'kandarin hard', 'ardougne hard']);
-    assert.deepEqual(cast('Varrock Teleport', 2).cast.tile, [3165, 3477, 0]);
-    assert.deepEqual(cast('Camelot Teleport', 2).cast.tile, [2726, 3486, 0]);
-    assert.deepEqual(cast('Watchtower Teleport', 2).cast.tile, [2583, 3095, 0]);
-    assert.equal(cast('Watchtower Teleport', 3).event.handled, false);
+    assertLanding(cast('Varrock Teleport', 2).cast.tile, [3163, 3478, 0]);
+    assertLanding(cast('Camelot Teleport', 2).cast.tile, [2726, 3484, 0]);
+    assertLanding(cast('Watchtower Teleport', 2).cast.tile, [2584, 3098, 0]);
+    assertLanding(cast('Watchtower Teleport', 3).cast.tile, [2549, 3112, 2]);
 });
 
 test('Configure asks as in the capture, and the choice is shared with the tablets', () => {
@@ -186,7 +196,7 @@ test('Configure asks as in the capture, and the choice is shared with the tablet
     assert.deepEqual(player.messages, ['Your default option is now the Grand Exchange teleport.']);
     assert.deepEqual(player.varbits, [[CacheDefinitions.getVarbitId('varrock_ge_teleport'), 1]]);
     player.inventory.set(tabletIds.get('varrock teleport').id, 1);
-    assert.deepEqual(use('varrock teleport', 'break', player).tile, [3165, 3477, 0]);
+    assertLanding(use('varrock teleport', 'break', player).tile, [3163, 3478, 0]);
 
     cast('Varrock Teleport', 10, player);
     assert.equal(prompt.title, 'Spellbook/portal default: Grand Exchange');
