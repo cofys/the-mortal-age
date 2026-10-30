@@ -16,6 +16,8 @@ const COMPLETED_ATTRIBUTE = "port-tasks:completed";
  * `boatSlot` when they took them out of that boat's hold to deliver (crew/Courier.Crew.js).
  */
 const CREW_CARGO_ATTRIBUTE = "port-tasks:crew-cargo";
+/** Saved task slot owning the physical crate in the player's weapon slot. */
+const CARRIED_SLOT_ATTRIBUTE = "port-tasks:carried-slot";
 
 const MAX_SLOTS = 5;
 /** Tasks a player may hold: 1, and one more at Sailing 7, 28, 56 and 84 (Wiki; not boostable). */
@@ -84,6 +86,7 @@ function slots(player) {
 function setSlots(player, value) {
   player.setAttribute(SLOTS_ATTRIBUTE, value);
   sendSlots(player);
+  core.PluginManager.emitCustomEvent("port-tasks:slots-changed", { player });
 }
 
 /** Every slot's id, cargo taken and cargo delivered varbits, and the unlocked extra slots. */
@@ -155,18 +158,27 @@ function refreshEquipment(player) {
 
 /** Puts a crate in the player's hands, for the slot (0-4) it belongs to. */
 function carry(player, crate, slot) {
+  player.setAttribute(CARRIED_SLOT_ATTRIBUTE, slot);
   player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(crate, 1));
   refreshEquipment(player);
   player.getPacketSender().sendVarbit(VARBIT.LAST_CARGO_TAKEN, slot + 1);
   player.getPacketSender().sendVarbit(VARBIT.CARRYING_CARGO, 1);
+  core.PluginManager.emitCustomEvent("port-tasks:cargo-carried", { player, crate, slot });
 }
 
 /** Takes the crate out of the player's hands. */
 function putDown(player) {
   player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(-1, 0));
   refreshEquipment(player);
+  clearCarrying(player);
+}
+
+/** Clear only hand-cargo bookkeeping after another shared owner removed the equipment. */
+function clearCarrying(player) {
+  player.setAttribute(CARRIED_SLOT_ATTRIBUTE, -1);
   player.getPacketSender().sendVarbit(VARBIT.LAST_CARGO_TAKEN, 0);
   player.getPacketSender().sendVarbit(VARBIT.CARRYING_CARGO, 0);
+  core.PluginManager.emitCustomEvent("port-tasks:cargo-released", { player });
 }
 
 /** "crate of jewellery", from the crate's name. */
@@ -186,6 +198,7 @@ module.exports = {
   UNCLAIMED_ATTRIBUTE,
   COMPLETED_ATTRIBUTE,
   CREW_CARGO_ATTRIBUTE,
+  CARRIED_SLOT_ATTRIBUTE,
   BOARD_SIZE,
   VARBIT,
   VARP_TASKS_COMPLETED,
@@ -206,6 +219,7 @@ module.exports = {
   handsFree,
   carry,
   putDown,
+  clearCarrying,
   crateName,
   blue,
   core: () => core,

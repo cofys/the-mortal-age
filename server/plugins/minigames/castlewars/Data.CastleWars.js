@@ -8,26 +8,33 @@
 let data = null;
 
 function buildData(core) {
-  const { Location, Boundary, PolygonalBoundary, Animation, Equipment, ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O } = core;
+  const { Location, Boundary, PolygonalBoundary, Equipment, ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O } = core;
   const loc = (x, y, z) => new Location(x, y, z);
   const box = (...args) => new Boundary(...args);
   const TEAM = { SARADOMIN: "saradomin", ZAMORAK: "zamorak" };
   const TEAM_VARBIT = { DOOR_HEALTH: 136, DOOR_UNLOCKED: 137, TUNNEL_NS_CLEAR: 138, TUNNEL_EW_CLEAR: 139, CATAPULT_BROKEN: 140 };
+  // Custom dose chain, defined in data/definitions/custom-items.json.
+  const SPECIAL_RESTORE_DOSES = [50001, 50002, 50003, 50004];
+  const BREW_DOSES = [I.CASTLEWARS_BREW_4_, I.CASTLEWARS_BREW_3_, I.CASTLEWARS_BREW_2_, I.CASTLEWARS_BREW_1_];
+  const SUPPLY_ITEMS = [I.BANDAGES, I.BRONZE_PICKAXE, I.EXPLOSIVE_POTION, I.BARRICADE, I.ROCK_5, I.TINDERBOX, I.ROPE, I.TOOLKIT_2, I.BUCKET, I.BUCKET_OF_WATER, I.RUNE_POUCH_6, ...BREW_DOSES, ...SPECIAL_RESTORE_DOSES];
 
   return Object.freeze({
     TEAM,
     TEAM_DATA: {
       // standType/standFace match the map's own stand loc, so a spawned stand replaces it on the
       // client instead of stacking next to it.
-      [TEAM.SARADOMIN]: { id: TEAM.SARADOMIN, name: "Saradomin", capeId: I.SARADOMIN_CLOAK_3, hoodId: I.CASTLEWARS_HOOD, bannerId: I.SARADOMIN_BANNER, waitingRoom: loc(2381, 9489, 0), startRoom: loc(2426, 3076, 1), respawnBounds: box(2423, 2431, 3072, 3080, 1), standLocation: loc(2429, 3074, 3), standType: 11, standFace: 1, safeStandId: O.SARADOMIN_STANDARD_2, emptyStandId: O.STANDARD_STAND, droppedFlagObjectId: O.SARADOMIN_STANDARD, waitingBounds: [box(2368, 2392, 9481, 9497, 0)] },
-      [TEAM.ZAMORAK]: { id: TEAM.ZAMORAK, name: "Zamorak", capeId: I.ZAMORAK_CLOAK_3, hoodId: I.CASTLEWARS_HOOD_2, bannerId: I.ZAMORAK_BANNER, waitingRoom: loc(2421, 9524, 0), startRoom: loc(2372, 3131, 1), respawnBounds: box(2368, 2376, 3127, 3135, 1), standLocation: loc(2370, 3133, 3), standType: 11, standFace: 3, safeStandId: O.ZAMORAK_STANDARD_2, emptyStandId: O.STANDARD_STAND_2, droppedFlagObjectId: O.ZAMORAK_STANDARD, waitingBounds: [box(2408, 2432, 9512, 9535, 0)] },
+      [TEAM.SARADOMIN]: { id: TEAM.SARADOMIN, name: "Saradomin", capeId: I.SARADOMIN_CLOAK_3, bannerId: I.SARADOMIN_BANNER, waitingRoom: loc(2381, 9489, 0), startRoom: loc(2426, 3076, 1), respawnBounds: box(2423, 2431, 3072, 3080, 1), standLocation: loc(2429, 3074, 3), standType: 11, standFace: 1, safeStandId: O.SARADOMIN_STANDARD_2, emptyStandId: O.STANDARD_STAND, droppedFlagObjectId: O.SARADOMIN_STANDARD, waitingBounds: [box(2368, 2392, 9481, 9497, 0)] },
+      [TEAM.ZAMORAK]: { id: TEAM.ZAMORAK, name: "Zamorak", capeId: I.ZAMORAK_CLOAK_3, bannerId: I.ZAMORAK_BANNER, waitingRoom: loc(2421, 9524, 0), startRoom: loc(2372, 3131, 1), respawnBounds: box(2368, 2376, 3127, 3135, 1), standLocation: loc(2370, 3133, 3), standType: 11, standFace: 3, safeStandId: O.ZAMORAK_STANDARD_2, emptyStandId: O.STANDARD_STAND_2, droppedFlagObjectId: O.ZAMORAK_STANDARD, waitingBounds: [box(2408, 2432, 9512, 9535, 0)] },
     },
     START_TASK_KEY: "cw.start",
     END_TASK_KEY: "cw.end",
-    START_COUNTDOWN_SECONDS: 10,
+    START_COUNTDOWN_SECONDS: 120,
+    BOT_START_COUNTDOWN_SECONDS: 15,
     GAME_SECONDS: 1200,
     LOBBY_TELEPORT: loc(2440, 3089, 0),
-    TAKE_SUPPLY_ANIM: new Animation(881),
+    SPECIAL_RESTORE_DOSES,
+    BREW_DOSES,
+    RUNE_POUCH: I.RUNE_POUCH_6,
 
     // OSRS interfaces (cache 237). The old 317 ids (11146/11479/...) don't exist in this cache.
     OVERLAY_HUD_UID: (161 << 16) | 8, // component.toplevel_osrs_stretch:overlay_hud
@@ -51,9 +58,9 @@ function buildData(core) {
     MAX_BARRICADES: 10,
     BARRICADE_NPC: { [TEAM.SARADOMIN]: N.BARRICADE, [TEAM.ZAMORAK]: N.BARRICADE_3 },
     BRACELET_NEXT: { [I.CASTLE_WARS_BRACELET_3_]: I.CASTLE_WARS_BRACELET_2_, [I.CASTLE_WARS_BRACELET_2_]: I.CASTLE_WARS_BRACELET_1_, [I.CASTLE_WARS_BRACELET_1_]: -1 },
-    CLEANUP_ITEM_IDS: new Set([I.BANDAGES, I.BRONZE_PICKAXE, I.EXPLOSIVE_POTION, I.BARRICADE, I.SARADOMIN_CLOAK_3, I.ZAMORAK_CLOAK_3, I.CASTLEWARS_HOOD, I.CASTLEWARS_HOOD_2, I.SARADOMIN_BANNER, I.ZAMORAK_BANNER, I.ROCK_5, I.TINDERBOX, I.ROPE, I.TOOLKIT_2]),
-    DEATH_REMOVE_ITEM_IDS: new Set([I.BANDAGES, I.BRONZE_PICKAXE, I.EXPLOSIVE_POTION, I.BARRICADE, I.ROCK_5, I.TINDERBOX, I.ROPE, I.TOOLKIT_2, I.SARADOMIN_BANNER, I.ZAMORAK_BANNER]),
-    TEAM_COLOUR_SLOTS: new Set([Equipment.CAPE_SLOT, Equipment.HEAD_SLOT]),
+    CLEANUP_ITEM_IDS: new Set([...SUPPLY_ITEMS, I.SARADOMIN_CLOAK_3, I.ZAMORAK_CLOAK_3, I.SARADOMIN_BANNER, I.ZAMORAK_BANNER]),
+    DEATH_REMOVE_ITEM_IDS: new Set([...SUPPLY_ITEMS.filter((id) => id !== I.RUNE_POUCH_6), I.SARADOMIN_BANNER, I.ZAMORAK_BANNER]),
+    TEAM_COLOUR_SLOTS: new Set([Equipment.CAPE_SLOT]),
     ENEMY_SPAWN_MESSAGE: "You are not allowed in the other team's spawn point.",
 
     LOBBY_TEAMS: { [O.ZAMORAK_PORTAL]: TEAM.ZAMORAK, [O.SARADOMIN_PORTAL]: TEAM.SARADOMIN, [O.GUTHIX_PORTAL]: null },
@@ -78,7 +85,7 @@ function buildData(core) {
       [O.STAIRCASE_13]: [[[2419, 3080, 1], [2419, 3077, 0]], [[2430, 3081, 2], [2427, 3081, 1]], [[2425, 3074, 3], [2425, 3077, 2]], [[2374, 3133, 3], [2374, 3130, 2]], [[2369, 3126, 2], [2372, 3126, 1]], [[2380, 3127, 1], [2380, 3130, 0]]],
       [O.LADDER_46]: [[[2421, 3073, 1], [2421, 3074, 0]], [[2378, 3134, 1], [2378, 3133, 0]]],
       [O.LADDER_195]: [[[2421, 3073, 0], [2421, 3074, 1]], [[2378, 3134, 0], [2378, 3133, 1]]],
-      [O.LADDER_47]: [[[2430, 3082, 0], [2430, 9482, 0]], [[2369, 3125, 0], [2369, 9525, 0]]],
+      [O.LADDER_47]: [[[2430, 3082, 0], [2430, 9481, 0]], [[2369, 3125, 0], [2369, 9526, 0]]],
       [O.LADDER_218]: [[[2369, 9525, 0], [2369, 3126, 0]], [[2430, 9482, 0], [2430, 3081, 0]], [[2400, 9508, 0], [2400, 3107, 0]], [[2399, 9499, 0], [2399, 3100, 0]]],
       [O.HOLLOW_TREE_3]: [[[2430, 9482, 0], [2430, 3081, 0]], [[2369, 9525, 0], [2369, 3126, 0]]],
       [O.STAIRCASE_16]: [[[2380, 3127, 0], [2379, 3127, 1]], [[2369, 3126, 1], [2369, 3127, 2]], [[2374, 3131, 2], [2373, 3133, 3]]],
@@ -87,14 +94,13 @@ function buildData(core) {
     SUPPLY_TABLES: {
       [O.TABLE_450]: [I.BANDAGES, "You get some bandages."],
       [O.TABLE_451]: [I.BANDAGES, "You get some bandages."],
-      // Newer-revision tables: 56224/56225 carry the explosive-potion prop (model 4434, as 4463),
-      // 56226 sits under the bucket spawns.
-      [O.TABLE_452]: [I.EXPLOSIVE_POTION, "You get an explosive potion."],
-      [O.TABLE_453]: [I.EXPLOSIVE_POTION, "You get an explosive potion."],
+      // The blue potion tables are Castlewars brew supplies; the old red table supplies explosives.
+      [O.TABLE_452]: [I.CASTLEWARS_BREW_4_, "You get a Castlewars brew."],
+      [O.TABLE_453]: [I.CASTLEWARS_BREW_4_, "You get a Castlewars brew."],
+      [O.TABLE_349]: [I.CASTLEWARS_BREW_4_, "You get a Castlewars brew."],
       [O.TABLE_454]: [I.BUCKET, "You get a bucket."],
-      // One rock table per spawn: the static props for the catapults.
-      [O.TABLE_455]: [I.ROCK_5, "You get a rock."],
-      [O.TABLE_456]: [I.ROCK_5, "You get a rock."],
+      [O.TABLE_455]: [I.RUNE_POUCH_6, "You get a rune pouch with unlimited combat runes for this game."],
+      [O.TABLE_456]: [I.RUNE_POUCH_6, "You get a rune pouch with unlimited combat runes for this game."],
       [O.TABLE_44]: [I.BARRICADE, "You get a barricade."],
       [O.TABLE_46]: [I.EXPLOSIVE_POTION, "You get an explosive potion."],
       [O.TABLE_47]: [I.BRONZE_PICKAXE, "You get a bronze pickaxe for mining."],
@@ -102,7 +108,7 @@ function buildData(core) {
       [O.TABLE_45]: [I.ROPE, "You get some rope."],
       [O.TABLE_43]: [I.ROCK_5, "You get a rock."],
     },
-    ALTAR_SPAWNS: [[O.CHAOS_ALTAR_2, [2431, 3076, 1], 1], [O.CHAOS_ALTAR_2, [2373, 3135, 1], 0]],
+    ALTAR_SPAWNS: [],
   });
 }
 

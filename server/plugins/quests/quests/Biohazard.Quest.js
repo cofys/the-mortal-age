@@ -412,7 +412,7 @@ module.exports = function registerBiohazardQuest(api) {
     if (stage >= STAGE_STARTED) {
       return ["Speak to <col=800000>Jerico</col> near the East Ardougne chapel."];
     }
-    return ["Speak to <col=800000>Elena</col> after completing Plague City."];
+    return ["I can start this quest by talking to <col=800000>Elena</col> in her house in <col=800000>East Ardougne</col>."];
   }
 
   function grantReward(player) {

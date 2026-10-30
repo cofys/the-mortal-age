@@ -332,3 +332,40 @@ test("a trade request reaches the other player as a trade-request chat line", ()
   assert.ok(bob.packets.some((packet) =>
     packet.includes("wishes to trade with you.") && packet.includes("alice")));
 });
+
+test("either trader's area can refuse a request before any trade state changes", () => {
+  for (const refusedSide of ['requester', 'target']) {
+    const alice = createPlayer('alice', 1), bob = createPlayer('bob', 2);
+    const area = { canTrade: () => false };
+    alice.getArea = () => refusedSide === 'requester' ? area : null;
+    bob.getArea = () => refusedSide === 'target' ? area : null;
+    const before = [alice.getTrading().getInteract(), bob.getTrading().getInteract()];
+    alice.getTrading().requestTrade(bob);
+    assert.deepEqual([alice.getTrading().getInteract(), bob.getTrading().getInteract()], before);
+    assert.equal(bob.packets.length, 0);
+    assert.ok(alice.messages.includes('You cannot trade here.'));
+  }
+});
+
+test("a shared area is asked once and cannot bypass a global trade refusal", (t) => {
+  const alice = createPlayer('alice', 1), bob = createPlayer('bob', 2);
+  let calls = 0;
+  const area = { canTrade: () => { calls++; return true; } };
+  alice.getArea = bob.getArea = () => area;
+  t.mock.method(PluginManager, 'emitCanTrade', () => false);
+  alice.getTrading().requestTrade(bob);
+  assert.equal(calls, 1);
+  assert.equal(bob.packets.length, 0);
+});
+
+test("a new area restriction aborts an open trade and returns both players' offers", () => {
+  const { alice, bob } = startTrade();
+  bob.getArea = () => ({ canTrade: () => false });
+  alice.getTrading().acceptTrade();
+  assert.equal(count(alice, LOBSTER), 3);
+  assert.equal(count(bob, COINS), 500);
+  assert.equal(alice.getTrading().getInteract(), null);
+  assert.equal(bob.getTrading().getInteract(), null);
+  assert.equal(alice.getTrading().getContainer().getValidItems().length, 0);
+  assert.equal(bob.getTrading().getContainer().getValidItems().length, 0);
+});

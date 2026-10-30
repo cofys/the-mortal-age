@@ -22,7 +22,7 @@ import type { WidgetManager } from "../../widgets/WidgetManager";
 import type { WidgetNode } from "../../widgets/WidgetNode";
 import type { GameFrameDrawContext, WidgetOverlay } from "../../game/plugins/ClientPluginManager";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
-import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
+import { isCurrentClientType, reportedClientType } from "../../rs/cs2/ClientType";
 
 /**
  * The enhanced client's mouseover text setting, mouseover_text_disabled from rev 241 (it was
@@ -145,6 +145,21 @@ export class WidgetsOverlay implements Overlay {
      */
     getGLCanvas(): HTMLCanvasElement | undefined {
         return this.glRenderer?.canvas as HTMLCanvasElement | undefined;
+    }
+
+    /** Rebuild type-dependent widget models, including portraits already baked into textures. */
+    invalidateDefinitionCaches(): void {
+        const canvas = this.getGLCanvas() as (HTMLCanvasElement & {
+            __modelRenderCache?: Map<string, unknown>;
+            __animatedModelMemo?: Map<number, unknown>;
+        }) | undefined;
+        for (const key of canvas?.__modelRenderCache?.keys() ?? []) this.glRenderer?.deleteTexture(key);
+        for (const uid of canvas?.__animatedModelMemo?.keys() ?? []) this.glRenderer?.deleteTexture(`wm:dyn:${uid}`);
+        canvas?.__modelRenderCache?.clear();
+        canvas?.__animatedModelMemo?.clear();
+        this.ctx.getWidgetManager?.()?.invalidateAll();
+        this.hasPresentedFrame = false;
+        this.rootSetChanged = true;
     }
 
     dispose(): void {
@@ -646,9 +661,9 @@ export class WidgetsOverlay implements Overlay {
         if (!client?.showMouseOverText || menuOpen || client.menuOpen) {
             return { signature: "hidden" };
         }
-        // As the enhanced client, the game draws the mouseover text itself (script 4726);
-        // drawing ours too showed it twice. Ours is only for other client types.
-        if (reportedClientType(client.widgetManager?.rootInterface) === CLIENT_TYPE_ENHANCED) {
+        // As the current client (desktop or mobile), the game draws the mouseover text itself
+        // (script 4726); drawing ours too showed it twice. Ours is only for older client types.
+        if (isCurrentClientType(reportedClientType(client.widgetManager?.rootInterface))) {
             return { signature: "hidden" };
         }
         if (client.varManager?.getVarbit?.(VARBIT_MOUSEOVER_TEXT_DISABLED) === 1) {

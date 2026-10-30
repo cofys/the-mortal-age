@@ -5,8 +5,8 @@ import { DataBuffer } from "../../game/buffer/DataBuffer";
 export class VertexBuffer extends DataBuffer {
     static readonly STRIDE = 12;
 
-    // Use every packed bit as the identity; numeric hashes can merge unrelated vertices.
-    vertexIndices: Map<string, number>;
+    // Hashes locate candidates; all packed words must match before reusing a vertex.
+    vertexIndices: Map<number, number>;
 
     constructor(count: number, stride: number = VertexBuffer.STRIDE) {
         super(stride, count);
@@ -76,21 +76,28 @@ export class VertexBuffer extends DataBuffer {
             (uPacked >> 6);
 
         if (reuseVertex) {
-            // Two UTF-16 code units retain each word exactly, without decimal formatting
-            // and long temporary strings for every vertex of every animated pose.
-            const key = String.fromCharCode(
-                v0 & 0xffff, v0 >>> 16,
-                v1 & 0xffff, v1 >>> 16,
-                v2 & 0xffff, v2 >>> 16,
-            ) + (this.stride > VertexBuffer.STRIDE ? String.fromCharCode(
-                actorData & 0xffff, actorData >>> 16,
-                fractions & 0xffff, fractions >>> 16,
-            ) : "");
-            const cachedIndex = this.vertexIndices.get(key);
-            if (cachedIndex !== undefined) {
-                return cachedIndex;
-            } else {
-                this.vertexIndices.set(key, this.offset);
+            let key = Math.imul(v0, 0x85ebca6b) ^ Math.imul(v1, 0xc2b2ae35);
+            key = Math.imul(key ^ (key >>> 16) ^ v2, 0x85ebca6b);
+            if (this.stride > VertexBuffer.STRIDE) {
+                key = Math.imul(key ^ actorData, 0xc2b2ae35) ^ fractions;
+            }
+            key ^= key >>> 16;
+            for (;;) {
+                const cachedIndex = this.vertexIndices.get(key);
+                if (cachedIndex === undefined) {
+                    this.vertexIndices.set(key, this.offset);
+                    break;
+                }
+                const at = cachedIndex * this.stride;
+                if (this.view.getInt32(at, true) === v0 &&
+                    this.view.getInt32(at + 4, true) === v1 &&
+                    this.view.getInt32(at + 8, true) === v2 &&
+                    (this.stride <= VertexBuffer.STRIDE || this.view.getInt32(at + 12, true) === (actorData | 0)) &&
+                    (this.stride < 20 || this.view.getInt32(at + 16, true) === fractions)) {
+                    return cachedIndex;
+                }
+                // Probe past hash collisions instead of merging different packed vertices.
+                key = (key + 1) | 0;
             }
         }
         this.ensureSize(1);

@@ -703,7 +703,7 @@ export class SceneRaycaster {
             // re-points the RENDER type to a synthetic id, and everything the pick
             // path feeds (menu names, actions, heights) must stay the server's id.
             const interactId = baseNpcTypeId(npcEcs.getNpcTypeId(ecsId) | 0);
-            if (!(interactId > 0)) continue;
+            if (interactId < 0) continue;
             const npcPlane = npcEcs.getLevel(ecsId) | 0;
             if (typeof basePlane === "number" && (npcPlane | 0) !== (basePlane | 0)) {
                 continue;
@@ -786,7 +786,7 @@ export class SceneRaycaster {
             const npcPlane = npcEcs.getLevel(ecsId) | 0;
             if (typeof basePlane === "number" && (npcPlane | 0) !== (basePlane | 0)) return;
             const interactId = baseNpcTypeId(npcEcs.getNpcTypeId(ecsId) | 0);
-            if (!(interactId > 0)) return;
+            if (interactId < 0) return;
             let heightTiles = 0;
             try {
                 let npcType: NpcType | undefined = this.osrsClient.npcTypeLoader.load(interactId);

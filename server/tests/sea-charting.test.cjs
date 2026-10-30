@@ -656,14 +656,14 @@ test("drinking a crate's drink charts it, with its own lines (rsprox 907)", () =
   const spot = common.spotByKey("drink_crate_mango_gin");
   drinkCrate.drinks();
   player.getInventory().add(new (require("../dist/game/model/Item").Item)(spot.item, 1), true);
-  const event = { player, itemId: spot.item, option: "Drink", handled: false };
+  const event = { player, item: player.getInventory().get(0), itemId: spot.item, slot: 0, clickType: 2, option: "Drink", handled: false };
   drinkCrate.drink(event);
   assert.equal(event.handled, true);
   assert.match(dialogueTexts(player)[0], /This drink has been sealed in a crate/);
   assert.equal(spotBit(player, spot), 0);
 
   player.attributes.set(drinkCrate.NO_WARNING_ATTRIBUTE, true);
-  drinkCrate.drink({ player, itemId: spot.item, option: "Drink", handled: false });
+  drinkCrate.drink({ player, item: player.getInventory().get(0), itemId: spot.item, slot: 0, clickType: 2, option: "Drink", handled: false });
   assert.equal(player.getInventory().getAmount(spot.item), 0);
   assert.deepEqual(player.messages().slice(0, 3), [
     "You drink the bottle of captain clop's mango gin.",

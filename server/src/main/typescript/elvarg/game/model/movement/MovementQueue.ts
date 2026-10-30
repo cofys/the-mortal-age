@@ -625,7 +625,8 @@ export class MovementQueue {
      * checked by NPCs only; players pass over it (and clear it in OSRS, which is
      * the entity-stacking mechanic) - osrs-docs: Entity Collision, NPC flag
      * "Checked by: all NPCs but the excluded NPCs". Only the separate "full" flag
-     * (gorillas, Vanstrom) blocks players, and no NPC here sets it yet.
+     * (NPC.BLOCKS_PLAYERS_FLAG: the Agility Pyramid's blocks) blocks players; they keep
+     * their path and step on once it moves.
      *
      * Upstream splits the two opt-outs (walk-through-NPCs and walk-through-players
      * are separate NPC properties). Pets are this server's only walk-through NPC
@@ -642,6 +643,8 @@ export class MovementQueue {
             if (World.isPlayerOccupyingTile(next, null, size, privateArea)) {
                 return true;
             }
+        } else if (this.character.isPlayer() && World.isPlayerBlockingNpcOnTile(next, size, privateArea)) {
+            return true;
         }
         return false;
     }
@@ -1291,13 +1294,7 @@ export class MovementQueue {
         // the player stands in the deck scene. Resolve that interaction from the boat's root
         // tile instead of trying to path the deck scene across the map and timing out.
         if (this.isProjectedMainWorldNpc(entity)) {
-            if (this.reachedProjectedNpc(entity, range)) {
-                this.player.setMobileInteraction(entity);
-                runnable?.();
-            } else {
-                this.reset();
-                this.player.sendMessage("I can't reach that!");
-            }
+            this.walkToProjectedNpc(entity, range, runnable);
             return;
         }
 
@@ -1388,6 +1385,46 @@ export class MovementQueue {
                 PathFinder.calculateEntityRoute(this.player, entity, range);
             }
         };
+        TaskManager.submit(task);
+    }
+
+    /**
+     * A main-world NPC from a boat's deck: done at once when in reach of the boat's root tile;
+     * otherwise the player walks along the deck towards it (BoatManager.deckTileToward) and acts
+     * as soon as they're in reach. "I can't reach that!" once the deck takes them no nearer.
+     */
+    private walkToProjectedNpc(entity: Mobile, range: number, runnable?: () => void): void {
+        if (this.reachedProjectedNpc(entity, range)) {
+            this.player.setMobileInteraction(entity);
+            runnable?.();
+            return;
+        }
+        const tile = getBoatManager().deckTileToward(this.player, entity);
+        this.reset();
+        if (!tile) {
+            this.player.sendMessage("I can't reach that!");
+            return;
+        }
+        this.walkToReset();
+        PathFinder.calculateWalkRoute(this.player, tile.getX(), tile.getY());
+        const task = new MovementTask(this.player.getIndex(), (task: MovementTask) => {
+            if (!entity.isRegistered() || !this.isProjectedMainWorldNpc(entity)) {
+                this.reset();
+                task.stop();
+                return;
+            }
+            this.player.setMobileInteraction(entity);
+            if (this.reachedProjectedNpc(entity, range)) {
+                this.reset();
+                task.stop();
+                runnable?.();
+                return;
+            }
+            if (this.points.length || this.isMovings()) return;
+            this.reset();
+            task.stop();
+            this.player.sendMessage("I can't reach that!");
+        });
         TaskManager.submit(task);
     }
 

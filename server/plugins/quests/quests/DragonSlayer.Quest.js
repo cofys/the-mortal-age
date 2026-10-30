@@ -239,7 +239,7 @@ module.exports = function registerDragonSlayerQuest(api) {
       ];
     }
     if (stage >= STAGE_GUILDMASTER) return ["Speak to <col=800000>Oziach</col> near Edgeville."];
-    return ["You need 32 Quest Points, then speak to the Champions' Guildmaster."];
+    return ["I can start this quest by talking to the <col=800000>Guildmaster</col> in the <col=800000>Champions' Guild</col>."];
   }
 
   function reward(player) {

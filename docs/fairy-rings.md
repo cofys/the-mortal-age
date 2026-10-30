@@ -16,7 +16,7 @@ All 64 dial combinations are rows of **db table 89**:
 | 7 | the name ("Fairy ring (AJR)") |
 | 8 | the travel log text ("<br>Fremennik Province: Fremennik Slayer Cave") |
 
-The dials are varbits 3985/3986/3987 and count **anticlockwise**: by value 0-3 the letters are A D C B, I L K J and P S R Q, so the index is `dial1 * 16 + dial2 * 4 + dial3` (AJR is 0 3 2 = 14). The common ring (`fairyring_minorhub`, 29495) is a multiloc on varbit 5374; each variant's third option reads "Last-destination (XYZ)".
+The dials are varbits 3985/3986/3987 and count **anticlockwise**: by value 0-3 the letters are A D C B, I L K J and P S R Q, so the index is `dial1 * 16 + dial2 * 4 + dial3` (AJR is 0 3 2 = 14). The rings (`fairyring_minorhub` 29495, Zanaris' 29560, the POH ring 29228) are not multilocs: op 3 is a plain "Last-destination" for every code. Varbit 20251 (`fairyring_lastloc_opvis`, 64 + the index) is sent with it; our client does not use it, so the option shows (as "Last-destination", without the code) before a first use too.
 
 ## What OSRS sends
 
@@ -31,7 +31,7 @@ The dials are varbits 3985/3986/3987 and count **anticlockwise**: by value 0-3 t
 | 4 | the teleport; animation 3266 (`human_fairy_appear`) |
 | 5 | `busy` = 0; animation reset |
 
-- **"Last-destination (XYZ)"** (op 3) and **"Zanaris"** (op 1, code BKS) skip the dials. Both were captured from the ring's tile: `busy` and the flowers at once, the teleport 3 ticks later, `busy` 0 a tick after. To the ring the player stands on, the animation plays without moving them.
+- **"Last-destination"** (op 3) and **"Zanaris"** (op 1, code BKS) skip the dials. Both were captured from the ring's tile: `busy` and the flowers at once, the teleport 3 ticks later, `busy` 0 a tick after. To the ring the player stands on, the animation plays without moving them.
 - **Close** (398:27) is client script 29 (`if_close`); the server only clears `busy`.
 - **AJQ** (Dorgesh-Kaan cave), for a player without a light source: at Confirm, varbit 3865 (`cws_warning_15`) = 1, `meslayer_close [28]` and `toplevel_mainmodal_open` (2524) `[-1, -1]` run, and the warning (578) opens: "This fairy ring code leads to a dark area. Are you sure you want to go there without a light source?" with "Yes I am sure." (578:17) and "No, I am not properly equipped." (578:18). No closed it and cleared `busy`.
 
@@ -45,4 +45,5 @@ The dials are varbits 3985/3986/3987 and count **anticlockwise**: by value 0-3 t
 - The warning's "Don't ask me this again" (578:20) toggles varbit 3865 between 1 and 2, and 2 skips it; the capture doesn't show the toggle. Light sources are matched by item name: lit candles, torches and lanterns, bullseye lanterns, Kandarin headgear 2-4, the Firemaking and max capes.
 - Not shown in the capture, so not sent: a sound heard while dialling (synth 2871, not on every click).
 - The dial letters are 12 models (16237, 16243-16283) that script 398 rotates with `if_setmodelangle`; the selected letter sits at the bottom, behind a window in the wooden bar (component 18, model 16236). The window's faces are translucent (alpha 192). OSRS draws widget models straight into the frame, so the letter shows through. The client draws each widget model into its own texture, so `client/ui/model/Model2DRenderer.ts` now keeps each pixel's coverage, and a translucent face stays translucent instead of blending with black (`client/tests/widget-model-translucency.test.ts`).
+- The Confirm button's destination name ("Slayer cave" for AJR) is not OSRS: the cache's text is "Teleport to this location" and the capture sends nothing for it. It is RuneLite's Fairy Rings plugin, ported as a client plugin (`client/game/plugins/fairyring`) with RuneLite's names; it renames the button after each run of script 398, the dials' varbit listener (`client/tests/fairy-ring-plugin.test.ts`).
 - `server/tests/fairy-rings.test.cjs` checks the table, the dial order, the staff rule, Configure, the dials, the Confirm teleport tick by tick, AJQ's warning, Last-destination and the favourites.

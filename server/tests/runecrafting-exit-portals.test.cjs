@@ -20,6 +20,8 @@ const handlers = {};
 /** Tasks the plugin submits, run a tick at a time by `ticks`; custom events it emits. */
 const tasks = [];
 const emitted = [];
+/** Whether the medium Ardougne Diary answers complete. */
+let ardougneMedium = false;
 function ticks(count = 1) {
   for (let tick = 0; tick < count; tick++) {
     for (const task of [...tasks]) task.tick();
@@ -45,6 +47,7 @@ before(async () => {
     onPlayerDeath: (handler) => (handlers.death = handler),
     emitCustomEvent: (name, payload) => {
       emitted.push([name, payload]);
+      if (name === "diary:is-complete" && payload.diary === "ardougne" && payload.tier === "medium") payload.complete = ardougneMedium;
       return realApi.emitCustomEvent(name, payload);
     },
   };
@@ -309,7 +312,9 @@ function crafter(level, items) {
     getDialogueManager: () => ({ startDialogues: (chain) => dialogues.push(chain.getDialogues().get(0).getText()) }),
     performGraphic: (graphic) => player.log.push(`graphic ${graphic.getId()} height ${graphic.getHeight()}`),
     performAnimation: (animation) => player.log.push(`animation ${animation.getId()}`),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getPacketSender: () => new Proxy({}, {
+      get: (_target, key) => (key === "sendTypedMessage" ? (_type, text) => player.log.push(`spam ${text}`) : () => {}),
+    }),
     getAttribute: () => undefined,
   });
   return player;
@@ -353,6 +358,64 @@ test("a pure essence altar without pure essence refuses in a message box (rsprox
   assert.deepEqual(player.dialogues, ["You do not have any pure essences to bind."]);
   assert.equal(amount(player, ItemIdentifiers.RUNE_ESSENCE), 1);
   assert.equal(amount(player, ItemIdentifiers.BLOOD_RUNE), 0);
+});
+
+/** Runs `body` with Math.random returning `values` in turn (the last one repeated). */
+function withRandom(values, body) {
+  const random = Math.random;
+  let index = 0;
+  Math.random = () => values[Math.min(index++, values.length - 1)];
+  try { body(); } finally { Math.random = random; }
+}
+
+test("the Ourania Altar binds pure and daeyalt essence into random runes at 1.7 times their XP (Wiki: Ourania Altar)", () => {
+  const ourania = require("../plugins/skills/data/ourania-altar.json");
+  for (const { weights } of ourania.levels) assert.equal(weights.reduce((a, b) => a + b, 0), ourania.rolls);
+
+  // Rolls of 0 land on the first rune with weight: soul at every level.
+  const player = crafter(1, [[ItemIdentifiers.PURE_ESSENCE, 1], [ItemIdentifiers.DAEYALT_ESSENCE, 1], [ItemIdentifiers.RUNE_ESSENCE, 1]]);
+  emitted.length = 0;
+  withRandom([0], () => assert.equal(craft(player, ObjectIdentifiers.ALTAR_31), true));
+  assert.equal(amount(player, ItemIdentifiers.SOUL_RUNE), 2, "one rune an essence, no level needed");
+  assert.equal(amount(player, ItemIdentifiers.RUNE_ESSENCE), 1, "rune essence stays");
+  assert.equal(player.xp.length, 1);
+  assert.ok(Math.abs(player.xp[0] - (11 * 1.7 + 11 * 1.7 * 1.5)) < 1e-9, "daeyalt's XP is 1.5 times pure's");
+  assert.ok(player.log.includes("spam You bind the temple's power into runes."));
+  assert.ok(!player.log.some((line) => line.includes("medium level knowledge")));
+  assert.deepEqual(emitted.filter(([name]) => name === "runecrafting:success").map(([, event]) => [event.runeId, event.rolls, event.petBase]), [[ItemIdentifiers.SOUL_RUNE, 2, 1487213]],
+    "the rift guardian rolls at the Ourania Altar's base (Wiki: Rift guardian)");
+
+  // The last roll lands on air runes, the most common at level 1.
+  const low = crafter(1, [[ItemIdentifiers.PURE_ESSENCE, 1]]);
+  emitted.length = 0;
+  withRandom([0.9999], () => craft(low, ObjectIdentifiers.ALTAR_31));
+  assert.equal(emitted.find(([name]) => name === "runecrafting:success")[1].petBase, 1487213, "the same base for any rune");
+  assert.equal(amount(low, ItemIdentifiers.AIR_RUNE), 1);
+  assert.ok(Math.abs(low.xp[0] - 5 * 1.7) < 1e-9);
+});
+
+test("the medium Ardougne Diary adds runes at the Ourania Altar, without XP (Wiki; rsprox captures 819, 822)", () => {
+  ardougneMedium = true;
+  try {
+    // A roll of 0 picks the soul rune and passes its 10% extra chance.
+    const player = crafter(99, [[ItemIdentifiers.PURE_ESSENCE, 1]]);
+    withRandom([0], () => craft(player, ObjectIdentifiers.ALTAR_31));
+    assert.equal(amount(player, ItemIdentifiers.SOUL_RUNE), 2);
+    assert.ok(Math.abs(player.xp[0] - 11 * 1.7) < 1e-9, "the extra rune gives no XP");
+    assert.deepEqual(player.log.filter((line) => line.startsWith("spam")), [
+      "spam You bind the temple's power into runes.",
+      "spam Your medium level knowledge of the local area allows you to bind additional runes.",
+    ]);
+  } finally {
+    ardougneMedium = false;
+  }
+});
+
+test("the Ourania Altar without pure or daeyalt essence refuses in a message box (rsprox capture 822)", () => {
+  const player = crafter(99, [[ItemIdentifiers.RUNE_ESSENCE, 1]]);
+  assert.equal(craft(player, ObjectIdentifiers.ALTAR_31), true);
+  assert.deepEqual(player.dialogues, ["You do not have any pure or daeyalt essences to bind."]);
+  assert.equal(amount(player, ItemIdentifiers.RUNE_ESSENCE), 1);
 });
 
 test("Kourend's Blood Altar binds dark essence fragments, not pure essence (Wiki; rsprox capture 1673)", () => {

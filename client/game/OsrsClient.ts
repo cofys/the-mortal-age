@@ -2463,6 +2463,12 @@ export class OsrsClient {
             // checked the run against the deck, so only the step between two deck tiles is drawn.
             (plane: number, x: number, y: number) =>
                 ClientState.isWorldEntityTile(x, y) ? 0 : this.renderer.getCollisionFlagAt(plane, x, y),
+            {
+                projectDeckToWorld: (entityIndex, fineX, fineY) =>
+                    (this.renderer as { projectDeckToWorld?: (entityIndex: number, fineX: number, fineY: number) => { x: number; y: number } | undefined } | undefined)
+                        ?.projectDeckToWorld?.(entityIndex, fineX, fineY),
+                orientationOf: (entityIndex) => this.worldViewManager.getWorldEntity(entityIndex)?.position.orientation,
+            },
         );
         this.continuousMovement = new ContinuousMovement(this.playerEcs, () => this.controlledPlayerServerId,
             sendMovementInput, (plane, x, y) => this.renderer.getCollisionFlagAt(plane, x, y), this.resolvePlayerPlane);
@@ -3773,6 +3779,14 @@ export class OsrsClient {
                         if (position.index !== this.controlledPlayerServerId) this.continuousMovement?.receive(position);
                     }
                     this.syncLocalWorldView();
+                    const tile = this.playerSyncManager.getServerTile(this.controlledPlayerServerId);
+                    if (tile) ClientState.scenePositionReady = true;
+                    if (this.gameState === GameState.LOADING_GAME) {
+                        const localIndex = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
+                        if (localIndex !== undefined && this.playerEcs.getWorldViewId(localIndex) < 0) {
+                            if (tile) this.renderer.prepareInitialScene(tile.tileX, tile.tileY);
+                        }
+                    }
                 } catch (err) {
                     console.warn("[OsrsClient] player_sync frame error", err);
                 }
@@ -5466,6 +5480,7 @@ export class OsrsClient {
         }
 
         if (newState === GameState.CONNECTING) {
+            ClientState.scenePositionReady = false;
             this.loginState.setResponse("", "Connecting to server...", "", "");
 
             // Set up loading requirements BEFORE server responds
@@ -6357,6 +6372,8 @@ export class OsrsClient {
             } catch {}
             this.runeLite?.postPostClientTick();
         }
+        // Input must reach the server while scene rendering is still loading or stalled.
+        flushPackets();
     }
 
     getMinimapImageUrl(mapX: number, mapY: number, level: number = 0): string | undefined {
@@ -7786,7 +7803,7 @@ export class OsrsClient {
                     // (raycast/menu/projectiles/overlays) continue to see this NPC after crossing.
                     this.npcEcs.rebaseToMapSquare(ecsId, nextMapX, nextMapY);
                     const typeId = this.npcEcs.getNpcTypeId(ecsId) | 0;
-                    if (typeId > 0) {
+                    if (typeId >= 0) {
                         this.upsertNpcInstanceFromBinary(
                             serverId,
                             typeId,

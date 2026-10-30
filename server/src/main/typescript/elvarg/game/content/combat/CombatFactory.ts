@@ -1,3 +1,4 @@
+import { CombatPosition } from "./CombatPosition";
 import { ItemAliases } from "../../model/ItemAliases";
 import { Sound } from "../../Sound";
 import { Sounds } from "../../Sounds";
@@ -391,10 +392,12 @@ export class CombatFactory {
             return false;
         }
 
+        const attackerLocation = CombatPosition.location(attacker, target);
+        const targetLocation = CombatPosition.location(target, attacker);
         if (
-            attacker.getPrivateArea() !== target.getPrivateArea() ||
-            attacker.getLocation().getZ() !== target.getLocation().getZ() ||
-            attacker.getLocation().getDistance(target.getLocation()) >= 40
+            CombatPosition.area(attacker, target) !== CombatPosition.area(target, attacker) ||
+            attackerLocation.getZ() !== targetLocation.getZ() ||
+            attackerLocation.getDistance(targetLocation) >= 40
         ) {
             return false;
         }
@@ -637,8 +640,15 @@ export class CombatFactory {
     }
 
     public static canAttackByPolicy(attacker: Mobile, target: Mobile, method?: CombatMethod): CanAttackResponse {
-        if (attacker.getPrivateArea() !== target.getPrivateArea()) {
+        if (CombatPosition.area(attacker, target) !== CombatPosition.area(target, attacker)) {
             return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        }
+        // Across a boat's deck only content decides (sailing allows ranged and magic at sea
+        // creatures): with no plugin saying yes, a deck and the shore can't fight.
+        if (CombatPosition.acrossDeck(attacker, target)) {
+            return PluginManager.emitCanAttack(attacker, target, method) === true
+                ? CanAttackResponse.CAN_ATTACK
+                : CanAttackResponse.CANT_ATTACK_IN_AREA;
         }
         if (attacker.isPlayer() && target.isPlayer() &&
             (Wilderness.isInSafeBuilding(attacker.getLocation()) || Wilderness.isInSafeBuilding(target.getLocation()))) {
@@ -1318,6 +1328,9 @@ export class CombatFactory {
             return;
         }
 
+        const freeze = { target: character, source, ticks, kind };
+        PluginManager.emitCustomEvent("combat:freeze-duration", freeze);
+        ticks = Math.max(1, Math.floor(freeze.ticks));
         character.getTimers().registers(TimerKey.FREEZE, ticks);
         character.getTimers().registers(TimerKey.FREEZE_IMMUNITY, ticks + Misc.getTicks(3));
         character.getMovementQueue().reset();

@@ -160,3 +160,40 @@ test("missing floor requests deduplicate, retry after failure and reject replace
     await stopped;
     assert.equal(installed.length, 0, "a stopped renderer must not publish floors after a backend switch");
 });
+
+test("both backends accept another plane's cached square before requesting a missing minimap", async () => {
+    (globalThis as any).self = globalThis;
+    require.extensions[".glsl"] = (module, file) => { module.exports = fs.readFileSync(file, "utf8"); };
+    for (const ext of [".png", ".jpg", ".webp"]) require.extensions[ext] = (module, file) => { module.exports = file; };
+    const { GameRenderer } = require("../game/GameRenderer");
+    const { registerMinimapData } = require("../render/render/minimap");
+    const { WebGPUUi } = require("../render/webgpu/ui/WebGPUUi");
+    for (const backend of ["webgl", "webgpu"]) {
+        let requests = 0;
+        const urls = new Map<number, string>();
+        const renderer: any = Object.create(GameRenderer.prototype);
+        renderer.minimapSources = new Map(); renderer.minimapRequests = new Map();
+        renderer.minimapIcons = new Map();
+        renderer.osrsClient = {
+            setMinimapImageUrl: (_x: number, _y: number, url: string | undefined, level: number) => {
+                if (url) urls.set(level, url);
+            },
+            workerPool: { queueMinimap: async (_source: SdMapLoaderInput, level: number) => {
+                requests++;
+                assert.equal(level, 0);
+                return { minimapBlobs: [new Blob(["ground floor"])] };
+            } },
+        };
+        const cached = { mapX: 50, mapY: 50, minimapInput: input,
+            minimapBlobs: [undefined, new Blob(["upper floor"])] };
+        if (backend === "webgl") registerMinimapData(renderer, cached);
+        else WebGPUUi.prototype.registerMinimapData.call({ renderer, minimapIcons: new Map() }, cached);
+        assert.equal(requests, 0, `${backend}: installing cached geometry cannot wait for minimap work`);
+        assert.ok(urls.has(1));
+        assert.equal(urls.has(0), false);
+        await renderer.requestMinimapImage(50, 50, 0);
+        assert.equal(requests, 1);
+        assert.ok(urls.has(0), `${backend}: the ground floor arrives through the on-demand path`);
+        for (const url of urls.values()) URL.revokeObjectURL(url);
+    }
+});

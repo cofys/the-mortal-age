@@ -30,7 +30,7 @@ export function processWidgetHoverInput(
         const nextHoveredWidgetsByUid = new Map<number, any>();
         const hasHoverHandlers = (w: any): boolean => {
             // mouse listener dispatch is in the IF3 event branch.
-            if (!w || w.isIf3 === false) return false;
+            if (!w || w.isIf3 === false || widgetManager.getWidgetByUid(w.uid) !== w) return false;
             // If the cache/runtime explicitly marked this widget as "no listeners", skip.
             if (w.hasListeners === false) return false;
             return !!(
@@ -68,7 +68,9 @@ export function processWidgetHoverInput(
         for (const uid of state.hoveredWidgetUids) {
             if (nextHoveredUids.has(uid)) continue;
             const old = state.hoveredWidgetsByUid.get(uid);
-            if (!old) continue;
+            // CC_DELETEALL/rebuild can leave last frame's hover reference detached. Its
+            // listener arguments belong to that old child, not the newly created UI.
+            if (!old || widgetManager.getWidgetByUid(uid) !== old) continue;
             const eventCtx = createMouseEventContext(old);
             if (old.jsListeners?.onMouseLeave) {
                 runJsListener(old.jsListeners.onMouseLeave);
@@ -85,7 +87,7 @@ export function processWidgetHoverInput(
             if (!hasHoverHandlers(w)) continue;
             const uid = (w.uid ?? 0) | 0;
             if (uid === 0) continue;
-            if (!nextHoveredUids.has(uid) || state.hoveredWidgetUids.has(uid)) continue;
+            if (!nextHoveredUids.has(uid) || state.hoveredWidgetsByUid.get(uid) === w) continue;
             const eventCtx = createMouseEventContext(w);
             if (w.jsListeners?.onMouseOver) {
                 runJsListener(w.jsListeners.onMouseOver);

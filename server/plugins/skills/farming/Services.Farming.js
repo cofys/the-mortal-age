@@ -7,7 +7,10 @@ const Tools = require("./Tools.Farming");
 // Every gardener stands within 7 tiles of its patch; Ceto (drift nets, 20 tiles from the
 // underwater seaweed) and Cap'n Izzy No-Beard (agility arena, 12) also advertise Pay.
 const GARDENER_RANGE = 10;
+// Cache OC_ITEM_OP1; equipment op1 removes, op2 starts the item's worn options.
+const WORN_OPTION_PARAM = 451;
 const COMPOST_NAMES = ["", "Compost", "Supercompost", "Ultracompost", "Rotten tomato"];
+const ROTTEN_TOMATO_TIER = 4;
 // Rev 241 gamevals human_push and human_pickuptable, with the sounds captured on the bin (recording 1858).
 const BIN_LID_ANIMATION = 810;
 const BIN_TAKE_ANIMATION = 832;
@@ -61,6 +64,10 @@ function binAction(player, patch, action, usedId, usedSlot) {
     if (usedId && core.CacheDefinitions.getItem(usedId).noteTemplate >= 0) {
         player.sendMessage("You cannot use noted items on a compost bin."); return;
     }
+    if (action === "dump") {
+        if (bin.count) confirmDump(player, patch, bin);
+        return;
+    }
     // Captures (recording 1858): the push and its sound with the spam line, the bin changing a tick later.
     if (action === "close") {
         if (bin.count !== capacity) { player.sendMessage(`The bin needs ${capacity} items before you can close it.`); return; }
@@ -101,7 +108,7 @@ function binAction(player, patch, action, usedId, usedSlot) {
             takenFromBin(player, patch, bin);
             return;
         }
-        if (!inventory.contains(Data.itemId("Bucket"))) { player.sendMessage("You need an empty bucket."); return; }
+        if (!canTakeBinProduct(player, bin)) return;
         Patches.startBinWork(player, patch, { bin }, "take-bin");
         return;
     }
@@ -113,10 +120,40 @@ function binAction(player, patch, action, usedId, usedSlot) {
         if (!superItem && !COMPOST.has(name) && !herb) {
             player.sendMessage("That cannot be composted."); return;
         }
-        Patches.startBinWork(player, patch, { id: usedId, superItem, tomato: name === "Tomato", bin });
+        const input = { id: usedId, superItem, tomato: name === "Tomato", bin };
+        if (bin.count && (superItem ? bin.super < bin.count : bin.super > 0))
+            confirmBinMix(player, patch, input, usedSlot);
+        else Patches.startBinWork(player, patch, input);
         return;
     }
     player.sendMessage(`The compost bin contains ${bin.count}/${capacity} items${bin.closedAt && !bin.open ? ", rotting" : ""}.`);
+}
+// The Wiki specifies a mixing warning; no indexed capture establishes its exact wording.
+function confirmBinMix(player, patch, input, slot) {
+    const inventory = player.getInventory(), item = inventory.forSlot(slot);
+    if (!item || item.getId() !== input.id || item.getAmount() <= 0) return;
+    const position = player.getLocation().clone(), area = player.getArea();
+    const contents = JSON.stringify(input.bin), stock = JSON.stringify(item);
+    Patches.choose(player, [["Yes, mix the ingredients.", () => {
+        if (!player.isRegistered() || player.getHitpoints() <= 0 || player.isNeedsPlacement()
+            || player.getArea() !== area || !player.getLocation().equals(position)
+            || Patches.stateFor(player, patch).bin !== input.bin || JSON.stringify(input.bin) !== contents
+            || inventory.forSlot(slot) !== item || JSON.stringify(item) !== stock) return;
+        Patches.startBinWork(player, patch, input);
+    }], ["No, keep the ingredients.", () => {}]], 0, "Mixing these ingredients will produce normal compost. Continue?");
+}
+// The Wiki permits discarding contents; no indexed capture establishes the Dump prompt or timing.
+function confirmDump(player, patch, bin) {
+    const position = player.getLocation().clone(), area = player.getArea();
+    const contents = JSON.stringify(bin);
+    Patches.choose(player, [["Yes, discard the contents.", () => {
+        if (!player.isRegistered() || player.getHitpoints() <= 0 || player.isNeedsPlacement()
+            || player.getArea() !== area || !player.getLocation().equals(position)
+            || Patches.stateFor(player, patch).bin !== bin || JSON.stringify(bin) !== contents) return;
+        Patches.stateFor(player, patch).bin = undefined;
+        Patches.syncPatch(player, patch);
+        player.sendMessage("You empty the compost bin.");
+    }], ["No, keep them.", () => {}]], 0, "Discard all contents of this compost bin?");
 }
 function pushLid(player, sound, line) {
     player.performAnimation(new core.Animation(BIN_LID_ANIMATION));
@@ -128,22 +165,50 @@ function takenFromBin(player, patch, bin) {
     if (--bin.count === 0) Patches.stateFor(player, patch).bin = undefined;
     Patches.syncPatch(player, patch);
 }
+function binBottomless(player, bin) {
+    return player.getInventory().getItems().find(item => {
+        if (item.getAmount() !== 1 || ![core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET,
+            core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET_4].includes(item.getId())) return false;
+        const charges = Number(item.getMetaValue("farming:charges") ?? 0);
+        return Number.isInteger(charges) && charges >= 0 && charges <= 9998
+            && (!charges || item.getMetaValue("farming:tier") === bin.tier);
+    });
+}
+function canTakeBinProduct(player, bin) {
+    if (bin.tier === ROTTEN_TOMATO_TIER) {
+        // Wiki Rotten tomato: no tools; unlike compost, collecting one does not consume a bucket.
+        if (player.getInventory().getAddableAmount(new core.Item(Data.itemId("Rotten tomato"))) > 0) return true;
+        player.sendMessage("You don't have space to hold a rotten tomato, squishy though it may be.");
+        return false;
+    }
+    if (player.getInventory().contains(Data.itemId("Bucket")) || binBottomless(player, bin)) return true;
+    player.sendMessage("You need an empty bucket or a suitable bottomless compost bucket with room.");
+    return false;
+}
 /** Captures: buckets are filled one at a time, the scoop and its sound, the bucket a tick later, every four ticks. */
 function takeBinStep(player, work) {
     const { bin } = work.input;
     const inventory = player.getInventory();
-    if (Patches.stateFor(player, work.patch).bin !== bin || !bin.open || !bin.count || !inventory.contains(Data.itemId("Bucket"))) return false;
+    if (Patches.stateFor(player, work.patch).bin !== bin || !bin.open || !bin.count || !canTakeBinProduct(player, bin)) return false;
     if (!work.depositing) {
         player.performAnimation(new core.Animation(BIN_TAKE_ANIMATION));
         Patches.sound(player, BIN_TAKE_SOUND);
         work.depositing = true;
         return 1;
     }
-    inventory.deleteNumber(Data.itemId("Bucket"), 1);
-    inventory.addItem(new core.Item(Data.itemId(COMPOST_NAMES[bin.tier])));
+    // Capacity is rechecked above on the output tick, before any output, depletion or XP.
+    if (bin.tier === ROTTEN_TOMATO_TIER || inventory.contains(Data.itemId("Bucket"))) {
+        if (bin.tier !== ROTTEN_TOMATO_TIER) inventory.deleteNumber(Data.itemId("Bucket"), 1);
+        inventory.addItem(new core.Item(Data.itemId(COMPOST_NAMES[bin.tier])));
+    } else {
+        // Choose from the live inventory at output time; ordinary buckets always have priority.
+        const bucket = binBottomless(player, bin);
+        if (!bucket || !chargeBottomless(player, bin.tier, bucket)) return false;
+    }
     takenFromBin(player, work.patch, bin);
     work.depositing = false;
-    return bin.count > 0 && inventory.contains(Data.itemId("Bucket")) ? 3 : false;
+    return bin.count > 0 && (bin.tier === ROTTEN_TOMATO_TIER || inventory.contains(Data.itemId("Bucket"))
+        || binBottomless(player, bin)) ? 3 : false;
 }
 function dose(player, id) {
     const name = core.CacheDefinitions.getItem(id).name;
@@ -151,16 +216,39 @@ function dose(player, id) {
     player.getInventory().deleteNumber(id, 1);
     player.getInventory().addItem(new core.Item(Data.itemId(count > 1 ? `Compost potion(${count - 1})` : "Vial")));
 }
-function chargeBottomless(player, tier, bucket) {
+function chargeBottomless(player, tier, bucket, amount = 1, refresh = true) {
     if (!bucket) return false;
     const charges = Number(bucket.getMetaValue("farming:charges") ?? 0);
     if (charges > 0 && bucket.getMetaValue("farming:tier") !== tier) { player.sendMessage("Empty the bucket before changing compost type."); return false; }
-    if (charges > 9998) { player.sendMessage("The bucket is full."); return false; }
-    bucket.setMetaValue("farming:charges", charges + 2).setMetaValue("farming:tier", tier);
+    if (charges + amount * 2 > 10000) { player.sendMessage("The bucket is full."); return false; }
+    bucket.setMetaValue("farming:charges", charges + amount * 2).setMetaValue("farming:tier", tier);
     bucket.setId(core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET_4);
-    player.getInventory().refreshItems();
+    if (refresh) player.getInventory().refreshItems();
     return true;
 }
+/** Plan the complete conversion before committing either charges or returned buckets. */
+function fillBottomless(player, event, bucketFirst, tier, noted) {
+    const inventory = player.getInventory();
+    const bucketSlot = bucketFirst ? event.usedItemSlot : event.usedWithItemSlot;
+    const inputSlot = bucketFirst ? event.usedWithItemSlot : event.usedItemSlot;
+    const bucket = inventory.forSlot(bucketSlot), input = inventory.forSlot(inputSlot);
+    if (!bucket || !input || bucketSlot === inputSlot
+        || bucket.getId() !== (bucketFirst ? event.usedItemId : event.usedWithItemId)
+        || input.getId() !== (bucketFirst ? event.usedWithItemId : event.usedItemId)
+        || core.CacheDefinitions.getItem(bucket.getId()).noteTemplate >= 0) return;
+    const charges = Number(bucket.getMetaValue("farming:charges") ?? 0);
+    const amount = noted ? Math.min(input.getAmount(), Math.floor((10000 - charges) / 2)) : 1;
+    if (amount <= 0) { player.sendMessage("The bucket is full."); return; }
+    const planned = new inventory.constructor(player).setItems(inventory.getCopiedItems());
+    planned.deleteAtSlot(inputSlot, amount, false);
+    const emptyId = Data.itemId("Bucket");
+    const output = new core.Item(noted ? core.CacheDefinitions.getItem(emptyId).note : emptyId, amount);
+    if (planned.getAddableAmount(output) < amount) { inventory.full(); return; }
+    if (!chargeBottomless(player, tier, planned.forSlot(bucketSlot), amount, false)) return;
+    planned.add(output, false);
+    inventory.setItems(planned.getItems()).refreshItems();
+}
+
 function useBottomless(player, patch, id, slot) {
     const bucket = player.getInventory().forSlot(slot);
     if (bucket?.getId() !== id) return;
@@ -213,18 +301,20 @@ function farmingItemPair(event) {
         inventory.refreshItems();
         return;
     }
-    const compostTier = COMPOST_NAMES.slice(1, 4).findIndex(name => Data.itemId(name) === a || Data.itemId(name) === b) + 1;
-    if (compostTier && [a, b].some(id => core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket")) {
-        event.handled = true;
-        const bucketFirst = names[0] === "Bottomless compost bucket";
-        const bucket = inventory.forSlot(bucketFirst ? event.usedItemSlot : event.usedWithItemSlot);
-        if (bucket?.getId() !== (bucketFirst ? a : b)) return;
-        if (chargeBottomless(player, compostTier, bucket)) {
-            inventory.deleteNumber(Data.itemId(COMPOST_NAMES[compostTier]), 1);
-            inventory.addItem(new core.Item(Data.itemId("Bucket")));
+    const bucketFirst = names[0] === "Bottomless compost bucket";
+    if (bucketFirst || names[1] === "Bottomless compost bucket") {
+        const inputId = bucketFirst ? b : a;
+        const definition = core.CacheDefinitions.getItem(inputId);
+        const noted = definition.noteTemplate >= 0;
+        const baseId = noted ? definition.note : inputId;
+        const tier = COMPOST_NAMES.slice(1, 4).findIndex(name => Data.itemId(name) === baseId) + 1;
+        if (tier) {
+            event.handled = true;
+            fillBottomless(player, event, bucketFirst, tier, noted);
+            return;
         }
-        return;
     }
+    const compostTier = COMPOST_NAMES.slice(1, 4).findIndex(name => Data.itemId(name) === a || Data.itemId(name) === b) + 1;
     if (compostTier === 2 && (a === Data.itemId("Volcanic ash") || b === Data.itemId("Volcanic ash"))) {
         event.handled = true;
         if (inventory.getAmount(Data.itemId("Volcanic ash")) < 2) { player.sendMessage("You need two volcanic ash."); return; }
@@ -506,7 +596,11 @@ function farmingItemAction(event) {
     const item = container.forSlot(event.slot);
     if (!item || item.getId() !== id) return;
     const name = core.CacheDefinitions.getItem(id).name;
-    const action = (event.option ?? core.CacheDefinitions.getItem(id).inventoryActions?.[event.clickType - 1])?.toLowerCase();
+    const definition = core.CacheDefinitions.getItem(id);
+    const option = container === player.getEquipment()
+        ? event.clickType >= 2 ? definition.params?.get?.(WORN_OPTION_PARAM + event.clickType - 2) : undefined
+        : definition.inventoryActions?.[event.clickType - 1];
+    const action = (event.option ?? option)?.toLowerCase();
     if (name === "Amulet of bounty" && ["check", "break"].includes(action)) {
         event.handled = true;
         if (action === "check") player.sendMessage(`Your amulet of bounty has ${Patches.farmFor(player).bountyCharges ?? 10} charges.`);
@@ -527,6 +621,8 @@ function farmingItemAction(event) {
         const patch = Data.CACHE.patches.find(p => Data.patchKey(p) === bound);
         if (!patch) player.sendMessage("Use the amulet on a farming patch to bind it.");
         else {
+            // A growth boundary can pass after the scheduled refresh but before this input.
+            Model.advanceFarm(Patches.farmFor(player), Date.now());
             const state = Patches.stateFor(player, patch);
             player.sendMessage(`Your bound patch: ${state.crop ? `${Data.CROPS.get(state.crop).name}, ${state.status}` : "empty"}.`);
         }

@@ -167,12 +167,7 @@ module.exports = function registerFishingContestQuest(api) {
         "I must win the contest at <col=800000>Hemenster</col>.",
       ];
     }
-    return [
-      "Speak to <col=800000>Austri or Vestri</col> beside the",
-      "White Wolf Mountain tunnel.",
-      "",
-      "<col=ff0000>Requires level 10 Fishing.</col>",
-    ];
+    return ["I can start this quest by talking to <col=800000>Austri</col> or <col=800000>Vestri</col> by the tunnel entrances of <col=800000>White Wolf Mountain</col>."];
   }
 
   function grantReward(player) {

@@ -12,7 +12,9 @@
 // - otherwise the type comes from a weapon with the same name, or the same name without a
 //   variant suffix ("(or)", "(p++)", "(nz)", ...), in that category; otherwise from the
 //   category's types by name (CHOOSE_BY_NAME), or its only type;
-// - a weapon still on the human stance animations gets its source's (or its type's usual) ones;
+// - a weapon still on the human stance animations gets its source's ones; failing that, a cosmetic
+//   gets the gait of the weapon its cache model belongs to and a weapon named in STANCE_SOURCES
+//   gets that one's; a weapon being retyped takes none of those, so its type's usual ones;
 // - weapons the Wiki has no style for keep their type, or take a same-name weapon's.
 // A weapon without a type is already unarmed, so "Unarmed" is only written over another type or
 // for a weapon with an attack speed in the cache.
@@ -71,6 +73,21 @@ const CHOOSE_BY_NAME: Record<string, Array<[RegExp | null, string]>> = {
 
 /** Variant suffixes a weapon shares its type with its base for. */
 const VARIANT_SUFFIX = /\s*\((or|i|p\+\+|p\+|p|kp|nz|u|uncharged|empty|full|deadman|bh|l|e|cr|t|g)\)\s*$/i;
+
+/**
+ * Two-handed weapons no name or model match reaches, and whose gait the cache does not store
+ * either: item id -> the weapon to take the stance from. Their category's other two-handers
+ * decide it, and no category agrees as a whole — most of its bare-handed two-handers are novelties
+ * or weapons that really do walk bare-handed (blowpipes, and the one-handed warhammer family,
+ * which the cache does not wear in the shield slot), so this is listed, never guessed.
+ * The Hill giant club is the only real two-handed blunt left on the human gait; the blunt
+ * two-handers that have a gait (the Granite maul, the Tzhaar-ket-om) share
+ * `slayer_granite_maul_ready/walk/run` (1662/1663/1664) with its `_defend` (1666). The Elder maul
+ * has its own set (7518-7520), which is why the source is the maul rather than the category.
+ */
+const STANCE_SOURCES: Record<number, number> = {
+    20756: 4153, // Hill giant club, from the Granite maul
+};
 
 const STANCE_FIELDS = ["blockAnim", "standAnim", "walkAnim", "runAnim", "standTurnAnim", "turn180Anim", "turn90CWAnim", "turn90CCWAnim"] as const;
 const HUMAN_STANCE: Record<string, number> = {
@@ -174,6 +191,19 @@ function stanceOf(row: ItemRow): Record<string, number> {
     return Object.fromEntries(STANCE_FIELDS.map((field) => [field, row[field] ?? HUMAN_STANCE[field]]));
 }
 
+/**
+ * What makes two cache items the same weapon wearing a different skin: the same model, bonuses,
+ * requirements and attack speed. A reskin is not named after its base ("Gilded 2h sword" is a
+ * resprayed "Rune 2h sword", both model 546), so the name match above never finds it. Items with no
+ * model of their own are not keyed; every one of them would share a bucket.
+ */
+function reskinKey(row: ItemRow): string | undefined {
+    const cached = CacheDefinitions.getItem(row.id);
+    if (!cached || cached.maleModel < 0) return undefined;
+    return [cached.maleModel, JSON.stringify(row.bonuses ?? null), JSON.stringify(row.requirements ?? null),
+        cached.params?.get(ATTACK_SPEED_PARAM) ?? null].join("|");
+}
+
 /** Writes `weaponInterface` right after `equipmentType`, as the file has it. */
 function withInterface(row: ItemRow, weaponInterface: string): ItemRow {
     const out: ItemRow = {} as ItemRow;
@@ -218,6 +248,15 @@ async function main() {
         if (!typedByName.has(key)) typedByName.set(key, []);
         typedByName.get(key)!.push(row);
     }
+    /** Typed weapons by their cache skin, for copying a stance to a reskin named after nothing. */
+    const typedBySkin = new Map<string, ItemRow[]>();
+    for (const row of rows) {
+        if (!row.weaponInterface || !weapons.has(row.id)) continue;
+        const key = reskinKey(row);
+        if (key === undefined) continue;
+        if (!typedBySkin.has(key)) typedBySkin.set(key, []);
+        typedBySkin.get(key)!.push(row);
+    }
     /** The usual stance for a type: the most common non-human one among its weapons. */
     const usualStance = new Map<string, Record<string, number>>();
     for (const type of Object.keys(styles.weaponInterfaces)) {
@@ -232,10 +271,14 @@ async function main() {
         if (best) usualStance.set(type, best.stance);
     }
 
-    const sourceFor = (name: string, category: number | undefined) => {
+    /**
+     * A typed weapon of `name` (or of the same name without its variant suffix) in `category`, other
+     * than `excludeId`: a variant copies from its base, never from itself.
+     */
+    const sourceFor = (name: string, category: number | undefined, excludeId = -1) => {
         for (const candidate of [name.toLowerCase(), name.replace(VARIANT_SUFFIX, "").toLowerCase()]) {
             const match = (typedByName.get(candidate) ?? [])
-                .find((row) => category === undefined || interfaceCategory(row.weaponInterface) === category);
+                .find((row) => row.id !== excludeId && (category === undefined || interfaceCategory(row.weaponInterface) === category));
             if (match) return match;
         }
         return undefined;
@@ -284,14 +327,28 @@ async function main() {
                 typedByName.set(key, [...(typedByName.get(key) ?? []).filter((typed) => typed.id !== id), next]);
                 continue;
             }
-            // Right type already: a variant still on the human stance takes its namesake's stance.
-            const namesake = hasHumanStance(row) ? sourceFor(name, interfaceCategory(current)) : undefined;
-            if (row && namesake && namesake.id !== id && !hasHumanStance(namesake)) {
-                const next = { ...row, ...stanceOf(namesake) };
+            // Right type already: a variant still on the human stance takes its namesake's stance;
+            // failing that, a reskin takes the gait of the weapon wearing its own cache model, and a
+            // weapon named in STANCE_SOURCES that one's. The type's usual stance, which the branch
+            // above falls back to, is a guess for a type whose members disagree — see STANCE_SOURCES.
+            const namesake = hasHumanStance(row) ? sourceFor(name, interfaceCategory(current), id) : undefined;
+            const skin = row && hasHumanStance(row) ? (typedBySkin.get(reskinKey(row) ?? "") ?? [])
+                .find((other) => other.id !== id && !hasHumanStance(other)
+                    && interfaceCategory(other.weaponInterface) === interfaceCategory(current)) : undefined;
+            const listed = row && hasHumanStance(row) ? rowById.get(STANCE_SOURCES[id] ?? -1) : undefined;
+            const stance = [namesake, skin, listed]
+                .find((from) => from !== undefined && from.id !== id && !hasHumanStance(from));
+            if (row && stance) {
+                const next = { ...row, ...stanceOf(stance) };
                 rows[rows.indexOf(row)] = next;
-                changes.push(`${name} (${id}): stance from ${namesake.name} ${namesake.id}`);
+                changes.push(`${name} (${id}): stance from ${stance.name} ${stance.id}` +
+                    (stance === namesake ? "" : stance === skin ? ", same model" : ", listed"));
                 const key = name.toLowerCase();
                 typedByName.set(key, [...(typedByName.get(key) ?? []).filter((typed) => typed.id !== id), next]);
+                const skinKey = reskinKey(row);
+                if (skinKey !== undefined) {
+                    typedBySkin.set(skinKey, [...(typedBySkin.get(skinKey) ?? []).filter((typed) => typed.id !== id), next]);
+                }
             }
             continue;
         }

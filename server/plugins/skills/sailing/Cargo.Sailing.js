@@ -6,8 +6,19 @@ const { ItemDefinition } = require("../../../src/main/typescript/elvarg/game/def
 const { content, boatType } = require("./SailingContent.Sailing");
 
 const REPAIR_KIT = 31964;
-/** The sidepanel counts repair kit uses: 5 per kit in the hold. */
-const REPAIR_KIT_USES = 5;
+/**
+ * Each repair kit and the hitpoints it repairs (Wiki: Repair kits). The sidepanel counts the
+ * hold's kits by what they repair: 5 per (wooden) repair kit, as captured.
+ */
+const REPAIR_KITS = Object.freeze({
+  31964: 5, // Repair kit
+  31967: 10, // Oak repair kit
+  31970: 20, // Teak repair kit
+  31973: 30, // Mahogany repair kit
+  31976: 40, // Camphor repair kit
+  31979: 45, // Ironwood repair kit
+  31982: 50, // Rosewood repair kit
+});
 /** Boat slot 0's hold is inventory 963 (`sailing_boat_1_cargohold`), up to 967. */
 const FIRST_CARGO_INVENTORY = 963;
 /**
@@ -76,7 +87,7 @@ function countIn(boat, itemId) {
 }
 
 function repairKitUses(boat) {
-  return countIn(boat, REPAIR_KIT) * REPAIR_KIT_USES;
+  return Object.entries(REPAIR_KITS).reduce((total, [kit, heals]) => total + countIn(boat, Number(kit)) * heals, 0);
 }
 
 /**
@@ -145,6 +156,7 @@ function dropLostOnRecovery(boat) {
 
 module.exports = {
   REPAIR_KIT,
+  REPAIR_KITS,
   TOOLS_UNLOCKED_ATTRIBUTE,
   sendToolUnlocks,
   categoryOf,

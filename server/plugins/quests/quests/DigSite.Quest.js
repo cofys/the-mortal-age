@@ -114,10 +114,7 @@ module.exports = function registerDigSiteQuest(api) {
         "I should interview all <col=800000>three students</col>.",
       ];
     }
-    return [
-      "I can start this quest at the <col=800000>Dig Site Exam Centre</col>.",
-      "It requires 10 Agility, 10 Herblore and 25 Thieving.",
-    ];
+    return ["I can start this quest by talking to an <col=800000>Examiner</col> in the <col=800000>Exam Centre</col> south of the <col=800000>Digsite</col>."];
   }
 
   function grantReward(player) {

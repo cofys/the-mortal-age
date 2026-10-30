@@ -388,6 +388,7 @@ function createContext(core, server) {
     player: z.string().describe("Username of an online player"),
     amountSchema: z.union([z.number().int().min(1), z.literal("all")]).default(1),
     find, send, items, tile, sleepTicks, takeMessages, takeClient, area, status, movementBlocked, settle, npcClick, nearby, nearest,
+    activity, waitingOn,
     inventorySlot, carried, byName, clicks, clickEach,
   };
 }

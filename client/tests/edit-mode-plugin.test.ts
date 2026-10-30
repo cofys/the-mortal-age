@@ -35,6 +35,19 @@ type Call = [string, ...unknown[]];
 }
 
 {
+    for (const id of [5722, 5724]) {
+        const actions = ["", "Attack", "Burn", "", ""];
+        assert.deepEqual(getNpcMenuOptions({ id, actions } as any).map(({ option, actionIndex }) => [option, actionIndex]),
+            [["Attack", 1]], "Castle Wars barricades require explicit item use to burn");
+        assert.equal(actions[2], "Burn", "the cached definition is unchanged");
+    }
+    assert.deepEqual(getNpcMenuOptions({ id: 5723, actions: ["", "Attack", "Extinguish"] } as any)
+        .map(({ option }) => option), ["Attack", "Extinguish"], "burning barricades retain Extinguish");
+    assert.deepEqual(getNpcMenuOptions({ id: 1, actions: ["Burn"] } as any)
+        .map(({ option }) => option), ["Burn"], "other NPC actions are unchanged");
+}
+
+{
     let focused = false;
     const muted: boolean[] = [];
     const plugin = new EditModePlugin();

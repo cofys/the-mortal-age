@@ -1,0 +1,145 @@
+// Imports the transport tables of the Shortest Path RuneLite plugin
+// (https://github.com/Skretzo/shortest-path, BSD 2-Clause) into
+// plugins/agent/data/transports.json, for the agent MCP's travel_to tool: how a player gets
+// from one tile to another in live OSRS (doors, stairs, shortcuts, boats ...), with the click
+// that does it and what it needs. It is a description of live OSRS kept apart from tsps's own
+// data, so a route that works live but not here shows up as a failed leg.
+//
+//   git clone https://github.com/Skretzo/shortest-path ../shortest-path
+//   yarn import:shortest-path --repo ../shortest-path
+//
+// The output records the source commit and licence. The same commit always gives the same file.
+"use strict";
+
+const fs = require("node:fs");
+const path = require("node:path");
+const { execFileSync } = require("node:child_process");
+
+const SERVER = path.resolve(__dirname, "..");
+const OUT_FILE = path.join(SERVER, "plugins", "agent", "data", "transports.json");
+const REPO_URL = "https://github.com/Skretzo/shortest-path";
+
+// Fixed tile-to-tile routes only. Teleports (spells, items, minigame and house portals) start
+// anywhere and are the agent's own choice to cast; seasonal ones are not on the main game.
+// Destination networks (fairy rings, spirit trees, gliders, balloons, mushtrees, quetzals,
+// obelisks) list no destination per row: the player picks it on an interface.
+const FILES = [
+  "transports.tsv",
+  "agility_shortcuts.tsv",
+  "boats.tsv",
+  "canoes.tsv",
+  "charter_ships.tsv",
+  "magic_carpets.tsv",
+  "minecarts.tsv",
+  "ships.tsv",
+  "teleportation_boxes.tsv",
+  "teleportation_levers.tsv",
+  "teleportation_portals.tsv",
+];
+
+// Column name in the TSV header -> field in the output row. Rows are arrays in COLUMNS order,
+// grouped by table, with null for an empty cell and trailing empty cells left off.
+const FIELDS = {
+  Skills: "skills",
+  Items: "items",
+  Quests: "quests",
+  Varbits: "varbits",
+  VarPlayers: "varps",
+  Duration: "ticks",
+  "Display info": "info",
+};
+const COLUMNS = ["from", "to", "menu", "id", ...Object.values(FIELDS)];
+
+function argValue(flag) {
+  const index = process.argv.indexOf(flag);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+function tile(text) {
+  const parts = String(text ?? "").trim().split(/\s+/).map(Number);
+  return parts.length === 3 && parts.every(Number.isInteger) ? parts : null;
+}
+
+/**
+ * "Climb-up Staircase 16671" -> { menu: "Climb-up Staircase", id: 16671 }; a row without the id
+ * keeps id null and is found by name. The option/target split is resolved at runtime.
+ */
+function click(text) {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return null;
+  const match = /^(.*\S)\s+(-?\d+)$/.exec(trimmed);
+  return match ? { menu: match[1], id: Number(match[2]) } : { menu: trimmed, id: null };
+}
+
+function readTable(file, type, skipped) {
+  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+  const header = lines.find((line) => line.startsWith("# Origin"));
+  if (!header) throw new Error(`${path.basename(file)} has no "# Origin" header`);
+  const columns = header.slice(2).split("\t");
+  const rows = [];
+  for (const line of lines) {
+    if (!line.trim() || line.startsWith("#")) continue;
+    const cells = line.split("\t");
+    const value = (name) => (cells[columns.indexOf(name)] ?? "").trim();
+    const from = tile(value("Origin"));
+    const to = tile(value("Destination"));
+    const action = click(value("menuOption menuTarget objectID"));
+    if (!from || !to || !action) {
+      skipped.push(`${type}: ${line}`);
+      continue;
+    }
+    const row = [from, to, action.menu, action.id];
+    for (const [column, field] of Object.entries(FIELDS)) {
+      const text = value(column);
+      row.push(!text ? null : field === "ticks" ? Number(text) : text);
+    }
+    while (row[row.length - 1] === null) row.pop();
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** AXE -> [1351, 1349, ...]: the item groups the Items column names. */
+function readItemGroups(file) {
+  const groups = {};
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith("#")) continue;
+    const [name, ids] = line.split("\t");
+    groups[name.trim()] = ids.split(",").map(Number).filter(Number.isInteger);
+  }
+  return groups;
+}
+
+function format(data) {
+  const { transports, ...head } = data;
+  const top = JSON.stringify(head, null, 2).replace(/\n}$/, "");
+  const tables = Object.entries(transports).map(([type, rows]) =>
+    `    ${JSON.stringify(type)}: [\n${rows.map((row) => `      ${JSON.stringify(row)}`).join(",\n")}\n    ]`);
+  return `${top},\n  "transports": {\n${tables.join(",\n")}\n  }\n}\n`;
+}
+
+function main() {
+  const repo = argValue("--repo");
+  if (!repo) throw new Error("Usage: yarn import:shortest-path --repo <shortest-path checkout>");
+  const resources = path.join(path.resolve(repo), "src", "main", "resources");
+  const commit = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const skipped = [];
+  const transports = Object.fromEntries(FILES.map((name) => {
+    const type = name.replace(/\.tsv$/, "");
+    return [type, readTable(path.join(resources, "transports", name), type, skipped)];
+  }));
+  const count = Object.values(transports).reduce((sum, rows) => sum + rows.length, 0);
+  const data = {
+    $comment: "Generated by scripts/import-shortest-path.cjs from the Shortest Path RuneLite plugin; regenerate, don't edit.",
+    source: { repo: REPO_URL, commit },
+    license: fs.readFileSync(path.join(path.resolve(repo), "LICENSE"), "utf8").trim(),
+    itemGroups: readItemGroups(path.join(resources, "item-variations.tsv")),
+    columns: COLUMNS,
+    transports,
+  };
+  fs.writeFileSync(OUT_FILE, format(data));
+  console.log(`${count} transports from ${commit.slice(0, 9)} -> ${path.relative(SERVER, OUT_FILE)}`);
+  if (skipped.length) console.log(`skipped ${skipped.length} rows without a destination or click:\n  ${skipped.join("\n  ")}`);
+}
+
+main();

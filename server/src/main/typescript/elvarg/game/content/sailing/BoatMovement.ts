@@ -44,10 +44,10 @@ export function tickBoat(boat: Boat, isSailable: SailableTileCheck): BoatStep {
     const step: BoatStep = { moved: false, turned: false, blocked: false };
     const target = sailVelocity(boat);
     boat.velocity += Math.max(-boat.acceleration, Math.min(boat.acceleration, target - boat.velocity));
-    if (boat.velocity === 0) return step;
 
     // Turning doesn't cost speed: the boat swings towards its heading, then sails on at its
-    // speed along the new facing.
+    // speed along the new facing. A stopped boat turns on the spot at the same rate (rsprox:
+    // crew-combat, sails lowered at the helm, then 640 -> 1280 by 128 a tick without moving).
     const delta = turnAngleDelta(boat.angle, boat.heading);
     if (delta !== 0) {
         const angle = normalizeAngle(boat.angle + Math.max(-TURN_RATE, Math.min(TURN_RATE, delta)));
@@ -56,6 +56,7 @@ export function tickBoat(boat: Boat, isSailable: SailableTileCheck): BoatStep {
             step.turned = true;
         }
     }
+    if (boat.velocity === 0) return step;
 
     const distance = Math.abs(boat.velocity) * Math.max(1, boat.speedMultiplier);
     const travel = boat.velocity < 0 ? reverseAngle(boat.angle) : boat.angle;

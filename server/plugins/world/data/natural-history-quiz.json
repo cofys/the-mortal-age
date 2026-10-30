@@ -1,0 +1,145 @@
+{
+  "source": "rsprox captures: recording 1723 (rev 227), the whole quiz from Orlando Smith to the reward",
+  "cases": [
+    {
+      "number": 1, "title": "The Dragon (Draconis Rex)",
+      "plaque": "vm_plaque_dragon", "varbit": "vm_nathis_dragon_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_dragon_01", "model": 25551 }, { "component": "vm_natural_history:vm_nathis_dragon_02", "model": 25552 }, { "component": "vm_natural_history:vm_nathis_dragon_03", "model": 25553 }],
+      "questions": [
+        { "question": "Approximately how many feet tall do dragons stand?", "answers": ["Twelve.", "Six.", "Ten."], "correct": 0 },
+        { "question": "What is the best defence against a dragon's attack?", "answers": ["Anti dragon-breath shield.", "Rune plate.", "Cats."], "correct": 0 },
+        { "question": "How long do dragons live?", "answers": ["Fifty years.", "Forever.", "Unknown."], "correct": 2 }
+      ]
+    },
+    {
+      "number": 2, "title": "The Wyvern (Draconis Ossis)",
+      "plaque": "vm_plaque_wyvern", "varbit": "vm_nathis_wyvern_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_wyvern", "model": 25565 }],
+      "questions": [
+        { "question": "Where have wyvern bones been found?", "answers": ["Ape Atoll.", "Al Kharid.", "Asgarnia."], "correct": 2 },
+        { "question": "How did the wyverns die out?", "answers": ["Climate change.", "Disease.", "Marauding adventurers."], "correct": 0 },
+        { "question": "Which genus does the wyvern theoretically belong to?", "answers": ["Invertebrates.", "Reptiles.", "Mammals."], "correct": 1 }
+      ]
+    },
+    {
+      "number": 3, "title": "The Giant Tortoise (Testudines Giganteus)",
+      "plaque": "vm_plaque_battle_tortoise", "varbit": "vm_nathis_tortoise_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_battle_tortoise", "model": 25547 }],
+      "questions": [
+        { "question": "What is a tortoise's favourite food?", "answers": ["Sharks.", "Kebabs.", "Vegetables."], "correct": 2 },
+        { "question": "Name the explorer who discovered the world's oldest tortoise.", "answers": ["Admiral Bake.", "Captain Cook.", "Ensign Chef."], "correct": 0 },
+        { "question": "How does the tortoise protect itself?", "answers": ["Thick skin.", "Magic.", "Hard shell."], "correct": 2 }
+      ]
+    },
+    {
+      "number": 4, "title": "The Giant Lizard (Lacertilia Giganteus)",
+      "plaque": "vm_plaque_lizard", "varbit": "vm_nathis_lizard_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_lizard", "model": 25557 }],
+      "questions": [
+        { "question": "What order do lizards belong to?", "answers": ["Mammal.", "Squamata.", "Insecta."], "correct": 1 },
+        { "question": "How does a lizard regulate body heat?", "answers": ["Chilli sauce.", "Fire.", "Sunlight."], "correct": 2 },
+        { "question": "Lizard skin is made of the same substance as?", "answers": ["Hair.", "Bone.", "Wood."], "correct": 0 }
+      ]
+    },
+    {
+      "number": 5, "title": "The Giant Leech (Hirudinea Acidia)",
+      "plaque": "vm_plaque_leech", "varbit": "vm_nathis_leech_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_leech", "model": 25555 }],
+      "questions": [
+        { "question": "How does a leech change when it feeds?", "answers": ["It turns blue.", "It starts singing.", "It doubles in size."], "correct": 2 },
+        { "question": "What is special about Morytanian leeches?", "answers": ["They sing.", "They attack by jumping.", "They have legs."], "correct": 1 },
+        { "question": "What shape is the inside of a leech's mouth?", "answers": ["Star-shaped.", "'X'-shaped.", "'Y'-shaped."], "correct": 2 }
+      ]
+    },
+    {
+      "number": 6, "title": "The Camel (Camelus Bactrian)",
+      "plaque": "vm_plaque_camel", "varbit": "vm_nathis_camel_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_camel", "model": 25548 }],
+      "questions": [
+        { "question": "Which camel byproduct is known to be very nutritious?", "answers": ["Milk.", "Dung.", "Meat."], "correct": 0 },
+        { "question": "What is produced by feeding chilli to a camel?", "answers": ["An irate camel.", "Toxic dung.", "An undead bactrian."], "correct": 1 },
+        { "question": "Where would you find an ugthanki?", "answers": ["Al Kharid.", "Morytania.", "Nowhere."], "correct": 0 }
+      ]
+    },
+    {
+      "number": 7, "title": "The Giant Mole (Talpidae Wysonian)",
+      "plaque": "vm_plaque_mole", "varbit": "vm_nathis_mole_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_mole", "model": 25558 }],
+      "questions": [
+        { "question": "What habitat do moles prefer?", "answers": ["Subterranean.", "Any.", "Subaquatic."], "correct": 0 },
+        { "question": "What is a mole's favourite food?", "answers": ["Insects and other invertebrates.", "Humans and gnomes.", "Seeds and plant roots."], "correct": 0 },
+        { "question": "Which family do moles belong to?", "answers": ["The Malpidae family.", "The Talpidae family.", "The Falpidae family."], "correct": 1 }
+      ]
+    },
+    {
+      "number": 8, "title": "The Penguin (Spheniscidae Callidus)",
+      "plaque": "vm_plaque_penguine", "varbit": "vm_nathis_penguin_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_penguine", "model": 25560 }],
+      "questions": [
+        { "question": "Which sense do penguins rely on when hunting?", "answers": ["Smell.", "Taste.", "Sight."], "correct": 2 },
+        { "question": "How do penguins keep warm?", "answers": ["A layer of fat.", "Vigorous exercise.", "Magic."], "correct": 0 },
+        { "question": "What is the preferred climate for penguins?", "answers": ["Cold.", "Hot.", "Damp."], "correct": 0 }
+      ]
+    },
+    {
+      "number": 9, "title": "The Terrorbird (Aves Terror)",
+      "plaque": "vm_plaque_terrorbird", "varbit": "vm_nathis_terrorbird_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_terrorbird", "model": 25564 }],
+      "questions": [
+        { "question": "Where do terrorbirds get most of their water?", "answers": ["Streams and rivers.", "Licking trees.", "Eating plants."], "correct": 2 },
+        { "question": "What do terrorbirds eat to aid digestion?", "answers": ["Blurite.", "Stones.", "Paper."], "correct": 1 },
+        { "question": "Who use terrorbirds as mounts?", "answers": ["Dwarves.", "Gnomes.", "Goblins."], "correct": 1 }
+      ]
+    },
+    {
+      "number": 10, "title": "The Kalphite Queen (Kalphiscarabeinae Pasha)",
+      "plaque": "vm_plaque_kalphite_queen", "varbit": "vm_nathis_kalphite_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_kalphite_queen", "model": 25554 }],
+      "questions": [
+        { "question": "Are kalphites carnivores, herbivores or omnivores?", "answers": ["Omnivores.", "Herbivores.", "Carnivores."], "correct": 2 },
+        { "question": "What is the lowest caste in kalphite society?", "answers": ["Prince.", "Soldier.", "Worker."], "correct": 2 },
+        { "question": "What are kalphites assumed to have evolved from?", "answers": ["Scarab beetles.", "Penguins.", "Dragons."], "correct": 0 }
+      ]
+    },
+    {
+      "number": 11, "title": "The Monkey (Simiiformes Karamjan)",
+      "plaque": "vm_plaque_monkey", "varbit": "vm_nathis_monkey_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_monkey", "model": 25559 }],
+      "questions": [
+        { "question": "What colour mohawk do Karamjan monkeys have?", "answers": ["Red.", "Blue.", "Green."], "correct": 0 },
+        { "question": "What have Karamjan monkeys taken a deep dislike to?", "answers": ["Seaweed.", "Chilli.", "Taxes."], "correct": 0 },
+        { "question": "Which type of primates do monkeys belong to?", "answers": ["Simian.", "Hominid.", "Lagomorpha."], "correct": 0 }
+      ]
+    },
+    {
+      "number": 12, "title": "The Sea Slug (Opisthobranchia Alucinor)",
+      "plaque": "vm_plaque_seaslug", "varbit": "vm_nathis_seaslug_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_seaslugs_1", "model": 25561 }, { "component": "vm_natural_history:vm_nathis_seaslugs_2", "model": 25739 }, { "component": "vm_natural_history:vm_nathis_seaslugs_3", "model": 25741 }, { "component": "vm_natural_history:vm_nathis_seaslugs_4", "model": 25740 }],
+      "questions": [
+        { "question": "Why has the museum never examined a live sea slug?", "answers": ["The sea slugs are shy.", "The researchers keep vanishing.", "Sea slugs are extinct."], "correct": 1 },
+        { "question": "Off of which coastline would you find sea slugs?", "answers": ["Karamja.", "Miscellania.", "Ardougne."], "correct": 2 },
+        { "question": "We assume that sea slugs have a stinging organ on their soft skin - what is it called?", "answers": ["Nematocysts.", "Hematocysts.", "Pematocysts."], "correct": 0 }
+      ]
+    },
+    {
+      "number": 13, "title": "The Snake (Serpentes Fellis)",
+      "plaque": "vm_plaque_snake", "varbit": "vm_nathis_snake_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_snake", "model": 25563 }],
+      "questions": [
+        { "question": "If a snake sticks its tongue out at you, what is it doing?", "answers": ["Being rude.", "Seeing how you taste.", "Seeing how you smell."], "correct": 2 },
+        { "question": "What is snake venom adapted from?", "answers": ["Ear wax.", "Stomach acid.", "Saliva."], "correct": 1 },
+        { "question": "If some snakes use venom to kill their prey, what do other snakes use?", "answers": ["Fire.", "Constriction.", "Magic."], "correct": 1 }
+      ]
+    },
+    {
+      "number": 14, "title": "The Giant Snail (Achatina Acidia Giganteus)",
+      "plaque": "vm_plaque_snail", "varbit": "vm_nathis_snail_display",
+      "models": [{ "component": "vm_natural_history:vm_nathis_snail", "model": 25562 }],
+      "questions": [
+        { "question": "How do snails move?", "answers": ["Flapping their wings.", "Contracting and stretching.", "Hopping about."], "correct": 1 },
+        { "question": "How do Morytanian snails capture their prey?", "answers": ["Aggressive marketing.", "Spitting acid.", "Hex them until they glow."], "correct": 1 },
+        { "question": "Which of these is a snail byproduct?", "answers": ["Fireproof oil.", "A musical instrument", "Snail-a-cola."], "correct": 0 }
+      ]
+    }
+  ]
+}

@@ -16,13 +16,14 @@ const Cooking = require("../plugins/skills/Cooking.plugin");
 before(() => CachePipeline.initialize());
 
 const noop = () => {};
-const hooks = { object: {}, itemOnObject: [], custom: {} };
+const hooks = { object: {}, itemOnObject: [], itemOnItem: [], custom: {} };
 Cooking.register(new Proxy({
   core,
   getTaskManager: () => ({ submit: noop }),
   emitCustomEvent: (name, request) => { if (name === "quest:is-complete") request.complete = true; },
   onObjectInteraction: (name, actions) => { hooks.object[name] = actions; },
   onItemOnObject: (handler, filter) => hooks.itemOnObject.push({ handler, filter }),
+  onItemOnItem: (handler) => hooks.itemOnItem.push(handler),
   onCustomEvent: (name, handler) => { hooks.custom[name] = handler; },
 }, { get: (target, key) => target[key] ?? noop }));
 
@@ -160,4 +161,270 @@ test("the Gauntlet's cooks move cooking_success_count", () => {
   assert.equal(p.sent.varbits.get(varbit), 2);
   hooks.custom["cooking:count"]({ player: p, burnt: true });
   assert.equal(p.sent.varbits.get(varbit), 0);
+});
+
+const obj = (name) => core.CacheDefinitions.getObjId(name);
+
+test("every food, dough, recipe and wine in cooking.json names a cache item", () => {
+  const data = require("../plugins/skills/data/cooking.json");
+  const names = new Set();
+  for (const row of data.cookables) for (const key of ["raw", "cooked", "burnt"]) names.add(row[key]);
+  for (const pair of [data.doughs.flour, ...data.doughs.waters]) for (const name of pair) names.add(name);
+  for (const row of data.doughs.products) names.add(row.product);
+  for (const row of data.recipes) for (const name of [row.product, ...row.ingredients, ...(row.returns ?? [])]) names.add(name);
+  for (const row of data.wines) for (const key of ["grapes", "unfermented", "wine", "bad"]) names.add(row[key]);
+  for (const name of names) assert.ok(Number.isInteger(obj(name)), name);
+  assert.equal(Cooking.COOKABLE_BY_RAW.size, data.cookables.length, "one row per raw item");
+});
+
+test("the Sailing fish cook with their captured lines (recording 4103)", () => {
+  const line = (raw) => Cooking._test.successMessage(Cooking.COOKABLE_BY_RAW.get(obj(raw)));
+  assert.equal(line("raw_giant_krill"), "You successfully cook the giant krill.");
+  assert.equal(line("raw_haddock"), "You successfully cook the haddock.");
+  assert.equal(line("raw_marlin"), "You successfully cook the marlin.");
+  assert.equal(line("raw_swordtip_squid"), "You successfully cook a swordtip squid.");
+  assert.equal(line("raw_jumbo_squid"), "You successfully cook a jumbo squid.");
+  assert.equal(Cooking._test.burnMessage(Cooking.COOKABLE_BY_RAW.get(obj("raw_bluefin"))), "You accidentally burn the bluefin.");
+  assert.equal(Cooking.COOKABLE_BY_RAW.get(obj("raw_halibut")).xp, 212.5);
+});
+
+test("pies and pizzas bake on a range with the captured lines, never on a fire", () => {
+  const line = (raw) => Cooking._test.successMessage(Cooking.COOKABLE_BY_RAW.get(obj(raw)));
+  assert.equal(line("uncooked_apple_pie"), "You successfully bake a traditional apple pie.");
+  assert.equal(line("uncooked_redberry_pie"), "You successfully bake a delicious redberry pie.");
+  assert.equal(line("uncooked_pizza"), "You successfully bake a pizza.");
+  assert.equal(Cooking.COOKABLE_BY_RAW.get(obj("uncooked_summer_pie")).burnt, obj("burnt_pie"));
+
+  const onFire = player(99, [[obj("uncooked_apple_pie"), 2]]);
+  const event = { player: onFire, object: cooker("Fire"), itemId: obj("uncooked_apple_pie"), handled: false };
+  hooks.itemOnObject.find(({ filter }) => !filter.fallback).handler(event);
+  assert.equal(event.handled, false, "left to the fallback's \"You can't cook that.\"");
+  const onRange = player(99, [[obj("uncooked_apple_pie"), 2]]);
+  hooks.object.Range.Cook({ player: onRange, object: cooker("Range") });
+  assert.deepEqual(onRange.sent.menu.getItems(), [obj("uncooked_apple_pie")]);
+});
+
+/** A player whose inventory really changes, for the item-on-item recipes. */
+function maker(cooking, carried) {
+  const p = player(cooking, []);
+  const slots = new Array(28).fill(null);
+  let next = 0;
+  for (const [id, amount] of carried) for (let i = 0; i < amount; i++) slots[next++] = { getId: () => id };
+  const item = (id) => ({ getId: () => id });
+  const amount = (id) => slots.filter((slot) => slot?.getId() === id).length;
+  const inventory = {
+    getItems: () => slots,
+    getAmount: amount,
+    contains: (id) => amount(id) > 0,
+    getFreeSlots: () => slots.filter((slot) => !slot).length,
+    deleteNumber: (id, count) => { for (let i = 0; i < slots.length && count > 0; i++) if (slots[i]?.getId() === id) { slots[i] = null; count--; } },
+    addItem: (added) => { for (let i = 0; i < added.getAmount(); i++) slots[slots.indexOf(null)] = item(added.getId()); },
+    setItem: (slot, added) => { slots[slot] = item(added.getId()); },
+    refreshItems: noop,
+  };
+  const xp = [];
+  const effects = [];
+  return Object.assign(p, {
+    xp, effects,
+    getIndex: () => 1,
+    isRegistered: () => true,
+    getHitpoints: () => 10,
+    getInventory: () => inventory,
+    getBanks: () => [],
+    getSkillManager: () => ({ getCurrentLevel: () => cooking, addExperiences: (_skill, gained) => xp.push(gained) }),
+    performAnimation: (animation) => effects.push(["seq", animation.getId()]),
+    performGraphic: (graphic) => effects.push(["spotanim", graphic.getId()]),
+  });
+}
+
+function useItems(p, used, usedWith) {
+  const event = { player: p, usedItemId: obj(used), usedWithItemId: obj(usedWith), handled: false };
+  for (const handler of hooks.itemOnItem) if (!event.handled) handler(event);
+  return event;
+}
+
+const ticks = (count) => { for (let i = 0; i < count; i++) core.TaskManager.process(); };
+
+test("flour on water opens the four-dough menu; pastry dough comes a tick after the choice, then a tick, then every 2", () => {
+  const p = maker(1, [["pot_flour", 3], ["bucket_water", 3]].map(([name, n]) => [obj(name), n]));
+  assert.equal(useItems(p, "pot_flour", "bucket_water").handled, true);
+  assert.equal(p.sent.menu.getTitle(), "What sort of dough do you wish to make?");
+  assert.deepEqual(p.sent.menu.getItems(), ["bread_dough", "pastry_dough", "pizza_base", "uncooked_pitta_bread"].map(obj));
+  assert.deepEqual(p.sent.menu.getOptions(), { mode: 0, maxAmount: 3, lastAmount: 3 });
+  p.sent.menu.execute(obj("pastry_dough"), 3);
+  const doughs = () => p.getInventory().getAmount(obj("pastry_dough"));
+  ticks(1); assert.equal(doughs(), 1);
+  ticks(1); assert.equal(doughs(), 2);
+  ticks(1); assert.equal(doughs(), 2);
+  ticks(1); assert.equal(doughs(), 3);
+  assert.equal(p.getInventory().getAmount(obj("pot_empty")), 3);
+  assert.equal(p.getInventory().getAmount(obj("bucket_empty")), 3);
+  assert.ok(p.sent.spam.some(([, text]) => text === "You mix the water and flour to make some pastry dough."));
+});
+
+test("a pizza base needs 35 Cooking", () => {
+  const p = maker(20, [[obj("pot_flour"), 1], [obj("jug_water"), 1]]);
+  useItems(p, "jug_water", "pot_flour");
+  p.sent.menu.execute(obj("pizza_base"), 1);
+  assert.equal(statementText(p.sent.statements[0]), "You need a Cooking level of 35 to make a pizza base.");
+  ticks(2);
+  assert.equal(p.getInventory().getAmount(obj("pizza_base")), 0);
+});
+
+test("a pie shell, then a filling: how-many menu on the product, a tick after the choice then every 2", () => {
+  const p = maker(30, [[obj("pie_shell"), 3], [obj("cooking_apple"), 3]]);
+  useItems(p, "cooking_apple", "pie_shell");
+  assert.equal(p.sent.menu.getTitle(), "How many do you wish to make?");
+  assert.deepEqual(p.sent.menu.getItems(), [obj("uncooked_apple_pie")]);
+  p.sent.menu.execute(obj("uncooked_apple_pie"), 3);
+  const pies = () => p.getInventory().getAmount(obj("uncooked_apple_pie"));
+  ticks(1); assert.equal(pies(), 1);
+  ticks(1); assert.equal(pies(), 1);
+  ticks(1); assert.equal(pies(), 2);
+  ticks(2); assert.equal(pies(), 3);
+  assert.deepEqual(p.effects, [], "no animation");
+});
+
+test("a mud pie's part pies give the buckets back", () => {
+  const p = maker(29, [[obj("pie_shell"), 1], [obj("bucket_compost"), 1], [obj("bucket_water"), 1], [obj("clay"), 1]]);
+  useItems(p, "bucket_compost", "pie_shell"); ticks(1);
+  useItems(p, "bucket_water", "unfinished_mud_pie_1"); ticks(1);
+  useItems(p, "clay", "unfinished_mud_pie_2"); ticks(1);
+  assert.equal(p.getInventory().getAmount(obj("uncooked_mud_pie")), 1);
+  assert.equal(p.getInventory().getAmount(obj("bucket_empty")), 2);
+});
+
+test("the pizza steps have the captured lines; a topping gives its XP", () => {
+  const p = maker(65, [[obj("pizza_base"), 1], [obj("tomato"), 1], [obj("cheese"), 1], [obj("plain_pizza"), 1], [obj("pineapple_ring"), 1]]);
+  useItems(p, "tomato", "pizza_base"); ticks(1);
+  useItems(p, "cheese", "incomplete_pizza"); ticks(1);
+  assert.equal(p.getInventory().getAmount(obj("uncooked_pizza")), 1);
+  assert.deepEqual(p.sent.spam.map(([, text]) => text), ["You add the tomato to the pizza.", "You add the cheese to the pizza."]);
+  useItems(p, "pineapple_ring", "plain_pizza"); ticks(1);
+  assert.equal(p.getInventory().getAmount(obj("pineapple_pizza")), 1);
+  assert.deepEqual(p.xp, [45]);
+});
+
+test("wine: a jug every 2 ticks with the captured animation, graphic and sound; the line on the last", () => {
+  const Wine = Cooking._test.wine;
+  const p = maker(99, [[obj("grapes"), 2], [obj("jug_water"), 2]]);
+  const sounds = [];
+  p.getPacketSender().sendSound = (id, volume, delay) => { sounds.push([id, delay]); return p.getPacketSender(); };
+  useItems(p, "grapes", "jug_water");
+  assert.deepEqual(p.sent.menu.getItems(), [obj("jug_unfermented_wine")]);
+  p.sent.menu.execute(obj("jug_unfermented_wine"), 2);
+  const seq = core.CacheDefinitions.getSeqId("human_make_wine");
+  const spotanim = core.CacheDefinitions.getSpotanimId("cooking_make_wine_spotanim");
+  assert.deepEqual(p.effects, [["seq", seq], ["spotanim", spotanim]], "as the menu closes");
+  const jugs = () => p.getInventory().getAmount(obj("jug_unfermented_wine"));
+  ticks(1); assert.equal(jugs(), 0);
+  ticks(1); assert.equal(jugs(), 1);
+  assert.equal(p.effects.length, 4, "again for the second jug");
+  ticks(2); assert.equal(jugs(), 2);
+  assert.equal(p.effects.length, 4, "not after the last");
+  assert.deepEqual(sounds, [[2489, 2], [2489, 2]]);
+  assert.deepEqual(p.sent.spam.map(([, text]) => text), ["You squeeze the grapes into the jug. The wine begins to ferment."]);
+  assert.equal(Wine.fermenting.get(p), Wine.FERMENT_TICKS);
+  Wine.fermenting.delete(p);
+});
+
+/** maker()'s player with a real bank (every tab a native Bank), `fill` slots of it taken by other items. */
+function bankedMaker(cooking, carried, banked, fill) {
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const p = maker(cooking, carried);
+  const tabs = Array.from({ length: Bank.TOTAL_BANK_TABS }, () => new Bank(p));
+  Object.assign(p, {
+    getBanks: () => tabs,
+    getBank: (tab) => tabs[tab],
+    setBank: (tab, bank) => { tabs[tab] = bank; return p; },
+    isSearchingBank: () => false,
+    getCurrentBankTab: () => 0,
+    getPacketSender: () => new Proxy({}, { get: (_t, _k) => function sender() { return this; } }),
+  });
+  Bank.withoutLimit(p, () => {
+    for (let id = 0, added = 0; added < fill; id++) {
+      if ([...banked.map(([itemId]) => itemId), obj("jug_wine"), obj("jug_bad_wine")].includes(id)) continue;
+      tabs[0].add(new core.Item(id, 1), false);
+      added++;
+    }
+    for (const [id, amount] of banked) tabs[0].add(new core.Item(id, amount), false);
+  });
+  return { p, tabs, Bank };
+}
+
+test("wine ferments 20 ticks after the last jug, carried and banked at once, with all its XP", () => {
+  const Wine = Cooking._test.wine;
+  const { p, tabs } = bankedMaker(99, [[obj("grapes"), 1], [obj("jug_water"), 1]], [[obj("jug_unfermented_wine"), 40]], 0);
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
+  useItems(p, "grapes", "jug_water");
+  ticks(2);
+  assert.equal(p.getInventory().getAmount(obj("jug_unfermented_wine")), 1);
+  for (let i = 0; i < Wine.FERMENT_TICKS - 1; i++) Wine.fermentTick();
+  assert.equal(p.getInventory().getAmount(obj("jug_wine")), 0);
+  Wine.fermentTick();
+  assert.equal(p.getInventory().getAmount(obj("jug_wine")), 1);
+  assert.equal(amount(obj("jug_unfermented_wine")), 0);
+  assert.equal(amount(obj("jug_wine")), 40);
+  assert.deepEqual(p.xp, [41 * 200]);
+});
+
+test("a full bank's wine ferments without losing any: the outcome takes the unfermented stack's slot", () => {
+  const Wine = Cooking._test.wine;
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const unfermented = obj("jug_unfermented_wine");
+  // One stack of 2 and nothing else free: room for one new stack only.
+  const { p, tabs } = bankedMaker(35, [], [[unfermented, 2]], Bank.getCapacity({}) - 1);
+  assert.equal(Bank.freeSlots(p), 0);
+  const random = Math.random;
+  let roll = 0;
+  Math.random = () => (roll++ === 0 ? 0 : 0.99); // one jug good, one bad
+  try { Wine.ferment(p); } finally { Math.random = random; }
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
+  assert.equal(amount(unfermented), 2, "no room for both wine and bad wine: the jugs wait");
+  assert.equal(amount(obj("jug_wine")) + amount(obj("jug_bad_wine")), 0);
+  assert.deepEqual(p.xp, []);
+  assert.equal(Bank.freeSlots(p), 0);
+});
+
+test("a bank with one more free slot ferments a mixed result into two new stacks", () => {
+  const Wine = Cooking._test.wine;
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const unfermented = obj("jug_unfermented_wine");
+  const { p, tabs } = bankedMaker(35, [], [[unfermented, 2]], Bank.getCapacity({}) - 2);
+  const random = Math.random;
+  let roll = 0;
+  Math.random = () => (roll++ === 0 ? 0 : 0.99);
+  try { Wine.ferment(p); } finally { Math.random = random; }
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
+  assert.equal(amount(unfermented), 0);
+  assert.equal(amount(obj("jug_wine")), 1);
+  assert.equal(amount(obj("jug_bad_wine")), 1);
+  assert.deepEqual(p.xp, [200]);
+});
+
+test("a full bank that already holds wine and bad wine stacks onto them", () => {
+  const Wine = Cooking._test.wine;
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const unfermented = obj("jug_unfermented_wine");
+  const { p, tabs } = bankedMaker(35, [], [[unfermented, 2], [obj("jug_wine"), 5], [obj("jug_bad_wine"), 5]], Bank.getCapacity({}) - 3);
+  assert.equal(Bank.freeSlots(p), 0);
+  const random = Math.random;
+  let roll = 0;
+  Math.random = () => (roll++ === 0 ? 0 : 0.99);
+  try { Wine.ferment(p); } finally { Math.random = random; }
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
+  assert.equal(amount(unfermented), 0);
+  assert.equal(amount(obj("jug_wine")), 6);
+  assert.equal(amount(obj("jug_bad_wine")), 6);
+});
+
+test("wine's success chance is the Wiki's: about 60% at 35, sure at 68; stacks roll in 15 batches", () => {
+  const { successChance, successes } = Cooking._test.wine;
+  const wine = { chance: [48, 352] };
+  assert.equal(successChance(maker(35, []), wine), 154 / 256);
+  assert.equal(successChance(maker(68, []), wine), 1);
+  assert.equal(successChance(maker(98, []), { chance: [-125, 260] }), 1, "wine of Zamorak is sure at 98");
+  let rolls = 0;
+  assert.equal(successes(32, 0.5, () => (rolls++ % 2 === 0 ? 0 : 1)), 8 * 2 + 1, "15 batches of 2 and 2 jugs left over");
+  assert.equal(rolls, 17);
 });

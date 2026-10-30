@@ -1,0 +1,32 @@
+{
+  "rolls": 10000,
+  "runes": [
+    {"rune": "SOUL_RUNE", "xp": 11, "extraChance": 10},
+    {"rune": "BLOOD_RUNE", "xp": 10.5, "extraChance": 15},
+    {"rune": "DEATH_RUNE", "xp": 10, "extraChance": 17.5},
+    {"rune": "LAW_RUNE", "xp": 9.5, "extraChance": 20},
+    {"rune": "NATURE_RUNE", "xp": 9, "extraChance": 22.5},
+    {"rune": "ASTRAL_RUNE", "xp": 8.7, "extraChance": 25},
+    {"rune": "CHAOS_RUNE", "xp": 8.5, "extraChance": 25},
+    {"rune": "COSMIC_RUNE", "xp": 8, "extraChance": 25},
+    {"rune": "BODY_RUNE", "xp": 7.5, "extraChance": 25},
+    {"rune": "FIRE_RUNE", "xp": 7, "extraChance": 25},
+    {"rune": "EARTH_RUNE", "xp": 6.5, "extraChance": 25},
+    {"rune": "WATER_RUNE", "xp": 6, "extraChance": 25},
+    {"rune": "MIND_RUNE", "xp": 5.5, "extraChance": 25},
+    {"rune": "AIR_RUNE", "xp": 5, "extraChance": 25}
+  ],
+  "levels": [
+    {"level": 1, "weights": [2, 5, 8, 15, 30, 45, 60, 85, 150, 300, 600, 1200, 2500, 5000]},
+    {"level": 10, "weights": [3, 6, 12, 24, 40, 60, 80, 175, 600, 1200, 2400, 2100, 1800, 1500]},
+    {"level": 20, "weights": [8, 15, 32, 55, 110, 210, 420, 800, 1600, 1500, 1400, 1350, 1300, 1200]},
+    {"level": 30, "weights": [20, 40, 60, 130, 250, 500, 1000, 2000, 1300, 1200, 1100, 900, 800, 700]},
+    {"level": 40, "weights": [40, 80, 120, 260, 500, 1000, 2000, 1500, 1000, 800, 750, 700, 650, 600]},
+    {"level": 50, "weights": [80, 170, 350, 700, 1350, 1500, 1100, 1000, 750, 700, 650, 600, 550, 500]},
+    {"level": 60, "weights": [100, 200, 400, 800, 1550, 1400, 1050, 950, 750, 700, 600, 550, 500, 450]},
+    {"level": 70, "weights": [200, 500, 1000, 1800, 1500, 1200, 900, 700, 500, 400, 400, 300, 300, 300]},
+    {"level": 80, "weights": [400, 600, 1450, 1450, 1350, 1050, 800, 700, 600, 500, 400, 300, 200, 200]},
+    {"level": 90, "weights": [650, 1000, 1650, 1450, 1350, 1000, 700, 600, 500, 400, 300, 200, 100, 100]},
+    {"level": 99, "weights": [900, 1300, 1550, 1450, 1350, 950, 600, 500, 400, 300, 300, 200, 100, 100]}
+  ]
+}

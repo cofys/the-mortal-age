@@ -9,6 +9,9 @@
 //   of {drink}." with the drink's own lines, the drinking animation and graphic, sound 2401, the
 //   bottle gone, and the charting.
 const common = require("./Common.Charting");
+const poteen = require("./Poteen.Charting");
+const effects = require("./DrinkEffects.Charting");
+const fishier = require("./FishierStout.Charting");
 
 const LOC_CRATE = 59283;
 const ITEM_CROWBAR = 31807;
@@ -28,6 +31,22 @@ const WARNING = "This drink has been sealed in a crate for an unknown amount of 
 const CHOICE = "Are you sure you want to drink this?";
 
 let byItem;
+const pendingChoices = new WeakMap();
+
+function interfaceChanged({ player, interfaceId }) {
+  // A bank/trade/modal takes ownership before the old chatbox option can resume.
+  // MultiChatboxPrompt closes interfaces (and clears status) before its callback runs.
+  if (interfaceId < 0) return;
+  const target = pendingChoices.get(player);
+  if (target) target.cancelled = true;
+  pendingChoices.delete(player);
+}
+
+function onLogout({ player }) {
+  const target = pendingChoices.get(player);
+  if (target) target.cancelled = true;
+  pendingChoices.delete(player);
+}
 
 /** Each drink task's crate tile and drink item: the item named after the task (31831-31905). */
 function drinks() {
@@ -96,35 +115,50 @@ function drink(event) {
   // Until Prying Times is done its stout is the quest's to drink.
   if (spot.key === PRYING_TIMES_DRINK && !questComplete(player, "prying_times")) return;
   event.handled = true;
+  const target = { slot: event.slot, item: player.getInventory().getItems()[event.slot] };
+  pendingChoices.set(player, target);
+  const consume = () => swallow(player, spot, target);
+  if (spot.key === fishier.KEY) return fishier.warn(player, consume);
   if (player.getAttribute(NO_WARNING_ATTRIBUTE) === true) {
-    swallow(player, spot);
+    consume();
     return;
   }
   const { DialogueChainBuilder, StatementDialogue, ActionDialogue } = common.core();
   player.getDialogueManager().startDialogues(new DialogueChainBuilder()
     .add(new StatementDialogue(0, WARNING))
-    .add(new ActionDialogue(1, { execute: () => choose(player, spot) })));
+    .add(new ActionDialogue(1, { execute: () => choose(player, consume) })));
 }
 
-function choose(player, spot) {
+function choose(player, consume) {
   common.api().sendMultiChatboxPrompt(player, CHOICE,
-    "Yes.", () => swallow(player, spot),
+    "Yes.", consume,
     "Yes, and don't ask again.", () => {
       player.setAttribute(NO_WARNING_ATTRIBUTE, true);
       player.getPacketSender().sendVarbit(VARBIT_NO_WARNING, 1);
-      swallow(player, spot);
+      consume();
     },
     "No.", () => {});
 }
 
-function swallow(player, spot) {
+function swallow(player, spot, target) {
+  const { PlayerStatus } = common.core();
+  if (player.isRegistered?.() === false || player.getHitpoints?.() <= 0
+    || (player.getStatus && player.getStatus() !== PlayerStatus.NONE)) return;
+  if (target && (target.cancelled || pendingChoices.get(player) !== target
+    || player.getInventory().getItems()[target.slot] !== target.item
+    || target.item?.getId() !== spot.item || target.item.getAmount() < 1)) return;
   if (!player.getInventory().contains(spot.item)) return;
+  pendingChoices.delete(player);
   const { Animation, Graphic } = common.core();
-  player.getInventory().delete(spot.item, 1);
+  if (target) player.getInventory().deleteAtSlot(target.slot, 1, true);
+  else player.getInventory().delete(spot.item, 1);
   player.performAnimation(new Animation(SEQ_DRINK));
   player.performGraphic(new Graphic(SPOTANIM_DRINK, 0, SPOTANIM_HEIGHT));
   player.getPacketSender().sendSoundEffect(SOUND_DRINK, 1, 0);
   common.complete(player, spot, { lines: [`You drink the bottle of ${drinkName(spot)}.`, ...(spot.drink?.lines ?? [])] });
+  if (spot.key === "drink_crate_puzzlers_poteen") poteen.start(player);
+  effects.start(player, spot);
+  if (spot.key === fishier.KEY) fishier.start(player);
 }
 
 /** The crates, placed where every drink task's crate floats (rsprox: the Wiki's tiles, shape 10). */
@@ -143,12 +177,18 @@ function onLogin({ player }) {
 
 function attach(api) {
   common.init(api);
+  poteen.attach(api);
+  effects.attach(api);
+  fishier.attach(api);
+  require("./TrollCombat.Charting")(api);
   api.persistAttribute(NO_WARNING_ATTRIBUTE, false);
   api.setUsableFromDeck([LOC_CRATE]);
   api.onObjectInteraction(pryOpen);
   api.onItemAction(drink);
   api.onServerStartup(placeCrates);
   api.onPlayerLogin(onLogin);
+  api.onPlayerLogout(onLogout);
+  api.onCustomEvent("interface:changed", interfaceChanged);
 }
 
 module.exports = attach;

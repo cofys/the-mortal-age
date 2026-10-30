@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { cacheKey, cachePrefix, isCacheable, shouldStore } from "../game/worker/MapSquareCache";
+import { cacheKey, cachePrefix, isCacheable, MAX_SQUARES, shouldStore } from "../game/worker/MapSquareCache";
+import { MapManager } from "../game/MapManager";
 
 const info: any = { game: "oldschool", environment: "live", name: "c1", revision: 230, timestamp: "t", size: 5 };
 const input: any = {
@@ -13,6 +14,13 @@ assert.notEqual(cacheKey(info, input, "a"), cacheKey(info, { ...input, smoothTer
 assert.notEqual(cacheKey(info, input, "a"), cacheKey(info, input, "b"));
 assert.notEqual(cacheKey(info, input, "a"), cacheKey({ ...info, revision: 231 }, input, "a"));
 assert.notEqual(cachePrefix(cacheKey(info, input, "a")), cachePrefix(cacheKey({ ...info, revision: 231 }, input, "a")));
+assert.equal(cacheKey(info, { ...input, minimapLevel: 0 }, "a"), cacheKey(info, { ...input, minimapLevel: 1 }, "a"),
+    "geometry is reusable across planes; missing minimaps load independently");
+
+const hdMaps = new MapManager<any>(4, () => {});
+hdMaps.update(3287.5, 3287.5, { getPosX: () => 3287.5, getPosZ: () => 3287.5 } as any,
+    0, 3, 3200, 3200, MapManager.getSceneryPadding(160), 160);
+assert.ok(MAX_SQUARES >= hdMaps.gridMapCount * 3, "desktop storage retains several complete HD scene windows while walking");
 
 assert.notEqual(cacheKey(info, { ...input, smoothLocAnimations: true, smoothLocAnimationSteps: 4 }, "a"),
     cacheKey(info, { ...input, smoothLocAnimations: true, smoothLocAnimationSteps: 8 }, "a"));

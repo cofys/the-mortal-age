@@ -55,6 +55,7 @@ export class NPCOptionPacketListener {
         return;
       }
       trace("ACCEPTED attack", npc);
+      if (PluginManager.emitNpcAttackOption({ player, npc, npcId: npc.getContentId(player), clickType, handled: false })) return;
       if (player.getCombat?.().getAutocastSpell?.() != null) player.getCombat().setCastSpell(null);
       player.getCombat().attack(npc);
       return;
@@ -141,7 +142,7 @@ export class NPCOptionPacketListener {
     if (index < 0 || index >= World.getNpcs().capacityReturn()) return false;
     const npc = World.getNpcs().get(index);
     const spell = CombatSpells.getCombatSpell(spellId);
-    if (!npc || !spell || !player.getLocation().isWithinDistance(npc.getLocation(), 24) || npc.getHitpoints?.() <= 0) {
+    if (!npc || !spell || !BoatManager.rootLocation(player).isWithinDistance(BoatManager.rootLocation(npc), 24) || npc.getHitpoints?.() <= 0) {
       player.getMovementQueue().reset();
       return false;
     }

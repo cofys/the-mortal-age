@@ -4,6 +4,7 @@ require('../dist/Server').Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PlayerSession } = require('../dist/net/PlayerSession');
 let core, Data, Patches, Services, hooks;
 before(async () => {
     await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
@@ -18,10 +19,14 @@ before(async () => {
         if (name === 'onItemOnObject') hooks.use = args[0];
         if (name === 'onCustomEvent' && args[0] === 'player:world-input') hooks.cancel = args[1];
         if (name === 'onPlayerLogout') hooks.logout ??= args[0];
+        if (name === 'onInterfaceActionClick' && args[0].name === 'farmingOptionClick') hooks.choose = args[0];
     } }));
 });
-function prepare(t, type = 'COMPOST') {
-    const player = new Player(null), animations = [], sounds = [], varbits = [];
+function prepare(t, type = 'COMPOST', realChoice = false) {
+    const transport = { kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true, send: () => true,
+        close() {}, onData() {}, onError() {}, onClose() {} };
+    const player = new Player(realChoice ? new PlayerSession(transport) : null), animations = [], sounds = [], varbits = [];
+    const realSender = player.getPacketSender();
     const sender = new Proxy({
         sendSound: (...args) => { sounds.push(args); return sender; },
         sendVarbit: (...args) => { varbits.push(args); return sender; },
@@ -31,8 +36,13 @@ function prepare(t, type = 'COMPOST') {
     player.getClickDelay = () => ({ elapsedTime: () => true, reset() {} });
     t.mock.method(core.MapObjects, 'get', () => null);
     t.after(() => hooks.cancel({ player }));
-    player.getPacketSender = () => sender; player.sendMessage = () => {};
+    player.getPacketSender = () => realChoice ? realSender : sender; player.sendMessage = () => {};
     const patch = Data.CACHE.patches.find(p => p.type === type);
+    if (realChoice) {
+        player.setRegistered(true);
+        player.setLocation(new core.Location(patch.x - 1, patch.y, patch.z));
+        t.after(() => player.setRegistered(false));
+    }
     const state = Patches.stateFor(player, patch), inventory = player.getInventory();
     const tick = (count = 1) => { for (let i = 0; i < count; i++) { Patches.tick(); } };
     const stock = (name, count) => {
@@ -50,11 +60,16 @@ function prepare(t, type = 'COMPOST') {
         let id = Data.itemId(name); assert.ok(id > 0, name);
         if (noted) { id = core.CacheDefinitions.getItem(id).note; assert.ok(id > 0, `${name} note`); }
         inventory.add(new core.Item(id), false);
-        Services.binAction(player, patch, '', id);
+        Services.binAction(player, patch, '', id, inventory.getSlotForItemId(id));
         tick(3);
         return id;
     };
-    return { player, patch, state, inventory, add, tick, stock, use, animations, sounds, varbits, bin: () => state.bin };
+    const choose = option => {
+        const event = { player, buttonId: core.OptionDialogue.OPTIONS_WIDGET_ID, action: option, handled: false };
+        hooks.choose(event);
+        assert.equal(event.handled, true);
+    };
+    return { player, patch, state, inventory, add, tick, stock, use, choose, animations, sounds, varbits, bin: () => state.bin };
 }
 test('cotton bolls produce regular compost in both bin sizes', t => {
     for (const [type, capacity] of [['COMPOST', 15], ['BIG_COMPOST', 30]]) {
@@ -75,9 +90,14 @@ test('half coconuts produce supercompost in both bin sizes', t => {
     }
 });
 test('mixing a cotton boll into otherwise supercompostable contents produces regular compost', t => {
-    const f = prepare(t);
+    const f = prepare(t, 'COMPOST', true);
     for (let i = 0; i < 14; i++) f.add('Half coconut');
     f.add('Cotton boll');
+    assert.equal(f.bin().count, 14);
+    assert.equal(f.inventory.getAmount(Data.itemId('Cotton boll')), 1);
+    assert.ok(f.player.getDialogueManager().getCurrent() instanceof core.OptionDialogue);
+    f.choose(1);
+    f.tick(3);
     assert.equal(f.bin().count, 15);
     assert.equal(f.bin().super, 14);
     assert.equal(f.bin().tier, 1);

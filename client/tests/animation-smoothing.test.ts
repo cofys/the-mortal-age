@@ -222,6 +222,29 @@ for (const stride of [12, 16, ACTOR_VERTEX_STRIDE]) {
     assert.equal(deduplicated.offset, expected.size);
 }
 
+// Hash collisions must compare packed bytes, including actor data and sub-tile positions.
+for (const stride of [12, 16, ACTOR_VERTEX_STRIDE]) {
+    const buffer = new VertexBuffer(1, stride);
+    const first = () => buffer.addVertex(1, 2, 3, 0x7fff, 255, 0, 0, -1);
+    const original = first();
+    const expected = buffer.bytes.slice(original * stride, (original + 1) * stride);
+    const key = buffer.vertexIndices.keys().next().value!;
+    const different = buffer.addVertex(
+        stride === ACTOR_VERTEX_STRIDE ? 1.25 : 1, 2, 3,
+        stride === 12 ? 0x7ffe : 0x7fff, 255, 0, 0, -1,
+        false, 0, false, stride === 16 ? 0xffffffff : 0,
+    );
+    buffer.vertexIndices.set(key, different);
+    const result = first();
+    assert.notEqual(result, different, `hash collision at stride ${stride}`);
+    assert.deepEqual(buffer.bytes.subarray(result * stride, (result + 1) * stride), expected);
+    assert.equal(first(), result, "probed entries must remain reusable");
+    buffer.vertexIndices.clear();
+    buffer.offset = 0;
+    assert.equal(first(), 0, "resetting an actor buffer must clear the lookup");
+    assert.equal(first(), 0);
+}
+
 // The action and movement layers have independent clocks and respect the interleave mask.
 const layered = model();
 layered.animateInterleavedFramesInterpolated(tinyA, tinyB, 0.5, false,

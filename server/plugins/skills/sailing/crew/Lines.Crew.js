@@ -20,7 +20,11 @@ const CONDITIONAL = Object.freeze({
   holdFull: ["at-sea-recovering-salvaging", /cargo hold is full/i],
   tooComplicated: ["at-sea-recovering-salvaging", /sailing level for the ship/i],
   noRepairKits: ["at-sea-making-repairs", /no repair kits/i],
+  repaired: ["at-sea-making-repairs", /there are repair kits/i],
+  noAmmo: ["at-sea-idle-at-cannon", /no cannon balls/i],
 });
+/** Said only when their transcript has it; a crewmate without one says the captured line instead. */
+const NO_FALLBACK = new Set(["helm", "hook", "repaired", "noAmmo"]);
 const FALLBACK = ["while-at-sea", "at-sea-while-idle"];
 
 /** Per crewmate id: situation -> lines. Read once, keeping only the crew pages. */
@@ -76,7 +80,7 @@ function load() {
     }
     // Jenkins says his "Woooo"s for everything; the generic crew have no at-sea lines to fall back on.
     for (const situation of Object.keys(byCrew)) {
-      if (!byCrew[situation].length && situation !== "helm" && situation !== "hook") byCrew[situation] = fallback;
+      if (!byCrew[situation].length && !NO_FALLBACK.has(situation)) byCrew[situation] = fallback;
     }
     lines.set(crew.id, byCrew);
   }

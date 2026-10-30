@@ -15,7 +15,9 @@ import { handleShopPayload } from "../domain/shop";
 import { handleSmithingPayload } from "../domain/smithing";
 import { emitPlayerSync, emitSkills } from "../domain/skills";
 import { handleTradePayload } from "../domain/trade";
-import { markChatTransmit } from "../../../game/TransmitCycles";
+import { markChatTransmit, markItemDefinitionsChanged } from "../../../game/TransmitCycles";
+import { CustomItemRegistry } from "../../../custom/items/CustomItemRegistry";
+import { getDefinitionArchiveKey } from "../../../custom/archives/ArchivedDefinitionStore";
 import { getClientCycle } from "../timing";
 import { cloneRunEnergyState, state } from "../state";
 import {
@@ -265,15 +267,26 @@ export function handleInboundUi(msg: any): boolean {
         }
         try {
             const { loadFromPayload } = require("../../../common/gamemode/GamemodeContentStore");
+            const itemRevision = CustomItemRegistry.revision;
+            const archiveKey = getDefinitionArchiveKey();
             loadFromPayload(msg.payload);
             const g: any = (typeof window !== "undefined" ? window : globalThis) as any;
             const mv = g?.__osrsClient;
             if (msg.payload?.datasets?.some((dataset: any) =>
-                dataset.key === "customItems" || dataset.key === "customModels")) {
+                dataset.key === "customItems" || dataset.key === "customModels" ||
+                dataset.key === "definitionArchives")) {
                 mv?.objTypeLoader?.clearCache();
                 mv?.objModelLoader?.clearCache();
+                if (datasets?.some((dataset: any) => dataset.key === "definitionArchives")) {
+                    mv?.npcTypeLoader?.clearCache();
+                    mv?.locTypeLoader?.clearCache();
+                    mv?.renderer?.invalidateDefinitionCaches();
+                }
                 mv?.workerPool?.runAll((worker: any) => worker.setCustomContent(msg.payload))
                     .catch((error: unknown) => console.error("Custom worker content failed", error));
+            }
+            if (CustomItemRegistry.revision !== itemRevision || getDefinitionArchiveKey() !== archiveKey) {
+                markItemDefinitionsChanged();
             }
             if (mv && typeof mv.refreshGamemodeWorldLocs === "function") {
                 mv.refreshGamemodeWorldLocs();

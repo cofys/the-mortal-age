@@ -55,11 +55,6 @@ export class TradeRequestPacketListener {
       return;
     }
 
-    const pluginCanTrade = PluginManager.emitCanTrade(player, target);
-    if (pluginCanTrade === false) {
-      player.sendMessage("You cannot trade here.");
-      return;
-    }
     if (player.getLocalPlayers().indexOf(target) !== -1) {
       player.getTrading().requestTrade(target);
     }

@@ -114,11 +114,8 @@ module.exports = function registerShiloVillageQuest(api) {
   const SMASHED_TABLE = ObjectIdentifiers.SMASHED_TABLE; // 2226
   const WELL_STACKED_ROCKS = ObjectIdentifiers.WELL_STACKED_ROCKS; // 2234
   const TOMB_DOLMEN = ObjectIdentifiers.TOMB_DOLMEN; // 2235 (Bervirius')
-  const CLIMBING_ROCKS_IDS = new Set([
-    ObjectIdentifiers.CLIMBING_ROCKS,
-    ObjectIdentifiers.CLIMBING_ROCKS_2,
-    ObjectIdentifiers.CLIMBING_ROCKS_3,
-  ]); // 2236, 10851, 10852
+  // 2236, in Bervirius' tomb; 10851 is the Agility Pyramid's top and 10852 is never placed.
+  const CLIMBING_ROCKS = ObjectIdentifiers.CLIMBING_ROCKS; // 2236
   const PALM_TREE = ObjectIdentifiers.PALM_TREE; // 2237
   const CARVED_DOORS_IDS = new Set([ObjectIdentifiers.CARVED_DOORS, ObjectIdentifiers.CARVED_DOORS_2]); // 2240, 2241
   const TOMB_EXIT_IDS = new Set([
@@ -639,7 +636,7 @@ module.exports = function registerShiloVillageQuest(api) {
         : "visiting-the-tomb-of-bervirius-search-well-stacked-rocks");
       return;
     }
-    if (CLIMBING_ROCKS_IDS.has(objectId)) {
+    if (objectId === CLIMBING_ROCKS) {
       event.handled = true;
       scene(player, TRUFITUS, "visiting-the-tomb-of-bervirius-climb-climbing-rocks");
       return;

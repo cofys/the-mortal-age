@@ -11,6 +11,7 @@ import {
 import {
     deriveMenuEntriesForWidget,
     getWidgetTargetLabelForMenu,
+    hasNativeWidgetOperation,
     sanitizeText,
 } from "../../../widgets/menu/utils";
 import { resolveWidgetIdentifiers } from "../widgetActionPayload";
@@ -93,7 +94,7 @@ export function createPrimaryWidgetActionResolver(
                           lower &&
                           lower !== "cancel" &&
                           lower !== "examine" &&
-                          lower !== "inspect" &&
+                          (lower !== "inspect" || hasNativeWidgetOperation(e)) &&
                           lower !== "walk here"
                       );
                   })
@@ -139,7 +140,7 @@ export function createPrimaryWidgetActionResolver(
             const isNonAction =
                 lower === "cancel" ||
                 lower === "examine" ||
-                lower === "inspect" ||
+                (lower === "inspect" && !hasNativeWidgetOperation(chosen)) ||
                 lower === "walk here";
             if (chosen && !isNonAction) {
                 entryOption = String(chosen.option);

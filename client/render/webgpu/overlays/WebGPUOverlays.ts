@@ -295,7 +295,7 @@ export class WebGPUOverlays {
         const width = Math.max(1, canvas.width | 0);
         const height = Math.max(1, canvas.height | 0);
         try {
-            const rect = this.renderer.getSceneViewportWidgetRect();
+            const rect = this.renderer.getSceneViewportClipRect();
             // A 1x1 rect means the UI layout is not built yet (login/loading, or a sibling
             // subsystem failed to init); fall back to the full canvas rather than scissor
             // every overlay away.

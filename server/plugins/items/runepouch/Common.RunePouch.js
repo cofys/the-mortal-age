@@ -80,7 +80,9 @@ function itemName(item) {
 }
 
 function isPouch(item) {
-  return SLOTS_BY_POUCH.has(itemName(item));
+  // Minigame replacement pouches share the name but never store a player's saved runes.
+  return SLOTS_BY_POUCH.has(itemName(item)) &&
+    core.CacheDefinitions.getItem(item.getId()).inventoryActions?.includes("Open") === true;
 }
 
 /**

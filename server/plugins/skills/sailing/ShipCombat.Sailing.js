@@ -1,38 +1,20 @@
-// Boat cannons: Operate mans an installed cannon on the player's current deck; Attack (op2) on
-// a hostile static ship fires one shot. Projectiles/animation/flight and the 7-tick repeated
-// attack interval are the Red Reef capture (4152); damage is not captured (fixed 25).
+// Boat cannons against hostile static ships (a quest's pirates), and what damages the player's
+// own boat. Manning and firing a cannon are seacombat/Cannon.SeaCombat.js's; Attack (op2) on a
+// hostile ship fires the manned cannon at it, with the cannon's reach (rsprox: Red Reef capture
+// 4152 for the ship's shots back, every 7 ticks). A ship's own damage isn't captured (fixed 5).
 const StaticShips = require("./StaticShips.Sailing");
 
-const CANNON_ATTACK_ANIMATION = 13323; // sailing_cannon01_small01_attack01
-const CANNON_ATTACK_GRAPHIC = 3538; // vfx_sailing_cannon01_small01_attack02
-const CANNON_IMPACT_GRAPHIC = 3541; // vfx_sailing_cannon01_small01_impact01
 const BRONZE_CANNONBALL_PROJECTILE = 3487; // sailing_cannonball_travel_bronze
-const ADAMANT_CANNONBALL_PROJECTILE = 3492; // sailing_cannonball_travel_adamant
 const FLIGHT_CYCLES = 86;
-const ATTACK_INTERVAL_TICKS = 7; // captured player cannon shots every 7 ticks
+/** 120 in the capture's map_projanim_v2, which rsprox prints four times over. */
+const HOSTILE_START_HEIGHT = 30;
 const ENEMY_ATTACK_INTERVAL_TICKS = 7; // captured pirate cannon/arrow volleys
 const ENEMY_DAMAGE = 5; // observed player-boat hits are 1-6; exact attribution is not captured
-const PLAYER_BOAT_HP_VARBIT = 19181;
-const PLAYER_BOAT_STORED_HP_VARBIT = 19458;
-const DAMAGE = 25;
 const RANGE_TILES = 24;
-const CANNON_REACH = 2; // normal deck interaction reach (the object plus one tile)
 const NOT_MOUNTED = "You can only attack a boat with a weapon mounted on another boat!";
-/** Captured bronze/adamant projectiles; other cannonball tiers use the bronze visual. */
-const AMMUNITION = [
-  [31906, BRONZE_CANNONBALL_PROJECTILE], // bronze
-  [31908, BRONZE_CANNONBALL_PROJECTILE], // iron
-  [2, BRONZE_CANNONBALL_PROJECTILE], // steel (legacy id)
-  [31910, BRONZE_CANNONBALL_PROJECTILE], // mithril
-  [31912, ADAMANT_CANNONBALL_PROJECTILE], // adamant
-  [31914, ADAMANT_CANNONBALL_PROJECTILE], // rune
-  [31916, ADAMANT_CANNONBALL_PROJECTILE], // dragon
-];
 
 let core;
 let hostileFireStarted = false;
-/** player index -> { player, boat, cannon, cannonId, location, nextAttackTick }. */
-const manning = new Map();
 
 function attach(api) {
   core = api.core ?? api;
@@ -43,67 +25,12 @@ function coreApi() {
   return core;
 }
 
-/** Helper for direct callers/tests; logout hooks receive the event object. */
-function forgetPlayer(player) {
-  manning.delete(player.getIndex());
-}
-
-function logout({ player }) {
-  forgetPlayer(player);
-}
-
-function cannonInstalled(state) {
-  const deck = coreApi().BoatManager.getDeck(state.boat);
-  return !!deck?.getObjects?.().some((object) =>
-    object.getId() === state.cannonId && object.getLocation().equals(state.location));
-}
-
-function operateCannon(event) {
-  const name = String(event.definition?.getName?.() ?? "");
-  if (!/cannon/i.test(name) || String(event.option ?? "").toLowerCase() !== "operate") return false;
-  const boat = coreApi().BoatManager.getBoatAboard(event.player);
-  if (!boat) {
-    event.player.sendMessage("You need to be on a boat to use a cannon.");
-    event.handled = true;
-    return true;
-  }
-  const location = new (coreApi().Location)(event.location.x, event.location.y, event.location.z);
-  const installed = coreApi().BoatManager.getDeck(boat)?.getObjects?.().some((object) =>
-    object.getId() === event.objectId && object.getLocation().equals(location));
-  if (!installed || !event.player.getLocation().isWithinDistance(location, CANNON_REACH)) {
-    event.player.sendMessage("You can't use that cannon.");
-    event.handled = true;
-    return true;
-  }
-  const previous = manning.get(event.player.getIndex());
-  const sameCannon = previous && previous.boat === boat
-    && previous.cannonId === event.objectId
-    && previous.location.equals(location);
-  // Re-manning the same cannon must keep both the cooldown and the state object identity: a
-  // queued shot's impact is cancelled when `manning` no longer holds that exact state.
-  const state = sameCannon ? previous : {
-    player: event.player,
-    boat,
-    cannonId: event.objectId,
-    location,
-    nextAttackTick: 0,
-  };
-  state.player = event.player;
-  state.cannon = event.object;
-  manning.set(event.player.getIndex(), state);
-  event.player.sendMessage("You man the cannon and take aim...");
-  event.handled = true;
-  return true;
+function cannons() {
+  return require("./seacombat/Cannon.SeaCombat");
 }
 
 function shipTile(ship) {
   return new (coreApi().Location)(ship.boat.tileX, ship.boat.tileY, ship.boat.level);
-}
-
-/** The main-world tile under the cannon, not its deck-scene coordinate. */
-function cannonWorldLocation(state) {
-  const tile = state.boat.deckTileToWorld(state.location.x, state.location.y);
-  return new (coreApi().Location)(tile.x, tile.y, state.boat.level);
 }
 
 function viewersFor(player, attackerBoat, targetBoat) {
@@ -112,94 +39,47 @@ function viewersFor(player, attackerBoat, targetBoat) {
     boat.canSeeBoat(other, attackerBoat) && boat.canSeeBoat(other, targetBoat))];
 }
 
-function fireProjectile(player, state, target, projectileId) {
-  const start = cannonWorldLocation(state);
-  const end = shipTile(target);
-  const viewers = viewersFor(player, state.boat, target.boat);
-  for (const viewer of viewers) {
-    viewer.getPacketSender().sendProjectile(
-      start, end, 0, FLIGHT_CYCLES, projectileId, 120, 0, null, 0,
-    );
-    viewer.getPacketSender().sendGraphic(new (coreApi().Graphic)(CANNON_ATTACK_GRAPHIC), start);
-    viewer.getPacketSender().sendObjectAnimation(state.cannon, new (coreApi().Animation)(CANNON_ATTACK_ANIMATION));
-  }
-}
-
-function ammoFor(player) {
-  for (const [itemId, projectileId] of AMMUNITION) {
-    if (player.getInventory().contains(itemId)) return { itemId, projectileId };
-  }
-  return undefined;
-}
-
+/** Attack (op2) on a hostile static ship: the manned cannon fires at it. */
 function attackWorldEntity(event) {
   if (event.clickType !== 2) return false;
   const target = StaticShips.get(event.entityIndex);
   if (!target || !target.definition.hostile) return false;
   if (!StaticShips.canSee(event.player, target)) return false;
-  const state = manning.get(event.player.getIndex());
-  if (!state) {
+  const gunner = cannons().mannedBy(event.player);
+  event.handled = true;
+  if (!gunner) {
     event.player.sendMessage(NOT_MOUNTED);
-    event.handled = true;
     return true;
-  }
-  const boat = coreApi().BoatManager.getBoatAboard(event.player);
-  if (boat !== state.boat || !cannonInstalled(state)
-    || !event.player.getLocation().isWithinDistance(state.location, CANNON_REACH)) {
-    manning.delete(event.player.getIndex());
-    return false;
   }
   if (!StaticShips.inRange(event.player, target, RANGE_TILES)) {
     event.player.sendMessage("You can't reach that boat.");
-    event.handled = true;
     return true;
   }
   const now = coreApi().World.getProcessCycle();
-  if (now < state.nextAttackTick) {
-    event.handled = true;
-    return true;
-  }
-  const ammo = ammoFor(event.player);
-  if (!ammo) {
-    event.player.sendMessage("You have no cannonballs to fire.");
-    event.handled = true;
-    return true;
-  }
-  event.player.getInventory().deleteNumber(ammo.itemId, 1);
-  state.nextAttackTick = now + ATTACK_INTERVAL_TICKS;
-  event.handled = true;
-  fireProjectile(event.player, state, target, ammo.projectileId);
-
+  if (now < gunner.nextAttackTick) return true;
+  gunner.nextAttackTick = now + gunner.stats.attackRate;
   const player = event.player;
-  const impactTicks = Math.max(1, Math.ceil(
-    FLIGHT_CYCLES * 20 / coreApi().GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE,
-  ));
-  coreApi().TaskManager.submit(new (class extends coreApi().Task {
-    constructor() { super(impactTicks, player, false); }
-    execute() {
-      this.stop();
-      // The shot is cancelled by leaving the deck, losing/replacing the cannon, logging out,
-      // or the target being removed/sunk.
-      if (manning.get(player.getIndex()) !== state
-        || coreApi().BoatManager.getBoatAboard(player) !== state.boat
-        || !cannonInstalled(state)
-        || !player.getLocation().isWithinDistance(state.location, CANNON_REACH)
-        || StaticShips.get(target.boat.entityIndex) !== target
-        || !StaticShips.inRange(player, target, RANGE_TILES)) return;
-      const result = StaticShips.damage(target, DAMAGE);
-      if (result.damage <= 0) return;
-      for (const viewer of viewersFor(player, state.boat, target.boat)) {
-        viewer.getPacketSender().sendGraphic(new (coreApi().Graphic)(CANNON_IMPACT_GRAPHIC), shipTile(target));
-      }
-      coreApi().PluginManager.emitCustomEvent("sailing:ship-hit", {
-        player, ship: target, damage: result.damage, hitpoints: result.hitpoints,
-      });
-      if (!result.sunk || result.alreadySunk) return;
-      coreApi().PluginManager.emitCustomEvent("sailing:ship-sunk", { player, ship: target });
-      if (StaticShips.get(target.boat.entityIndex) === target) StaticShips.dispose(target);
-    }
-  })());
+  cannons().fire(gunner, {
+    ship: target,
+    onShipHit: (damage) => shipHit(player, gunner, target, damage),
+  });
   return true;
+}
+
+/** A shot landing on a static ship, unless the gunner left the cannon or the ship has gone. */
+function shipHit(player, gunner, target, damage) {
+  if (cannons().mannedBy(player) !== gunner || StaticShips.get(target.boat.entityIndex) !== target) return;
+  const result = StaticShips.damage(target, damage);
+  if (result.damage <= 0) return;
+  for (const viewer of viewersFor(player, gunner.boat, target.boat)) {
+    viewer.getPacketSender().sendGraphic(new (coreApi().Graphic)(3541), shipTile(target));
+  }
+  coreApi().PluginManager.emitCustomEvent("sailing:ship-hit", {
+    player, ship: target, damage: result.damage, hitpoints: result.hitpoints,
+  });
+  if (!result.sunk || result.alreadySunk) return;
+  coreApi().PluginManager.emitCustomEvent("sailing:ship-sunk", { player, ship: target });
+  if (StaticShips.get(target.boat.entityIndex) === target) StaticShips.dispose(target);
 }
 
 function playerBoatTile(boat) {
@@ -233,7 +113,7 @@ function fireHostileCannon(ship, target) {
   const end = playerBoatTile(target.boat);
   for (const viewer of viewersFor(target.player, ship.boat, target.boat)) {
     viewer.getPacketSender().sendProjectile(
-      start, end, 0, FLIGHT_CYCLES, BRONZE_CANNONBALL_PROJECTILE, 120, 0, null, 0,
+      start, end, 0, FLIGHT_CYCLES, BRONZE_CANNONBALL_PROJECTILE, HOSTILE_START_HEIGHT, 0, null, 0,
     );
   }
   const impactTicks = Math.max(1, Math.ceil(
@@ -254,23 +134,25 @@ function fireHostileCannon(ship, target) {
 }
 
 /**
- * Damages the player's own boat (a hostile ship's shot, a Barracuda Trial's lightning): its HP and
- * the HP varbits, `sailing:ship-attacked`, and at 0 the escape to land.
+ * Damages the player's own boat (a sea creature, a hostile ship's shot, a Barracuda Trial's
+ * lightning): its HP, the hitsplat on its HP-bar NPC, `sailing:ship-attacked`, and at 0 the player
+ * escapes to land, losing the cargo when a creature or ship sank it (seacombat/BoatHp.SeaCombat.js).
  */
-function damagePlayerBoat(player, damage, { ship, target } = {}) {
+function damagePlayerBoat(player, damage, { ship, target, creature } = {}) {
   const owned = coreApi().Sailing.activeBoat(player);
   if (!owned) return undefined;
-  // Hitpoints are the parts' maximum less the damage taken (a new or recovered boat is whole).
-  const max = require("./BoatParts.Sailing").boatStats(owned).hitpoints;
-  owned.damage = Math.min(max, (owned.damage ?? 0) + damage);
-  owned.hitpoints = Math.max(0, max - owned.damage);
-  player.getPacketSender().sendVarbit(PLAYER_BOAT_HP_VARBIT, owned.hitpoints);
-  player.getPacketSender().sendVarbit(PLAYER_BOAT_STORED_HP_VARBIT + owned.slot, owned.hitpoints);
+  const BoatHp = require("./seacombat/BoatHp.SeaCombat");
+  const hitpoints = BoatHp.damage(player, owned, damage, coreApi().Sailing.instanceAboard(player));
   coreApi().PluginManager.emitCustomEvent("sailing:ship-attacked", {
-    player, ship, target: target ?? coreApi().Sailing.instanceAboard(player), damage, hitpoints: owned.hitpoints,
+    player, ship, creature, target: target ?? coreApi().Sailing.instanceAboard(player), damage, hitpoints,
   });
-  if (owned.hitpoints <= 0) coreApi().Sailing.escape(player);
-  return owned.hitpoints;
+  if (hitpoints <= 0 && coreApi().Sailing.instanceAboard(player)) {
+    // Sunk in a fight, the hold goes with it (Wiki: Boat combat); a trial's hazards only send the
+    // player back, as before.
+    if (ship || creature) BoatHp.loseCargo(owned);
+    coreApi().Sailing.escape(player);
+  }
+  return hitpoints;
 }
 
 function tickHostileShips() {
@@ -299,13 +181,9 @@ module.exports = {
   damagePlayerBoat,
   register(api) {
     initialize(api);
-    api.onObjectInteraction(operateCannon);
     api.onWorldEntityInteraction(attackWorldEntity);
-    api.onPlayerLogout(logout);
   },
   _test: {
-    manning, forget: forgetPlayer, logout, operateCannon, attackWorldEntity, cannonInstalled, ammoFor,
-    AMMUNITION, DAMAGE, RANGE_TILES, CANNON_REACH, ATTACK_INTERVAL_TICKS, FLIGHT_CYCLES,
-    ENEMY_ATTACK_INTERVAL_TICKS, ENEMY_DAMAGE, tickHostileShips, fireHostileCannon,
+    attackWorldEntity, RANGE_TILES, FLIGHT_CYCLES, ENEMY_ATTACK_INTERVAL_TICKS, ENEMY_DAMAGE, tickHostileShips, fireHostileCannon,
   },
 };

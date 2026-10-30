@@ -103,7 +103,7 @@ module.exports = function registerGertrudesCatQuest(api) {
     if (stage >= STAGE_STARTED) {
       return ["Gertrude asked me to speak to", "<col=800000>Shilop and Wilough</col> in Varrock marketplace."];
     }
-    return ["Speak to <col=800000>Gertrude</col> in her house", "west of Varrock."];
+    return ["I can start this quest by talking to <col=800000>Gertrude</col> in her house just west of <col=800000>Varrock</col>."];
   }
 
   function grantReward(player) {

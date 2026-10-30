@@ -666,6 +666,16 @@ export class WebGPUActors {
         return this.gfx?.projectiles;
     }
 
+    invalidateNpcDefinitions(): void {
+        this.asyncNpcPoses?.invalidate();
+        this.npcBounds.clear();
+        this.npcPose?.clear();
+        this.dynamicNpcLoader?.clear();
+        // This cache remains usable after releasing its buffers. Player entries
+        // are rebuilt too, so no draw can keep a retired shared buffer reference.
+        this.geometry?.destroy();
+    }
+
     dispose(): void {
         this.renderer.osrsClient.npcEcs.mutationListeners.delete(this.npcPoseMutation);
         this.asyncNpcPoses?.dispose();

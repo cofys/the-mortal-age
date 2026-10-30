@@ -24,6 +24,7 @@ const ShipCombat = require("../plugins/skills/sailing/ShipCombat.Sailing");
 const core = PluginManager.getCoreApi();
 StaticShips.attach({ core });
 ShipCombat.attach({ core });
+require("../plugins/skills/sailing/seacombat/Common.SeaCombat").init({ core });
 
 const RAFT = {
   type: "raft", configId: 1, templateChunkX: 480, templateChunkY: 807,
@@ -106,31 +107,6 @@ function raft(index, x, y, ownerOnly = false) {
   const boat = BoatManager.spawn(index, RAFT, { fineX: x * 128 + 64, fineY: y * 128 + 64, level: 0, angle: 1024 });
   boat.ownerOnly = ownerOnly;
   return boat;
-}
-
-function cannonObject(boat, id = 59450) {
-  return {
-    getId: () => id,
-    getLocation: () => new Location(boat.deckBaseX + 2, boat.deckBaseY + 3, 0),
-    getType: () => 10,
-    getFace: () => 0,
-  };
-}
-
-function installCannon(boat, id = 59450) {
-  BoatManager.setDeckLoc(boat, { id, x: 2, y: 3, level: 0, shape: 10, rotation: 0 });
-}
-
-function manCannon(player, boat, id = 59450) {
-  return ShipCombat._test.operateCannon({
-    player,
-    object: cannonObject(boat, id),
-    objectId: id,
-    definition: { getName: () => "Adamant cannon" },
-    option: "operate",
-    location: { x: boat.deckBaseX + 2, y: boat.deckBaseY + 3, z: 0 },
-    handled: false,
-  });
 }
 
 test("OPWORLDENTITY options decode with live's byte transforms", () => {
@@ -462,7 +438,7 @@ test("Pandemonium's tutorial ship keeps its explicit deck tiles and dynamic locs
   }
 });
 
-test("attacking without the attack option, ammo or a cannon is refused", () => {
+test("attacking a hostile ship without manning a cannon is refused", () => {
   const boat = raft(1, 2830, 2360);
   const ship = StaticShips.spawn("red_reef_pirate_1");
   const player = fakePlayer(1, new Location(boat.deckBaseX + 3, boat.deckBaseY + 4, 0), BoatManager.getDeck(boat));
@@ -475,109 +451,9 @@ test("attacking without the attack option, ammo or a cannon is refused", () => {
       player, entityIndex: ship.boat.entityIndex, clickType: 2, handled: false,
     }), true);
     assert.deepEqual(player.messages, ["You can only attack a boat with a weapon mounted on another boat!"]);
-
-    installCannon(boat);
-    assert.equal(manCannon(player, boat), true);
-    player.inventory.clear();
-    assert.equal(ShipCombat._test.attackWorldEntity({
-      player, entityIndex: ship.boat.entityIndex, clickType: 2, handled: false,
-    }), true);
-    assert.equal(player.messages.at(-1), "You have no cannonballs to fire.");
-    assert.equal(player.projectiles.length, 0);
   } finally {
     StaticShips.dispose(ship);
     BoatManager.dispose(boat);
-    ShipCombat._test.forget(player);
-  }
-});
-
-test("cannon manning requires reach and is lost when the player walks away", () => {
-  const boat = raft(1, 2830, 2360);
-  const ship = StaticShips.spawn("red_reef_pirate_1");
-  const player = fakePlayer(1, new Location(boat.deckBaseX + 7, boat.deckBaseY + 7, 0), BoatManager.getDeck(boat));
-  installCannon(boat);
-  player.inventory.set(31912, 2);
-  try {
-    assert.equal(manCannon(player, boat), true);
-    assert.equal(player.messages.at(-1), "You can't use that cannon.");
-    assert.equal(ShipCombat._test.manning.has(player.getIndex()), false);
-    player.moveTo(new Location(boat.deckBaseX + 3, boat.deckBaseY + 4, 0));
-    assert.equal(manCannon(player, boat), true);
-    player.moveTo(new Location(boat.deckBaseX + 6, boat.deckBaseY + 6, 0));
-    assert.equal(ShipCombat._test.attackWorldEntity({
-      player, entityIndex: ship.boat.entityIndex, clickType: 2, handled: false,
-    }), false);
-    assert.equal(ShipCombat._test.manning.has(player.getIndex()), false);
-    assert.equal(player.projectiles.length, 0);
-  } finally {
-    StaticShips.dispose(ship);
-    BoatManager.dispose(boat);
-    ShipCombat._test.forget(player);
-  }
-});
-
-test("cannon shots use the selected cannonball, root projectile coords and 7-tick cooldown", () => {
-  const boat = raft(1, 2830, 2360, true);
-  const ship = StaticShips.spawn("red_reef_pirate_1");
-  const player = fakePlayer(1, new Location(boat.deckBaseX + 3, boat.deckBaseY + 4, 0), BoatManager.getDeck(boat));
-  const outsider = fakePlayer(2, new Location(2831, 2361, 0));
-  player.localPlayers = [outsider];
-  player.inventory.set(31912, 2);
-  try {
-    installCannon(boat);
-    manCannon(player, boat);
-    const event = { player, entityIndex: ship.boat.entityIndex, clickType: 2, handled: false };
-    assert.equal(ShipCombat._test.attackWorldEntity(event), true);
-    assert.equal(player.inventory.get(31912), 1, "one cannonball consumed");
-    assert.equal(player.projectiles.length, 1);
-    assert.equal(player.projectiles[0].rest[2], 3492, "adamant projectile");
-    assert.ok(player.projectiles[0].start.getX() < 3000, "projectile starts from the main world");
-    assert.equal(outsider.projectiles.length, 0, "owner-only boat effects stay private");
-
-    assert.equal(ShipCombat._test.attackWorldEntity({ ...event, handled: false }), true);
-    assert.equal(player.projectiles.length, 1, "cooldown blocks a second shot");
-  } finally {
-    StaticShips.dispose(ship);
-    BoatManager.dispose(boat);
-    ShipCombat._test.forget(player);
-  }
-});
-
-test("queued impacts cancel on leaving and sink only once when they land", () => {
-  const boat = raft(1, 2830, 2360);
-  const ship = StaticShips.spawn("red_reef_pirate_1");
-  const player = fakePlayer(1, new Location(boat.deckBaseX + 3, boat.deckBaseY + 4, 0), BoatManager.getDeck(boat));
-  player.inventory.set(31912, 5);
-  const events = [];
-  const previousEmit = PluginManager.emitCustomEvent;
-  PluginManager.emitCustomEvent = (name, payload) => events.push({ name, payload });
-  try {
-    installCannon(boat);
-    installCannon(boat);
-    ship.hitpoints = 25;
-    manCannon(player, boat);
-    const event = { player, entityIndex: ship.boat.entityIndex, clickType: 2, handled: false };
-    // Queue two shots by bypassing the cooldown between clicks.
-    assert.equal(ShipCombat._test.attackWorldEntity(event), true);
-    ShipCombat._test.manning.get(player.getIndex()).nextAttackTick = 0;
-    assert.equal(ShipCombat._test.attackWorldEntity({ ...event, handled: false }), true);
-    for (let tick = 0; tick < 3; tick++) TaskManager.process();
-    assert.deepEqual(events.map((entry) => entry.name), ["sailing:ship-hit", "sailing:ship-sunk"]);
-    assert.equal(StaticShips.get(ship.boat.entityIndex), undefined);
-
-    // A fresh target shot cancels if the player steps off the boat before impact.
-    const secondShip = StaticShips.spawn("red_reef_pirate_2");
-    BoatManager.getDeck(boat).leave(player, false);
-    ShipCombat._test.manning.get(player.getIndex()).nextAttackTick = 0;
-    assert.equal(ShipCombat._test.attackWorldEntity({
-      player, entityIndex: secondShip.boat.entityIndex, clickType: 2, handled: false,
-    }), false, "not aboard the cannon boat");
-    StaticShips.dispose(secondShip);
-  } finally {
-    PluginManager.emitCustomEvent = previousEmit;
-    StaticShips.dispose(ship);
-    BoatManager.dispose(boat);
-    ShipCombat._test.forget(player);
   }
 });
 
@@ -683,7 +559,7 @@ test("the static ship plugin attaches core and boards/disembarks on op1", () => 
   }
 });
 
-test("registered logout hooks receive {player}, clean manning and preserve returns", () => {
+test("registered logout hooks receive {player} and preserve returns", () => {
   const plugin = require("../plugins/skills/sailing/StaticShips.plugin");
   // Register through the real PluginManager api so onPlayerLogout uses the real hook contract.
   plugin.register(PluginManager.createApi("SailingLogoutTest"));
@@ -705,9 +581,6 @@ test("registered logout hooks receive {player}, clean manning and preserve retur
   const boat = raft(22, 2830, 2360);
   const sailor = fakePlayer(22, new Location(boat.deckBaseX + 3, boat.deckBaseY + 4, 0), BoatManager.getDeck(boat));
   BoatManager.getDeck(boat).enter(sailor);
-  installCannon(boat);
-  manCannon(sailor, boat);
-  assert.equal(ShipCombat._test.manning.has(22), true);
 
   const errors = [];
   const previousError = console.error;
@@ -725,7 +598,6 @@ test("registered logout hooks receive {player}, clean manning and preserve retur
   assert.deepEqual([owner.getLocation().getX(), owner.getLocation().getY()], [2870, 2506]);
   assert.deepEqual([passenger.getLocation().getX(), passenger.getLocation().getY()], [2870, 2506]);
   assert.ok(StaticShips.get(publicShip.boat.entityIndex), "a public ship survives a passenger's logout");
-  assert.equal(ShipCombat._test.manning.has(22), false, "manning cleaned by the registered hook");
 
   StaticShips.dispose(publicShip);
   BoatManager.dispose(boat);

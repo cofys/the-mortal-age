@@ -88,8 +88,9 @@ function register() {
   };
 }
 
-function player() {
+function player({ holdDialogue = false } = {}) {
   const attributes = new Map(), items = new Map(), packets = [], messages = [], xp = [], worn = new Map(), flags = new Set();
+  let dialogueOpen = false;
   let location = new core.Location(2521, 3495, 0);
   const inventory = {
     getAmount: (id) => items.get(id) || 0,
@@ -127,9 +128,16 @@ function player() {
     getPacketSender: () => packet,
     getFrameUpdater: () => ({ clear() {} }),
     getDialogueManager: () => ({
-      reset() {},
-      startDialogues: (builder) => { for (const dialogue of builder.getDialogues().values()) dialogue.send(p); },
-      isActive: () => false,
+      reset() { dialogueOpen = false; },
+      startDialogues: (builder) => {
+        dialogueOpen = true;
+        for (const dialogue of builder.getDialogues().values()) {
+          // Hold the message open so a test can dismiss it without Continue.
+          if (holdDialogue && dialogue instanceof core.ActionDialogue) continue;
+          dialogue.send(p);
+        }
+      },
+      isActive: () => holdDialogue && dialogueOpen,
     }),
     getSkillManager: () => ({
       getCombatLevel: () => 20,
@@ -450,6 +458,17 @@ test('the rock and river swim point route the player to the north bank', () => {
   assert.ok(p.getLocation().equals(new core.Location(2527, 3413, 0)), 'the real River Swim point washes the player downstream');
 });
 
+test('closing the downstream message without Continue releases the movement lock', () => {
+  const q = register(), p = player({ holdDialogue: true });
+  q.call('onObjectInteraction', objectEvent(p, 10283, 2511, 3476));
+  q.tick(2);
+  assert.ok(p.getLocation().equals(new core.Location(2527, 3413, 0)));
+  assert.equal(p.isMovementBlocked(), true, 'the arrival message still holds the player');
+  p.getDialogueManager().reset();
+  q.tick(1);
+  assert.equal(p.isMovementBlocked(), false, 'dismissing the message unlocks movement');
+});
+
 test('the key still gates the Baxtorian door when Doors handles it first', () => {
   const q = register(), p = player();
   q.quest.setStage(p, STAGE.dungeon);
@@ -466,6 +485,54 @@ test('the key still gates the Baxtorian door when Doors handles it first', () =>
   assert.equal(q.quest.getStage(p), STAGE.door);
   assert.equal(p.attributes.get('waterfall-quest:baxtorian-door'), 1);
   assert.equal(p.count(ID.baxKey), 1, 'the dungeon key is kept');
+});
+
+test('the raised-room door returns to the lower passage instead of swinging', () => {
+  const q = register(), p = player();
+  q.quest.setStage(p, STAGE.complete);
+  p.moveTo(new core.Location(2606, 9895, 0));
+  const exit = {
+    player: p, objectId: ID.baxDoor, location: { x: 2606, y: 9892, z: 0 }, handled: false,
+  };
+  q.emit('door:toggle', exit);
+  assert.equal(exit.handled, true, 'the raised door is not left for Doors to swing');
+  assert.ok(p.getLocation().equals(new core.Location(2566, 9900, 0)), 'Open returns to the lower passage');
+
+  p.give(ID.baxKey, 1);
+  q.quest.setStage(p, STAGE.dungeon);
+  const lower = {
+    player: p, objectId: ID.baxDoor, location: { x: 2566, y: 9901, z: 0 }, handled: false,
+  };
+  q.emit('door:toggle', lower);
+  assert.equal(lower.handled, false, 'the lower door still swings');
+  assert.ok(p.getLocation().equals(new core.Location(2566, 9900, 0)), 'the lower door does not teleport');
+
+  p.moveTo(new core.Location(2604, 9901, 0));
+  const other = {
+    player: p, objectId: ID.baxDoor, location: { x: 2604, y: 9900, z: 0 }, handled: false,
+  };
+  q.emit('door:toggle', other);
+  assert.equal(other.handled, true, 'the other raised door is not left for Doors to swing');
+  assert.ok(p.getLocation().equals(new core.Location(2566, 9900, 0)));
+});
+
+test('the inside waterfall door returns to the ledge', () => {
+  const q = register(), p = player();
+  q.quest.setStage(p, STAGE.complete);
+  p.moveTo(new core.Location(2575, 9862, 0));
+  const exit = {
+    player: p, objectId: 2000, location: { x: 2575, y: 9861, z: 0 }, handled: false,
+  };
+  q.emit('door:toggle', exit);
+  assert.equal(exit.handled, true, 'the inside door is not left for Doors to swing');
+  assert.ok(p.getLocation().equals(new core.Location(2511, 3463, 0)), 'Open returns to the ledge');
+
+  const elsewhere = {
+    player: p, objectId: 2000, location: { x: 2000, y: 2000, z: 0 }, handled: false,
+  };
+  q.emit('door:toggle', elsewhere);
+  assert.equal(elsewhere.handled, false, 'another door 2000 is left alone');
+  assert.ok(p.getLocation().equals(new core.Location(2511, 3463, 0)));
 });
 
 test('the Waterfall dungeon doors swap to their cache open locs', () => {

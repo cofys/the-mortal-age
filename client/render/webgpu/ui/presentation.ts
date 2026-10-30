@@ -321,7 +321,7 @@ export class WebgpuUiPresentation {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, bufW, bufH);
         // Sky clears and HD/FXAA cover the full target; mask them without clipping canvas input.
-        const viewport = this.renderer.getSceneViewportWidgetRect();
+        const viewport = this.renderer.getSceneViewportClipRect();
         const hasGutters =
             viewport.x > 0 || viewport.y > 0 ||
             viewport.x + viewport.width < bufW || viewport.y + viewport.height < bufH;

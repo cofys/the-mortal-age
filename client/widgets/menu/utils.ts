@@ -21,7 +21,15 @@ export type SimpleMenuEntry = {
 /** Widget ops with 0-based index above targetPriority use the low-priority opcode. */
 const WIDGET_OP_NORMAL = 57;
 const WIDGET_OP_LOW_PRIORITY = 1007;
+const WIDGET_TARGET = 25;
 const DEFAULT_TARGET_PRIORITY = 4;
+
+/** Native component operation/target metadata takes priority over its label. */
+export function hasNativeWidgetOperation(entry?: {opIndex?: number; opcode?: number}): boolean {
+    return (typeof entry?.opIndex === "number" && Number.isInteger(entry.opIndex) && entry.opIndex >= 0) ||
+        entry?.opcode === WIDGET_OP_NORMAL || entry?.opcode === WIDGET_OP_LOW_PRIORITY ||
+        entry?.opcode === WIDGET_TARGET;
+}
 
 function getWidgetTargetPriority(w: any): number {
     return typeof w?.targetPriority === "number" ? w.targetPriority | 0 : DEFAULT_TARGET_PRIORITY;

@@ -129,21 +129,8 @@ function builtSpec(boat, base) {
   return { ...spec, locs: [...spec.locs, ...hotspotLocs(boat)] };
 }
 
-/**
- * Facility and part schematics the customisation interface shows as "Unknown" until found
- * (cache script 9078: one varbit each, found at 1+): salvaging stations, the gale catcher,
- * eternal braziers, dragon hooks, rosewood cargo holds, the dragon cannon, the top-tier hulls,
- * sails, helms and keels, and the ballistic attractor. Every schematic is unlocked here; finding
- * them doesn't exist yet.
- */
-const SCHEMATIC_VARBITS = [19544, 19545, 19546, 19547, 19548, 19549, 19550, 19551, 19552, 19553, 20227];
-
-/**
- * Describes every owned boat (the per-boat varbits), as live OSRS has them at login, and
- * unlocks every schematic.
- */
+/** Describes owned boats; Schematics restores only recipes the player has learned. */
 function describeBoatsOnLogin({ player }) {
-  for (const varbit of SCHEMATIC_VARBITS) setVarbit(player, varbit, 1);
   sendBoatVarbits(player);
 }
 

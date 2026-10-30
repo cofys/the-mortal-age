@@ -19,6 +19,7 @@ let EXIT_PORTALS;
 let RIFT_RUNES;
 let RUINS_BY_ID;
 const RUINS_DATA = require("./data/runecrafting-ruins.json");
+const OURANIA_DATA = require("./data/ourania-altar.json");
 const Pouches = require("./runecrafting/Pouches.Runecrafting");
 let RUINS;
 /** The exit portal's sound (synth 200). */
@@ -31,14 +32,30 @@ let CRAFT_RUNES_GRAPHIC;
 const CRAFT_RUNES_GRAPHIC_HEIGHT = 92;
 let CRAFT_RUNES_ANIMATION;
 let RUNE_ESSENCE_MINE;
+let OURANIA_ALTAR;
+let OURANIA_RUNES;
+let OURANIA_ESSENCE;
 let ABYSS_INNER_RING;
 
 const RUNE_MYSTERIES_STAGE_ATTRIBUTE = "quest.rune_mysteries.stage";
 const RUNE_MYSTERIES_COMPLETE_STAGE = 6;
 const ABYSS_OBSTACLE_XP = 25;
 const ABYSS_SKULL_SECONDS = 10 * 60;
+/**
+ * The Ourania Altar (Wiki: Ourania Altar) binds pure and daeyalt essence into a random rune each,
+ * rolled out of `rolls` on its level's weights. The XP is 1.7 times the crafted rune's (1.5 times
+ * that for daeyalt), and the medium Ardougne Diary adds a rune at the rune's `extraChance`, no XP.
+ * Messages are captured (rsprox captures 819, 822).
+ */
+const OURANIA_XP_SCALE = 1.7;
+const DAEYALT_XP_SCALE = 1.5;
+const OURANIA_CRAFT_MESSAGE = "You bind the temple's power into runes.";
+const OURANIA_DIARY_MESSAGE = "Your medium level knowledge of the local area allows you to bind additional runes.";
+const OURANIA_NO_ESSENCE = "You do not have any pure or daeyalt essences to bind.";
 const RIFT_GUARDIAN_BASE = 1795758;
 const BLOOD_RIFT_GUARDIAN_BASE = 804984;
+/** The Ourania Altar's rift guardian base, whatever rune is made (Wiki: Rift guardian). */
+const OURANIA_RIFT_GUARDIAN_BASE = 1487213;
 const ABYSS_TELEPORT_STEP = "o8m7y6";
 const ESSENCE_TELEPORT_STEPS = new Set(["ILlRUH", "SvUvek"]);
 /** The Rune Essence mine's exit portals (loc 34825, "Portal", Use). */
@@ -120,6 +137,13 @@ function initialize(api) {
   CRAFT_RUNES_ANIMATION = new Animation(791);
   RUNE_ESSENCE_MINE = new Location(2913, 4832, 0);
   ABYSS_INNER_RING = new Location(3040, 4839, 0);
+  // rc_zmi_dungeon_cracked_center_altar.
+  OURANIA_ALTAR = ObjectIdentifiers.ALTAR_31;
+  OURANIA_RUNES = OURANIA_DATA.runes.map((rune) => ({ ...rune, runeId: ItemIdentifiers[rune.rune] }));
+  OURANIA_ESSENCE = [
+    { id: ItemIdentifiers.PURE_ESSENCE, xpScale: OURANIA_XP_SCALE },
+    { id: ItemIdentifiers.DAEYALT_ESSENCE, xpScale: OURANIA_XP_SCALE * DAEYALT_XP_SCALE },
+  ];
 
   PICKAXE_IDS = [
     ItemIdentifiers.BRONZE_PICKAXE,
@@ -284,7 +308,79 @@ function requestTeleport(player, destination) {
   pluginApi.emitCustomEvent("lever:teleport", { player, destination: destination.clone() });
 }
 
+function ouraniaWeights(level) {
+  let weights = OURANIA_DATA.levels[0].weights;
+  for (const bracket of OURANIA_DATA.levels) {
+    if (level >= bracket.level) weights = bracket.weights;
+  }
+  return weights;
+}
+
+function rollOuraniaRune(weights) {
+  let roll = Math.floor(Math.random() * OURANIA_DATA.rolls);
+  for (let index = 0; index < weights.length; index++) {
+    roll -= weights[index];
+    if (roll < 0) return OURANIA_RUNES[index];
+  }
+  return OURANIA_RUNES[OURANIA_RUNES.length - 1];
+}
+
+function ardougneMediumComplete(player) {
+  const request = { player, diary: "ardougne", tier: "medium", complete: false };
+  pluginApi.emitCustomEvent("diary:is-complete", request);
+  return request.complete === true;
+}
+
+/** Every pure and daeyalt essence becomes a rune rolled at the player's level (Wiki: Ourania Altar). */
+function craftOurania(player) {
+  const inventory = player.getInventory();
+  if (!OURANIA_ESSENCE.some((essence) => inventory.contains(essence.id))) {
+    const { DialogueChainBuilder, StatementDialogue } = pluginApi.core;
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, OURANIA_NO_ESSENCE)));
+    return;
+  }
+
+  const weights = ouraniaWeights(player.getSkillManager().getCurrentLevel(Skill.RUNECRAFTING));
+  const diary = ardougneMediumComplete(player);
+  /** The essence each rune was crafted from, for the rift guardian's rolls. */
+  const crafted = new Map();
+  let xp = 0;
+  for (const essence of OURANIA_ESSENCE) {
+    while (inventory.contains(essence.id)) {
+      inventory.deleteNumber(essence.id, 1);
+      const rune = rollOuraniaRune(weights);
+      const amount = diary && Math.random() * 100 < rune.extraChance ? 2 : 1;
+      inventory.addItem(new Item(rune.runeId, amount));
+      xp += rune.xp * essence.xpScale;
+      crafted.set(rune, (crafted.get(rune) ?? 0) + 1);
+    }
+  }
+
+  player.performGraphic(CRAFT_RUNES_GRAPHIC);
+  player.performAnimation(CRAFT_RUNES_ANIMATION);
+  Sounds.sendSound(player, Sound.CRAFT_RUNES);
+  spam(player, OURANIA_CRAFT_MESSAGE);
+  if (diary) spam(player, OURANIA_DIARY_MESSAGE);
+  player.getSkillManager().addExperiences(Skill.RUNECRAFTING, xp);
+  // The rift guardian rolls per essence at the altar's own base; each rune is reported for its colour.
+  for (const [rune, essence] of crafted) {
+    pluginApi.emitCustomEvent("runecrafting:success", {
+      player,
+      skill: Skill.RUNECRAFTING,
+      petBase: OURANIA_RIFT_GUARDIAN_BASE,
+      rolls: essence,
+      runeId: rune.runeId,
+      amountPerEssence: 1,
+    });
+  }
+}
+
 function handleCraftRunes(event) {
+  if (event.objectId === OURANIA_ALTAR) {
+    craftOurania(event.player);
+    event.handled = true;
+    return true;
+  }
   const runeData = RUNES_BY_ALTAR_ID.get(event.objectId);
   if (!runeData) {
     return false;

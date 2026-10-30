@@ -46,6 +46,7 @@ function defineAreas() {
       }
       game.setTeamId(player, this.teamId);
       game.equipTeamColours(player, this.teamId);
+      game.applyWaitingForm?.(player);
       player.getPacketSender().sendSubInterface(data.OVERLAY_HUD_UID, data.WAITING_ROOM_INTERFACE, 1);
       game.beginStartCountdown();
       const secondsLeft = game.startSecondsLeft();
@@ -57,6 +58,7 @@ function defineAreas() {
       if (!player) {
         return;
       }
+      game.clearWaitingForm?.(player);
       if (logout) {
         if (player.getAttribute(game.BOT_KEY) === true) {
           return;
@@ -81,6 +83,20 @@ function defineAreas() {
       if (player) {
         game.setVar(player, data.TIMER_VARP, game.startSecondsLeft());
       }
+    }
+
+    canAttack(attacker) {
+      return game.isWaitingTransformed?.(attacker) ? false : null;
+    }
+
+    canTeleport(player) {
+      return game.isWaitingTransformed?.(player) ? false : null;
+    }
+
+    canTrade(player, target) {
+      if (!game.isWaitingTransformed?.(player) && !game.isWaitingTransformed?.(target)) return null;
+      player.sendMessage("You can't trade while transformed in the Castle Wars waiting room.");
+      return false;
     }
   }
 
@@ -151,6 +167,15 @@ function defineAreas() {
 
     canAttack(attacker, target) {
       return friendlyFireVerdict(attacker, target);
+    }
+
+    canTrade(player, target) {
+      if (player?.getArea?.() !== game.gameArea || target?.getArea?.() !== game.gameArea) return null;
+      const team = game.getTeamId(player);
+      const other = game.getTeamId(target);
+      if (!team || !other || team === other) return null;
+      player.sendMessage("You can't trade with the opposing team in Castle Wars.");
+      return false;
     }
 
     canTeleport(player) {

@@ -121,6 +121,9 @@ function resolveIds(cache) {
       level: varbit("ntk_thieving_required"),
       room: varbit("ntk_room_number"),
       playedBefore: varbit("ntk_played_before"),
+      simonNamed: varbit("agility_pyramid_simon_named"),
+      simonJob: varbit("agility_pyramid_simon_job"),
+      simonJobDone: varbit("agility_pyramid_simon_job_done"),
     },
     overlay: cache.getInterfaceId("ntk_overlay"),
     tombExit: loc("ntk_tomb_door_exit"),
@@ -155,6 +158,7 @@ function resolveIds(cache) {
       snakeCharm: cache.getObjId("snake_flute"), // "Snake charm" in game
       lockpick: cache.getObjId("lockpick"),
       coins: cache.getObjId("coins"),
+      pyramidTop: cache.getObjId("agility_pyramid_gold_pyramid"),
     },
   };
 }

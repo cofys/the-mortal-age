@@ -1,0 +1,2906 @@
+{
+  "source": {
+    "url": "https://archive.openrs2.org/caches/runescape/2392",
+    "revision": 235,
+    "symbolCommit": "6f75a611629a4fd7d294650f3842b0358172d7f2",
+    "symbolFiles": [
+      {
+        "name": "dump.loc",
+        "size": 13069749,
+        "sha256": "4C387DCDD810208B0960A4284029C1D098A3864E15B35FFDF16943C4585FE617"
+      },
+      {
+        "name": "dump.npc",
+        "size": 7021883,
+        "sha256": "8DF8DC069E993488D7CD8AE8C055C739F882A1E3368DCB5DFBCDB8DBE504B1B9"
+      },
+      {
+        "name": "dump.obj",
+        "size": 8635566,
+        "sha256": "625FC651C306F9A108215E7FC5BDF80BA9FFE7E382969160B3381A2DAC3ECA18"
+      },
+      {
+        "name": "dump.varbit",
+        "size": 1763401,
+        "sha256": "B71558FFE7DF8F1B55B2D5B21621A190DF1553F42F5F3088B3183126F18DFE06"
+      }
+    ],
+    "files": [
+      {
+        "file": "255-2.dat",
+        "bytes": 1170,
+        "sha256": "ad5fc54fcb1646818470b191ee13366fc8e828dc3d4b1b07aef8c0f90c079d67"
+      },
+      {
+        "file": "255-7.dat",
+        "bytes": 499127,
+        "sha256": "b97973cce50625ca5c3249edd157c5870d9bc70a7ce02e41abbea4b8fdceaa3a"
+      },
+      {
+        "file": "2-6.dat",
+        "bytes": 573655,
+        "sha256": "f38eeee8b8b1f28acfe0ed473d4193a337b088696916aa50a07c859824390030"
+      },
+      {
+        "file": "2-9.dat",
+        "bytes": 382408,
+        "sha256": "c3112f5f2f2e247a3ac2241b44cf2847d4f30df003790a2289218d2adb44bd7c"
+      },
+      {
+        "file": "2-10.dat",
+        "bytes": 637451,
+        "sha256": "36b4a2d9792609be706583f36a8ccd2d70f7d1eeb98b243d4ad156086f8b7f5a"
+      },
+      {
+        "file": "2-14.dat",
+        "bytes": 46311,
+        "sha256": "0ce18fdecfa42e8290400538334e9f1a099531c0f9f0d2eba24cd3a2f3c4397f"
+      },
+      {
+        "file": "7-312.dat",
+        "bytes": 601,
+        "sha256": "b5780f5bc6e9253a233cc56ac371d81cf940148a98ddc44762621c8a1d53486c"
+      },
+      {
+        "file": "7-15106.dat",
+        "bytes": 166,
+        "sha256": "ff208fd3424bd575917631a39e66d9c39c1360d1cf0683ef975a659797ecdb04"
+      },
+      {
+        "file": "7-17526.dat",
+        "bytes": 761,
+        "sha256": "863d8f765775b49e12e0b82b51b08e5252a9950d704c410c32a1784c5fc645df"
+      },
+      {
+        "file": "7-26422.dat",
+        "bytes": 546,
+        "sha256": "d65f992692264c3235ae6bf48eb86b114e40e75525d62cf6b91dff50dc0e5006"
+      },
+      {
+        "file": "255-5.dat",
+        "bytes": 110985,
+        "sha256": "063dafd7103b9207d67f71e44306650e05e12f34c527f7fb210392cb0d728a1e"
+      },
+      {
+        "file": "keys.json",
+        "bytes": 539639,
+        "sha256": "e0920d234c32ecef2399cf98a896bd3b4c1f9990a7927c6783dbb3bedbd9d893"
+      },
+      {
+        "file": "5-2098.dat",
+        "bytes": 9636,
+        "sha256": "eabb3d91b0514ba3f68a5d35c075da12acb17c74456394d0c726aaa73fd3e569"
+      },
+      {
+        "file": "5-805.dat",
+        "bytes": 304,
+        "sha256": "50f409f1335cde7afd7a75ca04eeb88b7fc671859b6719f933999045a1b62dc2"
+      },
+      {
+        "file": "5-2797.dat",
+        "bytes": 6171,
+        "sha256": "78d70ec32751fc60b091f4fb728f349ba43ea2b04769915b055ee2cb1f9299c6"
+      },
+      {
+        "file": "2-12.dat",
+        "bytes": 253129,
+        "sha256": "bb984558a53d49f732a5c3a63b10fbbf562af7b613005381c33a5c3b7749cbc2"
+      }
+    ]
+  },
+  "bundle": {
+    "id": "christmas-2025",
+    "targetCache": {
+      "name": "osrs-241_2026-10-20",
+      "game": "oldschool",
+      "revision": 241
+    },
+    "sourceCache": {
+      "name": "osrs-235_2025-12-17",
+      "game": "oldschool",
+      "environment": "live",
+      "revision": 235,
+      "timestamp": "2025-12-17T11:45:07Z",
+      "size": 0
+    },
+    "definitions": [
+      {
+        "kind": "npc",
+        "sourceId": 14814,
+        "symbol": "xmas25_queue_npc_1",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///CDy9PL48vzzAPME8wjzDPMQ8xQA=",
+        "crc": 2411202293,
+        "id": 16772
+      },
+      {
+        "kind": "npc",
+        "sourceId": 14864,
+        "symbol": "xmas25_queue_npc_2",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///Bzy+PL88wDzBPMI8wzzEPMUA",
+        "crc": 3846263467,
+        "id": 16773
+      },
+      {
+        "kind": "npc",
+        "sourceId": 14865,
+        "symbol": "xmas25_queue_npc_3",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///Bjy/PMA8wTzCPMM8xDzFAA==",
+        "crc": 2306182982,
+        "id": 16774
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15178,
+        "symbol": "xmas25_queue_npc_4",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///BTzAPME8wjzDPMQ8xQA=",
+        "crc": 1444900182,
+        "id": 16775
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15179,
+        "symbol": "xmas25_queue_npc_5",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///BDzBPMI8wzzEPMUA",
+        "crc": 3933770217,
+        "id": 16776
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15180,
+        "symbol": "xmas25_queue_npc_6",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///AzzCPMM8xDzFAA==",
+        "crc": 3625392768,
+        "id": 16777
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15181,
+        "symbol": "xmas25_queue_npc_7",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///AjzDPMQ8xQA=",
+        "crc": 574099962,
+        "id": 16778
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15182,
+        "symbol": "xmas25_queue_npc_8",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///ATzEPMUA",
+        "crc": 4207287578,
+        "id": 16779
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15183,
+        "symbol": "xmas25_queue_npc_9",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///ADzFAA==",
+        "crc": 3346190458,
+        "id": 16780
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15184,
+        "symbol": "xmas25_table_npc_1",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMpP//Azy8PL08vjy/AA==",
+        "crc": 4240712271,
+        "id": 16781
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15185,
+        "symbol": "xmas25_table_npc_2",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMpf//Azy8PL08vjy/AA==",
+        "crc": 559086538,
+        "id": 16782
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15237,
+        "symbol": "xmas25_table_npc_3",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMpv//Azy8PL08vjy/AA==",
+        "crc": 2627245828,
+        "id": 16783
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15547,
+        "symbol": "xmas25_table_npc_4",
+        "dataBase64": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMp///Azy8PL08vjy/AA==",
+        "crc": 1091456641,
+        "id": 16784
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15548,
+        "symbol": "xmas25_stool_empty",
+        "dataBase64": "ZAplCl8AAGNdAjxjb2w9MDBmZmZmPlN0b29sAAEBpBD5AQAACQgAAAAKAA==",
+        "crc": 2010848944,
+        "id": 16785
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15549,
+        "symbol": "xmas25_sir_prysin",
+        "dataBase64": "EQMzAzQDNQM2DQMoHlRhbGstdG8AXwAAYwJTaXIgUHJ5c2luAAEGRHJEeURrRHBEdkRtPAFEfAA=",
+        "crc": 1036265456,
+        "id": 16786
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15550,
+        "symbol": "xmas25_aggie",
+        "dataBase64": "DAFfAAARAzMDNAM1AzYNAygeVGFsay10bwAoBmKWKQwajkIUl54pDCIlKQwfECkMEcYMwgJBZ2dpZQABCAF5QEtIegHfDwgBYThVAWk8AkA/AGYA",
+        "crc": 2791674899,
+        "id": 16787
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15551,
+        "symbol": "xmas25_jobless_jim",
+        "dataBase64": "EQMzAzQDNQM2DQMoHlRhbGstdG8AXwAAKAEajhUYAkpvYmxlc3MgSmltAAEG5szm2Ob9J+rm4uaePALmUABRAA==",
+        "crc": 3550600691,
+        "id": 16788
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15552,
+        "symbol": "xmas25_hans",
+        "dataBase64": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKAYfjgMYIiUHnqhAEcYjkAMY1H0UtWKWABwCSGFucwABCQDZAPZvY2gGALBufQC5AUAAvTwCADcARQA=",
+        "crc": 281193068,
+        "id": 16789
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15553,
+        "symbol": "xmas25_karim",
+        "dataBase64": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKAZilhYUIiXNnBqOKQyoQBInEcYSJ9R9EqECS2FyaW0AAQcA6259APkBMWgIALAAtTwCAEMAUQA=",
+        "crc": 2789117152,
+        "id": 16790
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15554,
+        "symbol": "xmas25_oziach",
+        "dataBase64": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKAQAPYmpACmNJRqOG45iluSaAk96aWFjaAABCQDrAPcBOGc2AKQAsQCwbn0AtTwCAEMATwA=",
+        "crc": 468677408,
+        "id": 16791
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15555,
+        "symbol": "xmas25_rommik",
+        "dataBase64": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKARilimjIiUWFKhAEifUfRKhAlJvbW1pawABCADZbn0A/QExaAgAsAC1AhE8AgA3AFUA",
+        "crc": 3243254352,
+        "id": 16792
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15556,
+        "symbol": "xmas25_doris",
+        "dataBase64": "DAERAzMDNAM1AzYNAygeVGFsay10bwBfAABjKAIiJZ03qEARxgJEb3JpcwABCAGYNCEB0SKOAWE0IjQbAbU8AjHFM/oA",
+        "crc": 4081875273,
+        "id": 16793
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15557,
+        "symbol": "xmas25_herquin",
+        "dataBase64": "XwAAEQMzAzQDNQM2DQMoHlRhbGstdG8AYwJIZXJxdWluAAEKAOst5CWULfAt+Sw+J+ouXQC1Lfo8AwBDJOkuXAA=",
+        "crc": 3721162529,
+        "id": 16794
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15558,
+        "symbol": "xmas25_puffin",
+        "dataBase64": "DhbwDRbxXwAAYxIDmgJQdWZmaW4AAQJZCOn4AA==",
+        "crc": 1009753777,
+        "id": 16795
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15559,
+        "symbol": "xmas25_cutscene_chef_with_plate",
+        "dataBase64": "XwAAZBQONYENNYAoBgBrILEiJSCxq5ggyAB7INwAWiISIpwgsQJDb29rAAEJAOYUXznHOwIq5CfqMc4AtennPAIAPxRXAA==",
+        "crc": 337672754,
+        "id": 16796
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15560,
+        "symbol": "xmas25_cutscene_chef_no_plate",
+        "dataBase64": "XwAAZBQRAzMDNAM1AzYNAygoBgBrILEiJSCxq5ggyAB7INwAWiISIpwgsQJDb29rAAEIAOYUXznHOwIq5CfqMc4AtTwCAD8UVwA=",
+        "crc": 2882730742,
+        "id": 16797
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15561,
+        "symbol": "xmas25_cutscene_bartender",
+        "dataBase64": "XwAADAFhAIJiAHwRAzMDNAM1AzYNAygSA5ooBhqOE5AiJZQxIpyUMWKWQQwOFCoQI5CUKQJCYXJ0ZW5kZXIAAQoA6wD6b2NlDSrkJ+ovagC1OwIBRzwCAEMAUgA=",
+        "crc": 1092672623,
+        "id": 16798
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15562,
+        "symbol": "xmas25_cutscene_woman1",
+        "dataBase64": "DAFfAAARAzMDNAM1AzYNAyhKAAFLAAFMAAFNAAcSA5ooBgBn6LkAWOjCAE7osQA36MoiJYi9Go4hXgJXb21hbgABBwGGJJENlCnSRIwBZgG1PAEAcfkEAAAABf///+sAAAAG////6wAAAAf////rAAAACP///+sA",
+        "crc": 3171640574,
+        "id": 16799
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15563,
+        "symbol": "xmas25_cutscene_jonny",
+        "dataBase64": "DAFfAABhAIJiAHwRAzMDNAM1AzYNAyhKAAFLAAFMAAFNAAhjEgOaKARilg+OIiUpDKhAEcYhlJivAkpvbm55IHRoZSBCZWFyZAABCGQ6TtwBK0G/AJ8AsUsyZDE8AmQjZCb5AQAAABoAAAACAA==",
+        "crc": 733182437,
+        "id": 16800
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15564,
+        "symbol": "xmas25_cutscene_dr_harlow",
+        "dataBase64": "XwAADAERC98DNAM1AzYNC+AeVGFsay10bwBfAAASA5ooBRqOFGciJQBvqEARxmKWAI4dFhHGAkRyIEhhcmxvdwABCgDZAPUrtgEuDHYAnwCxK7pufQC1PAMANwBOK7QA",
+        "crc": 790028977,
+        "id": 16801
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15565,
+        "symbol": "xmas25_cutscene_barbarian",
+        "dataBase64": "DAERAzMDNAM1AzYNAyhfAAASA5ooASFcFhACQmFyYmFyaWFuAAEGL24uCS37LgEuBi4DPAEvZwA=",
+        "crc": 2700865144,
+        "id": 16802
+      },
+      {
+        "kind": "npc",
+        "sourceId": 15566,
+        "symbol": "xmas25_cutscene_freddie",
+        "dataBase64": "DAENAyhfAAASA5ooBSIlABIajsKrEcYRxmKWABISEgAIAk1vZF9GcmVkZGllAAEHL2kA9m+HaAgn6m66ALUA",
+        "crc": 523219615,
+        "id": 16803
+      },
+      {
+        "kind": "loc",
+        "sourceId": 46501,
+        "symbol": "xmas22_pub01_rugmiddle01",
+        "dataBase64": "EwARKAMDngMeAAAKoSXCA44BATDwFgA=",
+        "crc": 1873965746,
+        "id": 63307
+      },
+      {
+        "kind": "loc",
+        "sourceId": 46502,
+        "symbol": "xmas22_pub01_rugcorner01",
+        "dataBase64": "EwARKAMDngMeAAAc4SXCA44BATDvFgA=",
+        "crc": 1302710028,
+        "id": 63308
+      },
+      {
+        "kind": "loc",
+        "sourceId": 46503,
+        "symbol": "xmas22_pub01_rugside01",
+        "dataBase64": "EwARKAMDngMeAAAc4SXCA44BATDxFgA=",
+        "crc": 1528646006,
+        "id": 63309
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60576,
+        "symbol": "xmas25_table01_empty01",
+        "dataBase64": "EwEdCicPGAoEPQCbKAQVnB2jFhgdnhYUHhoaEh6WBQHpyAJUYWJsZQAA",
+        "crc": 2432922200,
+        "id": 63310
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60577,
+        "symbol": "xmas25_table01_empty01_op1",
+        "dataBase64": "EwEdCicPGAoEPQCbHlNlcnZlACgEFZwdoxYYHZ4WFB4aGhIelgUB6cgCVGFibGUAAA==",
+        "crc": 3872191343,
+        "id": 63311
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60578,
+        "symbol": "xmas25_table01_drink01",
+        "dataBase64": "EwEdCicPGAoEPQCbHlNlcnZlACgEFZwdoxYYHZ4WFB4aGhIelgUB6ccCVGFibGUAAA==",
+        "crc": 963984574,
+        "id": 63312
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60579,
+        "symbol": "xmas25_table01_food01",
+        "dataBase64": "EwEdCicPGAoEPQCbKAQVnB2jFhgdnhYUHhoaEh6WBQHpyQJUYWJsZQAA",
+        "crc": 2256037403,
+        "id": 63313
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60580,
+        "symbol": "xmas25_table01_vegetable01",
+        "dataBase64": "EwEOAz0Amh0UEigEGTMdoxkrHZ4ZJx4aGaMelgUCYfPIwwJUYWJsZQAA",
+        "crc": 1069288662,
+        "id": 63314
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60581,
+        "symbol": "xmas25_table_1",
+        "dataBase64": "GAoEEwFNTKv//wPsoOyh7KLsowA=",
+        "crc": 3476830405,
+        "id": 63315
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60582,
+        "symbol": "xmas25_table_2",
+        "dataBase64": "GAoEEwFNTKz//wPsoOyh7KLsowA=",
+        "crc": 2991537821,
+        "id": 63316
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60583,
+        "symbol": "xmas25_table_3",
+        "dataBase64": "GAoEEwFNTK3//wPsoOyh7KLsowA=",
+        "crc": 1876551448,
+        "id": 63317
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60584,
+        "symbol": "xmas25_table_4",
+        "dataBase64": "GAoEEwFNTK7//wPsoOyh7KLsowA=",
+        "crc": 3524496342,
+        "id": 63318
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60585,
+        "symbol": "xmas25_blue_inn_drinks_bar_middle",
+        "dataBase64": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6c1WnWJCYi0CQmFyAAA=",
+        "crc": 2963835835,
+        "id": 63319
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60586,
+        "symbol": "xmas25_blue_inn_drinks_bar_middle_interact",
+        "dataBase64": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnNVp1iQmItAkJhcgAA",
+        "crc": 2568602950,
+        "id": 63320
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60587,
+        "symbol": "xmas25_blue_inn_drinks_bar_middle2",
+        "dataBase64": "EwEWEigGqHOoq0OzRKcVnB2jFhgeGhYUHpYaEh8SBQTpzVaeVp1iNQJCYXIAAA==",
+        "crc": 3781538516,
+        "id": 63321
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60588,
+        "symbol": "xmas25_blue_inn_drinks_bar_middle2_interact",
+        "dataBase64": "EwEWHkdldCBEcmluayBGcm9tABIoBqhzqKtDs0SnFZwdoxYYHhoWFB6WGhIfEgUE6c1WnladYjUCQmFyAAA=",
+        "crc": 2356687054,
+        "id": 63322
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60589,
+        "symbol": "xmas25_blue_inn_drinks_bar_left",
+        "dataBase64": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6cxWnladYi0CQmFyAAA=",
+        "crc": 1585092757,
+        "id": 63323
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60590,
+        "symbol": "xmas25_blue_inn_drinks_bar_left_interact",
+        "dataBase64": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnMVp5WnWItAkJhcgAA",
+        "crc": 2009847400,
+        "id": 63324
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60591,
+        "symbol": "xmas25_blue_inn_drinks_bar_right",
+        "dataBase64": "EwEWPhIoBBWcHaMWGB4aFhQelhoSHxIFBOnMVp5iLmI8AkJhcgAA",
+        "crc": 1032537558,
+        "id": 63325
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60592,
+        "symbol": "xmas25_blue_inn_drinks_bar_right_interact",
+        "dataBase64": "EwEWPh5HZXQgRHJpbmsgRnJvbQASKAQVnB2jFhgeGhYUHpYaEh8SBQTpzFaeYi5iPAJCYXIAAA==",
+        "crc": 1072910105,
+        "id": 63326
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60593,
+        "symbol": "xmas25_blue_inn_bar_middle",
+        "dataBase64": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6ctiQGJBVpwCQmFyAAA=",
+        "crc": 2107759095,
+        "id": 63327
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60594,
+        "symbol": "xmas25_blue_inn_bar_middle_interact",
+        "dataBase64": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnLYkBiQVacAkJhcgAA",
+        "crc": 1410373386,
+        "id": 63328
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60595,
+        "symbol": "xmas25_blue_inn_bar_middle2",
+        "dataBase64": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6ctiQGI8Vp8CQmFyAAA=",
+        "crc": 1302718440,
+        "id": 63329
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60596,
+        "symbol": "xmas25_blue_inn_bar_middle2_interact",
+        "dataBase64": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnLYkBiPFafAkJhcgAA",
+        "crc": 1679075605,
+        "id": 63330
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60597,
+        "symbol": "xmas25_blue_inn_bar_middle3",
+        "dataBase64": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6ctiLWJBVp8CQmFyAAA=",
+        "crc": 3607697493,
+        "id": 63331
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60598,
+        "symbol": "xmas25_blue_inn_bar_middle3_interact",
+        "dataBase64": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnLYi1iQVafAkJhcgAA",
+        "crc": 4273493672,
+        "id": 63332
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60599,
+        "symbol": "xmas25_blue_inn_bar_left",
+        "dataBase64": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6cpiLmJCYj8CQmFyAAA=",
+        "crc": 3973846525,
+        "id": 63333
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60600,
+        "symbol": "xmas25_blue_inn_bar_right",
+        "dataBase64": "EwEWPhIoBBWcHaMWGB4aFhQelhoSHxIFA+nKYkJiPAJCYXIAAA==",
+        "crc": 1910390897,
+        "id": 63334
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60601,
+        "symbol": "xmas25_bar_drinks_middle",
+        "dataBase64": "EwFNTK///wHsqeyqAA==",
+        "crc": 1764597895,
+        "id": 63335
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60602,
+        "symbol": "xmas25_bar_drinks_middle2",
+        "dataBase64": "EwFNTK///wHsq+ysAA==",
+        "crc": 2508115850,
+        "id": 63336
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60603,
+        "symbol": "xmas25_bar_drinks_left",
+        "dataBase64": "EwFNTK///wHsreyuAA==",
+        "crc": 2183394004,
+        "id": 63337
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60604,
+        "symbol": "xmas25_bar_drinks_right",
+        "dataBase64": "EwFNTK///wHsr+ywAA==",
+        "crc": 4234872192,
+        "id": 63338
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60605,
+        "symbol": "xmas25_bar_middle",
+        "dataBase64": "EwFNTK///wHsseyyAA==",
+        "crc": 2124105646,
+        "id": 63339
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60606,
+        "symbol": "xmas25_bar_middle2",
+        "dataBase64": "EwFNTK///wHss+y0AA==",
+        "crc": 2194155683,
+        "id": 63340
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60607,
+        "symbol": "xmas25_bar_middle3",
+        "dataBase64": "EwFNTK///wHstey2AA==",
+        "crc": 2509575677,
+        "id": 63341
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60608,
+        "symbol": "xmas25_crate01_carrot01",
+        "dataBase64": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQK/vwtmAkNyYXRlAAA=",
+        "crc": 3987373246,
+        "id": 63342
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60609,
+        "symbol": "xmas25_crate01_tomato01",
+        "dataBase64": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQK/v+nYAkNyYXRlAAA=",
+        "crc": 1578875645,
+        "id": 63343
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60610,
+        "symbol": "xmas25_crate01_vegetable01",
+        "dataBase64": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQK/v+nZAkNyYXRlAAA=",
+        "crc": 1231072958,
+        "id": 63344
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60611,
+        "symbol": "xmas25_crate01_broccoli01",
+        "dataBase64": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnUAkNyYXRlAAA=",
+        "crc": 735723945,
+        "id": 63345
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60612,
+        "symbol": "xmas25_crate01_fruit01",
+        "dataBase64": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnWAkNyYXRlAAA=",
+        "crc": 86796591,
+        "id": 63346
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60613,
+        "symbol": "xmas25_crate01_fish01",
+        "dataBase64": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnVAkNyYXRlAAA=",
+        "crc": 1017206250,
+        "id": 63347
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60614,
+        "symbol": "xmas25_crate01_meat01",
+        "dataBase64": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnXAkNyYXRlAAA=",
+        "crc": 307723628,
+        "id": 63348
+      },
+      {
+        "kind": "loc",
+        "sourceId": 60616,
+        "symbol": "xmas25_snowball_pile",
+        "dataBase64": "HRQnCkAOAg8CQQEAQwEAQgEAHlRha2UtZnJvbQAgaGlkZGVuABUbPQI4QBIoAphtmG2YdZjrBQG3LgJTbm93YmFsbCBwaWxlAAA=",
+        "crc": 2819201067,
+        "id": 63349
+      },
+      {
+        "kind": "obj",
+        "sourceId": 14401,
+        "symbol": "template_for_placeholder",
+        "dataBase64": "AQJUSwAABAu4BQIAXgEVAA==",
+        "crc": 38701168,
+        "id": 34732
+      },
+      {
+        "kind": "obj",
+        "sourceId": 32926,
+        "symbol": "xmas25_serving_platter",
+        "dataBase64": "AenPDAAAADJLADIjSW5zcGVjdAAnRGVzdHJveQAFAf4GAy8EBzICU2VydmluZyBwbGF0dGVyAANJIGNhbiBjYXJyeSBmb29kIGFuZCBkcmlua3Mgb24gdGhpcy4AlICf+QIAAAEnAAAAAQAAADsAAAABAA==",
+        "crc": 1659260767,
+        "id": 32926,
+        "expectedCurrentCrc": 1529175761
+      },
+      {
+        "kind": "obj",
+        "sourceId": 32927,
+        "symbol": "placeholder_xmas25_serving_platter",
+        "dataBase64": "lICelThBAA==",
+        "crc": 3219774210,
+        "id": 32927,
+        "expectedCurrentCrc": 1529175761
+      }
+    ]
+  },
+  "placements": [
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3395,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3396,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3397,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3398,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3399,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3400,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3401,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3395,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3396,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3397,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3398,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3399,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3400,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3401,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3222,
+      "y": 3395,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3222,
+      "y": 3396,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3222,
+      "y": 3397,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3222,
+      "y": 3398,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3222,
+      "y": 3399,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3222,
+      "y": 3400,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3222,
+      "y": 3401,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3223,
+      "y": 3395,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3223,
+      "y": 3396,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3223,
+      "y": 3397,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3223,
+      "y": 3398,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3223,
+      "y": 3399,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3223,
+      "y": 3400,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3223,
+      "y": 3401,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3219,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3219,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3395,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3220,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3221,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3225,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugmiddle01",
+      "sourceId": 46501,
+      "x": 3230,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3219,
+      "y": 3394,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3219,
+      "y": 3402,
+      "z": 0,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3224,
+      "y": 3394,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3224,
+      "y": 3402,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3218,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3218,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3219,
+      "y": 3394,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3219,
+      "y": 3396,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3221,
+      "y": 3394,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3221,
+      "y": 3396,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3222,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3222,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3224,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3224,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3226,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3226,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3229,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3229,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3231,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugcorner01",
+      "sourceId": 46502,
+      "x": 3231,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3395,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3396,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3397,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3398,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3399,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3400,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3401,
+      "z": 0,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3220,
+      "y": 3394,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3220,
+      "y": 3402,
+      "z": 0,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3221,
+      "y": 3394,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3221,
+      "y": 3402,
+      "z": 0,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3222,
+      "y": 3394,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3222,
+      "y": 3402,
+      "z": 0,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3223,
+      "y": 3394,
+      "z": 0,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3223,
+      "y": 3402,
+      "z": 0,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3395,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3396,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3397,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3398,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3399,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3400,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3401,
+      "z": 0,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3218,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3218,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3395,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3219,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3220,
+      "y": 3394,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3220,
+      "y": 3396,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3220,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3220,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3221,
+      "y": 3395,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3221,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3221,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3222,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3222,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3224,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3225,
+      "y": 3397,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3225,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3226,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3229,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3230,
+      "y": 3398,
+      "z": 1,
+      "shape": 22,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3230,
+      "y": 3400,
+      "z": 1,
+      "shape": 22,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas22_pub01_rugside01",
+      "sourceId": 46503,
+      "x": 3231,
+      "y": 3399,
+      "z": 1,
+      "shape": 22,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas25_table01_vegetable01",
+      "sourceId": 60580,
+      "x": 3232,
+      "y": 3398,
+      "z": 0,
+      "shape": 10,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas25_table_1",
+      "sourceId": 60581,
+      "x": 3220,
+      "y": 3401,
+      "z": 0,
+      "shape": 10,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas25_table_2",
+      "sourceId": 60582,
+      "x": 3221,
+      "y": 3401,
+      "z": 0,
+      "shape": 10,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas25_table_3",
+      "sourceId": 60583,
+      "x": 3221,
+      "y": 3398,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_table_4",
+      "sourceId": 60584,
+      "x": 3220,
+      "y": 3398,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_blue_inn_bar_left",
+      "sourceId": 60599,
+      "x": 3225,
+      "y": 3397,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_blue_inn_bar_right",
+      "sourceId": 60600,
+      "x": 3225,
+      "y": 3401,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_bar_drinks_middle",
+      "sourceId": 60601,
+      "x": 3227,
+      "y": 3398,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_bar_drinks_middle2",
+      "sourceId": 60602,
+      "x": 3227,
+      "y": 3399,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_bar_drinks_left",
+      "sourceId": 60603,
+      "x": 3227,
+      "y": 3397,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_bar_drinks_right",
+      "sourceId": 60604,
+      "x": 3227,
+      "y": 3400,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_bar_middle",
+      "sourceId": 60605,
+      "x": 3225,
+      "y": 3399,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_bar_middle2",
+      "sourceId": 60606,
+      "x": 3225,
+      "y": 3398,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_bar_middle3",
+      "sourceId": 60607,
+      "x": 3225,
+      "y": 3400,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_snowball_pile",
+      "sourceId": 60616,
+      "x": 3216,
+      "y": 3406,
+      "z": 0,
+      "shape": 10,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas25_snowball_pile",
+      "sourceId": 60616,
+      "x": 3232,
+      "y": 3414,
+      "z": 0,
+      "shape": 10,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas25_snowball_pile",
+      "sourceId": 60616,
+      "x": 3237,
+      "y": 3397,
+      "z": 0,
+      "shape": 10,
+      "rotation": 2
+    },
+    {
+      "symbol": "xmas25_crate01_carrot01",
+      "sourceId": 60608,
+      "x": 3238,
+      "y": 9806,
+      "z": 0,
+      "shape": 10,
+      "rotation": 0
+    },
+    {
+      "symbol": "xmas25_crate01_tomato01",
+      "sourceId": 60609,
+      "x": 3236,
+      "y": 9802,
+      "z": 0,
+      "shape": 10,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas25_crate01_vegetable01",
+      "sourceId": 60610,
+      "x": 3241,
+      "y": 9805,
+      "z": 0,
+      "shape": 10,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas25_crate01_broccoli01",
+      "sourceId": 60611,
+      "x": 3237,
+      "y": 9803,
+      "z": 0,
+      "shape": 10,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas25_crate01_fruit01",
+      "sourceId": 60612,
+      "x": 3233,
+      "y": 9797,
+      "z": 0,
+      "shape": 10,
+      "rotation": 3
+    },
+    {
+      "symbol": "xmas25_crate01_fish01",
+      "sourceId": 60613,
+      "x": 3241,
+      "y": 9803,
+      "z": 0,
+      "shape": 10,
+      "rotation": 1
+    },
+    {
+      "symbol": "xmas25_crate01_meat01",
+      "sourceId": 60614,
+      "x": 3232,
+      "y": 9797,
+      "z": 0,
+      "shape": 10,
+      "rotation": 3
+    }
+  ],
+  "varbits": [
+    {
+      "symbol": "xmas_25_main",
+      "id": 19618,
+      "baseVar": 5214,
+      "startBit": 0,
+      "endBit": 6
+    },
+    {
+      "symbol": "xmas_25_npc_queue",
+      "id": 19619,
+      "baseVar": 5214,
+      "startBit": 7,
+      "endBit": 10
+    },
+    {
+      "symbol": "xmas_25_seat_id_1",
+      "id": 19620,
+      "baseVar": 5214,
+      "startBit": 11,
+      "endBit": 14
+    },
+    {
+      "symbol": "xmas_25_seat_id_2",
+      "id": 19621,
+      "baseVar": 5214,
+      "startBit": 15,
+      "endBit": 18
+    },
+    {
+      "symbol": "xmas_25_seat_id_3",
+      "id": 19622,
+      "baseVar": 5214,
+      "startBit": 19,
+      "endBit": 22
+    },
+    {
+      "symbol": "xmas_25_seat_id_4",
+      "id": 19623,
+      "baseVar": 5214,
+      "startBit": 23,
+      "endBit": 26
+    },
+    {
+      "symbol": "xmas25_current_table",
+      "id": 19624,
+      "baseVar": 5214,
+      "startBit": 27,
+      "endBit": 29
+    },
+    {
+      "symbol": "xmas25_food_correct_main",
+      "id": 19625,
+      "baseVar": 5214,
+      "startBit": 30,
+      "endBit": 30
+    },
+    {
+      "symbol": "xmas25_food_correct_side_1",
+      "id": 19626,
+      "baseVar": 5214,
+      "startBit": 31,
+      "endBit": 31
+    },
+    {
+      "symbol": "xmas_25_table_id_1",
+      "id": 19627,
+      "baseVar": 5215,
+      "startBit": 0,
+      "endBit": 2
+    },
+    {
+      "symbol": "xmas_25_table_id_2",
+      "id": 19628,
+      "baseVar": 5215,
+      "startBit": 3,
+      "endBit": 5
+    },
+    {
+      "symbol": "xmas_25_table_id_3",
+      "id": 19629,
+      "baseVar": 5215,
+      "startBit": 6,
+      "endBit": 8
+    },
+    {
+      "symbol": "xmas_25_table_id_4",
+      "id": 19630,
+      "baseVar": 5215,
+      "startBit": 9,
+      "endBit": 11
+    },
+    {
+      "symbol": "xmas_25_bar_interactable",
+      "id": 19631,
+      "baseVar": 5215,
+      "startBit": 12,
+      "endBit": 12
+    },
+    {
+      "symbol": "xmas_25_bar_drinks",
+      "id": 19632,
+      "baseVar": 5215,
+      "startBit": 13,
+      "endBit": 16
+    },
+    {
+      "symbol": "xmas_25_bar_correct_drink",
+      "id": 19633,
+      "baseVar": 5215,
+      "startBit": 17,
+      "endBit": 17
+    },
+    {
+      "symbol": "xmas25_table_1_state",
+      "id": 19634,
+      "baseVar": 5215,
+      "startBit": 18,
+      "endBit": 20
+    },
+    {
+      "symbol": "xmas25_table_2_state",
+      "id": 19635,
+      "baseVar": 5215,
+      "startBit": 21,
+      "endBit": 23
+    },
+    {
+      "symbol": "xmas25_table_3_state",
+      "id": 19636,
+      "baseVar": 5215,
+      "startBit": 24,
+      "endBit": 26
+    },
+    {
+      "symbol": "xmas25_table_4_state",
+      "id": 19637,
+      "baseVar": 5215,
+      "startBit": 27,
+      "endBit": 29
+    },
+    {
+      "symbol": "xmas25_food_correct_side_2",
+      "id": 19638,
+      "baseVar": 5215,
+      "startBit": 30,
+      "endBit": 30
+    },
+    {
+      "symbol": "xmas25_food_correct_side_3",
+      "id": 19639,
+      "baseVar": 5215,
+      "startBit": 31,
+      "endBit": 31
+    },
+    {
+      "symbol": "xmas25_food_main",
+      "id": 19640,
+      "baseVar": 5216,
+      "startBit": 0,
+      "endBit": 5
+    },
+    {
+      "symbol": "xmas25_food_side_1",
+      "id": 19641,
+      "baseVar": 5216,
+      "startBit": 6,
+      "endBit": 9
+    },
+    {
+      "symbol": "xmas25_food_side_2",
+      "id": 19642,
+      "baseVar": 5216,
+      "startBit": 10,
+      "endBit": 13
+    },
+    {
+      "symbol": "xmas25_food_side_3",
+      "id": 19643,
+      "baseVar": 5216,
+      "startBit": 14,
+      "endBit": 17
+    }
+  ],
+  "sequences": [
+    {
+      "id": 808,
+      "sha256": "3ce7bda7b7cf5c23141768e6d0c06269569b97d0f5d590361448797a75084b98"
+    },
+    {
+      "id": 819,
+      "sha256": "3bf4048a66b6aa80b3829ff181d314f7b3b684edfd2e60ba9ec7adf777ede068"
+    },
+    {
+      "id": 820,
+      "sha256": "e835e4689e6f21efcac1a0c961fc95f14aac166fdc0d7fe17df0b1a3ed477230"
+    },
+    {
+      "id": 821,
+      "sha256": "ca387813773159e44c2d7f1cf590469fb0e93800cffe6dfbf1a295eecc7f165b"
+    },
+    {
+      "id": 822,
+      "sha256": "487184d09ac9933cf0d6b27f04957a95dab434894d3389950166073e3c4ddb6a"
+    },
+    {
+      "id": 2564,
+      "sha256": "e24f64ef56c074a9644c444ad7bf4cbeeb622de9998901d76408ebcaaa4b19b6"
+    },
+    {
+      "id": 3039,
+      "sha256": "74a3421928f12e1010e0c36b4379943d72b3043b119f88244ff05c8c9acb9091"
+    },
+    {
+      "id": 3040,
+      "sha256": "5573fc9719b47898f5e126da9ac39a206a3cce61d6016cdf8f9f328fd6110d49"
+    },
+    {
+      "id": 5872,
+      "sha256": "883aa714db83f51f01505f663c0a4145bf9b945fe719f4bed5f275e928b62134"
+    },
+    {
+      "id": 5873,
+      "sha256": "1097f6ca1b2e9f8f897b57ff0033f1f50cc4562b335f15ff7caaa6e0c3ac00d4"
+    },
+    {
+      "id": 13696,
+      "sha256": "0ac34b1de0118b8cda0004c818754dc526f991ac6470210db039529cb0ba0577"
+    },
+    {
+      "id": 13697,
+      "sha256": "cea05c38534c62bcebcf523376274f806a89b0318fd6bb72fe9de4c85aef340b"
+    }
+  ],
+  "models": [
+    {
+      "id": 0,
+      "sourceCrc": 3336036485,
+      "currentCrc": 3336036485
+    },
+    {
+      "id": 55,
+      "sourceCrc": 2827627699,
+      "currentCrc": 2827627699
+    },
+    {
+      "id": 63,
+      "sourceCrc": 1988826096,
+      "currentCrc": 1988826096
+    },
+    {
+      "id": 67,
+      "sourceCrc": 2243641358,
+      "currentCrc": 2243641358
+    },
+    {
+      "id": 69,
+      "sourceCrc": 1843753808,
+      "currentCrc": 1843753808
+    },
+    {
+      "id": 78,
+      "sourceCrc": 3867378054,
+      "currentCrc": 3867378054
+    },
+    {
+      "id": 79,
+      "sourceCrc": 3545733265,
+      "currentCrc": 3545733265
+    },
+    {
+      "id": 81,
+      "sourceCrc": 2141146568,
+      "currentCrc": 2141146568
+    },
+    {
+      "id": 82,
+      "sourceCrc": 2305243461,
+      "currentCrc": 2305243461
+    },
+    {
+      "id": 85,
+      "sourceCrc": 3043226424,
+      "currentCrc": 3043226424
+    },
+    {
+      "id": 102,
+      "sourceCrc": 3607418308,
+      "currentCrc": 3607418308
+    },
+    {
+      "id": 113,
+      "sourceCrc": 3136359072,
+      "currentCrc": 3136359072
+    },
+    {
+      "id": 159,
+      "sourceCrc": 4177602223,
+      "currentCrc": 4177602223
+    },
+    {
+      "id": 164,
+      "sourceCrc": 1396448610,
+      "currentCrc": 1396448610
+    },
+    {
+      "id": 176,
+      "sourceCrc": 1797401190,
+      "currentCrc": 1797401190
+    },
+    {
+      "id": 177,
+      "sourceCrc": 2828354547,
+      "currentCrc": 2828354547
+    },
+    {
+      "id": 181,
+      "sourceCrc": 2813309447,
+      "currentCrc": 2813309447
+    },
+    {
+      "id": 185,
+      "sourceCrc": 1307341295,
+      "currentCrc": 1307341295
+    },
+    {
+      "id": 189,
+      "sourceCrc": 3122920131,
+      "currentCrc": 3122920131
+    },
+    {
+      "id": 217,
+      "sourceCrc": 4291964766,
+      "currentCrc": 4291964766
+    },
+    {
+      "id": 230,
+      "sourceCrc": 454769497,
+      "currentCrc": 454769497
+    },
+    {
+      "id": 235,
+      "sourceCrc": 4081101452,
+      "currentCrc": 4081101452
+    },
+    {
+      "id": 245,
+      "sourceCrc": 2701790213,
+      "currentCrc": 2701790213
+    },
+    {
+      "id": 246,
+      "sourceCrc": 2966368682,
+      "currentCrc": 2966368682
+    },
+    {
+      "id": 247,
+      "sourceCrc": 3164787155,
+      "currentCrc": 3164787155
+    },
+    {
+      "id": 249,
+      "sourceCrc": 2370672225,
+      "currentCrc": 2370672225
+    },
+    {
+      "id": 250,
+      "sourceCrc": 3104873202,
+      "currentCrc": 3104873202
+    },
+    {
+      "id": 253,
+      "sourceCrc": 3156715534,
+      "currentCrc": 3156715534
+    },
+    {
+      "id": 299,
+      "sourceCrc": 961178636,
+      "currentCrc": 961178636
+    },
+    {
+      "id": 302,
+      "sourceCrc": 4113642224,
+      "currentCrc": 4113642224
+    },
+    {
+      "id": 305,
+      "sourceCrc": 4275602807,
+      "currentCrc": 4275602807
+    },
+    {
+      "id": 312,
+      "sourceCrc": 2580118865,
+      "currentCrc": 2344517450,
+      "sourceSha256": "90f2747e2dd56377a83ef138be89c115c49232a524b8dd6b00a5c9a6079c8238",
+      "currentSha256": "513454f8361f8af2ce7e6f428d02fedd9264ddc41dd7704547f61f405f64202e"
+    },
+    {
+      "id": 320,
+      "sourceCrc": 1146944256,
+      "currentCrc": 1146944256
+    },
+    {
+      "id": 327,
+      "sourceCrc": 780933112,
+      "currentCrc": 780933112
+    },
+    {
+      "id": 353,
+      "sourceCrc": 3624911118,
+      "currentCrc": 3624911118
+    },
+    {
+      "id": 358,
+      "sourceCrc": 1486996011,
+      "currentCrc": 1486996011
+    },
+    {
+      "id": 361,
+      "sourceCrc": 3577435285,
+      "currentCrc": 3577435285
+    },
+    {
+      "id": 377,
+      "sourceCrc": 2882256754,
+      "currentCrc": 2882256754
+    },
+    {
+      "id": 390,
+      "sourceCrc": 2255333777,
+      "currentCrc": 2255333777
+    },
+    {
+      "id": 408,
+      "sourceCrc": 82735594,
+      "currentCrc": 82735594
+    },
+    {
+      "id": 437,
+      "sourceCrc": 2774288570,
+      "currentCrc": 2774288570
+    },
+    {
+      "id": 465,
+      "sourceCrc": 4123405072,
+      "currentCrc": 4123405072
+    },
+    {
+      "id": 479,
+      "sourceCrc": 2873366060,
+      "currentCrc": 2873366060
+    },
+    {
+      "id": 529,
+      "sourceCrc": 529753130,
+      "currentCrc": 529753130
+    },
+    {
+      "id": 596,
+      "sourceCrc": 778741851,
+      "currentCrc": 778741851
+    },
+    {
+      "id": 2918,
+      "sourceCrc": 601650016,
+      "currentCrc": 601650016
+    },
+    {
+      "id": 3190,
+      "sourceCrc": 197343966,
+      "currentCrc": 197343966
+    },
+    {
+      "id": 3476,
+      "sourceCrc": 3382321646,
+      "currentCrc": 3382321646
+    },
+    {
+      "id": 3848,
+      "sourceCrc": 3657383256,
+      "currentCrc": 3657383256
+    },
+    {
+      "id": 5207,
+      "sourceCrc": 630201782,
+      "currentCrc": 630201782
+    },
+    {
+      "id": 5215,
+      "sourceCrc": 4201477414,
+      "currentCrc": 4201477414
+    },
+    {
+      "id": 8846,
+      "sourceCrc": 694461827,
+      "currentCrc": 694461827
+    },
+    {
+      "id": 9361,
+      "sourceCrc": 3713399092,
+      "currentCrc": 3713399092
+    },
+    {
+      "id": 9449,
+      "sourceCrc": 3858326680,
+      "currentCrc": 3858326680
+    },
+    {
+      "id": 9620,
+      "sourceCrc": 3046368965,
+      "currentCrc": 3046368965
+    },
+    {
+      "id": 10218,
+      "sourceCrc": 1795808357,
+      "currentCrc": 1795808357
+    },
+    {
+      "id": 10706,
+      "sourceCrc": 3676446449,
+      "currentCrc": 3676446449
+    },
+    {
+      "id": 10980,
+      "sourceCrc": 1486639781,
+      "currentCrc": 1486639781
+    },
+    {
+      "id": 11188,
+      "sourceCrc": 2107983659,
+      "currentCrc": 2107983659
+    },
+    {
+      "id": 11190,
+      "sourceCrc": 1564498645,
+      "currentCrc": 1564498645
+    },
+    {
+      "id": 11194,
+      "sourceCrc": 3346673797,
+      "currentCrc": 3346673797
+    },
+    {
+      "id": 11326,
+      "sourceCrc": 2390414220,
+      "currentCrc": 2390414220
+    },
+    {
+      "id": 11748,
+      "sourceCrc": 4213475431,
+      "currentCrc": 4213475431
+    },
+    {
+      "id": 11760,
+      "sourceCrc": 881411146,
+      "currentCrc": 881411146
+    },
+    {
+      "id": 11769,
+      "sourceCrc": 3833022336,
+      "currentCrc": 3833022336
+    },
+    {
+      "id": 11770,
+      "sourceCrc": 3450827793,
+      "currentCrc": 3450827793
+    },
+    {
+      "id": 11771,
+      "sourceCrc": 1423798780,
+      "currentCrc": 1423798780
+    },
+    {
+      "id": 11777,
+      "sourceCrc": 482679806,
+      "currentCrc": 482679806
+    },
+    {
+      "id": 11779,
+      "sourceCrc": 2401104581,
+      "currentCrc": 2401104581
+    },
+    {
+      "id": 11782,
+      "sourceCrc": 2193728630,
+      "currentCrc": 2193728630
+    },
+    {
+      "id": 11785,
+      "sourceCrc": 381961028,
+      "currentCrc": 381961028
+    },
+    {
+      "id": 11868,
+      "sourceCrc": 3437475151,
+      "currentCrc": 3437475151
+    },
+    {
+      "id": 11869,
+      "sourceCrc": 399291968,
+      "currentCrc": 399291968
+    },
+    {
+      "id": 12135,
+      "sourceCrc": 4285970300,
+      "currentCrc": 4285970300
+    },
+    {
+      "id": 12137,
+      "sourceCrc": 1105198502,
+      "currentCrc": 1105198502
+    },
+    {
+      "id": 12138,
+      "sourceCrc": 2782384460,
+      "currentCrc": 2782384460
+    },
+    {
+      "id": 12142,
+      "sourceCrc": 324613682,
+      "currentCrc": 324613682
+    },
+    {
+      "id": 12527,
+      "sourceCrc": 4095184955,
+      "currentCrc": 4095184955
+    },
+    {
+      "id": 12528,
+      "sourceCrc": 2740996333,
+      "currentCrc": 2740996333
+    },
+    {
+      "id": 12529,
+      "sourceCrc": 193017565,
+      "currentCrc": 193017565
+    },
+    {
+      "id": 12741,
+      "sourceCrc": 2539312655,
+      "currentCrc": 2539312655
+    },
+    {
+      "id": 12750,
+      "sourceCrc": 2305139508,
+      "currentCrc": 2305139508
+    },
+    {
+      "id": 13306,
+      "sourceCrc": 2702024861,
+      "currentCrc": 2702024861
+    },
+    {
+      "id": 13339,
+      "sourceCrc": 4256874710,
+      "currentCrc": 4256874710
+    },
+    {
+      "id": 13345,
+      "sourceCrc": 2660908594,
+      "currentCrc": 2660908594
+    },
+    {
+      "id": 13346,
+      "sourceCrc": 1078812088,
+      "currentCrc": 1078812088
+    },
+    {
+      "id": 14421,
+      "sourceCrc": 496403334,
+      "currentCrc": 496403334
+    },
+    {
+      "id": 14791,
+      "sourceCrc": 4053252131,
+      "currentCrc": 4053252131
+    },
+    {
+      "id": 15106,
+      "sourceCrc": 1454903019,
+      "currentCrc": 2263095431,
+      "sourceSha256": "a289bebfdc625a7d986a5209218c236c942e3b6d7ff2992a557e5fc33bb366e8",
+      "currentSha256": "4709ece57ba12b65037fd7d5ac9ead323fdc50498865918aa7127a3779d9f92d"
+    },
+    {
+      "id": 16447,
+      "sourceCrc": 2569326532,
+      "currentCrc": 2569326532
+    },
+    {
+      "id": 16459,
+      "sourceCrc": 268157999,
+      "currentCrc": 268157999
+    },
+    {
+      "id": 16831,
+      "sourceCrc": 3248704273,
+      "currentCrc": 3248704273
+    },
+    {
+      "id": 17515,
+      "sourceCrc": 2392210345,
+      "currentCrc": 2392210345
+    },
+    {
+      "id": 17517,
+      "sourceCrc": 3005133138,
+      "currentCrc": 3005133138
+    },
+    {
+      "id": 17520,
+      "sourceCrc": 830764963,
+      "currentCrc": 830764963
+    },
+    {
+      "id": 17522,
+      "sourceCrc": 214907382,
+      "currentCrc": 214907382
+    },
+    {
+      "id": 17526,
+      "sourceCrc": 3785356281,
+      "currentCrc": 1492297933,
+      "sourceSha256": "1664ecbcea43599bf15bd7cf5ba4c661911bfbf40308946f8a0d52d10fb95604",
+      "currentSha256": "a08a55f17fe13246ddb81572e9d539c76554c864344db6d877415a0c94fd0d6c"
+    },
+    {
+      "id": 17529,
+      "sourceCrc": 3619978271,
+      "currentCrc": 3619978271
+    },
+    {
+      "id": 17532,
+      "sourceCrc": 780047498,
+      "currentCrc": 780047498
+    },
+    {
+      "id": 17548,
+      "sourceCrc": 2216115409,
+      "currentCrc": 2216115409
+    },
+    {
+      "id": 18554,
+      "sourceCrc": 2985133514,
+      "currentCrc": 2985133514
+    },
+    {
+      "id": 19250,
+      "sourceCrc": 3250173001,
+      "currentCrc": 3250173001
+    },
+    {
+      "id": 20188,
+      "sourceCrc": 29940778,
+      "currentCrc": 29940778
+    },
+    {
+      "id": 20848,
+      "sourceCrc": 777551548,
+      "currentCrc": 777551548
+    },
+    {
+      "id": 22172,
+      "sourceCrc": 1926757850,
+      "currentCrc": 1926757850
+    },
+    {
+      "id": 22173,
+      "sourceCrc": 3834765683,
+      "currentCrc": 3834765683
+    },
+    {
+      "id": 22174,
+      "sourceCrc": 349125362,
+      "currentCrc": 349125362
+    },
+    {
+      "id": 22175,
+      "sourceCrc": 1111057749,
+      "currentCrc": 1111057749
+    },
+    {
+      "id": 22792,
+      "sourceCrc": 468627741,
+      "currentCrc": 468627741
+    },
+    {
+      "id": 25075,
+      "sourceCrc": 820580412,
+      "currentCrc": 820580412
+    },
+    {
+      "id": 25133,
+      "sourceCrc": 456320603,
+      "currentCrc": 456320603
+    },
+    {
+      "id": 25134,
+      "sourceCrc": 1346411149,
+      "currentCrc": 1346411149
+    },
+    {
+      "id": 25141,
+      "sourceCrc": 792180948,
+      "currentCrc": 792180948
+    },
+    {
+      "id": 25148,
+      "sourceCrc": 1267164827,
+      "currentCrc": 1267164827
+    },
+    {
+      "id": 25151,
+      "sourceCrc": 4118081829,
+      "currentCrc": 4118081829
+    },
+    {
+      "id": 25152,
+      "sourceCrc": 596775947,
+      "currentCrc": 596775947
+    },
+    {
+      "id": 25153,
+      "sourceCrc": 835455522,
+      "currentCrc": 835455522
+    },
+    {
+      "id": 25154,
+      "sourceCrc": 122820650,
+      "currentCrc": 122820650
+    },
+    {
+      "id": 25635,
+      "sourceCrc": 3662725781,
+      "currentCrc": 3662725781
+    },
+    {
+      "id": 25638,
+      "sourceCrc": 3408336536,
+      "currentCrc": 3408336536
+    },
+    {
+      "id": 25649,
+      "sourceCrc": 794005313,
+      "currentCrc": 794005313
+    },
+    {
+      "id": 25658,
+      "sourceCrc": 1661993444,
+      "currentCrc": 1661993444
+    },
+    {
+      "id": 25869,
+      "sourceCrc": 4010997226,
+      "currentCrc": 4010997226
+    },
+    {
+      "id": 26422,
+      "sourceCrc": 3146477216,
+      "currentCrc": 1250845221,
+      "sourceSha256": "d93956ab8e605a7aa3ca987e71d7cadaae560028f3494be272128a65e27e0ede",
+      "currentSha256": "8088a4458e9efb3bfe0c993bf86faee5b67371facda159fc2c886dfa51b9f0f1"
+    },
+    {
+      "id": 26630,
+      "sourceCrc": 395060418,
+      "currentCrc": 395060418
+    },
+    {
+      "id": 26632,
+      "sourceCrc": 233514561,
+      "currentCrc": 233514561
+    },
+    {
+      "id": 28285,
+      "sourceCrc": 3749187947,
+      "currentCrc": 3749187947
+    },
+    {
+      "id": 28346,
+      "sourceCrc": 2603392246,
+      "currentCrc": 2603392246
+    },
+    {
+      "id": 28515,
+      "sourceCrc": 3384875131,
+      "currentCrc": 3384875131
+    },
+    {
+      "id": 28551,
+      "sourceCrc": 4289173334,
+      "currentCrc": 4289173334
+    },
+    {
+      "id": 42000,
+      "sourceCrc": 2143746215,
+      "currentCrc": 2143746215
+    },
+    {
+      "id": 46894,
+      "sourceCrc": 1999968742,
+      "currentCrc": 1999968742
+    },
+    {
+      "id": 49087,
+      "sourceCrc": 3476208537,
+      "currentCrc": 3476208537
+    },
+    {
+      "id": 51395,
+      "sourceCrc": 3256685729,
+      "currentCrc": 3256685729
+    },
+    {
+      "id": 58960,
+      "sourceCrc": 2540981895,
+      "currentCrc": 2540981895
+    },
+    {
+      "id": 59038,
+      "sourceCrc": 2373583606,
+      "currentCrc": 2373583606
+    },
+    {
+      "id": 59084,
+      "sourceCrc": 3835476131,
+      "currentCrc": 3835476131
+    },
+    {
+      "id": 59096,
+      "sourceCrc": 4115151079,
+      "currentCrc": 4115151079
+    },
+    {
+      "id": 59106,
+      "sourceCrc": 2077895779,
+      "currentCrc": 2077895779
+    },
+    {
+      "id": 59133,
+      "sourceCrc": 1475216837,
+      "currentCrc": 1475216837
+    },
+    {
+      "id": 59847,
+      "sourceCrc": 2604933881,
+      "currentCrc": 2604933881
+    },
+    {
+      "id": 59848,
+      "sourceCrc": 3992596593,
+      "currentCrc": 3992596593
+    },
+    {
+      "id": 59849,
+      "sourceCrc": 2243338914,
+      "currentCrc": 2243338914
+    },
+    {
+      "id": 59850,
+      "sourceCrc": 2232214137,
+      "currentCrc": 2232214137
+    },
+    {
+      "id": 59851,
+      "sourceCrc": 2101894483,
+      "currentCrc": 2101894483
+    },
+    {
+      "id": 59852,
+      "sourceCrc": 4076473984,
+      "currentCrc": 4076473984
+    },
+    {
+      "id": 59853,
+      "sourceCrc": 2268419631,
+      "currentCrc": 2268419631
+    },
+    {
+      "id": 59855,
+      "sourceCrc": 866248650,
+      "currentCrc": 866248650
+    },
+    {
+      "id": 59860,
+      "sourceCrc": 3877485611,
+      "currentCrc": 3877485611
+    },
+    {
+      "id": 59861,
+      "sourceCrc": 1829735080,
+      "currentCrc": 1829735080
+    },
+    {
+      "id": 59862,
+      "sourceCrc": 3833169029,
+      "currentCrc": 3833169029
+    },
+    {
+      "id": 59863,
+      "sourceCrc": 2291999956,
+      "currentCrc": 2291999956
+    },
+    {
+      "id": 59864,
+      "sourceCrc": 1266472626,
+      "currentCrc": 1266472626
+    },
+    {
+      "id": 59865,
+      "sourceCrc": 295688043,
+      "currentCrc": 295688043
+    },
+    {
+      "id": 59879,
+      "sourceCrc": 3261220622,
+      "currentCrc": 3261220622
+    },
+    {
+      "id": 59896,
+      "sourceCrc": 503556529,
+      "currentCrc": 503556529
+    }
+  ]
+}

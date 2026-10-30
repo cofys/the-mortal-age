@@ -1255,9 +1255,7 @@ export class ClientConnection {
     const layoutRoot = resolveGameframeRoot(player);
     for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot, player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) === true)) this.send(packet);
     player.getPacketSender()
-      // The bootstrap mounts the magic tab (161:82 -> 218) directly, which does not send
-      // varbit 4070, so the cache scripts would draw the standard book for everyone.
-      // sendTabInterface(6) is the one place that publishes the spellbook varbit.
+      // Publish the saved spellbook before the remaining login state and quest recovery.
       .sendTabInterface(6, player.getSpellbook().getInterfaceId())
       // Cache script 828 sets varc 103 (account is a member), which the GE, collection box
       // and membership panels read; everyone on a members world is a member.
@@ -1266,8 +1264,8 @@ export class ClientConnection {
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();
-    // Plugins re-sync client state that sendTabInterface(6)'s spell-unlock varps
-    // overwrote (quest varps share storage with NPC transform varps).
+    // Spell-unlock varps can share storage with quest transforms. Recover them at login,
+    // even while a plugin's welcome screen is visible.
     PluginManager.emitCustomEvent("player:bootstrap-complete", { player, username: player.getUsername() });
   }
 

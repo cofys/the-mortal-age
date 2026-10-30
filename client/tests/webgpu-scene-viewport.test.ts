@@ -183,6 +183,35 @@ assert.deepEqual(fills, [], "Resizable mode removes the gutter mask");
 assert.equal(hudCanvas.style.display, "none");
 assert.equal(renderer.osrsClient.camera.computeViewportMetricsForSize(400, 200).unitViewportHeight, 200);
 
+// Native toplevel_resize's fixed cutscene policy changes the camera's actual
+// viewport even when its root widget continues to fill the whole canvas.
+const previousFov = camera.getViewportFovValues();
+renderer.canvas.width = 1000;
+renderer.canvas.height = 2000;
+viewport = { x: 0, y: 0, width: 1000, height: 2000 };
+camera.setViewportFovValues(256, 256);
+camera.setClampFov(512, 512, 512, 512);
+render();
+assert.deepEqual(scissors, [[0, 673, 1000, 654]], "Cutscene geometry uses the camera's effective viewport, not its full root widget");
+assert.deepEqual(clears.at(-1), [0, 673, 1000, 654], "Sky/post-processing in the cutscene margins are masked black");
+assert.equal(hudCanvas.style.display, "");
+
+renderer.canvas.width = 1600;
+renderer.canvas.height = 700;
+viewport = { x: 0, y: 0, width: 1600, height: 700 };
+render();
+assert.deepEqual(scissors, [[263, 0, 1074, 700]], "Resizing a clamped scene updates the actual side margins");
+assert.deepEqual(clears.at(-1), [263, 0, 1074, 700]);
+
+camera.setClampFov(0, 0, 0, 0);
+camera.setViewportFovValues(previousFov.low, previousFov.high);
+renderer.canvas.width = 400;
+renderer.canvas.height = 200;
+viewport = { x: 0, y: 0, width: 400, height: 200 };
+render();
+assert.deepEqual(scissors, [[0, 0, 400, 200]], "Leaving the cutscene restores ordinary world clipping");
+assert.deepEqual(fills, [], "Restoring the ordinary viewport removes the margin mask");
+
 loggedIn = false;
 render();
 assert.deepEqual(scissors, [], "Login has no world scissor");

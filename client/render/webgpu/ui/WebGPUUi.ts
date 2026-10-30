@@ -37,6 +37,7 @@ export interface UiRenderMetrics {
 export class WebGPUUi {
     private readonly minimapIcons: Map<number, MinimapIcon[]> = new Map();
     private widgetsOverlay?: WidgetsOverlay;
+    private widgetsHost?: WidgetsOverlayHost;
     private presentation?: WebgpuUiPresentation;
     private adapterApp?: { width: number; height: number; gl: { canvas: HTMLCanvasElement } };
     private widgetsCleared = true;
@@ -64,6 +65,7 @@ export class WebGPUUi {
             app: this.adapterApp as unknown as PicoApp,
             computeUiRenderMetrics: (bufW, bufH) => this.computeUiRenderMetrics(bufW, bufH),
         };
+        this.widgetsHost = adapter;
         try {
             this.widgetsOverlay = createWidgetsOverlay(adapter);
         } catch (error) {
@@ -71,6 +73,11 @@ export class WebGPUUi {
         }
 
         this.presentation.attachLoginLayer();
+    }
+
+    invalidateDefinitionCaches(): void {
+        this.widgetsHost?.chatheadFactory?.clear();
+        this.widgetsOverlay?.invalidateDefinitionCaches();
     }
 
     update(timeMs: number, deltaMs: number): void {
@@ -161,6 +168,7 @@ export class WebGPUUi {
             this.widgetsOverlay?.dispose();
         } catch {}
         this.widgetsOverlay = undefined;
+        this.widgetsHost = undefined;
         this.presentation?.dispose();
         this.presentation = undefined;
         this.minimapIcons.clear();

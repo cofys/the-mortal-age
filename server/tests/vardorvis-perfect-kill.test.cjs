@@ -37,6 +37,8 @@ function fixture({ awakened = false } = {}) {
         getHitpoints() { return this.hp; },
         decrementHealth(hit) {
             hit.setDamage(Math.min(this.hp, hit.getDamage()));
+            // Match Mobile's applied loss snapshot before reactive healing/death hooks.
+            hit.setHealthLost(hit.getDamage());
             this.hp -= hit.getDamage();
             return hit;
         },

@@ -64,7 +64,7 @@ const quest = registerQuest(api, {
     },
 });
 
-assert.deepEqual([...persisted].sort(), ["quest.points", "quest.test_quest.stage"], "persists stage + points");
+assert.deepEqual([...persisted].sort(), ["quest.experience-withheld", "quest.points", "quest.test_quest.stage"], "persists stage, points and withheld experience");
 
 assert.equal(quest.getStage(player), 0, "new players start at stage 0");
 assert.equal(quest.isComplete(player), false);
@@ -98,6 +98,10 @@ openJournalBySlot(player, 1);
 assert.ok(
     sent.strings.some(([text, uid]) => uid === journalTitleUid && text.includes("Test Quest")),
     "slot 1 opens the first quest's journal"
+);
+assert.ok(
+    sent.strings.some(([text, uid]) => uid === ((119 << 16) | 11) && text === "<col=000080>line one"),
+    "journal lines are navy, as live OSRS sends them"
 );
 sent.strings.length = 0;
 openJournalBySlot(player, 0);

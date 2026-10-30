@@ -115,9 +115,7 @@ module.exports = function registerHeroesQuest(api) {
       ];
     }
     if (stage === 0) {
-      return [
-        "Speak to <col=800000>Achietties</col> outside the Heroes' Guild in Burthorpe.",
-      ];
+      return ["I can start this quest by talking to <col=800000>Achietties</col> by the entrance to the <col=800000>Heroes' Guild</col>, between <col=800000>Taverley</col> and <col=800000>Burthorpe</col>."];
     }
     return [
       "Achietties requires three proofs:",

@@ -647,3 +647,55 @@ test("his bolts and fur balls land four ticks after the cast, as the flight ends
   assert.equal(Math.round((end * 20) / 600), 4);
   assert.equal(start, 30);
 });
+
+test("his bolts and fur balls are rolled as they land, after the player's prayer click that tick", (t) => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const { PrayerHandler, CombatType, CombatFactory } = core;
+  const npc = core.NPC.create(Common.SOLO_ID, Common.location(Common.FEEDING_SPOTS[1].stand));
+  npc.isRegistered = () => true;
+  npc.setHitpoints(500);
+  const player = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.setRegistered(true);
+  player.setLocation(new Location(3295, 9867, 0));
+  player.setHitpoints(99);
+  const queued = [];
+  t.mock.method(CombatFactory, "addPendingHit", (hit) => queued.push(hit));
+  const Method = Fight._test.defineCombatMethod();
+  const method = new Method();
+  const prayers = player.getPrayerActive();
+  // The landing tick: the task queues it (world phase), then the player's click, then it lands.
+  const land = (action, stance, prayerAtImpact) => {
+    queued.length = 0;
+    method.action = action;
+    method.stance = stance;
+    assert.deepEqual(method.hits(npc, player), []);
+    // He moves on to a swipe before it lands; the hit keeps its own style.
+    method.action = "melee";
+    method.stance = CombatType.MELEE;
+    runTicks(Fight._test.DISTANT_HIT_DELAY - 1);
+    assert.equal(queued.length, 0);
+    runTicks(1);
+    assert.equal(queued.length, 1, action);
+    prayerAtImpact();
+    const event = { player, hit: queued[0] };
+    Fight._test.distantHitLands(event);
+    assert.notEqual(event.hit, queued[0], "rolled as it lands");
+    assert.equal(event.hit.getCombatType(), stance);
+    return event.hit.getTotalDamage();
+  };
+  for (const [action, stance, prayer] of [
+    ["magic", CombatType.MAGIC, PrayerHandler.PROTECT_FROM_MAGIC],
+    ["ranged", CombatType.RANGED, PrayerHandler.PROTECT_FROM_MISSILES],
+  ]) {
+    let unprotected = 0;
+    for (let i = 0; i < 20; i++) {
+      prayers.fill(false);
+      assert.equal(land(action, stance, () => { prayers[prayer] = true; }), 0, `${action}: prayer clicked on the landing tick`);
+      prayers[prayer] = true;
+      unprotected += land(action, stance, () => { prayers[prayer] = false; });
+    }
+    assert.ok(unprotected > 0, `${action}: prayer turned off on the landing tick`);
+  }
+});

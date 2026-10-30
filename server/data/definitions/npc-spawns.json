@@ -4850,7 +4850,7 @@
   {"level":1,"name":"Blue dragon","x":2922,"y":9809,"id":5882},
   {"level":1,"name":"Blue dragon","x":2926,"y":9812,"id":5878},
   {"level":1,"name":"Blue dragon","x":2942,"y":9818,"id":5882},
-  {"level":0,"name":"Lanthus","x":2441,"y":3089,"id":5721},
+  {"level":0,"name":"Lanthus","x":2441,"y":3089,"id":5721,"wanderRadius":0},
   {"level":0,"name":"Postie Pete","x":2445,"y":3097,"id":3291},
   {"level":0,"name":"Man","x":2455,"y":3084,"id":9392,"wanderRadius":0},
   {"level":0,"name":"Assistant Marrow","x":2460,"y":3108,"id":4729},

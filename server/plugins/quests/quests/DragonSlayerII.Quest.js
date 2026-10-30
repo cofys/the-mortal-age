@@ -536,7 +536,7 @@ module.exports = function registerDragonSlayerII(api) {
     if (s >= S.TUNNEL) return ["Investigate the blockage in the north-east of Elvarg's lair, then enter the passage."];
     if (s >= S.KARAMJA) return ["Use a pickaxe on the northern wall in Elvarg's lair."];
     if (s >= S.START) return ["Meet Dallas Jones at the Karamja pub."];
-    return ["Speak to Alec Kincade outside the Myths' Guild."];
+    return ["I can start this quest by talking to <col=800000>Alec Kincade</col> outside the <col=800000>Myths' Guild</col>."];
   }
   function startRequirements(player) {
     const requirements = [

@@ -83,6 +83,14 @@ test("warm complete square builds preserve every geometry byte and scene metadat
     const expected = await loader.load(state, input, immediate);
     const actual = await loader.load(state, input, new BuildSteps());
     assert.deepEqual(actual.data, expected.data, "yielding cannot change geometry, minimaps, bridge flags or picking metadata");
+
+    const castleInput = { ...input, mapX: 37, mapY: 48,
+        extraLocs: [{ id: 4444, x: 2411, y: 3080, level: 0, shape: 4, rotation: 0 }] };
+    const castle = await loader.load(state, castleInput, immediate);
+    const ropeReload = await loader.load(state, { ...castleInput, locOnly: true }, immediate);
+    assert.ok(Buffer.from(ropeReload.data!.loc.vertices).equals(Buffer.from(castle.data!.loc.vertices)),
+        "a rope's loc-only reload keeps the castle's merged wall lighting");
+    assert.ok(Buffer.from(ropeReload.data!.loc.indices.buffer).equals(Buffer.from(castle.data!.loc.indices.buffer)));
 });
 
 test("pool skips cancelled queued jobs and forwards cancellation to a running worker", async () => {

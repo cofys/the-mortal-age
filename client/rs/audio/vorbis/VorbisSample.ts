@@ -3,6 +3,7 @@
  * Faithful port of the OSRS custom Vorbis decoder.
  */
 import { ByteBuffer } from "../../io/ByteBuffer";
+import { finishBuild } from "../../../common/utils/BuildSteps";
 import { VorbisBitReader, sharedBitReader } from "./VorbisBitReader";
 import { VorbisCodebook } from "./VorbisCodebook";
 import { VorbisFloor, VorbisFloorState } from "./VorbisFloor";
@@ -174,6 +175,7 @@ export class VorbisSample {
     private outputSamples: Int8Array | null = null;
     private outputPos: number = 0;
     private packetIndex: number = 0;
+    private readonly setup = captureSetup();
 
     constructor(data: Uint8Array) {
         const buf = new ByteBuffer(data);
@@ -495,20 +497,31 @@ export class VorbisSample {
         }
     }
 
-    /**
-     * Convert to raw PCM sound data (toRawSound in Java).
-     */
+    /** Convert to raw PCM sound data synchronously. */
     toRawSound(): RawSoundData {
+        return finishBuild(this.toRawSoundSteps());
+    }
+
+    /** Yield between complete packets so asynchronous callers can keep the UI responsive. */
+    *toRawSoundSteps(): Generator<void, RawSoundData> {
         if (this.outputSamples === null) {
             this.prevBlockSize = 0;
-            this.prevPcmBuffer = new Float32Array(blocksize1);
+            this.prevPcmBuffer = new Float32Array(this.setup.blocksize1);
             this.outputSamples = new Int8Array(this.sampleCount);
             this.outputPos = 0;
             this.packetIndex = 0;
         }
 
         while (this.packetIndex < this.packets.length) {
-            const decoded = this.decodePacket(this.packetIndex);
+            // Another sample or cache can use its own setup between our packets.
+            const previous = captureSetup();
+            let decoded: Float32Array | null;
+            try {
+                applySetup(this.setup);
+                decoded = this.decodePacket(this.packetIndex);
+            } finally {
+                applySetup(previous);
+            }
             this.packetIndex++;
 
             if (decoded !== null) {
@@ -526,6 +539,7 @@ export class VorbisSample {
                     this.outputSamples[this.outputPos++] = v - 128;
                 }
             }
+            yield;
         }
 
         this.prevPcmBuffer = new Float32Array(0); // Release

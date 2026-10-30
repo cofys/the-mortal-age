@@ -308,5 +308,7 @@ export class AsyncNpcPoseCache {
         for (const key of this.shownAt.keys()) if (key.startsWith(`${actorIdentity}:`)) this.shownAt.delete(key);
     }
 
+    invalidate(): void { this.cancel(); }
+
     dispose(): void { this.disposed = true; this.cancel(); }
 }

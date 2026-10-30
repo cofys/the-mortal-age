@@ -568,6 +568,16 @@ function registerCopy(request) {
   request.registered = true;
 }
 
+/** Content plugins register their drinks here to share dose handling, cooldowns and permissions. */
+function registerContentPotion(request) {
+  if (!Array.isArray(request?.chains) || !request.chains.every(Array.isArray)) return;
+  const ids = request.chains.flat();
+  if (typeof request?.name !== "string" || typeof request.effect !== "function" || !ids.length ||
+      ids.some((id) => !isItemId(id) || POTION_BY_ITEM_ID.has(id)) || new Set(ids).size !== ids.length) return;
+  registerPotion(request);
+  request.registered = true;
+}
+
 // https://oldschool.runescape.wiki/w/Free-to-play_Ironman_guide#Boosts
 registerPotion({ name: "Beer", chains: [[Items.BEER]], emptyItemId: Items.BEER_GLASS,
   drink: { messages: () => ["You drink the beer. You feel slightly reinvigorated...", "...and slightly dizzy too."] },
@@ -1549,6 +1559,7 @@ module.exports = {
     api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
     api.onCustomEvent("potions:dose-family", answerDoseFamily);
     api.onCustomEvent("potions:register-copy", registerCopy);
+    api.onCustomEvent("potions:register", registerContentPotion);
     api.onCustomEvent("prayer:activated", notePreserveActivated);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);

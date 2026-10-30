@@ -1,0 +1,153 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { before, test } = require('node:test');
+const { Server } = require('../dist/Server');
+Server.installProductionPathResolver();
+const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PlayerSession } = require('../dist/net/PlayerSession');
+const { ClientConnection } = require('../dist/net/NetworkBuilder');
+const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+let core, cookId, nextIndex = 2500;
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  core = PM.getCoreApi();
+  cookId = core.CacheDefinitions.getNpcId('fai_varrock_bluemoon_chef');
+  PM.loadFromDirectory(path.resolve(__dirname, '../plugins'));
+});
+function fixture(t) {
+  const packets = [];
+  const channel = { kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true,
+    send: packet => { packets.push(packet); return true; }, close() {}, onData() {}, onError() {}, onClose() {} };
+  const player = new Player(new PlayerSession(channel));
+  player.setIndex(nextIndex++);
+  player.setUsername('holidaydialogueqa');
+  player.setRegistered(true);
+  const connection = new ClientConnection(channel);
+  connection.player = player;
+  const npc = core.NPC.create(cookId, new core.Location(3227, 3396));
+  t.after(() => { player.closeInterruptibleInterfaces(); player.setRegistered(false); core.TaskManager.cancelTasks(player.getIndex()); });
+  return { player, npc, packets, connection };
+}
+async function choose(f, childIndex) {
+  await f.connection.dispatch([{ type: 'dialogue_continue', widgetId: MultiChatboxPrompt.OPTIONS_WIDGET_ID, childIndex }]);
+  f.connection.processTurnPackets();
+}
+function request(player, npc, variant = 'starting-the-event-talking-to-the-cook', page = '2025 Christmas event') {
+  const event = { player, npc, npcId: cookId, variant: { page, variant }, exact: true };
+  PM.emitCustomEvent('npc-dialogue:start', event);
+  return event;
+}
+test('the activity explicitly reaches its canonical source through the real dispatcher and native choice', async t => {
+  const f = fixture(t), { player, npc, packets } = f;
+  assert.equal(request(player, npc).handled, true);
+  const manager = player.getDialogueManager();
+  assert.deepEqual(MultiChatboxPrompt.getPending(player), { title: 'Ask about the Christmas Event?', options: ['Yes', 'No'] });
+  await choose(f, 1);
+  assert.equal(manager.getCurrent().getText().replace(/\s+/g, ' '), "Can't you see the huge queue of people? I really don't have time to chat.");
+  assert.ok(packets.length > 0, 'the actual PacketSender encoded the chatbox/choice updates');
+  player.closeInterruptibleInterfaces();
+  await choose(f, 1);
+  assert.equal(MultiChatboxPrompt.getPending(player), null);
+  assert.equal(manager.getCurrent(), undefined);
+});
+test('ordinary Talk-to does not select an inactive annual activity', t => {
+  const { player, npc } = fixture(t);
+  PM.emitNpcInteraction({ player, npc, npcId: cookId, action: 'Talk-to', clickType: 1, handled: false });
+  const current = player.getDialogueManager().getCurrent();
+  assert.ok(current);
+  assert.notEqual(MultiChatboxPrompt.getPending(player)?.title, 'Ask about the Christmas Event?');
+  assert.notEqual(current.getTitle?.(), 'Ask about the Christmas Event?');
+  assert.notEqual(current.getText?.(), "Can't you see the huge queue of people? I really don't have time to chat.");
+});
+
+test('trusted playback can cancel only its actual initial prompt',t=>{
+  const f=fixture(t),playback=request(f.player,f.npc);
+  assert.equal(typeof playback.cancel,'function');assert.ok(MultiChatboxPrompt.getPending(f.player));
+  assert.equal(playback.cancel(),true);assert.equal(MultiChatboxPrompt.getPending(f.player),null);
+  assert.equal(f.player.getDialogueManager().getCurrent(),undefined);assert.equal(playback.cancel(),false);
+});
+
+test('a cancelled transcript cannot close an identical replacement prompt',async t=>{
+  const f=fixture(t),playback=request(f.player,f.npc);let selected=false;
+  PM.createApi('Replacement').sendMultiChatboxPrompt(f.player,'Ask about the Christmas Event?','Yes',()=>{selected=true;},'No',()=>{});
+  assert.equal(playback.cancel(),false);assert.ok(MultiChatboxPrompt.getPending(f.player));
+  await choose(f,1);assert.equal(selected,true,'native selection belongs to the replacement callback');
+});
+
+test('old cancellation preserves a new identical native source dialogue and its continuation',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  const first=f.player.getDialogueManager().getCurrent();assert.ok(first);
+  const fresh=request(f.player,f.npc);await choose(f,1);
+  const current=f.player.getDialogueManager().getCurrent();assert.notEqual(current,first);assert.equal(current.getText(),first.getText());
+  assert.equal(old.cancel(),false);assert.equal(f.player.getDialogueManager().getCurrent(),current);
+  assert.equal(fresh.cancel(),true);assert.equal(f.player.getDialogueManager().getCurrent(),undefined);
+});
+
+test('source cancellation preserves an actual later bank and an unscoped same-group chatbox',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  f.player.getBank(0).open();const bank=f.player.getInterfaceId();assert.ok(bank>=0,'real bank opened');
+  old.cancel();assert.equal(f.player.getInterfaceId(),bank,'bank remains mounted even if the old dialogue chain still needed resetting');
+  f.player.getPacketSender().sendInterfaceRemoval();
+  const fresh=request(f.player,f.npc);await choose(f,1);
+  const sender=f.player.getPacketSender(),group=sender.getChatboxGroupId();assert.ok(group>=0);
+  sender.sendChatboxInterface(group).sendString('An unrelated replacement', (group<<16)|6);
+  fresh.cancel();assert.equal(sender.isChatboxInterface(group),true,'same group id does not confer ownership of replacement UI');
+  const last=request(f.player,f.npc);await choose(f,1);
+  const sharedGroup=sender.getChatboxGroupId();sender.sendInterface(sharedGroup);
+  last.cancel();assert.equal(f.player.getInterfaceId(),sharedGroup,'closing an owned chatbox cannot remove a separately mounted main modal with the same group');
+});
+
+test('a replacement prompt opened inside a source before-action keeps its own ownership',async t=>{
+  const f=fixture(t);let selected=false;
+  const hooks=PM.customEventHooks.get('npc-dialogue:line'),start=hooks.length;
+  t.after(()=>hooks.splice(start));
+  PM.createApi('NestedReplacementTest').onCustomEvent('npc-dialogue:line',event=>{
+    if(event.player!==f.player||!String(event.text).startsWith("Can't you see"))return;
+    event.before=()=>PM.createApi('Replacement').sendMultiChatboxPrompt(f.player,'Ask about the Christmas Event?','Yes',()=>{selected=true;},'No',()=>{});
+  });
+  const old=request(f.player,f.npc);await choose(f,1);
+  assert.ok(MultiChatboxPrompt.getPending(f.player));assert.equal(old.cancel(),false);
+  assert.ok(MultiChatboxPrompt.getPending(f.player),'replacement created from the old action is a new UI owner');
+  await choose(f,1);assert.equal(selected,true);
+});
+
+test('closing an old owned chatbox preserves a newer real overhead chain and task continuation',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  const data=require('../data/definitions/npc-dialogues.json');
+  const line=data['Desert Treasure II - The Fallen Empire'].variants['the-whisperer-inspecting-the-totem-in-the-cistern'].find(step=>step.type==='line'&&step.speaker==='[player name]');
+  assert.equal(line.presentation,'overhead');
+  const fresh={player:f.player,npc:f.npc,npcId:cookId,variant:{page:'2025 Christmas event',variant:'starting-the-event-talking-to-the-cook'},exact:true,select:()=>[line,{player:'The later transcript continues.'}]};
+  PM.emitCustomEvent('npc-dialogue:start',fresh);assert.equal(fresh.handled,true);
+  const manager=f.player.getDialogueManager(),waiting=manager.getCurrent(),owner=manager.getOwner();assert.ok(waiting instanceof core.ActionDialogue);
+  assert.equal(old.cancel(),true);assert.equal(manager.getCurrent(),waiting);assert.equal(manager.getOwner(),owner);
+  core.TaskManager.process();core.TaskManager.process();
+  assert.equal(manager.getCurrent()?.getText(),'The later transcript continues.');assert.equal(fresh.cancel(),true);
+});
+
+test('an interface-close callback can install a new source without the old cancel resetting it',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  const sender=f.player.getPacketSender(),group=sender.getChatboxGroupId();
+  const hooks=PM.customEventHooks.get('interface:closed'),start=hooks.length;let replacement,entry,once=false;
+  t.after(()=>hooks.splice(start));
+  PM.createApi('CloseReplacementTest').onCustomEvent('interface:closed',event=>{
+    if(event.player!==f.player||event.interfaceId!==group||once)return;once=true;
+    replacement=request(f.player,f.npc);assert.equal(MultiChatboxPrompt.selectOption(f.player,0),true);entry=f.player.getDialogueManager().getCurrent();
+  });
+  assert.equal(old.cancel(),true);assert.ok(once);assert.ok(entry);
+  assert.equal(f.player.getDialogueManager().getCurrent(),entry,'post-close cleanup must recheck ownership after synchronous hooks');
+  assert.equal(replacement.cancel(),true);
+});
+test('a missing explicit activity page or variant cannot replace the current conversation', async t => {
+  const f = fixture(t), { player, npc } = f;
+  request(player, npc);
+  const current = MultiChatboxPrompt.getPending(player);
+  assert.ok(current);
+  assert.notEqual(request(player, npc, 'missing-variant').handled, true);
+  assert.deepEqual(MultiChatboxPrompt.getPending(player), current);
+  assert.notEqual(request(player, npc, 'starting-off', 'Missing annual event').handled, true);
+  assert.deepEqual(MultiChatboxPrompt.getPending(player), current);
+  await choose(f, 2);
+  assert.equal(MultiChatboxPrompt.getPending(player), null);
+});

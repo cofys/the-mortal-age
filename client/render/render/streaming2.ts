@@ -94,7 +94,6 @@ import { collectWidgetsAtPoint } from "../../widgets/menu/utils";
 import {
     getCanvasCssSize,
     isIos,
-    isLowEndDevice,
     isMobileMode,
     isTouchDevice,
     isWebGL2Supported,
@@ -199,6 +198,7 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
     ): Promise<void> {
 
         const queuedAt = performance.now();
+        const definitionEpoch = host.definitionContentEpoch;
 
         // Don't try to load maps before cache is initialized
         if (!host.osrsClient.loadedCache) return;
@@ -234,7 +234,7 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
                 : undefined;
         const input: SdMapLoaderInput = snapshotMapInput({
             mapProfileEnabled: isMapProfileEnabled(),
-            persistentCache: isLowEndDevice,
+            persistentCache: true,
             minimapLevel: host.getPlayerRawPlane(),
             mapX,
             mapY,
@@ -265,6 +265,7 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
                 SdMapDataLoader
             >(host.dataLoader, input);
         } catch (error) {
+            if (definitionEpoch !== host.definitionContentEpoch) return;
             console.error(`[WebGLOsrsRenderer] map load failed for (${mapX}, ${mapY})`, error);
             if (typeof locReloadBatchId === "number") {
                 host.resolveLocReloadBatchMap(locReloadBatchId, mapId, undefined);
@@ -277,6 +278,10 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
             host.queuedLocReloadBatchByMap.delete(mapId);
             return;
         }
+
+        // An obsolete build must not enter a newly rebuilt grid or mutate its
+        // loading/error state, even when its map coordinates are the same.
+        if (definitionEpoch !== host.definitionContentEpoch) return;
 
         // Terrain includes neighbouring regions in its border. A replacement
         // arriving during this load invalidates both geometry and height data.

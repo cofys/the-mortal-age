@@ -1,0 +1,142 @@
+"use strict";
+
+let core;
+let game;
+const SCORER = "scorer";
+const DEFENDER = "defender";
+const ACTION_INTERVAL_MS = 600;
+
+function isPractice(role) {
+  return role === SCORER || role === DEFENDER;
+}
+
+function gear(player, slot, id) {
+  if (player.getEquipment().getSlot(slot) === id) return false;
+  player.getEquipment().setItem(slot, new core.Item(id, 1));
+  return true;
+}
+
+function supply(player, id, amount = 1) {
+  const inventory = player.getInventory();
+  if (inventory.getAmount(id) < amount) inventory.adds(id, amount - inventory.getAmount(id));
+}
+
+function prepare(player, state, teamId) {
+  if (!isPractice(state.role)) return false;
+  if (state.equipped) return true;
+  const I = core.ItemIdentifiers;
+  const E = core.Equipment;
+  const scorer = state.role === SCORER;
+  for (const skill of [core.Skill.ATTACK, core.Skill.DEFENCE, core.Skill.STRENGTH, core.Skill.HITPOINTS, core.Skill.RANGED, core.Skill.PRAYER, core.Skill.MAGIC]) {
+    player.getSkillManager().setMaxLevels(skill, 99).setCurrentLevels(skill, 99);
+  }
+  for (const [slot, id] of [
+    [E.BODY_SLOT, scorer ? I.MASORI_BODY_F_ : I.ANCESTRAL_ROBE_TOP],
+    [E.LEG_SLOT, scorer ? I.MASORI_CHAPS_F_ : I.ANCESTRAL_ROBE_BOTTOM],
+    [E.SHIELD_SLOT, scorer ? I.SPECTRAL_SPIRIT_SHIELD : I.ELIDINIS_WARD_F_],
+    [E.AMULET_SLOT, scorer ? I.AMULET_OF_FURY : I.OCCULT_NECKLACE],
+    [E.HANDS_SLOT, scorer ? I.BARROWS_GLOVES : I.TORMENTED_BRACELET],
+    [E.FEET_SLOT, scorer ? I.PEGASIAN_BOOTS : I.ETERNAL_BOOTS],
+    [E.RING_SLOT, scorer ? I.RING_OF_SUFFERING_I_ : I.MAGUS_RING_2],
+  ]) gear(player, slot, id);
+  if (!scorer) {
+    gear(player, E.WEAPON_SLOT, I.KODAI_WAND);
+    player.setSpellbook(core.MagicSpellbook.ANCIENT);
+    supply(player, I.WATER_RUNE, 10000);
+    supply(player, I.BLOOD_RUNE, 10000);
+    supply(player, I.DEATH_RUNE, 10000);
+  }
+  supply(player, I.BANDAGES, 8);
+  supply(player, I.EXPLOSIVE_POTION, 4);
+  supply(player, I.BUCKET_OF_WATER, 2);
+  supply(player, I.TINDERBOX);
+  if (!scorer) supply(player, I.BARRICADE, 3);
+  state.equipped = true;
+  state.colours = true;
+  game.equipTeamColours(player, teamId);
+  game.refreshPlayerAppearance(player, true);
+  return true;
+}
+
+function useOnBarricade(player, npc, itemId) {
+  // Practice opponents keep tool supplies available for the full session.
+  if (itemId === core.ItemIdentifiers.BUCKET_OF_WATER && !player.getInventory().contains(itemId)) player.getInventory().delete(core.ItemIdentifiers.BUCKET, 1);
+  supply(player, itemId);
+  const slot = player.getInventory().getSlotForItemId(itemId);
+  if (slot < 0) return false;
+  return core.PluginManager.emitItemOnNpc({ player, target: npc, npcId: npc.getId(), targetIndex: npc.getIndex(), item: player.getInventory().getItems()[slot], itemId, slot, interfaceId: 0, handled: false });
+}
+
+function nearestBarricade(player, radius) {
+  let nearest = null;
+  let distance = radius + 1;
+  for (const npc of core.World.getNpcs()) {
+    if (!npc || !game.isBarricade(npc) || npc.getLocation().getZ() !== player.getLocation().getZ()) continue;
+    const next = player.calculateDistance(npc);
+    if (next < distance) { nearest = npc; distance = next; }
+  }
+  return nearest;
+}
+
+function scorerTools(ctx, state) {
+  if (ctx.nowMs < (state.nextToolAt ?? 0)) return "failure";
+  const npc = nearestBarricade(ctx.player, 1);
+  if (!npc) return "failure";
+  const burning = npc.getNpcTransformationId() !== -1;
+  const used = useOnBarricade(ctx.player, npc, burning ? core.ItemIdentifiers.BUCKET_OF_WATER : core.ItemIdentifiers.EXPLOSIVE_POTION);
+  if (!used) return "failure";
+  state.nextToolAt = ctx.nowMs + ACTION_INTERVAL_MS;
+  return "running";
+}
+
+function defenderTools(ctx, state, target) {
+  if (!target || ctx.nowMs < (state.nextToolAt ?? 0)) return "failure";
+  const player = ctx.player;
+  const I = core.ItemIdentifiers;
+  const npc = nearestBarricade(player, 1);
+  if (npc) {
+    const burning = npc.getNpcTransformationId() !== -1;
+    // Burning barriers resist explosives; water saves them before they collapse.
+    const item = burning ? I.BUCKET_OF_WATER : player.calculateDistance(target) <= 3 ? I.TINDERBOX : null;
+    if (item && useOnBarricade(player, npc, item)) {
+      state.nextToolAt = ctx.nowMs + 1800;
+      return "running";
+    }
+    return "failure";
+  }
+  if (player.calculateDistance(target) > 4 || ctx.nowMs < (state.nextBarricadeAt ?? 0)) return "failure";
+  supply(player, I.BARRICADE);
+  const barricadeSlot = player.getInventory().getSlotForItemId(I.BARRICADE);
+  if (barricadeSlot < 0) return "failure";
+  core.PluginManager.emitItemAction({ player, itemId: I.BARRICADE, item: player.getInventory().getItems()[barricadeSlot], slot: barricadeSlot, interfaceId: 0, clickType: 1, option: "Set-up", handled: false });
+  state.nextBarricadeAt = ctx.nowMs + 6000;
+  state.nextToolAt = ctx.nowMs + ACTION_INTERVAL_MS;
+  return "running";
+}
+
+function defenderAttack(ctx, state, target) {
+  if (!target) return "failure";
+  const player = ctx.player;
+  const spear = player.calculateDistance(target) === 1 && target.getTimers().has(core.TimerKey.FREEZE) && player.getSpecialPercentage() >= 25;
+  if (gear(player, core.Equipment.WEAPON_SLOT, spear ? core.ItemIdentifiers.ZAMORAKIAN_HASTA : core.ItemIdentifiers.KODAI_WAND)) game.refreshPlayerAppearance(player, true);
+  if (spear) {
+    player.getCombat().setCastSpell(null);
+    player.getCombat().setAutocastSpell(null);
+    player.setSpecialActivated(true);
+    player.getCombat().attack(target);
+  } else {
+    player.setSpecialActivated(false);
+    const spell = core.CombatSpells.ICE_BARRAGE.getSpell();
+    core.Autocasting.setAutocast(player, spell);
+    player.getCombat().castSpellOn(target, spell);
+  }
+  return "running";
+}
+
+module.exports = function attachCastleWarsPractice(api, castleWars) {
+  core = api.core;
+  game = castleWars;
+  game.practiceBots = { prepare, scorerTools, defenderTools, defenderAttack };
+};
+
+module.exports._test = { SCORER, DEFENDER, isPractice, prepare, nearestBarricade, scorerTools, defenderTools, defenderAttack };

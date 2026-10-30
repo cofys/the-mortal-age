@@ -44,6 +44,7 @@
     "433": { "name": "'Did you know?' tips", "varbit": 16235 },
     "451": { "name": "STASH units take equipped items", "varbit": 17938 },
     "454": { "name": "Sailing side panel", "varbit": 18131 },
+    "457": { "name": "Port task cancellation warning", "varbit": 18130 },
     "493": { "name": "Level-up chatbox list", "varbit": 20158 },
     "494": { "name": "Level-up guide list", "varbit": 20159 }
   }

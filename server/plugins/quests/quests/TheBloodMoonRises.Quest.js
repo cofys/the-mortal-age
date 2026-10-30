@@ -7033,6 +7033,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function buildJournal(player) {
     if (quest.isComplete(player)) return ["The confrontation at the blood moon is over.", "The Myreque have survived the battle and must regroup."];
     const value = stage(player);
+    if (!quest.isStarted(player)) return ["I can start this quest by talking to <col=800000>Sarius Guile</col> in the <col=800000>Icyene Graveyard</col>."];
     if (value >= STAGE.FINAL) return ["The Myreque have set out for Castle Drakan.", "I must follow them and stop Lowerniel Drakan."];
     if (value >= STAGE.FENCE_FOUND) return ["Safalaan escaped toward Castle Drakan.", "I should join the Myreque in Burgh de Rott and prepare to pursue him."];
     if (value >= STAGE.WYRD_DEFEATED) return ["The Wyrd knocked me unconscious and fled north.", "I should inspect the broken fence beyond Barrows and follow Safalaan's trail."];

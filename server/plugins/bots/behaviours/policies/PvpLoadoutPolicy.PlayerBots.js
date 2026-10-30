@@ -447,6 +447,9 @@ function applyGeneratedPvpLoadout(player, state, options = {}) {
   const inventoryItems = player.getInventory().getItems();
   if (player.getInventory().getFreeSlots() === 0 &&
       player.getEquipment().isSlotOccupied(Equipment.SHIELD_SLOT) &&
+      // Wielding into empty hands vacates the two-hander's own slot for the shield to fill,
+      // so only a worn weapon being displaced costs a free slot here.
+      player.getEquipment().isSlotOccupied(Equipment.WEAPON_SLOT) &&
       inventoryItems.some((item) => item?.getDefinition().isDoubleHanded())) {
     // Virtual eating never frees a slot to stow the shield during a two-handed switch.
     const foodSlot = inventoryItems.findIndex((item) => isFoodItem(item?.getId()));

@@ -1530,7 +1530,10 @@ export class OverlayHost {
                     ) {
                         return;
                     }
-                    if (!this.isNpcMapVisible(ecsId)) return;
+                    // A deck NPC (a boat's HP-bar NPC, crewmates) is in its deck's own scene: shown
+                    // with its deck, its bars and hitsplats where the deck is drawn.
+                    const deckView = npcEcs.getWorldViewId(ecsId) | 0;
+                    if (deckView < 0 && !this.isNpcMapVisible(ecsId)) return;
                     const localX = npcEcs.getX(ecsId) | 0;
                     const localY = npcEcs.getY(ecsId) | 0;
                     const serverId = npcEcs.getServerId(ecsId) | 0;
@@ -1553,8 +1556,14 @@ export class OverlayHost {
                         baseWorldZ,
                         npcTypeId,
                     );
-                    const worldX = overlayAnchor.worldX;
-                    const worldZ = overlayAnchor.worldZ;
+                    let worldX = overlayAnchor.worldX;
+                    let worldZ = overlayAnchor.worldZ;
+                    if (deckView >= 0) {
+                        const projected = projectDeckToWorld(this, deckView, worldX * 128, worldZ * 128);
+                        if (!projected) return;
+                        worldX = projected.x / 128;
+                        worldZ = projected.y / 128;
+                    }
                     const hitsplatOffset = overlayAnchor.logicalHeightTiles * 0.5;
                     const healthBarOffset = overlayAnchor.logicalHeightTiles + 15 / 128;
                     if (hasHealth && healthBars.length < healthBarMaxEntries) {

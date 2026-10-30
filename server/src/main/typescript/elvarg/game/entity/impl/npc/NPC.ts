@@ -217,6 +217,8 @@ export class NPC extends Mobile {
      */
     /** Flag for an NPC that, like a pet, is not stopped by other NPCs or players. */
     public static readonly WALK_THROUGH_ENTITIES_FLAG = "movement:walk-through-entities";
+    /** OSRS's "full" entity collision: players wait instead of stepping onto this NPC (the Agility Pyramid's moving blocks). */
+    public static readonly BLOCKS_PLAYERS_FLAG = "movement:blocks-players";
 
     public canWalkThroughNPCs(): boolean {
         if (this.pet || this.hasFlag(NPC.WALK_THROUGH_ENTITIES_FLAG)) {
@@ -266,7 +268,8 @@ export class NPC extends Mobile {
             const movement = this.getMovementQueue();
             const combat = this.getCombat();
             movement.beginCycle();
-            this.movementCoordinator.process();
+            // A plugin driving this NPC's walk owns its movement: no wandering or walking home.
+            if (!this.scriptedMovement) this.movementCoordinator.process();
             const processCombat = combat.hasPendingWork();
             if (processCombat) {
                 combat.preMovementProcess();
@@ -971,7 +974,7 @@ export class NPC extends Mobile {
 
     /**
      * While true, Combat leaves this NPC's movement queue alone (no pursuit route,
-     * no in-range reset) and does not attack. Plugins driving a scripted walk set
+     * no in-range reset) and does not attack, and it neither wanders nor walks home. Plugins driving a scripted walk set
      * this, path the NPC themselves, then clear it on arrival to resume combat.
      */
     public setScriptedMovement(scripted: boolean): void {

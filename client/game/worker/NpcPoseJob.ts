@@ -73,5 +73,12 @@ export class NpcPoseJob {
         }
     }
 
-    dispose(): void { this.disposed = true; this.loader?.clear(); }
+    invalidate(): void {
+        this.loader?.clear();
+        this.loader = undefined;
+        this.context = undefined;
+        this.appearances.clear();
+    }
+
+    dispose(): void { this.disposed = true; this.invalidate(); }
 }

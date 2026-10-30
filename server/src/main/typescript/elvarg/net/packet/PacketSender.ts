@@ -155,6 +155,8 @@ export class PacketSender {
   private readonly varps = new Map<number, number>();
   private subInterfaceTargets = new Map<number, { targetUid: number; type: number }>();
   private chatboxGroupId = -1;
+  private chatboxOwner: object | undefined;
+  private presentingChatboxOwner: object | undefined;
   private player: any;
   constructor(player: any) {
     this.player = player;
@@ -473,6 +475,7 @@ export class PacketSender {
     // decoding group 162 directly from the cache. Child 9 of 161 is an
     // unrelated 0x0 icon-cluster anchor nested under the sidebar tree.
     const previous = this.chatboxGroupId;
+    this.chatboxOwner = this.presentingChatboxOwner;
     this.chatboxGroupId = id;
     if (previous >= 0 && previous !== id) this.emitInterfaceClosed(previous);
     // A (re)mounted group starts with its cache text, so resend everything written to it. The
@@ -795,6 +798,33 @@ export class PacketSender {
     return this.chatboxGroupId;
   }
 
+  /** Associate only chatboxes mounted synchronously by this presentation. */
+  public withChatboxOwner<T>(owner: object | undefined, present: () => T): T {
+    const previous = this.presentingChatboxOwner;
+    this.presentingChatboxOwner = owner;
+    try { return present(); }
+    finally { this.presentingChatboxOwner = previous; }
+  }
+
+  /** Close this owner's chatbox without removing an unrelated main modal. */
+  public closeChatboxFor(owner: object): boolean {
+    if (this.chatboxGroupId < 0 || this.chatboxOwner !== owner) return false;
+    this.closeCurrentChatbox(this.player.getDialogueManager?.()?.getOwner?.() === owner);
+    return true;
+  }
+
+  private closeCurrentChatbox(resetDialogue = true): this {
+    const group = this.chatboxGroupId;
+    if (group < 0) return this;
+    this.chatboxGroupId = -1;
+    this.chatboxOwner = undefined;
+    if (resetDialogue) this.player.getDialogueManager?.()?.reset?.();
+    this.player.getSession().sendClientPacket(encodeWidgetCloseSub(CHATBOX_MODAL_TARGET_UID));
+    this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, true));
+    this.emitInterfaceClosed(group);
+    return this;
+  }
+
   public isChatboxInterface(groupId: number): boolean {
     return groupId === this.chatboxGroupId;
   }
@@ -823,12 +853,7 @@ export class PacketSender {
     if (!Number.isInteger(groupId) || groupId < 0) return this;
     if (groupId === this.player.getInterfaceId?.()) return this.sendInterfaceRemoval();
     if (groupId === this.chatboxGroupId) {
-      this.chatboxGroupId = -1;
-      this.player.getDialogueManager?.()?.reset?.();
-      this.player.getSession().sendClientPacket(encodeWidgetCloseSub(CHATBOX_MODAL_TARGET_UID));
-      this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, true));
-      this.emitInterfaceClosed(groupId);
-      return this;
+      return this.closeCurrentChatbox();
     }
     const target = this.subInterfaceTargets.get(groupId);
     if (target) {

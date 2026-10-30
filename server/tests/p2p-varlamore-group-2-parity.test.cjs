@@ -1164,8 +1164,21 @@ test('Quetzals use cache destinations, reject closed or locked map clicks, and f
   assert.ok(p.log.some(row => row[0] === 'closeSubInterface' && row[1] === ((161 << 16) | 1)));
 });
 
-test('Primio opens the canonical first-trip menu and flies both ways only after Children of the Sun', () => {
-  const h = harness('ChildrenOfTheSun'), p = player();
+test('Primio opens the canonical first-trip menu and flies both ways only after Children of the Sun', t => {
+  // Trusted transcript presentation needs the actual sender/manager owners;
+  // the legacy catch-all sender above would silently swallow its callback.
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { PlayerSession } = require('../dist/net/PlayerSession');
+  const frames = [], channel = { kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true,
+    send: frame => { frames.push(Buffer.from(frame)); return true; }, close() {}, onData() {}, onError() {}, onClose() {} };
+  const h = harness('ChildrenOfTheSun'), p = new Player(new PlayerSession(channel));
+  p.setIndex(2900); p.setUsername('PrimioParity'); p.setRegistered(true); p.setLocation(new core.Location(3210, 3220));
+  p.manager = p.getDialogueManager(); p.messages = [];
+  const sendMessage = p.sendMessage.bind(p);
+  p.sendMessage = text => { p.messages.push(text); return sendMessage(text); };
+  p.varbits = { get: id => p.getPacketSender().getVarbit(id) };
+  Object.defineProperty(p, 'text', { get: () => p.manager.getCurrent()?.getText?.() ?? '' });
+  t.after(() => { p.closeInterruptibleInterfaces(); p.setRegistered(false); h.tasks.forEach(task => task.stop()); });
   // This large parity file intentionally registers many copies of each quest
   // in one process; make the public completion query resolve against this
   // test's current Children of the Sun player rather than an older fixture.
@@ -1210,6 +1223,10 @@ test('Primio opens the canonical first-trip menu and flies both ways only after 
   h.continueUntil(p, () => p.text.includes('Well, here we are!'), 20);
   assert.match(p.text, /Well, here we are! Welcome to Fortis!/,
     'the registered runner resolves the arrival to the canonical Varrock transcript tail');
+  assert.ok(p.manager.getOwner(), 'the trusted arrival uses an actual dialogue owner');
+  assert.equal(p.getSession().flushPackets(), true, 'flush the actual session queue to the captured transport');
+  assert.ok(frames.some(frame => frame.includes(Buffer.from('Well, here we are! Welcome to Fortis!'))),
+    'the actual sender encoded the welcome, rather than a catch-all test double skipping presentation');
 
   h.tick(3);
   h.continueUntil(p, () => p.varbits.get(9652) === 4, 30);

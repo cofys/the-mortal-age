@@ -74,6 +74,9 @@ export class ClientState {
     /** Scene base Y in world tiles (8-aligned). */
     static baseY: number = 0;
 
+    /** A player_sync has supplied this session's local player and scene base. */
+    static scenePositionReady: boolean = false;
+
     /** Current plane/level (0-3) */
     static plane: number = 0;
 
@@ -366,6 +369,9 @@ export class ClientState {
         this.destinationY = 0;
         this.destinationWorldX = 0;
         this.destinationWorldY = 0;
+        this.baseX = 0;
+        this.baseY = 0;
+        this.scenePositionReady = false;
         this.inInstance = false;
         this.instanceTemplateChunks = null;
         this.regionX = -1;

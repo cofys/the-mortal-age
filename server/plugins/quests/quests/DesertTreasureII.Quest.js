@@ -4389,7 +4389,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (s >= S.DIG) return ["Find Dr Banikan at the Digsite excavation."];
     if (s >= S.VAULT) return ["Speak to Asgarnia Smith about the statues and plaque."];
     if (s >= S.STARTED) return ["Inspect the four statues and plaque in the Ancient Vault."];
-    return ["Investigate the Ancient Vault north-east of Nardah."];
+    return ["I can start this quest by investigating the <col=800000>Ancient Vault</col> north-east of <col=800000>Nardah</col>."];
   }
 
   const stage = (p) => quest.getStage(p);

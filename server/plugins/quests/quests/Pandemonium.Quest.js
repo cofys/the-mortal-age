@@ -276,6 +276,8 @@ module.exports = function registerPandemoniumQuest(api) {
   const OLD_GROG_SPAWN_TILE = { x: 3049, y: 2966, z: 0 };
   const PORT_SARIM_LEDGER_TILE = { x: 3028, y: 3194 };
   const PANDEMONIUM_LEDGER_TILE = { x: 3061, y: 2985 };
+  const PORT_SARIM_LEDGER_BASE = api.core.CacheDefinitions.getLocId("dock_loading_bay_ledger_table_port_sarim");
+  const PANDEMONIUM_LEDGER_BASE = api.core.CacheDefinitions.getLocId("dock_loading_bay_ledger_table_pandemonium");
 
   let quest;
   let questObjectsInstalled = false;
@@ -948,9 +950,17 @@ module.exports = function registerPandemoniumQuest(api) {
     startTranscript(api, player, JIM_NPC_ID, PAGE, JIM_BUILD_VARIANT);
   }
 
+  /** Native clicks keep the physical multiloc base separate from its resolved ledger action. */
+  function ledgerActionId(event) {
+    const resolved = event.definition?.id;
+    return resolved === ObjectIdentifiers.LEDGER_TABLE_2 || resolved === ObjectIdentifiers.LEDGER_TABLE_3
+      ? resolved : event.objectId;
+  }
+
   /** PortTasks deposits the crate; the quest advances once its task slot is complete. */
   function handleLedgerInteraction(event) {
-    const { player, objectId } = event;
+    const { player } = event;
+    const objectId = ledgerActionId(event);
     if (objectId !== ObjectIdentifiers.LEDGER_TABLE_3 || quest.getStage(player) !== STAGE_PANDEMONIUM) return;
     const { CountdownTask, TaskManager } = api.core;
     TaskManager.submit(
@@ -1076,7 +1086,7 @@ module.exports = function registerPandemoniumQuest(api) {
     if (handleTutorialHelm(event)) return;
     if (handleTutorialSails(event)) return;
     if (event.clickType !== 1) return;
-    switch (event.objectId) {
+    switch (ledgerActionId(event)) {
       case SALVAGING_HOOK_OBJECT_ID:
         deploySalvagingHook(event);
         return;
@@ -1107,8 +1117,8 @@ module.exports = function registerPandemoniumQuest(api) {
   function installQuestObjects() {
     if (questObjectsInstalled) return;
     questObjectsInstalled = true;
-    registerQuestObject(ObjectIdentifiers.LEDGER_TABLE_2, PORT_SARIM_LEDGER_TILE);
-    registerQuestObject(ObjectIdentifiers.LEDGER_TABLE_3, PANDEMONIUM_LEDGER_TILE);
+    registerQuestObject(PORT_SARIM_LEDGER_BASE, PORT_SARIM_LEDGER_TILE);
+    registerQuestObject(PANDEMONIUM_LEDGER_BASE, PANDEMONIUM_LEDGER_TILE);
   }
 
   /** The quest's sibling varbits in varp 4959 are not stage-writable, so re-send them. */

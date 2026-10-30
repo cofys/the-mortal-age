@@ -1,5 +1,5 @@
-// Port tasks (courier tasks; bounty tasks show on the boards but can't be taken yet): notice
-// boards, ledger tables, the cargo hold's crates, port masters and the reward bags. See
+// Port tasks (courier and bounty tasks): notice boards, ledger tables, the cargo hold's crates,
+// port masters, the reward bags and bounties' parts. See
 // docs/port-tasks.md.
 const common = require("./porttasks/Common.PortTasks");
 
@@ -23,9 +23,12 @@ module.exports = {
     api.persistAttribute(common.SLOTS_ATTRIBUTE);
     api.onCustomEvent("sailing:has-port-task-slot", answerOpenSlot);
     api.onPlayerLogin(sendState);
+    require("./porttasks/Cargo.PortTasks")(api);
     require("./porttasks/Board.PortTasks")(api);
     require("./porttasks/Ledger.PortTasks")(api);
     require("./porttasks/PortMaster.PortTasks")(api);
+    require("./porttasks/Log.PortTasks")(api);
     require("./porttasks/Bags.PortTasks")(api);
+    require("./porttasks/Bounty.PortTasks")(api);
   },
 };

@@ -30,7 +30,8 @@ function fixture(t,{magic=99,hp=100,claimed=false}={}) {
     getCombat:()=>({getTarget:()=>target,getAttacker:()=>null,reset(){},setCastSpell(){}})};
   const target={hp,registered:true,isNpc:()=>true,isPlayer:()=>false,isRegistered:()=>target.registered,isUntargetable:()=>false,
     getHitpoints:()=>target.hp,getSize:()=>1,getLocation:()=>new Location(3203,3200,0),
-    decrementHealth:hit=>{hit.setDamage(Math.min(hit.getDamage(),Math.max(0,target.hp)));target.hp-=hit.getDamage();return hit;},
+    // Match Mobile's pre-healing applied-damage bookkeeping.
+    decrementHealth:hit=>{hit.setDamage(Math.min(hit.getDamage(),Math.max(0,target.hp)));hit.setHealthLost(hit.getDamage());target.hp-=hit.getDamage();return hit;},
     addTickHit:hit=>shown.push(hit.getDamage()),getCombat:()=>combat};
   const combat=new Combat(target);
   t.mock.method(NPC,'create',()=>{

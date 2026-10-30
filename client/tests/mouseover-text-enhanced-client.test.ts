@@ -15,7 +15,7 @@ async function main(): Promise<void> {
     const { isMobileMode, isTouchDevice, tooltipsEnabledByDefault } = await import(
         "../common/utils/DeviceUtil"
     );
-    const { CLIENT_TYPE_ANDROID, CLIENT_TYPE_ENHANCED, isMobileClient, reportedClientType } =
+    const { CLIENT_TYPE_MOBILE, CLIENT_TYPE_ENHANCED, isMobileClient, reportedClientType } =
         await import("../rs/cs2/ClientType");
     const { WidgetsOverlay } = await import("../ui/devoverlay/WidgetsOverlay");
 
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
         CLIENT_TYPE_ENHANCED,
         "the desktop layout is the enhanced client",
     );
-    assert.equal(reportedClientType(601), CLIENT_TYPE_ANDROID, "the mobile layout is android");
+    assert.equal(reportedClientType(601), CLIENT_TYPE_MOBILE, "the mobile layout is the mobile client (7)");
 
     const client: any = {
         showMouseOverText: true,
@@ -64,9 +64,9 @@ async function main(): Promise<void> {
         "the game's text is the only one",
     );
 
-    // Other client types still get the client's own text.
+    // The mobile client is the current client too: the game draws its text there as well.
     client.widgetManager.rootInterface = 601;
-    assert.equal(overlay.getMouseOverTextVisualState(false).text, "Walk here");
+    assert.deepEqual(overlay.getMouseOverTextVisualState(false), { signature: "hidden" });
 
     console.log("mouseover text (enhanced client): ok");
 }

@@ -1,5 +1,10 @@
 import { CustomObjTypeLoader } from "../../../custom/items/CustomObjTypeLoader";
 import { CustomNpcTypeLoader } from "../../../custom/npcs/CustomNpcTypeLoader";
+import { createDefinitionArchiveView } from "../../../custom/archives/ArchivedDefinitionStore";
+import { ArchivedTypeLoader } from "../../config/ArchivedTypeLoader";
+import { LocType } from "../../config/loctype/LocType";
+import { NpcType } from "../../config/npctype/NpcType";
+import { ObjType } from "../../config/objtype/ObjType";
 import {
     ArchiveBasTypeLoader,
     BasTypeLoader,
@@ -89,6 +94,33 @@ import { IndexType } from "../IndexType";
 import { CacheLoaderFactory } from "./CacheLoaderFactory";
 
 export class Dat2CacheLoaderFactory implements CacheLoaderFactory {
+    private archivedLoaders?: { npc: NpcTypeLoader; loc: LocTypeLoader; obj: ObjTypeLoader };
+
+    private getArchivedLoaders() {
+        if (this.archivedLoaders) return this.archivedLoaders;
+        const configs = this.cacheSystem.getIndex(IndexType.DAT2.configs);
+        const native = {
+            npc: new ArchiveNpcTypeLoader(this.cacheInfo, configs.getArchive(ConfigType.DAT2.npcs)),
+            loc: new ArchiveLocTypeLoader(this.cacheInfo, configs.getArchive(ConfigType.DAT2.locs)),
+            obj: new ArchiveObjTypeLoader(this.cacheInfo, configs.getArchive(ConfigType.DAT2.objs)),
+        };
+        const view = createDefinitionArchiveView({
+            cacheInfo: this.cacheInfo,
+            counts: { npc: native.npc.getCount(), loc: native.loc.getCount(), obj: native.obj.getCount() },
+            currentDefinition: (kind, id) => ({
+                name: native[kind].load(id).name,
+                data: native[kind].archive.getFile(id)?.data,
+            }),
+        });
+        return this.archivedLoaders = {
+            npc: new ArchivedTypeLoader(native.npc, NpcType,
+                id => view().getSource("npc", id), () => view().getCount("npc")),
+            loc: new ArchivedTypeLoader(native.loc, LocType,
+                id => view().getSource("loc", id), () => view().getCount("loc")),
+            obj: new ArchivedTypeLoader(native.obj, ObjType,
+                id => view().getSource("obj", id), () => view().getCount("obj")),
+        };
+    }
     private enumTypeLoader?: EnumTypeLoader;
     private underlayTypeLoader?: FloorTypeLoader;
     private overlayTypeLoader?: OverlayFloorTypeLoader;
@@ -172,6 +204,9 @@ export class Dat2CacheLoaderFactory implements CacheLoaderFactory {
 
     getLocTypeLoader(): LocTypeLoader {
         if (this.locTypeLoader) return this.locTypeLoader;
+        if (this.cacheInfo.game === "oldschool") {
+            return this.locTypeLoader = this.getArchivedLoaders().loc;
+        }
         if (this.isIndexConfigs()) {
             const locsIndex = this.cacheSystem.getIndex(IndexType.RS2.locs);
             return (this.locTypeLoader = new IndexLocTypeLoader(this.cacheInfo, locsIndex));
@@ -184,6 +219,9 @@ export class Dat2CacheLoaderFactory implements CacheLoaderFactory {
 
     getNpcTypeLoader(): NpcTypeLoader {
         if (this.npcTypeLoader) return this.npcTypeLoader;
+        if (this.cacheInfo.game === "oldschool") {
+            return this.npcTypeLoader = new CustomNpcTypeLoader(this.getArchivedLoaders().npc);
+        }
         let baseLoader: NpcTypeLoader;
         if (this.isIndexConfigs()) {
             const npcIndex = this.cacheSystem.getIndex(IndexType.RS2.npcs);
@@ -199,6 +237,10 @@ export class Dat2CacheLoaderFactory implements CacheLoaderFactory {
 
     getObjTypeLoader(): ObjTypeLoader {
         if (this.objTypeLoader) return this.objTypeLoader;
+        if (this.cacheInfo.game === "oldschool") {
+            return this.objTypeLoader = new CustomObjTypeLoader(
+                new PostProcessedObjTypeLoader(this.getArchivedLoaders().obj), this.cacheInfo);
+        }
         let baseLoader: ObjTypeLoader;
         if (this.isIndexConfigs()) {
             const objIndex = this.cacheSystem.getIndex(IndexType.RS2.objs);

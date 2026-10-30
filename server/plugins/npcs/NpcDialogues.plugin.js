@@ -13,12 +13,14 @@
  * an `after` callback run once the player continues
  * past it. A message step's "npc-dialogue:action" (`kind: "message"`) can set
  * `box: { items }` (one or two item ids) to show it as an item box, as OSRS shows
- * hand-outs, instead of a chat message. "npc-dialogue:start" plays a named variant on demand.
+ * hand-outs, instead of a chat message. "npc-dialogue:start" plays a named variant on demand
+ * and returns an optional request.cancel handle scoped to that playback's chain/chatbox.
  * Speech, choices, random alternatives and named shops run through existing systems; a shop
  * with versions emits "npc-dialogue:shop" ({ player, npcId, target, shops, shop }) to pick one.
  */
 const fs = require("fs");
 const path = require("path");
+const { isDeepStrictEqual } = require("node:util");
 const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { PluginManager } = require("../../src/main/typescript/elvarg/plugins/PluginManager");
@@ -183,6 +185,7 @@ function formatPlayerText(text, player) {
  * NPC silent. Prefer the standard talk transcript over overhead shouts.
  */
 function pickVariant(npc) {
+  if (npc?.activation === "explicit") return undefined;
   if (Array.isArray(npc?.steps)) return npc.steps;
   const variants = npc?.variants;
   if (!variants) return undefined;
@@ -497,6 +500,26 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
   context.jumps = 0;
   const { player } = event;
   const manager = player.getDialogueManager();
+  // Scoped cancellation is an opt-in contract of trusted named playback.
+  // Ordinary/quest callers retain the existing unowned presentation path.
+  const sender = event.explicit === true ? player.getPacketSender() : undefined;
+  const owner = sender ? Object.freeze({}) : undefined;
+  let cancelled = false;
+  function presentOwned(present) {
+    return owner ? sender.withChatboxOwner(owner, present) : present();
+  }
+  function startChain(builder) {
+    if (!cancelled) manager.startDialogues(builder, owner);
+  }
+  function cancel() {
+    if (cancelled || !owner) return false;
+    cancelled = true;
+    const ownsChain = manager.getOwner() === owner;
+    const closed = sender.closeChatboxFor(owner);
+    // Closing emits synchronous interface hooks which may install a new chain.
+    if (manager.getOwner() === owner) manager.reset();
+    return ownsChain || closed;
+  }
   const npcId = event.npcId;
   const definition = event.definition;
   const close = () => player.getPacketSender().sendInterfaceRemoval();
@@ -660,6 +683,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     wrapBranch: (chosen, branch) => [{ type: "condition_chosen", id: chosen.id, text: chosen.text }, ...branch] });
 
   function presentMenu(menu, offset = 0, tail = []) {
+    if (cancelled) return;
     const { step, rest, record } = menu;
     context.currentMenu = menu;
     const notice = { player, npcId, definition, prompt: step.prompt || "Select an Option", warning: null };
@@ -667,7 +691,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     const warned = context.warnedMenus ??= new WeakSet();
     if (notice.warning && !warned.has(step)) {
       warned.add(step);
-      manager.startDialogues(new DialogueChainBuilder()
+      startChain(new DialogueChainBuilder()
         .add(new api.core.StatementDialogue(0, String(notice.warning)))
         .add(new ActionDialogue(1, { execute: () => presentMenu(menu, offset, tail) })));
       return;
@@ -691,6 +715,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         || (option.steps ?? []).find((entry) => typeof entry?.player === "string")?.player
         || "Continue.";
       return [label, () => {
+        if (cancelled) return;
         // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
         // let the owning quest run its action, then play the branch.
         if (option.hook) {
@@ -708,12 +733,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     if (!pairs.length) return run(rest, record);
     playedAny = true;
     manager.reset();
-    if (!api.sendMultiChatboxPrompt(player, formatPlayerText(step.prompt || "Select an Option", player), ...pairs)) {
+    if (!presentOwned(() => api.sendMultiChatboxPrompt(player, formatPlayerText(step.prompt || "Select an Option", player), ...pairs))) {
       unavailable();
     }
   }
 
   function run(steps, currentRecord) {
+    if (cancelled) return;
     const previous = context.currentRecord;
     context.currentRecord = currentRecord;
     const queue = flatten(steps, flattenOptions());
@@ -730,7 +756,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           if (++context.jumps > MAX_JUMPS) return close();
           run([...step.steps, ...after], currentRecord);
         } }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       if (step.type === "condition_run") {
@@ -754,7 +780,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             ...after,
           ], currentRecord);
         } }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       if (step.type === "condition_chosen") {
@@ -762,7 +788,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("npc-dialogue:condition", { player, npc: event.npc, npcId, definition, text: step.text, stepId: step.id });
           run(rest, currentRecord);
         } }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       // A menu jump abandons this option; the menu already owns its continuation.
@@ -775,7 +801,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           continue;
         }
         chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu) }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       // Typed lines carry a speaker; render any of them (cutscene actors included)
@@ -844,7 +870,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             }));
           } });
           chain.add(overheadAction);
-          manager.startDialogues(chain);
+          startChain(chain);
           return;
         }
         playedAny = true;
@@ -869,7 +895,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // continue", which comes that many ticks later (a cutscene's camera moving, as live).
         const hold = Number.isInteger(request.holdTicks) && request.holdTicks > 0
           ? new ActionDialogue(index++, { execute: () => {
-            held?.sendHeld?.(player);
+            presentOwned(() => held?.sendHeld?.(player));
             api.core.TaskManager.submit(new api.core.CountdownTask(player, request.holdTicks, () => {
               if (manager.getCurrent?.() === hold) manager.advance();
             }));
@@ -894,7 +920,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             if (current && manager.getCurrent() !== current) return;
             run(rest, currentRecord);
           } }));
-          manager.startDialogues(chain);
+          startChain(chain);
           return;
         }
         continue;
@@ -934,7 +960,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
                 ? new ItemStatementDialogue(0, first, text)
                 : new DoubleItemStatementDialogue(0, first, second, text));
             box.add(new ActionDialogue(1, { execute: () => run(rest, currentRecord) }));
-            manager.startDialogues(box);
+            startChain(box);
             return;
           }
           if (!message.handled) player.sendMessage(formatPlayerText(String(step.text ?? ""), player));
@@ -1006,13 +1032,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // shortcut: unknown step type with no executable contract. Stop safely.
         unavailable();
       } }));
-      manager.startDialogues(chain);
+      startChain(chain);
       return;
     }
     chain.add(new ActionDialogue(index, { execute: close }));
-    manager.startDialogues(chain);
+    startChain(chain);
   }
   run(steps, undefined);
+  return cancel;
 }
 
 module.exports = {
@@ -1030,16 +1057,36 @@ module.exports = {
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
     const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");
+    const eventFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "event-dialogues.json");
     // Parsed on the first Talk-to rather than at boot: the 17 MiB transcript dump expands
     // to ~35 MiB of objects, and a world where nobody talks never needs it.
     let loaded;
     const load = () => {
       if (loaded) return loaded;
-      const data = JSON.parse(fs.readFileSync(dialogueFile, "utf8"));
+      let data = JSON.parse(fs.readFileSync(dialogueFile, "utf8"));
       if (!data || typeof data !== "object" || Array.isArray(data)) {
         throw new Error(`${dialogueFile}: expected dialogues keyed by transcript name`);
       }
+      let events = {};
+      try {
+        events = JSON.parse(fs.readFileSync(eventFile, "utf8"));
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      if (!events || typeof events !== "object" || Array.isArray(events)) {
+        throw new Error(`${eventFile}: expected activity dialogues keyed by transcript name`);
+      }
+      for (const [name, record] of Object.entries(events)) {
+        if (record?.activation !== "explicit") throw new Error(`${eventFile}: ${name} must have an explicit activation`);
+        if (Object.hasOwn(data, name) && !isDeepStrictEqual(data[name], record)) {
+          throw new Error(`${eventFile}: ${name} conflicts with the ordinary dialogue catalogue`);
+        }
+      }
+      data = { ...data, ...events };
       for (const [name, npc] of Object.entries(data)) {
+        if (npc.activation !== undefined && npc.activation !== "explicit") {
+          throw new Error(`${dialogueFile}: ${name} has an unsupported activation`);
+        }
         if (npc.steps !== undefined && !Array.isArray(npc.steps)) {
           throw new Error(`${dialogueFile}: ${name} has non-array steps`);
         }
@@ -1069,6 +1116,12 @@ module.exports = {
       const pages = entries
         .map((entry) => ({ page: String(entry.page ?? "").replace(/^Transcript:/, ""), variants: Array.isArray(entry.variants) ? entry.variants : [] }))
         .filter((entry) => Object.hasOwn(data, entry.page));
+      // Only the trusted custom-event activation may bind an unindexed actor to
+      // a named source page (retired seasonal NPC ids need not exist this year).
+      const requestedPage = event.explicit && typeof event.variant === "object" ? event.variant?.page : undefined;
+      if (requestedPage && Object.hasOwn(data, requestedPage) && !pages.some((entry) => entry.page === requestedPage)) {
+        pages.push({ page: requestedPage, variants: Object.keys(data[requestedPage]?.variants ?? {}) });
+      }
       // A named transform missing from the id index still needs variant selectors.
       // Use the same resolution path as an indexed page rather than silently taking its default.
       if (!pages.length) {
@@ -1114,6 +1167,7 @@ module.exports = {
             const steps = wanted ? (record?.variants ? record.variants[wanted]
               : wanted === "standard-dialogue" ? record?.steps : undefined) : pickVariant(record);
             if (Array.isArray(steps)) return withOptions(page.page, { steps, branches: record?.branches, context, variant: wanted });
+            if (record?.activation === "explicit") return null;
           }
         }
         const first = pages.find((entry) => pickVariant(data[entry.page]));
@@ -1142,14 +1196,14 @@ module.exports = {
     api.onCustomEvent("npc-dialogue:start", (request) => {
       const definition = NpcDefinition.forId(request.npcId);
       if (!request.player || !definition) return;
-      const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant };
+      const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant, explicit: true };
       const resolved = resolveTranscript(event);
       const wanted = typeof request.variant === "string" ? request.variant : request.variant?.variant;
       const wantedPage = typeof request.variant === "object" ? request.variant?.page : undefined;
       if (request.exact && (resolved?.variant !== wanted || (wantedPage && resolved?.page !== wantedPage))) return;
       const steps = typeof request.select === "function" && resolved?.steps ? request.select(resolved.steps) : resolved?.steps;
       if (!steps?.length) return;
-      startDialogue(api, event, steps, resolved.branches, resolved.context);
+      request.cancel = startDialogue(api, event, steps, resolved.branches, resolved.context);
       request.handled = true;
     });
 

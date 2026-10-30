@@ -388,6 +388,38 @@ From captures of salvaging a small shipwreck with a sloop's adamant hook, deploy
 - With none left: "You have no more salvage to sort."
 - Loot: each salvage's pre-rolls first (1 in n each), then its main table by weight.
 
+## Shipwrights' workbench
+
+Locs 59723 (`shipwright_workbench`) and 59724 (`shipwright_workbench_small`) beside the shipwrights:
+Craft, Craft-hull-parts, Craft-repair-kits. Plugin: `plugins/skills/sailing/ShipwrightsWorkbench.plugin.js`,
+recipes in `plugins/skills/sailing/data/shipwrights-workbench.json`. The cache has no recipe table (only the
+part tables' materials name the products), so recipes, levels, XP and ticks are the OSRS Wiki's item pages.
+
+From rsprox captures (rev 235; recordings 3455, 3461, 3467, 3792):
+
+- **Craft:** the player faces the bench on arrival; a tick later the chat menu "What would you like to craft?"
+  with "Hull parts." and "Repair kits." (clientscript 58).
+- **No hammer and saw:** "You need a hammer and a saw to use this workbench." (mesbox).
+- **The menus:** skillmulti (270) with clientscript 2046: mode 36, Wooden ... Rosewood hull parts; mode 2,
+  Repair kit, Oak ... Rosewood repair kit. The amount offered is what the materials make; the pick is
+  remembered in varp 2673.
+- **Each item:** `human_poh_build` (3676) with synth 938, then 3 ticks later the materials go, the product
+  comes with the XP and a spam line: "You craft some oak hull parts.", "You craft a set of two camphor repair
+  kits."; the next swing a tick after that.
+- **Missing materials:** a mesbox naming the recipe, then the menu again after Continue: "You need two camphor
+  planks, ten adamantite nails and five swamp paste to craft a set of two camphor repair kits." (also captured
+  for mahogany and ironwood: "You need one ironwood plank, ten rune nails and five swamp paste to craft a set
+  of three ironwood repair kits.").
+- **XP:** the captures predate the 19 November 2025 halving of workbench XP (oak hull parts gave 300; the
+  Wiki now says 150), so the Wiki's values are used.
+
+From the Wiki only: large hull parts (5 hull parts, 5 ticks, 2.5 XP); planks from a carried plank sack after
+the inventory's; kits that don't fit drop to the floor, but ironwood and rosewood kits need the room when the
+planks are the inventory's. Not captured, so the texts are inferred: the large hull parts' place in the menu
+(after the hull parts), the hull part and level refusals ("You need five oak planks to craft some oak hull
+parts.", "You need a Construction level of 8 to craft some oak hull parts."), and Craft-hull-parts /
+Craft-repair-kits opening their menu straight away (added 11 March 2026, after the captures).
+
 ## Cargo hold
 
 **The loc** is a multiloc (60245 on the raft), chosen by varbit 19134:
@@ -545,3 +577,5 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
 - Teleporting from sea, Escape, and logging out and back in at sea.
 - Disembarking at a port's gangplank without docking at its buoy first.
 - Buying a boat: the refusals (Sailing level too low, no free slot, too few coins).
+- Shipwrights' workbench: large hull parts, Craft-hull-parts / Craft-repair-kits, and the level and
+  missing-planks refusals for hull parts.

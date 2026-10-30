@@ -185,6 +185,38 @@ export class BoatManager {
     }
 
     /**
+     * Where on their deck an actor aboard should walk to come nearest a main-world actor: the
+     * walkable deck tile whose tile on the sea is closest to it. Undefined when not aboard, or
+     * when no deck tile is closer than where they stand (they're as near as the boat lets them).
+     */
+    public static deckTileToward(mobile: Mobile, target: Mobile): Location | undefined {
+        const boat = BoatManager.getBoatAboard(mobile);
+        const spec = boat && BoatManager.getSpec(boat);
+        if (!boat || !spec) return undefined;
+        const at = target.getLocation();
+        const size = Math.max(1, target.getSize?.() ?? 1);
+        const distance = (x: number, y: number) => {
+            const tile = boat.deckTileToWorld(x, y);
+            const dx = Math.max(0, at.getX() - tile.x, tile.x - (at.getX() + size - 1));
+            const dy = Math.max(0, at.getY() - tile.y, tile.y - (at.getY() + size - 1));
+            return Math.max(dx, dy);
+        };
+        const here = mobile.getLocation();
+        let best: Location | undefined;
+        let bestDistance = distance(here.getX(), here.getY());
+        for (const tile of spec.walkableDeck) {
+            const x = boat.deckBaseX + tile.x;
+            const y = boat.deckBaseY + tile.y;
+            const d = distance(x, y);
+            if (d < bestDistance) {
+                best = new Location(x, y, here.getZ());
+                bestDistance = d;
+            }
+        }
+        return best;
+    }
+
+    /**
      * The private area an actor counts as being in for who-sees-whom: a deck counts as the
      * main world, so people aboard and people ashore see each other.
      */

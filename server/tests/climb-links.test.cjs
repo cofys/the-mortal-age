@@ -71,6 +71,18 @@ test('declared Wizards Tower pair links both ways from plugin data', () => {
     assert.deepEqual(lands(down, ClimbLinks.DOWN, new Location(3105, 3162, 0)), [3104, 9576, 0]);
 });
 
+test("a declared landing overrides the nearest tile (Grand Tree base staircase, Anita's floor)", () => {
+    // The nearest tile above the stairs is 2389,3512 and blocks the way to Anita; the captured
+    // climb lands on 2388,3513 instead.
+    const up = mapObject(2389, 3512, 0, 16675);
+    assert.deepEqual(lands(up, ClimbLinks.UP, new Location(2389, 3511, 0)), [2388, 3513, 1]);
+    assert.equal(ClimbLinks.destination(mapObject(2389, 3513, 1, 16677), ClimbLinks.DOWN, new Location(2388, 3513, 1)) !== null, true);
+});
+
+test("the Grand Tree cave ladder climbs to the base trapdoor's landing (the trapdoor only shows Open)", () => {
+    assert.deepEqual(lands(mapObject(2463, 9897, 0, 17385), ClimbLinks.UP, new Location(2463, 9896, 0)), [2463, 3498, 0]);
+});
+
 test('a multi-storey ladder skips only an inert same-name middle segment (Goblin Village crate ladder)', () => {
     const bottom = mapObject(2954, 3497, 0, 16450);
     const middle = mapObject(2954, 3497, 1, 16557);

@@ -1,0 +1,67 @@
+/** Each dial's letters by varbit value (fairyring_1-3): the dials count anticlockwise. */
+const DIAL_LETTERS = [["A", "D", "C", "B"], ["I", "L", "K", "J"], ["P", "S", "R", "Q"]] as const;
+
+/** RuneLite's FairyRing names, by code. */
+const DESTINATIONS: Readonly<Record<string, string>> = {
+    AIQ: "Mudskipper Point",
+    AIR: "(Island) South-east of Ardougne",
+    AIS: "Auburn Valley",
+    AJP: "Avium Savannah",
+    AJQ: "Cave south of Dorgesh-Kaan",
+    AJR: "Slayer cave",
+    AJS: "Penguins near Miscellania",
+    AKP: "Necropolis",
+    AKQ: "Piscatoris Hunter area",
+    AKR: "Hosidius Vinery",
+    AKS: "Feldip Hunter area",
+    ALP: "(Island) Lighthouse",
+    ALQ: "Haunted Woods east of Canifis",
+    ALR: "Abyssal Area",
+    ALS: "McGrubor's Wood",
+    BIP: "(Island) South-west of Mort Myre",
+    BIQ: "Kalphite Hive",
+    BIS: "Ardougne Zoo - Unicorns",
+    BJP: "(Island) Isle of Souls",
+    BJR: "Realm of the Fisher King",
+    BJS: "(Island) Near Zul-Andra",
+    BKP: "South of Castle Wars",
+    BKQ: "Enchanted Valley",
+    BKR: "Mort Myre Swamp, south of Canifis",
+    BKS: "Zanaris",
+    BLP: "TzHaar area",
+    BLQ: "Yu'biusk",
+    BLR: "Legends' Guild",
+    BLS: "South of Mount Quidamortem",
+    CIP: "(Island) Miscellania",
+    CIQ: "North-west of Yanille",
+    CIR: "North-east of the Farming Guild",
+    CIS: "North of the Arceuus Library",
+    CJQ: "The Great Conch",
+    CJR: "Sinclair Mansion",
+    CKP: "Cosmic entity's plane",
+    CKQ: "Aldarin",
+    CKR: "South of Tai Bwo Wannai Village",
+    CKS: "Canifis",
+    CLP: "(Island) South of Draynor Village",
+    CLR: "(Island) Ape Atoll",
+    CLS: "(Island) Hazelmere's home",
+    DIP: "(Sire Boss) Abyssal Nexus",
+    DIQ: "Player-owned house",
+    DIR: "Gorak's Plane",
+    DIS: "Wizards' Tower",
+    DJP: "Tower of Life",
+    DJR: "Chasm of Fire",
+    DKP: "South of Musa Point",
+    DKR: "Edgeville, Grand Exchange",
+    DKS: "Polar Hunter area",
+    DLP: "Grimstone Dungeon",
+    DLQ: "North of Nardah",
+    DLR: "(Island) Poison Waste south of Isafdar",
+    DLS: "Myreque hideout under The Hollows",
+};
+
+/** The Confirm button's text for the dials' varbit values, as RuneLite sets it. */
+export function fairyRingDestination(left: number, middle: number, right: number): string {
+    const code = [left, middle, right].map((value, dial) => DIAL_LETTERS[dial][value & 3]).join("");
+    return DESTINATIONS[code] ?? "Invalid location";
+}

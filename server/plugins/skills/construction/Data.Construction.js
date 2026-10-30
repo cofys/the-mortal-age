@@ -12,7 +12,7 @@ const { CacheDefinitions } = require("./Core.Construction");
  * coordinates, not map-square coordinates.
  */
 /** The player's house save. */
-const HOUSE_ATTRIBUTE = "construction:house";
+const { HOUSE_ATTRIBUTE } = require("./StorageState.Construction");
 const ANY_NAILS_OBJ = 32923; // the furniture table's "any nails"
 
 const column = (table, name) => CacheDefinitions.getDbColumn(CacheDefinitions.getDbTableId(table), name);

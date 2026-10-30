@@ -1,0 +1,1807 @@
+{
+  "source": "OSRS Wiki size pages, fetched 2026-10-29; see docs/port-tasks.md",
+  "tiers": [
+    {
+      "size": "Tiny",
+      "totalWeight": 192,
+      "localWeight": 2,
+      "shared": [
+        {
+          "item": "coins",
+          "min": 5000,
+          "max": 12500,
+          "weight": 12
+        },
+        {
+          "item": "brut_fish_cuts",
+          "min": 15,
+          "max": 25,
+          "weight": 8
+        },
+        {
+          "item": "cert_copper_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 8
+        },
+        {
+          "item": "cert_tin_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 8
+        },
+        {
+          "item": "cert_iron_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 8
+        },
+        {
+          "item": "cert_coal",
+          "min": 10,
+          "max": 20,
+          "weight": 8
+        },
+        {
+          "item": "bronze_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 8
+        },
+        {
+          "item": "iron_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 8
+        },
+        {
+          "item": "mcannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 8
+        },
+        {
+          "item": "mithril_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 8
+        },
+        {
+          "item": "nails_bronze",
+          "min": 20,
+          "max": 30,
+          "weight": 8
+        },
+        {
+          "item": "nails_iron",
+          "min": 20,
+          "max": 30,
+          "weight": 8
+        },
+        {
+          "item": "nails",
+          "min": 20,
+          "max": 30,
+          "weight": 8
+        },
+        {
+          "item": "nails_mithril",
+          "min": 20,
+          "max": 30,
+          "weight": 8
+        },
+        {
+          "item": "sawmill_coupon",
+          "min": 10,
+          "max": 20,
+          "weight": 8
+        },
+        {
+          "item": "sawmill_coupon_oak",
+          "min": 5,
+          "max": 15,
+          "weight": 8
+        },
+        {
+          "item": "cert_woodplank",
+          "min": 10,
+          "max": 20,
+          "weight": 8
+        },
+        {
+          "item": "cert_plank_oak",
+          "min": 10,
+          "max": 20,
+          "weight": 8
+        },
+        {
+          "item": "cert_plank_teak",
+          "min": 10,
+          "max": 20,
+          "weight": 6
+        },
+        {
+          "item": "cert_bronze_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 6
+        },
+        {
+          "item": "cert_iron_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 6
+        },
+        {
+          "item": "cert_steel_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 6
+        },
+        {
+          "item": "cert_boat_repair_kit",
+          "min": 5,
+          "max": 15,
+          "weight": 6
+        },
+        {
+          "item": "cert_boat_repair_kit_oak",
+          "min": 5,
+          "max": 15,
+          "weight": 6
+        },
+        {
+          "item": "cert_boat_repair_kit_teak",
+          "min": 5,
+          "max": 15,
+          "weight": 6
+        }
+      ],
+      "ports": {
+        "ardougne": [
+          {
+            "item": "cert_cake",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "brimhaven": [
+          {
+            "item": "cert_pineapple",
+            "min": 20,
+            "max": 30,
+            "weight": 1
+          }
+        ],
+        "cairn_isle": [
+          {
+            "item": "cert_uncut_sapphire",
+            "min": 10,
+            "max": 10,
+            "quantitySource": "rev241 bag params 2646/2647 (Wiki blank)",
+            "weight": 1
+          }
+        ],
+        "catherby": [
+          {
+            "item": "cert_raw_cod",
+            "min": 12,
+            "max": 18,
+            "weight": 1
+          }
+        ],
+        "entrana": [
+          {
+            "item": "cert_big_bones",
+            "min": 15,
+            "max": 15,
+            "quantitySource": "rev241 bag params 2646/2647 (Wiki blank)",
+            "weight": 1
+          }
+        ],
+        "hosidius": [
+          {
+            "item": "cert_bucket_compost",
+            "min": 18,
+            "max": 18,
+            "weight": 1
+          }
+        ],
+        "lands_end": [
+          {
+            "item": "cert_bird_nest_empty",
+            "min": 4,
+            "max": 4,
+            "weight": 1
+          }
+        ],
+        "musa_point": [
+          {
+            "item": "cert_banana",
+            "min": 20,
+            "max": 30,
+            "weight": 1
+          }
+        ],
+        "the_pandemonium": [
+          {
+            "item": "cert_barnacle_blaster",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "cert_gin",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "cert_grog",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "cert_kraken_colada",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "cert_rum",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "cert_sailors_mirage",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "cert_vodka",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "cert_whisky",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "port_khazard": [
+          {
+            "item": "cert_raw_mantaray",
+            "min": 4,
+            "max": 6,
+            "weight": 1
+          },
+          {
+            "item": "cert_raw_seaturtle",
+            "min": 4,
+            "max": 6,
+            "weight": 1
+          }
+        ],
+        "port_piscarilius": [
+          {
+            "item": "cert_raw_anglerfish",
+            "min": 4,
+            "max": 4,
+            "weight": 1
+          }
+        ],
+        "port_sarim": [
+          {
+            "item": "cert_casket",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "ruins_of_unkah": [
+          {
+            "item": "spirit_flakes",
+            "min": 8,
+            "max": 11,
+            "weight": 1
+          }
+        ],
+        "sunset_coast": [
+          {
+            "item": "cert_bucket_sand",
+            "min": 32,
+            "max": 47,
+            "weight": 1
+          }
+        ]
+      }
+    },
+    {
+      "size": "Small",
+      "totalWeight": 336,
+      "localWeight": 4,
+      "shared": [
+        {
+          "item": "coins",
+          "min": 10000,
+          "max": 17500,
+          "weight": 30
+        },
+        {
+          "item": "brut_fish_cuts",
+          "min": 40,
+          "max": 60,
+          "weight": 16
+        },
+        {
+          "item": "cert_iron_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_coal",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "iron_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 16
+        },
+        {
+          "item": "mcannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 16
+        },
+        {
+          "item": "nails_iron",
+          "min": 20,
+          "max": 30,
+          "weight": 16
+        },
+        {
+          "item": "nails",
+          "min": 20,
+          "max": 30,
+          "weight": 16
+        },
+        {
+          "item": "sawmill_coupon_oak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "sawmill_coupon_teak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_plank_oak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_plank_teak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_mithril_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 14
+        },
+        {
+          "item": "mithril_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 14
+        },
+        {
+          "item": "nails_mithril",
+          "min": 20,
+          "max": 30,
+          "weight": 14
+        },
+        {
+          "item": "cert_iron_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 12
+        },
+        {
+          "item": "cert_steel_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 12
+        },
+        {
+          "item": "cert_mithril_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 12
+        },
+        {
+          "item": "cert_plank_mahogany",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_boat_repair_kit_oak",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_boat_repair_kit_teak",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_boat_repair_kit_mahogany",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        }
+      ],
+      "ports": {
+        "aldarin": [
+          {
+            "item": "cert_grapes",
+            "min": 30,
+            "max": 50,
+            "weight": 1
+          }
+        ],
+        "ardougne": [
+          {
+            "item": "cert_cake",
+            "min": 1,
+            "max": 2,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "brimhaven": [
+          {
+            "item": "cert_pineapple",
+            "min": 20,
+            "max": 30,
+            "weight": 1
+          }
+        ],
+        "cairn_isle": [
+          {
+            "item": "cert_uncut_sapphire",
+            "min": 10,
+            "max": 10,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "catherby": [
+          {
+            "item": "cert_raw_tuna",
+            "min": 12,
+            "max": 18,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_raw_cod",
+            "min": 12,
+            "max": 18,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "civitas_illa_fortis": [
+          {
+            "item": "cert_varlamorian_kebab",
+            "min": 2,
+            "max": 2,
+            "weight": 1
+          }
+        ],
+        "corsair_cove": [
+          {
+            "item": "cert_bronze_scimitar",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_iron_scimitar",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_steel_scimitar",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "etceteria": [
+          {
+            "item": "cert_teak_logs",
+            "min": 5,
+            "max": 12,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "jatizso": [
+          {
+            "item": "cert_iron_ore",
+            "min": 20,
+            "max": 30,
+            "weight": 1
+          },
+          {
+            "item": "cert_coal",
+            "min": 20,
+            "max": 40,
+            "weight": 1
+          },
+          {
+            "item": "cert_mithril_ore",
+            "min": 20,
+            "max": 30,
+            "weight": 1
+          }
+        ],
+        "lands_end": [
+          {
+            "item": "cert_bird_nest_empty",
+            "min": 4,
+            "max": 6,
+            "weight": 1
+          }
+        ],
+        "musa_point": [
+          {
+            "item": "cert_banana",
+            "min": 25,
+            "max": 25,
+            "weight": 1
+          }
+        ],
+        "the_pandemonium": [
+          {
+            "item": "cert_grog",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_barnacle_blaster",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_sailors_mirage",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_vodka",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "port_khazard": [
+          {
+            "item": "cert_raw_mantaray",
+            "min": 5,
+            "max": 10,
+            "weight": 1
+          },
+          {
+            "item": "cert_raw_seaturtle",
+            "min": 5,
+            "max": 10,
+            "weight": 1
+          }
+        ],
+        "port_piscarilius": [
+          {
+            "item": "cert_raw_anglerfish",
+            "min": 4,
+            "max": 6,
+            "weight": 1
+          }
+        ],
+        "port_roberts": [
+          {
+            "item": "iron_cannonball",
+            "min": 30,
+            "max": 40,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "mcannonball",
+            "min": 30,
+            "max": 40,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "port_sarim": [
+          {
+            "item": "cert_casket",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "red_rock": [
+          {
+            "item": "coral_elkhorn",
+            "min": 6,
+            "max": 8,
+            "weight": 1
+          }
+        ],
+        "rellekka": [
+          {
+            "item": "viking_helmet",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "ruins_of_unkah": [
+          {
+            "item": "spirit_flakes",
+            "min": 8,
+            "max": 12,
+            "weight": 1
+          }
+        ],
+        "the_summer_shore": [
+          {
+            "item": "coral_elkhorn_frag",
+            "min": 3,
+            "max": 3,
+            "weight": 1
+          }
+        ],
+        "void_knights_outpost": [
+          {
+            "item": "cert_iron_platebody",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_steel_platebody",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ]
+      }
+    },
+    {
+      "size": "Medium",
+      "totalWeight": 320,
+      "localWeight": 4,
+      "shared": [
+        {
+          "item": "coins",
+          "min": 15000,
+          "max": 25000,
+          "weight": 28
+        },
+        {
+          "item": "cert_coal",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_mithril_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "mcannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 16
+        },
+        {
+          "item": "mithril_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 16
+        },
+        {
+          "item": "nails",
+          "min": 20,
+          "max": 30,
+          "weight": 16
+        },
+        {
+          "item": "nails_mithril",
+          "min": 20,
+          "max": 30,
+          "weight": 16
+        },
+        {
+          "item": "sawmill_coupon_teak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "sawmill_coupon_mahogany",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_plank_oak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_plank_teak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_plank_mahogany",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_boat_repair_kit_oak",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_boat_repair_kit_teak",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_boat_repair_kit_mahogany",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_steel_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 12
+        },
+        {
+          "item": "cert_mithril_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 12
+        },
+        {
+          "item": "cert_adamantite_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 11
+        },
+        {
+          "item": "adamant_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 11
+        },
+        {
+          "item": "nails_adamant",
+          "min": 20,
+          "max": 30,
+          "weight": 11
+        },
+        {
+          "item": "sailing_fine_fish_offcuts",
+          "min": 20,
+          "max": 30,
+          "weight": 9
+        },
+        {
+          "item": "brut_fish_cuts",
+          "min": 40,
+          "max": 60,
+          "weight": 7
+        },
+        {
+          "item": "cert_adamantite_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 7
+        }
+      ],
+      "ports": {
+        "aldarin": [
+          {
+            "item": "cert_grapes",
+            "min": 30,
+            "max": 50,
+            "weight": 1
+          }
+        ],
+        "ardougne": [
+          {
+            "item": "cert_cake",
+            "min": 1,
+            "max": 2,
+            "weight": 1
+          },
+          {
+            "item": "cert_chocolate_cake",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "brimhaven": [
+          {
+            "item": "cert_pineapple",
+            "min": 25,
+            "max": 30,
+            "weight": 1
+          }
+        ],
+        "catherby": [
+          {
+            "item": "cert_raw_lobster",
+            "min": 12,
+            "max": 18,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "civitas_illa_fortis": [
+          {
+            "item": "cert_varlamorian_kebab",
+            "min": 2,
+            "max": 2,
+            "weight": 1
+          }
+        ],
+        "corsair_cove": [
+          {
+            "item": "cert_steel_scimitar",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "deepfin_point": [
+          {
+            "item": "cert_nickel_ore",
+            "min": 10,
+            "max": 17,
+            "weight": 1
+          },
+          {
+            "item": "cert_lead_ore",
+            "min": 10,
+            "max": 18,
+            "weight": 1
+          }
+        ],
+        "etceteria": [
+          {
+            "item": "cert_teak_logs",
+            "min": 5,
+            "max": 17,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "jatizso": [
+          {
+            "item": "cert_iron_ore",
+            "min": 25,
+            "max": 25,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "lands_end": [
+          {
+            "item": "cert_bird_nest_empty",
+            "min": 4,
+            "max": 5,
+            "weight": 1
+          }
+        ],
+        "lunar_isle": [
+          {
+            "item": "astralrune",
+            "min": 23,
+            "max": 25,
+            "weight": 1
+          }
+        ],
+        "neitiznot": [
+          {
+            "item": "cert_yak_hide",
+            "min": 15,
+            "max": 15,
+            "weight": 1
+          }
+        ],
+        "the_pandemonium": [
+          {
+            "item": "cert_grog",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_barnacle_blaster",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_sailors_mirage",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_vodka",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "piscatoris": [
+          {
+            "item": "cert_raw_monkfish",
+            "min": 8,
+            "max": 12,
+            "weight": 1
+          }
+        ],
+        "port_khazard": [
+          {
+            "item": "cert_raw_mantaray",
+            "min": 10,
+            "max": 10,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "port_piscarilius": [
+          {
+            "item": "cert_raw_anglerfish",
+            "min": 4,
+            "max": 6,
+            "weight": 1
+          }
+        ],
+        "port_roberts": [
+          {
+            "item": "mcannonball",
+            "min": 25,
+            "max": 40,
+            "weight": 1
+          },
+          {
+            "item": "mithril_cannonball",
+            "min": 30,
+            "max": 40,
+            "weight": 1
+          }
+        ],
+        "port_sarim": [
+          {
+            "item": "cert_casket",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "port_tyras": [
+          {
+            "item": "snakeboss_scale",
+            "min": 22,
+            "max": 29,
+            "weight": 1
+          }
+        ],
+        "prifddinas": [
+          {
+            "item": "prif_crystal_shard",
+            "min": 9,
+            "max": 12,
+            "weight": 1
+          }
+        ],
+        "red_rock": [
+          {
+            "item": "coral_pillar",
+            "min": 5,
+            "max": 5,
+            "weight": 1
+          }
+        ],
+        "rellekka": [
+          {
+            "item": "viking_helmet",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_viking_helmet_range",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_viking_helmet_crush",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "ruins_of_unkah": [
+          {
+            "item": "spirit_flakes",
+            "min": 8,
+            "max": 12,
+            "weight": 1
+          }
+        ],
+        "the_summer_shore": [
+          {
+            "item": "coral_pillar_frag",
+            "min": 2,
+            "max": 2,
+            "weight": 1
+          }
+        ],
+        "sunset_coast": [
+          {
+            "item": "cert_bucket_sand",
+            "min": 40,
+            "max": 40,
+            "weight": 1
+          }
+        ],
+        "void_knights_outpost": [
+          {
+            "item": "cert_steel_full_helm",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_steel_platebody",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_steel_platelegs",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ]
+      }
+    },
+    {
+      "size": "Large",
+      "totalWeight": 310,
+      "localWeight": 4,
+      "shared": [
+        {
+          "item": "coins",
+          "min": 22500,
+          "max": 32500,
+          "weight": 30
+        },
+        {
+          "item": "cert_coal",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_adamantite_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "mithril_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 16
+        },
+        {
+          "item": "adamant_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 16
+        },
+        {
+          "item": "nails_mithril",
+          "min": 20,
+          "max": 30,
+          "weight": 16
+        },
+        {
+          "item": "nails_adamant",
+          "min": 20,
+          "max": 30,
+          "weight": 16
+        },
+        {
+          "item": "sawmill_coupon_mahogany",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "sawmill_coupon_camphor",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_plank_teak",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "cert_plank_mahogany",
+          "min": 10,
+          "max": 20,
+          "weight": 16
+        },
+        {
+          "item": "sailing_fine_fish_offcuts",
+          "min": 40,
+          "max": 60,
+          "weight": 14
+        },
+        {
+          "item": "cert_boat_repair_kit_teak",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_boat_repair_kit_mahogany",
+          "min": 5,
+          "max": 15,
+          "weight": 12
+        },
+        {
+          "item": "cert_mithril_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 12
+        },
+        {
+          "item": "cert_adamantite_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 12
+        },
+        {
+          "item": "cert_plank_camphor",
+          "min": 5,
+          "max": 15,
+          "weight": 11
+        },
+        {
+          "item": "cert_boat_repair_kit_camphor",
+          "min": 5,
+          "max": 15,
+          "weight": 11
+        },
+        {
+          "item": "rune_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 11
+        },
+        {
+          "item": "nails_rune",
+          "min": 20,
+          "max": 30,
+          "weight": 11
+        },
+        {
+          "item": "cert_runite_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 6
+        },
+        {
+          "item": "cert_runite_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 4
+        }
+      ],
+      "ports": {
+        "aldarin": [
+          {
+            "item": "cert_grapes",
+            "min": 35,
+            "max": 40,
+            "weight": 1
+          }
+        ],
+        "ardougne": [
+          {
+            "item": "cert_cake",
+            "min": 2,
+            "max": 2,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "brimhaven": [
+          {
+            "item": "cert_pineapple",
+            "min": 25,
+            "max": 25,
+            "weight": 1
+          }
+        ],
+        "catherby": [
+          {
+            "item": "cert_raw_bass",
+            "min": 15,
+            "max": 18,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "civitas_illa_fortis": [
+          {
+            "item": "cert_varlamorian_kebab",
+            "min": 2,
+            "max": 2,
+            "weight": 1
+          }
+        ],
+        "corsair_cove": [
+          {
+            "item": "cert_steel_scimitar",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "deepfin_point": [
+          {
+            "item": "cert_nickel_ore",
+            "min": 21,
+            "max": 24,
+            "weight": 1
+          },
+          {
+            "item": "cert_lead_ore",
+            "min": 10,
+            "max": 24,
+            "weight": 1
+          }
+        ],
+        "etceteria": [
+          {
+            "item": "cert_teak_logs",
+            "min": 5,
+            "max": 24,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "hosidius": [
+          {
+            "item": "cert_bucket_supercompost",
+            "min": 25,
+            "max": 25,
+            "weight": 1
+          }
+        ],
+        "lands_end": [
+          {
+            "item": "cert_bird_nest_empty",
+            "min": 5,
+            "max": 6,
+            "weight": 1
+          }
+        ],
+        "lunar_isle": [
+          {
+            "item": "astralrune",
+            "min": 20,
+            "max": 30,
+            "weight": 1
+          }
+        ],
+        "piscatoris": [
+          {
+            "item": "cert_raw_monkfish",
+            "min": 10,
+            "max": 10,
+            "weight": 1
+          }
+        ],
+        "port_piscarilius": [
+          {
+            "item": "cert_raw_anglerfish",
+            "min": 4,
+            "max": 6,
+            "weight": 1
+          }
+        ],
+        "port_roberts": [
+          {
+            "item": "mcannonball",
+            "min": 25,
+            "max": 52,
+            "weight": 1
+          },
+          {
+            "item": "mithril_cannonball",
+            "min": 25,
+            "max": 25,
+            "weight": 1
+          },
+          {
+            "item": "adamant_cannonball",
+            "min": 32,
+            "max": 40,
+            "weight": 1
+          }
+        ],
+        "port_sarim": [
+          {
+            "item": "cert_casket",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "port_tyras": [
+          {
+            "item": "snakeboss_scale",
+            "min": 23,
+            "max": 25,
+            "weight": 1
+          }
+        ],
+        "prifddinas": [
+          {
+            "item": "prif_crystal_shard",
+            "min": 8,
+            "max": 12,
+            "weight": 1
+          }
+        ],
+        "red_rock": [
+          {
+            "item": "coral_pillar",
+            "min": 8,
+            "max": 9,
+            "weight": 1
+          }
+        ],
+        "rellekka": [
+          {
+            "item": "viking_helmet",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_magic",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_slash",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_crush",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_range",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "the_summer_shore": [
+          {
+            "item": "coral_pillar_frag",
+            "min": 3,
+            "max": 3,
+            "weight": 1
+          }
+        ],
+        "sunset_coast": [
+          {
+            "item": "cert_bucket_sand",
+            "min": 40,
+            "max": 48,
+            "weight": 1
+          }
+        ],
+        "void_knights_outpost": [
+          {
+            "item": "cert_steel_platebody",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_mithril_platebody",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          },
+          {
+            "item": "cert_mithril_platelegs",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ]
+      }
+    },
+    {
+      "size": "Huge",
+      "totalWeight": 450,
+      "localWeight": 6,
+      "shared": [
+        {
+          "item": "coins",
+          "min": 40000,
+          "max": 60000,
+          "weight": 44
+        },
+        {
+          "item": "sawmill_coupon_camphor",
+          "min": 10,
+          "max": 20,
+          "weight": 26
+        },
+        {
+          "item": "sawmill_coupon_ironwood",
+          "min": 10,
+          "max": 20,
+          "weight": 26
+        },
+        {
+          "item": "sailing_fine_fish_offcuts",
+          "min": 40,
+          "max": 60,
+          "weight": 24
+        },
+        {
+          "item": "adamant_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 24
+        },
+        {
+          "item": "nails_adamant",
+          "min": 20,
+          "max": 30,
+          "weight": 24
+        },
+        {
+          "item": "cert_plank_mahogany",
+          "min": 10,
+          "max": 20,
+          "weight": 24
+        },
+        {
+          "item": "cert_plank_camphor",
+          "min": 10,
+          "max": 20,
+          "weight": 24
+        },
+        {
+          "item": "cert_plank_ironwood",
+          "min": 5,
+          "max": 15,
+          "weight": 18
+        },
+        {
+          "item": "cert_boat_repair_kit_mahogany",
+          "min": 5,
+          "max": 15,
+          "weight": 18
+        },
+        {
+          "item": "cert_boat_repair_kit_camphor",
+          "min": 5,
+          "max": 15,
+          "weight": 18
+        },
+        {
+          "item": "cert_boat_repair_kit_ironwood",
+          "min": 5,
+          "max": 15,
+          "weight": 18
+        },
+        {
+          "item": "cert_coal",
+          "min": 30,
+          "max": 50,
+          "weight": 18
+        },
+        {
+          "item": "cert_adamantite_ore",
+          "min": 10,
+          "max": 20,
+          "weight": 18
+        },
+        {
+          "item": "cert_mithril_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 18
+        },
+        {
+          "item": "cert_adamantite_bar",
+          "min": 10,
+          "max": 20,
+          "weight": 18
+        },
+        {
+          "item": "rune_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 18
+        },
+        {
+          "item": "nails_rune",
+          "min": 20,
+          "max": 30,
+          "weight": 18
+        },
+        {
+          "item": "cert_runite_ore",
+          "min": 5,
+          "max": 10,
+          "weight": 16
+        },
+        {
+          "item": "cert_runite_bar",
+          "min": 5,
+          "max": 10,
+          "weight": 10
+        },
+        {
+          "item": "dragon_cannonball",
+          "min": 40,
+          "max": 60,
+          "weight": 12
+        },
+        {
+          "item": "nails_dragon",
+          "min": 10,
+          "max": 15,
+          "weight": 8
+        },
+        {
+          "item": "cert_dragon_sheet",
+          "min": 1,
+          "max": 2,
+          "weight": 2
+        }
+      ],
+      "ports": {
+        "aldarin": [
+          {
+            "item": "cert_grapes",
+            "min": 40,
+            "max": 40,
+            "weight": 1
+          }
+        ],
+        "ardougne": [
+          {
+            "item": "cert_cake",
+            "min": 2,
+            "max": 2,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "deepfin_point": [
+          {
+            "item": "cert_lead_ore",
+            "min": 10,
+            "max": 10,
+            "weight": 1
+          },
+          {
+            "item": "cert_nickel_ore",
+            "min": 27,
+            "max": 27,
+            "weight": 1
+          }
+        ],
+        "etceteria": [
+          {
+            "item": "cert_teak_logs",
+            "min": 20,
+            "max": 29,
+            "weight": 1
+          },
+          {
+            "item": "cert_mahogany_logs",
+            "min": 21,
+            "max": 27,
+            "weight": 1
+          }
+        ],
+        "lunar_isle": [
+          {
+            "item": "astralrune",
+            "min": 21,
+            "max": 29,
+            "weight": 1
+          }
+        ],
+        "port_roberts": [
+          {
+            "item": "mcannonball",
+            "min": 25,
+            "max": 25,
+            "approximate": true,
+            "weight": 1
+          }
+        ],
+        "port_tyras": [
+          {
+            "item": "snakeboss_scale",
+            "min": 25,
+            "max": 25,
+            "weight": 1
+          }
+        ],
+        "prifddinas": [
+          {
+            "item": "prif_crystal_shard",
+            "min": 8,
+            "max": 10,
+            "weight": 1
+          }
+        ],
+        "red_rock": [
+          {
+            "item": "coral_umbral",
+            "min": 4,
+            "max": 5,
+            "weight": 1
+          }
+        ],
+        "rellekka": [
+          {
+            "item": "viking_helmet",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_range",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_crush",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_magic",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          },
+          {
+            "item": "viking_helmet_slash",
+            "min": 1,
+            "max": 1,
+            "weight": 1
+          }
+        ],
+        "the_summer_shore": [
+          {
+            "item": "coral_umbral_frag",
+            "min": 2,
+            "max": 2,
+            "weight": 1
+          }
+        ],
+        "void_knights_outpost": [
+          {
+            "item": "cert_steel_platebody",
+            "min": 1,
+            "max": 1,
+            "approximate": true,
+            "weight": 1
+          }
+        ]
+      }
+    }
+  ]
+}

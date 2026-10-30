@@ -3,10 +3,13 @@ import type { SdMapData } from "../../render/loader/SdMapData";
 import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
 import type { VarManager } from "../../rs/config/vartype/VarManager";
 import { Scene } from "../../rs/scene/Scene";
+import { isLowEndDevice } from "../../common/utils/DeviceUtil";
 
 /** Bump when SdMapData or the geometry the loader emits changes, so old entries stop matching. */
 export const CACHE_FORMAT = 5;
-export const MAX_SQUARES = 64;
+// Desktop HD scenes can cover 64 squares before walking into the next scene.
+// Retain several scene windows rather than evicting the previous login's squares.
+export const MAX_SQUARES = isLowEndDevice ? 64 : 256;
 
 const DB_NAME = "map-square-cache";
 
@@ -76,7 +79,7 @@ export function fnv(text: string): string {
 }
 
 /** "<cache identity>|<hash of every input that changes the output>". */
-export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: string): string {
+export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: string, definitionArchiveKey = ""): string {
     const prefix = `${info.game}/${info.environment}/${info.name}/${info.revision}/${info.timestamp}/${info.size}/v${CACHE_FORMAT}`;
     const fields = [
         input.mapX,
@@ -86,6 +89,7 @@ export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: str
         input.smoothTerrain,
         input.minimizeDrawCalls,
         input.loadNpcs ? npcsHash : "",
+        ...(definitionArchiveKey ? [`definitionArchives:${definitionArchiveKey}`] : []),
         // Only when on, so squares cached before this option keep their keys.
         ...(input.smoothLocAnimations ? [`smoothLocAnimations:${input.smoothLocAnimationSteps ?? 4}`] : []),
     ];

@@ -40,14 +40,7 @@ function releaseHouse(allocation) {
   if (index >= 0 && index < allocatedHouses.length) allocatedHouses[index] = false;
 }
 
-function createDefaultHouseSave() {
-  const rooms = Array.from({ length: 3 }, () =>
-    Array.from({ length: 8 }, () => Array(8).fill(null)),
-  );
-  rooms[1][4][4] = { roomKey: "GARDEN", rotation: 0, furniture: { CENTERPIECE: "EXIT_PORTAL" } };
-  rooms[1][4][5] = { roomKey: "PARLOUR", rotation: 0, furniture: {} };
-  return { rooms };
-}
+const {createDefaultHouseSave} = require("./StorageState.Construction");
 
 /** Minimal 4x4 grass test map with one Parlour, used by ::myhouse. */
 function createTestHouseSave() {

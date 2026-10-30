@@ -456,10 +456,10 @@ module.exports = function registerRuneMysteriesQuest(api) {
       return;
     }
     // Completion follows the entire explanation, after the notes handover.
+    // Leave the transcript open: the wiki continues into Sedridor's teleport menu.
     if (stepId === STEP_TAKE_NOTES) {
       if (stage === STAGE_RECEIVED_NOTES && player.getAttribute(DELIVERED_ATTRIBUTE)) quest.complete(player);
       event.handled = true;
-      event.end = true;
       return;
     }
   }

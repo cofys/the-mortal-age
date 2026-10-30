@@ -105,15 +105,24 @@ export function isReady(): boolean {
     return ready;
 }
 
+/** A new connection clears the old world's overlays, including legacy worlds without datasets. */
+export function clearWorldOverlays(): void {
+    worldLocChanges = [];
+    worldLocSpawns = [];
+    worldTerrainOverrides = [];
+}
+
 export function loadFromPayload(payload: {
     gamemodeId: string;
     datasets: Array<{ key: string; rows: unknown[] }>;
 }): void {
-    worldLocChanges = [];
-    worldLocSpawns = [];
-    worldTerrainOverrides = [];
     for (const dataset of payload.datasets) {
         switch (dataset.key) {
+            case "definitionArchives": {
+                const { replaceDefinitionArchives } = require("../../custom/archives/ArchivedDefinitionStore");
+                replaceDefinitionArchives(dataset.rows);
+                break;
+            }
             case "leagueTasks":
                 tasksByStructId = new Map();
                 tasksByTaskId = new Map();

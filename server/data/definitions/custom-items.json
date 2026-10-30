@@ -47,78 +47,66 @@
   },
   {
     "id": 50001,
-    "baseItemId": 2961,
+    "baseItemId": 25159,
     "objType": {
-      "name": "Worn silver sickle",
-      "examine": "A silver sickle, worn smooth by a friend of the Hollow.",
+      "name": "Castlewars special restore(4)",
+      "examine": "Restores 25% special attack energy, once every 30 seconds during Castle Wars.",
       "inventoryActions": [
-        "Read",
+        "Drink",
         null,
         null,
         null,
         "Drop"
       ],
       "isTradable": false
-    },
-    "itemDef": {
-      "tradeable": false
     }
   },
   {
     "id": 50002,
-    "baseItemId": 87,
+    "baseItemId": 25160,
     "objType": {
-      "name": "Tithe brand",
-      "examine": "A dark brand, still warm from the tithe-fire.",
+      "name": "Castlewars special restore(3)",
+      "examine": "Restores 25% special attack energy, once every 30 seconds during Castle Wars.",
       "inventoryActions": [
-        "Wear",
-        "Read",
+        "Drink",
+        null,
         null,
         null,
         "Drop"
       ],
       "isTradable": false
-    },
-    "itemDef": {
-      "tradeable": false
     }
   },
   {
     "id": 50003,
-    "baseItemId": 453,
+    "baseItemId": 25161,
     "objType": {
-      "name": "Smoke bomb",
-      "examine": "Packed coal-dust. Throw it to vanish in the smoke.",
+      "name": "Castlewars special restore(2)",
+      "examine": "Restores 25% special attack energy, once every 30 seconds during Castle Wars.",
       "inventoryActions": [
-        "Use",
+        "Drink",
         null,
         null,
         null,
         "Drop"
       ],
       "isTradable": false
-    },
-    "itemDef": {
-      "tradeable": false
     }
   },
   {
     "id": 50004,
-    "baseItemId": 970,
+    "baseItemId": 25162,
     "objType": {
-      "name": "Forged vault orders",
-      "examine": "Official-looking vault inspection orders. Officially fake.",
+      "name": "Castlewars special restore(1)",
+      "examine": "Restores 25% special attack energy, once every 30 seconds during Castle Wars.",
       "inventoryActions": [
-        "Read",
+        "Drink",
         null,
         null,
         null,
         "Drop"
       ],
       "isTradable": false
-    },
-    "itemDef": {
-      "tradeable": false
     }
   },
   {
@@ -157,6 +145,82 @@
     },
     "itemDef": {
       "tradeable": true
+    }
+  },
+  {
+    "id": 50007,
+    "baseItemId": 2961,
+    "objType": {
+      "name": "Worn silver sickle",
+      "examine": "A silver sickle, worn smooth by a friend of the Hollow.",
+      "inventoryActions": [
+        "Read",
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": false
+    },
+    "itemDef": {
+      "tradeable": false
+    }
+  },
+  {
+    "id": 50008,
+    "baseItemId": 87,
+    "objType": {
+      "name": "Tithe brand",
+      "examine": "A dark brand, still warm from the tithe-fire.",
+      "inventoryActions": [
+        "Wear",
+        "Read",
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": false
+    },
+    "itemDef": {
+      "tradeable": false
+    }
+  },
+  {
+    "id": 50009,
+    "baseItemId": 453,
+    "objType": {
+      "name": "Smoke bomb",
+      "examine": "Packed coal-dust. Throw it to vanish in the smoke.",
+      "inventoryActions": [
+        "Use",
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": false
+    },
+    "itemDef": {
+      "tradeable": false
+    }
+  },
+  {
+    "id": 50010,
+    "baseItemId": 970,
+    "objType": {
+      "name": "Forged vault orders",
+      "examine": "Official-looking vault inspection orders. Officially fake.",
+      "inventoryActions": [
+        "Read",
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "isTradable": false
+    },
+    "itemDef": {
+      "tradeable": false
     }
   }
 ]

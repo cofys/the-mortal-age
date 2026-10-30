@@ -15,7 +15,38 @@ const { WebGPURenderer } = require("../render/webgpu/WebGPURenderer");
 const { hasPendingMapStreamingWork: hasPendingWebGLStreaming } = require("../render/render/streaming");
 const { GameRenderer } = require("../game/GameRenderer");
 
-test("cache initialization leaves map scheduling to the first renderer frame", () => {
+test("client ticks flush interface input before scene rendering is ready", () => {
+    const { OsrsClient } = require("../game/OsrsClient");
+    const { getPacketWriter, createPacket, queuePacket, ClientPacketId } = require("../network/packet");
+    const writer = getPacketWriter();
+    const previousSocket = writer.socket;
+    const sent: Uint8Array[] = [];
+    writer.setSocket({ readyState: WebSocket.OPEN, send: (bytes: Uint8Array) => sent.push(bytes.slice()) });
+    try {
+        const packet = createPacket(ClientPacketId.IF_BUTTON1);
+        packet.packetBuffer.writeInt((378 << 16) | 72);
+        packet.packetBuffer.writeShort(-1);
+        packet.packetBuffer.writeShort(-1);
+        queuePacket(packet);
+        const client = {
+            transmitCycles: { cycleCntr: 0 },
+            updateSoundListener() {}, processWidgetTransmits() {},
+            processWidgetTimers() {}, processScriptEvents() {},
+            get renderer() { assert.fail("sending input must not require a rendered scene"); },
+        };
+        assert.equal(sent.length, 0);
+        OsrsClient.prototype.runClientTicks.call(client, 1);
+        assert.equal(sent.length, 1, "Play is sent on the next client tick");
+        assert.equal(sent[0][0], ClientPacketId.IF_BUTTON1);
+        OsrsClient.prototype.runClientTicks.call(client, 1);
+        assert.equal(sent.length, 1, "a later tick must not send the button twice");
+    } finally {
+        writer.clearBuffer();
+        writer.setSocket(previousSocket);
+    }
+});
+
+test("cache initialization does not queue maps around the login-screen camera", () => {
     const calls: string[] = [];
     const renderer = {
         mapManager: { init: () => calls.push("init"), update: () => calls.push("eager queue") },
@@ -30,9 +61,62 @@ test("cache initialization leaves map scheduling to the first renderer frame", (
     assert.deepEqual(calls, ["init"], "cache readiness must not queue a second camera-centred loading policy");
 });
 
-test("WebGPU streams the server scene around the player across camera orbits and scene rebases", () => {
-    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
+test("the first player sync starts the same scene workers before interface rendering", () => {
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] as const;
     try {
+        ClientState.baseX = 3024;
+        ClientState.baseY = 3440;
+        ClientState.inInstance = false;
+        const queued: number[] = [];
+        const maps = new MapManager<any>(4, (x, y) => queued.push(getMapSquareId(x, y)));
+        const renderer = {
+            mapManager: maps, stats: { frameCount: 0 }, playerPosUni: new Float32Array([3079.5, 3490.5]),
+            resolveEffectiveRenderDistanceTiles: () => 25,
+            osrsClient: {
+                mapRadius: 1, expandedMapLoading: 0, renderDistance: 25,
+                camera: { getPosX: () => 3079.5, getPosZ: () => 3490.5 },
+                isLoggedIn: () => true,
+                playerEcs: { getIndexForServerId: () => 0, getWorldViewId: () => -1 },
+                controlledPlayerServerId: 1,
+                clientPlugins: { gpuSettings: () => undefined, hdEnabled: () => false },
+            },
+        } as any;
+        // LOADING_GAME counts as logged in, but frames before player_sync must not
+        // consume the initial grid revision using a zero or previous-session base.
+        for (const base of [0, 6000]) {
+            ClientState.scenePositionReady = false;
+            ClientState.baseX = ClientState.baseY = base;
+            updateWebGPUMapStreaming(renderer, 0);
+            assert.equal(maps.getGridRevision(), 0);
+            assert.deepEqual(queued, []);
+        }
+        ClientState.baseX = 3024;
+        ClientState.baseY = 3440;
+        ClientState.scenePositionReady = true;
+        GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
+        assert.equal(queued.length, 4, "queue the four visible squares without waiting for a rendered frame");
+        const revision = maps.getGridRevision();
+        const bounds = maps.getGridTileBounds();
+        updateWebGPUMapStreaming(renderer, 1);
+        GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
+        assert.equal(maps.getGridRevision(), revision, "the first render must use the same authoritative grid");
+        assert.deepEqual(maps.getGridTileBounds(), bounds);
+        assert.equal(queued.length, 4, "subsequent syncs and rendering must not duplicate the builds");
+
+        maps.cleanUp();
+        queued.length = 0;
+        ClientState.inInstance = true;
+        GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
+        assert.deepEqual(queued, [], "instance loading keeps its own scene builder");
+    } finally {
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] = previous;
+    }
+});
+
+test("WebGPU streams the server scene around the player across camera orbits and scene rebases", () => {
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] as const;
+    try {
+        ClientState.scenePositionReady = true;
         ClientState.baseX = 3040;
         ClientState.baseY = 3464;
         ClientState.inInstance = false;
@@ -77,20 +161,22 @@ test("WebGPU streams the server scene around the player across camera orbits and
         assert.equal(maps.currentMapX, Math.floor(renderer.playerPosUni[0] / 64));
         assert.equal(maps.currentMapY, Math.floor(renderer.playerPosUni[1] / 64), "boats use their projected player position");
         preview = true;
+        ClientState.scenePositionReady = false;
         cameraX = 3300;
         cameraY = 3300;
         updateWebGPUMapStreaming(renderer, 67);
         assert.equal(maps.currentMapX, 51, "editor preview still streams around its camera");
         assert.equal(maps.currentMapY, 51);
     } finally {
-        [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] = previous;
     }
 });
 
 test("non-HD streaming covers the full visible footprint before the server rebases", () => {
-    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] as const;
     const previousLowEnd = MapManager.lowEnd;
     try {
+        ClientState.scenePositionReady = true;
         ClientState.inInstance = false;
         MapManager.lowEnd = false;
         for (const distance of [25, 90]) {
@@ -122,7 +208,7 @@ test("non-HD streaming covers the full visible footprint before the server rebas
             }
         }
     } finally {
-        [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] = previous;
         MapManager.lowEnd = previousLowEnd;
     }
 });

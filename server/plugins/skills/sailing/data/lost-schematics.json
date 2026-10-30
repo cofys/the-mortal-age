@@ -1,0 +1,268 @@
+[
+  {
+    "key": "salvaging_station",
+    "gameval": "lost_schematic_salvaging_station",
+    "learned": "lost_schematic_salvaging_station",
+    "name": "Salvaging station schematic",
+    "part": "salvaging stations",
+    "buildRows": [
+      "sailing_boat_facility_salvaging_station_2x5a",
+      "sailing_boat_facility_salvaging_station_2x5b",
+      "sailing_boat_facility_salvaging_station_3x8"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_chinchompa_closed",
+      "open": "lost_schematic_box_chinchompa_open",
+      "unlocked": "lost_schematic_chinchompa_unlocked",
+      "hintItem": "lost_schematic_map_chinchompa",
+      "directions": "On the Pandemonium, you'll dig on dry land, but make sure to move as far east as you can.",
+      "keyItem": "lost_schematic_key_chinchompa",
+      "dig": [
+        3050,
+        2995,
+        0
+      ]
+    }
+  },
+  {
+    "key": "gale_catcher",
+    "gameval": "lost_schematic_gale_catcher",
+    "learned": "lost_schematic_gale_catcher",
+    "name": "Gale catcher schematic",
+    "part": "gale catchers",
+    "buildRows": [
+      "sailing_boat_facility_gale_catcher"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_anglers_closed",
+      "open": "lost_schematic_box_anglers_open",
+      "unlocked": "lost_schematic_anglers_unlocked",
+      "hintItem": "lost_schematic_map_anglers",
+      "directions": "On the Onyx Crest, dig where lots of gold is close, but your gems are closer.",
+      "keyItem": "lost_schematic_key_anglers",
+      "dig": [
+        2979,
+        2255,
+        0
+      ]
+    }
+  },
+  {
+    "key": "eternal_brazier",
+    "gameval": "lost_schematic_eternal_brazier",
+    "learned": "lost_schematic_eternal_brazier",
+    "name": "Eternal brazier schematic",
+    "part": "eternal braziers",
+    "buildRows": [
+      "sailing_boat_facility_1x3_eternal_brazier",
+      "sailing_boat_facility_2x5_eternal_brazier",
+      "sailing_boat_facility_3x8_eternal_brazier"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_buccaneers_closed",
+      "open": "lost_schematic_box_buccaneers_open",
+      "unlocked": "lost_schematic_buccaneers_unlocked",
+      "hintItem": "lost_schematic_map_buccaneers",
+      "directions": "On the Tear of the Soul, dig directly between the longest straight line 'tween two pieces of green.",
+      "keyItem": "lost_schematic_key_buccaneers",
+      "dig": [
+        2318,
+        2779,
+        0
+      ]
+    }
+  },
+  {
+    "key": "dragon_salvaging_hook",
+    "gameval": "lost_schematic_dragon_salvaging_hook",
+    "learned": "lost_schematic_dragon_salvaging_hook",
+    "name": "Dragon salvaging hook schematic",
+    "part": "dragon salvaging hooks",
+    "buildRows": [
+      "sailing_boat_facility_salvaging_hook_dragon",
+      "sailing_boat_facility_salvaging_hook_dragon_raft",
+      "sailing_boat_facility_salvaging_hook_dragon_large",
+      "sailing_boat_facility_salvaging_hook_dragon_large_b"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_lledrith_closed",
+      "open": "lost_schematic_box_lledrith_open",
+      "unlocked": "lost_schematic_lledrith_unlocked",
+      "hintItem": "lost_schematic_map_lledrith",
+      "directions": "On Ynysdail, dig where you dock, then figure out a safer place to bury the key.",
+      "keyItem": "lost_schematic_key_lledrith",
+      "dig": [
+        2223,
+        3467,
+        0
+      ]
+    }
+  },
+  {
+    "key": "rosewood_cargo_hold",
+    "gameval": "lost_schematic_rosewood_cargohold",
+    "learned": "lost_schematic_rosewood_cargo_hold",
+    "name": "Rosewood cargo hold schematic",
+    "part": "rosewood cargo holds",
+    "buildRows": [
+      "sailing_boat_facility_cargo_hold_rosewood_raft",
+      "sailing_boat_facility_cargo_hold_rosewood_2x5",
+      "sailing_boat_facility_cargo_hold_rosewood_large"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_crownjewel_closed",
+      "open": "lost_schematic_box_crownjewel_open",
+      "unlocked": "lost_schematic_crownjewel_unlocked",
+      "hintItem": "lost_schematic_map_crownjewel",
+      "directions": "On Minotaurs' Rest, starting just outside the beastmasters door, move one pace south for each capybara and one pace west for each crab.",
+      "keyItem": "lost_schematic_key_crownjewel",
+      "dig": [
+        1961,
+        3102,
+        0
+      ]
+    }
+  },
+  {
+    "key": "dragon_cannon",
+    "gameval": "lost_schematic_dragon_cannon",
+    "learned": "lost_schematic_dragon_cannon",
+    "name": "Dragon cannon schematic",
+    "part": "dragon cannons",
+    "buildRows": [
+      "sailing_boat_facility_dragon_cannon"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_deepfin_closed",
+      "open": "lost_schematic_box_deepfin_open",
+      "unlocked": "lost_schematic_deepfin_unlocked",
+      "hintItem": "lost_schematic_map_deepfin",
+      "directions": "On Buccaneers' Haven, find a cell yet unclaimed, then dig where you'd rest your head if you stayed.",
+      "keyItem": "lost_schematic_key_deepfin",
+      "dig": [
+        2054,
+        10092,
+        0
+      ]
+    }
+  },
+  {
+    "key": "rosewood_hull",
+    "gameval": "lost_schematic_rosewood_hull",
+    "learned": "lost_schematic_rosewood_hull",
+    "name": "Rosewood hull schematic",
+    "part": "rosewood hulls",
+    "buildRows": [
+      "sailing_boat_rosewood_hull_2x5",
+      "sailing_boat_rosewood_hull_large",
+      "sailing_boat_rosewood_raft_base"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_shimmering_closed",
+      "open": "lost_schematic_box_shimmering_open",
+      "unlocked": "lost_schematic_shimmering_unlocked",
+      "hintItem": "lost_schematic_map_shimmering",
+      "directions": "On the Isle of Bones, dig on the beach, but not on a rock, and not next to nor in line with any bones that they've dropped.",
+      "keyItem": "lost_schematic_key_shimmering",
+      "dig": [
+        2530,
+        2529,
+        0
+      ]
+    }
+  },
+  {
+    "key": "rosewood_sail",
+    "gameval": "lost_schematic_rosewood_sail",
+    "learned": "lost_schematic_rosewood_sail",
+    "name": "Rosewood & cotton sails schematic",
+    "part": "rosewood & cotton sails",
+    "buildRows": [
+      "sailing_boat_rosewood_mast_raft",
+      "sailing_boat_rosewood_mast_2x5",
+      "sailing_boat_rosewood_mast_large"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_brittle_closed",
+      "open": "lost_schematic_box_brittle_open",
+      "unlocked": "lost_schematic_brittle_unlocked",
+      "hintItem": "lost_schematic_map_brittle",
+      "directions": "On Charred Island, trace the seaweed up north, then walk six paces west and six paces north.",
+      "keyItem": "lost_schematic_key_brittle",
+      "dig": [
+        2646,
+        2419,
+        0
+      ]
+    }
+  },
+  {
+    "key": "dragon_tiller",
+    "gameval": "lost_schematic_dragon_tiller",
+    "learned": "lost_schematic_dragon_tiller",
+    "name": "Dragon helm schematic",
+    "part": "dragon helms",
+    "buildRows": [
+      "sailing_boat_dragon_steering_raft",
+      "sailing_boat_dragon_steering_2x5",
+      "sailing_boat_dragon_steering_large"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_sunbleak_closed",
+      "open": "lost_schematic_box_sunbleak_open",
+      "unlocked": "lost_schematic_sunbleak_unlocked",
+      "hintItem": "lost_schematic_map_sunbleak",
+      "directions": "On Laguna Aurorae, step out your front door to face the sunrise, then take another step for each of your neighbours.",
+      "keyItem": "lost_schematic_key_sunbleak",
+      "dig": [
+        1161,
+        2779,
+        0
+      ]
+    }
+  },
+  {
+    "key": "dragon_keel",
+    "gameval": "lost_schematic_dragon_keel",
+    "learned": "lost_schematic_dragon_keel",
+    "name": "Dragon keel schematic",
+    "part": "dragon keels",
+    "buildRows": [
+      "sailing_boat_dragon_keel_2x5",
+      "sailing_boat_dragon_keel_large"
+    ],
+    "box": {
+      "closed": "lost_schematic_box_grimstone_closed",
+      "open": "lost_schematic_box_grimstone_open",
+      "unlocked": "lost_schematic_grimstone_unlocked",
+      "hintItem": "lost_schematic_map_grimstone",
+      "directions": "On Drumstick Isle, complete the square.",
+      "keyItem": "lost_schematic_key_grimstone",
+      "dig": [
+        2151,
+        3557,
+        0
+      ]
+    }
+  },
+  {
+    "key": "ballistic_attractor",
+    "gameval": "lost_schematic_ballistic_attractor",
+    "learned": "lost_schematic_ballistic_attractor",
+    "name": "Ballistic attractor schematic",
+    "part": "ballistic attractors",
+    "buildRows": [
+      "sailing_boat_facility_ballistic_attractor"
+    ]
+  },
+  {
+    "key": "bosuns_workbench",
+    "gameval": "lost_schematic_bosuns_workbench",
+    "learned": "lost_schematic_bosuns_workbench",
+    "name": "Bosun's workbench schematic",
+    "part": "bosun's workbenches",
+    "buildRows": [
+      "sailing_boat_facility_bosuns_workbench"
+    ]
+  }
+]

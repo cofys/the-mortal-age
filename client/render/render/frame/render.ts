@@ -2,6 +2,7 @@ import { hintArrow } from "../../../game/HintArrow";
 import { projectDeckToWorld } from "../worldEntityMotion";
 import { updateSkyColor } from "../environment";
 import { syncCameraViewportUnitScale } from "../quality";
+import { getCameraViewportRect } from "../viewportRect";
 import { resolveSceneFramebuffer } from "../init/framebuffers";
 import { takePreparedQueuedMap } from "../streaming";
 import Denque from "denque";
@@ -552,7 +553,6 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         const camHeight = Math.max(1, host.app.height || host.canvas.height || 1);
         syncCameraViewportUnitScale(host);
         const sceneViewport = host.getSceneViewportWidgetRect();
-        const sceneFramebufferViewport = host.scaleViewportRectToSceneBuffer(sceneViewport);
         camera.update(
             camWidth,
             camHeight,
@@ -561,6 +561,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             sceneViewport.width,
             sceneViewport.height,
         );
+        const effectiveSceneViewport = getCameraViewportRect(camera);
+        const sceneFramebufferViewport = host.scaleViewportRectToSceneBuffer(effectiveSceneViewport);
         updateSkyColor(host);
         host.clearSceneFramebuffer(sceneFramebufferViewport);
         // keep CS2-visible viewport zoom in sync with the viewport widget size
@@ -608,7 +610,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // Server scene rebases at local tile 16/88. Load enough static scenery
         // beyond those edges for the requested view, without changing simulation.
         const sceneryPadding = MapManager.getSceneryPadding(renderDistance);
-        host.mapManager.update(
+        if (scenePreview || ClientState.scenePositionReady) host.mapManager.update(
             host.playerPosUni[0],
             host.playerPosUni[1],
             camera,
@@ -1191,6 +1193,89 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             if (shouldProcessNpcOverlays) {
                 try {
                     const npcEcs = host.osrsClient.npcEcs;
+                    const emitNpcOverlays = (ecsId: number, worldViewId: number): void => {
+                        const localX = npcEcs.getX(ecsId) | 0;
+                        const localY = npcEcs.getY(ecsId) | 0;
+                        const serverId = npcEcs.getServerId(ecsId) | 0;
+                        if (serverId <= 0) return;
+                        const state = host.npcHitsplats.get(serverId);
+                        const hb = host.npcHealthBars.get(serverId);
+                        const hasHealth = !!hb && hb.bars.length > 0;
+                        if (!hasHealth && !state) return;
+                        const npcMapId = npcEcs.getMapId(ecsId) | 0;
+                        const npcMapX = (npcMapId >> 8) & 0xff;
+                        const npcMapY = npcMapId & 0xff;
+                        const baseWorldX = npcMapX * 64 + localX / 128.0;
+                        const baseWorldZ = npcMapY * 64 + localY / 128.0;
+                        // Raw plane: overlay anchor heights apply bridge promotion
+                        // per sample, mirroring the model placement plane.
+                        const plane = npcEcs.getLevel(ecsId) | 0;
+                        const npcTypeId = npcEcs.getNpcTypeId?.(ecsId);
+                        const footprintRadius = host.getNpcFootprintRadius(npcTypeId);
+                        const overlayAnchor = host.resolveNpcOverlayAnchor(
+                            ecsId,
+                            baseWorldX,
+                            baseWorldZ,
+                            npcTypeId,
+                        );
+                        let worldX = overlayAnchor.worldX;
+                        let worldZ = overlayAnchor.worldZ;
+                        // On a boat's deck (the HP-bar NPC, crewmates) the NPC stands in the deck's
+                        // own scene: its bars and hitsplats go where the deck is drawn.
+                        if (worldViewId >= 0) {
+                            const projected = projectDeckToWorld(host, worldViewId, worldX * 128, worldZ * 128);
+                            if (!projected) return;
+                            worldX = projected.x / 128;
+                            worldZ = projected.y / 128;
+                        }
+                        const hitsplatOffset = overlayAnchor.logicalHeightTiles * 0.5;
+                        const healthBarOffset = overlayAnchor.logicalHeightTiles + 15 / 128;
+                        if (hasHealth && healthBars.length < healthBarMaxEntries) {
+                            host.appendActorHealthBars(
+                                host.npcHealthBars,
+                                serverId,
+                                "npc",
+                                worldX,
+                                worldZ,
+                                plane,
+                                footprintRadius,
+                                healthBarOffset,
+                                healthBars,
+                                clientCycle,
+                                healthBarMaxEntries,
+                            );
+                        }
+                        if (!state) return;
+                        for (
+                            let slot = 0;
+                            slot < 4 && hitsplats.length < hitsplatMaxEntries;
+                            slot++
+                        ) {
+                            // Use client cycles and calculate visibility from end cycle
+                            const animProgress = host.getHitsplatVisibility(
+                                state,
+                                slot,
+                                clientCycle,
+                            );
+                            if (animProgress === undefined) return;
+                            const entry = host.acquireHitsplatEntry();
+                            entry.worldX = worldX;
+                            entry.worldZ = worldZ;
+                            entry.plane = plane;
+                            entry.footprintRadius = footprintRadius;
+                            entry.heightOffsetTiles = hitsplatOffset;
+                            entry.damage = state.hitSplatValues[slot] | 0;
+                            entry.count = 1;
+                            entry.color = undefined;
+                            entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
+                            entry.variant = slot & 3;
+                            entry.style = state.hitSplatTypes[slot] | 0;
+                            entry.type2 = state.hitSplatTypes2[slot] | 0;
+                            entry.damage2 = state.hitSplatValues2[slot] | 0;
+                            entry.animProgress = animProgress;
+                            hitsplats.push(entry);
+                        }
+                    };
                     for (let i = 0; i < host.mapManager.visibleMapCount; i++) {
                         if (
                             hitsplats.length >= hitsplatMaxEntries &&
@@ -1211,80 +1296,18 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                             if (ecsId <= 0 || seen.has(ecsId)) continue;
                             if (!host.shouldRenderNpcFromMap(map, ecsId)) continue;
                             if (!npcEcs.isActive(ecsId)) continue;
+                            if ((npcEcs.getWorldViewId(ecsId) | 0) >= 0) continue; // the deck pass below
                             seen.add(ecsId);
-                            const localX = npcEcs.getX(ecsId) | 0;
-                            const localY = npcEcs.getY(ecsId) | 0;
-                            const serverId = npcEcs.getServerId(ecsId) | 0;
-                            if (serverId <= 0) continue;
-                            const state = host.npcHitsplats.get(serverId);
-                            const hb = host.npcHealthBars.get(serverId);
-                            const hasHealth = !!hb && hb.bars.length > 0;
-                            if (!hasHealth && !state) continue;
-                            const npcMapId = npcEcs.getMapId(ecsId) | 0;
-                            const npcMapX = (npcMapId >> 8) & 0xff;
-                            const npcMapY = npcMapId & 0xff;
-                            const baseWorldX = npcMapX * 64 + localX / 128.0;
-                            const baseWorldZ = npcMapY * 64 + localY / 128.0;
-                            // Raw plane: overlay anchor heights apply bridge promotion
-                            // per sample, mirroring the model placement plane.
-                            const plane = npcEcs.getLevel(ecsId) | 0;
-                            const npcTypeId = npcEcs.getNpcTypeId?.(ecsId);
-                            const footprintRadius = host.getNpcFootprintRadius(npcTypeId);
-                            const overlayAnchor = host.resolveNpcOverlayAnchor(
-                                ecsId,
-                                baseWorldX,
-                                baseWorldZ,
-                                npcTypeId,
-                            );
-                            const worldX = overlayAnchor.worldX;
-                            const worldZ = overlayAnchor.worldZ;
-                            const hitsplatOffset = overlayAnchor.logicalHeightTiles * 0.5;
-                            const healthBarOffset = overlayAnchor.logicalHeightTiles + 15 / 128;
-                            if (hasHealth && healthBars.length < healthBarMaxEntries) {
-                                host.appendActorHealthBars(
-                                    host.npcHealthBars,
-                                    serverId,
-                                    "npc",
-                                    worldX,
-                                    worldZ,
-                                    plane,
-                                    footprintRadius,
-                                    healthBarOffset,
-                                    healthBars,
-                                    clientCycle,
-                                    healthBarMaxEntries,
-                                );
-                            }
-                            if (!state) continue;
-                            for (
-                                let slot = 0;
-                                slot < 4 && hitsplats.length < hitsplatMaxEntries;
-                                slot++
-                            ) {
-                                // Use client cycles and calculate visibility from end cycle
-                                const animProgress = host.getHitsplatVisibility(
-                                    state,
-                                    slot,
-                                    clientCycle,
-                                );
-                                if (animProgress === undefined) continue;
-                                const entry = host.acquireHitsplatEntry();
-                                entry.worldX = worldX;
-                                entry.worldZ = worldZ;
-                                entry.plane = plane;
-                                entry.footprintRadius = footprintRadius;
-                                entry.heightOffsetTiles = hitsplatOffset;
-                                entry.damage = state.hitSplatValues[slot] | 0;
-                                entry.count = 1;
-                                entry.color = undefined;
-                                entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
-                                entry.variant = slot & 3;
-                                entry.style = state.hitSplatTypes[slot] | 0;
-                                entry.type2 = state.hitSplatTypes2[slot] | 0;
-                                entry.damage2 = state.hitSplatValues2[slot] | 0;
-                                entry.animProgress = animProgress;
-                                hitsplats.push(entry);
-                            }
+                            emitNpcOverlays(ecsId, -1);
+                        }
+                    }
+                    // NPCs on a boat's deck aren't on the main map's squares.
+                    for (const view of host.osrsClient.worldViewManager) {
+                        if (view.id < 0) continue;
+                        for (const ecsId of view.npcIds) {
+                            if (seen.has(ecsId) || !npcEcs.isActive(ecsId)) continue;
+                            seen.add(ecsId);
+                            emitNpcOverlays(ecsId, view.id);
                         }
                     }
                 } catch {}
@@ -1379,7 +1402,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     },
                     helpers: host.getOverlayHelpers(),
                 });
-                host.overlayManager?.draw(RenderPhase.ToFrameTexture, sceneViewport);
+                host.overlayManager?.draw(RenderPhase.ToFrameTexture, effectiveSceneViewport);
             }
         } catch {}
         profiler.endPhase();
@@ -1603,7 +1626,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             }
             if (!host.uiHidden) {
                 host.overlayManager?.update(args);
-                host.overlayManager?.draw(RenderPhase.PostPresent, sceneViewport);
+                host.overlayManager?.draw(RenderPhase.PostPresent, effectiveSceneViewport);
                 if (host.loginOverlay) {
                     host.loginOverlay.setGameState(host.osrsClient.gameState);
                     host.loginOverlay.update(args);

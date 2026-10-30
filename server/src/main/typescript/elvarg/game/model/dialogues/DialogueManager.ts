@@ -5,6 +5,7 @@ import { Dialogue } from "./entries/Dialogue";
 import { TestStaticDialogue } from '../../model/dialogues/builders/impl/TestStaticDialogue'
 import { DialogueOption } from "./DialogueOption";
 import { OptionDialogue } from "./entries/impl/OptionDialogue";
+import { ActionDialogue } from "./entries/impl/ActionDialogue";
 import { DialogueIdentifiers } from "../../../util/DialogueIdentifiers";
 
 interface StaticDialogueDefinition {
@@ -28,6 +29,7 @@ export class DialogueManager {
      * The current dialogue's index.
      */
     private index: number;
+    private owner: object | undefined;
 
     /**
      * Creates a new {@link DialogueManager} for the given {@link Player}.
@@ -44,6 +46,7 @@ export class DialogueManager {
     public reset() {
         this.dialogues.clear();
         this.index = -1;
+        this.owner = undefined;
     }
 
     public isActive(): boolean {
@@ -53,6 +56,11 @@ export class DialogueManager {
     /** The dialogue entry currently shown, if any. */
     public getCurrent(): Dialogue | undefined {
         return this.isActive() ? this.dialogues.get(this.index) : undefined;
+    }
+
+    /** Opaque owner of this chain, retained across its native continuations. */
+    public getOwner(): object | undefined {
+        return this.isActive() ? this.owner : undefined;
     }
 
     public canContinue(widgetId: number): boolean {
@@ -101,19 +109,20 @@ export class DialogueManager {
         return true;
     }
 
-    public startDialogues(builder: DialogueBuilder) {
-        this.startDialog(builder, 0);
+    public startDialogues(builder: DialogueBuilder, owner?: object) {
+        this.startDialog(builder, 0, owner);
     }
 
-    public startDialog(builder: DialogueBuilder, index: number): void {
+    public startDialog(builder: DialogueBuilder, index: number, owner?: object): void {
         if (builder instanceof DynamicDialogueBuilder) {
             builder.build(this.player);
         }
-        this.startDialogueMap(builder.getDialogues(), index);
+        this.startDialogueMap(builder.getDialogues(), index, owner);
     }
 
-    private startDialogueMap(entries: Map<number, Dialogue>, index: number) {
+    private startDialogueMap(entries: Map<number, Dialogue>, index: number, owner?: object) {
         this.reset();
+        this.owner = owner;
         entries.forEach((value, key) => {
             this.dialogues.set(key, value);
         });
@@ -127,7 +136,12 @@ export class DialogueManager {
             this.player.getPacketSender().sendInterfaceRemoval();
             return;
         }
-        dialogue.send(this.player);
+        // Arbitrary action callbacks may open a different feature's prompt.
+        // Only visible entries inherit the chain owner; an action that presents
+        // owned UI must scope that presentation explicitly.
+        const presentationOwner = dialogue instanceof ActionDialogue ? undefined : this.owner;
+        if (this.owner === undefined) dialogue.send(this.player);
+        else this.player.getPacketSender().withChatboxOwner(presentationOwner, () => dialogue.send(this.player));
     }
 
     public handleOption(option: DialogueOption): void {

@@ -5,6 +5,16 @@ export class HitDamage {
     private hitmask: HitMask;
     private startHitmask: HitMask;
     private appliedObservers: Array<(damageTaken: number) => void> = [];
+    private healthLost = 0;
+
+    /** Recorded before setHitpoints can invoke reactive healing or a death-phase transition. */
+    public setHealthLost(amount: number): void {
+        this.healthLost = Math.max(0, amount);
+    }
+
+    public getHealthLost(): number {
+        return this.healthLost;
+    }
 
     /** Observes health actually lost when this hit lands, before reactive healing. */
     public onApplied(observer: (damageTaken: number) => void): this {

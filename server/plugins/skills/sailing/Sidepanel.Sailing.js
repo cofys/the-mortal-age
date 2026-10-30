@@ -58,6 +58,15 @@ const VIEW_COMBAT_OPTIONS_CHILD = 1;
 const VIEW_COMBAT_OPTIONS_MAX_SLOT = 12;
 const IF_EVENT_OP1 = 1 << 1;
 const IF_EVENT_OP1_TO_OP4 = IF_EVENT_OP1 | (1 << 2) | (1 << 3) | (1 << 4);
+/**
+ * The crew picker (937:20, a slot per facility slot), its Back button (937:29, 0-11) and the crew
+ * tab's radio buttons (937:38, 0-3), as live enables them with the panel (rsprox: every boarding).
+ */
+const CREW_PICKER_CHILD = 20;
+const CREW_PICKER_BACK_CHILD = 29;
+const CREW_PICKER_BACK_MAX_SLOT = 11;
+const CREW_RADIO_BUTTONS_CHILD = 38;
+const CREW_RADIO_BUTTONS_MAX_SLOT = 3;
 
 /**
  * A boat's stats: from its parts in the cache, with any the cache doesn't hold (the captured
@@ -108,6 +117,11 @@ function openSidepanel(player, type, varbits, varps) {
     (SIDEPANEL_GROUP << 16) | VIEW_COMBAT_OPTIONS_CHILD, 0, VIEW_COMBAT_OPTIONS_MAX_SLOT, IF_EVENT_OP1);
   sender.sendInterfaceFlagsRange(
     (SIDEPANEL_GROUP << 16) | SIDEPANEL_FACILITIES_CHILD, 0, type.sidepanelFacilitySlots, IF_EVENT_OP1_TO_OP4);
+  sender.sendInterfaceFlagsRange((SIDEPANEL_GROUP << 16) | CREW_PICKER_CHILD, 0, type.sidepanelFacilitySlots, IF_EVENT_OP1);
+  sender.sendInterfaceFlagsRange(
+    (SIDEPANEL_GROUP << 16) | CREW_PICKER_BACK_CHILD, 0, CREW_PICKER_BACK_MAX_SLOT, IF_EVENT_OP1);
+  sender.sendInterfaceFlagsRange(
+    (SIDEPANEL_GROUP << 16) | CREW_RADIO_BUTTONS_CHILD, 0, CREW_RADIO_BUTTONS_MAX_SLOT, IF_EVENT_OP1);
 }
 
 module.exports = { describeBoat, boatVarps, clearBoatVarps, openSidepanel, DESCRIPTION_VARBITS, HOTSPOT_VARBITS };

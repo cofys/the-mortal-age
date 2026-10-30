@@ -110,7 +110,7 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 
 - boat types (`plugins/skills/sailing/data/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs, stats, facility hotspots, part tiers and loc animations. The raft, and the skiff and sloop with camphor hulls.
 - gangplanks: Board / Disembark, routed to the lifecycle
-- helm: Navigate (walking onto the helm tile first) / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape, after a yes/no confirmation. Asking for more speed at full sail says "The boat is already going as fast as it can."
+- helm: Navigate (walking onto the helm tile first) / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; the first heading after taking the helm (moored, 4) sets full sail, while with the sails lowered at the helm (stopped, 0) a heading only turns the boat, on the spot at 128 a tick (the user's crew-combat capture: 640 -> 1280 in five ticks with the sails down after the Stop button); Escape, after a yes/no confirmation. Asking for more speed at full sail says "The boat is already going as fast as it can."
 - helm animations (rsprox: the skiff's and sloop's; boats.json `anims.helm`, each size's set from the cache: `sailing_alpha_helm_raft01_*`, `sailing_alpha_helm_small01_*`, `sailing_helm_3x8_*` and their `human_` versions): taking the helm plays `active01` on the helmsman and the helm loc together; every 10 ticks after, both replay `active01_loop` while they navigate (the trim's own loop replaces it while the sails are trimmed); leaving resets the helmsman and plays the loc's `inactive01`. The raft's are matched by name, not captured. Navigate walks to the boat type's helm stand tile (boats.json `helmStand`, from the wheel), which the helm animations are made for (rsprox): the raft's own helm tile, south of the skiff's wheel, south-east of the sloop's (every recorded sloop navigation). At the helm the helmsman faces the bow, three tiles ahead (rsprox: the skiff's facing, the sloop's face angle 0), not the wheel. Stop-navigating resets the helm animation facing the bow and turns them to the wheel a tick later (live turns them on the same tick: face angle 768 on the sloop, 1024 on the skiff). Clicking any other loc from the helm leaves it and stops the boat (rsprox, salvaging hooks' Deploy from the helm); the sail cloth's options are used from the helm
 - sails (rsprox capture of a skiff's sails, tick by tick): a boat's sail is two deck locs, the mast (the sails part) and the sail cloth beside it (`sailing_boat_sail_kandarin_<size>_<linen|canvas|cotton>`, the material the built sails' option names). Every change plays on both on the same tick (the cloth with the `_offset` animation): the transition (`down_to_full`, `full_to_half`, ...) or, when the state doesn't change, the state's own loop; a tick later the new state's loop (`down`, `half` or `full`). Full and half are up; stopped, moored and reversing are down. Each size's animations are in `boats.json` `anims.sail`.
 - helm sounds and lines (rsprox captures, rev 235): taking the helm plays 10792 on the raft's 1x3 helm (49 recordings) and 10807 on the skiff's and sloop's (210 and 35), leaving it 10793 or 10808 (boats.json `anims.helm.sounds`); live sends no chat line when the helm is taken
@@ -124,6 +124,9 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - Teleport to boat tablets (`BoatTeleport.plugin.js`; Wiki, not captured): teleport the player to the dock or mooring point where a moored boat with a greater teleport focus is, without boarding it. The boat is picked in the boat selection's Teleport to Boat mode (8).
 - teleport foci: each boat's `sailing_boat_N_teleport_focus` varbit (block offset 12: 19270 for slot 1) is 1 with a teleport focus and 2 with a greater one (rsprox). The boat selection greys out boats by it: table 149's Summon mode `requires_teleport_focus` (either focus), Teleport to Boat `requires_greater_teleport_focus`
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
+- side panel events (rsprox, every boarding): the crew picker (937:20) over the facility slots, its
+  Back button (937:29, 0-11) and the crew tab's radio buttons (937:38, 0-3), with the panel.
+- facility ops: built facilities are sent with op flags (rsprox, every capture): at sea ops 1-4 (`0b1111`, no Modify), in the shipyard only Modify (`0b10000`).
 - facility facing: on a side hotspot, facilities that work over the side (cannons, hooks, nets, wind catchers) face out and the rest (a range, a keg) face in; chum stations and spreaders face in although they work over the side (rsprox: all 431 recorded placements). The centre line faces 0.
 - salvaging: shipwrecks rise and sink at every site the cache places them; a boat's salvaging hook reels salvage in from one nearby for Sailing XP, and a salvaging station (on a boat or at a port) sorts it into loot for more. Data in `plugins/skills/sailing/data/sailing-salvage.json`
 - Barracuda Trials (`BarracudaTrials.plugin.js`): the Tempor Tantrum, the Jubbly Jive and the Gwenith Glide, in [barracuda-trials.md](barracuda-trials.md).
@@ -147,9 +150,140 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
   - `::crew all | <name or id> | reset | list` (developers): recruits crewmates without their conversations or requirements, into free crew slots, or resets them.
   - Bank-cargo (`BankCargo.Crew.js`, rsprox): the dock crewmate's Bank-cargo, or "Can you help bank my cargo hold contents?", asks "Move all available items from your cargo hold to your bank?" (Yes/No) for the boat docked there; with several docked, the boat selection in its bank cargo mode (11) comes first. Yes: their first line with no "Click here to continue" as the screen fades (50 cycles, minimap kept), 3 ticks later "Your crew start moving the contents of the cargo hold..." (no continue), at 7 the cargo goes to the bank (what a full bank or a maxed stack can't take stays in the hold) and the screen fades in, at 10 their closing line by whether the bank had room. Lines from their transcript. An empty hold: their "nothing to move" line. No boat at that dock: Jenkins' captured lines ("This some 'ghost ship' joke? If not, I reckon yer boat ain't here."; without ghostspeak "Woooo..." and "You think Jenkins is either trying to tell you that your boat isn't at this dock..."); the others, whose lines weren't captured, "Your boat isn't docked here." (ours). The Wiki's Deckhandiness 2 isn't enforced: its refusal was never captured.
   - courier crates (`Courier.Crew.js`, rsprox; capacity from the Wiki): with the boat docked at the port, the crew carry what's left of a task's crates, 2 each with Deckhandiness 3-4, else 1, in slot order. Taking a crate at the ledger table: "Your crew come to help you carry the heavy cargo." and "...There are two more crates of this type to collect, but your crew can help with that."; each appears beside the player with a puff of smoke (2902) in their carrying form for that many crates (table 173 `cargo_npc`) and follows (the second follows the first). Boarding: "Your crew pack the cargo they were holding into the cargo hold.", and they count as taken. Disembarking at the destination with a crate in hand, a tick later they carry the task's other crates out of the hold, and the ledger takes theirs first: "Your crew drop off the cargo that needed to be delivered here.". `sailing_crew_held_cargo_n` (varp 5174+n, crate) and `_amount` (varbit 19473+n) per task slot, varp 5179 the hold they came from. Ours: crew who lose the player (leaving port, teleporting, logging out) put the crates back where they came from and go, cancelling the task drops theirs with it, and a hold too full to pack them leaves the rest at the ledger.
-  - wind and gale catchers (`WindCatcher.Helm.js`, rsprox 907, 908, 936, 1031, 4306): Activate and Deactivate (from the helm too), trims kept as wind motes while switched on (2, or 3 in a gale catcher; three quarters of the trim's XP, full XP owed on release), Release-mote on the loc or the side panel for the trim's burst, the motes kept with the boat. Building one keeps its captured wind mote.
-  - not done yet: repairing a damaged boat, firing cannons, trawling or a crewmate working the wind catcher (they go there and stand; live's switch it on and off), and the level-up boxes ("You can now recruit Jobless Jim as a crewmate."; tsps has no level-up unlock messages yet).
+  - wind and gale catchers (`WindCatcher.Helm.js`, rsprox 907, 908, 936, 1031, 4306): Activate and Deactivate (from the helm too), trims kept as wind motes while switched on (2, or 3 in a gale catcher; three quarters of the trim's XP, full XP owed on release), Release-mote on the loc or the side panel (the first button of the catcher's hotspot row: 937:25 slot (3 + hotspot) x 4, slot 12 on hotspot 0 as in every recording) for the trim's burst, the motes kept with the boat. Building one keeps its captured wind mote.
+  - on a cannon or making repairs: see Combat below.
+  - not done yet: trawling or a crewmate working the wind catcher (they go there and stand; live's switch it on and off), and the level-up boxes ("You can now recruit Jobless Jim as a crewmate."; tsps has no level-up unlock messages yet).
 - developer commands: `::maxboat [default|salvaging|combat|fishing]` gives the boat being customised in the shipyard (else the active one) every part's best tier and a preset's facilities, replacing what was built (not while aboard it; the shipyard's display is rebuilt); `::raft`, `::skiff` and `::sloop` give a boat docked at The Pandemonium, `::pandemonium` teleports to its gangplank, `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet), and `::boatmats <hull|keel|sails|helm> <tier> [boat]` or `::boatmats facility <name>` spawns a part's or facility's materials for the shipyard. The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest comes later. Junior Jim's Buy-boat opens the Boat Emporium omnishop (`BoatShop.Sailing.js`), and the boat is moored at his dock
+
+## Combat
+
+Boat combat: sea creatures, the boat's cannons (manned by the player or a crewmate), ranged and
+magic from the deck, the boat's HP and repairs, harvesting corpses, and bounty tasks
+([port-tasks.md](port-tasks.md)). Code: `SeaCombat.plugin.js` and `seacombat/` (`Cannon`,
+`Creatures`, `BoatHp`, `Loot`, `Repairs`, `DeckCombat`), `crew/Cannon.Crew.js`,
+`crew/Repair.Crew.js`, `porttasks/Bounty.PortTasks.js`; static ships' cannon fire stays in
+`ShipCombat.Sailing.js`. Data: `data/sea-combat.json`. Tests: `server/tests/sea-combat.test.cjs`.
+
+Sources: two of the user's own rev 241 rsprox captures (a rune cannon on a camphor sloop against
+ospreys; Jittery Jim on a skiff's adamant cannon against terns, with the Pandemonium tern
+bounty), rsprox.net recordings (https://rsprox.net/database: the other creatures' sounds and
+animations, repair kits), the cache (cannon table 162 via facility table 176, cannonball ids in
+table 165, task table 197) and the OSRS Wiki (Boat combat, the cannons' and cannonballs' pages,
+Bounty tasks, Repair kits).
+
+- **Cannons.** Operate mans one: `facility_lockedin` 19105 = 4, varps 5042/5043 the loc and its
+  table 162 row (8080 adamant, 8081 rune), `sailing_facility_hotspot_number` 19103 = hotspot + 1,
+  the combat tab as "Category: Cannon" (357 -> 33, `com_mode` 43 -> 5), "You man the cannon and
+  take aim...", the side panel's `player_at_facility_n` and ammunition (`ammo_flags_n` 4,
+  `ammunition_type_n`, `ammunition_count_n`), the engage animation 13325 then the idle 13327 and
+  the cannon's 13322/13324. Operate again: "You disengage from the cannon." with everything put
+  back; walking off (to the helm, say) says nothing. Levels: the facility's Sailing level and the
+  table's Ranged one (our refusal wording).
+- **Ammunition.** A cannonball used on a cannon sets the preferred one (varbit 19101, the
+  cannonball's type 1-8 as in table 165): "Your preferred ammunition has been set to
+  <red>adamant cannonballs</col>."; Check-ammunition shows it ("Your preferred ammunition is set to
+  ...", or "You have no preferred ammunition type set. Set it by using a cannonball on any
+  cannon."), Reset-ammunition clears it ("Your preferred ammunition type has been reset."). A
+  cannon fires the preferred one if there's any, otherwise the best it can (`ammunition_max_tier`),
+  the player's from the inventory first and then the cargo hold, a crewmate's from the hold only.
+- **Firing.** Attack on a creature while manning fires every 7 ticks (`attack_rate`) until it dies
+  or leaves the cannon's reach, 15 tiles in the 180 degrees in front of it (Wiki): "I can't reach
+  that!". A shot: the gunner's 13326, the cannon's 13323 and its flash on the cannon's own deck tile, by
+  the cannon's rotation (`vfx_sailing_cannon01_small01_attack01-04`: 3538 facing 1, 3540 facing 3,
+  in 900 recorded shots), the cannonball's projectile from the tile outboard of the cannon (x - 1
+  facing 1, x + 1 facing 3; 3487-3494; start 0, end 46 + 5 a tile, angle 15, heights 30 to a
+  quarter of the creature's impact height: rsprox prints map_projanim_v2 heights four times over,
+  120 -> 210 for an osprey, 264 a tern, 20 a shark), the impact 3541 (at the full height) delayed
+  to land with it, and the hitsplat
+  floor(end / 30) ticks after the shot (captured: 51-59 -> 1 tick, 61-89 -> 2, 96 and 111 -> 3) with
+  sound 10927. The side panel's ammunition count goes down, `weapon_n_has_target` 1,
+  `last_fired_ammunition_player` the type.
+- **Damage and XP** (Wiki): the player's ranged max hit with the cannon's and cannonball's strength
+  added to the worn gear it counts (not the weapon, shield or ammo slots), prayers and set effects
+  included; accuracy the same way against the creature's heavy ranged defence. Cannonball bonuses
+  are the Wiki's (table 165's stats are server side). 1 Sailing and 4 Ranged XP per point of the
+  rolled damage, overkill included, on the shot (captured: 48 dealt to an osprey with 48 left gave
+  59 Sailing, 236 Ranged). A crewmate's max hit is floor(floor((Sailing x (cannon + ball + 64) +
+  320) / 640) x (Privateering + 13) / 20); their accuracy uses the captain's Sailing (ours). The
+  captain gets 0.7 of a crewmate's damage as Sailing XP and no Ranged (captured: 9 -> 7, 13 -> 9,
+  17 -> 12, 21 -> 15), with "You gain some experience by watching your crew work." at most every 21
+  ticks (captured gaps 21-32).
+- **Crewmates on cannons**: they stand on the deck tile inboard of the cannon, facing it (captured:
+  Jittery Jim at 3876 for a cannon at 3875), and drop the cannon's idle pose when they leave it; by Command or the row's crew picker, needing the cannon's Privateering
+  ("Your crewmate requires 3 Privateering to use that facility."), and not while the player mans
+  it ("A player is already working at that facility."; the player manning it while they walk there
+  sends them back to idle). No ammunition in the hold: "Your crewmate
+  on the cannon can't find any ammo in the cargo hold." and "I can't find any ammo in the cargo
+  hold." over their head, once until they next fire (live repeats it now and then). Orders are the cannon row's first two buttons (row 3 + hotspot: slots 16
+  and 17 for a skiff's hotspot 1): the first cycles "Await further orders!", "Fire at will!" and
+  "Attack my targets!" (`weapon_n_following_target` 1, 2, 0), the second is "Hold fire!", said by
+  the captain. Following the captain they take the captain's target, whether the captain mans a cannon or attacks
+  with their own weapon ("Fire!"); firing at will they
+  pick the nearest creature the cannon reaches, for 10 minutes (captured: 1000 ticks), then follow
+  the captain again.
+- **Sea creatures** (`data/sea-combat.json`, every spawned kind; their animations, death sounds
+  and aggression are the NPC definitions', with `npc-combat-defs.json` entries giving each no block
+  animation, as captured): hit by a player on their boat, or near one when aggressive (krakens and
+  every shark but the bull shark, Wiki; ours: 8 tiles), a
+  creature takes the boat as its target, never the player. It comes over the water to its reach of
+  the hull (ours: birds 4 tiles as the captured osprey, krakens 6, the rest beside it) and attacks
+  every attack speed ticks: its attack animation and sound (osprey 13233/10925, tern 13237/10936,
+  rays 10933, frigatebird 10915, mogre 10802, dolphin 10912; sharks silent), then a tick later
+  (captured) a roll against the hull's defence up to its max hit, less 1 per 100 of the keel's
+  armour (Wiki; a creature with a lower max hit than that can't hurt the boat), with sound 11165
+  for a block and 10700 for damage. Under the hull it can't attack (Wiki); it gives up 20 tiles
+  behind (ours).
+- **The boat's HP.** `boat_hp_npc_tiny/small/medium` stands on the deck (raft and skiff (3,3), sloop
+  (3,8), captured for the skiff and sloop) while the player is aboard; hits on the boat show as
+  hitsplats on it (the client draws a deck NPC's hitsplats and health bars where its deck is drawn) (12 for the owner's block, as captured) with the boat's health bar (headbar 19,
+  100 wide, on a skiff; 21, 140 wide, on a sloop; the raft's 17, 60 wide, follows the sizes'
+  pattern). The HP goes to `sailing_sidepanel_boat_hp` and the slot's stored HP. At 0 the boat is
+  lost: all of its cargo goes when a creature or ship sank it (Wiki; a Barracuda Trial's hazards
+  only send the player back, as before) and the player escapes to land; the boat is sunk until a
+  shipwright recovers it.
+- **Repairs.** A repair kit's Apply aboard (rsprox.net recording 3455): `human_repairkit`, sound 2101
+  at 15, 30 and 45 cycles, "You use the repair kit to fix up the boat.", the kit used and the boat
+  repaired by the kit's hitpoints (wooden 5, oak 10, teak 20, mahogany 30, camphor 40, ironwood 45,
+  rosewood 50; Wiki). It holds off the player's next cannon shot 3 ticks (ours, as food). A
+  crewmate on repairs uses the hold's kits (best first, every 5 ticks: ours) for the kit's
+  hitpoints plus their Deckhandiness less 1 (Wiki), saying "Aye, that's better.". The side panel's
+  repair kit count is what the hold's kits repair (5 a wooden kit, as captured).
+- **Corpses and loot.** A creature dies with its death animation and sound (osprey 10926, tern
+  10937, rays 10934, mogre 10799), and 2 ticks later lies as its corpse (`_dead`, op1 Harvest) for
+  two minutes (Wiki), then respawns its usual time later. Its drops wait for the harvest: the killer's Harvest picks it up beside the
+  hull (`human_pickupfloor`, the loot a tick later) or throws a net further out
+  (`sailing_human_loot_net_cast_01` with spotanims 3519 and 3521, projectile 3520: start 30, end
+  90, angle 255, progress 112, heights 128 to 0), pulling it a tile a tick towards the player for six ticks (its death left its movement locked; the net
+  frees it, and while it's pulled, as while a creature fights a boat, its walk is scripted: core's
+  NPC movement coordinator doesn't wander it or walk it home) (stopping beside the hull; the net's
+  3522 on it from the third tick for four, then 3523) and looting 9 ticks after the throw (captured).
+  Out of the net's reach (ours: 10 tiles), the player first walks along the deck to the tile
+  nearest it (`BoatManager.deckTileToward`), as for any main-world NPC's option from a deck. The loot goes into the inventory, each item
+  flying in (script 7192 with the corpse, a loot key counting up, the item and the amount) with
+  sound 2581; without room for all of it, it all drops under the player (Wiki).
+- **Loot rules**: a harvest's loot goes through the same hooks as a kill's drops (NpcDrops'
+  `npc-drops:add`, `npc-drops:roll` with everyone who damaged the creature, `npc-drops:generated`,
+  with the creature's own id), so an Ironman's shared kill keeps nothing, members items go on a
+  free world and the collection log counts it; a bounty part only counts if it survives them.
+- **Bounty parts** in a creature's drop table (Wiki tertiaries, "only dropped while on an applicable
+  bounty task") come only from an active bounty (porttasks/Bounty.PortTasks.js); harvests drop them
+  from the table's roll.
+- **From the deck** (Wiki): bows and spells reach sea creatures from the deck of the player's own
+  boat (the one a creature fights back against), measured from the
+  boat's tile on the sea (core `CombatPosition`: across a deck both are measured from the
+  main-world tiles under them, over main-world clipping, and projectiles fly in the main world);
+  melee says "I can't reach that!", and nothing ashore can be attacked. Out of reach, the player
+  walks along the deck to the tile nearest the target and attacks once in reach; when the deck
+  takes them no nearer, "I can't reach that!" (captured). The client faces a target in another
+  world view from where the player stands in the world, relative to the deck it turns with
+  (`PlayerMovementSync.acrossDeckOrientation`).
+- **Not done**: chainshot and incendiary cannonballs, the ballistic attractor, the perildance
+  bitter's +1, the cannons' auto-retaliate setting, the side panel's NPC target layer (937:26),
+  Telekinetic Grab on corpses, the herb sack and seed box when looting, crewmates "fire at will"
+  needing their target cleared, and multi-combat limits at sea.
+- Shipwright Seb repairs the boat visiting the shipyard for 50 coins per missing hitpoint,
+  with canonical confirmation, a remembered warning choice and PIN-guarded bank fallback.
+  See [repair sources and verification limits](shipwright-repairs.md).
 
 ## Client
 

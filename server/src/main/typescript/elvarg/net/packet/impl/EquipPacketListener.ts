@@ -147,8 +147,11 @@ export class EquipPacketListener {
       item.getDefinition().isDoubleHanded() &&
       equipmentSlot === Equipment.WEAPON_SLOT
     ) {
-      const occupiedShield = equipment.isSlotOccupied(Equipment.SHIELD_SLOT);
-      const slotsRequired = occupiedShield ? 1 : 0;
+      // The displaced weapon lands in the slot the two-handed weapon came from, so the shield
+      // only needs a spare slot when there is a weapon to fill it. Wielding a two-hander into
+      // empty hands vacates its own slot, which the stowed shield takes.
+      const slotsRequired = equipment.isSlotOccupied(Equipment.SHIELD_SLOT) &&
+        equipment.isSlotOccupied(Equipment.WEAPON_SLOT) ? 1 : 0;
       if (inventory.getFreeSlots() < slotsRequired) {
         inventory.full();
         return;

@@ -27,6 +27,8 @@ export class WorldMapTileJob {
 
     setVars(values: Int32Array): void { this.vars.set(values); }
 
+    invalidate(): void { this.cancel(this.epoch, true); }
+
     cancel(epoch: number, clearCache = false): void {
         this.epoch = epoch;
         this.abort.abort();

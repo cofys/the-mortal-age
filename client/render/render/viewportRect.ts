@@ -33,6 +33,21 @@ export interface SceneViewportRect {
     height: number;
 }
 
+/** The camera's device-pixel bounds after native viewport-shape/FOV clamping. */
+export function getCameraViewportRect(camera: {
+    viewportXOffset: number;
+    viewportYOffset: number;
+    viewportWidth: number;
+    viewportHeight: number;
+}): SceneViewportRect {
+    return {
+        x: camera.viewportXOffset,
+        y: camera.viewportYOffset,
+        width: camera.viewportWidth,
+        height: camera.viewportHeight,
+    };
+}
+
 export function computeSceneViewportRect(input: SceneViewportInput): SceneViewportRect {
     const fallbackWidth = Math.max(1, input.fallbackWidth | 0);
     const fallbackHeight = Math.max(1, input.fallbackHeight | 0);

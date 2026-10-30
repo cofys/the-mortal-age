@@ -145,7 +145,7 @@ module.exports = function registerHolyGrailQuest(api) {
     if (stage >= STAGE_STARTED) {
       return ["<str>King Arthur sent me to recover the Holy Grail.</str>", "I should speak to <col=800000>Merlin</col> in his Camelot workshop."];
     }
-    return ["After Merlin's Crystal, I can ask <col=800000>King Arthur</col> for another quest."];
+    return ["I can start this quest by talking to <col=800000>King Arthur</col> in <col=800000>Camelot</col>."];
   }
 
   function grantReward(player) {

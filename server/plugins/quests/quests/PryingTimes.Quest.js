@@ -573,7 +573,10 @@ module.exports = function registerPryingTimesQuest(api) {
 
   function handleObjectInteraction(event) {
     const { player } = event;
-    switch (event.objectId) {
+    const resolved = event.definition?.id;
+    const objectId = resolved === PORT_SARIM_LEDGER_ID || resolved === PANDEMONIUM_LEDGER_ID
+      ? resolved : event.objectId;
+    switch (objectId) {
       // The ledger tables are ordinary port-task ledgers: the sailing plugin's
       // "Ledger table" hooks take and deposit the crate. This generic hook runs
       // before them, so a deposit is confirmed a tick later (capture 3455: 5 -> 10).

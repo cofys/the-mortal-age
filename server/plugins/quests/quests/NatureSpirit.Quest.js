@@ -381,7 +381,7 @@ module.exports = function registerNatureSpiritQuest(api) {
     if (stage >= STAGE_STARTED) {
       return ["Enter Mort Myre swamp and find <col=800000>Filliman Tarlock</col>."];
     }
-    return ["Speak to <col=800000>Drezel</col> after completing Priest in Peril."];
+    return ["I can start this quest by talking to <col=800000>Drezel</col> in the basement of the <col=800000>Paterdomus Temple</col>."];
   }
 
   function grantReward(player) {

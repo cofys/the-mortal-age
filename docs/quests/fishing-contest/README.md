@@ -1,0 +1,31 @@
+---
+quest: Fishing Contest
+key: fishing_contest
+status: passed
+tested:
+tester: agent
+model:
+commit:
+cache: osrs-241_2026-10-20
+start: checkpoint
+travel:
+---
+
+# Fishing Contest
+
+Natural route linked across saved checkpoints to the Vestri trophy hand-in. Reward was not duplicated and the post-quest tunnel worked.
+
+## Findings
+
+None recorded.
+
+## Runs
+
+### date not recorded · agent · model not recorded
+
+- **Source:** issue [#728](https://github.com/RSPSApp/tsps/issues/728) active (q041); moved here from its ledger on 2026-10-29. Proven against plugin hashes, not a commit, so a later plugin change is not flagged automatically.
+- **Start:** checkpoint: stage 0->1, continued to 4, completed after later restarts.
+- **Result:** varp 11 = 5; QP +1, Fishing +2,437.5 XP; trophy consumed.
+- **Checked:** repeat (no duplicate), relog/save, post-quest tunnel descent.
+- **Not checked:** Recovery, full-bag and overlay unchecked; Later plugin edits and uncovered recovery need rechecks.
+- **PRs:** [#1122](https://github.com/RSPSApp/tsps/pull/1122).

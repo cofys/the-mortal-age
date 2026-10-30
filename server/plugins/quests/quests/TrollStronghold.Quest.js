@@ -170,11 +170,7 @@ module.exports = function registerTrollStrongholdQuest(api) {
         "I must climb the mountain and defeat <col=800000>Dad</col>.",
       ];
     }
-    return [
-      "I must complete <col=800000>Death Plateau</col> first.",
-      "It also requires 15 Agility.",
-      "Speak to <col=800000>Denulth</col> after meeting the requirements.",
-    ];
+    return ["I can start this quest by talking to <col=800000>Denulth</col> in <col=800000>Burthorpe</col>."];
   }
 
   function grantReward(_player) {

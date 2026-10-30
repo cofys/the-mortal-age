@@ -225,6 +225,7 @@ export type {
 } from "./render/constants";
 
 export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
+    public definitionContentEpoch = 0;
     type: OsrsRendererType = WEBGL;
 
     dataLoader = new SdMapDataLoader();
@@ -1408,6 +1409,29 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     override initCache(): void {
         return render.initCache(this);
+    }
+
+    override invalidateDefinitionCaches(): void {
+        this.definitionContentEpoch++;
+        this.worldEntityLoadTokens.clear();
+        this.instanceBuildSeq++;
+        if (this.instanceLocRebuildTimer !== null) clearTimeout(this.instanceLocRebuildTimer);
+        this.instanceLocRebuildTimer = null;
+        if (this.pendingInstanceScene) WebGLMapSquare.cancelPreparedLoad(this.pendingInstanceScene);
+        this.pendingInstanceScene = null;
+        super.invalidateDefinitionCaches();
+        this.chatheadFactory?.clear();
+        this.widgetsOverlay?.invalidateDefinitionCaches();
+        this.interactLocModelLoader?.clearCache();
+        this.interactNpcModelLoader?.clearCache();
+        this.sceneRaycaster?.clearCache();
+        this.npcDefaultHeightCache.clear();
+        this.npcNameCache.clear();
+        this.cachedNpcIds.clear();
+        this.cachedLocIds.clear();
+        this.cachedObjIds.clear();
+        this.clearDynamicNpcAnimRuntimeState();
+        if (this.instanceActive) this.scheduleInstanceLocRebuild();
     }
 
     initOverlays(): void {

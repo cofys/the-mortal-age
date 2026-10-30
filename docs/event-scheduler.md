@@ -1,0 +1,74 @@
+# Holiday event scheduler
+
+The reusable scheduler is the foundation of the Holiday & seasonal events tracker section.
+It does not implement an annual activity or distribute rewards. `plugins/world/data/events.json`
+is deliberately empty until a sourced activity supplies a real year-specific window.
+
+## Configuration and contract
+
+Each entry has `key` (unique lowercase name, hyphens allowed; `reset` is reserved), `enabled`
+(boolean), and a nonempty `windows` array. Each window has `start` and `end` as UTC ISO
+instants, e.g. `2026-12-24T00:00:00.000Z`. These example dates illustrate syntax only.
+Start is inclusive; end is exclusive. Entries are validated together before startup, so an
+invalid/duplicate key or malformed/reversed date leaves the scheduler stopped, logs the
+reason, and activates no content. Dates are not extrapolated into future years.
+
+- `events:active` sends `{ key, active }` once per transition. State changes before notification.
+  Notifications are immutable and serialized: a consumer's nested override or shutdown waits
+  until every subscriber has received the current transition. Later consumers therefore
+  cannot receive an obsolete start after cleanup. Queries during a notification agree with it.
+  Consumers attach their named handlers during plugin registration, spawn temporary content
+  on start, and clean up their owned NPCs/objects/tasks on stop. They must also check status
+  before rewarding or progressing a player. Do not register new interaction hooks each time
+  a window opens. One consumer failing is not an atomic world rollback; consumers must be
+  independently idempotent and tested through their own failure/cleanup paths.
+- `events:status` uses a request `{ key, active: false }`; the scheduler writes its answer to
+  `active`. Unknown keys and a stopped scheduler are inactive. No internal Set/Map escapes.
+- Owner-only `::forceevent <key> [on|off|auto]` overrides a window for testing (default on).
+  `::forceevent reset` restores all configured windows. Overrides are local to this process
+  and disappear on shutdown; no player saves or rights are changed. Invalid commands do
+  not claim success or mutate state. The existing central command dispatcher enforces rank.
+- On startup, the scheduler snapshots validated configuration, evaluates immediately and
+  submits one repeating Task. A duplicate startup does nothing. It checks wall-clock UTC
+  every 60 seconds, converted to ticks with the configured engine cycle length. This is a
+  local infrastructure cadence, not an OSRS action timing; transitions can be observed up
+  to one check interval after a window boundary.
+- Shutdown makes every query inactive, stops the retained task, cancels the matching owned
+  task key, clears overrides/configuration state and emits stop for each active key exactly
+  once. Consumers use these notifications to tear down their temporary world changes.
+
+## Production path and evidence
+
+CommandPacketListener.execute sanitizes the native command and includes its base in
+`parts[0]`; PluginManager.emitCommand checks registered Owner rights before invoking
+forceEvent. The handler reads `parts[1]`, updates private overrides, evaluates the calendar
+and emits the custom event. Server lifecycle hooks invoke start/stop through the normal
+register API; TaskManager owns the pending/active task lists and cancellation. No new core
+initialization hook, generated data, permanent spawn, dependency or persistence changes.
+
+The content consumer's entity references, not NPC names or IDs alone, identify what it owns.
+The regression uses api.spawnNpc/removeNpc and the real NPC registry to verify closing a
+window leaves another NPC alive. Each later activity must separately prove cancellation,
+death/respawn behaviour, pending additions and native client rendering.
+
+- Local RSProx index searches `*xmas*`, `*halloween*`, `*easter*` returned no mentions. There
+  is no cited recording of this internal server calendar. No recorded timing is claimed.
+- The pinned revision-241 dump contains annual symbols (e.g. npc `easter_egg_rolling_bunny`
+  and varp `easter_2005`) and holiday interfaces, but cannot establish calendar mechanics.
+  No gameplay ID or UI is added here. Tests resolve the synthetic consumer's MAN identifier
+  against the shipped active cache, not a guessed number or claimed holiday NPC.
+- The [tracker](https://rsps.app/progress) specifies a reusable calendar/custom-event
+  foundation and temporary-content cleanup. Start/end semantics, 60-second cadence and the
+  Owner override syntax are implementation choices for this private server.
+- No annual quest, exact holiday date, transcript, reward, RNG or OSRS parity is established
+  by this PR. Those require their own Wiki/capture/cache evidence and native game checks.
+
+## Verification
+
+`node --test tests/event-scheduler.test.cjs` runs on the built server and shipped cache with
+real PluginManager, Player, CommandPacketListener, NPC and TaskManager. Only player network
+output and wall-clock time are controlled. The cached JSON configuration array is seeded
+with explicit synthetic windows and restored after each test; the shipped file remains empty.
+The suite exercises the scheduler's registered hooks, not a fake plugin API. This targeted
+suite does not load/start all content plugins or verify rendering; registry/server startup
+integration and independent review are recorded separately in the PR's testing evidence.

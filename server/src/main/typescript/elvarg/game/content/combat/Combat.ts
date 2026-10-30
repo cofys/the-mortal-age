@@ -1,3 +1,5 @@
+import { BoatManager } from "../sailing/BoatManager";
+import { CombatPosition } from "./CombatPosition";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { HitDamageCache } from "../../content/combat/hit/HitDamageCache";
 import { HitQueue } from "../../content/combat/hit/HitQueue";
@@ -347,6 +349,30 @@ export class Combat {
         this.faceTarget(target);
 
         const reachable = CombatRange.canReach(this.character, method, target);
+        if (!reachable && CombatPosition.acrossDeck(this.character, target)) {
+            // Across a boat's deck the attacker can only close in along the deck: they walk to
+            // the deck tile nearest the target, and attack once it's in reach. When the deck
+            // takes them no nearer, the attack ends there (rsprox: Attack on a sea creature
+            // beyond range from a deck: "I can't reach that!").
+            const movement = this.character.getMovementQueue();
+            const tile = BoatManager.deckTileToward(this.character, target);
+            if (tile && movement.getMobility().canMove()) {
+                if (!movement.hasRoute() || this.routedTargetX !== tile.getX() || this.routedTargetY !== tile.getY()) {
+                    this.routedTargetX = tile.getX();
+                    this.routedTargetY = tile.getY();
+                    this.routedTargetZ = tile.getZ();
+                    PathFinder.calculateWalkRoute(this.character, tile.getX(), tile.getY());
+                }
+                state.routeRequested = true;
+                return;
+            }
+            if (movement.size() > 0) return;
+            if (this.character.isPlayer() && this.character.getAsPlayer().isPlayerBot?.() !== true) {
+                this.character.getAsPlayer().sendMessage("I can't reach that!");
+            }
+            this.cancelIfCurrent(target, generation);
+            return;
+        }
         if (reachable) {
             this.resetUnreachableTracking();
         } else if (this.giveUpUnreachableTarget(target, generation)) {

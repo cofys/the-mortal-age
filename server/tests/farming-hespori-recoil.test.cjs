@@ -16,6 +16,7 @@ before(async () => {
 });
 test('waking a grown Farming Hespori sets recoil immunity on the boss, without changing its flowers', t => {
     const player = new Player(null), sender = new Proxy({}, { get: () => () => sender }), spawned = [];
+    player.setRegistered(true);
     player.getPacketSender = () => sender; player.sendMessage = () => {};
     player.getInventory().add(new core.Item(Data.itemId('Spade')), false);
     t.mock.method(core.MapObjects, 'get', () => null);

@@ -1,0 +1,47 @@
+{
+  "_source": "Recipes, levels, XP and ticks: OSRS Wiki item pages (Construction XP after the 19 November 2025 halving). Menus, animation, sound, timing and the repair kit texts: rsprox captures 3461, 3467, 3792 (rev 235). Items, animation and the loc by cache gameval name; tools by ItemIdentifiers name.",
+  "loc": "shipwright_workbench",
+  "tools": { "hammer": ["HAMMER", "IMCANDO_HAMMER", "IMCANDO_HAMMER_OFF_HAND_"], "saw": ["SAW", "CRYSTAL_SAW", "AMYS_SAW"] },
+  "animation": "human_poh_build",
+  "sound": 938,
+  "prompt": "What would you like to craft?",
+  "categories": ["Hull parts.", "Repair kits."],
+  "menus": {
+    "hull": { "mode": 36, "title": "What would you like to craft?" },
+    "kits": { "mode": 2, "title": "What would you like to craft?" }
+  },
+  "messages": {
+    "noTools": "You need a hammer and a saw to use this workbench.",
+    "noMaterials": "You need {materials} to craft {product}.",
+    "level": "You need a Construction level of {level} to craft {product}.",
+    "crafted": "You craft {product}.",
+    "noRoom": "You don't have enough inventory space."
+  },
+  "recipes": {
+    "hull": [
+      { "item": "sailing_boat_hull_part_wooden", "level": 1, "xp": 72.5, "ticks": 4, "materials": [["woodplank", 5]], "need": "five planks", "product": "some wooden hull parts" },
+      { "item": "sailing_boat_hull_part_oak", "level": 8, "xp": 150, "ticks": 4, "materials": [["plank_oak", 5]], "need": "five oak planks", "product": "some oak hull parts" },
+      { "item": "sailing_boat_hull_part_teak", "level": 23, "xp": 225, "ticks": 4, "materials": [["plank_teak", 5]], "need": "five teak planks", "product": "some teak hull parts" },
+      { "item": "sailing_boat_hull_part_mahogany", "level": 41, "xp": 350, "ticks": 4, "materials": [["plank_mahogany", 5]], "need": "five mahogany planks", "product": "some mahogany hull parts" },
+      { "item": "sailing_boat_hull_part_camphor", "level": 53, "xp": 400, "ticks": 4, "materials": [["plank_camphor", 5]], "need": "five camphor planks", "product": "some camphor hull parts" },
+      { "item": "sailing_boat_hull_part_ironwood", "level": 75, "xp": 437.5, "ticks": 4, "materials": [["plank_ironwood", 5]], "need": "five ironwood planks", "product": "some ironwood hull parts" },
+      { "item": "sailing_boat_hull_part_rosewood", "level": 84, "xp": 475, "ticks": 4, "materials": [["plank_rosewood", 5]], "need": "five rosewood planks", "product": "some rosewood hull parts" },
+      { "item": "sailing_boat_large_hull_part_wooden", "level": 1, "xp": 2.5, "ticks": 5, "materials": [["sailing_boat_hull_part_wooden", 5]], "need": "five wooden hull parts", "product": "some large wooden hull parts" },
+      { "item": "sailing_boat_large_hull_part_oak", "level": 8, "xp": 2.5, "ticks": 5, "materials": [["sailing_boat_hull_part_oak", 5]], "need": "five oak hull parts", "product": "some large oak hull parts" },
+      { "item": "sailing_boat_large_hull_part_teak", "level": 23, "xp": 2.5, "ticks": 5, "materials": [["sailing_boat_hull_part_teak", 5]], "need": "five teak hull parts", "product": "some large teak hull parts" },
+      { "item": "sailing_boat_large_hull_part_mahogany", "level": 41, "xp": 2.5, "ticks": 5, "materials": [["sailing_boat_hull_part_mahogany", 5]], "need": "five mahogany hull parts", "product": "some large mahogany hull parts" },
+      { "item": "sailing_boat_large_hull_part_camphor", "level": 53, "xp": 2.5, "ticks": 5, "materials": [["sailing_boat_hull_part_camphor", 5]], "need": "five camphor hull parts", "product": "some large camphor hull parts" },
+      { "item": "sailing_boat_large_hull_part_ironwood", "level": 75, "xp": 2.5, "ticks": 5, "materials": [["sailing_boat_hull_part_ironwood", 5]], "need": "five ironwood hull parts", "product": "some large ironwood hull parts" },
+      { "item": "sailing_boat_large_hull_part_rosewood", "level": 84, "xp": 2.5, "ticks": 5, "materials": [["sailing_boat_hull_part_rosewood", 5]], "need": "five rosewood hull parts", "product": "some large rosewood hull parts" }
+    ],
+    "kits": [
+      { "item": "boat_repair_kit", "amount": 2, "level": 1, "xp": 43.5, "ticks": 4, "materials": [["woodplank", 2], ["nails_bronze", 10], ["swamppaste", 5]], "need": "two planks, ten bronze nails and five swamp paste", "product": "a set of two repair kits" },
+      { "item": "boat_repair_kit_oak", "amount": 2, "level": 19, "xp": 90, "ticks": 4, "materials": [["plank_oak", 2], ["nails_iron", 10], ["swamppaste", 5]], "need": "two oak planks, ten iron nails and five swamp paste", "product": "a set of two oak repair kits" },
+      { "item": "boat_repair_kit_teak", "amount": 2, "level": 30, "xp": 135, "ticks": 4, "materials": [["plank_teak", 2], ["nails", 10], ["swamppaste", 5]], "need": "two teak planks, ten steel nails and five swamp paste", "product": "a set of two teak repair kits" },
+      { "item": "boat_repair_kit_mahogany", "amount": 2, "level": 47, "xp": 210, "ticks": 4, "materials": [["plank_mahogany", 2], ["nails_mithril", 10], ["swamppaste", 5]], "need": "two mahogany planks, ten mithril nails and five swamp paste", "product": "a set of two mahogany repair kits" },
+      { "item": "boat_repair_kit_camphor", "amount": 2, "level": 66, "xp": 255, "ticks": 4, "materials": [["plank_camphor", 2], ["nails_adamant", 10], ["swamppaste", 5]], "need": "two camphor planks, ten adamantite nails and five swamp paste", "product": "a set of two camphor repair kits" },
+      { "item": "boat_repair_kit_ironwood", "amount": 3, "level": 80, "xp": 300, "ticks": 4, "materials": [["plank_ironwood", 1], ["nails_rune", 10], ["swamppaste", 5]], "need": "one ironwood plank, ten rune nails and five swamp paste", "product": "a set of three ironwood repair kits" },
+      { "item": "boat_repair_kit_rosewood", "amount": 3, "level": 92, "xp": 330, "ticks": 4, "materials": [["plank_rosewood", 1], ["nails_dragon", 5], ["swamppaste", 5]], "need": "one rosewood plank, five dragon nails and five swamp paste", "product": "a set of three rosewood repair kits" }
+    ]
+  }
+}

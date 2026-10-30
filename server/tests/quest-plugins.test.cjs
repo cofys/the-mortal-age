@@ -21867,3 +21867,38 @@ test('every registered quest has a cache metadata record for settings filters an
   const missing = [...new Set(getRegisteredQuests().map(q => q.name))].filter(name => !records.has(normalize(name)));
   assert.deepEqual(missing, [], 'missing cache records must be explicitly resolved');
 });
+
+test('a quest not started yet opens the overview with its start sentence', () => {
+  const { api } = mockApi();
+  const { getRegisteredQuests, openJournal } = require('../plugins/quests/QuestRuntime');
+  if (!getRegisteredQuests().some((quest) => quest.name === 'Vampyre Slayer')) require('../plugins/quests/Quests.plugin').register(api);
+  const overviewSetup = 6821;
+  const withoutOverview = [];
+  for (const quest of new Map(getRegisteredQuests().map((entry) => [entry.key, entry])).values()) {
+    const scripts = [], interfaces = [];
+    const sender = new Proxy({}, {
+      get: (_target, key) => {
+        if (key === 'getVarbit') return () => 0;
+        if (key === 'sendInterfaceScript') return (id, args) => (scripts.push([id, args]), sender);
+        if (key === 'sendSubInterface') return (_uid, group) => (interfaces.push(group), sender);
+        return () => sender;
+      },
+    });
+    const player = {
+      getAttribute: () => undefined, setAttribute: () => {}, getPacketSender: () => sender,
+      getSkillManager: () => ({ getCombatLevel: () => 3, getMaxLevel: () => 1, getCurrentLevel: () => 1 }),
+      getInventory: () => ({ contains: () => false, getAmount: () => 0 }), getEquipment: () => ({ contains: () => false }),
+    };
+    openJournal(player, quest);
+    const setup = scripts.find(([id]) => id === overviewSetup);
+    if (!setup) {
+      withoutOverview.push(quest.name);
+      continue;
+    }
+    assert.ok(interfaces.includes(782), `${quest.name}: overview script without the overview`);
+    assert.match(setup[1][1], /\S/, `${quest.name}: empty start sentence`);
+    assert.doesNotMatch(setup[1][1], /^I can start|<\/col>/, `${quest.name}: start sentence not in the overview's form`);
+  }
+  // A quest's not-started journal line ("I can start this quest by ...") or the start text file gives it.
+  assert.deepEqual(withoutOverview, [], 'quests with no start sentence or no cache quest row');
+});

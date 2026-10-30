@@ -70,12 +70,17 @@ export class WebGPUInstances {
         return scene;
     }
 
-    clear(): void {
-        const r = this.renderer;
+    /** Discard obsolete geometry while retaining the live template and loc state. */
+    invalidate(): void {
         this.buildSeq++;
         this.cancelRebuild();
         if (this.builtScene) WebGPUMapSquare.cancelPreparedLoad(this.builtScene);
         this.builtScene = null;
+    }
+
+    clear(): void {
+        const r = this.renderer;
+        this.invalidate();
         r.instanceActive = false;
         r.instanceSceneMap = null;
         r.instanceTemplateChunks = null;

@@ -11,6 +11,11 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { Location } = require('../dist/game/model/Location');
 const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+const { CombatRange } = require('../dist/game/content/combat/CombatRange');
+const { MeleeCombatMethod } = require('../dist/game/content/combat/method/impl/MeleeCombatMethod');
 const Shared = require('../plugins/bosses/zulrah/Shared.Zulrah');
 const Rotations = require('../plugins/bosses/zulrah/Rotations.Zulrah');
 const Fight = require('../plugins/bosses/zulrah/Fight.Zulrah');
@@ -147,13 +152,92 @@ function ticks(count) {
   for (let i = 0; i < count; i++) TaskManager.process();
 }
 
-before(() => {
-  CachePipeline.initialize();
+before(async () => {
+  await CachePipeline.initialize();
   RegionManager.init();
   ObjectDefinition.init();
+  require('../plugins/items/ItemDefinitionLoader.plugin').register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
   const api = fakeApi();
   Access.attach(api);
   Shrine(api);
+});
+
+function meleePlayer(id, x, y) {
+  const items = [];
+  items[Equipment.WEAPON_SLOT] = { getId: () => id };
+  const player = {
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+    getLocation: () => new Location(x, y, 0),
+    getSize: () => 1,
+    getPrivateArea: () => null,
+    getCombat: () => null,
+    getEquipment: () => ({ getItems: () => items }),
+    getWeapon: () => ItemDefinition.forId(id).getWeaponInterface(),
+  };
+  return player;
+}
+
+test('dragon, crystal and noxious halberds reach Zulrah across the actual swamp collision', () => {
+  const method = new MeleeCombatMethod();
+  for (const id of [ItemIdentifiers.DRAGON_HALBERD, ItemIdentifiers.CRYSTAL_HALBERD, ItemIdentifiers.NOXIOUS_HALBERD]) {
+    for (const [name, { spawn }] of Object.entries(Shared.POSITION)) {
+      const zulrah = fakeNpc(Shared.NPC.GREEN, spawn.x, spawn.y);
+      let checked = 0;
+      for (let x = spawn.x - 2; x <= spawn.x + 6; x++) {
+        for (let y = spawn.y - 2; y <= spawn.y + 6; y++) {
+          const distance = Math.max(0, spawn.x - x, x - (spawn.x + 4), spawn.y - y, y - (spawn.y + 4));
+          if (distance < 1 || distance > 2 || (RegionManager.getClipping(x, y, 0, null) & 0x1280100) !== 0) continue;
+          const player = meleePlayer(id, x, y);
+          assert.equal(method.attackDistance(player), 2, `${id} has halberd reach`);
+          assert.equal(CombatRange.canReach(player, method, zulrah), true, `${id}, ${name}, tile ${x},${y}`);
+          checked++;
+        }
+      }
+      assert.ok(checked > 0, `${name} has walkable attack tiles`);
+    }
+  }
+});
+
+test('extended melee crosses low obstacles but respects projectile walls, range and unknown tiles', (t) => {
+  const method = new MeleeCombatMethod();
+  const player = meleePlayer(ItemIdentifiers.DRAGON_HALBERD, 100, 100);
+  const target = fakeNpc(Shared.NPC.SNAKELING_MELEE, 102, 100);
+  let clip = 0;
+  t.mock.method(RegionManager, 'getClipping', (x, y) => x === 101 && y === 100 ? clip : 0);
+  assert.equal(CombatRange.canReach(player, method, target), true, 'open ground');
+  clip = RegionManager.BLOCKED_TILE | 0x100;
+  assert.equal(CombatRange.canReach(player, method, target), true, 'water and low solid objects');
+  for (const blocked of [RegionManager.PROJECTILE_TILE_BLOCKED, RegionManager.PROJECTILE_WEST_BLOCKED,
+    RegionManager.UNKNOWN, RegionManager.UNLOADED_TILE]) {
+    clip = blocked;
+    assert.equal(CombatRange.canReach(player, method, target), false, `blocked by ${blocked.toString(16)}`);
+  }
+  clip = 0;
+  target.moveTo(new Location(103, 100, 0));
+  assert.equal(CombatRange.canReach(player, method, target), false, 'three tiles away');
+  target.moveTo(new Location(102, 100, 1));
+  assert.equal(CombatRange.canReach(player, method, target), false, 'another plane');
+  target.moveTo(new Location(100, 100, 0));
+  assert.equal(CombatRange.canReach(player, method, target), false, 'overlapping');
+});
+
+test('ordinary melee still needs an open cardinal edge', (t) => {
+  const method = new MeleeCombatMethod();
+  const player = meleePlayer(ItemIdentifiers.DRAGON_SCIMITAR, 100, 100);
+  const target = fakeNpc(Shared.NPC.SNAKELING_MELEE, 101, 100);
+  let clip = 0;
+  t.mock.method(RegionManager, 'getClipping', (x) => x === 101 ? clip : 0);
+  assert.equal(method.attackDistance(player), 1);
+  assert.equal(CombatRange.canReach(player, method, target), true);
+  clip = 0x80;
+  assert.equal(CombatRange.canReach(player, method, target), false, 'west wall blocks the shared edge');
+  clip = 0;
+  target.moveTo(new Location(101, 101, 0));
+  assert.equal(CombatRange.canReach(player, method, target), false, 'diagonal contact');
+  target.moveTo(new Location(102, 100, 0));
+  assert.equal(CombatRange.canReach(player, method, target), false, 'outside ordinary melee reach');
 });
 
 // ------------------------------------------------------------------ rotations

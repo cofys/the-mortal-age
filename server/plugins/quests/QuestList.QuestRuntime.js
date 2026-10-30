@@ -82,4 +82,8 @@ function questListGroups(quests, player, cache, statusOf, Skill) {
   }
   return groups;
 }
-module.exports = { questListGroups, metadata };
+/** A registered quest's row in the cache quest table (matched by display name), or undefined. */
+function questMetadata(quest, cache) {
+  return metadata(cache).get(normalize(quest.name));
+}
+module.exports = { questListGroups, metadata, questMetadata };

@@ -15,7 +15,7 @@ Agree these before touching an account. They stop most time loss.
 - **One account, one actor.** You own a single test account and its one MCP client. Do not run a
   second driver, drain its `messages`, or poll `observe` from another loop.
 - **User-approved community completion exemptions.** Before choosing a new full playthrough,
-  check [the issue #1257 exclusions](../quest-helper-728-community-completions.md). The user
+  check [the quest's page](../../../docs/quests/README.md) for an issue #1257 community report. The user
   accepts these 21 reported completions as sufficient to skip repeat manual runs. Preserve
   their caveats; use bounded checks for known regressions instead of restarting a listed
   quest. Do not treat this as full Quest Helper parity or extend it to unlisted quests.
@@ -26,6 +26,8 @@ Agree these before touching an account. They stop most time loss.
 - **Natural means normal.** Ordinary travel (teleports, boats/gliders, walking) and ordinary
   supplies, gear, skills and prerequisites are fine when declared. Mandatory ladders, doors,
   dungeons, puzzles, boat boarding/landing and scene handoffs must be played normally.
+  `::tele` only places the actor before the baseline; once quest progress begins, travel with
+  `travel_to` or a real teleport (spell, tablet, jewellery), never the command.
 - **Cheats are a scalpel, not the route.** Use them only after the real encounter/phase has
   started, and never to skip a mandatory threshold, scene, dialogue chain or the final step.
 - **Observe after the action settles.** An interaction packet being sent does not mean its
@@ -182,6 +184,7 @@ the MCP endpoint is stateless and every call names the player.
 | Click object | `object_option { id, x, y, option }` |
 | Inventory | `inventory_option { slot? item? option }`, `use_item { item, targetItem? target? }` |
 | Walk and settle | `walk_to { x, y, run, maxTicks }` |
+| Travel anywhere | `travel_to { x, y, z, exact, run, budgetTicks, retryFailed }` |
 | Let time pass | `wait_ticks { ticks }` |
 | Admin probe | `command { text }` (runs as developer for that call) |
 | Rules only | `can_attack`, `can_teleport` |
@@ -222,7 +225,18 @@ stage and auxiliary flags, then use that step's destination. A later scout or bo
 is not the current destination. Reuse the cached live MCP schema for tool names and
 arguments; do not search for a developer command when the documented tool exists.
 
-For long walks or a failed direct path, use MCP `plan_route` before trying arbitrary
+For travel between quest steps, use `travel_to`. It plans across floors and the live game's
+transports (doors, stairs, ladders, shortcuts, boats; from the Shortest Path plugin's tables,
+`plugins/agent/data/transports.json`) and plays each hop as a normal click. A call returns on
+arrival, on a dialogue to answer (a boat's fare, then call it again), on a failed hop, or when
+`budgetTicks` runs out (call again). Read `legs` for what it clicked: a `blocked` leg names the
+loc or NPC, option and game messages, and a `note` marks where this server differs from the
+live data (an id, a menu entry, a landing tile). A blocked hop is routed around on the next
+call; decide first whether it is a real requirement or a bug, and record it. `needs-requirements`
+lists the skills, items, quests or varbits the only route needs. Destination networks (fairy
+rings, spirit trees, gliders) and teleports are not planned: use them by hand.
+
+For a read-only same-floor plan, use MCP `plan_route` before trying arbitrary
 intermediate tiles. It reuses the bot long-distance collision planner and returns short
 waypoints plus closed door/gate candidates at crossings. Walk each leg and open the
 observed door normally before crossing; the plan does not establish that a locked quest
@@ -367,15 +381,17 @@ in varp 3403, bits 2–5, with completion threshold 9. Sending 399 alone cannot 
 
 ### Preserve evidence between runs
 
-Before starting or resuming a quest, read the committed coverage ledger and
-[verification history](../quest-helper-728-verification.md). Reuse the recorded checkpoint
-and verified route prefix. A new agent session is not a reason to repeat an unchanged test.
+Before starting or resuming a quest, read its page in [docs/quests](../../../docs/quests/README.md).
+Reuse the recorded checkpoint and verified route prefix. A new agent session is not a reason
+to repeat an unchanged test.
 
-Record each reviewed result in the tracked quest ledger before handing off: quest and
-scope, source/test/loaded hashes, Quest Helper revision, cache and relevant shared runtime
-or dialogue dependencies, starting checkpoint, stages reached, rewards/repeat/relog/offline
-checks, recovery checks and remaining gaps. Include a concise, sanitized evidence summary;
-temporary report paths alone are not a durable record. Never commit raw logs or credentials.
+Record each result there before handing off: copy
+[the template](../../../docs/quests/_template/README.md) to `docs/quests/<key>/` (the
+quest's `registerQuest` key, `-` for `_`) or add a run to the existing page, set its status
+block (status, date, tester, model, commit, cache, start, travel), list findings with their
+issues or PRs, and run `yarn docs:quests` to update the index. A run entry covers the start
+state, route, stages reached, rewards, repeat/relog checks and what was not checked. Never
+commit raw logs, local paths or credentials.
 
 Keep previous results when code changes. Mark the affected claim as needing revalidation,
 with the changed dependency and required check; do not erase its history or label it never
@@ -386,7 +402,7 @@ Resume from a preserved, verified checkpoint when valid, then test the affected 
 Report implementation, source review, focused tests and natural playthroughs separately.
 Count original issue quests and supplemental work separately. A partial recovery failure
 does not erase an observed main-route completion, and that completion does not certify the
-unresolved recovery case. Commit and push ledger updates with the reviewed fix batches.
+unresolved recovery case. Commit the quest page updates with the reviewed fix batches.
 
 - Narrow the contract once: quest key, start state, mandatory legs, rewards, recovery cases.
   Write it down; do not re-derive it every turn.

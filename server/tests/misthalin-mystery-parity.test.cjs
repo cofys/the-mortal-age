@@ -355,6 +355,32 @@ test('colored door handover consumes its own key when old keys have been recover
   const obstacle=require('../plugins/skills/agility/ObstacleRunner.Agility'),run=obstacle.run;obstacle.run=noop;
   try{object(h,p,core.ObjectIdentifiers.DOOR_559,1633,4833);h.continueUntil(p,()=>h.quest.getStage(p)===85);}finally{obstacle.run=run;}
   assert.equal(p.items.get(I.EMERALD_KEY_2),0);assert.equal(p.items.get(I.RUBY_KEY_2),1);
+  assert.ok(p.messages.includes('You use the emerald key to unlock the door.'), p.messages.join(' | '));
+});
+test('coloured doors name the key that opens them',()=>{
+  const doors=[[core.ObjectIdentifiers.DOOR_558,I.RUBY_KEY_2,45,50,'ruby'],[core.ObjectIdentifiers.DOOR_559,I.EMERALD_KEY_2,80,85,'emerald'],[core.ObjectIdentifiers.DOOR_561,I.SAPPHIRE_KEY_2,105,110,'sapphire']];
+  const obstacle=require('../plugins/skills/agility/ObstacleRunner.Agility'),run=obstacle.run;obstacle.run=noop;
+  try{
+    for(const [door,key,stage,next,name] of doors){
+      const h=harness('MisthalinMystery'),p=player();h.quest.setStage(p,stage);p.items.set(key,1);
+      object(h,p,door);h.continueUntil(p,()=>h.quest.getStage(p)===next);
+      assert.equal(p.items.get(key),0);
+      assert.ok(p.messages.includes(`You use the ${name} key to unlock the door.`), p.messages.join(' | '));
+      assert.equal(p.messages.some(text=>text.includes('[ruby/emerald/sapphire]')),false);
+    }
+  }finally{obstacle.run=run;}
+});
+test('talking to Hewey or Abigale after the reveal does not replay it',()=>{
+  const h=harness('MisthalinMystery'),p=player();h.quest.setStage(p,135);
+  const variant=h.hooks.onNpcDialogueVariant.map(fn=>fn({player:p,npcId:N.HEWEY_2})).find(Boolean);
+  assert.equal(variant??null,null);
+  assert.equal(h.hooks.onNpcDialogueVariant.map(fn=>fn({player:p,npcId:N.ABIGALE})).find(Boolean)??null,null);
+  assert.equal(h.npcActions.get('Hewey')['Talk-to']({player:p,npcId:N.HEWEY_2}),true);
+  assert.equal(h.npcActions.get('Abigale')['Talk-to']({player:p,npcId:N.ABIGALE}),true);
+  assert.equal(p.manager.getCurrent() ?? null, null);
+  h.quest.setStage(p,10);
+  assert.equal(h.hooks.onNpcDialogueVariant.map(fn=>fn({player:p,npcId:N.HEWEY})).find(Boolean),'starting-out-talking-to-abigale-or-hewey-talking-to-abigale-or-hewey-again');
+  assert.equal(h.npcActions.get('Hewey')['Talk-to']({player:p,npcId:N.HEWEY}),false);
 });
 test('leaving and re-entering the private island replaces Mandy and cancels owned tasks',()=>{
   const h=harness('MisthalinMystery'),p=player(),area=island(h,p,130),old=h.npcs.find(n=>n.id===N.MANDY_2);area.leave(p,false);assert.equal(old.removed,true);assert.equal(area.isDestroyed(),true);

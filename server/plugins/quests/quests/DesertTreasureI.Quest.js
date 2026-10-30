@@ -346,10 +346,7 @@ module.exports = function registerDesertTreasureIQuest(api) {
     if (stage >= STAGE_STARTED) {
       return ["The Asgarnia Smith found ancient etchings in the desert.", "I should take them to <col=800000>Terry Balando</col> at the Dig Site."];
     }
-    return [
-      "Speak to the <col=800000>Asgarnia Smith</col> at the Bedabin Camp.",
-      "I need 50 <col=800000>Magic</col> and six prerequisite quests.",
-    ];
+    return ["I can start this quest by talking to <col=800000>Asgarnia Smith</col> at the <col=800000>Bedabin Camp</col>."];
   }
 
   function grantReward(player) {

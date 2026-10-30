@@ -12,6 +12,27 @@ let game;
 let core;
 let data;
 
+// Cache-nameless locs: castlewars_castlebattlements_saradomin, oldcastlebattlements,
+// and castlewars_castlebattlements_zamorak. Only the stair/ladder rails are removed.
+const CASTLE_RAIL_IDS = new Set([4410, 1622, 4908]);
+const CASTLE_RAIL_TILES = [
+  [2419, 3079], [2419, 3080], [2419, 3081], [2420, 3079], [2420, 3080],
+  [2420, 3074], [2422, 3074],
+  [2380, 3128], [2380, 3127], [2380, 3126], [2379, 3128], [2379, 3127],
+  [2379, 3133], [2377, 3133],
+];
+
+function removeCastleRails() {
+  for (const [x, y] of CASTLE_RAIL_TILES) {
+    const location = new core.Location(x, y, 1);
+    // getType loads the cache region before we inspect its locs.
+    for (const type of [0, 1, 2, 3]) {
+      const object = core.MapObjects.getType(location, type, null);
+      if (object && CASTLE_RAIL_IDS.has(object.getId())) core.ObjectManager.deregister(object, true);
+    }
+  }
+}
+
 function climbFromRoutes(player, object, routes) {
   const route = routes.find(([from]) => game.isAt(object, from[0], from[1], from[2]));
   if (!route) {
@@ -141,7 +162,9 @@ module.exports = function attachCastleWarsNavigation(api, castleWars) {
   core = api.core;
   data = castleWars.data;
   ObstacleRunner.init(api);
+  api.onServerStartup(removeCastleRails);
   api.onObjectRoute(routeToBarrier);
   api.onObjectInteraction(useCastleObject);
   api.onCustomEvent("ladders:climb", claimCastleClimb);
+  api.onCustomEvent("door:toggle", claimCastleClimb);
 };

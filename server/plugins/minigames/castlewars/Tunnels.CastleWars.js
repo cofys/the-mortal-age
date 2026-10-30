@@ -3,8 +3,8 @@
 /**
  * Castle Wars tunnels.
  *
- * Each of the four tunnel mouths starts blocked by rocks. Clearing them takes two goes with a
- * pickaxe or an explosive potion (Rocks 4437 -> 4438 -> gone); an explosive potion on any of
+ * Each of the four tunnel mouths starts blocked by rocks. Mining gradually clears both layers;
+ * explosive potions each clear one (Rocks 4437 -> 4438 -> gone). An explosive potion on any of
  * the cave walls around a mouth brings the rocks back down, killing whoever stands under them
  * (OSRS Wiki: Explosive potion, Castle Wars). The owning team's overlay shows each pair of
  * tunnels as clear or blocked (varbits 138/139).
@@ -13,10 +13,10 @@
  * RSPS-only (Near-Reality): which team owns which patch and the clear/collapse messages.
  */
 
-const Mining = require("../../skills/Mining.plugin");
-
 let game;
 let core;
+let api;
+const miners = new WeakMap();
 
 const PATCH_SIZE = 2;
 
@@ -49,13 +49,27 @@ function patchAtWall(object) {
 function clearRocks(player, object, patch) {
   const O = core.ObjectIdentifiers;
   if (object.getId() === O.ROCKS_21) {
-    game.swapObject(object, new core.GameObject(O.ROCKS_22, object.getLocation(), object.getType(), object.getFace(), null));
+    const remaining = new core.GameObject(O.ROCKS_22, object.getLocation(), object.getType(), object.getFace(), null);
+    game.swapObject(object, remaining);
     player.sendMessage("You manage to remove some of the rocks.");
-    return;
+    return remaining;
   }
   game.swapObject(object, null);
   game.setTeamVar(patch.team, patch.varbit, 1);
   player.sendMessage("You manage to clear the rest of the rocks.");
+  return null;
+}
+
+function bestPickaxe(player) {
+  const request = { player, pickaxe: null };
+  api.emitCustomEvent("mining:best-pickaxe", request);
+  return request.pickaxe;
+}
+
+function miningInterval(pickaxe) {
+  const request = { pickaxe, ticks: null };
+  api.emitCustomEvent("mining:roll-interval", request);
+  return request.ticks ?? pickaxe.attemptIntervalTicks;
 }
 
 function mineRocks({ player, object }) {
@@ -66,14 +80,48 @@ function mineRocks({ player, object }) {
   if (!game.requirePlaying(player)) {
     return true;
   }
-  const pickaxe = Mining.findBestPickaxe(player);
+  const pickaxe = bestPickaxe(player);
   if (!pickaxe) {
     player.sendMessage("You need a pickaxe to mine these rocks.");
     return true;
   }
-  // ponytail: each click clears a layer at once; real OSRS mines it over a few ticks.
+  miners.get(player)?.stop();
+  const start = player.getLocation().clone();
+  const area = player.getPrivateArea();
+  let remaining = object;
+  // shortcut: the Wiki confirms faster pickaxes here but gives no CW-specific timing;
+  // use Mining's canonical interval per layer until a live capture establishes it.
+  let ticks = miningInterval(pickaxe);
+  const task = new core.Task(1, player.getIndex(), false);
+  task.stop = () => {
+    core.Task.prototype.stop.call(task);
+    if (miners.get(player) === task) {
+      miners.delete(player);
+      player.performAnimation(core.Animation.DEFAULT_RESET_ANIMATION);
+    }
+  };
+  task.execute = () => {
+    const tool = bestPickaxe(player);
+    const movement = player.getMovementQueue();
+    if (!player.isRegistered() || player.getHitpoints() <= 0 || !game.isPlaying(player)
+      || player.getPrivateArea() !== area || !player.getLocation().equals(start)
+      || movement.size() > 0 || player.getForceMovement() != null || !tool
+      || core.MapObjects.get(remaining.getId(), remaining.getLocation(), area) !== remaining) {
+      task.stop();
+      return;
+    }
+    if (--ticks > 0) return;
+    remaining = clearRocks(player, remaining, patch);
+    if (!remaining) {
+      task.stop();
+      return;
+    }
+    ticks = miningInterval(tool);
+    player.performAnimation(tool.animation);
+  };
+  miners.set(player, task);
   player.performAnimation(pickaxe.animation);
-  clearRocks(player, object, patch);
+  api.getTaskManager().submit(task);
   return true;
 }
 
@@ -128,12 +176,7 @@ function collapseWall({ player, object }) {
   if (!game.requirePlaying(player)) {
     return true;
   }
-  const slot = player.getInventory().getSlotForItemId(core.ItemIdentifiers.EXPLOSIVE_POTION);
-  if (slot < 0) {
-    player.sendMessage("You need an explosive potion to collapse the tunnel.");
-    return true;
-  }
-  collapseTunnel(player, patch, slot);
+  player.sendMessage("Use an explosive potion on the cave wall to collapse the tunnel.");
   return true;
 }
 
@@ -149,7 +192,8 @@ function blastWall({ player, object, itemSlot }) {
   return true;
 }
 
-module.exports = function attachCastleWarsTunnels(api, castleWars) {
+module.exports = function attachCastleWarsTunnels(pluginApi, castleWars) {
+  api = pluginApi;
   game = castleWars;
   core = api.core;
   api.onObjectInteraction("Rocks", { Mine: mineRocks });

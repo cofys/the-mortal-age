@@ -66,6 +66,9 @@ function buildFacility(event) {
   const facility = readOptionRow(event.argsData);
   const hotspot = visit.hotspot;
   if (!boat || facility === undefined || !facilities.allows(boat, hotspot, facility)) return;
+  const schematic = { player, row: facility, allow: null };
+  pluginApi.emitCustomEvent("sailing:schematic-can-build", schematic);
+  if (schematic.allow === false) return;
   if (facilities.facilityAt(boat, hotspot) === facility) {
     player.sendMessage("Your boat already has that.");
     return;

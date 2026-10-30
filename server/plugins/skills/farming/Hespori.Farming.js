@@ -23,6 +23,61 @@ class HesporiArea extends core.PrivateArea {
 }
 const FIGHTS = new WeakMap();
 const NPC_FIGHTS = new WeakMap();
+const WARNINGS = new WeakMap();
+const ENTRIES = new WeakMap();
+const REENTRY_ACTION = "farming-hespori-reentry";
+const REENTRY_VARIANT = "attempting-to-fight-the-hespori-with-items-in-arno-s-item-retrieval-service";
+let warningSession = 0;
+
+function cancelWarning({ player }) {
+    ENTRIES.delete(player);
+    const warning = WARNINGS.get(player);
+    WARNINGS.delete(player);
+    warning?.cancel?.();
+}
+function warningInterfaceChanged(event) {
+    if (event.interfaceId >= 0) cancelWarning(event);
+}
+function warningSteps(steps, session) {
+    return steps.map(step => {
+        if (step.type === "action" && ["F74wXQ", "Fh9eKI"].includes(step.id)) {
+            return { ...step, action: REENTRY_ACTION, session };
+        }
+        if (step.type === "choice") return { ...step, options: step.options.map(option =>
+            ({ ...option, steps: warningSteps(option.steps, session) })) };
+        return step;
+    });
+}
+// Wiki: Arno / Transcript:Arno. Local RSProx recordings contain sightings, not this interaction.
+function warnReentry(player, patch) {
+    cancelWarning({ player });
+    const warning = { patch, state: Patches.stateFor(player, patch), area: player.getArea(),
+        position: player.getLocation().clone(), bank: Patches.farmFor(player).deathbank, session: ++warningSession };
+    WARNINGS.set(player, warning);
+    const request = { player, npcId: core.CacheDefinitions.getNpcId("farming_guild_hespori_farmer"),
+        variant: { page: "Arno", variant: REENTRY_VARIANT }, exact: true,
+        select: steps => warningSteps(steps, warning.session) };
+    core.PluginManager.emitCustomEvent("npc-dialogue:start", request);
+    warning.cancel = request.cancel;
+    if (!request.handled) WARNINGS.delete(player);
+}
+function reentryAction(event) {
+    if (event.action !== REENTRY_ACTION) return;
+    event.handled = true;
+    event.end = true;
+    const { player } = event;
+    const warning = WARNINGS.get(player);
+    if (!warning || warning.session !== event.step?.session) return;
+    WARNINGS.delete(player);
+    if (!player.isRegistered() || player.getHitpoints() <= 0 || player.busy() || player.isNeedsPlacement()
+        || player.getArea() !== warning.area || !player.getLocation().equals(warning.position)
+        || Patches.stateFor(player, warning.patch) !== warning.state || warning.state.status !== "grown"
+        || Patches.farmFor(player).deathbank !== warning.bank || FIGHTS.has(player)) return;
+    if (event.stepId === "F74wXQ") {
+        player.getArea()?.leave(player, false);
+        player.moveTo(EXIT.clone());
+    } else if (event.stepId === "Fh9eKI") startFight(player, warning.patch, true);
+}
 
 function spawn(fight, id, x, y) {
     const npc = core.PluginManager.spawnNpc({ id, x, y, z: 0, owner: fight.player, ownerOnly: true, wanderRadius: 0 });
@@ -78,13 +133,23 @@ function harvestHespori(player, patch) {
         return;
     }
     if (FIGHTS.has(player) || state.status !== "grown") return;
-    Patches.after(player, 1, () => startFight(player, patch));
+    cancelWarning({ player });
+    const entry = { position: player.getLocation().clone(), area: player.getArea() };
+    ENTRIES.set(player, entry);
+    Patches.after(player, 1, () => {
+        if (ENTRIES.get(player) !== entry) return;
+        ENTRIES.delete(player);
+        if (!player.isRegistered() || player.getHitpoints() <= 0 || player.busy()
+            || player.getArea() !== entry.area || !player.getLocation().equals(entry.position)
+            || Patches.stateFor(player, patch) !== state) return;
+        startFight(player, patch);
+    });
 }
-function startFight(player, patch) {
+function startFight(player, patch, acceptedWarning = false) {
     const state = Patches.stateFor(player, patch);
     if (FIGHTS.has(player) || state.status !== "grown") return;
-    if (Patches.farmFor(player).deathbank?.length) {
-        player.sendMessage("Collect your items from Arno before starting another fight."); return;
+    if (Patches.farmFor(player).deathbank?.length && !acceptedWarning) {
+        warnReentry(player, patch); return;
     }
     const area = player.getArea() instanceof HesporiArea ? player.getArea()  : new HesporiArea();
     if (player.getArea() !== area) { player.getArea()?.leave(player, false); area.enter(player); }
@@ -170,6 +235,7 @@ function hesporiDamage(event) {
     if (fight?.flowers.includes(event.target) && !fight.quest) event.hit.setTotalDamage(event.target.getHitpoints());
 }
 function hesporiInput(event) {
+    cancelWarning(event);
     const fight = FIGHTS.get(event.player);
     if (!fight?.vinesUntil || !["move", "npc_option", "spell_on_npc"].includes(event.packet.type)) return;
     event.handled = true;
@@ -231,6 +297,7 @@ function questHesporiDeath({ npc }) {
     if (fight?.quest && fight.boss === npc) finishQuestHespori(fight);
 }
 function hesporiLogout({ player }) {
+    cancelWarning({ player });
     const fight = FIGHTS.get(player);
     if (!fight) return;
     if (!fight.quest) Patches.stateFor(player, fight.patch).hesporiFight = false;
@@ -248,8 +315,13 @@ function hesporiDeathDrop(event) {
     event.handled = true;
 }
 function hesporiPlayerDeath(event) {
-    if (!FIGHTS.has(event.player) && (core.PluginManager.emitShouldDropItemsOnDeath(event.player, event.killer) ?? true)) {
-        Patches.farmFor(event.player).deathbank = [];
+    const fight = FIGHTS.get(event.player);
+    // Item capture precedes this hook. An unsafe death without lost items still
+    // destroys the previous retrieval; preserve only this death's newly stored items.
+    if (!fight?.deathCaptured && (core.PluginManager.emitShouldDropItemsOnDeath(event.player, event.killer) ?? true)) {
+        const farm = Patches.farmFor(event.player);
+        farm.deathbank = [];
+        farm.deathbankPaid = false;
     }
 }
 function hesporiNpc(event) {
@@ -296,4 +368,4 @@ function hesporiCave(event) {
     }
 }
 
-Object.assign(module.exports, { questHesporiDeath, challengeHespori, harvestHespori, HesporiCombat, hesporiHitRoll, hesporiCanAttack, hesporiHit, hesporiDamage, hesporiInput, hesporiProcess, keepQuestHesporiEngaged, hesporiLoot, hesporiLogout, hesporiDeathDrop, hesporiPlayerDeath, hesporiNpc, hesporiCave });
+Object.assign(module.exports, { warningInterfaceChanged, reentryAction, questHesporiDeath, challengeHespori, harvestHespori, HesporiCombat, hesporiHitRoll, hesporiCanAttack, hesporiHit, hesporiDamage, hesporiInput, hesporiProcess, keepQuestHesporiEngaged, hesporiLoot, hesporiLogout, hesporiDeathDrop, hesporiPlayerDeath, hesporiNpc, hesporiCave });

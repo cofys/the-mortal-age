@@ -2,6 +2,8 @@ import { Location } from "./Location";
 import { World } from '../World';
 import { Mobile } from "../entity/impl/Mobile";
 import { PrivateArea } from "./areas/impl/PrivateArea";
+import { BoatManager } from "../content/sailing/BoatManager";
+import { CombatPosition } from "../content/combat/CombatPosition";
 
 export class Projectile {
     private start: Location;
@@ -80,17 +82,27 @@ export class Projectile {
 
         static createProjectile(source: Mobile, victim: Mobile, projectileId: number, delay: number, speed: number,
                             startHeight: number, endHeight: number) {
+        // Across a boat's deck (a player aboard shooting a sea creature) the shot flies in the
+        // main world, from the tile under the shooter.
+        const across = CombatPosition.acrossDeck(source, victim);
         return new Projectile(
-            Projectile.centreOf(source),
-            Projectile.centreOf(victim),
+            across ? Projectile.rootCentreOf(source) : Projectile.centreOf(source),
+            across ? Projectile.rootCentreOf(victim) : Projectile.centreOf(victim),
             victim,
             projectileId,
             delay,
             speed,
             startHeight,
             endHeight,
-            source.getPrivateArea()
+            across ? null : source.getPrivateArea()
         ).withSource(source);
+    }
+
+    /** `centreOf`, from the main-world tile under a mobile aboard a boat. */
+    private static rootCentreOf(mobile: Mobile): Location {
+        const location = BoatManager.rootLocation(mobile);
+        const offset = (Math.max(1, mobile.getSize()) - 1) >> 1;
+        return offset > 0 ? location.transform(offset, offset) : location;
     }
 
     /**
@@ -145,20 +157,24 @@ export class Projectile {
         let skippedTargetView = 0;
         World.forEachNetworkPlayer((player) => {
             scannedNetworkPlayers++;
-            if (player.getPrivateArea() != this.privateArea) {
+            // A deck counts as the main world: people aboard see the shots around them at sea,
+            // measured from the tile under them (as sync does).
+            const sameArea = player.getPrivateArea() == this.privateArea;
+            if (!sameArea && BoatManager.syncArea(player) != this.privateArea) {
                 skippedArea++;
                 return;
             }
+            const viewer = sameArea ? player.getLocation() : BoatManager.rootLocation(player);
             // Seen as far as NPCs are: an area that widens that shows their projectiles too.
             const range = Math.max(15, player.getNpcViewDistance?.() ?? 15);
-            if (!this.start.isViewableFromWithin(player.getLocation(), range)) {
+            if (!this.start.isViewableFromWithin(viewer, range)) {
                 skippedView++;
                 return;
             }
             if (
                 this.lockon &&
                 typeof this.lockon.getLocation === "function" &&
-                !this.lockon.getLocation().isViewableFromWithin(player.getLocation(), range)
+                !(sameArea ? this.lockon.getLocation() : BoatManager.rootLocation(this.lockon)).isViewableFromWithin(viewer, range)
             ) {
                 skippedTargetView++;
                 return;

@@ -14,6 +14,7 @@ import {
 import { CacheSystem } from "../../rs/cache/CacheSystem";
 import { IndexType } from "../../rs/cache/IndexType";
 import { retryOnMissingGroup } from "../../rs/cache/js5/retryOnMissingGroup";
+import { BuildSteps } from "../../common/utils/BuildSteps";
 
 let decoder: OggVorbisDecoder | null = null;
 let initPromise: Promise<OggVorbisDecoder> | null = null;
@@ -177,7 +178,7 @@ export async function loadVorbisSample(
     try {
         // Decode using ported OSRS decoder
         const sample = new VorbisSample(sampleData);
-        const raw = sample.toRawSound();
+        const raw = await new BuildSteps().run(sample.toRawSoundSteps());
 
         return {
             sampleRate: raw.sampleRate,

@@ -2,7 +2,7 @@ import { LocAnimated, type LocFrameSoundHandler } from "../loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec3 } from "gl-matrix";
 
-import { isLowEndDevice, isWebGPUSupported } from "../../common/utils/DeviceUtil";
+import { isWebGPUSupported } from "../../common/utils/DeviceUtil";
 import { GameRenderer } from "../../game/GameRenderer";
 import type {
     HitsplatEventPayload,
@@ -46,6 +46,7 @@ import {
 } from "./worldEntity";
 import { environmentAt } from "../render/environment";
 import { getCanvasResolutionScale, syncCameraViewportUnitScale } from "../render/quality";
+import { getCameraViewportRect } from "../render/viewportRect";
 import { GPU_TEXTURE_USAGE, SCENE_DEPTH_FORMAT, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
 import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
 import { resolveWebGPULodDistance, resolveWebGPURenderDistance, updateWebGPUMapStreaming } from "./frameConfig";
@@ -250,6 +251,25 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         void this.initWorldResources();
     }
 
+    override invalidateDefinitionCaches(): void {
+        this.mapLoadEpoch++;
+        this.cancelObsoleteSceneBuilds();
+        this.instances.invalidate();
+        WebGPUMapSquare.cancelPreparedLoads(this.device);
+        this.mapsToLoad.clear();
+        super.invalidateDefinitionCaches();
+        this.ui?.invalidateDefinitionCaches();
+        this.interactionHost.interactLocModelLoader?.clearCache();
+        this.interactionHost.interactNpcModelLoader?.clearCache();
+        this.interactionHost.sceneRaycaster?.clearCache();
+        this.interactionHost.npcDefaultHeightCache.clear();
+        this.interactionHost.cachedNpcIds.clear();
+        this.interactionHost.cachedLocIds.clear();
+        this.interactionHost.cachedObjIds.clear();
+        this.actors?.invalidateNpcDefinitions();
+        if (this.instanceActive) this.scheduleInstanceLocRebuild();
+    }
+
     private async initWorldResources(): Promise<void> {
         if (this.world || !this.device || !this.osrsClient.loadedCache) return;
         try {
@@ -306,6 +326,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.sceneColorView = this.sceneColorTexture.createView();
         this.sceneColorWidth = w;
         this.sceneColorHeight = h;
+    }
+
+    override resolveEffectiveRenderDistanceTiles(_frameCount: number): number {
+        return resolveWebGPURenderDistance(this);
     }
 
     override queueLoadMap(mapX: number, mapY: number, streamGeneration?: number): void {
@@ -398,7 +422,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.locUpdates.applyGamemode();
         const locVersion = this.locUpdates.version(mapX, mapY);
         const input: SdMapLoaderInput = snapshotMapInput({
-            persistentCache: isLowEndDevice,
+            persistentCache: true,
             minimapLevel: this.getPlayerRawPlane(),
             mapX,
             mapY,
@@ -938,12 +962,13 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         });
 
         if (drawScene) {
-            const clipX = Math.max(0, Math.min(width, Math.floor(sceneViewport.x)));
-            const clipY = Math.max(0, Math.min(height, Math.floor(sceneViewport.y)));
+            const sceneClip = this.getSceneViewportClipRect();
+            const clipX = Math.max(0, Math.min(width, Math.floor(sceneClip.x)));
+            const clipY = Math.max(0, Math.min(height, Math.floor(sceneClip.y)));
             pass.setScissorRect(
                 clipX, clipY,
-                Math.max(0, Math.min(width, Math.ceil(sceneViewport.x + sceneViewport.width)) - clipX),
-                Math.max(0, Math.min(height, Math.ceil(sceneViewport.y + sceneViewport.height)) - clipY),
+                Math.max(0, Math.min(width, Math.ceil(sceneClip.x + sceneClip.width)) - clipX),
+                Math.max(0, Math.min(height, Math.ceil(sceneClip.y + sceneClip.height)) - clipY),
             );
             for (let i = 0; i < visible.length; i++) {
                 if (visible[i].canRender(this.stats.frameCount)) {
@@ -1162,6 +1187,11 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     getUiRenderMetrics(bufW: number, bufH: number): UiRenderMetrics {
         return this.ui?.getUiRenderMetrics(bufW, bufH) ?? this.computeUiRenderMetrics(bufW, bufH);
+    }
+
+    /** Current draw bounds; the raw widget rect remains the input to camera.update. */
+    getSceneViewportClipRect(): { x: number; y: number; width: number; height: number } {
+        return getCameraViewportRect(this.osrsClient.camera);
     }
 
     getSceneViewportWidgetRect(): { x: number; y: number; width: number; height: number } {

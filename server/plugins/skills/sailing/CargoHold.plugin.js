@@ -11,6 +11,7 @@ const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/T
 const { VARBIT, content, setVarbit, playSound, boatName } = require("./SailingContent.Sailing");
 const cargo = require("./Cargo.Sailing");
 const portTasks = require("./porttasks/Common.PortTasks");
+let pluginApi;
 
 const HOLD = 943;
 const SIDE = 944;
@@ -235,6 +236,9 @@ function takeTool(player, slot) {
   const tool = cargo.toolAt(slot);
   const tools = player.getSailing().tools;
   if (!tool || !tools.includes(tool.slot)) return;
+  const request = { player, slot: tool.slot, allowed: true };
+  pluginApi.emitCustomEvent("sailing:can-take-tool", request);
+  if (request.allowed === false) return;
   const inventory = player.getInventory();
   if (inventory.getFreeSlots() < tool.give.length) {
     player.sendMessage("You don't have enough inventory space.");
@@ -343,6 +347,7 @@ module.exports = {
   members: true,
   opAmount,
   register(api) {
+    pluginApi = api;
     content();
     api.persistAttribute(QUANTITY_ATTRIBUTE);
     api.persistAttribute(WARNING_ATTRIBUTE);

@@ -254,15 +254,28 @@ module.exports = function registerScorpionCatcherQuest(api) {
   /**
    * The post-quest battlestaff service: Thormac's standard page opens the cache
    * interface "thormac", which offers one "Enchant" button per elemental
-   * battlestaff. The service is only open while that dialogue is.
+   * battlestaff. The screen stays open after the conversation ends, until the player closes it.
    */
+  function later(player, ticks, fn) {
+    const { CountdownTask, TaskManager } = api.core;
+    TaskManager.submit(new CountdownTask(player, ticks, () => {
+      if (player.isRegistered?.() === false) return;
+      fn();
+    }));
+  }
+
   function openEnchantInterface(event) {
     const { player } = event;
     if (!quest.isComplete(player)) return;
     event.handled = true;
     event.end = true;
     enchanting.add(player);
-    player.getPacketSender().sendInterface(ENCHANT_INTERFACE);
+    // Ending the conversation closes its window on this tick, which would remove
+    // an interface opened now. Open Thormac's screen once that close has finished.
+    later(player, 1, () => {
+      if (!enchanting.has(player) || !quest.isComplete(player)) return;
+      player.getPacketSender().sendInterface(ENCHANT_INTERFACE);
+    });
   }
 
   /** "Enchant" on one of the interface's battlestaff buttons. */
@@ -390,9 +403,10 @@ module.exports = function registerScorpionCatcherQuest(api) {
     refreshQuestList(player);
   }
 
-  function handleInterfaceClosed({ player }) {
-    // The enchanting interface is the only one this plugin opens, so any close
-    // ends the service.
+  function handleInterfaceClosed({ player, interfaceId }) {
+    // Dialogue end also emits a close for the chatbox. Only Thormac's screen
+    // ends the enchanting service.
+    if (interfaceId !== ENCHANT_INTERFACE) return;
     enchanting.delete(player);
   }
 

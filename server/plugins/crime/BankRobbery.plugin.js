@@ -116,8 +116,8 @@ const TIER_ORDER = ["village", "city", "capital"];
 
 const COINS_ID = 995; // ItemIdentifiers.COINS
 const LOCKPICK_ID = 1523; // ItemIdentifiers.LOCKPICK
-const SMOKE_BOMB_ID = 50003; // custom-items.json (smoke bomb)
-const VAULT_ORDERS_ID = 50004; // custom-items.json (forged vault orders)
+const SMOKE_BOMB_ID = 50009; // custom-items.json (smoke bomb)
+const VAULT_ORDERS_ID = 50010; // custom-items.json (forged vault orders)
 const PAPYRUS_ID = 970; // ItemIdentifiers.PAPYRUS
 const COAL_ID = 453; // ItemIdentifiers.COAL
 const TINDERBOX_ID = 590; // ItemIdentifiers.TINDERBOX

@@ -969,16 +969,19 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
-        case ServerPacketId.WIDGET_SET_ITEM:
+        case ServerPacketId.WIDGET_SET_ITEM: {
+            const uid = reader.readInt();
+            const itemId = reader.readShort();
             return {
                 type: "widget",
                 payload: {
                     action: "set_item",
-                    uid: reader.readInt(),
-                    itemId: reader.readSignedShort(), // -1 means clear item
+                    uid,
+                    itemId: itemId === 0xffff ? -1 : itemId,
                     quantity: reader.readInt(),
                 },
             };
+        }
 
         case ServerPacketId.WIDGET_SET_NPC_HEAD:
             return {

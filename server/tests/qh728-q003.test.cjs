@@ -46,6 +46,7 @@ before(async () => {
 });
 
 function setup(options = {}) {
+  const realOwners = options.realOwners === true;
   const core = PluginManager.getCoreApi();
   const hooks = {
     variants: [], conditions: [], objects: [], itemOnItem: [], customs: new Map(), login: [], deaths: [], anyNpc: null,
@@ -95,6 +96,14 @@ function setup(options = {}) {
     sendMultiChatboxPrompt(player, title, ...pairs) {
       const options = [];
       for (let index = 0; index < pairs.length; index += 2) options.push({ text: pairs[index], pick: pairs[index + 1] });
+      if (realOwners) {
+        const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+        const sent = PluginManager.createApi('AscentNativeFixture').sendMultiChatboxPrompt(player, title, ...pairs);
+        prompts.push({ title, options: options.map((option, index) => ({ text: option.text,
+          pick: () => MultiChatboxPrompt.handleInterfaceActionClick({ player, buttonId: MultiChatboxPrompt.OPTIONS_WIDGET_ID,
+            groupId: MultiChatboxPrompt.OPTIONS_WIDGET_ID >>> 16, action: index + 1, handled: false }) })) });
+        return sent;
+      }
       prompts.push({ title, options });
       return true;
     },
@@ -119,7 +128,7 @@ function setup(options = {}) {
     getVarbit(id) { return varbits.get(id) ?? 0; },
     getVarp(id) { return varbits.get(id) ?? 0; },
   }, { get(target, key) { return target[key] ?? (() => sender); } });
-  const player = {
+  let player = {
     getAttribute: (key) => attrs.get(key),
     setAttribute(key, value) { attrs.set(key, value); },
     getPacketSender: () => sender,
@@ -158,6 +167,17 @@ function setup(options = {}) {
   };
   player.getDialogueManager = () => player.manager;
   player.manager = new DialogueManager(player);
+  if (realOwners) {
+    const { Player } = require('../dist/game/entity/impl/player/Player');
+    const { PlayerSession } = require('../dist/net/PlayerSession');
+    const channel = { kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true,
+      send: () => true, close() {}, onData() {}, onError() {}, onClose() {} };
+    player = new Player(new PlayerSession(channel));
+    player.setIndex(2901); player.setUsername('TowerMageParity'); player.setRegistered(true);
+    player.manager = player.getDialogueManager();
+    const sendMessage = player.sendMessage.bind(player);
+    player.sendMessage = text => { messages.push(text); return sendMessage(text); };
+  }
 
   const emit = (name, event) => api.emitCustomEvent(name, { player, ...event });
   const withVariantDispatch = (fn) => {
@@ -196,7 +216,7 @@ function setup(options = {}) {
     emit, talk, text,
     advance() { player.manager.advance(); return text(); },
     resetDialogue() { player.manager.reset(); },
-    setLocation(x, y, z = 0) { location = new core.Location(x, y, z); },
+    setLocation(x, y, z = 0) { location = new core.Location(x, y, z); if (realOwners) player.setLocation(location); },
     setFullBag(value) { options.fullBag = value; },
   };
 }
@@ -548,8 +568,9 @@ test('Ascent of Arceuus: the cache Mori transforms own pre- and post-quest dialo
   assert.equal(h.ascentVariant({ npcId: postQuest.id, player: h.player }), 'standard-dialogue-after-a-kingdom-divided');
 });
 
-test('Ascent of Arceuus: clicking the tower door runs the Tower Mage entry prompt', () => {
-  const h = setup();
+test('Ascent of Arceuus: clicking the tower door runs the Tower Mage entry prompt', t => {
+  const h = setup({ realOwners: true });
+  t.after(() => { h.player.closeInterruptibleInterfaces(); h.player.setRegistered(false); });
   const click = h.hooks.objects.at(-1);
   const clickDoor = () => click({
     player: h.player, objectId: 33570, clickType: 1, location: { x: 1596, y: 3820, z: 0 },

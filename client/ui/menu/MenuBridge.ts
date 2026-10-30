@@ -6,7 +6,7 @@ import { normalizeMenuEntries } from "./MenuEngine";
 import { MenuState } from "./MenuState";
 import { applyMenuTransform } from "./menuTransforms";
 import { preparePluginMenu } from "./menuEvents";
-import { transformWidgetMenuEntries } from "../../widgets/menu/utils";
+import { hasNativeWidgetOperation, transformWidgetMenuEntries } from "../../widgets/menu/utils";
 
 type WidgetMenuEntryInput = {
     option: string;
@@ -26,6 +26,10 @@ type WidgetMenuEntryInput = {
     /** Submenu entry texts for this op (widget.submenuActions[opIndex-1]) */
     subOptions?: string[];
 };
+
+function isWidgetInspectOperation(entry: WidgetMenuEntryInput, option = entry.option): boolean {
+    return option.trim().toLowerCase() === "inspect" && hasNativeWidgetOperation(entry);
+}
 
 export type TargetLabelOptions = {
     includeExamineIds?: boolean; // default false (OSRS doesn't show IDs)
@@ -327,7 +331,7 @@ export function widgetEntriesToSimple(
         const lower = String(entry.option || "")
             .trim()
             .toLowerCase();
-        if (!includeIds || (lower !== "examine" && lower !== "inspect")) {
+        if (!includeIds || (lower !== "examine" && lower !== "inspect") || isWidgetInspectOperation(entry)) {
             return target;
         }
         return appendDebugIdLabel(target, resolveWidgetItemId(entry));
@@ -347,11 +351,12 @@ export function widgetEntriesToSimple(
         opSubIndex?: number,
     ): ((gx?: number, gy?: number, ctx?: MenuClickContext) => void) => {
         const lower = String(option || "").toLowerCase();
+        const inspectOperation = isWidgetInspectOperation(e, option);
         const shouldDispatchWidgetAction =
             !e.suppressWidgetAction &&
             lower !== "cancel" &&
             lower !== "examine" &&
-            lower !== "inspect";
+            (lower !== "inspect" || inspectOperation);
         const dispatchWidgetAction = (clickCtx?: MenuClickContext): boolean => {
             if (!shouldDispatchWidgetAction) return false;
             const hook = ui?.onWidgetAction;
@@ -395,7 +400,7 @@ export function widgetEntriesToSimple(
                 closeMenus();
             };
         }
-        if (lower === "cancel" || lower === "examine" || lower === "inspect") {
+        if (lower === "cancel" || lower === "examine" || (lower === "inspect" && !inspectOperation)) {
             return () => {
                 const hook = ui?.onWidgetExamine || ui?.setDetails;
                 if (typeof hook === "function") hook(chosenWidget);
@@ -419,7 +424,8 @@ export function widgetEntriesToSimple(
         const mapped: SimpleMenuEntry = {
             option: e.option,
             target,
-            action: inferMenuAction(e.option),
+            action: e.option.trim().toLowerCase() === "inspect" && !isWidgetInspectOperation(e)
+                ? MenuAction.Examine : inferMenuAction(e.option),
             targetType: target ? MenuTargetType.ITEM : MenuTargetType.NONE,
             opcode: e.opcode,
             identifier: e.opIndex ?? (e.opcode === 25 ? 0 : 1),

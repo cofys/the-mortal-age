@@ -126,6 +126,7 @@ test('a bot without a rotation returns to its own activity, never a random one (
 
 test('cooking: food goes on a fire nearby; with no range or fire about, the bot lights one', () => {
   const Cooking = require('../plugins/skills/Cooking.plugin');
+  Cooking._test.setApi({ core: require('../dist/plugins/PluginManager').PluginManager.getCoreApi() });
   const Firemaking = require('../plugins/skills/Firemaking.plugin');
   const { createCookAction } = require('../plugins/bots/brain/actions/Cook.PlayerBots');
   const { Skill } = require('../dist/game/model/Skill');

@@ -1,0 +1,41 @@
+{
+  "_sources": {
+    "cannonballs": "OSRS Wiki, each cannonball's page: Ranged accuracy and strength (the cache's sailing_combat_facility_ammunition table, 165, keeps only the ids); projectiles are the cache's sailing_cannonball_travel_* spotanims",
+    "creatures": "Cache npc ids (sailing_<name> and sailing_<name>_dead, whose op1 is Harvest). Attack sounds from rsprox recordings (the osprey and tern from the user's captures, rays, frigatebird, mogre and dolphin from rsprox.net); sharks attack silently there. Death sounds, animations and aggression are the NPC definitions' (data/definitions). impactHeight: the cannon impact's height on the creature (rsprox: osprey 210, tern 264, bull shark 20), the rest by kind. reach: how close a creature comes to the hull to attack (ours: birds swoop from about four tiles, as the osprey in the capture, krakens from six, the rest beside the hull). bountyXp: Wiki, Bounty tasks (one value per creature; the cache leaves port_task xp_reward empty)."
+  },
+  "cannonballs": [
+    { "type": 1, "item": 31906, "name": "bronze cannonball", "accuracy": 12, "strength": 43, "projectile": 3487 },
+    { "type": 2, "item": 31908, "name": "iron cannonball", "accuracy": 16, "strength": 56, "projectile": 3488 },
+    { "type": 3, "item": 2, "name": "steel cannonball", "accuracy": 20, "strength": 74, "projectile": 3489 },
+    { "type": 4, "item": 31910, "name": "mithril cannonball", "accuracy": 30, "strength": 105, "projectile": 3491 },
+    { "type": 5, "item": 21728, "name": "granite cannonball", "accuracy": 30, "strength": 125, "projectile": 3490 },
+    { "type": 6, "item": 31912, "name": "adamant cannonball", "accuracy": 50, "strength": 157, "projectile": 3492 },
+    { "type": 7, "item": 31914, "name": "rune cannonball", "accuracy": 64, "strength": 201, "projectile": 3493 },
+    { "type": 8, "item": 31916, "name": "dragon cannonball", "accuracy": 80, "strength": 270, "projectile": 3494 }
+  ],
+  "creatures": [
+    { "npc": 15175, "dead": 15176, "name": "Drink troll queen", "reach": 6, "impactHeight": 20 },
+    { "npc": 15194, "dead": 15195, "name": "Bull shark", "reach": 1, "impactHeight": 20, "bountyXp": 3465 },
+    { "npc": 15196, "dead": 15197, "name": "Hammerhead shark", "reach": 1, "impactHeight": 20, "bountyXp": 8800 },
+    { "npc": 15198, "dead": 15199, "name": "Tiger shark", "reach": 1, "impactHeight": 20, "bountyXp": 19910 },
+    { "npc": 15200, "dead": 15201, "name": "Great white shark", "reach": 1, "impactHeight": 20, "bountyXp": 40370 },
+    { "npc": 15202, "dead": 15203, "name": "Narwhal", "reach": 1, "impactHeight": 20, "bountyXp": 19910 },
+    { "npc": 15204, "dead": 15205, "name": "Orca", "reach": 1, "impactHeight": 20, "bountyXp": 47080 },
+    { "npc": 15206, "dead": 15207, "name": "Pygmy kraken", "reach": 6, "impactHeight": 20, "bountyXp": 14575 },
+    { "npc": 15208, "dead": 15209, "name": "Spined kraken", "reach": 6, "impactHeight": 20, "bountyXp": 30965 },
+    { "npc": 15210, "dead": 15211, "name": "Armoured kraken", "reach": 6, "impactHeight": 20, "bountyXp": 40370 },
+    { "npc": 15212, "dead": 15213, "name": "Vampyre kraken", "reach": 6, "impactHeight": 20, "bountyXp": 47080 },
+    { "npc": 15576, "dead": 15577, "name": "Veiled kraken", "reach": 6, "impactHeight": 20, "bountyXp": 47080 },
+    { "npc": 15214, "dead": 15215, "name": "Eagle ray", "reach": 1, "impactHeight": 20, "attackSound": 10933, "bountyXp": 3465 },
+    { "npc": 15216, "dead": 15217, "name": "Butterfly ray", "reach": 1, "impactHeight": 20, "attackSound": 10933, "bountyXp": 8800 },
+    { "npc": 15218, "dead": 15219, "name": "Stingray", "reach": 1, "impactHeight": 20, "attackSound": 10933, "bountyXp": 11825 },
+    { "npc": 15220, "dead": 15221, "name": "Manta ray", "reach": 1, "impactHeight": 20, "attackSound": 10933 },
+    { "npc": 15222, "dead": 15223, "name": "Osprey", "reach": 4, "impactHeight": 210, "attackSound": 10925, "bountyXp": 3465 },
+    { "npc": 15224, "dead": 15225, "name": "Albatross", "reach": 4, "impactHeight": 210, "bountyXp": 14575 },
+    { "npc": 15226, "dead": 15227, "name": "Frigatebird", "reach": 4, "impactHeight": 210, "attackSound": 10915, "bountyXp": 11825 },
+    { "npc": 15228, "dead": 15229, "name": "Tern", "reach": 4, "impactHeight": 264, "attackSound": 10936, "bountyXp": 3465 },
+    { "npc": 15230, "dead": 15231, "name": "Mogre", "reach": 1, "impactHeight": 20, "attackSound": 10802, "bountyXp": 3465 },
+    { "npc": 15232, "dead": 15233, "name": "Mogre", "reach": 1, "impactHeight": 20, "attackSound": 10802, "bountyXp": 3465 },
+    { "npc": 15234, "dead": 15235, "name": "Dolphin", "reach": 1, "impactHeight": 20, "attackSound": 10912 }
+  ]
+}

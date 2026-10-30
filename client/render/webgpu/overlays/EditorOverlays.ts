@@ -283,7 +283,7 @@ export class EditorOverlays {
         const ctx = maskCanvas.getContext("2d");
         if (!ctx) { pending.resolve(undefined); return; }
         ctx.fillStyle = "white";
-        const clip = this.renderer.getSceneViewportWidgetRect();
+        const clip = this.renderer.getSceneViewportClipRect();
         ctx.beginPath(); ctx.rect(clip.x, clip.y, clip.width, clip.height); ctx.clip();
         const host = this.renderer.interactionHost;
         for (let i = 0; i + 2 < pending.points.length; i += 3) {

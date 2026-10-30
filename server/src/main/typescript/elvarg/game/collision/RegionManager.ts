@@ -538,7 +538,7 @@ export class RegionManager {
     }
 
     public static blocked(pos: Location, privateArea: PrivateArea) {
-        return (RegionManager.getClipping(pos.getX(), pos.getY(), pos.getZ(), privateArea) & 0x1280120) !== 0;
+        return (RegionManager.getClipping(pos.getX(), pos.getY(), pos.getZ(), privateArea) & 0x1280100) !== 0;
     }
 
     public static blockedNorth(pos: Location, privateArea: PrivateArea) {

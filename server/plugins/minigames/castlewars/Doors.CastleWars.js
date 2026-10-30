@@ -251,10 +251,32 @@ function lockSideDoor({ player, objectId }) {
   return true;
 }
 
+/** Open leaves swing inward; approach their original threshold from the player's own side. */
+function routeCastleDoor(event) {
+  const source = event.sourceLocation;
+  if (source.z !== 0 || !game.inGameBounds(event.object.getLocation())) return;
+  const large = largeDoors();
+  for (const [owner, door] of Object.entries(large)) {
+    const leaves = [...door.leaves, ...openLeaves()[owner]];
+    if (!leaves.some(([id]) => id === event.objectId)) continue;
+    const inside = door.isInside(event.player);
+    const y = owner === game.TEAM.SARADOMIN ? (inside ? 3087 : 3088) : (inside ? 3120 : 3119);
+    event.destination = { x: event.object.getLocation().getX(), y, z: 0 };
+    return;
+  }
+  const sides = sideDoors();
+  const owner = ownerOf(sides, event.objectId, (door) => [door.lockedId, door.openId]);
+  if (!owner) return;
+  const inside = sides[owner].isInside(event.player);
+  const x = owner === game.TEAM.SARADOMIN ? (inside ? 2415 : 2414) : (inside ? 2384 : 2385);
+  event.destination = { x, y: owner === game.TEAM.SARADOMIN ? 3073 : 3134, z: 0 };
+}
+
 module.exports = function attachCastleWarsDoors(api, castleWars) {
   game = castleWars;
   core = api.core;
   api.onCustomEvent("door:toggle", guardLargeDoor);
+  api.onObjectRoute(routeCastleDoor);
   api.onObjectInteraction("Large door", { Attack: attackDoor });
   api.onObjectInteraction("Broken door", { Repair: repairDoor });
   api.onObjectInteraction("Door", { Unlock: unlockSideDoor, Lock: lockSideDoor });

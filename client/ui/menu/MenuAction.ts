@@ -134,7 +134,7 @@ function normalizeSelectedSpellState(): void {
  */
 export function inferMenuAction(
     option: string | undefined,
-    targetType?: MenuTargetType,
+    _targetType?: MenuTargetType,
 ): MenuAction | undefined {
     if (!option) return undefined;
     const s = String(option).trim().toLowerCase();
@@ -148,8 +148,9 @@ export function inferMenuAction(
         case "examine":
             return MenuAction.Examine;
         case "inspect":
-            // Inspect is a real object operation (e.g. the ToA grouping obelisk).
-            return targetType === MenuTargetType.LOC ? undefined : MenuAction.Examine;
+            // Inspect is a real operation, including inventory and component
+            // ops. Only a specific metadata-less debug UI may treat it as details.
+            return undefined;
         case "cancel":
             return MenuAction.Cancel;
         case "follow":

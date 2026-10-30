@@ -53,6 +53,11 @@ export class ObjectDefinition extends ObjectIdentifiers {
         this.totalObjects = CacheDefinitions.getCounts().objects;
     }
 
+    static invalidateCache(id: number): void {
+        this.definitions.delete(id);
+        this.totalObjects = CacheDefinitions.getCounts().objects;
+    }
+
     static forId(id: number): ObjectDefinition | undefined {
         if (!Number.isInteger(id) || id < 0 || id >= this.totalObjects) return undefined;
         let definition = this.definitions.get(id);

@@ -1,11 +1,16 @@
 import { isMobileMode } from "../../common/utils/DeviceUtil";
 
 /**
- * The client type cache scripts see (the clienttype opcode): 2 (android) on the mobile layout,
- * otherwise 10, the enhanced (Steam C++) client.
+ * The client type cache scripts see (the clienttype opcode): 7, the mobile client, on the mobile
+ * layout, otherwise 10, the enhanced (Steam C++) client. Both are the current client to the cache
+ * (scripts 1445 and 2476, which script 100 combines); 2, the pre-2024 android client, left the
+ * mobile layout on the old branches, where script 876 never makes the minimap zoomable (#1510).
+ * The cache's own on_mobile check (script 1972) looks for 7.
  */
 export const CLIENT_TYPE_ENHANCED = 10;
-export const CLIENT_TYPE_ANDROID = 2;
+export const CLIENT_TYPE_MOBILE = 7;
+/** Client types scripts 1445 and 2476 treat as the current client. */
+const CURRENT_CLIENT_TYPES = new Set([4, 5, 7, 8, 10]);
 export const MOBILE_ROOT_INTERFACE = 601;
 
 /**
@@ -19,5 +24,10 @@ export function isMobileClient(rootInterface: number | undefined): boolean {
 }
 
 export function reportedClientType(rootInterface: number | undefined): number {
-    return isMobileClient(rootInterface) ? CLIENT_TYPE_ANDROID : CLIENT_TYPE_ENHANCED;
+    return isMobileClient(rootInterface) ? CLIENT_TYPE_MOBILE : CLIENT_TYPE_ENHANCED;
+}
+
+/** Whether the cache draws the mouseover text itself for this client type (script 4726). */
+export function isCurrentClientType(clientType: number): boolean {
+    return CURRENT_CLIENT_TYPES.has(clientType);
 }

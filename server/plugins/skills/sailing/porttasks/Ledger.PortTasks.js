@@ -179,3 +179,7 @@ module.exports.rewardBag = rewardBag;
 module.exports.complete = complete;
 module.exports.collectable = collectable;
 module.exports.moreToGo = moreToGo;
+module.exports.give = give;
+module.exports.countCompletion = countCompletion;
+module.exports.SHARK_PAINT = SHARK_PAINT;
+module.exports.SHARK_PAINT_CHANCE = SHARK_PAINT_CHANCE;

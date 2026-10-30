@@ -55,7 +55,7 @@ module.exports = function registerDwarfCannonQuest(api) {
   const CANNON_SPRING_VARBIT = 2239;
   const MUDPILE_OBJECT_ID = 13; // "Mud pile", Climb-over
   const MUDPILE_TILE = { x: 2621, y: 9796, z: 0 };
-  const OUTSIDE_CAVE_TILE = { x: 2622, y: 3395, z: 0 };
+  const OUTSIDE_CAVE_TILE = { x: 2623, y: 3391, z: 0 };
 
   const RAILS_ATTRIBUTE = "dwarf-cannon:rails-fixed";
   const RAILS_MASK_ATTRIBUTE = "dwarf-cannon:rails-fixed-mask";
@@ -92,7 +92,7 @@ module.exports = function registerDwarfCannonQuest(api) {
     if (stage >= STAGE_FIND_CAVE) return ["The remains belonged to Gilob, but Lollk may live.", "I should find the <col=800000>goblin cave</col> to the south-east."];
     if (stage >= STAGE_CHECK_WATCHTOWER) return ["I should climb the southern watchtower", "and investigate why it has gone quiet."];
     if (stage >= STAGE_REPAIR_RAILINGS) return ["Captain Lawgof gave me replacement rails and a hammer.", "I should repair the broken railings."];
-    return ["Speak to <col=800000>Captain Lawgof</col> at the Coal Trucks,", "north-west of the Fishing Guild."];
+    return ["I can start this quest by talking to <col=800000>Captain Lawgof</col> south of the <col=800000>Coal Trucks</col>, north-west of the <col=800000>Fishing Guild</col>."];
   }
 
   function nativeProgress(stage) {

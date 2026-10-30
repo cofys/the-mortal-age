@@ -1,0 +1,89 @@
+{
+  "source": "https://archive.openrs2.org/caches/runescape/2392",
+  "revision": 235,
+  "date": "2025-12-17",
+  "referenceCrc": 601061141,
+  "definitions": [
+    {
+      "id": 15548,
+      "symbol": "xmas25_stool_empty",
+      "kind": "npc",
+      "sourceName": "<col=00ffff>Stool",
+      "currentName": "Scurrius",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        42000
+      ],
+      "sourceSha256": "64ecf6cc893c82ceb3994d44504747cdd1b1a4ad3d11ddacfdc9f66ccf528449",
+      "sourceBytes": "ZAplCl8AAGNdAjxjb2w9MDBmZmZmPlN0b29sAAEBpBD5AQAACQgAAAAKAA=="
+    },
+    {
+      "id": 15549,
+      "symbol": "xmas25_sir_prysin",
+      "kind": "npc",
+      "sourceName": "Sir Prysin",
+      "currentName": "Phantom Muspah",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        17522,
+        17529,
+        17515,
+        17520,
+        17526,
+        17517
+      ],
+      "sourceSha256": "6b7e317e82822661e0d28762595ae8618f131d26e5337dd7224490d4bf2ac812",
+      "sourceBytes": "EQMzAzQDNQM2DQMoHlRhbGstdG8AXwAAYwJTaXIgUHJ5c2luAAEGRHJEeURrRHBEdkRtPAFEfAA="
+    },
+    {
+      "id": 32926,
+      "symbol": "xmas25_serving_platter",
+      "kind": "obj",
+      "sourceName": "Serving platter",
+      "currentName": "Null",
+      "sourceActions": [
+        "Inspect",
+        null,
+        null,
+        null,
+        "Destroy"
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "sourceModels": 59855,
+      "sourceSha256": "a623494918b1fa8f0baad19ab27cdd91b43885e5db42f9345c7769b910b68090",
+      "sourceBytes": "AenPDAAAADJLADIjSW5zcGVjdAAnRGVzdHJveQAFAf4GAy8EBzICU2VydmluZyBwbGF0dGVyAANJIGNhbiBjYXJyeSBmb29kIGFuZCBkcmlua3Mgb24gdGhpcy4AlICf+QIAAAEnAAAAAQAAADsAAAABAA=="
+    }
+  ]
+}

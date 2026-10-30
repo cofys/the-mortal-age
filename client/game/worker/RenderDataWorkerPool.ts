@@ -6,6 +6,7 @@ import { ObservablePromise } from "threads/dist/observable-promise";
 import { canUseSharedArrayBuffer, LoadedCache } from "../Caches";
 import { CustomItemRegistry } from "../../custom/items/CustomItemRegistry";
 import { CustomModelRegistry } from "../../custom/items/CustomModelRegistry";
+import { getDefinitionArchives } from "../../custom/archives/ArchivedDefinitionStore";
 import { NpcGeometryData } from "../../render/loader/NpcGeometryData";
 import type { NpcInstance } from "../../render/npc/NpcRenderTemplate";
 import { RenderDataLoader } from "./RenderDataLoader";
@@ -70,7 +71,7 @@ export class RenderDataWorkerPool {
         for (const reservation of this.npcPoseWorkers.values()) this.releasePoseWorker(reservation, false);
         for (const worker of this.workers) {
             worker.init.then((w) => {
-                w.initCache(cache, npcInstances);
+                w.initCache(cache, npcInstances, getDefinitionArchives());
                 return w.setCustomContent({ gamemodeId: "custom-items", datasets: [
                     { key: "customItems", rows: Array.from(CustomItemRegistry.getAll(), (item) => item.definition) },
                     { key: "customModels", rows: CustomModelRegistry.getAll() },

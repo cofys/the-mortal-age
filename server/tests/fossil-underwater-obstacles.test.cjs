@@ -30,6 +30,7 @@ before(() => {
     onObjectRoute: (handler) => hooks.route.push(handler),
     onObjectFirstClick: (ids, handler) => ids.forEach((id) => hooks.click.set(id, handler)),
     onCanTeleport() {},
+    registerArea() {},
     onPlayerLogout() {},
     onPlayerLogin() {},
     onNpcInteraction() {},

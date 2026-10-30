@@ -78,6 +78,11 @@ export abstract class Area {
         return null;
     }
 
+    /** Asked of both traders' areas; a refusal on either side prevents the trade. */
+    canTrade(player: Player, target: Player): boolean | null {
+        return null;
+    }
+
     /**
      * A walk click the engine would refuse because the player is mid forced move (or being placed
      * after one): true when the area takes it (a roll chained at once), false to refuse it.

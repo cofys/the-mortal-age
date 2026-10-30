@@ -81,7 +81,8 @@ const PICKAXES = [
 ];
 
 /** Best first: by the level they need, a `rank` standing in for a tool whose requirement understates it. */
-const PICKAXES_DESC = [...PICKAXES].sort((a, b) => (b.rank ?? b.requiredLevel) - (a.rank ?? a.requiredLevel));
+const PICKAXES_DESC = [...PICKAXES].sort((a, b) => (b.rank ?? b.requiredLevel) - (a.rank ?? a.requiredLevel)
+  || a.attemptIntervalTicks - b.attemptIntervalTicks);
 
 // Wiki rock pages: level, XP, respawn, and each rock's skilling success chart (`chance`: its low and
 // high values). Rocks with `gems` roll the mining gem table before each ore roll.
@@ -874,7 +875,7 @@ function mineDepletedRock(event) {
   const depleted = [`${DEPLETED_ROCK_NAME}1`, `${DEPLETED_ROCK_NAME}2`].includes(gameval) || gameval.endsWith(EMPTY_ROCK_SUFFIX)
     || EMPTY_ROCK_NAMES.includes(CacheDefinitions.getObject(event.object.getId())?.name);
   if (!depleted) {
-    return;
+    return false;
   }
   stopMining(activeSessions, event.player, false);
   event.player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);

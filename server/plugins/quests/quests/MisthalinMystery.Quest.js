@@ -411,6 +411,12 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     const area=island(player);if(!area||area.knifeDropped||held(player,KILLER_KNIFE_ITEM_ID)||player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId()===KILLER_KNIFE_ITEM_ID)return;
     area.knifeDropped=true;ItemOnGroundManager.registerLocation(player,new Item(KILLER_KNIFE_ITEM_ID,1),new Location(1624,4830,0));
   }
+  // Returning true consumes Talk-to. Returning null from selectVariant would otherwise
+  // fall through to the page default and offer the quest start to a dead Hewey.
+  function finishedShowdown(event) {
+    if (quest.getStage(event.player) < STAGE_HEWEY_DEAD) return false;
+    return true;
+  }
   function fightAbigale(event){
     const {player}=event;if(quest.getStage(player)!==STAGE_HEWEY_DEAD)return false;
     const weapon=player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId()??-1;
@@ -619,14 +625,15 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
     if (ABIGALE_NPC_IDS.has(npcId)) {
-      if (stage >= STAGE_HEWEY_DEAD) return "showdown-defeating-the-killer";
+      // The reveal plays from the murder scene. Talk-to after it must not start that transcript.
+      if (stage >= STAGE_HEWEY_DEAD) return null;
       if (stage >= STAGE_BRIEFED) {
         return "starting-out-talking-to-abigale-or-hewey-talking-to-abigale-or-hewey-again";
       }
       return "starting-out-talking-to-abigale-or-hewey";
     }
     if (HEWEY_NPC_IDS.has(npcId)) {
-      if (stage >= STAGE_HEWEY_DEAD) return "showdown-defeating-the-killer";
+      if (stage >= STAGE_HEWEY_DEAD) return null;
       if (stage >= STAGE_BRIEFED) {
         return "starting-out-talking-to-abigale-or-hewey-talking-to-abigale-or-hewey-again";
       }
@@ -781,6 +788,8 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     if (stepId === "i5vdZV") {
       const key=doorKeyByPlayer.get(player);doorKeyByPlayer.delete(player);
       if(!key||!held(player,key.item))return;
+      const keyName=new Map([[RUBY_KEY_ITEM_ID,"ruby"],[EMERALD_KEY_ITEM_ID,"emerald"],[SAPPHIRE_KEY_ITEM_ID,"sapphire"]]).get(key.item);
+      if(keyName){event.text=`You use the ${keyName} key to unlock the door.`;event.handled=true;player.sendMessage(event.text);}
       player.getInventory().deleteNumber(key.item,1);quest.setStage(player,key.stage);return;
     }
     if (stepId === "6KwKGJ" && quest.getStage(player) < STAGE_FUSE_LIT) {
@@ -1564,7 +1573,8 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   api.onCustomEvent("player:world-input", protectScene);
   api.onCustomEvent("interface:close", protectScene);
   api.onNpcInteraction("<col=00ffff>Mirror</col>",{Push:pushMirror});
-  api.onNpcInteraction("Abigale",{Fight:fightAbigale});
+  api.onNpcInteraction("Abigale",{Fight:fightAbigale,"Talk-to":finishedShowdown});
+  api.onNpcInteraction("Hewey",{"Talk-to":finishedShowdown});
   api.onCustomEvent("door:toggle", claimQuestDoor);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });

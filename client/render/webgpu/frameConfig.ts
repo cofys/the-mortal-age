@@ -29,6 +29,7 @@ interface TilePoint {
 export function updateWebGPUMapStreaming(renderer: WebGPURenderer, frameCount: number): void {
     const client = renderer.osrsClient;
     const preview = !client.isLoggedIn() && client.scenePreviewEnabled;
+    if (!preview && !ClientState.scenePositionReady) return;
     const streamAroundPlayer = preview || getControlledPlayerWorldViewId(renderer) >= 0;
     const distance = resolveWebGPURenderDistance(renderer);
     const padding = MapManager.getSceneryPadding(distance);

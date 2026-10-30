@@ -181,14 +181,11 @@ function restoreObjects() {
   }
 }
 
-/**
- * Castle stairs, ladders and trapdoors use the shared ladder climb (Ladders.plugin.js): it waits
- * out the arrival step (arriveDelay) and plays the climb before moving.
- */
+/** Castle Wars stairs change floor immediately, so another click can follow on the next tick. */
 function climbTo(player, to) {
   const destination = new core.Location(to[0], to[1], to[2]);
-  const direction = to[2] < player.getLocation().getZ() ? "ladders:climbDown" : "ladders:climbUp";
-  api.emitCustomEvent(direction, { player, destination });
+  player.getMovementQueue().reset();
+  player.moveTo(destination);
 }
 
 // --- Equipment and game items ------------------------------------------------------------
@@ -208,7 +205,6 @@ function refreshPlayerAppearance(player, weaponChanged = false) {
 function equipTeamColours(player, teamId) {
   const team = getTeamData(teamId);
   player.getEquipment().setItem(core.Equipment.CAPE_SLOT, new core.Item(team.capeId, 1));
-  player.getEquipment().setItem(core.Equipment.HEAD_SLOT, new core.Item(team.hoodId, 1));
   refreshPlayerAppearance(player);
 }
 
@@ -221,9 +217,9 @@ function clearWeaponSlot(player) {
 }
 
 function clearCastleWarsItems(player, ids = data.CLEANUP_ITEM_IDS) {
-  const { HEAD_SLOT, CAPE_SLOT, WEAPON_SLOT } = core.Equipment;
+  const { CAPE_SLOT, WEAPON_SLOT } = core.Equipment;
   let weaponChanged = false;
-  for (const slot of [HEAD_SLOT, CAPE_SLOT, WEAPON_SLOT]) {
+  for (const slot of [CAPE_SLOT, WEAPON_SLOT]) {
     if (!ids.has(player.getEquipment().getSlot(slot))) {
       continue;
     }
@@ -292,6 +288,8 @@ function restoreFlagToBase(flagTeam, cause = "reset") {
 }
 
 function carryFlag(player, flagTeam) {
+  player.getCombat().reset();
+  player.getCombat().setCastSpell(null);
   flagStatus[flagTeam] = 1;
   flagCarriers[flagTeam] = player;
   player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(getTeamData(flagTeam).bannerId, 1));
@@ -306,6 +304,16 @@ function isSteppingStone(tile) {
     (tile.x >= 2418 && tile.x <= 2420 && tile.y >= 3122 && tile.y <= 3125) ||
     (tile.x >= 2377 && tile.x <= 2378 && tile.y >= 3084 && tile.y <= 3088)
   );
+}
+
+function isInsideCastle(player, teamId) {
+  const { x, y, z } = getLocationTile(player);
+  if (z < 0 || z > 3) return false;
+  // The large and side doors bound the interior; their outside approach tiles
+  // must still allow defenders to hold their standard.
+  return teamId === data.TEAM.SARADOMIN
+    ? x >= 2415 && x <= 2432 && y >= 3072 && y <= 3087
+    : x >= 2368 && x <= 2384 && y >= 3120 && y <= 3136;
 }
 
 /** The team this player is recorded as carrying for, banner still equipped or not. */
@@ -323,6 +331,15 @@ function placeDroppedFlag(flagTeam, player) {
   // One standard per team: remove whatever drop a previous life left behind, so repeated
   // deaths in the same spot cannot stack flag objects.
   removeDroppedFlagObject(flagTeam);
+  const otherTeam = opposingTeam(flagTeam);
+  const otherDrop = droppedFlagObjects[otherTeam];
+  // The client has one scenery slot per tile. Returning the dropper's own standard
+  // keeps the enemy standard available instead of hiding one beneath the other.
+  if (otherDrop?.getLocation().equals(player.getLocation())) {
+    const ownTeam = getTeamId(player);
+    restoreFlagToBase(ownTeam, "overlap");
+    if (flagTeam === ownTeam) return;
+  }
   flagStatus[flagTeam] = 2;
   flagCarriers[flagTeam] = null;
   if (process.env.CW_BOT_DEBUG === "1") {
@@ -385,10 +402,9 @@ function dropCarriedFlag(player) {
 // --- Barricades --------------------------------------------------------------------------
 
 function trackBarricade(npc, teamId) {
-  const location = npc.getLocation();
   npc.castleWarsTeam = teamId;
+  npc.setFlag(core.NPC.BLOCKS_PLAYERS_FLAG);
   barricades.add(npc);
-  RegionManager.addClipping(location.getX(), location.getY(), location.getZ(), RegionManager.BLOCKED_TILE, npc.getPrivateArea());
 }
 
 function teamBarricadeCount(teamId) {
@@ -403,8 +419,7 @@ function releaseBarricade(npc) {
   if (!barricades.delete(npc)) {
     return;
   }
-  const location = npc.getLocation();
-  RegionManager.removeClipping(location.getX(), location.getY(), location.getZ(), RegionManager.BLOCKED_TILE, npc.getPrivateArea());
+  npc.removeFlag(core.NPC.BLOCKS_PLAYERS_FLAG);
 }
 
 function removeBarricade(npc) {
@@ -474,7 +489,10 @@ function beginStartCountdown() {
     return;
   }
   phase = PHASE.STARTING;
-  startTask = new core.CountdownTask(data.START_TASK_KEY, secondsToTicks(data.START_COUNTDOWN_SECONDS), startGame);
+  const hasBots = Object.values(game.waitingAreas).some((area) =>
+    area.getPlayers().some((player) => player.getAttribute(BOT_KEY) === true));
+  const seconds = hasBots ? data.BOT_START_COUNTDOWN_SECONDS : data.START_COUNTDOWN_SECONDS;
+  startTask = new core.CountdownTask(data.START_TASK_KEY, secondsToTicks(seconds), startGame);
   TaskManager.submit(startTask);
 }
 
@@ -528,6 +546,7 @@ function startGame() {
     for (const player of [...game.waitingAreas[teamId].getPlayers()]) {
       resetIdleTicks(player);
       chargeBracelet(player);
+      api.emitCustomEvent("castlewars:started-player", { player });
       player.setAttribute(TRANSITION_KEY, true);
       closeOverlay(player);
       player.smartMove(getTeamData(teamId).startRoom, 3);
@@ -545,6 +564,7 @@ function startGame() {
     }
     resetIdleTicks(player);
     chargeBracelet(player);
+    api.emitCustomEvent("castlewars:started-player", { player });
     player.setAttribute(TRANSITION_KEY, true);
     closeOverlay(player);
     player.moveTo(getTeamData(teamId).startRoom);
@@ -816,6 +836,7 @@ module.exports = function createCastleWarsGame(registry) {
     startSecondsLeft,
     gameMinutesLeft,
     getLocationTile,
+    isSteppingStone,
     isAt,
     inGameBounds,
     getTeamId,
@@ -837,6 +858,7 @@ module.exports = function createCastleWarsGame(registry) {
     hasBraceletEffect,
     clearBraceletEffect,
     getCarriedFlagTeam,
+    isInsideCastle,
     getDroppedFlagObject: (flagTeam) => droppedFlagObjects[flagTeam] ?? null,
     removeDroppedFlagObject,
     updateFlagStand,

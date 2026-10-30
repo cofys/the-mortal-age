@@ -120,6 +120,8 @@ function harness({ prayer = 31, prayerCurrent = prayer } = {}) {
   return {
     quest, player, items, messages, moves, xp, attributes, configs, hooks, interfaces, hits,
     emit, variant, stage, wire, cage, npcTalk, object,
+    // Runs the plugin's CountdownTasks one game tick.
+    tick: () => core.TaskManager.process(),
     start: () => emit('npc-dialogue:hook', { npcId: N.THORMAC, hook: 'quest:scorpion-catcher:start' }),
     choose: (npcId, option) => emit('npc-dialogue:choice', { npcId, option }),
     action: (npcId, stepId) => emit('npc-dialogue:action', { npcId, stepId }),
@@ -339,7 +341,13 @@ test("Thormac's post-quest battlestaff service opens the cache interface and enc
 
   const event = h.enchantAction();
   assert.equal(event.handled, true, "the transcript's open_interface step is owned by the plugin");
-  assert.deepEqual(h.interfaces, [332], 'the cache interface "thormac" is opened');
+  assert.equal(event.end, true, 'the conversation ends on the open_interface step');
+  assert.deepEqual(h.interfaces, [], 'the screen waits for the conversation close on this tick');
+
+  // Ending the conversation closes the chatbox; that close leaves the service pending.
+  h.emit('interface:closed', { player: h.player, interfaceId: 231 });
+  h.tick();
+  assert.deepEqual(h.interfaces, [332], 'the cache interface "thormac" opens on the next tick');
 
   h.items.set(I.COINS, 40000);
   h.items.set(I.FIRE_BATTLESTAFF, 1);
@@ -361,6 +369,7 @@ test('the battlestaff service refuses without the staff or the coins and stays c
   const h = harness();
   h.quest.setStage(h.player, 4);
   h.enchantAction();
+  h.tick();
 
   h.items.set(I.COINS, 40000);
   const noStaff = h.interfaceClick({ groupId: 332, childId: 7 });
@@ -382,20 +391,38 @@ test('the battlestaff service refuses without the staff or the coins and stays c
   const fresh = harness();
   const before = fresh.enchantAction();
   assert.equal(before.handled, false, 'the service is post-quest only');
+  fresh.tick();
   assert.deepEqual(fresh.interfaces, []);
 });
 
-test('the enchanting interface closes with any interface and on logout', () => {
+test("only closing Thormac's screen ends the enchanting service", () => {
   const h = harness();
   h.quest.setStage(h.player, 4);
   h.enchantAction();
+  h.tick();
   h.items.set(I.COINS, 40000);
   h.items.set(I.FIRE_BATTLESTAFF, 1);
 
+  h.emit('interface:closed', { player: h.player, interfaceId: 231 });
+  h.emit('interface:closed', { player: h.player, interfaceId: 162 });
+  const open = h.interfaceClick({ groupId: 332, childId: 7 });
+  assert.equal(open.handled, true, 'chatbox closes leave the service open');
+  assert.equal(h.items.get(I.MYSTIC_FIRE_STAFF), 1);
+
+  h.items.set(I.COINS, 40000);
+  h.items.set(I.FIRE_BATTLESTAFF, 1);
   h.emit('interface:closed', { player: h.player, interfaceId: 332 });
   const closed = h.interfaceClick({ groupId: 332, childId: 7 });
   assert.equal(closed.handled, false, 'a closed interface cannot be used');
   assert.equal(h.items.get(I.FIRE_BATTLESTAFF), 1);
+
+  // Closing the screen before the deferred open cancels it.
+  const early = harness();
+  early.quest.setStage(early.player, 4);
+  early.enchantAction();
+  early.emit('interface:closed', { player: early.player, interfaceId: 332 });
+  early.tick();
+  assert.deepEqual(early.interfaces, [], 'a cancelled service does not open the screen');
 });
 
 test('the secret wall crosses the side the player stands on and is closed before the first hint', () => {

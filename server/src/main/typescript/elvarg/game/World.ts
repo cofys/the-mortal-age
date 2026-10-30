@@ -56,6 +56,7 @@ export class World {
     private static items: ItemOnGround[] = [];
     private static playerArray: Player[] = []
     private static activeNpcsForUpdate: NPC[] = [];
+    private static npcsAddedSinceLastCollection = new Set<NPC>();
     private static combatActiveNpcs = new Set<NPC>();
     private static playerTileOccupants: Map<string, Player[]> = new Map();
     private static npcTileOccupants: Map<string, NPC[]> = new Map();
@@ -408,11 +409,13 @@ export class World {
     public static registerNpcPosition(npc: NPC, location: Location | null | undefined = npc?.getLocation?.()): void {
         World.addNpcToTileOccupants(npc, location);
         World.addNpcToRegionOccupants(npc, location);
+        World.npcsAddedSinceLastCollection.add(npc);
     }
 
     public static unregisterNpcPosition(npc: NPC, location: Location | null | undefined = npc?.getLocation?.()): void {
         World.removeNpcFromTileOccupants(npc, location);
         World.removeNpcFromRegionOccupants(npc, location);
+        World.npcsAddedSinceLastCollection.delete(npc);
     }
 
     public static onNpcMoved(
@@ -456,6 +459,27 @@ export class World {
         return false;
     }
 
+    /** Whether an NPC with the "full" flag (NPC.BLOCKS_PLAYERS_FLAG) covers any tile of the footprint. */
+    public static isPlayerBlockingNpcOnTile(
+        location: Location | null | undefined,
+        size = 1,
+        privateArea?: any
+    ): boolean {
+        if (!location) {
+            return false;
+        }
+        for (let x = 0; x < Math.max(1, size); x++) {
+            for (let y = 0; y < Math.max(1, size); y++) {
+                const key = World.getNpcTileKey(location.getX() + x, location.getY() + y, location.getZ());
+                if (World.npcTileOccupants.get(key)?.some((npc) => npc && npc.hasFlag(NPC.BLOCKS_PLAYERS_FLAG) &&
+                    (privateArea === undefined || npc.getPrivateArea() === privateArea))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static addToUpdateBucket<T extends Mobile>(
         buckets: Map<string, T[]>,
         entity: T
@@ -472,6 +496,21 @@ export class World {
     }
 
     private static rebuildUpdateBuckets(): void {
+        // Player turns and NPC mechanics can register actors after the mechanics snapshot.
+        // Include them in this tick's normal sync, without giving them an extra AI turn or
+        // rescanning every occupied region. Deregistration removes pending actors.
+        if (World.npcsAddedSinceLastCollection.size > 0) {
+            const active = new Set(World.activeNpcsForUpdate);
+            for (const npc of World.npcsAddedSinceLastCollection) {
+                const location = BoatManager.rootLocation(npc);
+                if (npc.isRegistered() && (!GameConstants.PROCESS_NPCS_BY_ACTIVE_REGIONS ||
+                    World.activeRegionIndex.isLocationActive(location.getX(), location.getY(), location.getZ()))) {
+                    active.add(npc);
+                }
+            }
+            World.activeNpcsForUpdate = Array.from(active).sort((a, b) => a.getIndex() - b.getIndex());
+            World.npcsAddedSinceLastCollection.clear();
+        }
         World.npcUpdateBuckets.clear();
         World.playerUpdateBuckets.clear();
         World.players.forEach((player) => {
@@ -1285,9 +1324,10 @@ export class World {
         World.rebuildRealPlayerObserverBuckets();
         timed("process_npcs", () => {
             // One pass per cycle: the collection scans every occupied bucket,
-            // allocates a Set and sorts. An NPC that only becomes active during
-            // this pass is picked up on the next cycle, one tick later.
+            // allocates a Set and sorts. Newly registered actors join sync below,
+            // but their first mechanics turn waits until the next cycle.
             World.activeNpcsForUpdate = World.collectActiveNpcsForUpdate();
+            World.npcsAddedSinceLastCollection.clear();
             World.processNpcMechanics(World.activeNpcsForUpdate);
         });
 

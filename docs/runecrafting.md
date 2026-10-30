@@ -25,6 +25,27 @@ described in [guardians-of-the-rift.md](guardians-of-the-rift.md).
   [Wiki: Blood rune](https://oldschool.runescape.wiki/w/Blood_rune)). With nothing to bind it
   says "You have nothing suitable to bind." in a message box (rsprox capture 1673).
 
+## The Ourania Altar
+
+The Ourania Altar (loc 29631, `rc_zmi_dungeon_cracked_center_altar`) in the Ourania Cave
+([Wiki: Ourania Altar](https://oldschool.runescape.wiki/w/Ourania_Altar)):
+
+- It needs no Runecraft level and binds every pure and daeyalt essence, never rune essence.
+  Each essence becomes one rune, rolled out of 10,000 on the Wiki's table for the player's level
+  bracket (`plugins/skills/data/ourania-altar.json`); there are no level multiples.
+- The XP is 1.7 times the crafted rune's base XP, and 1.5 times that for daeyalt essence. The
+  base XP is the normal altars' (soul 11, blood 10.5); with it the table gives the Wiki's XP per
+  essence for every bracket.
+- With the medium Ardougne Diary done, each rune has a chance of an extra one (25% for air
+  through astral, down to 10% for soul) and no extra XP.
+- Messages (rsprox captures 819, 822): "You bind the temple's power into runes." as spam, then,
+  with the diary, "Your medium level knowledge of the local area allows you to bind additional
+  runes." Without essence: "You do not have any pure or daeyalt essences to bind." in a message
+  box. The craft's animation, graphic and sound are the other altars'. Both recordings are Grid
+  Master event worlds, so their rune amounts and un-noting are not used.
+- The rift guardian rolls once per essence at the altar's own base, 1,487,213, whatever the rune
+  ([Wiki: Rift guardian](https://oldschool.runescape.wiki/w/Rift_guardian)); the rune made still sets its colour.
+
 ## The craft
 
 On the click (or on arrival): sequence `human_runecraft` (791), spotanim `runecrafting` (186) at
@@ -55,6 +76,8 @@ of the Rift).
   mine is an instance with several landing tiles; here it is the fixed mine and its middle.
 
 ## Not done yet
+
+- The Raiments of the Eye's 60% extra runes, here and at the other altars.
 
 - Daeyalt essence (pure essence's runes at 1.5 times the XP) needs the Daeyalt essence mine.
 - Dark essence fragments come from the Dense essence mine, the Dark Altar and a chisel, none of

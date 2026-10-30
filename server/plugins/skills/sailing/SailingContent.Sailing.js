@@ -72,6 +72,17 @@ const ROLE_CAPTAIN = 10;
 
 const SIDEPANEL_GROUP = 937;
 const SIDEPANEL_FACILITIES_CHILD = 25;
+/**
+ * The facilities list (937:25) has a row of four buttons per facility: the sails, the helm, hull
+ * repairs, then hotspot n at row 3 + n (cache script 9027); the fourth button picks a crewmate.
+ */
+const FACILITY_ROW_BUTTONS = 4;
+const FACILITY_ROW_HOTSPOT0 = 3;
+
+/** The 937:25 slot of a hotspot row's button (0-3). */
+function facilityRowSlot(hotspot, button) {
+  return (FACILITY_ROW_HOTSPOT0 + hotspot) * FACILITY_ROW_BUTTONS + button;
+}
 const COMBAT_TAB_UID = (161 << 16) | 76;
 const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
 const FADE_OVERLAY_GROUP = 174;
@@ -286,6 +297,9 @@ module.exports = {
   ROLE_CAPTAIN,
   SIDEPANEL_GROUP,
   SIDEPANEL_FACILITIES_CHILD,
+  FACILITY_ROW_BUTTONS,
+  FACILITY_ROW_HOTSPOT0,
+  facilityRowSlot,
   COMBAT_TAB_UID,
   SCRIPT_SIDEPANEL_INIT,
   SCRIPT_HELM_UPDATE,

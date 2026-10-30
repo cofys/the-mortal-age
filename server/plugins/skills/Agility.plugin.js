@@ -49,6 +49,10 @@ const TICK_MS = 600;
 const OBSTACLES_BY_OBJECT = new Map();
 /** npcId -> the course obstacle done on that NPC (Werewolf's stick hand-in). */
 const OBSTACLES_BY_NPC = new Map();
+/** "x,y,z" -> the course obstacle played by stepping onto that tile (the Agility Pyramid's stone blocks). */
+const OBSTACLES_BY_TILE = new Map();
+/** player -> the tile key they last stepped onto inside a tile obstacle's area. */
+const lastTileStepped = new WeakMap();
 
 let pluginApi;
 let core;
@@ -57,6 +61,12 @@ let ItemOnGroundManager;
 function indexObstacle(obstacle) {
   if (obstacle.npc != null) {
     OBSTACLES_BY_NPC.set(obstacle.npc, obstacle);
+    return;
+  }
+  if (obstacle.tiles) {
+    for (const [x, y, z] of obstacle.tiles) {
+      OBSTACLES_BY_TILE.set(tileKey(x, y, z), obstacle);
+    }
     return;
   }
   const objects = Array.isArray(obstacle.object) ? obstacle.object : [obstacle.object];
@@ -117,17 +127,27 @@ function findObstacle(objectId, location, player = null) {
 /**
  * Whether `obstacle` is the next one of the lap in `progress`: the same course, or a course that
  * shares its first obstacles (`sharesWith: { course, through }`) with the one the lap began on.
+ * A course whose floors repeat its obstacles in another order (`anyOrder`, the Agility Pyramid)
+ * only needs the lap to have begun.
  */
 function continuesLap(progress, obstacle) {
-  if (!progress || progress.index !== obstacle.index - 1) return false;
   const course = obstacle.course;
+  if (progress && course?.anyOrder && progress.course === course.key) return true;
+  if (!progress || progress.index !== obstacle.index - 1) return false;
   if (progress.course === course.key) return true;
   return course.sharesWith?.course === progress.course && progress.index <= course.sharesWith.through;
+}
+
+function tileKey(x, y, z) {
+  return `${x},${y},${z}`;
 }
 
 function objectContext(player, object) {
   const location = object.getLocation();
   const playerLocation = player.getLocation();
+  const face = object.getFace?.() ?? 0;
+  const definition = object.getDefinition?.();
+  const [width, length] = [definition?.getSizeX?.() ?? 1, definition?.getSizeY?.() ?? 1];
   return {
     player,
     object,
@@ -135,10 +155,20 @@ function objectContext(player, object) {
     api: pluginApi,
     obj: {
       x: location.getX(), y: location.getY(), z: location.getZ(),
-      face: object.getFace?.() ?? 0, type: object.getType?.() ?? 10, id: object.getId(),
+      face, type: object.getType?.() ?? 10, id: object.getId(),
+      // The footprint on the map: a quarter turn swaps the definition's sizes.
+      sizeX: face % 2 === 1 ? length : width,
+      sizeY: face % 2 === 1 ? width : length,
     },
     pos: { x: playerLocation.getX(), y: playerLocation.getY(), z: playerLocation.getZ() },
   };
+}
+
+/** A tile obstacle's context: `obj` is the tile stepped on, facing the obstacle's `face`. */
+function tileContext(player, obstacle) {
+  const location = player.getLocation();
+  const pos = { x: location.getX(), y: location.getY(), z: location.getZ() };
+  return { player, object: null, core, api: pluginApi, obj: { ...pos, face: obstacle.face ?? 0, type: -1, id: -1 }, pos };
 }
 
 function resolve(value, context) {
@@ -433,8 +463,8 @@ function usable(player, obstacle, level) {
   return { refusal };
 }
 
-function attemptObstacle(player, object, entry) {
-  const context = objectContext(player, object);
+function attemptObstacle(player, context, entry) {
+  const objectId = context.obj.id;
   const level = resolve(entry.level, context);
   const { obstacle, refusal } = usable(player, entry, level);
   if (refusal) {
@@ -450,14 +480,14 @@ function attemptObstacle(player, object, entry) {
   const forced = obstacle.forceFail?.(context) ?? null;
   const fail = forced ?? obstacle.fail;
   // Content may make the roll succeed ("agility:roll", a league relic); a forced failure stays one.
-  const roll = { player, objectId: object.getId(), success: !forced && rollSuccess(player, obstacle, level) };
+  const roll = { player, objectId, success: !forced && rollSuccess(player, obstacle, level) };
   if (!forced) pluginApi.emitCustomEvent("agility:roll", roll);
   const success = roll.success;
   const resolved = resolve(success ? obstacle.steps : fail.steps, context);
   if (!resolved) return;
   const lapStart = success && startsLap(obstacle, context);
   const steps = lapStart && obstacle.course.helper != null ? withHighlight(resolved, obstacle.course.helper) : resolved;
-  pluginApi.emitCustomEvent("agility:obstacle-start", { player, objectId: object.getId(), location: context.obj, success });
+  pluginApi.emitCustomEvent("agility:obstacle-start", { player, objectId, location: context.obj, success });
   const startMessage = success ? obstacle.start : fail?.start ?? obstacle.start;
   if (startMessage) {
     ObstacleRunner.sendMessage(player, startMessage);
@@ -467,7 +497,7 @@ function attemptObstacle(player, object, entry) {
     onFinish: (completed) => {
       finishObstacle(player, obstacle, success, completed, fail, lapStart);
       if (completed && success) {
-        pluginApi.emitCustomEvent("agility:obstacle", { player, objectId: object.getId(), location: context.obj });
+        pluginApi.emitCustomEvent("agility:obstacle", { player, objectId, location: context.obj });
       }
       if (completed && success && obstacle.skipTo != null) {
         skipAhead(player, obstacle, context);
@@ -490,7 +520,7 @@ function operateObstacle(event) {
   const obstacle = findObstacle(event.objectId, event.location, event.player);
   if (!obstacle) return false;
   if (ObstacleRunner.isBusy(event.player)) return true;
-  attemptObstacle(event.player, event.object, obstacle);
+  attemptObstacle(event.player, objectContext(event.player, event.object), obstacle);
   return true;
 }
 
@@ -528,7 +558,39 @@ function claimLadderObstacle(request) {
   if (!obstacle) return;
   request.handled = true;
   if (ObstacleRunner.isBusy(request.player)) return;
-  attemptObstacle(request.player, request.object, obstacle);
+  attemptObstacle(request.player, objectContext(request.player, request.object), obstacle);
+}
+
+/**
+ * A tile obstacle plays once each time a player steps onto one of its tiles (not while they
+ * stand there, nor when an obstacle puts them there).
+ */
+function stepOntoTile(player) {
+  const location = player.getLocation();
+  const key = tileKey(location.getX(), location.getY(), location.getZ());
+  if (lastTileStepped.get(player) === key) return;
+  lastTileStepped.set(player, key);
+  const obstacle = OBSTACLES_BY_TILE.get(key);
+  if (!obstacle || ObstacleRunner.isBusy(player)) return;
+  attemptObstacle(player, tileContext(player, obstacle), obstacle);
+}
+
+/** Every tile obstacle's tiles as one Area, so only players standing on one are asked. */
+function createTileObstacleArea() {
+  class TileObstacleArea extends core.Area {
+    process(character) {
+      if (character.isPlayer()) stepOntoTile(character.getAsPlayer());
+    }
+
+    postLeave(character) {
+      if (character.isPlayer()) lastTileStepped.delete(character.getAsPlayer());
+    }
+  }
+  const boundaries = [...OBSTACLES_BY_TILE.keys()].map((key) => {
+    const [x, y, z] = key.split(",").map(Number);
+    return new core.Boundary(x, x, y, y, z);
+  });
+  return new TileObstacleArea(boundaries);
 }
 
 function blockTeleportMidObstacle(event) {
@@ -626,6 +688,7 @@ module.exports = {
     api.onObjectFirstClick([...OBSTACLES_BY_OBJECT.keys()], operateObstacle);
     api.onCustomEvent("ladders:climb", claimLadderObstacle);
     api.onNpcInteraction("Agility Trainer", { "Give-Stick": operateNpcObstacle });
+    api.registerArea(createTileObstacleArea());
     api.onCanTeleport(blockTeleportMidObstacle);
     api.onPlayerLogout(finishObstacleOnLogout);
     api.onPlayerLogout(pauseMarksOnLogout);

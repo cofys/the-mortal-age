@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/cooking-gauntlets.test.cjs
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { before, test } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
@@ -9,10 +9,15 @@ const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { ItemIds } = require("../dist/util/IdEnums");
 const { Skill } = require("../dist/game/model/Skill");
 
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { PluginManager } = require("../dist/plugins/PluginManager");
 const Cooking = require("../plugins/skills/Cooking.plugin");
+
+before(() => CachePipeline.initialize());
 
 // The Skillcapes plugin answers this; a worn Cooking cape (or trimmed) is all these tests need.
 Cooking._test.setApi({
+  core: PluginManager.getCoreApi(),
   emitCustomEvent(name, request) {
     if (name !== "skillcape:has-perk" || request.skill !== "COOKING") return;
     const cape = request.player.getEquipment().getItems()[Equipment.CAPE_SLOT]?.getId();
@@ -50,8 +55,8 @@ test("the gauntlets do not help with unlisted food", () => {
 
 test("a worn Cooking cape never burns food", () => {
   const shark = Cooking._test.COOKABLE_BY_RAW.get(ItemIds.RAW_SHARK);
-  assert.equal(Cooking._test.wearingCookingCape(player(50, 0, ItemIds.COOKING_CAPE)), true);
+  assert.equal(Cooking._test.wearsCookingCape(player(50, 0, ItemIds.COOKING_CAPE)), true);
   assert.equal(Cooking._test.isSuccess(player(50, 0, ItemIds.COOKING_CAPE), shark), true, "50 Cooking would burn a shark");
   assert.equal(Cooking._test.isSuccess(player(50, 0, ItemIds.COOKING_CAPE_T_), shark), true);
-  assert.equal(Cooking._test.wearingCookingCape(player(50, 0, 0)), false);
+  assert.equal(Cooking._test.wearsCookingCape(player(50, 0, 0)), false);
 });

@@ -19,6 +19,8 @@ function buildTarget(hp) {
         decrementHealth: (hit) => {
             if (target.hp <= 0) hit.setDamage(0);
             hit.setDamage(Math.min(hit.getDamage(), target.hp));
+            // Mobile records the applied loss before reactive setHitpoints/death hooks.
+            hit.setHealthLost(hit.getDamage());
             target.hp -= hit.getDamage();
             return hit;
         },

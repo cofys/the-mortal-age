@@ -15,6 +15,8 @@ import {
     writeSquare,
 } from "./MapSquareCache";
 import { loadFromPayload } from "../../common/gamemode/GamemodeContentStore";
+import { getDefinitionArchiveKey, replaceDefinitionArchives } from "../../custom/archives/ArchivedDefinitionStore";
+import type { ArchivedDefinitionBundle } from "../../rs/config/ArchivedDefinitionRegistry";
 import { TransferDescriptor } from "threads";
 import { registerSerializer } from "threads";
 import { Transfer, expose } from "threads/worker";
@@ -355,10 +357,21 @@ const worker = {
             if (statePromise !== workerStatePromise) return;
             loadFromPayload(payload);
             state?.objTypeLoader.clearCache();
+            if (state && payload.datasets.some(dataset => dataset.key === "definitionArchives")) {
+                state.locTypeLoader.clearCache();
+                state.npcTypeLoader.clearCache();
+                state.locModelLoader.clearCache();
+                state.npcModelLoader.clearCache();
+                state.worldMapTiles?.invalidate();
+                state.npcPoses?.invalidate();
+            }
         });
     },
-    initCache(cache: LoadedCache, npcInstances: NpcInstance[]) {
+    initCache(cache: LoadedCache, npcInstances: NpcInstance[], archives: readonly ArchivedDefinitionBundle[] = []) {
         for (const build of mapBuilds.values()) build.abort();
+        // Synchronous snapshot replacement survives an older queued update being
+        // discarded by the state-generation guard during a world/cache switch.
+        replaceDefinitionArchives(archives);
         registerInstanceModelOverrides(npcInstances);
         void workerStatePromise?.then(state => state.worldMapTiles?.dispose());
         void workerStatePromise?.then(state => state.npcPoses?.dispose());
@@ -404,22 +417,14 @@ const worker = {
                 const npcsHash = sdInput.loadNpcs
                     ? fnv(JSON.stringify([...new Set(squareNpcs.map((npc) => npc.typeId))].sort((a, b) => a - b)))
                     : "";
-                key = cacheKey(workerState.cache.info, sdInput, npcsHash);
+                key = cacheKey(workerState.cache.info, sdInput, npcsHash, getDefinitionArchiveKey());
                 const hit = await readSquare(key);
                 build.check();
                 const varsMatch = !!hit && varReadsMatch(workerState.varManager, hit.reads);
                 if (sdInput.mapProfileEnabled) console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
                 if (hit && varsMatch) {
-                    const level = sdInput.minimapLevel;
-                    if (level !== undefined && !hit.data.minimapBlobs?.[level]) {
-                        try {
-                            const repaired = await loadMinimapFloor(workerState, sdInput, level, build);
-                            if (repaired?.minimapBlobs[level]) {
-                                hit.data.minimapBlobs ??= new Array(Scene.MAX_LEVELS);
-                                hit.data.minimapBlobs[level] = repaired.minimapBlobs[level];
-                            }
-                        } finally { clearCache(workerState); }
-                    }
+                    // Geometry is shared across planes. Return it immediately; missing
+                    // minimap floors use the renderer's deduplicated on-demand requests.
                     build.check();
                     if (sdInput.loadNpcs) refreshNpcs(hit.data, squareNpcs, sdInput.mapX, sdInput.mapY);
                     dropLoadedTextures(hit.data, sdInput.loadedTextureIds);

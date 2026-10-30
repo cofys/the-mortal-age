@@ -1,0 +1,136 @@
+// Build first: node --test tests/event-scheduler.test.cjs
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {test, before, beforeEach, afterEach} = require('node:test');
+const {Server} = require('../dist/Server');
+Server.installProductionPathResolver();
+const {CachePipeline} = require('../dist/game/cache/CachePipeline');
+const {PluginManager: PM} = require('../dist/plugins/PluginManager');
+const {CommandPacketListener} = require('../dist/net/packet/impl/CommandPacketListener');
+const {Player} = require('../dist/game/entity/impl/player/Player');
+const pluginPath = path.resolve(__dirname,'../plugins/world/EventScheduler.plugin.js');
+const dataPath = path.resolve(__dirname,'../plugins/world/data/events.json');
+const configured = fs.existsSync(dataPath) ? require(dataPath) : [];
+const shipped = JSON.stringify(configured);
+let core, api, events = [], consumer = null, enableConsumer = false;
+const START = Date.parse('2026-12-24T00:00:00.000Z');
+const END = Date.parse('2027-01-04T00:00:00.000Z');
+const definition = (key='fixture') => ({key,enabled:true,windows:[{start:new Date(START).toISOString(),end:new Date(END).toISOString()}]});
+function status(key='fixture') {const q={key,active:null};PM.emitCustomEvent('events:status',q);return q.active;}
+function command(text,rights) {
+  const p=new Player(null);p.setUsername('holidayqa');
+  const sender=new Proxy({}, {get:()=>()=>sender});p.getPacketSender=()=>sender;p.setHitpoints(10);
+  p.setRights(rights ?? core.PlayerRights.OWNER);
+  const messages=[];p.sendMessage=m=>messages.push(m);
+  CommandPacketListener.execute(p,text);return messages;
+}
+function transition(e) {
+  events.push({key:e.key,active:e.active,query:status(e.key)});
+  if(enableConsumer && e.key==='fixture') {
+    if(e.active) consumer=api.spawnNpc({id:core.NpcIdentifiers.MAN,x:3222,y:3218,z:0,wanderRadius:0});
+    else if(consumer) {api.removeNpc(consumer);consumer=null;}
+  }
+}
+function start() {assert.ok(fs.existsSync(pluginPath),'world scheduler plugin must exist');PM.emitServerStartup({timestamp:Date.now()});}
+function stop() {PM.emitServerShutdown({timestamp:Date.now()});}
+function tasks() {return [...core.TaskManager.pendingTasks.toArray(),...core.TaskManager.activeTasks].filter(t=>t.key==='event-scheduler:clock'&&t.isRunning());}
+before(async()=>{
+  await CachePipeline.initialize(path.resolve(__dirname,'..'));
+  core=PM.getCoreApi();api=PM.createApi('EventScheduler');
+  if(fs.existsSync(pluginPath)) require(pluginPath).register(api);
+  PM.createApi('HolidayConsumerTest').onCustomEvent('events:active',transition);
+});
+beforeEach(()=>{stop();configured.splice(0,configured.length,definition());events=[];enableConsumer=false;});
+afterEach(()=>{stop();configured.splice(0,configured.length,...JSON.parse(shipped));});
+test('loads through the supported register lifecycle without initialize',()=>{
+  start();assert.equal(typeof status(),'boolean');assert.equal(tasks().length,1);
+});
+test('UTC windows include their start and exclude their end across New Year',(t)=>{
+  let now=START-1;t.mock.method(Date,'now',()=>now);start();assert.equal(status(),false);
+  now=START;command('forceevent fixture auto');assert.equal(status(),true);
+  assert.deepEqual(events,[{key:'fixture',active:true,query:true}]);
+  now=END;command('forceevent fixture auto');assert.equal(status(),false);
+  assert.deepEqual(events.at(-1),{key:'fixture',active:false,query:false});
+});
+test('native command arguments force on/off/auto and reject unknown keys or modes',(t)=>{
+  t.mock.method(Date,'now',()=>START-1);start();
+  command('::forceevent fixture');assert.equal(status(),true);
+  command('forceevent fixture off');assert.equal(status(),false);
+  command('forceevent fixture on');assert.equal(status(),true);
+  assert.match(command('forceevent imaginary on').join(' '),/unknown/i);
+  assert.match(command('forceevent fixture nonsense').join(' '),/usage/i);assert.equal(status(),true);
+  command('forceevent fixture auto');assert.equal(status(),false);
+});
+test('ordinary players and Administrators cannot change the event',(t)=>{
+  t.mock.method(Date,'now',()=>START-1);start();
+  for(const rank of [core.PlayerRights.NONE,core.PlayerRights.MODERATOR,core.PlayerRights.ADMINISTRATOR]) {
+    assert.match(command('forceevent fixture on',rank).join(' '),/permission/i);assert.equal(status(),false);
+  }
+  command('forceevent fixture on',core.PlayerRights.OWNER);assert.equal(status(),true);
+});
+test('disabled events require an explicit test override and reset restores all dates',(t)=>{
+  t.mock.method(Date,'now',()=>START+1);configured[0].enabled=false;
+  configured.push(definition('second'));start();assert.equal(status(),false);assert.equal(status('second'),true);
+  command('forceevent fixture on');command('forceevent second off');
+  assert.equal(status(),true);assert.equal(status('second'),false);
+  command('forceevent reset');assert.equal(status(),false);assert.equal(status('second'),true);
+});
+test('duplicate startup/repeated commands emit one transition and own one task',(t)=>{
+  t.mock.method(Date,'now',()=>START+1);start();start();command('forceevent fixture on');command('forceevent fixture on');
+  assert.equal(tasks().length,1);assert.equal(events.length,1);
+});
+test('the real task loop closes an expired event without another command',(t)=>{
+  let now=START;t.mock.method(Date,'now',()=>now);start();now=END;
+  const delay=tasks()[0].getDelay();assert.ok(delay>0);
+  for(let i=0;i<delay;i++)core.TaskManager.process();
+  assert.equal(status(),false);assert.equal(events.length,2);
+});
+test('shutdown cancels its real task, not unrelated tasks; restart drops overrides',(t)=>{
+  t.mock.method(Date,'now',()=>START-1);start();command('forceevent fixture on');
+  const own=tasks()[0];const other=new(class extends core.Task {execute(){}})(1,'other-plugin');
+  core.TaskManager.submit(other);stop();stop();assert.equal(own.isRunning(),false);assert.equal(other.isRunning(),true);
+  assert.equal(status(),false);assert.equal(events.filter(e=>!e.active).length,1);
+  command('forceevent fixture on');assert.equal(status(),false);
+  start();assert.equal(status(),false);assert.equal(tasks().length,1);other.stop();
+});
+test('real consumer NPC is removed on close and shutdown without removing another NPC',(t)=>{
+  t.mock.method(Date,'now',()=>START-1);enableConsumer=true;start();
+  const unrelated=api.spawnNpc({id:core.NpcIdentifiers.MAN,x:3223,y:3218,z:0});
+  command('forceevent fixture on');const first=consumer;assert.ok(first?.isRegistered());
+  command('forceevent fixture off');assert.equal(first.isRegistered(),false);assert.equal(unrelated.isRegistered(),true);
+  command('forceevent fixture on');const second=consumer;assert.notEqual(first,second);
+  stop();assert.equal(second.isRegistered(),false);assert.equal(unrelated.isRegistered(),true);api.removeNpc(unrelated);
+});
+test('unknown queries are inactive and query results cannot mutate scheduler state',(t)=>{
+  t.mock.method(Date,'now',()=>START+1);start();assert.equal(status('missing'),false);
+  const q={key:'fixture',active:false};PM.emitCustomEvent('events:status',q);q.active=false;assert.equal(status(),true);
+});
+test('rejects duplicate keys, invalid dates and reversed/empty windows before activation',(t)=>{
+  t.mock.method(Date,'now',()=>START+1);
+  for(const input of [[definition(),definition()],[{...definition(),windows:[{start:'nonsense',end:new Date(END).toISOString()}]}],[{...definition(),windows:[{start:new Date(END).toISOString(),end:new Date(START).toISOString()}]}],[{...definition(),windows:[]}]] ) {
+    configured.splice(0,configured.length,...input);start();assert.equal(status(),false);assert.equal(tasks().length,0);stop();
+  }
+});
+test('reentrant Owner close and shutdown reach every subscriber in start/stop order',(t)=>{
+  t.mock.method(Date,'now',()=>START-1);
+  let action=null,watching=true,lateNpc=null;
+  const observed=[];
+  api.onCustomEvent('events:active',e=>{
+    if(!watching||e.key!=='fixture'||!e.active||!action)return;
+    const close=action;action=null;
+    if(close==='shutdown')stop();else command('forceevent fixture off');
+  });
+  api.onCustomEvent('events:active',e=>{
+    if(!watching||e.key!=='fixture')return;
+    observed.push({active:e.active,query:status()});
+    if(e.active)lateNpc=api.spawnNpc({id:core.NpcIdentifiers.MAN,x:3222,y:3218,z:0});
+    else if(lateNpc){api.removeNpc(lateNpc);lateNpc=null;}
+  });
+  t.after(()=>{watching=false;if(lateNpc)api.removeNpc(lateNpc);});
+  for(const mode of ['command','shutdown']) {
+    stop();observed.length=0;start();action=mode;command('forceevent fixture on');
+    assert.deepEqual(observed,[{active:true,query:true},{active:false,query:false}]);
+    assert.equal(status(),false);assert.equal(lateNpc,null);
+  }
+});

@@ -29,6 +29,9 @@ const COLLECT_RANGE = 12;
 const LEVEL = 22;
 const IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
 const QUEUED_STEPS = 8;
+const DUCK_TOOL_SLOT = 2;
+const STOPPED_LIFETIME_MS = 120000; // OSRS Wiki Current duck: two minutes after stopping.
+const RESET_ATTRIBUTE = "charting:duck-reset-at";
 
 const RELEASED = "<col=3366ff>You release your current duck and he begins tracking the currents...</col>";
 const STOPPED = "<col=3366ff>Your current duck comes to a stop.</col>";
@@ -112,7 +115,7 @@ function trackCurrent(event) {
     player.sendMessage(NOTHING);
     return true;
   }
-  if (ducks.has(player)) return true;
+  if (ducks.has(player) || resetAt(player) > Date.now()) return true;
   common.afterHelm(player, () => {
     player.performAnimation(new (common.core().Animation)(SEQ_PLACE));
     later(1, () => release(player, spot));
@@ -132,10 +135,13 @@ function release(player, spot) {
   player.getInventory().delete(ITEM_DUCK, 1);
   const sender = player.getPacketSender();
   player.sendMessage(RELEASED);
-  sender.sendConfig(VARP_DUCK_RESET, common.core().World.processCycle | 0);
   sender.sendVarbit(VARBIT_HINT_ARROW, HINT_ARROW_DUCK);
   sender.sendEntityHint(npc);
   const duck = { player, spot, npc, steps: routeSteps(spot.route), stopped: false };
+  // Remember the remaining journey as well as its stopped lifetime across a relog/restart.
+  player.setAttribute(RESET_ATTRIBUTE, Date.now() + (duck.steps.length + 1) * 600 + STOPPED_LIFETIME_MS);
+  if (!player.getSailing().tools.includes(DUCK_TOOL_SLOT)) player.getSailing().tools.push(DUCK_TOOL_SLOT);
+  sendReset(player);
   ducks.set(player, duck);
   common.api().emitCustomEvent("charting:duck-released", { player, spot: spot.key });
   later(1, () => {
@@ -176,6 +182,18 @@ function stop(duck) {
   duck.npc.setNpcTransformationId(NPC_STOPPED);
   duck.player.sendMessage(STOPPED);
   quack(duck, "Quack! Quack! Quack!", 2);
+  duck.player.setAttribute(RESET_ATTRIBUTE, Date.now() + STOPPED_LIFETIME_MS);
+  sendReset(duck.player);
+  const { Task, TaskManager } = common.core();
+  TaskManager.submit(new (class extends Task {
+    constructor() { super(1, duck, false); }
+    execute() {
+      if (ducks.get(duck.player) !== duck) return this.stop();
+      if (Date.now() < resetAt(duck.player)) return;
+      finish(duck.player, duck);
+      this.stop();
+    }
+  })());
 }
 
 /** The stopped duck is collected from the deck, across the water. */
@@ -200,10 +218,17 @@ function collect(event) {
 
 function climbAboard(player, duck) {
   if (ducks.get(player) !== duck) return;
+  if (player.getInventory().getFreeSlots() < 1) {
+    player.sendMessage("You don't have enough inventory space.");
+    return;
+  }
   finish(player, duck);
   const { Item, DialogueChainBuilder, ItemStatementDialogue } = common.core();
   common.complete(player, duck.spot, { lines: [] });
   player.getInventory().add(new Item(ITEM_DUCK, 1), true);
+  const tools = player.getSailing().tools;
+  const toolIndex = tools.indexOf(DUCK_TOOL_SLOT);
+  if (toolIndex >= 0) tools.splice(toolIndex, 1);
   // A quest charting its current (Current Affairs) answers with its own lines instead.
   const event = { player, spot: duck.spot.key, handled: false };
   common.api().emitCustomEvent("charting:duck-collected", event);
@@ -214,27 +239,63 @@ function climbAboard(player, duck) {
 function finish(player, duck) {
   ducks.delete(player);
   common.api().removeNpc(duck.npc);
+  common.core().TaskManager.cancelTasks(duck);
+  player.setAttribute(RESET_ATTRIBUTE, 0);
   const sender = player.getPacketSender();
   sender.sendConfig(VARP_DUCK_RESET, 0);
   sender.sendVarbit(VARBIT_HINT_ARROW, 0);
   sender.clearHintArrow();
 }
 
-/** A duck still out when its player leaves goes back to them (ours: live's timer isn't captured). */
+function resetAt(player) {
+  const value = player.getAttribute(RESET_ATTRIBUTE);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function sendReset(player) {
+  // RSProx 235/938 publishes epoch minutes (29408822), never a server process cycle.
+  player.getPacketSender().sendConfig(VARP_DUCK_RESET, resetAt(player) ? Math.ceil(resetAt(player) / 60000) : 0);
+}
+
+function canTakeTool(event) {
+  if (event.slot !== DUCK_TOOL_SLOT) return;
+  const remaining = resetAt(event.player) - Date.now();
+  if (remaining > 0) {
+    event.allowed = false;
+    event.player.sendMessage(`You have a current duck out at sea. Either find it or wait ${Math.ceil(remaining / 1000)} seconds to collect another.`);
+    return;
+  }
+  const duck = ducks.get(event.player);
+  if (duck) finish(event.player, duck);
+  else {
+    event.player.setAttribute(RESET_ATTRIBUTE, 0);
+    sendReset(event.player);
+  }
+}
+
+function onLogin({ player }) {
+  if (resetAt(player) <= Date.now()) player.setAttribute(RESET_ATTRIBUTE, 0);
+  sendReset(player);
+}
+
+/** Session NPCs disappear on logout; the tools compartment and deadline survive in the save. */
 function onLogout({ player }) {
   const duck = ducks.get(player);
   if (!duck) return;
-  finish(player, duck);
-  const { Item } = common.core();
-  if (!player.getInventory().contains(ITEM_DUCK)) player.getInventory().add(new Item(ITEM_DUCK, 1), true);
+  ducks.delete(player);
+  common.core().TaskManager.cancelTasks(duck);
+  common.api().removeNpc(duck.npc);
 }
 
 function attach(api) {
   common.init(api);
+  api.persistAttribute(RESET_ATTRIBUTE, 0);
   api.onItemAction("Current duck", { "Track-current": trackCurrent });
   api.onNpcRoute(widenCollectRange);
   api.onNpcInteraction("Current duck", { Collect: collect });
   api.onPlayerLogout(onLogout);
+  api.onPlayerLogin(onLogin);
+  api.onCustomEvent("sailing:can-take-tool", canTakeTool);
 }
 
 module.exports = attach;
@@ -243,3 +304,4 @@ module.exports.trackCurrent = trackCurrent;
 module.exports.collect = collect;
 module.exports.routeSteps = routeSteps;
 module.exports.NOTHING = NOTHING;
+module.exports.RESET_ATTRIBUTE = RESET_ATTRIBUTE;

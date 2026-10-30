@@ -1,3 +1,4 @@
+import { CombatPosition } from "../../CombatPosition";
 import { CombatMethod } from "../CombatMethod";
 import { CombatType } from "../../CombatType";
 import { CombatFactory } from "../../CombatFactory";
@@ -20,7 +21,7 @@ export class RangedCombatMethod extends CombatMethod {
     }
 
     hits(character: Mobile, target: Mobile): PendingHit[] {
-        const distance = character.getLocation().getDistance(target.getLocation());
+        const distance = CombatPosition.distance(character, target);
         const delays = character.isPlayer() ? WeaponProfiles.hitDelays(character.getAsPlayer(), distance) : [1];
         return delays.map((delay) => new PendingHit(character, target, this, delay));
     }
@@ -78,7 +79,7 @@ export class RangedCombatMethod extends CombatMethod {
         }
 
         const projectiles = profile?.projectiles ?? [{ delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 43, endHeight: 31 }];
-        const distance = character.getLocation().getDistance(target.getLocation());
+        const distance = CombatPosition.distance(character, target);
         const processingOrder = target.isNpc() ? 1 : 0;
         const hitDelays = WeaponProfiles.hitDelays(character.getAsPlayer(), distance)
             .map((ticks) => ticks + processingOrder);

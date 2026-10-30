@@ -1599,7 +1599,9 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         if (mapProfileEnabled) console.time(`build scene ${mapX},${mapY}`);
         let scene: Scene;
-        const locLoadType = shouldLoadPartial || minimapOnly ? LocLoadType.NO_MODELS : LocLoadType.MODELS;
+        // Non-door loc reloads still merge adjoining scenery normals. Loading each wall
+        // as an independent entity made the castle look tiled after a rope was added.
+        const locLoadType = shouldLoadDoorOnly || minimapOnly ? LocLoadType.NO_MODELS : LocLoadType.MODELS;
         if (instanceInput) {
             scene = await build.run(state.sceneBuilder.buildInstanceSceneSteps(
                 instanceInput.templateChunks,
@@ -1696,7 +1698,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         );
         const sceneModels: SceneModel[] = [];
         const doorSceneModels: SceneModel[] = [];
-        if (!shouldLoadPartial) {
+        if (!shouldLoadDoorOnly) {
             for (const locModel of sceneLocs.locs) {
                 const locType = locTypeLoader.load(locModel.interactId);
                 if (isDoorLocType(locType)) {

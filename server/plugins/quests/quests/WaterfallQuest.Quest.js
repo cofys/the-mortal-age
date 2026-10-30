@@ -90,6 +90,7 @@ module.exports = function registerWaterfallQuest(api) {
   const PILLAR_ID = 2005; // stonepillar_small_waterfall_quest
   const STATUE_ID = 2006; // statue_queen_waterfall_quest
   const WATERFALL_DOOR_ID = 2010; // waterfall_ledge_door
+  const DUNGEON_EXIT_DOOR_ID = 2000; // inside of the ledge door; Open returns to the ledge
   const CHALICE_ID = 2014; // baxtorian_chalice_waterfall_quest
   const DEAD_TREE_ID = 2020; // overhanging_tree1_waterfall_quest
   const BARREL_ID = 2022; // barrel_waterfall_quest
@@ -120,6 +121,12 @@ module.exports = function registerWaterfallQuest(api) {
   const DOWNSTREAM_SHORE = new Location(2527, 3413, 0);
   const TOMB_LANDING = new Location(2555, 9844, 0);
   const WATERFALL_DUNGEON_LANDING = new Location(2575, 9861, 0);
+  // The raised chalice room is a separate copy of the pillar room. Its doors
+  // do not connect to the lower passage, so Open returns to the entrance side
+  // of the lower door at 2566,9901. The inside ledge door likewise returns outside.
+  const CHALICE_EXIT_DOORS = new Set(["2606,9892", "2604,9900"]);
+  const CHALICE_ROOM_EXIT = new Location(2566, 9900, 0);
+  const DUNGEON_EXIT_TILE = { x: 2575, y: 9861 };
 
   // Six pillars, each needing one air, water and earth rune.
   const RUNE_TYPES = [AIR_RUNE_ITEM_ID, WATER_RUNE_ITEM_ID, EARTH_RUNE_ITEM_ID];
@@ -434,23 +441,44 @@ module.exports = function registerWaterfallQuest(api) {
    * with no continue, then the teleport, fade in and the same/last messagebox
    * with a continue. No camera moves are invented.
    */
+  function finishTravel(player, token) {
+    if (travelLocks.get(player) !== token) return;
+    travelLocks.delete(player);
+    player.getMovementQueue().setBlockMovement(false);
+    Scenes.closeFade(player);
+    token.onArrive?.();
+  }
+
+  /** While the arrival message is up, a dismissed chatbox still ends the beat. */
+  function watchTravel(player, token) {
+    Scenes.later(player, 1, () => {
+      if (travelLocks.get(player) !== token) return;
+      if (!player.getDialogueManager().isActive()) finishTravel(player, token);
+      else watchTravel(player, token);
+    });
+  }
+
   function travel(player, first, second, destination, onArrive) {
+    const token = { onArrive };
+    travelLocks.set(player, token);
     player.getMovementQueue().reset().setBlockMovement(true);
     Scenes.fade(player, true);
     StatementDialogue.send(player, first, false);
     Scenes.later(player, 2, () => {
+      if (travelLocks.get(player) !== token) return;
       player.moveTo(destination);
       Scenes.fade(player, false);
-      showStatement(player, second, () => {
-        player.getMovementQueue().setBlockMovement(false);
-        Scenes.closeFade(player);
-        onArrive?.();
-      });
+      showStatement(player, second, () => finishTravel(player, token));
+      // A mock that runs the continue action immediately has already finished.
+      if (travelLocks.get(player) === token) watchTravel(player, token);
     });
   }
 
   const crossingRopes = new WeakMap();
   const crossingMoves = new WeakMap();
+  // One in-progress travel beat per player. Closing the message any other way than
+  // Continue (escape, a walk click) must still release the movement lock.
+  const travelLocks = new WeakMap();
 
   /** Restore any existing ignore-clipping state; never leave free water walking. */
   function finishCrossingMove(player) {
@@ -629,6 +657,7 @@ module.exports = function registerWaterfallQuest(api) {
   /** A logout during a scripted travel must not leave the player movement-locked. */
   function handleLogout({ player }) {
     Scenes.cancel(player);
+    travelLocks.delete(player);
     clearCrossingRope(player);
     player.getMovementQueue().setBlockMovement(false);
     Scenes.closeFade(player);
@@ -880,13 +909,42 @@ module.exports = function registerWaterfallQuest(api) {
     ]);
   }
 
+  function doorXY(location) {
+    return {
+      x: location?.getX?.() ?? location?.x,
+      y: location?.getY?.() ?? location?.y,
+    };
+  }
+
+  function isChaliceExitDoor(location) {
+    const { x, y } = doorXY(location);
+    return CHALICE_EXIT_DOORS.has(`${x},${y}`);
+  }
+
+  function isDungeonExitDoor(objectId, location) {
+    const { x, y } = doorXY(location);
+    return objectId === DUNGEON_EXIT_DOOR_ID && x === DUNGEON_EXIT_TILE.x && y === DUNGEON_EXIT_TILE.y;
+  }
+
   /**
    * Doors.plugin.js handles "Door" before this quest's generic interaction hook.
    * Its `door:toggle` event is the only place that can still gate the key and
    * advance stage 6 once the shared open-loc pairing makes the door swing.
+   * The raised-room copies and the inside ledge door are not swings: Open
+   * sends the player back to the connected room.
    */
   function handleBaxtorianDoorToggle(request) {
+    if (isDungeonExitDoor(request.objectId, request.location)) {
+      request.handled = true;
+      request.player.moveTo(WATERFALL_LEDGE);
+      return;
+    }
     if (request.objectId !== BAXTORIAN_DOOR_ID) return;
+    if (isChaliceExitDoor(request.location)) {
+      request.handled = true;
+      request.player.moveTo(CHALICE_ROOM_EXIT);
+      return;
+    }
     const { player } = request;
     if (stageOf(player) < STAGE_ENTERED_DUNGEON) return;
     const unlocked = flag(player, BAXTORIAN_DOOR_ATTRIBUTE);

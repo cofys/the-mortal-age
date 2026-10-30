@@ -40,8 +40,8 @@ let core = null;
 
 // --- item ids (cache) ---------------------------------------------------------
 // Custom tokens (data/definitions/custom-items.json):
-const SICKLE_TOKEN = 50001; // Worn silver sickle
-const BRAND_TOKEN = 50002; // Tithe brand
+const SICKLE_TOKEN = 50007; // Worn silver sickle
+const BRAND_TOKEN = 50008; // Tithe brand
 
 // --- positions ------------------------------------------------------------------
 

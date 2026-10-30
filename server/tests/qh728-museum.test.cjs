@@ -214,6 +214,8 @@ function makeApi(quests = new Set()) {
       PluginManager.npcDialogueConditionHooks.push({ pluginName: "MuseumTest", handler });
     },
     onAnyNpcInteraction(actions) { anyNpc = actions; },
+    onInterfaceActionButton() {},
+    onNpcDialogueVariant() {},
     onPlayerLogin(handler) { login.push(handler); },
     sendMultiChatboxPrompt(_player, _title, ...flat) {
       const options = [];

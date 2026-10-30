@@ -346,6 +346,11 @@ function dialogueCondition(event) {
   if (match) return level(event.player) >= Number(match[1]) && level(event.player) <= Number(match[2]);
 }
 
+/** canoes:stored-axe { player, stored }: whether the player has an axe stored with a canoe station assistant. */
+function answerStoredAxe(request) {
+  if (request?.player) request.stored = !!request.player.getAttribute(AXE_ATTRIBUTE)?.id;
+}
+
 function attach(pluginApi) {
   core = pluginApi.core;
   api = pluginApi;
@@ -357,9 +362,10 @@ function attach(pluginApi) {
   api.onNpcDialogueCondition(dialogueCondition);
   api.onInterfaceActionClick(select);
   api.onCustomEvent("interface:closed", menuClosed);
+  api.onCustomEvent("canoes:stored-axe", answerStoredAxe);
   api.onPlayerLogin(restore);
   api.onPlayerLogout(logout);
 }
 
 module.exports = attach;
-module.exports._test = { stations, TYPES, chance, canTravel, chop, shape, carve, float, paddle, select, logout, restore, state, axeFor, storeAxe };
+module.exports._test = { stations, TYPES, chance, canTravel, chop, shape, carve, float, paddle, select, logout, restore, state, axeFor, storeAxe, answerStoredAxe };

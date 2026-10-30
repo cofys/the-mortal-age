@@ -24,12 +24,14 @@ module.exports = function registerShoveSpecialAttack(api) {
     }
 
     start(character, target) {
+      const rules = { attacker: character, target, chain: false, animate: true, attackDelay: character.getBaseAttackSpeed() + 1 };
+      api.emitCustomEvent("combat:shove-rules", rules);
       // Also blocked during the 1-tick grace period after a stun wears
       // off (see CombatFactory.stun) - Shove can't land on the same
       // target more than once every 6 ticks. Checked here, before any
       // energy/animation/sound, so a blocked Shove doesn't waste the
       // special attack.
-      if (target.getTimers().has(TimerKey.STUN) || target.getTimers().has(TimerKey.STUN_IMMUNITY)) {
+      if (!rules.chain && (target.getTimers().has(TimerKey.STUN) || target.getTimers().has(TimerKey.STUN_IMMUNITY))) {
         cancelShove(character);
         return;
       }
@@ -48,12 +50,15 @@ module.exports = function registerShoveSpecialAttack(api) {
       }
 
       CombatSpecial.drain(character, DRAIN);
-      character.performAnimation(ANIMATION);
-      character.performGraphic(GRAPHIC);
+      if (rules.animate) {
+        character.performAnimation(ANIMATION);
+        character.performGraphic(GRAPHIC);
+      }
       Sounds.sendSound(character, Sound.DRAGON_SPEAR_SPECIAL);
       target.performAnimation(STUN_ANIMATION);
+      if (rules.chain) target.getTimers().cancel(TimerKey.STUN_IMMUNITY);
       CombatFactory.stun(target, 3, true);
-      target.getTimers().registers(TimerKey.FREEZE_IMMUNITY, 10);
+      if (!rules.chain) target.getTimers().registers(TimerKey.FREEZE_IMMUNITY, 10);
 
       const direction = ShoveCombatMethod.getDirection(character, target);
       if (direction != null) {
@@ -82,7 +87,7 @@ module.exports = function registerShoveSpecialAttack(api) {
 
       // Shove's own attack speed is 1 tick slower than the weapon's normal
       // speed (5 ticks vs. the spear's normal 4), not the weapon's base speed.
-      character.getCombat().setAttackDelay(character.getBaseAttackSpeed() + 1);
+      character.getCombat().setAttackDelay(rules.attackDelay);
       character.setSpecialActivated(false);
       if (character.isPlayer()) {
         CombatSpecial.updateBar(character.getAsPlayer());

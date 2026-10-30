@@ -147,6 +147,7 @@ function player() {
   const packet = new Proxy({
     sendConfig(id, value) { configs.set(id, value); return packet; },
     sendVarbit(id, value) { varbits.set(id, value); return packet; },
+    getVarbit(id) { return varbits.get(id) ?? 0; },
     sendString(text, uid) { if ([6, 3, 2].some(child => [217, 231, 229, 193].some(group => uid === (group << 16 | child)))) p.text = text; log.push(['text', uid, text]); return packet; },
     sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
   }, { get: (t, key) => t[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
@@ -205,6 +206,7 @@ test('Children native stages: start, first meeting and 16→18→20→22→24 ha
   h.action(p, N.SERGEANT_TOBYN, '9QLQQG');
   assert.equal(h.quest.getStage(p), 24, 'completion is native stage 24');
   assert.equal(p.varbits.get(9645), 2);
+  assert.equal(p.varbits.get(9652), 1, 'completion sets vmq2_first_travel to 1');
   assert.equal(p.attrs.get('quest.points'), 1);
   const points = p.attrs.get('quest.points');
   h.action(p, N.SERGEANT_TOBYN, '9QLQQG');
@@ -395,6 +397,7 @@ test('Children migrates old completed 22 to 24 without paying rewards twice', ()
   assert.equal(h.quest.isComplete(p), true);
   assert.equal(p.attrs.get('quest.points'), 5, 'migration does not award quest points again');
   assert.equal(p.varbits.get(9645), 2);
+  assert.equal(p.varbits.get(9652), 1, 'a finished save still at 0 gains the completion first-travel bit');
 
   const fresh = player();
   h.quest.setStage(fresh, 22); // native transition writes the schema marker
@@ -402,6 +405,14 @@ test('Children migrates old completed 22 to 24 without paying rewards twice', ()
   h.hooks.onPlayerLogin[0]({ player: fresh });
   assert.equal(h.quest.getStage(fresh), 22, 'fresh native 22 stays Itzla-left, not complete');
   assert.equal(h.quest.isComplete(fresh), false);
+  assert.equal(fresh.varbits.get(9652) ?? 0, 0, 'an unfinished quest does not set the first-travel bit');
+
+  const travelled = player();
+  travelled.attrs.set('quest.children_of_the_sun.stage', 24);
+  travelled.attrs.set('children-of-the-sun:schema', 2);
+  travelled.varbits.set(9652, 3);
+  h.hooks.onPlayerLogin[0]({ player: travelled });
+  assert.equal(travelled.varbits.get(9652), 3, 'login does not rewind a first trip already underway');
 });
 
 test('Children cell scene places captured actors, walks Itzla and recovers on relog', () => {

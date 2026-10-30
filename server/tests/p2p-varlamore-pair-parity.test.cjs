@@ -294,7 +294,9 @@ test('Ruff desktop recovery waits for the real Welcome Play root swap before mou
   require('../plugins/interface/WelcomeScreen.plugin').register(h.api);
   p.attrs.set('a-ruff-situation:stage-version',1); h.quest.setStage(p,85);
   h.hooks.onPlayerLogin.forEach(fn=>fn({player:p,isNewAccount:false}));
-  h.emit('player:bootstrap-complete',{player:p}); await Promise.resolve(); h.tick(12);
+  p.getSession().sendClientPacket(Buffer.alloc(0));
+  h.emit('player:bootstrap-complete',{player:p});
+  await Promise.resolve(); h.tick(12);
   assert.ok(p.log.some(row=>row[0]==='sendRootInterface'&&row[1]===378));
   assert.equal(p.getArea(),null); assert.equal(p.manager.getCurrent(),undefined);
   assert.equal(p.log.some(row=>row[0]==='sendCameraMoveTo'),false);

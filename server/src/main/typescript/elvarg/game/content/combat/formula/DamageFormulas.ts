@@ -311,6 +311,20 @@ export class DamageFormulas {
         return effectiveLevel;
     }
 
+    /**
+     * A ranged max hit with a strength bonus given in place of the worn one: a boat cannon adds
+     * its own and its cannonball's to the gear it counts (Wiki: Boat combat). Prayers, the fight
+     * style and set effects apply as usual; specials don't.
+     */
+    public static rangedMaxHitWithStrength(player: Player, strengthBonus: number): number {
+        const maxHit = DamageFormulas.scaleRatio(
+            DamageFormulas.effectiveRangedStrength(player) * (strengthBonus + 64) + 320,
+            1,
+            640
+        );
+        return Math.floor(applyRangedHitModifiers(player, maxHit));
+    }
+
     private static maximumRangeHitDpsCalc(player: Player, includeSpecial?: boolean) {
         const traits = CombatSpecial.activeTraitsFor(player);
         let strengthBonus = player.getBonusManager().getOtherBonus()[BonusManager.RANGED_STRENGTH];

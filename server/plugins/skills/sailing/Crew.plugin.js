@@ -1,6 +1,6 @@
 // Sailing crewmates (docs/sailing.md, Crewmates): recruiting them through their transcripts,
 // the Crew Registrar's crew management, the crew aboard the player's boat, their jobs at the
-// helm and the salvaging hooks, banking cargo and carrying courier crates. The units are in ./crew/.
+// helm, the salvaging hooks, cannons and repairs, banking cargo and carrying courier crates. The units are in ./crew/.
 const common = require("./crew/Common.Crew");
 
 module.exports = {
@@ -14,6 +14,7 @@ module.exports = {
     require("./crew/Assign.Crew")(api);
     require("./crew/Helm.Crew")(api);
     require("./crew/Salvage.Crew")(api);
+    require("./crew/Cannon.Crew")(api);
     require("./crew/BankCargo.Crew")(api);
     require("./crew/Courier.Crew")(api);
     require("./crew/Dev.Crew")(api);

@@ -1,6 +1,6 @@
 export type SdMapLoaderInput = {
     mapProfileEnabled?: boolean;
-    /** Reuse/store this build in the browser's IndexedDB map square cache (low-end devices). */
+    /** Reuse/store this build in the browser's IndexedDB map square cache. */
     persistentCache?: boolean;
     /** Generate only this minimap floor with the foreground geometry; others are loaded on demand. */
     minimapLevel?: number;

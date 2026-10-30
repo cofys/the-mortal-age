@@ -120,6 +120,10 @@ export class ItemDefinition {
     /** Whether the bonuses are the cache's own; item-gameplay.json then doesn't replace them. */
     private cacheBonuses: boolean = false;
 
+    public static invalidateCache(id: number): void {
+        this.definitions.delete(id);
+    }
+
     public static forId(item: number) {
         if (!Number.isInteger(item) || item < 0 || item >= CacheDefinitions.getCounts().items) {
             return this.definitions.get(item) || this.DEFAULT;

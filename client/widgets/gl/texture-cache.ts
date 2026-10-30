@@ -4,6 +4,9 @@ import { SpriteLoader } from "../../rs/sprite/SpriteLoader";
 import { SpritePixels } from "../../rs/sprite/SpritePixels";
 import type { GLRenderer } from "./renderer";
 import { getSpriteOverride, hasSpriteOverride } from "./spriteOverrides";
+import { getDefinitionArchiveKey } from "../../custom/archives/ArchivedDefinitionStore";
+import { CustomItemRegistry } from "../../custom/items/CustomItemRegistry";
+import { CustomModelRegistry } from "../../custom/items/CustomModelRegistry";
 
 type Texture = { tex: WebGLTexture; w: number; h: number };
 
@@ -203,6 +206,7 @@ export class TextureCache {
     private glr: GLRenderer;
     /** Item icon texture keys, least recently drawn first. */
     private itemIconKeys = new Set<string>();
+    private itemContentKey = "";
     private spriteIndex: CacheIndex;
     private itemIconCanvas?: (
         itemId: number,
@@ -431,6 +435,12 @@ export class TextureCache {
         quantityMode: number = 2,
     ) {
         // key matches UserComparator7.getItemSprite var6 packing.
+        const contentKey = `${CustomItemRegistry.revision}:${CustomModelRegistry.revision}:${getDefinitionArchiveKey()}`;
+        if (contentKey !== this.itemContentKey) {
+            for (const key of this.itemIconKeys) this.glr.deleteTexture(key);
+            this.itemIconKeys.clear();
+            this.itemContentKey = contentKey;
+        }
         let mode = quantityMode | 0;
         const qty = quantity | 0;
         if (qty === -1) mode = 0;

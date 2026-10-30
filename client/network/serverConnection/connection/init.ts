@@ -17,6 +17,8 @@ import { send } from "./send";
 import { WebRtcGameSocket } from "./WebRtcGameSocket";
 import { CustomItemRegistry } from "../../../custom/items/CustomItemRegistry";
 import { CustomModelRegistry } from "../../../custom/items/CustomModelRegistry";
+import { replaceDefinitionArchives } from "../../../custom/archives/ArchivedDefinitionStore";
+import { clearWorldOverlays } from "../../../common/gamemode/GamemodeContentStore";
 
 export function initServerConnection(url: string = DEFAULT_URL): void {
     state.lastUrl = url;
@@ -46,6 +48,17 @@ export function initServerConnection(url: string = DEFAULT_URL): void {
     try {
         CustomItemRegistry.clear();
         CustomModelRegistry.clear();
+        replaceDefinitionArchives([]);
+        clearWorldOverlays();
+        const client = (globalThis as any).__osrsClient;
+        client?.objTypeLoader?.clearCache();
+        client?.objModelLoader?.clearCache();
+        client?.npcTypeLoader?.clearCache();
+        client?.locTypeLoader?.clearCache();
+        client?.renderer?.invalidateDefinitionCaches();
+        void client?.workerPool?.runAll((worker: any) => worker.setCustomContent({
+            gamemodeId: "connection-reset", datasets: [{ key: "definitionArchives", rows: [] }],
+        })).catch((error: unknown) => console.error("Archived worker reset failed", error));
         state.playerSyncContext = new PlayerSyncContext();
         state.playerUpdateDecoder = new PlayerUpdateDecoder();
         state.socket = state.webRtcConfig

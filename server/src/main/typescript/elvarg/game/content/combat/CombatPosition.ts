@@ -1,0 +1,40 @@
+import { BoatManager } from "../sailing/BoatManager";
+import type { Mobile } from "../../entity/impl/Mobile";
+import type { Location } from "../../model/Location";
+import type { PrivateArea } from "../../model/areas/impl/PrivateArea";
+
+/**
+ * Where two combatants are, for reach, range and line of sight. Normally their own tiles and
+ * private areas. When they fight across a boat's deck (one aboard, the other in the main world or
+ * on another boat), each is measured from the main-world tile under them and a deck counts as the
+ * main world, as sync already treats it: a player aboard shoots a sea creature at its real range.
+ * Whether such a fight is allowed at all is content's call (CombatFactory.canAttackByPolicy).
+ */
+export class CombatPosition {
+    /** Whether the two stand on different decks, or one on a deck and the other ashore. */
+    static acrossDeck(a: Mobile, b: Mobile): boolean {
+        const aBoat = CombatPosition.boatOf(a);
+        const bBoat = CombatPosition.boatOf(b);
+        return (aBoat !== undefined || bBoat !== undefined) && aBoat !== bBoat;
+    }
+
+    /** The boat a combatant is aboard; nothing for an actor with no area at all. */
+    private static boatOf(mobile: Mobile) {
+        return typeof (mobile as any)?.getArea === "function" ? BoatManager.getBoatAboard(mobile) : undefined;
+    }
+
+    /** A combatant's tile against the other. */
+    static location(mobile: Mobile, other: Mobile): Location {
+        return CombatPosition.acrossDeck(mobile, other) ? BoatManager.rootLocation(mobile) : mobile.getLocation();
+    }
+
+    /** A combatant's private area against the other: a deck counts as the main world across decks. */
+    static area(mobile: Mobile, other: Mobile): PrivateArea | null {
+        return CombatPosition.acrossDeck(mobile, other) ? BoatManager.syncArea(mobile) : mobile.getPrivateArea();
+    }
+
+    /** Chebyshev distance between their tiles, as `Location.getDistance` measures it. */
+    static distance(a: Mobile, b: Mobile): number {
+        return CombatPosition.location(a, b).getDistance(CombatPosition.location(b, a));
+    }
+}

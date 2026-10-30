@@ -68,6 +68,10 @@ export class NpcDefinition {
     private actions: string[] = [];
     private cacheHydrated: boolean = false;
     
+    public static invalidateCache(id: number): void {
+        this.definitions.delete(id);
+    }
+
     public static forId(id: number): NpcDefinition {
         if (!Number.isInteger(id) || id < 0 || id >= CacheDefinitions.getCounts().npcs) {
             return this.definitions.get(id) || this.DEFAULT;

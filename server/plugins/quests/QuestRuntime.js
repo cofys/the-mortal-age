@@ -34,6 +34,34 @@ const JOURNAL_FIRST_LINE_CHILD = 11;
 const VARP_QJ_LINES = 4398;
 const SCRIPT_QJ_RESET = 5240;
 const SCRIPT_QJ_SCROLL = 2523;
+// Journal text is navy, names and places dark red; the line widgets default to black.
+const JOURNAL_TEXT_COLOUR = "<col=000080>";
+/** latest_quest_journal: the quest table row of the journal or overview last opened. */
+const LATEST_QUEST_JOURNAL_VARP = 3679;
+
+// Quest overview (questjournal_overview), opened for quests not started yet. Its setup script
+// draws the start point, difficulty, length, requirements and recommendations from the quest's
+// cache row; the server sends only the start sentence.
+const OVERVIEW_GROUP = 782;
+const OVERVIEW_UNIVERSE = (OVERVIEW_GROUP << 16) | 1;
+const OVERVIEW_INNER = (OVERVIEW_GROUP << 16) | 2;
+const OVERVIEW_SCROLL = (OVERVIEW_GROUP << 16) | 3;
+const OVERVIEW_CONTAINER = (OVERVIEW_GROUP << 16) | 4;
+const OVERVIEW_TITLE = (OVERVIEW_GROUP << 16) | 5;
+const OVERVIEW_CONTENT_OUTER = (OVERVIEW_GROUP << 16) | 6;
+const OVERVIEW_CONTENT_INNER = (OVERVIEW_GROUP << 16) | 7;
+const OVERVIEW_SCROLLBAR = (OVERVIEW_GROUP << 16) | 8;
+const OVERVIEW_CLOSE = (OVERVIEW_GROUP << 16) | 9;
+/** The setup script's "Show on Map" line is the second child it creates in content_inner. */
+const OVERVIEW_SHOW_ON_MAP_SLOT = 1;
+const SCRIPT_QJ_OVERVIEW_SETUP = 6821;
+/** "I can start this quest by " is written by the setup script; the file holds the rest. */
+const START_TEXT = require("./data/quest-start-text.json");
+const START_SENTENCE = /^I can start this (?:mini)?quest by (.+)$/;
+
+// "Show on Map": the world map, marking the quest's start (script3331 on worldmap:map_noclick).
+const WORLD_MAP_NOCLICK = (595 << 16) | 3;
+const SCRIPT_WORLD_MAP_MARK = 3331;
 
 // Completion scroll.
 const COMPLETED_GROUP = 153;
@@ -59,7 +87,7 @@ const STATUS_IN_PROGRESS = 0;
 const STATUS_NOT_STARTED = 1;
 const STATUS_COMPLETE = 2;
 
-const { questListGroups } = require("./QuestList.QuestRuntime");
+const { questListGroups, questMetadata } = require("./QuestList.QuestRuntime");
 const quests = [];
 const sentQuestSlots = new WeakMap();
 const openBooks = new WeakMap();
@@ -202,8 +230,76 @@ function openJournalBySlot(player, slot) {
   if (quest) openJournal(player, quest);
 }
 
+/**
+ * A journal line as live OSRS sends it: navy text, with each highlight returning to navy rather
+ * than to the widget's black. Crossed-out lines and the red "QUEST COMPLETE!" keep their own.
+ */
+function journalText(line) {
+  const text = String(line ?? "");
+  if (!text || text.startsWith("<str>") || text.includes("<col=ff0000>")) return text;
+  return JOURNAL_TEXT_COLOUR + text.replace(/<\/col>/g, JOURNAL_TEXT_COLOUR);
+}
+
+/**
+ * How the overview says the quest starts, after "I can start this quest by": from the data file
+ * (Wiki journal transcripts and live captures), else from the quest's own not-started journal
+ * line, which may wrap over several lines. Null when neither has one.
+ */
+function startSentence(row, lines) {
+  const known = START_TEXT[row.displayname?.[0]];
+  if (known) return known;
+  const plain = (line) => String(line ?? "").replace(/<[^>]*>/g, "");
+  const first = lines.findIndex((line) => START_SENTENCE.test(String(line ?? "")));
+  if (first < 0) return null;
+  let last = first;
+  while (last < lines.length - 1 && !/[.!?]\s*$/.test(plain(lines[last])) && plain(lines[last + 1])) last++;
+  const sentence = lines.slice(first, last + 1).join(" ").replace(/\s+/g, " ").trim();
+  return START_SENTENCE.exec(sentence.replace(/<\/col>/g, JOURNAL_TEXT_COLOUR))[1];
+}
+
+/** Players' open quest overview: player -> the quest's cache row, for "Show on Map". */
+const openOverviews = new WeakMap();
+
+function openOverview(player, quest, row, start) {
+  const packet = player.getPacketSender();
+  const updater = player.getFrameUpdater?.();
+  const combatLevel = player.getSkillManager?.()?.getCombatLevel?.() ?? 3;
+  packet.sendConfig(LATEST_QUEST_JOURNAL_VARP, row.rowId);
+  packet.sendSubInterface(FLOATER_OVERLAY_UID, OVERVIEW_GROUP, 0);
+  updater?.clear?.(OVERVIEW_TITLE);
+  packet.sendString(`<col=7f0000>${quest.name}</col>`, OVERVIEW_TITLE);
+  packet.sendInterfaceFlagsRange(OVERVIEW_CONTENT_INNER, OVERVIEW_SHOW_ON_MAP_SLOT, OVERVIEW_SHOW_ON_MAP_SLOT, 1 << 1);
+  packet.sendInterfaceScript(SCRIPT_QJ_OVERVIEW_SETUP, [
+    row.rowId, start, OVERVIEW_UNIVERSE, OVERVIEW_CONTENT_INNER, OVERVIEW_CONTENT_OUTER,
+    OVERVIEW_SCROLLBAR, OVERVIEW_INNER, OVERVIEW_CONTAINER, OVERVIEW_SCROLL, combatLevel,
+  ]);
+  openOverviews.set(player, row);
+}
+
+/** "Show on Map" in the overview: the world map, with the quest's start point marked. */
+function showStartOnMap({ player, slot }) {
+  const row = openOverviews.get(player);
+  const start = row?.startcoord?.[0];
+  if (slot !== OVERVIEW_SHOW_ON_MAP_SLOT || start === undefined) return;
+  const packet = player.getPacketSender();
+  if (!packet.isWorldMapOpen()) packet.toggleWorldMap();
+  packet.sendInterfaceScript(SCRIPT_WORLD_MAP_MARK, [WORLD_MAP_NOCLICK, start, row.mapelement?.[0] ?? -1]);
+}
+
+/**
+ * The quest list's "Read journal": the overview for a quest not started yet (as live OSRS opens
+ * it), otherwise the journal (119) with the quest's progress lines.
+ */
 function openJournal(player, quest) {
   const lines = journalLines(quest, player);
+  const row = questMetadata(quest, coreApi?.CacheDefinitions);
+  if (row && !quest.isStarted(player)) {
+    const start = startSentence(row, lines);
+    if (start) {
+      openOverview(player, quest, row, start);
+      return;
+    }
+  }
   const packet = player.getPacketSender();
   const updater = player.getFrameUpdater?.();
   // The client remounts the interface blank, but the sender's per-widget text
@@ -212,6 +308,7 @@ function openJournal(player, quest) {
     updater?.clear?.(uid);
     packet.sendString(String(text ?? ""), uid);
   };
+  if (row) packet.sendConfig(LATEST_QUEST_JOURNAL_VARP, row.rowId);
   packet.sendConfig(VARP_QJ_LINES, lines.length);
   packet.sendSubInterface(FLOATER_OVERLAY_UID, JOURNAL_GROUP, 0);
   packet.sendInterfaceFlagsRange((JOURNAL_GROUP << 16) | JOURNAL_CLOSE_CHILD, -1, -1, 1 << 1);
@@ -219,7 +316,7 @@ function openJournal(player, quest) {
   packet.sendInterfaceScript(SCRIPT_QJ_RESET, []);
   setText((JOURNAL_GROUP << 16) | JOURNAL_TITLE_CHILD, `<col=7f0000>${quest.name}</col>`);
   lines.forEach((line, index) => {
-    setText((JOURNAL_GROUP << 16) | (JOURNAL_FIRST_LINE_CHILD + index), line);
+    setText((JOURNAL_GROUP << 16) | (JOURNAL_FIRST_LINE_CHILD + index), journalText(line));
   });
   packet.sendInterfaceScript(SCRIPT_QJ_SCROLL, [0, lines.length]);
 }
@@ -367,6 +464,9 @@ function registerQuestWidgets(api) {
     [(JOURNAL_GROUP << 16) | JOURNAL_CLOSE_CHILD, (JOURNAL_GROUP << 16) | JOURNAL_SWITCH_CHILD],
     (event) => event.player.getPacketSender().closeSubInterface(FLOATER_OVERLAY_UID)
   );
+  // Overview close / "Show on Map".
+  api.onInterfaceActionButton([OVERVIEW_CLOSE], (event) => event.player.getPacketSender().closeSubInterface(FLOATER_OVERLAY_UID));
+  api.onInterfaceActionButton([OVERVIEW_CONTENT_INNER], showStartOnMap);
   // Completion scroll close.
   api.onInterfaceActionButton([(COMPLETED_GROUP << 16) | COMPLETED_CLOSE_CHILD], (event) =>
     event.player.getPacketSender().sendInterfaceRemoval()

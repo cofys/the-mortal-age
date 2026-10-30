@@ -11,7 +11,8 @@
     "start:stable": "yarn --cwd server ensure-cache && yarn concurrently --kill-others --names server,client \"yarn --cwd server dev:stable\" \"yarn --cwd client start\"",
     "start:prod": "yarn --cwd server ensure-cache && yarn concurrently --kill-others --names server,client \"yarn --cwd server start:prod\" \"yarn --cwd client serve\"",
     "server": "yarn --cwd server dev",
-    "client": "yarn --cwd client start"
+    "client": "yarn --cwd client start",
+    "docs:quests": "node scripts/quest-docs.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

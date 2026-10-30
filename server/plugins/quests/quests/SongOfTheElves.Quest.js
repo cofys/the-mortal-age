@@ -4059,6 +4059,7 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function buildJournal(player) {
     if (quest.isComplete(player)) return ["Prifddinas has been restored.", "The war against the Iorwerth Clan is over."];
+    if (!quest.isStarted(player)) return ["I can start this quest by talking to <col=800000>Edmond</col> at his home in <col=800000>East Ardougne</col>, north of the <col=800000>Flying Horse Inn</col>."];
     const chapter = currentChapter(player);
     const names = [
       "Free Elena from the Ardougne prison.", "Disguise yourself as a Knight of Ardougne.",

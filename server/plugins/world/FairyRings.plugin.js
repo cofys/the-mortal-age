@@ -8,7 +8,7 @@
  *   dial's anticlockwise order (A D C B, I L K J, P S R Q). The rotate buttons turn them.
  * - The travel log (interface 381, beside the dials) shows the codes the player has used, the
  *   Fairy Queen's Hideout and up to 10 favourites.
- * - Confirm, "Last-destination (XYZ)" and "Zanaris" play the fairy teleport. AJQ (Dorgesh-Kaan
+ * - Confirm, "Last-destination" and "Zanaris" play the fairy teleport. AJQ (Dorgesh-Kaan
  *   cave) first warns a player without a light source (interface 578).
  *
  * ponytail: Fairytale II - Cure a Queen is not implemented, so the quest check passes when the
@@ -210,7 +210,7 @@ function closeDials(player, teleporting = false) {
   going.delete(player);
 }
 
-/** The last destination, as OSRS sends it: the ring's "Last-destination (XYZ)" follows it. */
+/** The last destination, as OSRS sends it: the ring's "Last-destination" goes there. */
 function sendLastDestination(player, ring) {
   player.getPacketSender()
     .sendConfig(DESTINATION_VARP, ring.destinationId)
@@ -445,11 +445,9 @@ function attach(api) {
   }
 }
 
-/** Every ring's options: Zanaris, Configure and "Last-destination (XYZ)" for each code. */
+/** The rings' options, as the cache names them (op 3 is a plain "Last-destination", not a multiloc). */
 function ringOptions() {
-  const options = { Zanaris: zanaris, Configure: openDial };
-  for (const code of rings.keys()) options[`Last-destination (${code})`] = lastDestination;
-  return options;
+  return { Zanaris: zanaris, Configure: openDial, "Last-destination": lastDestination };
 }
 
 module.exports = {
@@ -466,6 +464,7 @@ module.exports = {
     interfaceAction,
     interfaceClosed,
     hasLightSource,
+    ringOptions,
     rings: () => rings,
     DIAL_VARBITS,
     DIAL_LETTERS,

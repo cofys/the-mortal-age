@@ -11,16 +11,27 @@ let game;
 let core;
 let data;
 
-function requireFreeWeapon(player, message) {
-  if (player.getEquipment().getSlot(core.Equipment.WEAPON_SLOT) <= 0) {
-    return true;
+function freeHands(player) {
+  if (game.getCarriedFlagTeam(player)) {
+    player.sendMessage("You are already carrying a standard.");
+    return false;
   }
-  player.sendMessage(message);
-  return false;
+  const equipment = player.getEquipment();
+  const slots = [core.Equipment.WEAPON_SLOT, core.Equipment.SHIELD_SLOT]
+    .filter((slot) => equipment.getSlot(slot) > 0);
+  if (player.getInventory().getFreeSlots() < slots.length) {
+    player.sendMessage(`You need ${slots.length === 1 ? "one free inventory space" : "two free inventory spaces"} to take the standard.`);
+    return false;
+  }
+  for (const slot of slots) {
+    player.getInventory().addItem(equipment.getItems()[slot]);
+    equipment.setItem(slot, new core.Item(-1, 0));
+  }
+  return true;
 }
 
 function captureFlag(player, flagTeam) {
-  if (game.flagStatus[flagTeam] !== 0 || !requireFreeWeapon(player, "Please remove your weapon before attempting to capture the flag.")) {
+  if (game.flagStatus[flagTeam] !== 0 || !freeHands(player)) {
     return;
   }
   game.updateFlagStand(flagTeam, game.getTeamData(flagTeam).emptyStandId);
@@ -31,6 +42,7 @@ function returnCarriedFlag(player) {
   const teamId = game.getTeamId(player);
   const carriedFlagTeam = game.getCarriedFlagTeam(player);
   if (!teamId || !carriedFlagTeam) {
+    if (teamId) player.sendMessage(`${game.getTeamData(teamId).name} wants the other team's standard!`);
     return;
   }
   if (carriedFlagTeam === teamId) {
@@ -51,11 +63,25 @@ function returnCarriedFlag(player) {
 }
 
 function pickupDroppedFlag(player, flagTeam) {
-  if (game.flagStatus[flagTeam] !== 2 || !requireFreeWeapon(player, "Please remove your weapon before attempting to pick up the flag.")) {
+  if (game.flagStatus[flagTeam] !== 2) {
     return;
   }
+  if (flagTeam === game.getTeamId(player) && game.isInsideCastle(player, flagTeam)) {
+    game.restoreFlagToBase(flagTeam, "return");
+    player.sendMessage(`Returned the ${game.getTeamData(flagTeam).name.toLowerCase()} flag!`);
+    return;
+  }
+  if (!freeHands(player)) return;
   game.removeDroppedFlagObject(flagTeam);
   game.carryFlag(player, flagTeam);
+}
+
+/** Own standards go home as soon as their carrier enters the castle, including tunnel exits. */
+function returnOwnFlagInCastle(player) {
+  const flagTeam = game.getCarriedFlagTeam(player);
+  if (flagTeam && flagTeam === game.getTeamId(player) && game.isInsideCastle(player, flagTeam)) {
+    returnCarriedFlag(player);
+  }
 }
 
 function useFlagObject(event) {
@@ -67,7 +93,7 @@ function useFlagObject(event) {
     return;
   }
   event.handled = true;
-  if (!game.getTeamId(player)) {
+  if (!game.isPlaying(player)) {
     return;
   }
   if (droppedTeam) {
@@ -102,4 +128,5 @@ module.exports = function attachCastleWarsFlags(api, castleWars) {
   api.onObjectInteraction(useFlagObject);
   api.onCanEquip(dropFlagForWeapon);
   api.onCanUnequip(dropFlagOnUnequip);
+  game.inGameProcessors.push(returnOwnFlagInCastle);
 };

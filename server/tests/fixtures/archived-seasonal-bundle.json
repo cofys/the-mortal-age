@@ -1,0 +1,2443 @@
+{
+  "source": "https://archive.openrs2.org/caches/runescape/2392",
+  "revision": 235,
+  "date": "2025-12-17",
+  "definitions": [
+    {
+      "id": 14814,
+      "symbol": "xmas25_queue_npc_1",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant imp",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15549,
+        15550,
+        15551,
+        15552,
+        15553,
+        15554,
+        15555,
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "403cc062b24c3be9a726331f4d8dad5faec01b55dc935d177432a31925446d84",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///CDy9PL48vzzAPME8wjzDPMQ8xQA="
+    },
+    {
+      "id": 14864,
+      "symbol": "xmas25_queue_npc_2",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant goblin",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15550,
+        15551,
+        15552,
+        15553,
+        15554,
+        15555,
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "bc45e6439d860c0f09730d467add5a20318f1dd7ea38ed1721a36e1ae15e7d29",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///Bzy+PL88wDzBPMI8wzzEPMUA"
+    },
+    {
+      "id": 14865,
+      "symbol": "xmas25_queue_npc_3",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant pyrefiend",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15551,
+        15552,
+        15553,
+        15554,
+        15555,
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "92340c81ecec544017f07ae31e4fe09e32dba83ed1eaa98970c06ed3a65527e7",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///Bjy/PMA8wTzCPMM8xDzFAA=="
+    },
+    {
+      "id": 15178,
+      "symbol": "xmas25_queue_npc_4",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant hobgoblin",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15552,
+        15553,
+        15554,
+        15555,
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "1615807f129cebba6e103e2a90a84a6c595653cd3f435f678977c887119c07fb",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///BTzAPME8wjzDPMQ8xQA="
+    },
+    {
+      "id": 15179,
+      "symbol": "xmas25_queue_npc_5",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant cyclops",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15553,
+        15554,
+        15555,
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "62229ba2aa1767d26edbde627eccd4bce1199de761905d155ca393d28db0ed05",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///BDzBPMI8wzzEPMUA"
+    },
+    {
+      "id": 15180,
+      "symbol": "xmas25_queue_npc_6",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant hellhound",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15554,
+        15555,
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "e86a9b94b307df01d8a35e2e245715fb11350f4b337b8823a4e3b90261d62afe",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///AzzCPMM8xDzFAA=="
+    },
+    {
+      "id": 15181,
+      "symbol": "xmas25_queue_npc_7",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant demon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15555,
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "5a7aaef9994ecedc0908c9d4592d5bd4c3f0cb5b87e9ea232ff315bfd024a847",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///AjzDPMQ8xQA="
+    },
+    {
+      "id": 15182,
+      "symbol": "xmas25_queue_npc_8",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant ork",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15556,
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "d757435c0f7bb2bbbc1684e8b01d05e91014dbb9e59784a71d9170d1d7ce7411",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///ATzEPMUA"
+    },
+    {
+      "id": 15183,
+      "symbol": "xmas25_queue_npc_9",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant dark beast",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15557,
+        -1
+      ],
+      "sourceTransformVarbit": 19619,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "e0c1db2b93747cdf04f6424599d34151eb7286e04e92aacbf16cea05f90e2228",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMo///ADzFAA=="
+    },
+    {
+      "id": 15184,
+      "symbol": "xmas25_table_npc_1",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant knight",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15548,
+        15549,
+        15550,
+        15551,
+        -1
+      ],
+      "sourceTransformVarbit": 19620,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "fe352b581db814eda9e936c1e31c2d22d631bc0ac264be68b7612240b8896787",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMpP//Azy8PL08vjy/AA=="
+    },
+    {
+      "id": 15185,
+      "symbol": "xmas25_table_npc_2",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Revenant dragon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15548,
+        15549,
+        15550,
+        15551,
+        -1
+      ],
+      "sourceTransformVarbit": 19621,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "f99a4d4ee689a0e9c526f12ea1e90b08308e7585289148a3038677e8510c5045",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMpf//Azy8PL08vjy/AA=="
+    },
+    {
+      "id": 15237,
+      "symbol": "xmas25_table_npc_3",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Zemouregal",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15548,
+        15549,
+        15550,
+        15551,
+        -1
+      ],
+      "sourceTransformVarbit": 19622,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "eb8a0ea3f2e864f86e9b013b48846219a24300a761c444031392773616d37335",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMpv//Azy8PL08vjy/AA=="
+    },
+    {
+      "id": 15547,
+      "symbol": "xmas25_table_npc_4",
+      "kind": "npc",
+      "sourceName": "null",
+      "currentName": "Big Evil Chicken",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceTransforms": [
+        15548,
+        15549,
+        15550,
+        15551,
+        -1
+      ],
+      "sourceTransformVarbit": 19623,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "8af1e321f1b9a0a57a0d8d705b4a74ec78136c2ef1194799697f60856bfe2d23",
+      "sourceBytes": "YxIDmhEDMwM0AzUDNg0DKF8AAWpMp///Azy8PL08vjy/AA=="
+    },
+    {
+      "id": 15548,
+      "symbol": "xmas25_stool_empty",
+      "kind": "npc",
+      "sourceName": "<col=00ffff>Stool",
+      "currentName": "Scurrius",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        42000
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "64ecf6cc893c82ceb3994d44504747cdd1b1a4ad3d11ddacfdc9f66ccf528449",
+      "sourceBytes": "ZAplCl8AAGNdAjxjb2w9MDBmZmZmPlN0b29sAAEBpBD5AQAACQgAAAAKAA=="
+    },
+    {
+      "id": 15549,
+      "symbol": "xmas25_sir_prysin",
+      "kind": "npc",
+      "sourceName": "Sir Prysin",
+      "currentName": "Phantom Muspah",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        17522,
+        17529,
+        17515,
+        17520,
+        17526,
+        17517
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "6b7e317e82822661e0d28762595ae8618f131d26e5337dd7224490d4bf2ac812",
+      "sourceBytes": "EQMzAzQDNQM2DQMoHlRhbGstdG8AXwAAYwJTaXIgUHJ5c2luAAEGRHJEeURrRHBEdkRtPAFEfAA="
+    },
+    {
+      "id": 15550,
+      "symbol": "xmas25_aggie",
+      "kind": "npc",
+      "sourceName": "Aggie",
+      "currentName": "Splatter",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        377,
+        16459,
+        18554,
+        479,
+        3848,
+        353,
+        14421,
+        361
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "0d91bf5ad7f4b0bfd535d620c5972e9120d2bac4b93e10581f62c49355c9235d",
+      "sourceBytes": "DAFfAAARAzMDNAM1AzYNAygeVGFsay10bwAoBmKWKQwajkIUl54pDCIlKQwfECkMEcYMwgJBZ2dpZQABCAF5QEtIegHfDwgBYThVAWk8AkA/AGYA"
+    },
+    {
+      "id": 15551,
+      "symbol": "xmas25_jobless_jim",
+      "kind": "npc",
+      "sourceName": "Jobless Jim",
+      "currentName": "Tumeken's Warden",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        59084,
+        59096,
+        59133,
+        10218,
+        59106,
+        59038
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "e07ea36dc1c9118646a7c2d54f9465d54dfe8bcec955d6ba1db46f4d183e838e",
+      "sourceBytes": "EQMzAzQDNQM2DQMoHlRhbGstdG8AXwAAKAEajhUYAkpvYmxlc3MgSmltAAEG5szm2Ob9J+rm4uaePALmUABRAA=="
+    },
+    {
+      "id": 15552,
+      "symbol": "xmas25_hans",
+      "kind": "npc",
+      "sourceName": "Hans",
+      "currentName": "Elidinis' Warden",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        217,
+        246,
+        28515,
+        26630,
+        176,
+        28285,
+        185,
+        320,
+        189
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "8d49fdb372d76d97153b63a813e0b3b228e28960e072c2ff767a80446a78c214",
+      "sourceBytes": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKAYfjgMYIiUHnqhAEcYjkAMY1H0UtWKWABwCSGFucwABCQDZAPZvY2gGALBufQC5AUAAvTwCADcARQA="
+    },
+    {
+      "id": 15553,
+      "symbol": "xmas25_karim",
+      "kind": "npc",
+      "sourceName": "Karim",
+      "currentName": "I DSCIM YOU",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        235,
+        28285,
+        249,
+        305,
+        26632,
+        176,
+        181
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "23faf9638fac1e03dcfaa72182c9afcd1b49e4bcc28313dcc735ff47da9634b4",
+      "sourceBytes": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKAZilhYUIiXNnBqOKQyoQBInEcYSJ9R9EqECS2FyaW0AAQcA6259APkBMWgIALAAtTwCAEMAUQA="
+    },
+    {
+      "id": 15554,
+      "symbol": "xmas25_oziach",
+      "kind": "npc",
+      "sourceName": "Oziach",
+      "currentName": "Sol Heredit",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        235,
+        247,
+        312,
+        26422,
+        164,
+        177,
+        176,
+        28285,
+        181
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "14ab79eabbe598874e8c6788f6ca23fe96c8714f6084706839d0fd9d205a28eb",
+      "sourceBytes": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKAQAPYmpACmNJRqOG45iluSaAk96aWFjaAABCQDrAPcBOGc2AKQAsQCwbn0AtTwCAEMATwA="
+    },
+    {
+      "id": 15555,
+      "symbol": "xmas25_rommik",
+      "kind": "npc",
+      "sourceName": "Rommik",
+      "currentName": "Yama",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        217,
+        28285,
+        253,
+        305,
+        26632,
+        176,
+        181,
+        529
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "6f9c49a1da966e50a561b8b7d9b7fcae08420f22f893f2238cf9d86cd9cb8db1",
+      "sourceBytes": "XwAADAERAzMDNAM1AzYNAygeVGFsay10bwBjKARilimjIiUWFKhAEifUfRKhAlJvbW1pawABCADZbn0A/QExaAgAsAC1AhE8AgA3AFUA"
+    },
+    {
+      "id": 15556,
+      "symbol": "xmas25_doris",
+      "kind": "npc",
+      "sourceName": "Doris",
+      "currentName": "Pestilent Bloat",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        408,
+        13345,
+        465,
+        8846,
+        353,
+        13346,
+        13339,
+        437
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "25ccaef7a1a7ebc6a7212f4a1043a865e4d3233d95f69d07727cc213e95995cb",
+      "sourceBytes": "DAERAzMDNAM1AzYNAygeVGFsay10bwBfAABjKAIiJZ03qEARxgJEb3JpcwABCAGYNCEB0SKOAWE0IjQbAbU8AjHFM/oA"
+    },
+    {
+      "id": 15557,
+      "symbol": "xmas25_herquin",
+      "kind": "npc",
+      "sourceName": "Herquin",
+      "currentName": "TzTok-Jad-Rek",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        235,
+        11748,
+        9620,
+        11760,
+        11769,
+        11326,
+        10218,
+        11869,
+        181,
+        11770
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "45e1d0cfc7241b7cae16c0f10318aadd47330c22a8e365b82222e1d893663d2a",
+      "sourceBytes": "XwAAEQMzAzQDNQM2DQMoHlRhbGstdG8AYwJIZXJxdWluAAEKAOst5CWULfAt+Sw+J+ouXQC1Lfo8AwBDJOkuXAA="
+    },
+    {
+      "id": 15558,
+      "symbol": "xmas25_puffin",
+      "kind": "npc",
+      "sourceName": "Puffin",
+      "currentName": "Zemouregal Summon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        22792,
+        59896
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "909d8602575b093e1ee2443cb78558feafb39abb6017dad02dc95b72420fe444",
+      "sourceBytes": "DhbwDRbxXwAAYxIDmgJQdWZmaW4AAQJZCOn4AA=="
+    },
+    {
+      "id": 15559,
+      "symbol": "xmas25_cutscene_chef_with_plate",
+      "kind": "npc",
+      "sourceName": "Cook",
+      "currentName": "Zemouregal Summon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        230,
+        5215,
+        14791,
+        15106,
+        10980,
+        10218,
+        12750,
+        181,
+        59879
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "3db2356116f297cbdf9051135daf73bbbd2bdefa375511a40ca0cb1a6eba8536",
+      "sourceBytes": "XwAAZBQONYENNYAoBgBrILEiJSCxq5ggyAB7INwAWiISIpwgsQJDb29rAAEJAOYUXznHOwIq5CfqMc4AtennPAIAPxRXAA=="
+    },
+    {
+      "id": 15560,
+      "symbol": "xmas25_cutscene_chef_no_plate",
+      "kind": "npc",
+      "sourceName": "Cook",
+      "currentName": "Zemouregal Summon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        230,
+        5215,
+        14791,
+        15106,
+        10980,
+        10218,
+        12750,
+        181
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "8649ddb0287a5c593948c93e307af27268f83b7a13bf300997a097d609183270",
+      "sourceBytes": "XwAAZBQRAzMDNAM1AzYNAygoBgBrILEiJSCxq5ggyAB7INwAWiISIpwgsQJDb29rAAEIAOYUXznHOwIq5CfqMc4AtTwCAD8UVwA="
+    },
+    {
+      "id": 15561,
+      "symbol": "xmas25_cutscene_bartender",
+      "kind": "npc",
+      "sourceName": "Bartender",
+      "currentName": "Zemouregal Summon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        235,
+        250,
+        28515,
+        25869,
+        10980,
+        10218,
+        12138,
+        181,
+        15106,
+        327
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "53758867bfcfe2a20e116eece061603237580f0a355ed46b57b3b6b736d7a964",
+      "sourceBytes": "XwAADAFhAIJiAHwRAzMDNAM1AzYNAygSA5ooBhqOE5AiJZQxIpyUMWKWQQwOFCoQI5CUKQJCYXJ0ZW5kZXIAAQoA6wD6b2NlDSrkJ+ovagC1OwIBRzwCAEMAUgA="
+    },
+    {
+      "id": 15562,
+      "symbol": "xmas25_cutscene_woman1",
+      "kind": "npc",
+      "sourceName": "Woman",
+      "currentName": "Zemouregal Summon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        390,
+        9361,
+        3476,
+        10706,
+        17548,
+        358,
+        437
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "ab7a469d7d88539e076132a26b19d45b8642691ad82b216ac9f8e7afe5092ecf",
+      "sourceBytes": "DAFfAAARAzMDNAM1AzYNAyhKAAFLAAFMAAFNAAcSA5ooBgBn6LkAWOjCAE7osQA36MoiJYi9Go4hXgJXb21hbgABBwGGJJENlCnSRIwBZgG1PAEAcfkEAAAABf///+sAAAAG////6wAAAAf////rAAAACP///+sA"
+    },
+    {
+      "id": 15563,
+      "symbol": "xmas25_cutscene_jonny",
+      "kind": "npc",
+      "sourceName": "Jonny the Beard",
+      "currentName": "Zemouregal Summon",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        25658,
+        20188,
+        299,
+        16831,
+        159,
+        177,
+        19250,
+        25649
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "7f20f30af547b9b491845fca488e2b8dea75efd7ff3fb8408f15f43a44b1392d",
+      "sourceBytes": "DAFfAABhAIJiAHwRAzMDNAM1AzYNAyhKAAFLAAFMAAFNAAhjEgOaKARilg+OIiUpDKhAEcYhlJivAkpvbm55IHRoZSBCZWFyZAABCGQ6TtwBK0G/AJ8AsUsyZDE8AmQjZCb5AQAAABoAAAACAA=="
+    },
+    {
+      "id": 15564,
+      "symbol": "xmas25_cutscene_dr_harlow",
+      "kind": "npc",
+      "sourceName": "Dr Harlow",
+      "currentName": "Zemouregal",
+      "sourceActions": [
+        "Talk-to",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        217,
+        245,
+        11190,
+        302,
+        3190,
+        159,
+        177,
+        11194,
+        28285,
+        181
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "31380483bb25b324ec170f2a5ee6b78bac5281c775427442f32d4623e72b4af2",
+      "sourceBytes": "XwAADAERC98DNAM1AzYNC+AeVGFsay10bwBfAAASA5ooBRqOFGciJQBvqEARxmKWAI4dFhHGAkRyIEhhcmxvdwABCgDZAPUrtgEuDHYAnwCxK7pufQC1PAMANwBOK7QA"
+    },
+    {
+      "id": 15565,
+      "symbol": "xmas25_cutscene_barbarian",
+      "kind": "npc",
+      "sourceName": "Barbarian",
+      "currentName": "null",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        12142,
+        11785,
+        11771,
+        11777,
+        11782,
+        11779
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "f099f7c15fff779d11eaac676e1a877908175dc8cf21f874de5643b35029a49a",
+      "sourceBytes": "DAERAzMDNAM1AzYNAyhfAAASA5ooASFcFhACQmFyYmFyaWFuAAEGL24uCS37LgEuBi4DPAEvZwA="
+    },
+    {
+      "id": 15566,
+      "symbol": "xmas25_cutscene_freddie",
+      "kind": "npc",
+      "sourceName": "Mod_Freddie",
+      "currentName": "Guard",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        "Attack",
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        12137,
+        246,
+        28551,
+        26632,
+        10218,
+        28346,
+        181
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "a605090f7d714d8d07d834b936367b3fba01e75c435bc90f7ec50a3cfa454343",
+      "sourceBytes": "DAENAyhfAAASA5ooBSIlABIajsKrEcYRxmKWABISEgAIAk1vZF9GcmVkZGllAAEHL2kA9m+HaAgn6m66ALUA"
+    },
+    {
+      "id": 60576,
+      "symbol": "xmas25_table01_empty01",
+      "kind": "loc",
+      "sourceName": "Table",
+      "currentName": "Table",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59848
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "3dc895c00e51ebf4de8347b4d200bb4b3eb2b60324aee4725242691114a218fd",
+      "sourceBytes": "EwEdCicPGAoEPQCbKAQVnB2jFhgdnhYUHhoaEh6WBQHpyAJUYWJsZQAA"
+    },
+    {
+      "id": 60577,
+      "symbol": "xmas25_table01_empty01_op1",
+      "kind": "loc",
+      "sourceName": "Table",
+      "currentName": "Basic cargo hold",
+      "sourceActions": [
+        "Serve",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59848
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "ef705efb17deae26c86cacdcfc6be0a4fb515cccce4c0b466a900a7944916c03",
+      "sourceBytes": "EwEdCicPGAoEPQCbHlNlcnZlACgEFZwdoxYYHZ4WFB4aGhIelgUB6cgCVGFibGUAAA=="
+    },
+    {
+      "id": 60578,
+      "symbol": "xmas25_table01_drink01",
+      "kind": "loc",
+      "sourceName": "Table",
+      "currentName": "Table",
+      "sourceActions": [
+        "Serve",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59847
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "084ba5a904977fbb071f7ba9581d98f312a8530fdb0d040470b39017b9ab3bd4",
+      "sourceBytes": "EwEdCicPGAoEPQCbHlNlcnZlACgEFZwdoxYYHZ4WFB4aGhIelgUB6ccCVGFibGUAAA=="
+    },
+    {
+      "id": 60579,
+      "symbol": "xmas25_table01_food01",
+      "kind": "loc",
+      "sourceName": "Table",
+      "currentName": "Table",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59849
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "6caf8237084034af06e72f5cc58bd852840a5834255a64e5944b00236b00a97d",
+      "sourceBytes": "EwEdCicPGAoEPQCbKAQVnB2jFhgdnhYUHhoaEh6WBQHpyQJUYWJsZQAA"
+    },
+    {
+      "id": 60580,
+      "symbol": "xmas25_table01_vegetable01",
+      "kind": "loc",
+      "sourceName": "Table",
+      "currentName": "Table",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          25075,
+          51395
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "554ffc5c3735cb1e81ddf8a647b377cdea85105197e2c037f73ed35e471d30a8",
+      "sourceBytes": "EwEOAz0Amh0UEigEGTMdoxkrHZ4ZJx4aGaMelgUCYfPIwwJUYWJsZQAA"
+    },
+    {
+      "id": 60581,
+      "symbol": "xmas25_table_1",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Basic cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60576,
+        60577,
+        60578,
+        60579,
+        -1
+      ],
+      "sourceTransformVarbit": 19627,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "44526ca88cd231ca05dd17d897d9f101df251c04ed31ec12af651da9a1f4f5ec",
+      "sourceBytes": "GAoEEwFNTKv//wPsoOyh7KLsowA="
+    },
+    {
+      "id": 60582,
+      "symbol": "xmas25_table_2",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Oak cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60576,
+        60577,
+        60578,
+        60579,
+        -1
+      ],
+      "sourceTransformVarbit": 19628,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "141fccee28c901e7a3bb3aa4a7d1e624939e964378a8c789968e0bcda491ea2f",
+      "sourceBytes": "GAoEEwFNTKz//wPsoOyh7KLsowA="
+    },
+    {
+      "id": 60583,
+      "symbol": "xmas25_table_3",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Oak cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60576,
+        60577,
+        60578,
+        60579,
+        -1
+      ],
+      "sourceTransformVarbit": 19629,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "aa36ef419ce446e88bbfa4c8c6aede4821d456990dc2279fac25a729bbdf8b51",
+      "sourceBytes": "GAoEEwFNTK3//wPsoOyh7KLsowA="
+    },
+    {
+      "id": 60584,
+      "symbol": "xmas25_table_4",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Teak cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60576,
+        60577,
+        60578,
+        60579,
+        -1
+      ],
+      "sourceTransformVarbit": 19630,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "b8c4be46c71be809e7c1f0a1d8039a664929415b8a1c4be3fff26a5c52860574",
+      "sourceBytes": "GAoEEwFNTK7//wPsoOyh7KLsowA="
+    },
+    {
+      "id": 60585,
+      "symbol": "xmas25_blue_inn_drinks_bar_middle",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59853,
+          22173,
+          25154,
+          25133
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "4b34a5129be93b4da9c16b81f8299aaaba09078028635e8ddffc7625980e3bb5",
+      "sourceBytes": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6c1WnWJCYi0CQmFyAAA="
+    },
+    {
+      "id": 60586,
+      "symbol": "xmas25_blue_inn_drinks_bar_middle_interact",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Teak cargo hold",
+      "sourceActions": [
+        "Get Drink From",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59853,
+          22173,
+          25154,
+          25133
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "811c703d37419ec539b28c070920dc36bb2ec507b0ad8a2dc671a9d85f49115e",
+      "sourceBytes": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnNVp1iQmItAkJhcgAA"
+    },
+    {
+      "id": 60587,
+      "symbol": "xmas25_blue_inn_drinks_bar_middle2",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59853,
+          22174,
+          22173,
+          25141
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "5cc049231ec8ceeef734dd7b847e05c07c89f73d68d41d71e37bbb384421e1e4",
+      "sourceBytes": "EwEWEigGqHOoq0OzRKcVnB2jFhgeGhYUHpYaEh8SBQTpzVaeVp1iNQJCYXIAAA=="
+    },
+    {
+      "id": 60588,
+      "symbol": "xmas25_blue_inn_drinks_bar_middle2_interact",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Mahogany cargo hold",
+      "sourceActions": [
+        "Get Drink From",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59853,
+          22174,
+          22173,
+          25141
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "469347b3b59ad1ff923a4f39bac71a276156d94bdedf81f6aba8bba33cd17fb2",
+      "sourceBytes": "EwEWHkdldCBEcmluayBGcm9tABIoBqhzqKtDs0SnFZwdoxYYHhoWFB6WGhIfEgUE6c1WnladYjUCQmFyAAA="
+    },
+    {
+      "id": 60589,
+      "symbol": "xmas25_blue_inn_drinks_bar_left",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59852,
+          22174,
+          22173,
+          25133
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "b147f02b169a06eb49005435f4fc7248ed7a1659a0edde5f59333e01a0656176",
+      "sourceBytes": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6cxWnladYi0CQmFyAAA="
+    },
+    {
+      "id": 60590,
+      "symbol": "xmas25_blue_inn_drinks_bar_left_interact",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Mahogany cargo hold",
+      "sourceActions": [
+        "Get Drink From",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59852,
+          22174,
+          22173,
+          25133
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "d058a7226a5848f409b6faa3810e0525750d1fa7868765455bdba1c5feb50183",
+      "sourceBytes": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnMVp5WnWItAkJhcgAA"
+    },
+    {
+      "id": 60591,
+      "symbol": "xmas25_blue_inn_drinks_bar_right",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59852,
+          22174,
+          25134,
+          25148
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "0af114263cafb14a5e10c4152501d69ba3df9f42ca9bf641b6e3bfb15048c8c7",
+      "sourceBytes": "EwEWPhIoBBWcHaMWGB4aFhQelhoSHxIFBOnMVp5iLmI8AkJhcgAA"
+    },
+    {
+      "id": 60592,
+      "symbol": "xmas25_blue_inn_drinks_bar_right_interact",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Camphor cargo hold",
+      "sourceActions": [
+        "Get Drink From",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59852,
+          22174,
+          25134,
+          25148
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "d2d62d4c943a742353ec1e4866ba84ec285ebb81e78333296446df43b531c5ab",
+      "sourceBytes": "EwEWPh5HZXQgRHJpbmsgRnJvbQASKAQVnB2jFhgeGhYUHpYaEh8SBQTpzFaeYi5iPAJCYXIAAA=="
+    },
+    {
+      "id": 60593,
+      "symbol": "xmas25_blue_inn_bar_middle",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59851,
+          25152,
+          25153,
+          22172
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "7e27064f7735ef6ea435e4afdbc40e5d08fea1cd3c05128600e8da5780a19140",
+      "sourceBytes": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6ctiQGJBVpwCQmFyAAA="
+    },
+    {
+      "id": 60594,
+      "symbol": "xmas25_blue_inn_bar_middle_interact",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Camphor cargo hold",
+      "sourceActions": [
+        "Get Drink From",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59851,
+          25152,
+          25153,
+          22172
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "a3b3e91ae08c0e3c5c53237aafb83e2867ec46c9eeb70c00dc4dd54135361c00",
+      "sourceBytes": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnLYkBiQVacAkJhcgAA"
+    },
+    {
+      "id": 60595,
+      "symbol": "xmas25_blue_inn_bar_middle2",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59851,
+          25152,
+          25148,
+          22175
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "09817fd27925b8431426c87709d65b681b9a926a04f9d417068e043a23d601e4",
+      "sourceBytes": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6ctiQGI8Vp8CQmFyAAA="
+    },
+    {
+      "id": 60596,
+      "symbol": "xmas25_blue_inn_bar_middle2_interact",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Ironwood cargo hold",
+      "sourceActions": [
+        "Get Drink From",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59851,
+          25152,
+          25148,
+          22175
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "47dce1b795ae489e013d760f7e59070a97a083b1ada6075a5bdaa982f3b89b99",
+      "sourceBytes": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnLYkBiPFafAkJhcgAA"
+    },
+    {
+      "id": 60597,
+      "symbol": "xmas25_blue_inn_bar_middle3",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59851,
+          25133,
+          25153,
+          22175
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "115714418eaaebb6f80ee1905fbdba9d769f49ae0de8a8e2e2c907052c014537",
+      "sourceBytes": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6ctiLWJBVp8CQmFyAAA="
+    },
+    {
+      "id": 60598,
+      "symbol": "xmas25_blue_inn_bar_middle3_interact",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Ironwood cargo hold",
+      "sourceActions": [
+        "Get Drink From",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceModels": [
+        [
+          59851,
+          25133,
+          25153,
+          22175
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "ccce282155c447dd2338909b50a04493799b4981fc0ccf9217f3753e92134855",
+      "sourceBytes": "EwEWHkdldCBEcmluayBGcm9tABIoBBWcHaMWGB4aFhQelhoSHxIFBOnLYi1iQVafAkJhcgAA"
+    },
+    {
+      "id": 60599,
+      "symbol": "xmas25_blue_inn_bar_left",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59850,
+          25134,
+          25154,
+          25151
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "a950fe6f268863da97368c2a14d7646e49d859bb36760c6592c2342fc794cb43",
+      "sourceBytes": "EwEWEigEFZwdoxYYHhoWFB6WGhIfEgUE6cpiLmJCYj8CQmFyAAA="
+    },
+    {
+      "id": 60600,
+      "symbol": "xmas25_blue_inn_bar_right",
+      "kind": "loc",
+      "sourceName": "Bar",
+      "currentName": "Bar",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          59850,
+          25154,
+          25148
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "66a205a9cc4eb79be83e74a1251396d2854fd69738a3b7d305f54892d12ba5a2",
+      "sourceBytes": "EwEWPhIoBBWcHaMWGB4aFhQelhoSHxIFA+nKYkJiPAJCYXIAAA=="
+    },
+    {
+      "id": 60601,
+      "symbol": "xmas25_bar_drinks_middle",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Rosewood cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60585,
+        60586,
+        -1
+      ],
+      "sourceTransformVarbit": 19631,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "2dd401bfa1b468d79e78e2a8df06d142834c1430d2098ab91f149739af5aaaaf",
+      "sourceBytes": "EwFNTK///wHsqeyqAA=="
+    },
+    {
+      "id": 60602,
+      "symbol": "xmas25_bar_drinks_middle2",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Rosewood cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60587,
+        60588,
+        -1
+      ],
+      "sourceTransformVarbit": 19631,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "e2bf61a61a715247d5940aa41bca28cc0ed750dcc770a2116d5b7943f4b84b6d",
+      "sourceBytes": "EwFNTK///wHsq+ysAA=="
+    },
+    {
+      "id": 60603,
+      "symbol": "xmas25_bar_drinks_left",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Basic cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60589,
+        60590,
+        -1
+      ],
+      "sourceTransformVarbit": 19631,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "23b6de531d4c98bce015d31c928cbaa75cf6aa6961768d130e8274fb6de967d4",
+      "sourceBytes": "EwFNTK///wHsreyuAA=="
+    },
+    {
+      "id": 60604,
+      "symbol": "xmas25_bar_drinks_right",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Basic cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60591,
+        60592,
+        -1
+      ],
+      "sourceTransformVarbit": 19631,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "effe6ec49bf25f6680e5f54bbf9090f93c8d5ecc68ec574172d9a61311900a70",
+      "sourceBytes": "EwFNTK///wHsr+ywAA=="
+    },
+    {
+      "id": 60605,
+      "symbol": "xmas25_bar_middle",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Oak cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60593,
+        60594,
+        -1
+      ],
+      "sourceTransformVarbit": 19631,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "357264692b1b7599e95fed1cd94e828a975c8911b8897bd306283b82b8bf0348",
+      "sourceBytes": "EwFNTK///wHsseyyAA=="
+    },
+    {
+      "id": 60606,
+      "symbol": "xmas25_bar_middle2",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Oak cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Deposit-held",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60595,
+        60596,
+        -1
+      ],
+      "sourceTransformVarbit": 19631,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "9104555208312fa39add37c3b880c0193744624cbfcf6c7db94b59095d37a683",
+      "sourceBytes": "EwFNTK///wHss+y0AA=="
+    },
+    {
+      "id": 60607,
+      "symbol": "xmas25_bar_middle3",
+      "kind": "loc",
+      "sourceName": "null",
+      "currentName": "Teak cargo hold",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Open",
+        "Deposit-all",
+        null,
+        null,
+        "Modify"
+      ],
+      "sourceTransforms": [
+        60597,
+        60598,
+        -1
+      ],
+      "sourceTransformVarbit": 19631,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "bcd6a11e932ac9957f8522551443343f5e2fc39ab026d3c32b85515e79e8badf",
+      "sourceBytes": "EwFNTK///wHstey2AA=="
+    },
+    {
+      "id": 60608,
+      "symbol": "xmas25_crate01_carrot01",
+      "kind": "loc",
+      "sourceName": "Crate",
+      "currentName": "Crate",
+      "sourceActions": [
+        "Search",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          49087,
+          2918
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "dbccf4e6f3af83acee34a5b2eaf82013330e2b27970d5d316fac1c307351293b",
+      "sourceBytes": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQK/vwtmAkNyYXRlAAA="
+    },
+    {
+      "id": 60609,
+      "symbol": "xmas25_crate01_tomato01",
+      "kind": "loc",
+      "sourceName": "Crate",
+      "currentName": "Crate",
+      "sourceActions": [
+        "Search",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          49087,
+          59864
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "c56f87b80067dd65d15dcf928c128ea633f6dda12a422334838362c62d418b52",
+      "sourceBytes": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQK/v+nYAkNyYXRlAAA="
+    },
+    {
+      "id": 60610,
+      "symbol": "xmas25_crate01_vegetable01",
+      "kind": "loc",
+      "sourceName": "Crate",
+      "currentName": "Crate",
+      "sourceActions": [
+        "Search",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          49087,
+          59865
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "0c6698bd53affb7c54f852652df1126c95e13eb597abddc9efc222d95fd6920f",
+      "sourceBytes": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQK/v+nZAkNyYXRlAAA="
+    },
+    {
+      "id": 60611,
+      "symbol": "xmas25_crate01_broccoli01",
+      "kind": "loc",
+      "sourceName": "Crate",
+      "currentName": "Crate",
+      "sourceActions": [
+        "Search",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          20848,
+          59860
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "169781e70e3711dc4ebda2537482d668816f1ba4cf2254fe40bdc0dca2559539",
+      "sourceBytes": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnUAkNyYXRlAAA="
+    },
+    {
+      "id": 60612,
+      "symbol": "xmas25_crate01_fruit01",
+      "kind": "loc",
+      "sourceName": "Crate",
+      "currentName": "Crate",
+      "sourceActions": [
+        "Search",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          20848,
+          59862
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "40266ce43143593a2549ba47b1f955659cd7f18c868f03eb8688b2b87203127d",
+      "sourceBytes": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnWAkNyYXRlAAA="
+    },
+    {
+      "id": 60613,
+      "symbol": "xmas25_crate01_fish01",
+      "kind": "loc",
+      "sourceName": "Crate",
+      "currentName": "Crate",
+      "sourceActions": [
+        "Search",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          20848,
+          59861
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "ce671e22573c8670ae6fdd09ee6f752e3690bb8f3809f146489df6873dea63e3",
+      "sourceBytes": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnVAkNyYXRlAAA="
+    },
+    {
+      "id": 60614,
+      "symbol": "xmas25_crate01_meat01",
+      "kind": "loc",
+      "sourceName": "Crate",
+      "currentName": "Crate",
+      "sourceActions": [
+        "Search",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          20848,
+          59863
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "6a839407c8238df62d2af286d77be45b451fa4a1e624c7bbe860ad17c2b2f00b",
+      "sourceBytes": "HRQeU2VhcmNoACgGGSsdoxknHZ4Zox4aGZ4elhoaHxIalh+OBQJRcOnXAkNyYXRlAAA="
+    },
+    {
+      "id": 60616,
+      "symbol": "xmas25_snowball_pile",
+      "kind": "loc",
+      "sourceName": "Snowball pile",
+      "currentName": "Snowball pile",
+      "sourceActions": [
+        "Take-from",
+        null,
+        null,
+        null,
+        null
+      ],
+      "currentActions": [
+        "Take-from",
+        null,
+        null,
+        null,
+        null
+      ],
+      "sourceModels": [
+        [
+          46894
+        ]
+      ],
+      "sourceTransformVarbit": -1,
+      "sourceTransformVarp": -1,
+      "sourceSha256": "f5049c6bcce215e92ed3cbd59ffa8518f58f0e3f5454fa6bb7f310052d227a9a",
+      "sourceBytes": "HRQnCkAOAg8CQQEAQwEAQgEAHlRha2UtZnJvbQAgaGlkZGVuABUbPQI4QBIoAphtmG2YdZjrBQG3LgJTbm93YmFsbCBwaWxlAAA="
+    },
+    {
+      "id": 32926,
+      "symbol": "xmas25_serving_platter",
+      "kind": "obj",
+      "sourceName": "Serving platter",
+      "currentName": "Null",
+      "sourceActions": [
+        "Inspect",
+        null,
+        null,
+        null,
+        "Destroy"
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "sourceModels": 59855,
+      "sourceItemReferences": {
+        "note": -1,
+        "noteTemplate": -1,
+        "notedId": -1,
+        "unnotedId": -1,
+        "placeholder": 32927,
+        "placeholderTemplate": -1
+      },
+      "sourceSha256": "a623494918b1fa8f0baad19ab27cdd91b43885e5db42f9345c7769b910b68090",
+      "sourceBytes": "AenPDAAAADJLADIjSW5zcGVjdAAnRGVzdHJveQAFAf4GAy8EBzICU2VydmluZyBwbGF0dGVyAANJIGNhbiBjYXJyeSBmb29kIGFuZCBkcmlua3Mgb24gdGhpcy4AlICf+QIAAAEnAAAAAQAAADsAAAABAA=="
+    },
+    {
+      "id": 32927,
+      "symbol": "placeholder_xmas25_serving_platter",
+      "kind": "obj",
+      "sourceName": "null",
+      "currentName": "Null",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "sourceModels": 0,
+      "sourceItemReferences": {
+        "note": -1,
+        "noteTemplate": -1,
+        "notedId": -1,
+        "unnotedId": -1,
+        "placeholder": 32926,
+        "placeholderTemplate": 14401
+      },
+      "sourceSha256": "cea28f22db27ac5b62077f75ad37f48725b08fd09642cfbc2dffc9da428b03dd",
+      "sourceBytes": "lICelThBAA=="
+    },
+    {
+      "id": 14401,
+      "symbol": "template_for_placeholder",
+      "kind": "obj",
+      "sourceName": "null",
+      "currentName": "null",
+      "sourceActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "currentActions": [
+        null,
+        null,
+        null,
+        null,
+        "Drop"
+      ],
+      "sourceModels": 596,
+      "sourceItemReferences": {
+        "note": -1,
+        "noteTemplate": -1,
+        "notedId": -1,
+        "unnotedId": -1,
+        "placeholder": -1,
+        "placeholderTemplate": -1
+      },
+      "sourceSha256": "ba3c77ecc963b751f44318674addcb582fbfcc6706355a5232abc4fc22c2a61d",
+      "sourceBytes": "AQJUSwAABAu4BQIAXgEVAA=="
+    }
+  ]
+}

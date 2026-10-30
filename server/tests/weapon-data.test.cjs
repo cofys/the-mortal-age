@@ -82,6 +82,21 @@ test("a copy of a weapon has its original's type and stance", () => {
   }
 });
 
+test("a weapon with no same-name relative still gets a two-handed gait", () => {
+  // Reported in game: wielding a Gilded 2h sword or a Hill giant club left the player idling,
+  // walking and running bare-handed. The server sends these into the appearance packet
+  // (net/PlayerSession.ts), so a bare-hand row is what the client shows with a two-hander worn.
+  const gait = (row) => ["blockAnim", "standAnim", "walkAnim", "runAnim"].map((field) => row[field]);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  // A reskin: the cache gives it the rune 2h sword's own model, so it moves like it.
+  assert.deepEqual(gait(ItemDefinition.forId(20155)), gait(byId.get(1319)), "Gilded 2h sword, like the Rune 2h sword");
+  // The club has no relative to copy: the blunt two-handers (Granite maul, Tzhaar-ket-om) share
+  // the maul gait, and the warhammer family, which wears in one hand, keeps the bare-handed one.
+  assert.deepEqual(gait(ItemDefinition.forId(20756)), gait(byId.get(4153)), "Hill giant club, like the Granite maul");
+  assert.notDeepEqual(gait(ItemDefinition.forId(20756)), gait(byId.get(1347)), "... not like a warhammer");
+  assert.deepEqual(gait(byId.get(1347)), [424, 808, 819, 824], "a one-handed warhammer keeps the bare-hand gait");
+});
+
 test("attack speed is the cache's for the item, ahead of its weapon type's", () => {
   // Scythe of Vitur: 5 (cache and Wiki), not the scythe type's 4; the plain Scythe: 7.
   assert.equal(WeaponProfiles.attackSpeed(wielding(22325, WeaponInterfaces.SCYTHE), 4), 5);

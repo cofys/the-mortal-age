@@ -221,8 +221,12 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
 - Other currents need Current Affairs and 22 Sailing; no refusal was captured, so it's the
   "nothing worth tracking" line. Off the boat: `You need to be on your boat to release the duck.`
   (the quest's own line).
-- A duck still out when its player logs out goes back to their inventory; live's timer
-  (`sailing_charting_current_duck_reset`, "wait # seconds to collect another") isn't modelled.
+- A duck returns to the tools compartment on release and expires two minutes after stopping
+  (Wiki Current duck). The exact epoch deadline is persisted; logout removes the session NPC,
+  and relog keeps the replacement cooldown instead of refunding an inventory duck. Remaining
+  seconds are rounded upwards; the capture has the refusal at 60 seconds, but does not establish
+  the countdown rounding policy. The predicted remaining journey is included after a logout
+  before stopping; restoring the moving NPC itself across relog is not captured or implemented.
 - Routes seen in pieces (12 of 54: the duck left the player's view) are joined with straight
   steps; one (Sapphire Sea) runs on to the Wiki's end tile.
 - The wind: the tangent of the circle turned 25 degrees towards the spot, to the nearest of 8
@@ -248,11 +252,180 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
-## Not done (captured)
+## Bottle encounters, quiz and current-duck expiry
 
-- The drinks' side effects: the NPCs some bring to the deck (a defending troll, the fish
-  stoutier's, the monkfish stout's waves, the Sailing cat, a squirrel, a snakeling, a dwarf and
-  others: 10 drinks), the fishier stout's blackout with its three trolls and their drinks (varp
-  5035 bits 2-4), and the puzzler's poteen reward.
-- A current duck asked for at the tools compartment while one is out at sea: `You have a current
-  duck out at sea. Either find it or wait # seconds to collect another.` (no duck timer here).
+The units `DrinkEffects`, `FishierStout`, `Poteen` and `TrollCombat` extend `DrinkCrate`; all are Charting units.
+No generated NPC, dialogue or drop JSON is edited. Existing NPC definitions and generated drops
+supply the normal combat and loot; the queen is added to the sea-combat creature data so it uses
+boat combat, its defeated form and Harvest.
+
+- RSProx 235/940: platinum rum creates seven dwarves, one immediately and a replacement every
+  two ticks. Each waves (`dwarf_drunkwave`) and gives beer or kebab (equal chances, Wiki Drunken
+  Dwarf (Sea charting)); inventory capacity is checked for every gift. Missing capacity loses
+  that individual gift; overflow placement is not established by a recording.
+- 235/3455,3467,948,3837,940: drink troll, snakeling, blue dagannoth, corpse, tortugan and Dinky
+  appear on the deck one tick after drinking. Whisky creates squirrel/racoon/chinchompa together
+  immediately (3467); the Sailing cat also appears immediately (944). Visitors are owned and
+  scoped to that boat. Teleport, boat disposal and logout remove them; repeated bottles replace
+  that drink's own visitors. NPC combat stats/animations remain the shared definitions'.
+- 235/948: monkfish stout creates its queen in the sea one tick later. The recorded offset is
+  six tiles west and four north of the boat's rounded root tile. Its reach of six and impact
+  height of20 follow the existing sea-combat data conventions; those are implementation choices,
+  not independently recorded queen range measurements.
+- 235/941: puzzler's poteen asks the five recorded questions through normal chatbox menus.
+  A wrong answer deals floor10% of current HP and prints the recorded braincells message. Five
+  correct answers give five mystery boxes once, save the reward and send varbit18569. Capacity
+  is checked atomically; failure leaves the reward unclaimed and another bottle can retry.
+  The reward message continues to the recorded Quiz Master goodbye.
+- 235/948: fishier stout always asks the stronger expiry warning with Yes/No. Ordinary drink
+  warning suppression cannot skip it. At +2 ticks the blackout line appears; +3 moves into a
+  private copy of the troll arena; +6 wakes the player; +7 spawns the three recorded trolls.
+  The real arena exit sends the player to Rellekka Longhall. Ordinary cargo survives and the boat
+  docks at Rellekka only with62Sailing and Fremennik Trials, otherwise Port Sarim (Wiki).
+  Courier cargo is discarded. The existing trolls' death drops are their three special drinks;
+  each awards100SailingXP once and persists/re-sends varp5035 bits2-4. Session instances are
+  cleaned on leave/logout; a restart save in an instance returns to Longhall rather than freed
+  instance tiles. That restart fallback is not captured.
+- Wiki Current duck: expiry is120seconds after stopping. RSProx235/938 shows the tools refusal
+  `You have a current duck out at sea. Either find it or wait 60 seconds to collect another.`
+  A full inventory while collecting retains the owned duck and leaves its chart uncompleted.
+  Tools withdrawal is guarded by an additive `sailing:can-take-tool` query in CargoHold.
+
+## Combat and revival completion: evidence and approximations
+
+After expanded research failed to establish every hidden rule, Curt authorized the closest
+possible implementation on2026-10-30. The estimates below are implementation choices, **not
+verified OSRS values**. Named constants and comments distinguish them from captured mechanics.
+No generated definitions are changed, and this is not a claim of exact parity.
+
+| Mechanic | Source-backed behavior | Explicit approximation |
+| --- | --- | --- |
+| Corpse revival | Wiki: full90HP, up to9revivals. RSProx235/948: sameNPC, no death animation, unchanged cadence, regeneration message/overhead. | Uniform0..9 revival budget chosen once per encounter. Only final death awards ordinary kill credit/drops; intermediate revivals preserve damage ownership. Distribution/credit policy unverified. |
+| Dinky damage | Wiki51+,4tickattack, full melee protection,140HP. | Per-instance maximum51 uses a lower bound as a provisional ceiling, replacing fallback1. May underestimate real maximum. |
+| Rocks damage/style | Wiki melee23; normally magic, melee against ProtectMagic and sometimes adjacent. Magic maximum unknown. | Magic maximum23; one-in-three melee selection when cardinally adjacent. Diagonal adjacency retains magic unless ProtectMagic. Shared accuracy/prayer remain intact. |
+| Rocks freezing | Captured284attack,369impactdelay10 and attack interruption; release near3ticks is inconclusive. | Magic hit delay1tick, freeze3ticks on accurate magic including accurate0. Misses do not freeze. Shared freeze/immunity rules apply; combat/pending action interrupted on application. |
+| Rocks teleport | Wiki chance to teleport beside distant player, apparently absent when diagonally adjacent. Captured353graphic. | One-in-four per distant attack, valid unoccupied adjacent tile in same arena; none while already adjacent. |
+| Daddy special | Wiki max27,8tickattack, knockback/stun. Captured1158swing,1157flybackdelay20, exactmove20/40cycles,5tile displacement with clipping, cardinal facing towards Dad. | One-in-three selection borrowed from normalDad; stun3ticks; forced move completes after2server ticks. Revalidate path/destination before placement. |
+
+Special effects require the active owner's private arena. Applied-hit observers run after HP
+changes, so lethal hits cannot start post-death freeze/knockback. Forced movement cancels on
+logout and invalidates on teleport, scene replacement, death and late collision/occupancy.
+After its own knockback placement clears, Daddy resumes attacking the same living arena
+owner. The delayed re-engagement is cancelled with the scene and respects another target.
+Corpse state belongs to its existing drink/boat effect and is removed on leave/logout/boat
+teleport/replacement. Dinky's ceiling changes only its spawned instance.
+
+A generic combat correction records actual HP loss before death hooks can heal/transform the
+target. Applied-damage observers retain the damage preceding revival; protected developers,
+lockedHP and already-dead targets still report0.
+
+Combat completion path map and state ownership:
+
+- Native inventory packet enters `NetworkBuilder.inventoryAction` and `PluginManager.emitItemAction`.
+  `DrinkCrate.drink/choose/swallow` owns confirmation/slot validation and consumption;
+  `DrinkEffects.start/actor` owns the exact temporary encounter NPC and boat lifetime.
+- `CorpseRevival.configure/beforeDeath` uses that existing state, exact NPC, owner/deck and
+  remaining lives. `PendingHit`/`CombatFactory`/`HitQueue` resolve damage; `Mobile.decrementHealth`
+  records actual loss before `NPC.appendDeath` emits the before-death hook. Prevented deaths
+  remain the same NPC; the ordinary final `NPCDeathTask` owns killer credit/drop/removal.
+- `FishierStout.scenes` and its real private Area own trolls and scene-keyed tasks. `TrollCombat`
+  providers select a method; shared Combat/PendingHit own cadence, accuracy and protection.
+  Accurate applied hits alone reach the living-owner effect gate; shared timers own freeze/stun.
+- `ForceMovementTask` owns delayed placement. Destination collision/occupancy and scene identity
+  are rechecked; the subsequent scene-keyed CountdownTask resumes only the same live owner,
+  at the destination after placement clears, with no existing NPC target. Scene end cancels
+  its tasks; logout removes the encounter. Real World ordering is covered separately from
+  manual task ticks. Temporary lives are not persisted because logout despawns the encounter.
+- These combat changes do not store/withdraw inventory, merge items, award a separate XP/drop,
+  or introduce a bank/PIN policy. Existing drink/reward handlers retain those responsibilities;
+  queued lethals and actual final-death ownership are covered through their shared owners.
+
+All43 public [RSProx catalogue](https://rsprox.net/database) pages were checked:4283unique IDs
+exactly matched the local archive, highest revision239. NPC search confirmed corpse948/3711/3712
+(latter two overlap), Daddy/Rocks948only and11Dinky recordings. Later985/3836 are bystander
+views without victim damage packets. Fight videos, firsthand reports, RuneLite HP data,
+indexed developer searches and pinned dump yielded no exact missing rules. Wiki mirrors are
+not independent evidence; the apparent51+ Reddit corroboration was a Wiki screenshot. Private
+Discord/unpublished recordings were not accessible.
+
+## Remaining source limitations
+- Exact visitor placement on each hull, queen range, idle chatter/wandering, corpse regeneration
+  odds and these encounters' detailed mixed-style special attacks require more evidence.
+- Captures are revision235; identifiers and map objects are checked against pinned revision241
+  dump6e5033af6215963581a51b348f452320ff18f0f6 and the active241cache. The Wiki supplies mechanics
+  and current stats where the recording predates later boat-combat updates.
+
+## Initial draft verification (2026-10-30, before combat completion)
+
+The focused Charting/SeaCombat checks pass91/91. Independent review passes37/37 (seven reviewer
+cases and30 author cases), including actual combat attacks, PendingHit/HitQueue prayer changes,
+native inventory actions, real Trading, targetless combat resolution and automatic duck expiry
+before a replacement query. Retained failing reproductions preceded the reward-slot/trade and
+Rocks-animation fixes. The pinned Yarn production build passes.
+
+The production client rendered the five poteen questions and five mystery boxes after answers
+1,1,4,3,4; the reward flag and boxes survived a graceful save/restart. Fishier stout's real Drink,
+warning/Yes, blackout and private arena rendered all three trolls, including Rocks' ice impact.
+Normal whip combat and auto-retaliation killed them without NPC-hitpoint commands or healing.
+The three reward drinks used normal item packets (first mouse, two MCP inventory actions), set
+18566/18567/18568, and native Arena Exit Open returned2659,3674 in Rellekka Longhall.
+
+Native Track-current followed the full117-step Catherby route and stopped naturally. An early
+tools click refused with139seconds remaining. Natural expiry cleared5038 before any replacement
+query; a native Take then a repeated click left exactly one duck. The existing skiff was verified
+at Port Sarim and boarded using its real gangplank before the Catherby positioning fixture.
+
+Bottles, skills/master99, equipped Abyssal whip, player positioning and chart-go boat positioning
+were disclosed QA fixtures. Later mystery-box openings and a ground-item pickup had no established
+input provenance: they are excluded from native-input verification. At this initial draft stage,
+corpse revival, Dinky's fallback damage and Rocks special behavior remained unfinished. The
+completion above supersedes those omissions, with its remaining unknown values disclosed.
+
+The root-coordinated combined run reported10214 tests:10185 passed and29 failed; clean-base
+reported10137 tests:10108 passed and29 failed. This historical run is not validation of the
+later combat completion. The initial QA server saved its one online
+player successfully through gameUpdate5s. Its game/MCP listeners and own static server were then
+stopped, and ports3109/43709/49809 were verified free.
+
+## Combat completion verification (2026-10-30)
+
+Fresh pinned-Yarn `tsc --build` passed. Serial charting checks passed61/61, including the
+reviewer's11 actual-entity cases, which the reviewer also independently reran11/11. The
+28 affected HitQueue/thrall/Vardorvis foundation cases passed. Recovery focused/native runs
+disabled player bots and their dependent BountyHunter plugin; the full suite uses default
+plugin settings. The old Rocks impact case
+now uses99HP and asserts survival: its default10HP fixture could legitimately die to the
+real0..23 damage roll, correctly suppressing post-death effects. Its real hit path and
+interruption/graphic assertions remain intact.
+
+Independent review retained failing reproductions for forced-facing encoding and lost Dad
+engagement after forced placement. The fixes preserve cardinal facing towards the attacker
+and resume only the current live arena owner's NPC combat after placement clears. Actual
+World cycles cover successful resumption and cancellation in the new post-placement window
+after real teleport or scene replacement. Real list cleanup/network fixture errors discovered
+by running World were corrected; they are not hidden by mocked task/scene behavior.
+
+The production rendering client showed two natural corpse revivals on the same NPC and final
+removal, Dinky's fight, the three-troll arena, flyback and exact movement. After crash recovery,
+relogin returned the character to Longhall; native Drink/warning/Yes entered a fresh arena.
+Rocks rendered the ice block and freeze message. Dad's own knockback was followed by eleven
+observed normal attack starts, then natural death/drop, rather than the previous permanent
+stall. Native bottle use also replaced the arena. Read-only client actor snapshots and
+screenshots were retained. These checks do not measure damage caps or odds: master99, whip,
+seeded bottles/positioning and developer damage immunity are disclosed fixtures.
+
+The PC crash interrupted earlier concurrent runs, which logged native Node allocation
+failures. Source and evidence survived; recovery validation runs serially. The final native
+pass used normal input because its optional MCP listener returned EACCES. Native
+`::gameUpdate 5s` saved1player with0failures; own game/static processes were stopped, own tab
+closed and host-level checks confirmed3109/43709/49809 clear. Other processes were preserved.
+
+Curt's necessary-testing instruction superseded blanket full-suite requirements during the
+last run. It was deliberately stopped after9,246 completed top-level cases; it is **not a
+completed full-suite result**. Its nine observed failures match the recorded clean-main
+b57a25f88 names and normalized assertions, with no new failure observed. The later teleport
+and Whisperer cases had not run. Focused clean-base reproductions confirm all nine matching
+assertions; the burying case includes its existing cache-initialisation prerequisite. These
+reproductions do not change or weaken the baseline tests. No additional broad run is required
+for this PR: the actual changed
+behavior and identified damage-observer consumers are covered by the focused checks above.

@@ -1284,9 +1284,14 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
       player.moveTo(new Location(2485, 3465, 2));
       return;
     }
-    if ((objectId === TREE_INVESTIGATE_ID || objectId === BRANCH_TREE_MULTI_ID) && option === "Climb-down") {
+    if (objectId === TREE_INVESTIGATE_ID && option === "Climb-down") {
       event.handled = true;
       player.moveTo(new Location(2485, 3464, 1));
+      return;
+    }
+    if (objectId === BRANCH_TREE_MULTI_ID && option === "Climb-down") {
+      event.handled = true;
+      player.moveTo(new Location(2484, 3463, 1));
       return;
     }
     if (TRACKS_IDS.has(objectId) && option === "Investigate") {

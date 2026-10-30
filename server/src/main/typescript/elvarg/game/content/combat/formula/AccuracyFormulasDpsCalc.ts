@@ -522,6 +522,15 @@ export class AccuracyFormulasDpsCalc {
         return rngStrength;
     }
 
+    /**
+     * A player's ranged attack roll with an accuracy bonus given in place of the worn one (a boat
+     * cannon's, its cannonball's and the gear it counts). Prayers, style and set effects apply.
+     */
+    public static rangedAttackRollWithBonus(player: Mobile, accuracyBonus: number): number {
+        const roll = AccuracyFormulasDpsCalc.effectiveRangedAttack(player) * (accuracyBonus + 64);
+        return Math.floor(applyRangedAttackAccuracyModifiers(player, roll));
+    }
+
     public static attackRangedRoll(entity: Mobile) {
         const cache = this.getRollCache(entity);
         if (cache.attackRangedRoll != null) {

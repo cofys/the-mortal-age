@@ -348,6 +348,8 @@ export interface WidgetNode {
     // Initial value is 0 (or undefined), updated to changedInvCount after onInvTransmit check.
     // onInvTransmit fires when (changedInvCount > lastChangedInvCount).
     lastChangedInvCount?: number;
+    /** Definition snapshot used by this widget's last inventory presentation rebuild. */
+    lastItemDefinitionRevision?: number;
 
     // Last changedStatCount value when this widget's onStatTransmit handler
     // was processed. Used for counter-based stat transmit tracking.

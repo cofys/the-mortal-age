@@ -36,9 +36,9 @@ const MAX_PLANE = 3;
 function loadDeclaredLinks() {
   const data = require("./data/climb-links.json");
   const links = new Map();
-  for (const { up, down } of data.pairs) {
-    links.set(`${up.id}:${up.x},${up.y},${up.z}`, { direction: UP, id: down.id, x: down.x, y: down.y, z: down.z });
-    links.set(`${down.id}:${down.x},${down.y},${down.z}`, { direction: DOWN, id: up.id, x: up.x, y: up.y, z: up.z });
+  for (const { up, down, landing } of data.pairs) {
+    links.set(`${up.id}:${up.x},${up.y},${up.z}`, { direction: UP, id: down.id, x: down.x, y: down.y, z: down.z, landing: landing ?? null });
+    links.set(`${down.id}:${down.x},${down.y},${down.z}`, { direction: DOWN, id: up.id, x: up.x, y: up.y, z: up.z, landing: null });
   }
   return links;
 }
@@ -192,6 +192,13 @@ function landingTile(object, hint, privateArea) {
  */
 function destination(object, direction, from, privateArea = null, toEnd = false) {
   if (!object || !climbs(object.getId(), direction)) return null;
+  // A declared landing wins over the nearest tile: where the captured climb puts the player.
+  const location = object.getLocation();
+  const declared = DECLARED_LINKS.get(`${object.getId()}:${location.getX()},${location.getY()},${location.getZ()}`);
+  if (declared?.direction === direction && declared.landing) {
+    const { x, y, z } = declared.landing;
+    return new Location(x, y, z);
+  }
   let end = otherEnd(object, direction);
   if (!end) return null;
   // Top-floor / Bottom-floor: keep going while the next end climbs on in the same direction.

@@ -11,7 +11,8 @@
  *   motes owed full XP go up at once (at most 3), the charges the next tick. A crewmate's trim:
  *   "I've caught a wind mote!" over their head, no full XP owed. A Gwenith Glide crystal mote adds
  *   one too.
- * - Release-mote (op1 switched on, or the side panel's "Release wind mote", 937:25 slot 12): "You
+ * - Release-mote (op1 switched on, or the side panel's "Release wind mote": the first button of the
+ *   catcher's hotspot row, 937:25 slot 12 on hotspot 0 as in every recording): "You
  *   release the wind mote for a burst of speed!", graphic 3536 on the catcher, the trim's burst
  *   (Trim.Helm.js releaseBurst); 40 XP for a mote owed full XP (a gale catcher's 70), else 10.
  *   None left: "There are no wind motes in the wind catcher."
@@ -27,7 +28,7 @@ const { Location } = require("../../../src/main/typescript/elvarg/game/model/Loc
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
-const { SIDEPANEL_GROUP, SIDEPANEL_FACILITIES_CHILD, playSound } = require("./SailingContent.Sailing");
+const { SIDEPANEL_GROUP, SIDEPANEL_FACILITIES_CHILD, facilityRowSlot, playSound } = require("./SailingContent.Sailing");
 
 /** Each catcher's locs (off, on), how many motes it holds and what a mote owed full XP pays. */
 const CATCHERS = [
@@ -40,7 +41,6 @@ const VARBIT_CHARGES = 19178;
 const VARBIT_PANEL_ENABLED = 19179;
 const MAX_OWED = 3;
 const MOTE_XP = 10;
-const RELEASE_SLOT = 12;
 const SOUND_ENABLE = 10899;
 const SOUND_DISABLE = 10239;
 const GRAPHIC_STORED = 3535;
@@ -192,8 +192,12 @@ function onLoc(event) {
   }
 }
 
+/** The side panel's "Release wind mote": the first button of the catcher's hotspot row. */
 function onPanelClick(event) {
-  if (event.groupId !== SIDEPANEL_GROUP || event.childId !== SIDEPANEL_FACILITIES_CHILD || event.slot !== RELEASE_SLOT) return;
+  if (event.groupId !== SIDEPANEL_GROUP || event.childId !== SIDEPANEL_FACILITIES_CHILD) return;
+  const aboard = ownBoat(event.player);
+  const catcher = aboard && catcherOf(aboard.boat);
+  if (catcher?.loc.hotspot === undefined || event.slot !== facilityRowSlot(catcher.loc.hotspot, 0)) return;
   event.handled = true;
   release(event.player);
 }

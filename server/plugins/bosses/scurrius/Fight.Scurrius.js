@@ -107,10 +107,13 @@ const PROJECTILE = Object.freeze({ start: 30, end: 120, startHeight: 50, endHeig
 const HAND_ANGLES = Object.freeze({ ranged: (3 * Math.PI) / 4, magic: -(3 * Math.PI) / 4 });
 /**
  * Captured: the hitsplat and impact come 4 ticks after the cast, as the flight ends (live: 47 of
- * 52 casts; the other 5 never landed, as he died first). An NPC's hit on a player lands on the attack's tick plus this delay (melee,
- * delay 0, lands on the swing's tick, as live).
+ * 52 casts; the other 5 never landed, as he died first). Melee lands on the swing's tick, as live.
+ * Wiki: bolts and fur balls "only deal damage on impact" and "can be blocked with late
+ * reactions", so they are rolled as they land, with the protection prayer up then.
  */
 const DISTANT_HIT_DELAY = 4;
+/** Bolts and fur balls landing this tick: placeholder PendingHit -> its max hit, rolled by `distantHitLands`. */
+const landing = new WeakMap();
 /** Captured on the player: a missed bolt splashes (failedspell_impact) with sound 227. */
 const SPLASH_GFX = 85;
 const SPLASH_SOUND = 227;
@@ -554,10 +557,24 @@ function oneShotRat(event) {
   hit.updateTotalDamage();
 }
 
+/**
+ * A bolt or fur ball lands, in the player's own turn after their clicks this tick: rolled now,
+ * against the protection prayer they have up as it hits.
+ */
+function distantHitLands(event) {
+  const maxHit = landing.get(event.hit);
+  if (maxHit === undefined) return;
+  landing.delete(event.hit);
+  const placeholder = event.hit;
+  const hit = new core.PendingHit(placeholder.getAttacker(), placeholder.getTarget(), placeholder.getCombatMethod(), 0);
+  core.CombatFactory.applyStyleDamage(hit, maxHit);
+  event.hit = hit;
+}
+
 function defineCombatMethod() {
   const { Animation, CombatMethod, CombatType, Graphic, PendingHit } = core;
 
-  return class ScurriusCombatMethod extends CombatMethod {
+  class ScurriusCombatMethod extends CombatMethod {
     constructor() {
       super();
       this.stance = CombatType.MELEE;
@@ -638,13 +655,44 @@ function defineCombatMethod() {
     }
 
     hits(character, target) {
-      if (this.action !== "melee" && this.action !== "ranged" && this.action !== "magic") return [];
       const maxHits = maxHitsFor(character);
-      const melee = this.stance === CombatType.MELEE;
-      const hit = new PendingHit(character, target, this, melee ? 0 : DISTANT_HIT_DELAY);
-      const maxHit = this.stance === CombatType.RANGED ? maxHits.ranged : this.stance === CombatType.MAGIC ? maxHits.magic : maxHits.melee;
-      core.CombatFactory.applyStyleDamage(hit, maxHit);
-      return [hit];
+      if (this.action === "melee") {
+        const hit = new PendingHit(character, target, this, 0);
+        core.CombatFactory.applyStyleDamage(hit, maxHits.melee);
+        return [hit];
+      }
+      if (this.action !== "ranged" && this.action !== "magic") return [];
+      const kind = this.action;
+      // Queued at 0 as the flight ends and rolled by distantHitLands in the player's turn, so a
+      // prayer clicked on the landing tick counts (the task runs before the player's clicks).
+      Common.later(DISTANT_HIT_DELAY, () => {
+        if (character.getHitpoints() <= 0 || !character.isRegistered?.()) return;
+        if (target.getHitpoints() <= 0 || target.isRegistered?.() === false) return;
+        const placeholder = new PendingHit(character, target, DISTANT_STYLES[kind],
+          { delay: 0, rollAccuracy: false, experience: false, damage: 0, bypassProtectionPrayer: true });
+        landing.set(placeholder, maxHits[kind]);
+        core.CombatFactory.addPendingHit(placeholder);
+      }, character);
+      return [];
+    }
+  }
+
+  /**
+   * Carries a landing bolt's or fur ball's style: PendingHit reads its style from its method as
+   * it is built, and by the time one lands his own method may have moved on to the next attack.
+   */
+  class DistantHit extends CombatMethod {
+    constructor(style) {
+      super();
+      this.style = style;
+    }
+
+    type() {
+      return this.style;
+    }
+
+    hits() {
+      return [];
     }
 
     /** Captured on the player, at height 100: the fur ball's impact, or the bolt's (a splash on a miss). */
@@ -662,7 +710,10 @@ function defineCombatMethod() {
         sender.sendSound(landed ? SOUND.magicImpact : SPLASH_SOUND, 1, 0);
       }
     }
-  };
+  }
+
+  const DISTANT_STYLES = { ranged: new DistantHit(CombatType.RANGED), magic: new DistantHit(CombatType.MAGIC) };
+  return ScurriusCombatMethod;
 }
 
 function attach(pluginApi) {
@@ -671,6 +722,7 @@ function attach(pluginApi) {
   api.onNpcHitModify(oneShotRat);
   api.onPlayerDealtDamage(trackPhase);
   api.onPlayerDealtDamage(removeRatAttackDelay);
+  api.onPlayerHitModify(distantHitLands);
   api.registerNpcCombatMethodProvider([Common.PUBLIC_ID, Common.SOLO_ID], defineCombatMethod(), { singleton: false });
 }
 
@@ -683,6 +735,6 @@ module.exports = {
     SOLO_MAX_HITS, PUBLIC_MAX_HITS, PHASE_ONE, FEEDING, ENRAGED, RAT_WAVE_LIMIT, ROCKFALL_TILES,
     RAT_CALL_COOLDOWN_TICKS, FEED_HEALS, MELEE_BETWEEN_ROUNDS, PROJECTILE, pickAction, rockfallTiles, stomp, summonRats,
     FEED_HEAL_AMOUNTS, DISTANT_HIT_DELAY, startFeeding, feedingTurn, finishFeeding, stepOff, ratsAlive, facingFor, heal, goEat, enrage, handTile, oneShotRat, removeRatAttackDelay,
-    defineCombatMethod, maxHitsFor,
+    defineCombatMethod, distantHitLands, maxHitsFor,
   },
 };

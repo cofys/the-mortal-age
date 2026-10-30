@@ -89,7 +89,9 @@ before(async () => {
   // The real answers: Smelting's bar for an ore, Cooking's cooked fish, Firemaking's log XP, NpcDrops' tables.
   require("../plugins/skills/smithing/Data.Smithing").load(core);
   custom["smithing:bar-for-ore"] = [require("../plugins/skills/smithing/Smelting.Smithing").answerBarForOre];
-  const cookable = require("../plugins/skills/Cooking.plugin")._test.COOKABLE_BY_RAW;
+  const Cooking = require("../plugins/skills/Cooking.plugin");
+  Cooking._test.setApi({ core });
+  const cookable = Cooking._test.COOKABLE_BY_RAW;
   custom["cooking:cooked"] = [(request) => {
     const entry = cookable.get(request.rawId);
     if (entry) Object.assign(request, { cookedId: entry.cooked, xp: entry.xp });

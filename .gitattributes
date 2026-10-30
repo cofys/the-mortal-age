@@ -24,3 +24,6 @@
 /tools/quest-helper-bridge/gradlew text eol=lf
 /tools/quest-helper-bridge/gradlew.bat text eol=crlf
 /tools/quest-helper-bridge/gradle/wrapper/gradle-wrapper.jar binary
+
+# Preserve the historical cache export's deterministic bytes on Windows.
+/server/plugins/world/seasonal/data/christmas-2025-archive.json text eol=lf

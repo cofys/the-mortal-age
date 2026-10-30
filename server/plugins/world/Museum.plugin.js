@@ -19,8 +19,11 @@
  * item assessments are played from the same page's standard-dialogue item
  * conditions. No dialogue text is copied here.
  *
- * Not implemented: the natural history quiz, fossil displays, ancient relics
- * and salvaging. They are separate Kudos routes and are not needed for 100.
+ *   - The natural history quiz (museum/NaturalHistoryQuiz.Museum.js): 2 Kudos per
+ *     display case, through AWARD_KUDOS_EVENT.
+ *
+ * Not implemented: fossil displays, ancient relics and salvaging. They are
+ * separate Kudos routes and are not needed for 100.
  */
 "use strict";
 
@@ -30,6 +33,7 @@ const KUDOS_ATTRIBUTE = "museum:kudos";
 const STATE_ATTRIBUTE = "museum:state";
 const VARBIT_VM_KUDOS = 3637; // cache gameval vm_kudos: varp 1010, bits 0-10
 const KUDOS_EVENT = "museum:get-kudos";
+const AWARD_KUDOS_EVENT = "museum:award-kudos";
 const HAS_KIT_EVENT = "archaeology:has-kit";
 const KUDOS_CHANGED_EVENT = "museum:kudos-changed";
 
@@ -633,6 +637,12 @@ function answerGetKudos(request) {
   request.kudos = kudosOf(request.player);
 }
 
+/** AWARD_KUDOS_EVENT `{ player, amount, source }`: Kudos earned by a museum unit. */
+function answerAwardKudos(request) {
+  if (!request?.player || !(request.amount > 0)) return;
+  request.kudos = awardKudos(request.player, request.amount, request.source);
+}
+
 function handleLogin({ player }) {
   syncDisplayVarbits(player);
   sendKudosVarbit(player);
@@ -650,6 +660,7 @@ module.exports = {
     pluginApi.persistAttribute(KUDOS_ATTRIBUTE, 0);
     pluginApi.persistAttribute(STATE_ATTRIBUTE, null);
     pluginApi.onCustomEvent(KUDOS_EVENT, answerGetKudos);
+    pluginApi.onCustomEvent(AWARD_KUDOS_EVENT, answerAwardKudos);
     pluginApi.onCustomEvent(HAS_KIT_EVENT, answerHasKit);
     pluginApi.onCustomEvent("npc-dialogue:menu", startMinasConversation);
     pluginApi.onCustomEvent("npc-dialogue:condition", recordMinasCondition);
@@ -665,5 +676,6 @@ module.exports = {
     pluginApi.onItemAction("Antique lamp", { Rub: rubLamp });
     pluginApi.onPlayerLogin(handleLogin);
     pluginApi.onCustomEvent("player:bootstrap-complete", handleBootstrap);
+    require("./museum/NaturalHistoryQuiz.Museum")(pluginApi);
   },
 };

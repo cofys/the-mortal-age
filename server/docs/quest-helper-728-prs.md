@@ -14,14 +14,14 @@ worktree. Test accounts, saves and raw evidence were not reset.
 
 All 108 original split PRs have merged, including the three shared foundation PRs.
 Their links below preserve scope and review history. Merged code is not proof that
-all branches have passed natural verification; use the evidence column and ledger.
+all branches have passed natural verification; use the evidence column and docs/quests.
 Further fixes target current `main` in new quest/shared follow-up PRs. Do not push
 new work to the closed split PRs or superseded PR753.
 
 ## Evidence and ongoing verification
 
-Use the [verification ledger](quest-helper-728-verification.md),
-[coverage and gaps](quest-helper-728-coverage.md), and
+Use the per-quest pages in [docs/quests](../../docs/quests/README.md),
+[the coverage overview](quest-helper-728-coverage.md), and
 [quest review process](agents/quest-testing.md). Resume saved checkpoints and test changed
 steps rather than replaying completed routes. Record the exact candidate source/runtime
 hash and preserve per-quest raw evidence outside Git. A PR split does not invalidate a
@@ -58,7 +58,7 @@ stage 1 on its existing account; Murder Mystery is completed/offline with its An
 After this split, put further quest fixes in that quest's PR and shared fixes in their
 own support PR. Preserve newer main changes when moving a fix from the integration
 worktree; never replace a branch's whole source file with an older working-tree copy.
-Update this index and the verification ledger as evidence is accepted; do not infer
+Update this index and the quest's docs/quests page as evidence is accepted; do not infer
 percentages from PR counts or source-only tests.
 
 ## PRs and verification status
@@ -184,4 +184,4 @@ percentages from PR counts or source-only tests.
 
 ## Community-tested replay exclusions
 
-Follow the user-approved [community completion exclusions](quest-helper-728-community-completions.md) from issue #1257 before starting any new manual actor. The 21 listed completions skip full replay; caveats and targeted bug checks remain. None overlaps the original 106 active jobs.
+Follow the user-approved community completion exclusions (`tester: community` in [docs/quests](../../docs/quests/README.md)) from issue #1257 before starting any new manual actor. The 21 listed completions skip full replay; caveats and targeted bug checks remain. None overlaps the original 106 active jobs.

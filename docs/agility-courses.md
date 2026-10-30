@@ -55,6 +55,34 @@ tick after):
   `agility_pyramid_level` follows the floor (1-5) and is 0 again out of the doorway; on floors 1
   and 3 it swaps the static pyramid block for the moving one. Falls set it too, from where they
   land; no fall was captured.
+  - **Stairs up** land on a fixed tile per flight, whichever side they were climbed from:
+    3355,2833,1; 3356,2835,2; 3358,2837,3; 3041,4695,2; 3043,4697,3. No climb down was captured.
+  - **Gaps and low walls** go straight over the loc from the player's side of its footprint (a
+    2x2 gap jumped from its corner column still goes over it, 3357,2846 to 3357,2849).
+  - **Stone blocks** (Wiki: 12 XP, five a lap) are stepped on, not clicked: an invisible wall
+    (`inviswall_serverside`, loc 3550) runs across the middle of each 2x2 block. The tick after
+    the player arrives on the near row, `agility_pyramid_tilt_N` (1551-1555) goes to 1, sounds
+    1396 and 2455 (25 cycles in) play and the player dives (1115) two tiles on (exact move, 10-30
+    cycles); the next tick the varbit is 0 and the XP is paid. A failure, and always a step on
+    from the far side, drops the player a floor for 6 (1 backwards) damage (Wiki); neither was
+    captured, so the fall's animation (768) and tile are guesses. In the course data these are
+    obstacles with `tiles` instead of an `object`, played when a player steps onto one.
+  - **Pyramid blocks** (`plugins/areas/AgilityPyramid.plugin.js`) are NPCs 5788 (floor 1, from
+    3372,2847 east) and 5787 (floor 3, from 3366,2845 north). They slide out a tile a tick for
+    two ticks, with area sound 1395 (range 5) at home, stay out for two more and slide back; every 15 ticks
+    on floor 1, every 13 on floor 3. They block players (NPC "full" collision): a walk into one
+    waits and goes on once it has gone back, as captured. One that moves onto a player pushes
+    them down a floor for 8 damage (Wiki), two tiles on; the push wasn't captured.
+  - **Laps** run from the stairs up to the doorway with the floors' obstacles in any order
+    (`anyOrder`), so the doorway counts the lap ("Your Agility Pyramid lap count is", as
+    captured).
+  - **The top's climb** is the Desert diary's medium task "Climb to the summit of the Agility
+    Pyramid" (captured).
+  - **Simon Templeton** (`plugins/minigames/pyramidplunder/Simon.PyramidPlunder.js`) buys pyramid
+    tops for 10,000 coins each (Wiki) through his transcript: his introduction the first time
+    (setting `agility_pyramid_simon_named` and `_job`), then the before- and after-sale lines;
+    the first sale sets `_job_done`. A top used on him sells them all, or before the
+    introduction asks for a chat first (captured).
 
 ## Shared obstacles
 

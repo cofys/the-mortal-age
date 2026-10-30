@@ -185,7 +185,7 @@ module.exports = function registerBigChompyBirdHuntingQuest(api) {
     if (stage >= STAGE_KIDS_EXPLAINED_TOADS) return ["Open the rock-covered chest in the cave for ogre bellows."];
     if (stage >= STAGE_GIVEN_ARROWS) return ["Ask Rantz how to attract a chompy, then speak to his children."];
     if (stage >= STAGE_STARTED) return ["Make six ogre arrows from achey logs, wolf bones and feathers,", "then give the arrows to <col=800000>Rantz</col>."];
-    return ["Speak to <col=800000>Rantz</col> east of Gu'Tanoth in the Feldhil Hills."];
+    return ["I can start this quest by talking to <col=800000>Rantz</col> by the eastern coast of the <col=800000>Feldip Hills</col>."];
   }
 
   function grantReward(player) {

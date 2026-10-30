@@ -208,6 +208,8 @@ test('Rune Mysteries complete short-route dialogue round trip gives the package,
   h.continueUntil(p,()=>!p.manager.getCurrent());assert.equal(p.items.get(I.RESEARCH_PACKAGE),1);assert.equal(h.quest.getStage(p),3);assert.ok(p.log.some(row=>row[0]==='text'&&String(row[2]).includes("don't remember telling")));
   h.talk(p,2886);continueToMenu(h,p);h.choose(p,"I've been sent here with a package for you.");continueToMenu(h,p);assert.equal(h.quest.getStage(p),5);assert.equal(p.items.get(I.RESEARCH_NOTES_4),1);h.choose(p,"I'd love a cup of tea.");h.continueUntil(p,()=>!p.manager.getCurrent());assert.ok(p.messages.includes('Aubury hands you a cup of tea.'));
   h.talk(p,5034);h.continueUntil(p,()=>h.quest.isComplete(p));assert.equal(p.items.get(I.RESEARCH_NOTES_4),0);assert.equal(p.items.get(I.AIR_TALISMAN),1);
+  assert.ok(p.prompt?.options?.includes("Can you teleport me to the Rune Essence Mine?"), "completion keeps Sedridor's follow-up menu");
+  assert.ok(p.prompt?.options?.includes("I'd better get going."));
 });
 
 test('Juliet potion and Romeo crypt round trip renders each speaker and completes after returning', () => {

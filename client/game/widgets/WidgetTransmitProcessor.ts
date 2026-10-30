@@ -256,12 +256,14 @@ export class WidgetTransmitProcessor {
             if (node.onInvTransmit || node.eventHandlers?.onInvTransmit) {
                 const lastInvCount = node.lastChangedInvCount ?? 0;
                 const currentInvCount = cycles.changedInvCount;
+                const definitionRevision = cycles.itemDefinitionRevision ?? 0;
+                const definitionsChanged = definitionRevision > (node.lastItemDefinitionRevision ?? 0);
 
-                if (currentInvCount > lastInvCount) {
-                    let shouldFireInv = false;
+                if (definitionsChanged || currentInvCount > lastInvCount) {
+                    let shouldFireInv = definitionsChanged;
                     const triggers = node.invTransmitTriggers;
 
-                    if (triggers && triggers.length > 0 && currentInvCount - lastInvCount <= 32) {
+                    if (!definitionsChanged && triggers && triggers.length > 0 && currentInvCount - lastInvCount <= 32) {
                         scanInvLoop: for (let i = lastInvCount; i < currentInvCount; i++) {
                             const changedInvId = cycles.changedInvsBuffer[i & 31];
                             for (const triggerId of triggers) {
@@ -285,6 +287,7 @@ export class WidgetTransmitProcessor {
                     }
 
                     node.lastChangedInvCount = currentInvCount;
+                    node.lastItemDefinitionRevision = definitionRevision;
                 }
             }
 

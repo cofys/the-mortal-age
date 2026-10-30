@@ -21,6 +21,11 @@ before(async () => {
     core,
     persistAttribute() {},
     onPlayerLogin: (handler) => hooks.login.push(handler),
+    onPlayerLogout() {},
+    onPlayerDeath() {},
+    onCanEquip() {},
+    onCanUnequip() {},
+    onCanBankItem() {},
     onObjectInteraction: (name, actions) => { hooks.objects[name] = { ...hooks.objects[name], ...actions }; },
     onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
     onItemAction: (name, actions) => { hooks.items[name] = actions; },
@@ -132,7 +137,7 @@ test("a notice board shows eight tasks, the same each time, and a click opens on
   assert.ok(player.log.includes(`script 8900 ${JSON.stringify([(941 << 16) | 5, rows[7], 0, 0])}`), "slot 42 is the eighth task");
 });
 
-test("accepting fills a slot and redraws the board; the limits refuse (slots by level, level, bounties)", () => {
+test("accepting fills a slot and redraws the board; the limits refuse (slots by level, level)", () => {
   const player = createPlayer();
   withBoard(player);
   inspect(player);
@@ -147,7 +152,7 @@ test("accepting fills a slot and redraws the board; the limits refuse (slots by 
   novice.setAttribute(common.SLOTS_ATTRIBUTE, [{ id: 1, taken: 0, delivered: 0 }]);
   assert.match(board.refusal(novice, common.taskById(JEWELLERY_TASK)), /any more port tasks/, "one slot at level 1");
   assert.match(board.refusal(createPlayer(1), common.taskById(16)), /Sailing level of 20/);
-  assert.match(board.refusal(createPlayer(), common.taskById(445)), /Bounty/);
+  assert.equal(board.refusal(createPlayer(), common.taskById(445)), null, "bounty tasks can be taken (Bounty.PortTasks.js)");
 });
 
 test('the Prying Times prerequisite can query an available port-task slot', () => {
@@ -249,7 +254,8 @@ test("crewmates carrying crates: the ledger counts theirs, says they'll help, an
   } };
   try {
     hooks.objects["Ledger table"]["Take-cargo"]({ player, location: PANDEMONIUM_LEDGER });
-    const [name, taken] = events[0];
+    assert.equal(events[0][0], "port-tasks:slots-changed");
+    const [name, taken] = events.find(([event]) => event === "port-tasks:cargo-taken") ?? [];
     assert.equal(name, "port-tasks:cargo-taken");
     assert.equal(taken.left, 2);
     const box = player.dialogues.at(-1).getDialogues().get(0);

@@ -130,7 +130,18 @@ export class Trading {
         return true;
     }
 
+    private static canTrade(player: Player, target: Player): boolean {
+        for (const area of new Set([player.getArea?.(), target.getArea?.()])) {
+            if (area && PluginManager.callArea(area, "canTrade", player, target) === false) return false;
+        }
+        return PluginManager.emitCanTrade(player, target) !== false;
+    }
+
     public requestTrade(t_: Player) {
+        if (!Trading.canTrade(this.player, t_)) {
+            this.player.sendMessage("You cannot trade here.");
+            return;
+        }
         if (this.state == TradeState.NONE || this.state == TradeState.REQUESTED_TRADE) {
             if (!this.request_delay.finished()) {
                 let seconds = this.request_delay.secondsRemaining();
@@ -233,6 +244,10 @@ export class Trading {
     }
 
     public acceptTrade() {
+        if (this.interact && !Trading.canTrade(this.player, this.interact)) {
+            this.closeTrade();
+            return;
+        }
         if (!Trading.validate(this.player, this.interact, PlayerStatus.TRADING, TradeState.TRADE_SCREEN,
             TradeState.ACCEPTED_TRADE_SCREEN, TradeState.CONFIRM_SCREEN, TradeState.ACCEPTED_CONFIRM_SCREEN
         )) {

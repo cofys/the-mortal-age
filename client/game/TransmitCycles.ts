@@ -122,6 +122,9 @@ export interface TransmitCycles {
      */
     changedInvCount: number;
 
+    /** Item definitions changed without an inventory mutation (e.g. archived content). */
+    itemDefinitionRevision: number;
+
     /**
      * Circular buffer of last 32 changed inventory IDs.
      * Index = (changedInvCount - 1) & 31
@@ -193,6 +196,7 @@ export function createTransmitCycles(): TransmitCycles {
         changedVarps: new Int32Array(32),
         // Counter-based inventory change tracking
         changedInvCount: 0,
+        itemDefinitionRevision: 0,
         changedInvsBuffer: new Int32Array(32),
         // Counter-based stat change tracking
         changedStatCount: 0,
@@ -300,6 +304,13 @@ export function markInvTransmit(invId?: number): void {
         cycles.changedInvsBuffer[cycles.changedInvCount & 31] = invId;
         cycles.changedInvCount++;
     }
+}
+
+/** Rebuild cached inventory presentation through its normal listeners, without fake item changes. */
+export function markItemDefinitionsChanged(): void {
+    const cycles = getTransmitCycles();
+    cycles.itemDefinitionRevision++;
+    cycles.transmitDirty = true;
 }
 
 /**

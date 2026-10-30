@@ -152,6 +152,18 @@ export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   ignoreProjectileClip?: boolean;
 }
 
+/**
+ * An NPC's combat option (Attack), before normal combat starts. A plugin that handles it (a
+ * player manning a boat cannon) sets `handled` and core combat doesn't start.
+ */
+export interface PluginNpcAttackOptionEvent {
+  player: any;
+  npc: any;
+  npcId: number;
+  clickType: number;
+  handled: boolean;
+}
+
 /** A world entity (static ship or boat) menu option, such as Board or Attack. */
 export interface PluginWorldEntityInteractionEvent {
   player: any;
@@ -980,6 +992,8 @@ export interface PluginApi {
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
   /** Conditional interaction ownership before normal NPC handlers. Leave unclaimed events untouched. */
   onBeforeNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** An NPC's combat option, before normal combat starts; set `handled` to take it over. */
+  onNpcAttackOption(handler: (event: PluginNpcAttackOptionEvent) => void): void;
   /** World entity (static ship/boat) options, by op number (1-6). */
   onWorldEntityInteraction(handler: (event: PluginWorldEntityInteractionEvent) => void): void;
   /** Set a non-combat NPC option's approach range before movement starts. */
@@ -1293,6 +1307,7 @@ export interface PluginApi {
   /** Runs the NPC option handlers as a click would (a bot fishing a spot). */
   emitNpcInteraction(event: PluginNpcInteractionEvent): boolean;
   emitWorldEntityInteraction(event: PluginWorldEntityInteractionEvent): boolean;
+  emitNpcAttackOption(event: PluginNpcAttackOptionEvent): boolean;
   /** Runs the item-on-object handlers as a use would (a bot cooking on a range). */
   emitItemOnObject(event: PluginItemOnObjectEvent): boolean;
   emitPlayerLogin(event: PluginPlayerLoginEvent): void;
@@ -1487,6 +1502,9 @@ export interface PluginCoreApi {
   Mobile: any;
   encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
   MOBILE_CLIENT_ATTRIBUTE: typeof import("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE;
+  XPDROPS_ENABLED_ATTRIBUTE: typeof import("../net/protocol/ClientProtocol").XPDROPS_ENABLED_ATTRIBUTE;
+  encodeGameframeBootstrap: typeof import("../net/protocol/ClientProtocol").encodeGameframeBootstrap;
+  resolveGameframeRoot: typeof import("../net/protocol/ClientProtocol").resolveGameframeRoot;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;
@@ -1521,6 +1539,7 @@ export interface PluginCoreApi {
   CombatPoisonData: any;
   CombatPoisonEffect: any;
   CacheDefinitions: any;
+  encodeContentData: typeof import("../net/protocol/ClientProtocol").encodeContentData;
   CacheMaps: any;
   MapRegionReplacementManager: any;
   readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;

@@ -5,6 +5,7 @@ const { loadCache, loadCacheInfos, loadCacheList } = require("../scripts/cache/l
 const { SoundEffectLoader } = require("../rs/audio/SoundEffectLoader");
 const { loadVorbisSample } = require("../game/audio/VorbisWasm");
 const { IndexType } = require("../rs/cache/IndexType");
+const { VorbisSample, resetSetup, initVorbisSetup, isSetupInitialized } = require("../rs/audio/vorbis/VorbisSample");
 
 /**
  * OSRS's newer sound effects are sampled, not synths: file 1 of their archive in the sound
@@ -21,6 +22,28 @@ async function main(): Promise<void> {
     const group = (Array.from(music.getArchiveIds() as Int32Array) as number[]).find((id) => id > 0)!;
     const file = (Array.from(music.getFileIds(group) as Int32Array) as number[])[0];
     const before = await loadVorbisSample(cache, group, file);
+    assert.ok(before);
+    const data = music.getFile(group, file).data;
+    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    const synchronous = new VorbisSample(bytes).toRawSound();
+    assert.deepEqual(synchronous, before, "cooperative loading retains the complete PCM and loop metadata");
+    const first = new VorbisSample(bytes).toRawSoundSteps();
+    const second = new VorbisSample(bytes).toRawSoundSteps();
+    let a = first.next(), b = second.next();
+    resetSetup();
+    try {
+        assert.ok(loader.load(12819), "a sound with its own setup can decode between music packets");
+        while (!a.done || !b.done) {
+            if (!a.done) a = first.next();
+            if (!b.done) b = second.next();
+        }
+        assert.deepEqual(a.value, synchronous);
+        assert.deepEqual(b.value, synchronous, "interleaved samples keep their captured setup after a cache reset");
+        assert.equal(isSetupInitialized(), false, "resuming an older sample cannot restore a replaced global setup");
+    } finally {
+        const setup = music.getFile(0, 0).data;
+        initVorbisSetup(new Uint8Array(setup.buffer, setup.byteOffset, setup.byteLength));
+    }
 
     for (const id of [12819, 12825, 12814, 12837, 12826]) {
         const raw = loader.load(id);

@@ -135,6 +135,12 @@ function rotationOf(hotspot, facilityRow) {
   return facesIn ? (hotspot.side + 2) & 3 : hotspot.side;
 }
 
+/**
+ * A built facility's op flags (loc_add_change): at sea its ops 1-4 and not Modify, in the shipyard
+ * only Modify (op5) (rsprox: the user's captures, every facility, both ways).
+ */
+const FACILITY_OPS = Object.freeze({ AT_SEA: 0b1111, SHIPYARD: 0b10000 });
+
 /** The wind and gale catchers' switched-off locs and their switched-on ones (cache, rsprox 907). */
 const CATCHER_SWITCHED_ON = { 59684: 59683, 59685: 59686 };
 
@@ -155,7 +161,8 @@ function hotspotLocs(boat, placeholders = false) {
     if (boat.windCatcherOn && CATCHER_SWITCHED_ON[id] !== undefined) id = CATCHER_SWITCHED_ON[id];
     if (typeof id !== "number") return [];
     const blocks = (CacheDefinitions.getObject(id)?.clipType ?? 0) !== 0;
-    return [{ id, x: hotspot.x, y: hotspot.y, level: hotspot.level, shape: LOC_SHAPE, rotation: rotationOf(hotspot, facility), blocks, hotspot: hotspot.id }];
+    const opFlags = facility === undefined ? undefined : placeholders ? FACILITY_OPS.SHIPYARD : FACILITY_OPS.AT_SEA;
+    return [{ id, x: hotspot.x, y: hotspot.y, level: hotspot.level, shape: LOC_SHAPE, rotation: rotationOf(hotspot, facility), blocks, hotspot: hotspot.id, opFlags }];
   });
 }
 
@@ -171,6 +178,7 @@ function teleportFocusOf(boat) {
 
 module.exports = {
   CATCHER_SWITCHED_ON,
+  FACILITY_OPS,
   teleportFocusOf,
   TYPE_HOTSPOTS,
   HOTSPOT_FACILITIES,

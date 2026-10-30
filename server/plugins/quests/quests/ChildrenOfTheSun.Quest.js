@@ -8,9 +8,11 @@
  *   10 report to Sergeant Tobyn, 12 marking the disguised bandits,
  *   14 all four bandits marked, 16 escorted to the palace roof, 18 in the
  *   bandit cell, 20 left the cell, 22 Itzla departs, 24 complete.
- * On completion varbit 9645 ("vmq1_questcomplete_type") is set to 2, matching the
- * live-game transition recorded for this quest. Varbit 9646 ("vmq1_met_alina") is
- * set on the first Alina/Noah conversation.
+ * On completion varbit 9645 ("vmq1_questcomplete_type") is set to 2 and varbit
+ * 9652 ("vmq2_first_travel", varp 4076, bits 9-11) is set to 1, matching the
+ * live-game transition recorded for this quest. A later first trip (2 and above)
+ * is left alone. Varbit 9646 ("vmq1_met_alina") is set on the first Alina/Noah
+ * conversation.
  *
  * The ten 2-bit guard varbits 9633-9644 ("vmq1_guard_1..10") hold each guard's
  * state: 0 unmarked, 2 marked (the value live checkpoints use). The four bandits
@@ -58,6 +60,7 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
   const STAGE_VARBIT = 9632;
   const GUARD_VARBIT_IDS = [9633, 9634, 9635, 9636, 9637, 9640, 9641, 9642, 9643, 9644];
   const QUESTCOMPLETE_TYPE_VARBIT = 9645;
+  const FIRST_TRAVEL_VARBIT = 9652; // vmq2_first_travel; 1 at completion, then 2+ on the trip
   const MET_ALINA_VARBIT = 9646;
   const GUARD_MARKED_VALUE = 2;
 
@@ -420,7 +423,11 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
       sender.sendVarbit(GUARD_VARBIT_IDS[index], isGuardMarked(player, index) ? GUARD_MARKED_VALUE : 0);
     }
     if (metAlina(player)) sender.sendVarbit(MET_ALINA_VARBIT, 1);
-    if (quest.isComplete(player)) sender.sendVarbit(QUESTCOMPLETE_TYPE_VARBIT, 2);
+    if (quest.isComplete(player)) {
+      sender.sendVarbit(QUESTCOMPLETE_TYPE_VARBIT, 2);
+      // 0 is "not set". Primio uses 2+ once the first trip has been offered.
+      if (Number(sender.getVarbit(FIRST_TRAVEL_VARBIT)) === 0) sender.sendVarbit(FIRST_TRAVEL_VARBIT, 1);
+    }
   }
 
   function removeCellScene(player) {
@@ -818,6 +825,7 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
         if (!quest.isComplete(player)) {
           player.getPacketSender().sendVarbit(QUESTCOMPLETE_TYPE_VARBIT, 2);
           quest.complete(player);
+          syncGuardVarbits(player);
         }
         return;
       default:
@@ -897,6 +905,12 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
     ensureQuestNpcs(player);
     syncGuardVarbits(player);
     refreshQuestList(player);
+  }
+
+  /** Login bootstrap can clobber varps after the login hooks. Send the completion bits again. */
+  function handleBootstrap({ player }) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    syncGuardVarbits(player);
   }
 
   function handleLogout({ player }) {
@@ -1019,5 +1033,6 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
   api.onNpcInteraction("Guard", { Mark: markGuard, Unmark: unmarkGuard });
   api.onPlayerProcess(handlePlayerProcess);
   api.onPlayerLogin(handleLogin);
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   api.onPlayerLogout(handleLogout);
 };

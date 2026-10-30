@@ -1,6 +1,7 @@
 import { COSINE, SINE } from "../../rs/MathConstants";
 import { CustomItemRegistry } from "../../custom/items/CustomItemRegistry";
 import { CustomModelRegistry } from "../../custom/items/CustomModelRegistry";
+import { getDefinitionArchiveKey } from "../../custom/archives/ArchivedDefinitionStore";
 import type { CacheSystem } from "../../rs/cache/CacheSystem";
 import { ObjModelLoader } from "../../rs/config/objtype/ObjModelLoader";
 import { ObjStackability } from "../../rs/config/objtype/ObjStackability";
@@ -25,7 +26,7 @@ export type ItemIconRenderOptions = {
 };
 
 export class ItemIconRenderer {
-    private customRevision = -1;
+    private contentKey = "";
     private static readonly OSRS_SPRITE_W = 36;
     private static readonly OSRS_SPRITE_H = 32;
     private static readonly ITEM_SPRITE_CACHE_MAX = 2048;
@@ -65,11 +66,6 @@ export class ItemIconRenderer {
         quantity: number = 1,
         options: ItemIconRenderOptions = {},
     ): HTMLCanvasElement | undefined {
-        const revision = CustomItemRegistry.revision + CustomModelRegistry.revision;
-        if (revision !== this.customRevision) {
-            this.itemSpriteCache.clear();
-            this.customRevision = revision;
-        }
         // Mirror UserComparator7.getItemSprite (36x32, baked outline/shadow + stack text).
         const qty = quantity | 0;
         const outline = (options.outline ?? 0) | 0;
@@ -77,9 +73,6 @@ export class ItemIconRenderer {
         const qtyModeRaw = (options.quantityMode ?? 2) | 0;
         const qtyMode = this.normalizeQuantityMode(qty, qtyModeRaw);
         const key = this.getItemSpriteKey(itemId | 0, qty, outline, shadow, qtyMode);
-
-        const cached = this.itemSpriteCache.get(key);
-        if (cached?.canvas) return cached.canvas;
 
         const entry = this.getItemSpriteEntry(itemId | 0, qty, outline, shadow, qtyMode, false);
         if (!entry) return undefined;
@@ -230,6 +223,14 @@ export class ItemIconRenderer {
         var5: boolean,
         scale: number = 512,
     ): { pixels: Int32Array; isStackable: boolean; canvas?: HTMLCanvasElement } | undefined {
+        // Widgets and the plugin createSprite API share this boundary. The
+        // private model loader also holds same-id models across content swaps.
+        const contentKey = `${CustomItemRegistry.revision}:${CustomModelRegistry.revision}:${getDefinitionArchiveKey()}`;
+        if (contentKey !== this.contentKey) {
+            this.itemSpriteCache.clear();
+            this.objModel.clearCache();
+            this.contentKey = contentKey;
+        }
         const key = this.getItemSpriteKey(itemId, quantity, outline, shadow, quantityMode);
         if (!var5 && scale === 512) {
             const cached = this.itemSpriteCache.get(key);

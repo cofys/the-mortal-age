@@ -98,7 +98,6 @@ function clickBoard(event) {
 /** Why the task can't be taken, or null. The refusals' wording is ours (not captured). */
 function refusal(player, task) {
   const { Skill } = common.core();
-  if (task.type !== "courier") return "Bounty tasks aren't available yet.";
   if (player.getSkillManager().getMaxLevel(Skill.SAILING) < task.level) {
     return `You need a Sailing level of ${task.level} to take on this task.`;
   }
@@ -122,6 +121,7 @@ function answerTask(player, dockId, task, amount) {
   const free = held.findIndex((slot, i) => !slot && i < common.slotLimit(player));
   held[free] = { id: task.id, taken: 0, delivered: 0 };
   common.setSlots(player, held);
+  if (task.type === "bounty") common.core().PluginManager.emitCustomEvent("port-tasks:bounty-accepted", { player, index: free, task });
   player.sendMessage(`You have accepted the ${common.blue(task.name)} port task.`);
   openBoard(player, dockId);
 }

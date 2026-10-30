@@ -36,6 +36,12 @@ function toTileCoord(subCoord: number): number {
  *
  * Matches the setPathPosition / appendPathStep / interpolateActor / updateMovement model.
  */
+/** Where boats' decks are in the world: a deck position projected to world fine units, and a boat's orientation. */
+export interface WorldEntityPlacement {
+    projectDeckToWorld(entityIndex: number, fineX: number, fineY: number): { x: number; y: number } | undefined;
+    orientationOf(entityIndex: number): number | undefined;
+}
+
 export class PlayerMovementSync {
     private readonly states = new Map<number, MovementState>();
     private readonly routeFinder = new OsrsRouteFinder32();
@@ -55,6 +61,7 @@ export class PlayerMovementSync {
         private readonly npcEcs?: NpcEcs,
         private readonly seqTypeLoader?: SeqTypeLoader,
         private readonly getCollisionFlagAt?: CollisionFlagAtFn,
+        private readonly worldEntities?: WorldEntityPlacement,
     ) {
         this.playerEcs.setInteractionOrientationProvider?.((ecsIndex) =>
             this.computeInteractionOrientation(ecsIndex),
@@ -635,12 +642,45 @@ export class PlayerMovementSync {
                 }
             }
             if (targetX === undefined || targetY === undefined) return undefined;
+            const across = this.acrossDeckOrientation(ecsIndex, decoded, selfPos, targetX, targetY);
+            if (across !== null) return across;
             if ((selfPos.x | 0) === (targetX | 0) && (selfPos.y | 0) === (targetY | 0))
                 return undefined;
             return faceAngleRs(selfPos.x | 0, selfPos.y | 0, targetX | 0, targetY | 0);
         } catch {
             return undefined;
         }
+    }
+
+    /**
+     * Facing a target in another world view from a boat's deck (a sea creature shot from the deck):
+     * the player stands in the deck's own scene, so the angle is taken from where they are in the
+     * world, and made relative to the deck, which is drawn turned by the boat's orientation. Null
+     * when both are in the same world view (the usual case); undefined when it can't be placed.
+     */
+    private acrossDeckOrientation(
+        ecsIndex: number,
+        decoded: { type: string; id: number },
+        selfPos: { x: number; y: number },
+        targetX: number,
+        targetY: number,
+    ): number | undefined | null {
+        const worldView = this.playerEcs.getWorldViewId(ecsIndex) | 0;
+        if (worldView < 0 || !this.worldEntities) return null;
+        let targetWorldView = -1;
+        if (decoded.type === "npc" && this.npcEcs) {
+            const npcIdx = this.npcEcs.getEcsIdForServer(decoded.id | 0);
+            if (npcIdx !== undefined) targetWorldView = this.npcEcs.getWorldViewId(npcIdx) | 0;
+        } else if (decoded.type === "player") {
+            const targetIdx = this.playerEcs.getIndexForServerId(decoded.id | 0);
+            if (targetIdx !== undefined) targetWorldView = this.playerEcs.getWorldViewId(targetIdx) | 0;
+        }
+        if (targetWorldView === worldView) return null;
+        const self = this.worldEntities.projectDeckToWorld(worldView, selfPos.x | 0, selfPos.y | 0);
+        const orientation = this.worldEntities.orientationOf(worldView);
+        if (!self || orientation === undefined) return undefined;
+        if ((self.x | 0) === (targetX | 0) && (self.y | 0) === (targetY | 0)) return undefined;
+        return (faceAngleRs(self.x | 0, self.y | 0, targetX | 0, targetY | 0) - orientation) & 2047;
     }
 
     private samplePlayerVisualPosition(ecsIndex: number): { x: number; y: number } | undefined {

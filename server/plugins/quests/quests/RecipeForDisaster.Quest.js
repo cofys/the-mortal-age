@@ -3056,7 +3056,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       return ["I started the Recipe for Disaster banquet and freed the council members.", "", "The council still need to be freed, and the Culinaromancer defeated."];
     }
     if (stage(player) >= STAGE_STARTED) return ["The Cook is preparing a banquet for the Lumbridge council.", "", "I need to help him gather the ingredients."];
-    return ["I can help the Cook in Lumbridge Castle prepare a banquet.", "", "Requirements: 10 Cooking and Cook's Assistant."];
+    return ["I can start this quest by talking to the <col=800000>Cook</col> in the kitchen of <col=800000>Lumbridge Castle</col>."];
   }
 
   function syncQuestState({ player }) {

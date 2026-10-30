@@ -537,7 +537,7 @@ export function registerClientOps(handlers: HandlerMap): void {
         // 5 = mac
         // 7 = mobile (generic - used by ~on_mobile proc)
         // 10 = steam/enhanced variant
-        // Return 2 (android) on the mobile layout, 10 otherwise; see isMobileClient.
+        // Return 7 (mobile) on the mobile layout, 10 otherwise; see rs/cs2/ClientType.ts.
         // [proc,on_mobile] checks `clienttype = 7` as one condition.
         const wm = ctx.widgetManager as any;
         const result = reportedClientType(wm?.rootInterface);

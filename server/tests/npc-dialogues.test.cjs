@@ -25,6 +25,17 @@ test('a variant is chosen when the dump names no default', () => {
   for (const name of ['Larran', 'Pox', 'Emblem Trader', 'Ferox', 'Lisa']) assert.ok(talk(name)?.length, name);
 });
 
+test('activity-only records cannot become implicit NPC conversations or aliases', () => {
+  const event = { activation: 'explicit', default: 'starting-off', variants: {
+    'starting-off': [{ npc: 'An inactive activity must not start here.' }],
+  } };
+  assert.equal(pickVariant(event), undefined);
+  assert.equal(pickVariant({ activation: 'explicit', steps: [{ npc: 'Nor a flat activity.' }] }), undefined);
+  assert.equal(aliasKeys({ 'Cook (holiday event)': event }).has('Cook'), false);
+  assert.equal(pickVariant({ default: null, variants: { 'starting-off': [{ npc: 'An ordinary fallback.' }] } })[0].npc,
+    'An ordinary fallback.');
+});
+
 test('cache names reach disambiguated wiki keys', () => {
   assert.equal(aliases.get('Hops'), 'Hops (Biohazard)');
   // A bare key wins when it is usable; "Guard" is overhead-only, so the alias takes over.

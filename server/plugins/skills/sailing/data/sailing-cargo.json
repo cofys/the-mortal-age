@@ -37,12 +37,27 @@
     },
     "supplies": {
       "names": [
-        "Repair kit",
+        "Repair kit", "Oak repair kit", "Teak repair kit", "Mahogany repair kit", "Camphor repair kit",
+        "Ironwood repair kit", "Rosewood repair kit", "Granite cannonball",
         "Bronze cannonball", "Iron cannonball", "Steel cannonball", "Mithril cannonball",
         "Adamant cannonball", "Rune cannonball", "Dragon cannonball",
         "Beer glass", "Grog", "Cider", "Whirlpool surprise", "Kraken ink stout",
         "Perildance bitter", "Trawler's trust", "Horizon's lure",
         "Fish offcuts", "Fine fish offcuts", "Camphor crate", "Ice cooler", "Fish crate (empty)"
+      ]
+    },
+    "bounty": {
+      "lostOnRecovery": true,
+      "names": [
+        "Albatross beak", "Albatross feather", "Armoured kraken ink sac", "Armoured kraken tentacle",
+        "Bull shark jaw", "Bull shark liver", "Butterfly ray fin", "Butterfly ray skin",
+        "Eagle ray fin", "Eagle ray skin", "Frigatebird beak", "Frigatebird feather",
+        "Great white shark jaw", "Great white shark liver", "Hammerhead shark jaw", "Hammerhead shark liver",
+        "Manta ray skin", "Mogre head", "Mogre mace", "Narwhal blubber", "Narwhal tusk", "Orca blubber",
+        "Orca teeth", "Osprey beak", "Osprey feather", "Pygmy kraken ink sac", "Pygmy kraken tentacle",
+        "Spined kraken ink sac", "Spined kraken tentacle", "Stingray fin", "Stingray skin", "Tern beak",
+        "Tern feather", "Tiger shark jaw", "Tiger shark liver", "Vampyre kraken ink sac",
+        "Vampyre kraken tentacle", "Veiled kraken ink sac", "Veiled kraken tentacle"
       ]
     },
     "equipment": {

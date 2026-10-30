@@ -21,6 +21,10 @@ const WALL_GAP_SOUND = 2450;
 const PLANK_SOUND = 2470;
 const JUMP_SOUND = 2465;
 const TOP_CLIMB_SOUND = 2454;
+const STONE_BLOCK_SOUND = 1396;
+const STONE_BLOCK_LANDING_SOUND = 2455;
+/** agilityarena_dive_player: the dive over a stone block. */
+const STONE_BLOCK_DIVE = 1115;
 const PYRAMID_TOP_ATTRIBUTE = "agility.pyramid.top";
 const COMPLETION_BASE_XP = 300;
 const COMPLETION_XP_PER_LEVEL = 8;
@@ -59,7 +63,20 @@ function turned(face, quarterTurns) {
   return ROTATION_VECTORS[(face + quarterTurns) % 4];
 }
 
+/**
+ * Straight over the object from the player: along y when they stand within its columns, else
+ * along x. A 2x2 gap taken from a corner column goes over it, not along it (rsprox 1757: 3357,2846
+ * to 3357,2849 over the gap at 3356,2847).
+ */
 function toward({ obj, pos }) {
+  const width = obj.sizeX ?? 1;
+  const length = obj.sizeY ?? 1;
+  if (pos.x >= obj.x && pos.x < obj.x + width) {
+    return [0, pos.y < obj.y ? 1 : -1];
+  }
+  if (pos.y >= obj.y && pos.y < obj.y + length) {
+    return [pos.x < obj.x ? 1 : -1, 0];
+  }
   const dx = Math.sign(obj.x - pos.x);
   const dy = Math.sign(obj.y - pos.y);
   return Math.abs(obj.x - pos.x) >= Math.abs(obj.y - pos.y) ? [dx || 1, 0] : [0, dy || 1];
@@ -218,7 +235,9 @@ function jumpGap() {
   };
 }
 
-function takePyramidTop({ player, core }) {
+function takePyramidTop({ player, core, api }) {
+  // Climbing up is the Desert diary's medium task (rsprox 1757).
+  api.emitCustomEvent("diary:task", { player, diary: "desert", task: "climb-to-the-summit-of-the-agility-pyramid" });
   if (player.getAttribute(PYRAMID_TOP_ATTRIBUTE) === true) {
     player.sendMessage("You find nothing on top of the pyramid.");
     return;
@@ -247,15 +266,32 @@ function completionXp(player) {
   return Math.min(COMPLETION_MAX_XP, COMPLETION_BASE_XP + level * COMPLETION_XP_PER_LEVEL);
 }
 
-/** Stairs: up or down a floor at once. Up from the ground starts a lap (rsprox 2932, 1757). */
+/**
+ * Where each staircase up puts the player, whichever side it was climbed from (rsprox 2932, 1757:
+ * every flight, from two different tiles at the bottom).
+ */
+const STAIRS_UP_LANDINGS = new Map([
+  ["3354,2831,0", [3355, 2833, 1]],
+  ["3356,2833,1", [3356, 2835, 2]],
+  ["3358,2835,2", [3358, 2837, 3]],
+  ["3360,2837,3", [3041, 4695, 2]],
+  ["3042,4695,2", [3043, 4697, 3]],
+]);
+
+/**
+ * Stairs: up or down a floor at once. Up from the ground starts a lap (rsprox 2932, 1757). No
+ * climb down was captured; it keeps three tiles south of the player.
+ */
 function stairs(object, delta) {
   return {
     object,
     level: 30,
     xp: 0,
     startsLap: ({ pos }) => delta > 0 && pos.z === 0,
-    steps: ({ pos }) => {
-      const tile = delta > 0 ? higherTile(pos.x, pos.y + 3, pos.z) : lowerTile(pos.x, pos.y - 3, pos.z);
+    steps: ({ obj, pos }) => {
+      const tile = delta > 0
+        ? STAIRS_UP_LANDINGS.get(`${obj.x},${obj.y},${obj.z}`) ?? higherTile(pos.x, pos.y + 3, pos.z)
+        : lowerTile(pos.x, pos.y - 3, pos.z);
       return [{ tele: tile }, levelStep(tile)];
     },
   };
@@ -286,15 +322,70 @@ const wallGap = edgeCrossing({
 
 const plank = plankCrossing();
 
+/**
+ * Stone blocks: stepping onto one rolls it (its agility_pyramid_tilt_N varbit, which turns the
+ * block loc on the floor below) and throws the player two tiles on, over the invisible wall
+ * across its middle. `block` is that loc's south-west tile and rotation, `fall` where a failure
+ * drops the player on the floor below.
+ *
+ * Captured (rsprox 2932, 1757; all five blocks, never failed): the tick after arriving on the
+ * block's near row, the varbit goes to 1, sounds 1396 and 2455 (25 cycles in), and an exact move
+ * of 10-30 cycles with the dive; the next tick the varbit is 0 again and the 12 XP is paid.
+ * Failing (Wiki: Stone block, Agility Pyramid): down a floor for 6 damage, and always so, for 1,
+ * from the far row; neither was captured, so the fall's animation and tile are guesses.
+ */
+function stoneBlocks({ varbit, block: [bx, by, bz, face], fall }) {
+  const [dx, dy] = ROTATION_VECTORS[face];
+  const z = bz + 1;
+  const tiles = [[bx, by], [bx + 1, by], [bx, by + 1], [bx + 1, by + 1]];
+  const depth = ([x, y]) => (x - bx) * dx + (y - by) * dy;
+  const near = Math.min(...tiles.map(depth));
+  const row = (d) => tiles.filter((tile) => depth(tile) === d).map(([x, y]) => [x, y, z]);
+  const falls = (damage) => [
+    { varbit: [varbit, 1] },
+    { sound: STONE_BLOCK_SOUND },
+    { anim: Anim.FREE_FALL },
+    { wait: 1 },
+    { tele: fall },
+    levelStep(fall),
+    { varbit: [varbit, 0] },
+    { hit: damage },
+  ];
+  const onward = {
+    tiles: row(near),
+    face,
+    level: 30,
+    xp: 12,
+    steps: ({ pos }) => [
+      { varbit: [varbit, 1] },
+      { sound: STONE_BLOCK_SOUND },
+      { sound: STONE_BLOCK_LANDING_SOUND, delay: 25 },
+      { move: [pos.x + dx * 2, pos.y + dy * 2], anim: STONE_BLOCK_DIVE, speed: [10, 30], ticks: 1 },
+      { varbit: [varbit, 0] },
+    ],
+    fail: { baseChance: 75, neverFailLevel: 70, xp: 0, steps: falls(6) },
+  };
+  const backward = { tiles: row(near + 1), face, level: 30, xp: 0, steps: falls(1) };
+  return [onward, backward];
+}
+
 module.exports = {
   key: "pyramid",
   name: "Agility Pyramid",
   helper: 6, // the Agility helper's course (enum 3507: "Agility Pyramid")
   lapXp: 0,
+  // Each floor has its own mix of the obstacles; the lap runs from the stairs to the doorway.
+  anyOrder: true,
   petBase: 9901, // Giant squirrel base chance (Wiki)
   obstacles: [
     stairs(ObjectIds.STAIRS_50, 1),
     stairs(ObjectIds.STAIRS_51, -1),
+    // agility_pyramid_tilt_1-5 and the blocks' locs (10877-10881), in lap order.
+    ...stoneBlocks({ varbit: 1551, block: [3354, 2841, 0, 1], fall: [3353, 2842, 0] }),
+    ...stoneBlocks({ varbit: 1553, block: [3374, 2835, 0, 3], fall: [3376, 2835, 0] }),
+    ...stoneBlocks({ varbit: 1552, block: [3368, 2849, 1, 2], fall: [3368, 2851, 1] }),
+    ...stoneBlocks({ varbit: 1554, block: [3048, 4699, 1, 3], fall: [3370, 2843, 3] }),
+    ...stoneBlocks({ varbit: 1555, block: [3044, 4699, 2, 2], fall: [3044, 4701, 2] }),
     {
       object: ObjectIds.LOW_WALL_3,
       index: 1,

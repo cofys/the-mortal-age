@@ -680,6 +680,7 @@ export abstract class Mobile extends Entity {
     }
 
     decrementHealth(hit: HitDamage): HitDamage {
+        hit.setHealthLost(0);
         if (this.getHitpoints() <= 0) {
             hit.setDamage(0);
             return hit;
@@ -710,6 +711,7 @@ export abstract class Mobile extends Entity {
         let outcome = this.getHitpoints() - hit.getDamage();
         if (outcome < 0)
             outcome = 0;
+        hit.setHealthLost(this.getHitpoints() - outcome);
         this.setHitpoints(outcome);
         return hit;
     }

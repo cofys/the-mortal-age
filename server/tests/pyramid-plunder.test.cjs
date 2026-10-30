@@ -49,7 +49,10 @@ before(async () => {
     core,
     emitCustomEvent(name, payload) {
       if (name === "quest:is-started") payload.started = questStarted;
-      if (name === "npc-dialogue:start") payload.handled = true;
+      if (name === "npc-dialogue:start") {
+        payload.handled = true;
+        startedVariants.push(payload.variant);
+      }
     },
     spawnNpc(definition) {
       const npc = { definition, attacked: null, getCombat: () => ({ attack: (target) => { npc.attacked = target; } }) };
@@ -61,6 +64,9 @@ before(async () => {
   };
   C.bind(api);
 });
+
+/** The variants "npc-dialogue:start" was asked to play, latest last. */
+const startedVariants = [];
 
 /** Always (1), never (0), or a fixed roll. */
 const always = () => 0;
@@ -112,6 +118,7 @@ function player({ thieving = 99, strength = 99, items = {}, at = { x: 3289, y: 2
       addItem: (item) => inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()),
       deleteNumber: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) - amount),
       getFreeSlots: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length,
+      getAddableAmount: (item) => Math.min(item.getAmount(), 0x7fffffff - (inventory.get(item.getId()) ?? 0)),
     }),
     getCombat: () => ({ reset: () => {}, getHitQueue: () => ({ addPendingDamage: (hits) => p.hits.push(...hits.map((h) => h.getDamage?.() ?? h.damage ?? h)) }) }),
     performAnimation: (anim) => p.anims.push(anim),
@@ -487,7 +494,7 @@ test("Simon takes every artefact, noted or not, and pays his prices", () => {
   assert.equal(p.inventory.get(ids().item.coins), 2 * 50 + 3 * 1250 + 150);
   assert.equal(artefactCount(p), 0);
   assert.equal(p.inventory.get(noted.goldenStatuette), 0);
-  assert.equal(T.Simon.onDialogueVariant({ player: p, npcId: 5786 }), null, "nothing left: his usual lines");
+  assert.equal(T.Simon.onDialogueVariant({ player: p, npcId: 5786 }), T.Simon.VARIANT.firstTalk, "nothing left: his introduction");
 });
 
 test("an artefact used on Simon sells just that one", () => {
@@ -499,6 +506,77 @@ test("an artefact used on Simon sells just that one", () => {
   T.Simon.onDialogueAction({ player: p, npcId: 5786, stepId: "dFDQfD", handled: false });
   assert.equal(p.inventory.get(art("goldSeal")), 1);
   assert.equal(p.inventory.get(ids().item.coins), 750);
+});
+
+test("Simon: his introduction first, then the pyramid top lines, before and after the first sale (Wiki transcript)", () => {
+  const p = player();
+  const { VARIANT } = T.Simon;
+  assert.equal(T.Simon.onDialogueVariant({ player: p, npcId: 5786 }), VARIANT.firstTalk);
+  assert.equal(p.varbits.get(ids().varbit.simonNamed), 1, "agility_pyramid_simon_named (rsprox 1757)");
+  assert.equal(p.varbits.get(ids().varbit.simonJob), 1, "agility_pyramid_simon_job");
+  assert.equal(T.Simon.onDialogueVariant({ player: p, npcId: 5786 }), VARIANT.talkAgain);
+  p.inventory.set(ids().item.pyramidTop, 1);
+  T.Simon.onDialogueAction({ player: p, npcId: 5786, stepId: "xCY7EK", handled: false });
+  assert.equal(p.varbits.get(ids().varbit.simonJobDone), 1, "agility_pyramid_simon_job_done");
+  assert.equal(T.Simon.onDialogueVariant({ player: p, npcId: 5786 }), VARIANT.afterSelling);
+});
+
+test("Simon: the transcript's conditions follow how many pyramid tops are carried", () => {
+  const p = player();
+  const answer = (stepId) => T.Simon.onDialogueCondition({ player: p, npcId: 5786, stepId });
+  assert.deepEqual(["zXAwBg", "mPKGhu", "aJi_9W"].map(answer), [true, false, false]);
+  p.inventory.set(ids().item.pyramidTop, 1);
+  assert.deepEqual(["-mixJS", "DW3JPR", "D8hzoV"].map(answer), [false, true, false]);
+  p.inventory.set(ids().item.pyramidTop, 3);
+  assert.deepEqual(["zXAwBg", "mPKGhu", "aJi_9W"].map(answer), [false, false, true]);
+  assert.equal(answer("unrelated"), null);
+});
+
+test("Simon pays 10,000 coins a pyramid top, in a message box (Wiki; rsprox 1757)", () => {
+  const p = player({ items: { [ids().item.pyramidTop]: 3 } });
+  const request = { player: p, npcId: 5786, stepId: "0iaVVb", text: "", handled: false };
+  T.Simon.onDialogueAction(request);
+  assert.equal(p.inventory.get(ids().item.pyramidTop), 0);
+  assert.equal(p.inventory.get(ids().item.coins), 30000);
+  assert.equal(request.text, "You hand over the artefact(s) and Simon hands you 30000 coins.");
+  assert.deepEqual(request.box, { statement: true });
+  const nothing = { player: p, npcId: 5786, stepId: "MoWeP6", text: "", handled: false };
+  T.Simon.onDialogueAction(nothing);
+  assert.equal(nothing.end, true, "no tops left: the chat ends");
+  assert.equal(p.inventory.get(ids().item.coins), 30000);
+});
+
+test("Simon keeps the tops when the coin stack cannot take the whole payment", () => {
+  const p = player({ items: { [ids().item.pyramidTop]: 1, [ids().item.coins]: 0x7fffffff - 5000 } });
+  const request = { player: p, npcId: 5786, stepId: "xCY7EK", text: "", handled: false };
+  T.Simon.onDialogueAction(request);
+  assert.equal(request.end, true);
+  assert.equal(p.inventory.get(ids().item.pyramidTop), 1);
+  assert.equal(p.inventory.get(ids().item.coins), 0x7fffffff - 5000);
+  assert.deepEqual(p.messages, ["You don't have enough inventory space."]);
+});
+
+test("Simon's payment can take the slot the tops leave in a full inventory", () => {
+  const items = { [ids().item.pyramidTop]: 1 };
+  for (let id = 1; id <= 27; id++) items[id] = 1;
+  const p = player({ items });
+  const request = { player: p, npcId: 5786, stepId: "xCY7EK", text: "", handled: false };
+  T.Simon.onDialogueAction(request);
+  assert.equal(p.inventory.get(ids().item.pyramidTop), 0);
+  assert.equal(p.inventory.get(ids().item.coins), 10000);
+});
+
+test("a pyramid top used on Simon sells them all once he has explained the job (rsprox 1757)", () => {
+  const p = player({ items: { [ids().item.pyramidTop]: 2 } });
+  const use = () => {
+    const event = { player: p, npcId: 5786, itemId: ids().item.pyramidTop, target: {}, handled: false };
+    T.Simon.onItemOnNpc(event);
+    assert.equal(event.handled, true);
+    return startedVariants.at(-1);
+  };
+  assert.equal(use(), T.Simon.VARIANT.usedBeforeTalking, "he asks for a chat first");
+  T.Simon.onDialogueVariant({ player: p, npcId: 5786 });
+  assert.equal(use(), T.Simon.VARIANT.usedTop);
 });
 
 // --- Review fixes

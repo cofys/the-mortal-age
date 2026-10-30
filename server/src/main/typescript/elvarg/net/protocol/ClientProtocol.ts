@@ -455,8 +455,8 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       return { type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff, buttonNum: 1, simple: true };
     }
     case NativeClientPacket.IF_BUTTON_SUB: {
-      const widgetId = reader.int(), slot = reader.short(), itemId = reader.signedShort();
-      return { type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff, buttonNum: reader.byte(), subOpId: reader.byte() + 1, slot, itemId };
+      const widgetId = reader.int(), slot = reader.short(), itemId = reader.short();
+      return { type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff, buttonNum: reader.byte(), subOpId: reader.byte() + 1, slot, itemId: itemId === 0xffff ? -1 : itemId };
     }
     case NativeClientPacket.IF_BUTTONT:
       return {
@@ -630,11 +630,11 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       };
     case NativeClientPacket.IF_BUTTONX: {
       // Ops 11-32 carry their op index (live OSRS: a bank item's Examine is IF_BUTTONX op=11).
-      const widgetId = reader.int(), slot = reader.short(), itemId = reader.signedShort();
+      const widgetId = reader.int(), slot = reader.short(), itemId = reader.short();
       return {
         type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff,
         buttonNum: reader.byte(), slot: slot === 0xffff ? undefined : slot,
-        itemId: itemId >= 0 ? itemId : undefined,
+        itemId: itemId === 0xffff ? undefined : itemId,
       };
     }
     case NativeClientPacket.IF_BUTTON1:
@@ -653,11 +653,11 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         NativeClientPacket.IF_BUTTON7, NativeClientPacket.IF_BUTTON8, NativeClientPacket.IF_BUTTON9,
         NativeClientPacket.IF_BUTTON10,
       ].indexOf(opcode) + 1;
-      const widgetId = reader.int(), slot = reader.short(), itemId = reader.signedShort();
+      const widgetId = reader.int(), slot = reader.short(), itemId = reader.short();
       return {
         type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff,
         buttonNum: optionIndex, slot: slot === 0xffff ? undefined : slot,
-        itemId: itemId >= 0 ? itemId : undefined,
+        itemId: itemId === 0xffff ? undefined : itemId,
       };
     }
     case NativeClientPacket.SET_HEADING:

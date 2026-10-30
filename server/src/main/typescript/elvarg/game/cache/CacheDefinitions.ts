@@ -6,9 +6,9 @@ import type { CacheInfo } from "./codec/rs/cache/CacheInfo";
 import { ConfigType } from "./codec/rs/cache/ConfigType";
 import { IndexType } from "./codec/rs/cache/IndexType";
 import { ArchiveLocTypeLoader } from "./codec/rs/config/loctype/LocTypeLoader";
-import type { LocType } from "./codec/rs/config/loctype/LocType";
+import { LocType } from "./codec/rs/config/loctype/LocType";
 import { ArchiveNpcTypeLoader } from "./codec/rs/config/npctype/NpcTypeLoader";
-import type { NpcType } from "./codec/rs/config/npctype/NpcType";
+import { NpcType } from "./codec/rs/config/npctype/NpcType";
 import {
     ArchiveObjTypeLoader,
     PostProcessedObjTypeLoader,
@@ -19,6 +19,8 @@ import { DbRowType } from "./codec/rs/config/dbrow/DbRowType";
 import { Gamevals, GamevalKind } from "./Gamevals";
 import { ByteBuffer } from "./codec/rs/io/ByteBuffer";
 import { Type } from "./codec/rs/config/Type";
+import { ArchivedTypeLoader } from "./codec/rs/config/ArchivedTypeLoader";
+import { ArchivedDefinitionRegistry, ArchivedDefinitionBundle, ArchivedDefinitionKind, ArchivedDefinitionContext } from "./codec/rs/config/ArchivedDefinitionRegistry";
 
 const STRUCT_PARAMS_OPCODE = 249;
 
@@ -36,10 +38,13 @@ export class CacheDefinitions {
     private static spellNamesByWidget?: Map<number, string>;
     private static spellsByName?: Map<string, { widgetId: number; itemId: number }>;
     private static state?: {
-        npcs: ArchiveNpcTypeLoader;
+        npcs: ArchivedTypeLoader<NpcType>;
         varbits: ArchiveVarBitTypeLoader;
         items: PostProcessedObjTypeLoader;
-        objects: ArchiveLocTypeLoader;
+        objects: ArchivedTypeLoader<LocType>;
+        objArchives: ArchivedTypeLoader<ObjType>;
+        archives: ArchivedDefinitionRegistry;
+        archiveContext: ArchivedDefinitionContext;
         info: CacheInfo;
     };
     private static customItems = new Map<number, ServerCustomItem>();
@@ -69,13 +74,32 @@ export class CacheDefinitions {
         };
         const store = CachePipeline.getStore();
         const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, store);
+        const native = {
+            npc: new ArchiveNpcTypeLoader(info, configs.getArchive(ConfigType.DAT2.npcs)),
+            loc: new ArchiveLocTypeLoader(info, configs.getArchive(ConfigType.DAT2.locs)),
+            obj: new ArchiveObjTypeLoader(info, configs.getArchive(ConfigType.DAT2.objs)),
+        };
+        const archiveContext: ArchivedDefinitionContext = {
+            cacheInfo: info,
+            counts: { npc: native.npc.getCount(), loc: native.loc.getCount(), obj: native.obj.getCount() },
+            currentDefinition: (kind, id) => ({
+                name: native[kind].load(id).name,
+                data: native[kind].archive.getFile(id)?.data,
+            }),
+        };
+        const archives = new ArchivedDefinitionRegistry(archiveContext);
+        const objArchives = new ArchivedTypeLoader(native.obj, ObjType,
+            id => archives.getSource("obj", id), () => archives.getCount("obj"));
         this.state = {
             varbits: new ArchiveVarBitTypeLoader(info, configs.getArchive(ConfigType.DAT2.varbits)),
-            npcs: new ArchiveNpcTypeLoader(info, configs.getArchive(ConfigType.DAT2.npcs)),
-            items: new PostProcessedObjTypeLoader(
-                new ArchiveObjTypeLoader(info, configs.getArchive(ConfigType.DAT2.objs)),
-            ),
-            objects: new ArchiveLocTypeLoader(info, configs.getArchive(ConfigType.DAT2.locs)),
+            npcs: new ArchivedTypeLoader(native.npc, NpcType,
+                id => archives.getSource("npc", id), () => archives.getCount("npc")),
+            items: new PostProcessedObjTypeLoader(objArchives),
+            objects: new ArchivedTypeLoader(native.loc, LocType,
+                id => archives.getSource("loc", id), () => archives.getCount("loc")),
+            objArchives,
+            archives,
+            archiveContext,
             info,
         };
         console.debug(
@@ -86,6 +110,39 @@ export class CacheDefinitions {
 
     static getNpc(id: number): NpcType {
         return this.getState().npcs.load(id);
+    }
+
+    static registerDefinitionArchives(bundles: readonly ArchivedDefinitionBundle[]): Record<ArchivedDefinitionKind, number[]> {
+        const state = this.getState(), registry = state.archives;
+        const before = { npc: registry.ids("npc"), loc: registry.ids("loc"), obj: registry.ids("obj") };
+        registry.replace(bundles);
+        state.npcs.clearArchivedCache();
+        state.objects.clearArchivedCache();
+        state.objArchives.clearArchivedCache();
+        return {
+            npc: [...new Set([...before.npc, ...registry.ids("npc")])],
+            loc: [...new Set([...before.loc, ...registry.ids("loc")])],
+            obj: [...new Set([...before.obj, ...registry.ids("obj")])],
+        };
+    }
+
+    static getDefinitionArchiveBundles(): readonly ArchivedDefinitionBundle[] {
+        return this.getState().archives.getBundles();
+    }
+
+    /** Validate a candidate and report semantic source changes without publishing it. */
+    static getDefinitionArchiveChanges(bundles: readonly ArchivedDefinitionBundle[]): Record<ArchivedDefinitionKind, number[]> {
+        const state = this.getState();
+        const candidate = new ArchivedDefinitionRegistry(state.archiveContext);
+        candidate.replace(bundles);
+        const changed = (kind: ArchivedDefinitionKind) =>
+            [...new Set([...state.archives.ids(kind), ...candidate.ids(kind)])].filter(id =>
+                JSON.stringify(state.archives.getSource(kind, id)) !== JSON.stringify(candidate.getSource(kind, id)));
+        return { npc: changed("npc"), loc: changed("loc"), obj: changed("obj") };
+    }
+
+    static getArchivedId(bundle: string, kind: ArchivedDefinitionKind, symbol: string): number | null {
+        return this.getState().archives.resolve(bundle, kind, symbol);
     }
 
     private static getDbArchive(): Archive {

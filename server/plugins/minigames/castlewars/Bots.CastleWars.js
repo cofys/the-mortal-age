@@ -44,6 +44,8 @@ const ROLES = Object.freeze({
   ARCHER: "archer",
   MAGE: "mage",
   CATAPULT: "catapult",
+  SCORER: "scorer",
+  DEFENDER: "defender",
 });
 const FLAG_MODE = Object.freeze({ OUT: "out", HOME: "home", BACK: "back" });
 
@@ -1059,6 +1061,7 @@ function pickTierChoice(player, role, tier) {
 }
 
 function ensureLoadout(player, state, teamId, nowMs) {
+  if (game.practiceBots?.prepare(player, state, teamId)) return;
   if (state.equipped || nowMs < state.nextLoadoutAt) {
     return;
   }
@@ -1962,6 +1965,26 @@ function variantIndex(player, length) {
 }
 
 function createBotTree(role, state, teamId, player) {
+  if (role === ROLES.SCORER) {
+    return new SelectorNode([
+      new ActionNode((ctx) => game.practiceBots.scorerTools(ctx, state)),
+      new ActionNode((ctx) => takeBandages(ctx, state, teamId)),
+      new ActionNode((ctx) => bandageTeammate(ctx, state, teamId)),
+      new ActionNode((ctx) => flagCycle(ctx, state, teamId)),
+    ]);
+  }
+  if (role === ROLES.DEFENDER) {
+    const target = () => nearestEnemyCarrier(player, teamId, 16) ?? nearestEnemy(player, teamId, 10);
+    return new SelectorNode([
+      new ActionNode((ctx) => takeBandages(ctx, state, teamId)),
+      new ActionNode((ctx) => bandageTeammate(ctx, state, teamId)),
+      new ActionNode((ctx) => game.practiceBots.defenderTools(ctx, state, target())),
+      new ActionNode((ctx) => game.practiceBots.defenderAttack(ctx, state, target())),
+      new ActionNode((ctx) => guardReturnFlag(ctx, state, teamId)),
+      new ActionNode((ctx) => guardPost(ctx, state, teamId)),
+      new ActionNode(() => "running"),
+    ]);
+  }
   // Each selector is a priority list, first match wins. Bandages sit high for support roles
   // so a hurt teammate is healed between fights; the final node keeps idle bots alive.
   if (role === ROLES.GUARD) {

@@ -7,6 +7,7 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { Location } = require("../dist/game/model/Location");
@@ -199,6 +200,18 @@ test("Last-destination goes at once; to the ring you stand on, it only plays the
   here.nextTick();
   const sent = runTicks(here, 5).flat();
   assert.ok(!sent.some((e) => e.startsWith("teleport")) && sent.includes("anim 3266"));
+});
+
+test("the rings' Zanaris, Configure and Last-destination options, as the cache names them, have handlers", () => {
+  const options = T.ringOptions();
+  // 29495: the common ring; 29560: Zanaris' ring (no Zanaris option).
+  for (const id of [29495, 29560]) {
+    const actions = CacheDefinitions.getObject(id).actions;
+    for (const action of actions.slice(0, 3).filter(Boolean)) {
+      assert.equal(typeof options[action], "function", `${id}: ${action}`);
+    }
+  }
+  assert.equal(options["Last-destination"], T.lastDestination);
 });
 
 test("travel log favourites: add from a code's star, use and remove them", () => {

@@ -30,7 +30,7 @@ function tick() {
   }
 }
 
-const hooks = { persisted: {}, route: [], click: new Map(), logout: [], login: [], teleport: [], events: [], npcs: {}, answers: {}, listeners: {} };
+const hooks = { persisted: {}, areas: [], route: [], click: new Map(), logout: [], login: [], teleport: [], events: [], npcs: {}, answers: {}, listeners: {} };
 const groundItems = [];
 /** Answers ItemOnGroundManager.ownedBy: the stacks a test has put on the floor. */
 const floorStacks = [];
@@ -46,6 +46,7 @@ Agility.register({
   onObjectRoute: (handler) => hooks.route.push(handler),
   onObjectFirstClick: (ids, handler) => ids.forEach((id) => hooks.click.set(id, handler)),
   onCanTeleport: (handler) => hooks.teleport.push(handler),
+  registerArea: (area) => hooks.areas.push(area),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
   onPlayerLogin: (handler) => hooks.login.push(handler),
   onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
@@ -128,7 +129,13 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [], 
 }
 
 function gameObject(id, x, y, z, face = 0) {
-  return { getId: () => id, getFace: () => face, getLocation: () => new Location(x, y, z) };
+  const definition = CacheDefinitions.getObject(id);
+  return {
+    getId: () => id,
+    getFace: () => face,
+    getLocation: () => new Location(x, y, z),
+    getDefinition: () => ({ getSizeX: () => definition?.sizeX ?? 1, getSizeY: () => definition?.sizeY ?? 1 }),
+  };
 }
 
 function tileOf(player) {
@@ -205,6 +212,8 @@ test("every obstacle and shortcut uses an object id from the cache", () => {
       assert.ok(CacheDefinitions.getNpc(entry.npc)?.name, `unknown npc id ${entry.npc} (${entry.course?.key})`);
       continue;
     }
+    // Stepped on, not clicked: the Agility Pyramid's stone blocks.
+    if (entry.tiles) continue;
     const ids = Array.isArray(entry.object) ? entry.object : [entry.object];
     for (const id of ids) {
       assert.ok(isCacheLoc(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
@@ -1106,4 +1115,115 @@ test("Agility Pyramid: the stairs set the floor and start the lap; its lines are
   assert.equal(player.state.mesboxes, mesboxes + 1, "You climb down the steep passage... is a message box");
   assert.equal(player.state.varbits.get(1550), 0);
   assert.equal(player.state.varbits.get(HIGHLIGHT_VARBIT), 0);
+});
+
+/** The area of the tile obstacles has the player stand on its tiles; plays what that triggers. */
+function stepOnto(player, tile) {
+  player.setLocation(new Location(...tile));
+  const [area] = hooks.areas;
+  area.process({ isPlayer: () => true, getAsPlayer: () => player });
+  const ticks = [];
+  while (player.getAttribute("agility.obstacle") != null) {
+    assert.ok(ticks.length < 20, "the tile obstacle never finished");
+    tick();
+    ticks.push({ tile: tileOf(player), varbits: [...player.state.varbitLog] });
+  }
+  return ticks;
+}
+
+test("Agility Pyramid stone blocks: stepping on throws the player two tiles on for 12 XP, the tilt varbit on and off (rsprox 2932, 1757)", () => {
+  const blocks = [
+    [1551, [3355, 2841, 1], [3355, 2843, 1]],
+    [1553, [3374, 2836, 1], [3374, 2834, 1]],
+    [1552, [3368, 2849, 2], [3370, 2849, 2]],
+    [1554, [3048, 4700, 2], [3048, 4698, 2]],
+    [1555, [3044, 4699, 3], [3046, 4699, 3]],
+  ];
+  for (const [varbit, from, to] of blocks) {
+    const player = createPlayer(...from);
+    stepOnto(player, from);
+    assert.deepEqual(tileOf(player), to, `tilt ${varbit}`);
+    assert.equal(player.state.xp, 12);
+    assert.deepEqual(player.state.varbitLog.filter(([id]) => id === varbit).map(([, value]) => value), [1, 0]);
+    assert.ok(player.state.animations.includes(1115), "agilityarena_dive_player");
+    assert.deepEqual(player.state.sounds.slice(0, 2), [1396, 2455]);
+  }
+});
+
+test("Agility Pyramid stone blocks: a step on from the far side always drops the player a floor (Wiki)", () => {
+  const player = createPlayer(3355, 2843, 1);
+  stepOnto(player, [3355, 2842, 1]);
+  assert.deepEqual(tileOf(player), [3353, 2842, 0]);
+  assert.equal(player.state.hits, 1);
+  assert.equal(player.state.xp, 0);
+  assert.equal(player.state.varbits.get(1550), 0, "back on the ground floor");
+});
+
+test("Agility Pyramid stone blocks: standing still on one plays it once", () => {
+  const player = createPlayer(3355, 2841, 1);
+  stepOnto(player, [3355, 2841, 1]);
+  player.setLocation(new Location(3355, 2841, 1));
+  const xp = player.state.xp;
+  hooks.areas[0].process({ isPlayer: () => true, getAsPlayer: () => player });
+  assert.equal(player.getAttribute("agility.obstacle") ?? null, null);
+  assert.equal(player.state.xp, xp);
+});
+
+test("Agility Pyramid: each staircase up lands on its captured tile from either side (rsprox 2932, 1757)", () => {
+  const flights = [
+    [[3354, 2831, 0], [[3354, 2830, 0], [3355, 2830, 0]], [3355, 2833, 1]],
+    [[3356, 2833, 1], [[3357, 2832, 1]], [3356, 2835, 2]],
+    [[3358, 2835, 2], [[3359, 2834, 2]], [3358, 2837, 3]],
+    [[3360, 2837, 3], [[3361, 2836, 3]], [3041, 4695, 2]],
+    [[3042, 4695, 2], [[3043, 4694, 2]], [3043, 4697, 3]],
+  ];
+  for (const [stairs, froms, landing] of flights) {
+    for (const from of froms) {
+      const player = createPlayer(...from);
+      operate(player, ObjectIds.STAIRS_50, stairs);
+      assert.deepEqual(tileOf(player), landing, `stairs at ${stairs} from ${from}`);
+    }
+  }
+});
+
+test("Agility Pyramid: jump gaps and low walls go straight over, never along (rsprox 2932, 1757)", () => {
+  const crossings = [
+    [ObjectIds.GAP_17, [3356, 2847, 2], [3357, 2846, 2], [3357, 2849, 2]],
+    [ObjectIds.GAP_17, [3364, 2833, 2], [3366, 2834, 2], [3363, 2834, 2]],
+    [ObjectIds.GAP_17, [3040, 4697, 2], [3041, 4696, 2], [3041, 4699, 2]],
+    [ObjectIds.GAP_17, [3046, 4697, 3], [3046, 4699, 3], [3046, 4696, 3]],
+    [ObjectIds.LOW_WALL_3, [3354, 2849, 1, 1], [3355, 2848, 1], [3355, 2850, 1]],
+    [ObjectIds.LOW_WALL_3, [3370, 2833, 2, 2], [3371, 2834, 2], [3369, 2834, 2]],
+  ];
+  for (const [object, [x, y, z, face = 0], from, to] of crossings) {
+    const player = createPlayer(...from);
+    const loc = gameObject(object, x, y, z, face);
+    hooks.click.get(object)({ player, object: loc, objectId: object, clickType: 1, location: { x, y, z } });
+    for (let ticks = 0; player.getAttribute("agility.obstacle") != null; ticks++) {
+      assert.ok(ticks < 20);
+      tick();
+    }
+    assert.deepEqual(tileOf(player), to, `${object} at ${x},${y} from ${from}`);
+  }
+});
+
+test("Agility Pyramid: the lap counts at the doorway whatever order the floors' obstacles came in", () => {
+  const player = createPlayer(3354, 2830, 0);
+  operate(player, ObjectIds.STAIRS_50, [3354, 2831, 0]);
+  operate(player, ObjectIds.LOW_WALL_3, [3354, 2849, 1]);
+  operate(player, ObjectIds.LEDGE_9, [3362, 2831, 1]);
+  player.setLocation(new Location(3045, 4697, 3));
+  operate(player, ObjectIds.DOORWAY_15, [3045, 4696, 3]);
+  assert.ok(player.state.messages.some((message) => message.startsWith("Your Agility Pyramid lap count is")));
+  assert.equal(player.state.scripts.at(-1)[0], END_LAP);
+});
+
+test("Agility Pyramid blocks slide out over two ticks, wait two, and slide back: every 15 ticks on floor 1, 13 on floor 3 (rsprox 2932, 1757)", () => {
+  const { BLOCKS, offsetAt } = require("../plugins/areas/AgilityPyramid.plugin")._test;
+  const [east, north] = BLOCKS;
+  const cycle = (block) => Array.from({ length: block.period }, (_, tick) => offsetAt(block, tick));
+  assert.deepEqual(cycle(east), [1, 2, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(cycle(north), [1, 2, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([east.npc, east.home, east.dir], [5788, [3372, 2847, 1], [1, 0]]);
+  assert.deepEqual([north.npc, north.home, north.dir], [5787, [3366, 2845, 3], [0, 1]]);
 });

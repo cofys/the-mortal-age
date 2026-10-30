@@ -106,7 +106,7 @@ const lastVisited = new WeakMap();
 const pendingFurnitureMenus = new WeakMap();
 
 function defaultHouse() {
-  return { ...Instance.createDefaultHouseSave(), owned: false, defaultBuildingMode: false };
+  return require("./StorageState.Construction").defaultHouse();
 }
 
 function houseStateFor(player) {

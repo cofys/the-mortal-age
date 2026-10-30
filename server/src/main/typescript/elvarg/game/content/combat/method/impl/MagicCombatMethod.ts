@@ -1,3 +1,4 @@
+import { CombatPosition } from "../../CombatPosition";
 import { CombatMethod } from "../CombatMethod";
 import { Animation } from "../../../../model/Animation";
 import { Graphic } from "../../../../model/Graphic";
@@ -73,15 +74,15 @@ export class MagicCombatMethod extends CombatMethod {
         if (typeof own === "number") return own;
         if (!attacker.isPlayer()) return MagicCombatMethod.NPC_HIT_DELAY;
         const distance = MagicCombatMethod.isBarrage(spell)
-            ? attacker.getLocation().getDistance(target.getLocation())
+            ? CombatPosition.distance(attacker, target)
             : MagicCombatMethod.edgeDistance(attacker, target);
         return 1 + Math.floor((1 + distance) / 3);
     }
 
     /** Chebyshev distance from the attacker's tile to the nearest tile of the target. */
     private static edgeDistance(attacker: Mobile, target: Mobile): number {
-        const from = attacker.getLocation();
-        const to = target.getLocation();
+        const from = CombatPosition.location(attacker, target);
+        const to = CombatPosition.location(target, attacker);
         const size = Math.max(1, target.getSize?.() ?? 1);
         const dx = Math.max(0, to.getX() - from.getX(), from.getX() - (to.getX() + size - 1));
         const dy = Math.max(0, to.getY() - from.getY(), from.getY() - (to.getY() + size - 1));

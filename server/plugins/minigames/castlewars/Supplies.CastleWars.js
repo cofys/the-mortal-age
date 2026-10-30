@@ -1,15 +1,42 @@
 "use strict";
 
 /**
- * Castle Wars supply tables: Take-from gives one, Take-5 five, with a short cooldown between grabs.
+ * Castle Wars supplies: instant table withdrawals, game-only potions and an unlimited rune pouch.
  */
 
-const TAKE_COOLDOWN_TICKS = 2;
-const TAKE_FIVE_CLICK = 2;
+const { boostSkill, restoreSkillToBaseWithFormula } = require("../../items/ConsumableEffects");
 
+const TAKE_FIVE_CLICK = 2;
+const SPECIAL_RESTORE_AT_ATTRIBUTE = "castlewars:special-restore-at";
+const SPECIAL_RESTORE_COOLDOWN_TICKS = 50;
+const POTION_AREA = "castle-wars";
+
+let api;
 let core;
 let data;
 let game;
+let suppliedSpells;
+
+function giveSupply(player, itemId, amount, message) {
+  if (!game.requirePlaying(player)) return;
+  if (itemId === data.RUNE_POUCH && player.getInventory().contains(itemId)) {
+    player.sendMessage("You already have a Castle Wars rune pouch.");
+    return;
+  }
+  const count = Math.min(amount, player.getInventory().getFreeSlots());
+  if (count <= 0) {
+    player.sendMessage("You don't have enough inventory space.");
+    return;
+  }
+  player.getInventory().adds(itemId, itemId === data.RUNE_POUCH ? 1 : count);
+  player.sendMessage(message);
+}
+
+function chooseToolkitSupply(player) {
+  api.sendMultiChatboxPrompt(player, "Take a supply",
+    "Toolkit", () => giveSupply(player, core.ItemIdentifiers.TOOLKIT_2, 1, "You get a toolkit."),
+    "Special restore potion (4)", () => giveSupply(player, data.SPECIAL_RESTORE_DOSES[0], 1, "You get a Castlewars special restore potion."));
+}
 
 function takeSupply(event) {
   const { player, object, clickType } = event;
@@ -18,20 +45,100 @@ function takeSupply(event) {
     return;
   }
   event.handled = true;
-  const { CASTLEWARS_TAKE_ITEM } = core.TimerKey;
-  if (player.getTimers().has(CASTLEWARS_TAKE_ITEM)) {
+  if (!game.requirePlaying(player)) return;
+  if (object.getId() === core.ObjectIdentifiers.TABLE_42) {
+    chooseToolkitSupply(player);
     return;
   }
   const [itemId, message] = supply;
-  player.performAnimation(data.TAKE_SUPPLY_ANIM);
-  player.getInventory().adds(itemId, clickType === TAKE_FIVE_CLICK ? 5 : 1);
-  player.sendMessage(message);
-  player.getTimers().extendOrRegister(CASTLEWARS_TAKE_ITEM, TAKE_COOLDOWN_TICKS);
+  giveSupply(player, itemId, clickType === TAKE_FIVE_CLICK ? 5 : 1, message);
 }
 
-module.exports = function attachCastleWarsSupplies(api, castleWars) {
+function giveStartingPouch({ player }) {
+  giveSupply(player, data.RUNE_POUCH, 1, "Your rune pouch supplies unlimited combat runes during Castle Wars.");
+}
+
+function supplyCombatRunes(event) {
+  if (game.isPlaying(event.player) && event.player.getInventory().contains(data.RUNE_POUCH) && suppliedSpells.get(event.spellbook)?.has(event.spellId)) {
+    event.bypass = true;
+  }
+}
+
+function noFreeMagicExperience(event) {
+  if (event.skill === core.Skill.MAGIC && game.isPlaying(event.player) && event.player.getInventory().contains(data.RUNE_POUCH)) {
+    event.allow = false;
+  }
+}
+
+function applyBrew(player) {
+  const { Skill } = core;
+  for (const skill of Skill.values()) {
+    if (skill !== Skill.HITPOINTS) restoreSkillToBaseWithFormula(player, skill, 8, 0.25);
+  }
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) boostSkill(player, skill, 5, 0.15);
+  boostSkill(player, Skill.RANGED, 4, 0.1);
+  boostSkill(player, Skill.MAGIC, 1, 0.1);
+  api.emitCustomEvent("potions:apply-stamina", { player });
+}
+
+function applySpecialRestore(player) {
+  player.setSpecialPercentage(Math.min(100, player.getSpecialPercentage() + 25));
+  core.CombatSpecial.updateBar(player);
+  player.setAttribute(SPECIAL_RESTORE_AT_ATTRIBUTE, core.World.getProcessCycle() + SPECIAL_RESTORE_COOLDOWN_TICKS);
+}
+
+function registerSupplyPotions() {
+  api.emitCustomEvent("potions:register", { name: "Castlewars brew", chains: [data.BREW_DOSES], area: POTION_AREA, emptyItemId: null, effect: applyBrew });
+  api.emitCustomEvent("potions:register", { name: "Castlewars special restore", chains: [data.SPECIAL_RESTORE_DOSES], area: POTION_AREA, emptyItemId: null, effect: applySpecialRestore, shareable: false });
+}
+
+function allowSupplyPotions(event) {
+  if (event.area === POTION_AREA) event.inside = game.isPlaying(event.player);
+}
+
+function validateSpecialRestore(event) {
+  if (!data.SPECIAL_RESTORE_DOSES.includes(event.itemId)) return;
+  const ticks = (event.player.getAttribute(SPECIAL_RESTORE_AT_ATTRIBUTE) ?? 0) - core.World.getProcessCycle();
+  if (ticks > 0) {
+    event.allowed = false;
+    event.message = `You must wait ${Math.ceil(ticks * 0.6)} seconds before drinking another special restore potion.`;
+  } else if (event.player.getSpecialPercentage() >= 100) {
+    event.allowed = false;
+    event.message = "Your special attack energy is already full.";
+  }
+}
+
+/** A tap is mounted on a wall: use the cardinal tile in front, rather than reaching diagonally. */
+function routeToTap(event) {
+  if (!game.inGameBounds(event.object.getLocation()) || event.definition?.getName() !== "Tap") return;
+  const location = event.object.getLocation();
+  const sides = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+  const candidates = sides.map(([dx, dy]) => new core.Location(location.getX() + dx, location.getY() + dy, location.getZ()))
+    .filter((tile) => !core.RegionManager.blocked(tile, event.player.getPrivateArea()));
+  candidates.sort((a, b) => Math.abs(a.getX() - event.sourceLocation.x) + Math.abs(a.getY() - event.sourceLocation.y)
+    - Math.abs(b.getX() - event.sourceLocation.x) - Math.abs(b.getY() - event.sourceLocation.y));
+  const tile = candidates[0];
+  if (tile) event.destination = { x: tile.getX(), y: tile.getY(), z: tile.getZ() };
+}
+
+module.exports = function attachCastleWarsSupplies(pluginApi, castleWars) {
+  api = pluginApi;
   game = castleWars;
   core = api.core;
   data = castleWars.data;
+  suppliedSpells = new Map();
+  for (const spell of Object.values(core.CombatSpells)) {
+    if (typeof spell?.spellId !== "function") continue;
+    const book = spell.getSpellbook();
+    if (!suppliedSpells.has(book)) suppliedSpells.set(book, new Set());
+    suppliedSpells.get(book).add(spell.spellId());
+  }
   api.onObjectInteraction(takeSupply);
+  api.onObjectRoute(routeToTap);
+  api.onSpellRuneBypass(supplyCombatRunes);
+  api.onCanGainExperience(noFreeMagicExperience);
+  api.onServerStartup(registerSupplyPotions);
+  api.onCustomEvent("castlewars:started-player", giveStartingPouch);
+  api.onCustomEvent("potions:area", allowSupplyPotions);
+  api.onCustomEvent("potions:validate-drink", validateSpecialRestore);
 };
