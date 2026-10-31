@@ -257,19 +257,30 @@ test('real Obligator thrust applies incoming equipment reactions only to the sel
     try {
         const [hit] = method.hits(attacker, victim);
         assert.equal(hit.isAccurate(), true);
-        assert.equal(hit.getTotalDamage(), 7);
+        assert.equal(hit.getTotalDamage(), 9, 'the roll is not mitigated until the hit lands');
         assert.equal(Obligator._test.charges(mace), 9, 'one weapon charge for the one thrust');
-        assert.equal(rondache.charges(victim), 2, 'discarded candidates do not charge the shield');
+        assert.equal(rondache.charges(victim), 0, 'an in-flight hit has not charged the shield yet');
+        assert.equal(incomingCalls, 0, 'defensive reactions wait for impact');
+        c.CombatFactory.applyHitTimeDefences(hit);
+        assert.equal(hit.getTotalDamage(), 7, 'Rondache takes its flat 2 when the hit lands');
+        assert.equal(rondache.charges(victim), 2);
         assert.equal(incomingCalls, 1, 'the real incoming pipeline runs once');
         rondache.setCharges(victim, 0);
         const scaled = new c.PendingHit(attacker, victim, method, { bestOf: 3, damageMultiplier: 1.4, rollAccuracy: false });
-        assert.equal(scaled.getTotalDamage(), 9, 'mitigation precedes the per-hit multiplier: floor((9 - 2) x 1.4)');
+        assert.equal(scaled.getTotalDamage(), 12, 'the roll is capped, then the per-hit multiplier applies');
+        assert.equal(incomingCalls, 1);
+        assert.equal(rondache.charges(victim), 0);
+        c.CombatFactory.applyHitTimeDefences(scaled);
+        assert.equal(scaled.getTotalDamage(), 10, 'Rondache then takes its flat 2 at impact');
         assert.equal(rondache.charges(victim), 2);
         assert.equal(incomingCalls, 2);
         rondache.setCharges(victim, 0);
         victim.getSkillManager().setCurrentLevel(c.Skill.HITPOINTS, 5, false);
         const capped = new c.PendingHit(attacker, victim, method, { bestOf: 3, damageMultiplier: 1.4, rollAccuracy: false });
-        assert.equal(capped.getTotalDamage(), 5, 'selected roll is mitigated, multiplied, then capped to HP');
+        assert.equal(capped.getTotalDamage(), 5, 'the roll is capped to HP before and after the multiplier');
+        assert.equal(incomingCalls, 2);
+        c.CombatFactory.applyHitTimeDefences(capped);
+        assert.equal(capped.getTotalDamage(), 3);
         assert.equal(rondache.charges(victim), 2);
         assert.equal(incomingCalls, 3);
         const rollAccuracy = c.AccuracyFormulasDpsCalc.rollAccuracy;
@@ -278,14 +289,17 @@ test('real Obligator thrust applies incoming equipment reactions only to the sel
             const miss = new c.PendingHit(attacker, victim, method, { bestOf: 3 });
             assert.equal(miss.isAccurate(), false);
             assert.equal(miss.getTotalDamage(), 0);
-            assert.equal(incomingCalls, 3, 'discarded misses do not react');
+            c.CombatFactory.applyHitTimeDefences(miss);
+            assert.equal(incomingCalls, 3, 'a miss does not react');
             assert.equal(rondache.charges(victim), 2);
         } finally { c.AccuracyFormulasDpsCalc.rollAccuracy = rollAccuracy; }
         victim.getEquipment().set(c.Equipment.SHIELD_SLOT, new c.Item(c.ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD));
         let graphics = 0;
         victim.performGraphic = () => { graphics++; };
         Math.random = () => 0.5;
-        new c.PendingHit(attacker, victim, method, { bestOf: 4, rollAccuracy: false });
+        const elysian = new c.PendingHit(attacker, victim, method, { bestOf: 4, rollAccuracy: false });
+        assert.equal(graphics, 0, 'Elysian waits for impact');
+        c.CombatFactory.applyHitTimeDefences(elysian);
         assert.equal(graphics, 1, 'Elysian reacts to the winner once, not each candidate');
         assert.equal(incomingCalls, 4);
     } finally { Math.random = random; }

@@ -58,11 +58,28 @@ Agree these before touching an account. They stop most time loss.
    - Pin a commit when comparing; this repo's quest parity docs use
      `06da90f982518a093f2fe1c9cfac5547fa7053d3` (for example
      [custodia-dawn-qh-parity.md](../custodia-dawn-qh-parity.md)).
-   - **It is not a complete oracle.** It follows one guided route and can miss early,
+   - **Ask it headless rather than re-deriving it.** The agent MCP's `quest_helper` runs the same
+     pinned upstream lifecycle the client does, from a server-built snapshot, and returns the
+     step *and* the saved stage with its wire value in one call. See
+     [quest-helper-testing.md](quest-helper-testing.md). It follows all step kinds, not just the
+     travel leg: talk-to, dialogue choice, item, object, teleport and requirement.
+   - **A route that does not finish a quest may be a guide quirk.** Check the upstream tracker
+     (<https://github.com/Zoinkwiz/quest-helper/issues>) for a known issue before changing quest
+     code, and record the issue with the pinned commit when it explains the difference.
+   - A faithful copy of a guide is still a guide. Copy fidelity makes "is the helper integrated
+     correctly here?" a real question, and it does not make the helper ground truth about OSRS:
+     it covers one curated route and encodes no rewards, XP or exact speech. **It is not a
+     complete oracle.** It follows one guided route and can miss early,
      out-of-order or shared-NPC cases. Observed class: a helper step that walks the full route
      can still route a shared NPC interaction to the wrong quest owner (e.g. a before-book
      Katrine/Straven step resolving to an unrelated NPC such as Achietties) while the full
      helper route "passes". Treat competing quests' NPCs as first-class risk.
+   - **Where the check is circular, say so.** Where a plugin mirrors the helper's varbit values,
+     "the helper shows the next step" is close to true by construction. The independent signal is
+     the action: did the thing the step named actually move the stage. Weigh that half of the
+     loop, not the read half, and keep the cache as the second anchor — it is a guide-free
+     authority for ids, placements and the completion threshold in DB table 0 column 19 (see
+     [Check the cache's completion contract](#check-the-caches-completion-contract)).
 2. **RSProx captures** are the best evidence for recorded speech, action order, varps/varbits,
    menus and exact tiles. Record the facts the feature relies on in docs; do not commit raw logs
    (they contain accounts). Re-check every id against this cache.
@@ -114,6 +131,9 @@ shell. Do not assume `49700`, `3101` or any previous slot: they are assigned per
 ```bash
 AGENT_MCP=1 yarn start        # server + client for this worktree
 # or: AGENT_MCP=1 yarn server
+
+# In another shell, for `quest_helper`: the helper engine the server forwards to.
+yarn bridge
 ```
 
 `AGENT_MCP=1` is required; `AGENT_MCP_PORT` comes from the `.env`. Register or connect to
@@ -186,6 +206,7 @@ the MCP endpoint is stateless and every call names the player.
 | Walk and settle | `walk_to { x, y, run, maxTicks }` |
 | Travel anywhere | `travel_to { x, y, z, exact, run, budgetTicks, retryFailed }` |
 | Let time pass | `wait_ticks { ticks }` |
+| The guide's next step | `quest_helper { player, quest, variant?, fresh? }`; `quest_helper_result { player }`; `quest_helper_quests { player, filter? }` |
 | Admin probe | `command { text }` (runs as developer for that call) |
 | Rules only | `can_attack`, `can_teleport` |
 | Damage after real entry | `set_npc_hitpoints { npcIndex, hitpoints }` |
@@ -220,9 +241,10 @@ Only continue visible NPC/player/item/statement dialogues. A `kind: "other"` ent
 an internal action waiting for its scheduled overhead or scene callback. Use bounded
 `wait_ticks` and re-read it; clicking Continue there can invalidate the pending callback.
 
-Before each travel leg, resolve the current Quest Helper conditional step from the actual
-stage and auxiliary flags, then use that step's destination. A later scout or boss marker
-is not the current destination. Reuse the cached live MCP schema for tool names and
+Before each travel leg, ask the guide for the current step instead of reconstructing it:
+`quest_helper { player, quest }` resolves the conditional step from the actual stage and
+auxiliary flags, and returns its destination, targets and dialogue choices. A later scout or boss
+marker is not the current destination. Reuse the cached live MCP schema for tool names and
 arguments; do not search for a developer command when the documented tool exists.
 
 For travel between quest steps, use `travel_to`. It plans across floors and the live game's
@@ -293,6 +315,11 @@ Some plugins also keep sub-state in their own attributes (flags, puzzle progress
 rewards). Check those when a stage looks right but the world does not.
 
 ### Check the cache's completion contract
+
+`quest_helper` reports this for the quest it was asked about (`contract`), and
+`quest_helper_quests` reports it for every registered quest, so the comparison below is a read
+rather than a script — see [quest-helper-testing.md](quest-helper-testing.md). Reach for the cache
+directly when you need a value the tool does not surface.
 
 The final `loadSteps` key is **not** a completion value. Quest Helper asks the cache's
 `QUEST_STATUS_GET` script (4029) whether the quest finished; script 4024 reads its progress.

@@ -102,6 +102,9 @@ class DragonCombatMethod extends CombatMethod {
         prayerProtects: this.prayerProtects,
       });
       hit.setTotalDamage(dragonfire.damage);
+      // The resolver above already applied the prayer (or ignored it for metallic
+      // dragons); generic impact protection must not reduce the custom breath twice.
+      hit.markProtectionBypassed();
       sendDragonfireMessages(player, dragonfire.messages);
     } else {
       hit.setTotalDamage(0);

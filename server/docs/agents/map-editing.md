@@ -311,6 +311,8 @@ state on open and on **Refresh map**:
 - `GET /regions` → active replacement ids
 - `GET /regions/<id>.pack` or `/regions/<id>.terrain` → terrain bytes
 - `GET /api/world/object-spawns` → persisted placements (rendered as spawn edits)
+- `GET /api/world/npc-spawns` → persisted NPC spawns (selectable, movable, editable)
+- `GET /api/world/npc-spawns-custom` → the editor's existing spawn patch (empty when none)
 
 So an agent build appears in the editor without a login, and the same edits appear in-game to
 logged-in players on scene rebuild (walk, teleport, relog).

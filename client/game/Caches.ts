@@ -1,4 +1,4 @@
-import { isLowEndDevice, isSafari } from "../common/utils/DeviceUtil";
+import { isIos, isLowEndDevice, isSafari } from "../common/utils/DeviceUtil";
 import { getCacheBaseUrl } from "../config/clientEnv";
 import { CacheFiles, ProgressListener } from "../rs/cache/CacheFiles";
 import { CacheInfo, getLatestCache } from "../rs/cache/CacheInfo";
@@ -15,13 +15,13 @@ import { SparseMemoryStore, computeIndexRegion } from "../rs/cache/store/SparseM
 const CACHE_PATH = getCacheBaseUrl();
 
 function shouldSkipDat2MainCacheWrite(): boolean {
-    return isSafari;
+    return isSafari || isIos;
 }
 
 export function canUseSharedArrayBuffer(): boolean {
     // Safari/WebKit throws "Unable to convert chunk to Uint8Array" when assembling
     // large downloads into SharedArrayBuffer-backed views. Use plain ArrayBuffers.
-    if (isSafari) return false;
+    if (isSafari || isIos) return false;
     return typeof SharedArrayBuffer !== "undefined" && globalThis.crossOriginIsolated === true;
 }
 
@@ -133,7 +133,7 @@ export async function loadCacheFiles(
     let files: CacheFiles;
     if (cacheType === "dat2") {
         // Safari/WebKit can crash tab processes when writing huge dat2 blobs to CacheStorage.
-        // Keep downloading dat2, but skip persisting that one file on Safari for stability.
+        // Keep downloading dat2, but skip persisting that one file on WebKit browsers for stability.
         const skipDat2MainCacheWrite = shouldSkipDat2MainCacheWrite();
         if (skipDat2MainCacheWrite) {
             console.log(

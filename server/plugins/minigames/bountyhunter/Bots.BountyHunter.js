@@ -22,7 +22,7 @@ const { clearMovementRequest, queueRouteAndFlagAppearance } = require("../../bot
 const { getPvpProfile } = require("../../bots/behaviours/pvp/PvpProfileRegistry.PlayerBots");
 const { applyGeneratedPvpLoadout } = require("../../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
 const { buildRoamingPvpMetadata } = require("../../bots/behaviours/pvp/PvpAssignment.PlayerBots");
-const { pickTierChoice, TIER_PROFILE_IDS } = require("../../bots/behaviours/pvp/PvpTierLoadouts.PlayerBots");
+const { buildStyle, pickTierChoice, tierCombatLevel, TIER_PROFILE_IDS } = require("../../bots/behaviours/pvp/PvpTierLoadouts.PlayerBots");
 const { isFoodItem } = require("../../items/Food.plugin");
 const Entry = require("./Entry.BountyHunter");
 const Coffer = require("./Coffer.BountyHunter");
@@ -35,6 +35,9 @@ const BOT_BANDS = [
   { min: 111, max: 120, tier: "veteran" },
   { min: 121, max: 126, tier: "veteran" },
 ];
+// No protection prayers in the arena, so tanks and spec rushers fight as well as switchers.
+// ponytail: our estimate of the crater's mix; no published figure exists. Each band keeps it.
+const STYLE_WEIGHTS = { melee: 45, range: 30, hybrid: 25 };
 const BOT_ATTRIBUTE = "bounty-hunter:bot";
 const PVP_ACTIVITY = "pvp";
 const TARGET_HOLD_MS = 30 * 60 * 1000; // the target is the crater's to clear, not the engine's timer
@@ -52,6 +55,7 @@ let bh;
 /** The live bot players. */
 const bots = new Set();
 const botBands = new WeakMap();
+const botStyles = new WeakMap();
 /** Numbers each spawn: bots despawned a moment ago may still be online under their names. */
 let spawnedBots = 0;
 let populationTarget = 0;
@@ -80,12 +84,27 @@ function prepareBot(player) {
   }
 }
 
+/** The style furthest below its share of the band, counting the bot about to join it. */
+function nextStyle(inBand) {
+  const total = Object.values(STYLE_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
+  const shortfall = (style) => (STYLE_WEIGHTS[style] / total) * (inBand.length + 1)
+    - inBand.filter((bot) => botStyles.get(bot) === style).length;
+  return Object.keys(STYLE_WEIGHTS).reduce((best, style) => (shortfall(style) > shortfall(best) ? style : best));
+}
+
 function spawnBot(runtime, behaviorMode) {
   const counts = BOT_BANDS.map((band) => [...bots].filter((bot) => botBands.get(bot) === band).length);
   const bandIndex = counts.indexOf(Math.min(...counts));
   const band = BOT_BANDS[bandIndex];
+  const inBand = [...bots].filter((bot) => botBands.get(bot) === band);
+  const style = nextStyle(inBand);
   const profileId = band.min >= 111 && counts[bandIndex] % 2 === 0 ? "elite" : TIER_PROFILE_IDS[band.tier];
-  const choice = pickTierChoice(band.tier, { index: counts[bandIndex], band, profileId, excludeF2p: true });
+  const index = inBand.filter((bot) => botStyles.get(bot) === style).length;
+  // A band with no build of that style (only hybrids are maxed) takes its usual pick instead.
+  const styled = pickTierChoice(band.tier, { index, build: style, band, profileId, excludeF2p: true });
+  const level = styled && tierCombatLevel(styled.entry, getPvpProfile(profileId));
+  const choice = level >= band.min && level <= band.max ? styled
+    : pickTierChoice(band.tier, { index: counts[bandIndex], band, profileId, excludeF2p: true });
   if (!choice) return;
   const pvpMetadata = {
     ...buildRoamingPvpMetadata({ config: { pvp: {
@@ -104,6 +123,7 @@ function spawnBot(runtime, behaviorMode) {
   startActivity(bot, PVP_ACTIVITY, { home: { x: spawn.getX(), y: spawn.getY(), z: spawn.getZ() } });
   bots.add(bot);
   botBands.set(bot, band);
+  botStyles.set(bot, buildStyle(choice.entry));
 }
 
 function populate({ player }) {
@@ -347,4 +367,4 @@ module.exports = function attachBots(pluginApi, state) {
   api.onServerStartup(startTask);
 };
 
-Object.assign(module.exports, { _test: { huntTarget, dropTarget, BOT_BANDS, MAX_BOTS } });
+Object.assign(module.exports, { _test: { huntTarget, dropTarget, BOT_BANDS, MAX_BOTS, STYLE_WEIGHTS } });

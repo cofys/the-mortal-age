@@ -159,6 +159,68 @@ const WATERABLE = new Set(["ALLOTMENT", "FLOWER", "HOPS"]);
 const COMPOSTABLE_YIELD = new Set(["ALLOTMENT", "HOPS", "HERB", "SEAWEED", "CELASTRUS"]);
 const WOOD_TREES = new Set(["TREE", "HARDWOOD_TREE", "REDWOOD"]);
 
+/**
+ * The Farming model's rates and timings. Published values cite the OSRS Wiki;
+ * `unpublished` entries are this server's explicit estimates, never claimed as OSRS-exact.
+ * Keeping them here stops the growth/disease/yield formulas from carrying bare numbers.
+ */
+const FORMULAS = {
+    disease: {
+        // https://oldschool.runescape.wiki/w/Disease_(Farming): chance per growth cycle.
+        // The numerator includes the roll of zero (herbs are 27/128, not 26/128).
+        perCrop: { HERB: 27, FRUIT_TREE: 18, MAPLE: 13, MAGIC: 9, CORAL: 8 },
+        // ponytail: the Wiki publishes no rate for other crops; replace when one is measured.
+        unpublished: 16,
+        denominator: 128,
+        // Compost 50%, supercompost 80%, ultracompost 90% (rounded down to 1/128).
+        compostMultipliers: [1, 0.5, 0.2, 0.1],
+        // Mod Ash: Iasor reduces the chance to 20% of what it would have been.
+        iasorMultiplier: 0.2,
+        // ponytail: watering is documented as a per-crop reduction with no published formula.
+        wateredMultiplier: 0.5,
+    },
+    yield: {
+        // https://oldschool.runescape.wiki/w/Farming#Variable_crop_yield
+        denominator: 256,
+        secateursMultiplier: 0.10,
+        farmingCapeMultiplier: 0.05,
+        attasMultiplier: 0.05,
+    },
+    // ponytail: the Kronos page documents the shared skip but not its probability.
+    kronosStageSkipChance: 0.1,
+    kronosMaxStageSkips: 12,
+    // ponytail: only the training failure is documented; its probability is not.
+    barbarianPlantFailureChance: 0.5,
+    // https://oldschool.runescape.wiki/w/Disease_(Farming): pruning succeeds 75% of the time.
+    pruneFailureChance: 0.25,
+    // https://oldschool.runescape.wiki/w/Amulet_of_bounty: 25% chance to use one seed.
+    amuletOfBountySaveChance: 0.25,
+    // https://oldschool.runescape.wiki/w/Belladonna: 6 plus a level-scaled roll.
+    // ponytail: the individual roll's distribution is unpublished.
+    belladonna: { base: 6, levelStep: 8 },
+    growth: {
+        // https://oldschool.runescape.wiki/w/Farming#Growth_timing
+        tickMinutes: 5,
+        // A yew's first stage lasts five minutes; every later stage uses its normal cycle.
+        firstStageMinutes: { YEW: 5 },
+        // The growth-cycle tiers, slowest last. A diseased crop uses the next tier.
+        cycleMinutes: [5, 10, 20, 40, 80, 160, 320, 640],
+    },
+};
+
+/** Published per-cycle disease numerator for a crop, or the explicit unpublished estimate. */
+function diseaseNumerator(crop) {
+    return FORMULAS.disease.perCrop[crop.key] ?? FORMULAS.disease.perCrop[crop.type] ?? FORMULAS.disease.unpublished;
+}
+/** How long the current growth stage lasts. `stage` is the stage the crop is in now. */
+function stageMinutes(crop, stage = 0) {
+    return stage === 0 ? FORMULAS.growth.firstStageMinutes[crop.key] ?? crop.minutes : crop.minutes;
+}
+/** A diseased crop pauses for the next slowest growth cycle (`Farming#Growth_timing`). */
+function diseasedMinutes(crop) {
+    return FORMULAS.growth.cycleMinutes.find(minutes => minutes > crop.minutes) ?? crop.minutes;
+}
+
 // https://oldschool.runescape.wiki/w/Tangleroot (base denominators, before level adjustment).
 const PET_RATES = {
     HERB: 98364, CORAL: 98364, FLOWER: 281040, ALLOTMENT: 281040, FRUIT_TREE: 9000, HARDWOOD_TREE: 5000,
@@ -172,4 +234,4 @@ const PET_RATES = {
 };
 const petRate = (crop) => PET_RATES[crop.key] ?? PET_RATES[crop.type];
 
-Object.assign(module.exports, { CACHE, CROPS, SEEDS, WATERED_SEEDLINGS, BELLADONNA_HANDWEAR, itemId, initializeFarmingData, patchKey, WATERABLE, COMPOSTABLE_YIELD, WOOD_TREES, petRate });
+Object.assign(module.exports, { CACHE, CROPS, SEEDS, WATERED_SEEDLINGS, BELLADONNA_HANDWEAR, itemId, initializeFarmingData, patchKey, WATERABLE, COMPOSTABLE_YIELD, WOOD_TREES, petRate, FORMULAS, diseaseNumerator, stageMinutes, diseasedMinutes });

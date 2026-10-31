@@ -4,7 +4,8 @@ Start the server with the agent MCP enabled (see [perf.md](perf.md)). These tool
 run the in-game checklist a PR asks for, without a client.
 
 For a quest start-to-finish run (Quest Helper route, stages/varps, rewards, relog and recovery),
-use the checklist in [quest-testing.md](quest-testing.md).
+use the checklist in [quest-testing.md](quest-testing.md). To follow the helper's own steps
+headless, see [quest-helper-testing.md](quest-helper-testing.md).
 
 | Step | Tool |
 | --- | --- |
@@ -14,6 +15,8 @@ use the checklist in [quest-testing.md](quest-testing.md).
 | Travel | `travel_to { player, x, y, z }` walks there like a player, through doors, stairs, shortcuts and boats, one normal click per hop (see [quest-testing.md](quest-testing.md)) |
 | Act | `walk_to`, `interact`, `npc_option`, `object_option`, `inventory_option` (Wear/Wield to equip), `use_item`, `player_option` (Attack/Trade/Follow), `cast_spell { spell, target? }` |
 | Skip time | `advance_time { player, minutes }` moves timed content forward (farming, seedlings, bird houses) |
+| Ask the guide | `quest_helper { player, quest, … }` evaluates the real Quest Helper headless for that player: current step text, dialogue choices, targets, and the quest's saved stage with the wire value it mirrors to and the cache's completion threshold (`contract`). `quest_helper_result` reads what a connected client was last told; `quest_helper_quests` lists keys with status and stage. Needs `yarn bridge` (see [quest-helper-testing.md](quest-helper-testing.md)) |
+| Check a step's targets | `quest_helper` also resolves every target against the cache and the scene (`cache: known\|missing`, `scene: on-tile\|nearby\|absent\|carried\|on-ground`), so a step naming an id this cache does not have is caught before any click |
 | Check the result | every action returns `area`, new `messages` and `client` (varbits, varps, interface opens/closes/hides and interaction modes sent since the last call); `observe { varbits, varps }` reads current values |
 
 For example, Castle Wars friendly fire is: two `login`s, `command cwar` (or walk both into

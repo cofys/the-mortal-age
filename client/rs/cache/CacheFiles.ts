@@ -678,7 +678,9 @@ export type ProgressListener = (progress: DownloadProgress) => void;
 function ReadableBufferStream(ab: ArrayBuffer): ReadableStream<Uint8Array> {
     return new ReadableStream({
         start(controller) {
-            controller.enqueue(new Uint8Array(ab));
+            // Response body chunks must not be backed by SharedArrayBuffer (WebKit rejects them).
+            const bytes = new Uint8Array(ab);
+            controller.enqueue(ab instanceof ArrayBuffer ? bytes : new Uint8Array(bytes));
             controller.close();
         },
     });

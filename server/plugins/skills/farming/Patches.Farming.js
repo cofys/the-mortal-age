@@ -322,7 +322,7 @@ function rake(player, patch) {
     if (state.crop || state.scarecrow || !state.weeds) return false;
     if (!give(player, Data.itemId("Weeds"))) return false;
     state.weeds--;
-    state.nextAt = Model.nextGrowth(Date.now(), 5, farmFor(player).offset);
+    state.nextAt = Model.nextGrowth(Date.now(), Data.FORMULAS.growth.tickMinutes, farmFor(player).offset);
     award(player, 4, patch);
     return state.weeds > 0;
 }
@@ -379,8 +379,7 @@ function plant(player, patch, id) {
         }
     }
     if (player.getInventory().getAmount(id) < crop.seedCount) { player.sendMessage(`You need ${crop.seedCount} seeds to plant this crop.`); return; }
-    // ponytail: the training failure rate is unpublished; use an even roll until measured.
-    if (bareHanded && barbarian.planting === 1 && Math.random() < 0.5) {
+    if (bareHanded && barbarian.planting === 1 && Math.random() < Data.FORMULAS.barbarianPlantFailureChance) {
         player.getInventory().deleteNumber(id, crop.seedCount);
         player.sendMessage("You crush the seeds while trying to plant them bare-handed."); return;
     }
@@ -390,7 +389,7 @@ function plant(player, patch, id) {
     core.PluginManager.emitCustomEvent("farming:plant-rules", rules);
     const keepSeed = rules.keepSeed === true;
     let seedCount = crop.seedCount;
-    if (!keepSeed && patch.type === "ALLOTMENT" && player.getEquipment().contains(Data.itemId("Amulet of bounty")) && Math.random() < 0.25) {
+    if (!keepSeed && patch.type === "ALLOTMENT" && player.getEquipment().contains(Data.itemId("Amulet of bounty")) && Math.random() < Data.FORMULAS.amuletOfBountySaveChance) {
         seedCount = 1;
         const farm = farmFor(player);
         farm.bountyCharges = (farm.bountyCharges ?? 10) - 1;
@@ -419,8 +418,10 @@ function plant(player, patch, id) {
             barbarian.planting = 2;
             player.sendMessage("You feel you have learned more of barbarian ways. Otto might wish to talk to you more.");
         }
+        const plantedAt = Date.now(), offset = farmFor(player).offset;
         Object.assign(state, { crop: crop.key, stage: 0, status: "growing", checked: false, protected: false, watered: false,
-            lives: 0, plantedAt: Date.now(), nextAt: Model.nextGrowth(Date.now(), crop.minutes, farmFor(player).offset),
+            lives: 0, plantedAt, plantedTick: Model.tickIndex(plantedAt, offset),
+            nextAt: Model.nextGrowth(plantedAt, Data.stageMinutes(crop, 0), offset),
             diseaseFree: rules.diseaseFree === true, undying: rules.undying === true });
         // Fully grown at once, as the growth model leaves a crop on its last stage (an anima plant's last stage is its end).
         if (rules.grown === true && crop.type !== "ANIMA") {
@@ -556,10 +557,10 @@ function cure(player, patch, useItem = true, usedId) {
             player.getInventory().addItem(new core.Item(Data.itemId("Vial")));
         }
         animate(player, pruning ? ANIM.PRUNE : ANIM.CURE);
-        if (pruning && Math.random() < 0.25) { player.sendMessage("There are still some diseased leaves left."); return false; }
+        if (pruning && Math.random() < Data.FORMULAS.pruneFailureChance) { player.sendMessage("There are still some diseased leaves left."); return false; }
     }
     state.status = "growing";
-    state.nextAt = Model.nextGrowth(Date.now(), Data.CROPS.get(state.crop).minutes, farmFor(player).offset);
+    state.nextAt = Model.nextGrowth(Date.now(), Data.stageMinutes(Data.CROPS.get(state.crop), state.stage), farmFor(player).offset);
     syncPatch(player, patch);
     return true;
 }
@@ -615,9 +616,9 @@ function harvest(player, patch) {
     const pickLine = (PICKS[crop.type] ?? (crop.type === "CRYSTAL_TREE" ? { each: "You shatter the crystal tree into crystal shards." } : {})).each;
     const level = player.getSkillManager().getCurrentLevel(core.Skill.FARMING);
     const attas = Model.activeAnima(farmFor(player), Date.now()) === "ATTAS";
+    const belladonna = Data.FORMULAS.belladonna;
     let amount = crop.key === "WOAD" ? 3 : crop.key === "LIMPWURT" ? 3 + Math.floor(Math.floor(Math.random() * level) * (hasTool(player, "Magic secateurs") ? 1.1 : 1) * (attas ? 1.05 : 1) / 10)
-        // ponytail: uniform belladonna roll matches published level bounds; refine its distribution when published.
-        : crop.type === "BELLADONNA" ? 6 + Math.floor(Math.random() * (Math.floor(level / 8) + 1))
+        : crop.type === "BELLADONNA" ? belladonna.base + Math.floor(Math.random() * (Math.floor(level / belladonna.levelStep) + 1))
         : crop.type === "CRYSTAL_TREE" ? 16 + state.compost * 4 + Math.floor(Math.random() * 5) : 1;
     let produce = crop.produce;
     const blessing = crop.type === "GRAPES" && player.getInventory().contains(Data.itemId("Bologa's blessing"));

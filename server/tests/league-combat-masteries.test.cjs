@@ -745,7 +745,8 @@ test("Magic I and IV judge the undefended roll: a defender's damage reduction ap
   const hit = new core.PendingHit(caster, defender, core.CombatFactory.MAGIC_COMBAT, { delay: 0 });
   const max = core.DamageFormulas.sourceHitBounds(caster, CombatType.MAGIC, defender).maximum;
   assert.ok(Math.floor(max * 0.85) <= Math.floor(max * 0.9), "the reduced max roll would fail the 90% test");
-  assert.equal(hit.getTotalDamage(), Math.floor(Math.floor(max * 1.5) * 0.85), "Magic I's +50% first, then the defender's -15%");
+  core.CombatFactory.applyHitTimeDefences(hit);
+  assert.equal(hit.getTotalDamage(), Math.floor(Math.floor(max * 1.5) * 0.85), "Magic I's +50% first, then the defender's -15% at impact");
   caster.setHitpoints(50);
   hooks.onCombatHitResolved({ attacker: caster, target: defender, hit });
   assert.equal(caster.getHitpoints(), 50 + Math.floor(Math.floor(hit.getTotalDamage() * 0.1) * 1.2), "Magic IV heals 10% of the damage dealt");

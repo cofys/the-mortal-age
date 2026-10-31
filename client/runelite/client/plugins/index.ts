@@ -7,6 +7,7 @@ import { BankTagsPlugin } from "../../../game/plugins/banktags/BankTagsPlugin";
 import { CameraPlugin } from "../../../game/plugins/camera/CameraPlugin";
 import { QuestHelperPlugin } from "../../../game/plugins/questhelper/QuestHelperPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
+import { TouchControlsPlugin } from "../../../game/plugins/touchcontrols/TouchControlsPlugin";
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
 import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
@@ -58,6 +59,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     VoiceChatPlugin,
     HdPlugin,
     FirstPersonPlugin,
+    TouchControlsPlugin,
     GameFrame317Plugin,
     GroundItemsPlugin,
     InteractHighlightPlugin,

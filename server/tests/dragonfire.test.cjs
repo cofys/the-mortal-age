@@ -92,6 +92,51 @@ test("metallic dragonfire ignores Protect from Magic", () => {
   assert.deepEqual(range({ prayer: true, shield: true }, { prayerProtects: false }), [0, 5]);
 });
 
+test("registered chromatic and metallic providers keep their custom prayer damage through impact", () => {
+  const registered = [];
+  require("../plugins/npcs/Dragons.plugin").register({
+    core,
+    getPrayerHandler: () => PrayerHandler,
+    getCombatFactory: () => core.CombatFactory,
+    emitCustomEvent() {},
+    registerNpcCombatMethodProvider: (_ids, method) => registered.push(method),
+  });
+  const [Chromatic, , Metallic] = registered;
+  const originalBounds = core.DamageFormulas.sourceHitBounds;
+  const originalRandomInclusive = core.Misc.randomInclusive;
+  const originalGear = CombatEquipment.hasDragonProtectionGear;
+  core.DamageFormulas.sourceHitBounds = () => ({ minimum: 0, maximum: 0 });
+  core.Misc.randomInclusive = (_min, max) => max;
+  CombatEquipment.hasDragonProtectionGear = () => false;
+  ({ shield = false, prayer = true, accurate = false } = {});
+  try {
+    const victim = player();
+    Object.assign(victim, {
+      isPlayer: () => true,
+      getHitpoints: () => 99,
+      getAsPlayer: () => victim,
+      getEquipment: () => ({ getItems: () => Array.from({ length: 14 }, () => ({ getId: () => -1 })) }),
+      performGraphic() {},
+    });
+    const attacker = { isPlayer: () => false, isNpc: () => true, isRegistered: () => true, getHitpoints: () => 100 };
+    const breath = (Method) => {
+      const method = new Method();
+      method.useDragonfire = true;
+      method.currentAttackType = core.CombatType.MAGIC;
+      const [pending] = method.hits(attacker, victim);
+      core.CombatFactory.applyHitTimeDefences(pending);
+      return pending;
+    };
+    assert.equal(breath(Chromatic).getTotalDamage(), 10, "chromatic prayer leaves its 0-10 table, not a second prayer cut");
+    accurate = false;
+    assert.equal(breath(Metallic).getTotalDamage(), 50, "metallic ignores prayer and keeps its custom 0-50 breath");
+  } finally {
+    core.DamageFormulas.sourceHitBounds = originalBounds;
+    core.Misc.randomInclusive = originalRandomInclusive;
+    CombatEquipment.hasDragonProtectionGear = originalGear;
+  }
+});
+
 test("antifire is subtracted after the damage roll", () => {
   ({ shield, prayer, accurate } = { shield: false, prayer: false, accurate: false });
   const target = player({ potion: Tier.ANTIFIRE });

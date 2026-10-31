@@ -22,13 +22,18 @@ function titheDeposit(score, amount, harvestXp) {
     return { count, score: (score + count) % 100, xp, bonus, points };
 }
 const EPOCH = Date.UTC(2025, 5, 9); // Day 1 of the wiki's four-day growth schedule.
+const GROWTH_TICK = Data.FORMULAS.growth.tickMinutes * MINUTE;
 function nextGrowth(now, minutes, offset) {
     const period = minutes * MINUTE;
     return EPOCH + (Math.floor((now - EPOCH + offset) / period) + 1) * period - offset;
 }
+/** The five-minute growth tick a timestamp belongs to, from the same epoch and player offset. */
+function tickIndex(at, offset) {
+    return Math.floor((at - EPOCH + offset) / GROWTH_TICK);
+}
 function emptyPatch(now, farm, weeds = 0) {
     return { stage: 0, weeds, compost: 0, watered: false, status: "growing", checked: false,
-        protected: false, lives: 0, nextAt: nextGrowth(now, 5, farm.offset), plantedAt: now };
+        protected: false, lives: 0, nextAt: nextGrowth(now, Data.FORMULAS.growth.tickMinutes, farm.offset), plantedAt: now };
 }
 function startingLives(crop, compost) {
     if (Data.COMPOSTABLE_YIELD.has(crop.type)) return 3 + compost;
@@ -37,13 +42,14 @@ function startingLives(crop, compost) {
     return Math.max(1, crop.lives);
 }
 function diseaseChance(crop, compost, watered, iasor) {
-    // Wiki-confirmed numerators. Other crops/watered numerators have not been published.
-    // ponytail: 1/8 base risk for unpublished crops; replace with measured per-crop rates when known.
-    let numerator = crop.type === "HERB" ? 26 : crop.type === "FRUIT_TREE" ? 17 : crop.type === "CORAL" ? 7 : crop.key === "MAPLE" ? 12 : crop.key === "MAGIC" ? 8 : 15;
-    if (watered) numerator = Math.floor(numerator / 2);
-    numerator = Math.floor(numerator * [1, 0.5, 0.2, 0.1][compost]);
-    if (iasor) numerator = Math.floor(numerator * 0.2);
-    return (numerator + 1) / 128;
+    const { disease } = Data.FORMULAS;
+    // The published numerator already includes the zero roll, so modifiers apply to the
+    // rolls above zero and the final +1 restores it.
+    let rolls = Data.diseaseNumerator(crop) - 1;
+    if (watered) rolls = Math.floor(rolls * disease.wateredMultiplier);
+    rolls = Math.floor(rolls * disease.compostMultipliers[compost]);
+    if (iasor) rolls = Math.floor(rolls * disease.iasorMultiplier);
+    return (rolls + 1) / disease.denominator;
 }
 
 const HERB_LOW = { GUAM: 25, MARRENTILL: 28, TARROMIN: 31, HARRALANDER: 36, GOUTWEED: 39,
@@ -73,10 +79,13 @@ function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0,
         [low, high] = crop.type === "ALLOTMENT" || crop.type === "HOPS" ? [100, 180]
             : crop.type === "BUSH" || crop.key === "POTATO_CACTUS" ? [90, 190] : [25, 80];
     }
-    const items = (secateurs && ["ALLOTMENT", "HERB", "HOPS", "GRAPES", "BUSH", "CELASTRUS", "CORAL"].includes(crop.type) ? 0.10 : 0) + (cape && crop.type === "HERB" ? 0.05 : 0);
-    const boost = (value) => Math.floor((Math.floor(value * (1 + items)) + diary) * (attas ? 1.05 : 1));
+    const { yield: rates } = Data.FORMULAS;
+    const items = (secateurs && ["ALLOTMENT", "HERB", "HOPS", "GRAPES", "BUSH", "CELASTRUS", "CORAL"].includes(crop.type) ? rates.secateursMultiplier : 0)
+        + (cape && crop.type === "HERB" ? rates.farmingCapeMultiplier : 0);
+    const boost = (value) => Math.floor((Math.floor(value * (1 + items)) + diary) * (attas ? 1 + rates.attasMultiplier : 1));
     level = Math.max(1, Math.min(99, level));
-    return Math.max(0, Math.min(255 / 256, (1 + Math.floor((boost(low) * (99 - level) + boost(high) * (level - 1)) / 98 + 0.5)) / 256));
+    const chance = (1 + Math.floor((boost(low) * (99 - level) + boost(high) * (level - 1)) / 98 + 0.5)) / rates.denominator;
+    return Math.max(0, Math.min((rates.denominator - 1) / rates.denominator, chance));
 }
 function activeAnima(farm, at) {
     return Object.values(farm.patches).find(s => s.crop && Data.CACHE.timing[s.crop]?.type === "ANIMA"
@@ -87,8 +96,7 @@ function kronosGrowth(farm, at, minutes, random, skips) {
     const key = `${at}:${minutes}`;
     if (!skips.has(key)) {
         let extra = 0;
-        // ponytail: shared repeatable skips are documented, but their probability is unpublished.
-        while (extra < 12 && random() < 0.1) extra++;
+        while (extra < Data.FORMULAS.kronosMaxStageSkips && random() < Data.FORMULAS.kronosStageSkipChance) extra++;
         skips.set(key, extra);
     }
     return 1 + skips.get(key);
@@ -126,6 +134,24 @@ function* patchStates(farm) {
         const patch = PATCH_BY_KEY.get(key);
         if (patch) yield { patch, state: farm.patches[key] };
     }
+}
+
+/**
+ * The stage a healthy crop has reached `tick` growth ticks after `plantedTick`.
+ * Unlike the live state this ignores disease, so it only describes the wiki schedule.
+ */
+function stageAt(crop, plantedTick, tick) {
+    let stage = 0, at = plantedTick;
+    while (stage < crop.stages && at < tick) {
+        // Growth ticks are aligned to the cycle's own five-minute grid, not counted from
+        // the previous stage, so a yew's 5-minute first stage rejoins the 40-minute grid.
+        const cycle = Data.stageMinutes(crop, stage) / Data.FORMULAS.growth.tickMinutes;
+        const next = (Math.floor(at / cycle) + 1) * cycle;
+        if (next > tick) break;
+        at = next;
+        stage++;
+    }
+    return stage;
 }
 
 /** Whether advanceFarm still has growth to apply to this planted state. */
@@ -196,15 +222,15 @@ function advanceFarm(farm, now, random = Math.random) {
             state.watered = false;
 
         }
-        state.nextAt = nextGrowth(at, state.status === "diseased" ? crop.minutes * 2
-            : state.status === "grown" && crop.regrow ? crop.regrow : crop.minutes, farm.offset);
+        state.nextAt = nextGrowth(at, state.status === "diseased" ? Data.diseasedMinutes(crop)
+            : state.status === "grown" && crop.regrow ? crop.regrow : Data.stageMinutes(crop, state.stage), farm.offset);
     }
     for (const { patch, state } of patchStates(farm)) {
         if (!state || ["GRAPES", "CORAL"].includes(patch.type)) continue;
         if (state.crop || state.scarecrow || state.bin || farm.autoWeed) continue;
         if (state.nextAt <= now) {
-            state.weeds = Math.min(3, state.weeds + 1 + Math.floor((now - state.nextAt) / (5 * MINUTE)));
-            state.nextAt = nextGrowth(now, 5, farm.offset);
+            state.weeds = Math.min(3, state.weeds + 1 + Math.floor((now - state.nextAt) / (Data.FORMULAS.growth.tickMinutes * MINUTE)));
+            state.nextAt = nextGrowth(now, Data.FORMULAS.growth.tickMinutes, farm.offset);
         }
     }
 }
@@ -235,4 +261,4 @@ function patchValue(patch, state) {
     return (state.watered ? visual.WATERED?.[state.stage] : undefined) ?? visual.GROWING[state.stage];
 }
 
-Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, diseaseFree, nextDue, patchValue });
+Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, tickIndex, stageAt, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, diseaseFree, nextDue, patchValue });

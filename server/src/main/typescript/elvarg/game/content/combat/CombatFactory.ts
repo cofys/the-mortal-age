@@ -6,6 +6,7 @@ import { PrayerHandler } from "../PrayerHandler";
 import { Dueling, DuelRule, DuelState } from "../Duelling";
 import { WeaponInterfaces } from "./WeaponInterfaces";
 import { WeaponInterfaceManager } from "./WeaponInterfaceManager";
+import { AccuracyFormulasDpsCalc } from "./formula/AccuracyFormulasDpsCalc";
 import { DamageFormulas } from "./formula/DamageFormulas";
 import { HitDamage } from "./hit/HitDamage";
 import { HitMask } from "./hit/HitMask";
@@ -99,6 +100,8 @@ const isDeveloperQueuedAttackSpec = (entity: Mobile): entity is Player => {
 
 export class CombatFactory {
     private static readonly RANDOM = new RandomGen();
+    /** Non-zero while a PendingHit is rolling: its defences belong to the impact tick. */
+    private static hitRollDepth = 0;
     public static readonly RECOIL_DAMAGE_ATTRIBUTE = "ring-of-recoil:damage";
     public static readonly RECOIL_IMMUNE_ATTRIBUTE = "combat:recoil-immune";
     public static readonly CRYSTAL_BOW_SHOTS_ATTRIBUTE = "crystal-bow:shots-in-stage";
@@ -173,13 +176,33 @@ export class CombatFactory {
         return CombatFactory.MELEE_COMBAT;
     }
 
-    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true) {
-        return CombatFactory.applyIncomingHitDamage(entity, victim, type,
-            CombatFactory.rollHitDamage(entity, victim, type, bypassProtectionPrayer, boundsOverride, applySpecialTraits));
+    /**
+     * Rolls a hit and, unless defences are deferred, applies this victim's defensive
+     * reactions immediately. A PendingHit defers them to impact with `duringHitRoll`.
+     */
+    /** Runs a hit's rolls with defensive reactions deferred to the impact tick. */
+    public static duringHitRoll<T>(action: () => T): T {
+        CombatFactory.hitRollDepth++;
+        try {
+            return action();
+        } finally {
+            CombatFactory.hitRollDepth--;
+        }
     }
 
-    /** Rolls damage and protection prayers without spending or reacting with defensive equipment. */
-    public static rollHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): HitDamage {
+    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, applyDefences?: boolean) {
+        const deferDefences = applyDefences === undefined
+            ? CombatFactory.hitRollDepth > 0
+            : applyDefences === false;
+        const rolled = CombatFactory.rollHitDamage(entity, victim, type, bypassProtectionPrayer, boundsOverride, applySpecialTraits, !deferDefences);
+        return deferDefences ? rolled : CombatFactory.applyIncomingHitDamage(entity, victim, type, rolled);
+    }
+
+    /**
+     * Rolls damage only. Protection prayers are included when `applyProtectionPrayer`
+     * is true; a PendingHit passes false and reads the prayer again when it lands.
+     */
+    public static rollHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, applyProtectionPrayer = true): HitDamage {
         const specialTraits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (specialTraits?.ignoreProtectionPrayer) {
             bypassProtectionPrayer = true;
@@ -223,7 +246,8 @@ export class CombatFactory {
          */
 
         // Decrease damage if victim is using the corresponding protection prayer.
-        if (!bypassProtectionPrayer) {
+        // PendingHit defers this to the impact tick so a last-tick prayer flick works.
+        if (applyProtectionPrayer && !bypassProtectionPrayer) {
 
             // Check if victim is is using correct protection prayer
             if (PrayerHandler.isActivated(victim, PrayerHandler.getProtectingPrayer(prayerType))) {
@@ -265,14 +289,117 @@ export class CombatFactory {
     }
 
     /**
+     * Applies the victim's defensive reactions when a pre-rolled hit actually lands.
+     * Protection prayers are read now (a last-tick flick counts) and Elysian / incoming
+     * damage modifiers react now rather than when the attack was launched. The roll was
+     * already capped to the target's HP at roll time, so a heal after the roll can make
+     * the hit non-lethal.
+     */
+    public static applyHitTimeDefences(hit: PendingHit): void {
+        if (!hit || typeof hit.getHits !== "function") {
+            return;
+        }
+        const hits = hit.getHits();
+        if (!Array.isArray(hits) || hits.length === 0) {
+            return;
+        }
+        const attacker = hit.getAttacker();
+        const victim = hit.getTarget();
+        if (!attacker || !victim) {
+            return;
+        }
+
+        const protectionApplied = typeof hit.hasAppliedImpactProtection === "function"
+            && hit.hasAppliedImpactProtection();
+        if (!protectionApplied) {
+            const bypassProtection = typeof hit.bypassesProtectionPrayer === "function"
+                && hit.bypassesProtectionPrayer();
+            const protectionType = typeof hit.getProtectionType === "function"
+                ? hit.getProtectionType()
+                : hit.getCombatType();
+            if (!bypassProtection && protectionType !== undefined) {
+                const prayer = PrayerHandler.getProtectingPrayer(protectionType);
+                if (PrayerHandler.isActivated(victim, prayer)) {
+                    const reduction = attacker.isNpc()
+                        ? CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_NPCS
+                        : CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_PLAYERS;
+                    for (const damage of hits) damage.multiplyDamage(reduction);
+                }
+            }
+            if (typeof hit.markImpactProtectionApplied === "function") {
+                hit.markImpactProtectionApplied();
+            }
+        }
+
+        const incomingApplied = typeof hit.hasAppliedImpactIncoming === "function"
+            && hit.hasAppliedImpactIncoming();
+        const deferred = typeof hit.defersIncomingDamage === "function" && hit.defersIncomingDamage();
+        if (!incomingApplied && !deferred) {
+            CombatFactory.applyImpactIncomingDamage(hit, hits, attacker, victim);
+            if (typeof hit.markImpactIncomingApplied === "function") {
+                hit.markImpactIncomingApplied();
+            }
+        }
+        hit.updateTotalDamage();
+    }
+
+    /**
+     * A scripted producer (Mad Angel's blows) fills the same hit in `manipulateHit`, after
+     * the protection pass. Apply Elysian/equipment then, while an absorber such as
+     * Nightmare Zone has already seen the protected hit and must not react again.
+     */
+    public static applyDeferredImpactIncoming(hit: PendingHit): void {
+        if (!hit || typeof hit.getHits !== "function") {
+            return;
+        }
+        const hits = hit.getHits();
+        if (!Array.isArray(hits) || hits.length === 0) {
+            return;
+        }
+        if (typeof hit.defersIncomingDamage !== "function" || !hit.defersIncomingDamage()) {
+            return;
+        }
+        if (typeof hit.hasAppliedImpactIncoming === "function" && hit.hasAppliedImpactIncoming()) {
+            return;
+        }
+        const attacker = hit.getAttacker();
+        const victim = hit.getTarget();
+        if (!attacker || !victim) {
+            return;
+        }
+        CombatFactory.applyImpactIncomingDamage(hit, hits, attacker, victim);
+        if (typeof hit.markImpactIncomingApplied === "function") {
+            hit.markImpactIncomingApplied();
+        }
+        if (typeof hit.completeDeferredIncomingDamage === "function") {
+            hit.completeDeferredIncomingDamage();
+        }
+        hit.updateTotalDamage();
+    }
+
+    /** Elysian first, then plugin-owned additive/flat equipment reductions. A miss reacts to nothing. */
+    private static applyImpactIncomingDamage(hit: PendingHit, hits: HitDamage[], attacker: Mobile, victim: Mobile): void {
+        for (let i = 0; i < hits.length; i++) {
+            if (hits[i].getDamage() <= 0) continue;
+            const resolved = CombatFactory.applyIncomingHitDamage(attacker, victim, hit.getCombatType(), hits[i]);
+            if (resolved !== hits[i]) hits[i] = resolved;
+        }
+    }
+
+    /** Drops a dead entity's per-cycle accuracy cache so a respawn starts from fresh levels. */
+    public static clearHitRollCache(entity: Mobile): void {
+        AccuracyFormulasDpsCalc.clearRollCache(entity);
+    }
+
+    /**
      * Applies an explicit per-style max hit to an incoming hit.
      *
      * NpcDefinitions carry a single max hit (the wiki's highest style), so a boss
      * whose styles cap differently passes the cap for the style it rolled - the
      * bounds ride as flat bonuses so the exact integer max survives
-     * rollSpecialDamage's floor, and protection prayers still reduce the result
-     * unless bypassProtectionPrayer is set. Damage is capped to the target's
-     * current hitpoints, matching the cap PendingHit rolls with.
+     * rollSpecialDamage's floor. Protection prayers still reduce the result at
+     * impact unless bypassProtectionPrayer is set. Damage is capped to the
+     * target's current hitpoints, matching the cap PendingHit rolls with.
      */
     public static applyStyleDamage(
         hit: PendingHit,
@@ -284,17 +411,21 @@ export class CombatFactory {
         }
         const attacker = hit.getAttacker();
         const target = hit.getTarget();
+        const bypass = options.bypassProtectionPrayer === true;
+        if (bypass) hit.markProtectionBypassed();
         const rolled = CombatFactory.getHitDamage(
             attacker,
             target,
             hit.getCombatType(),
-            options.bypassProtectionPrayer === true,
+            bypass,
             {
                 minimumMultiplier: 0,
                 maximumMultiplier: 0,
                 minimumBonus: Math.max(0, options.minHit ?? 0),
                 maximumBonus: Math.max(0, Math.trunc(maxHit)),
-            }
+            },
+            true,
+            false
         );
         hit.getHits()[0].setDamage(Math.max(0, Math.min(rolled.getDamage(), target.getHitpoints())));
         hit.updateTotalDamage();
@@ -798,11 +929,23 @@ export class CombatFactory {
             return;
         }
 
+        // Defensive reactions are read on the impact tick, not when the attack was rolled,
+        // and before target-side consumers such as Nightmare Zone absorption spend the hit.
+        CombatFactory.applyHitTimeDefences(qHit);
+
         // Before target takes damage, manipulate the hit to handle last-second effects.
         let resolvedHit = target.manipulateHit(qHit);
         if (!resolvedHit) {
             return;
         }
+        // A replacement producer (Scurrius' landing bolt) returns a fresh hit; defend that
+        // one too, because the placeholder's defences belong to the discarded hit.
+        if (resolvedHit !== qHit) {
+            CombatFactory.applyHitTimeDefences(resolvedHit);
+        }
+        // An in-place scripted producer (Mad Angel's blows) filled this hit after its
+        // protection pass; resolve the deferred equipment reactions now.
+        CombatFactory.applyDeferredImpactIncoming(resolvedHit);
 
         const method = resolvedHit.getCombatMethod();
         const combatType = resolvedHit.getCombatType();

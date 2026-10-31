@@ -334,7 +334,7 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.equal(snapshot.npcs[0].maxHitpoints, 10);
     assert.equal(snapshot.npcs[0].animation, 8082, "boss animations are observable warning cues");
     assert.deepEqual(snapshot.npcs[0].options, ["Talk-to", "Attack", "Pickpocket"]);
-    assert.deepEqual(snapshot.objects, [{ id: 1276, displayId: 1276, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 }]);
+    assert.deepEqual(snapshot.objects, [{ id: 1276, displayId: 1276, name: "Tree", options: ["Chop down"], type: 10, x: 3220, y: 3216, z: 0 }]);
     assert.equal(snapshot.groundItems[0].id, 526);
     assert.deepEqual(snapshot.messages, ["You swing your axe at the tree."]);
     loadedMapRegions.length = 0;
@@ -359,11 +359,11 @@ else process.env.AGENT_MCP = previousMcpFlag;
     ownerReplacement = { getType: () => 10, getId: () => 9090, getLocation: () => tree.getLocation() };
     const ownerView = (await call(client, "observe", { player: "agent1" })).value;
     assert.deepEqual(ownerView.objects.filter((o: any) => o.x === 3220 && o.y === 3216),
-        [{ id: 9090, displayId: 9090, name: "Player tree", options: ["Chop down"], x: 3220, y: 3216 }],
+        [{ id: 9090, displayId: 9090, name: "Player tree", options: ["Chop down"], type: 10, x: 3220, y: 3216, z: 0 }],
         "the owner's private replacement hides the base cache loc");
     const otherView = (await call(client, "observe", { player: "agent2" })).value;
     assert.deepEqual(otherView.objects.filter((o: any) => o.x === 3220 && o.y === 3216),
-        [{ id: 1276, displayId: 1276, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 }],
+        [{ id: 1276, displayId: 1276, name: "Tree", options: ["Chop down"], type: 10, x: 3220, y: 3216, z: 0 }],
         "another player sees the base cache loc");
     ownerReplacement = null;
 
@@ -401,11 +401,11 @@ else process.env.AGENT_MCP = previousMcpFlag;
     };
     const instanced = (await call(client, "observe", { player: "agent1" })).value;
     assert.deepEqual(instanced.objects, [
-        { id: 2280, displayId: 2280, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 },
-        { id: 2282, displayId: 2282, name: "Tree", options: ["Chop down"], x: 3224, y: 3219 },
-        { id: 2284, displayId: 2284, name: "Plinth", options: [], x: 3224, y: 3220 },
-        { id: 49488, displayId: 48295, name: "Drain", options: ["Enter"], x: 3224, y: 3221 },
-        { id: 2283, displayId: 2283, name: "Acid pool", options: [], x: 3223, y: 3219 },
+        { id: 2280, displayId: 2280, name: "Tree", options: ["Chop down"], type: 10, x: 3220, y: 3216, z: 0 },
+        { id: 2282, displayId: 2282, name: "Tree", options: ["Chop down"], type: 10, x: 3224, y: 3219, z: 0 },
+        { id: 2284, displayId: 2284, name: "Plinth", options: [], type: 10, x: 3224, y: 3220, z: 0 },
+        { id: 49488, displayId: 48295, name: "Drain", options: ["Enter"], type: 10, x: 3224, y: 3221, z: 0 },
+        { id: 2283, displayId: 2283, name: "Acid pool", options: [], type: 22, x: 3223, y: 3219, z: 0 },
     ], "private replacements and template scenery are actual menu targets");
     assert.deepEqual(instanced.npcs, [], "world NPCs are hidden in the instance");
     dispatched.length = 0;

@@ -448,3 +448,119 @@ test('dart and bolt Make-X defaults on and restores either saved choice', () => 
     assert.equal(player.getPacketSender().getVarbit(id), choice);
   }
 });
+
+/** A sender that keeps varps the way PacketSender does, varbits packed into their varps. */
+function varpPlayer({ native = false } = {}) {
+  const varps = new Map();
+  const flags = [];
+  const attributes = new Map(native ? [['native-client', true]] : []);
+  const sender = {
+    getVarp: (id) => varps.get(id) ?? 0,
+    sendConfig: (id, value) => { varps.set(id, value | 0); return sender; },
+    sendVarbit: (id, value) => {
+      const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+      const mask = ((1 << (endBit - startBit + 1)) - 1) << startBit;
+      varps.set(baseVar, (sender.getVarp(baseVar) & ~mask) | ((value << startBit) & mask));
+      return sender;
+    },
+    sendInterfaceFlagsRange: (uid, from, to, value) => { flags.push([uid, from, to, value]); return sender; },
+    sendSubInterface: () => sender,
+  };
+  return { varps, flags, getPacketSender: () => sender, setAttribute: (k, v) => attributes.set(k, v), getAttribute: (k) => attributes.get(k) };
+}
+
+const XPDROPS_SETUP = 137;
+const XPDROPS_VARP = 1227;
+
+test('XP drops setup: a dropdown row sets its varbit to the row - 1 (script 1036), and the varp is kept', () => {
+  const { buttons, logins } = registered();
+  const player = varpPlayer({ native: true });
+  const position = buttons.get((XPDROPS_SETUP << 16) | 51);
+  assert.ok(position, 'the position dropdown is handled');
+  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 51, slot: 3 }), true);
+  assert.equal(buttons.get((XPDROPS_SETUP << 16) | 54)({ player, buttonId: (XPDROPS_SETUP << 16) | 54, slot: 6 }), true);
+  const varp = player.varps.get(XPDROPS_VARP);
+  assert.equal(varp & 0b11, 2, 'varbit 4692 (position, bits 0-1) = row 3 - 1');
+  assert.equal((varp >>> 22) & 0b11111, 5, 'varbit 4697 (counter, bits 22-26) = row 6 - 1');
+  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 51, slot: 0 }), false, 'the list itself');
+
+  // Another session of the same account gets it back at login.
+  const next = varpPlayer({ native: true });
+  next.setAttribute('settings:xpdrops-setup', player.getAttribute('settings:xpdrops-setup'));
+  logins.forEach((login) => login({ player: next }));
+  assert.equal(next.varps.get(XPDROPS_VARP), varp);
+});
+
+test('XP drops setup: the browser transmits the whole varp, which is kept and echoed', () => {
+  const { events, logins } = registered();
+  const player = varpPlayer();
+  const transmission = { player, varpId: XPDROPS_VARP, value: 0x1234, handled: false };
+  events.get('player:varp-transmit')(transmission);
+  assert.equal(transmission.handled, true);
+  assert.equal(player.varps.get(XPDROPS_VARP), 0x1234);
+  const other = { player, varpId: 173, value: 1, handled: false };
+  events.get('player:varp-transmit')(other);
+  assert.equal(other.handled, false, 'not an XP drops varp');
+
+  const next = varpPlayer();
+  next.setAttribute('settings:xpdrops-setup', player.getAttribute('settings:xpdrops-setup'));
+  logins.forEach((login) => login({ player: next }));
+  assert.equal(next.varps.get(XPDROPS_VARP), 0x1234);
+});
+
+test('a volume slider released sets the stored volume from its trigger argument', () => {
+  const { buttons } = registered();
+  const applied = [];
+  const player = { applyAudioSettingFromClient: (varp, value) => applied.push([varp, value]) };
+  const sliders = [[95, 3796], [109, 168], [123, 169], [137, 872]];
+  for (const [component, varp] of sliders) {
+    const buttonId = (116 << 16) | component;
+    // 70 is zigzag 35; the scripts trigger on release and when the volume reaches or leaves 0.
+    assert.equal(buttons.get(buttonId)({ player, buttonId, argsData: Buffer.from([70]), scriptTrigger: true }), true, `slider ${component}`);
+    assert.deepEqual(applied.pop(), [varp, 35]);
+  }
+  const music = (116 << 16) | 109;
+  assert.equal(buttons.get(music)({ player, buttonId: music, argsData: Buffer.from([70]), scriptTrigger: false }), false, 'a click is not the trigger');
+  assert.equal(applied.length, 0);
+});
+
+test('the mute buttons save the volume and restore it, as live does', () => {
+  const { buttons } = registered();
+  const audio = { 168: 8, 169: 65, 872: 100, 3796: 100, 3109: 0, 3797: 0 };
+  const sent = [];
+  const player = {
+    getAudioSettings: () => audio,
+    setAudioSetting: (varp, value) => { audio[varp] = value; return true; },
+    applyAudioSettingFromClient: (varp, value) => { audio[varp] = value; return true; },
+    getPacketSender: () => ({ sendConfig: (varp, value) => sent.push([varp, value]) }),
+  };
+  const click = (component) => {
+    const buttonId = (116 << 16) | component;
+    assert.equal(buttons.get(buttonId)({ player, buttonId }), true, `mute ${component}`);
+  };
+  // A live capture: music at 8, then its mute (116:110): 3109 = 8, then 168 = 0.
+  click(110);
+  assert.deepEqual(sent.splice(0), [[3109, 8], [168, 0]]);
+  // Sound effects keep their own bits (8-14) of 3109, beside music's saved level.
+  click(124);
+  assert.deepEqual(sent.splice(0), [[3109, 8 | (65 << 8)], [169, 0]]);
+  // Unmuting puts the saved level back.
+  click(110);
+  assert.deepEqual(sent.splice(0), [[168, 8]]);
+  click(124);
+  assert.deepEqual(sent.splice(0), [[169, 65]]);
+  // Master saves into 3797.
+  click(96);
+  assert.deepEqual(sent.splice(0), [[3797, 100], [3796, 0]]);
+});
+
+test('the volume sliders get the transmit-trigger event at login, so the client sends their triggers', async () => {
+  const { logins } = registered();
+  const flags = [];
+  const sender = new Proxy({ sendInterfaceFlagsRange: (uid, from, to, value) => flags.push([uid >>> 16, uid & 0xffff, from, to, value]) }, { get: (t, k) => (k in t ? t[k] : () => sender) });
+  const player = new Proxy({ getPacketSender: () => sender, getAttribute: () => undefined }, { get: (t, k) => (k in t ? t[k] : () => undefined) });
+  for (const login of logins) { try { login({ player }); } catch {} }
+  await new Promise((resolve) => setImmediate(resolve));
+  const sliders = flags.filter(([group]) => group === 116).map(([, component, from, to, value]) => [component, from, to, value]);
+  assert.deepEqual(sliders.sort((a, b) => a[0] - b[0]), [95, 109, 123, 137].map((component) => [component, -1, -1, 1 << 23]));
+});

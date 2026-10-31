@@ -1162,6 +1162,15 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             const from = reader.readString() || undefined;
             const prefix = reader.readString() || undefined;
             const playerId = reader.readSignedShort();
+            // Public chat's style (colour, effect, then a pattern's colours for colours 13-20).
+            let style: { color: number; effect: number; pattern?: Uint8Array } | undefined;
+            if (reader.remaining >= 2) {
+                const color = reader.readByte();
+                const effect = reader.readByte();
+                const patternLength = color >= 13 && color <= 20 ? color - 12 : 0;
+                const pattern = patternLength > 0 && reader.remaining >= patternLength ? reader.readBytes(patternLength) : undefined;
+                style = { color, effect, pattern };
+            }
             return {
                 type: "chat",
                 payload: {
@@ -1171,6 +1180,7 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                     prefix,
                     playerId: playerId >= 0 ? playerId : undefined,
                     chatType,
+                    style,
                 },
             };
         }

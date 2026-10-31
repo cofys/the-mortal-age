@@ -293,6 +293,9 @@ function combatClass() {
         : { damage: core.Misc.getRandom(Shared.MAGIC_MAX), messages: [] };
       const hit = new core.PendingHit(character, target, this, { delay, rollAccuracy: false });
       hit.setTotalDamage(outcome.damage);
+      // breathOutcome already applied the shield/prayer/potion pipeline; generic
+      // impact protection would zero the custom breath a second time.
+      hit.markProtectionBypassed();
       hit.vorkathBreath = { variant, messages: outcome.messages };
       return [hit];
     }

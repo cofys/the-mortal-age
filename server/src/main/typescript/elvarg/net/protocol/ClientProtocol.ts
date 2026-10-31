@@ -166,6 +166,8 @@ export type NpcView = Tile & ActorUpdateView & {
   baseAnimations?: { slot: number; seqId: number }[];
   /** A fade of its model (OSRS npc transparency): `from` (-1 its current look) to `to`, 0 opaque to 255 invisible. */
   transparency?: { startCycles: number; endCycles: number; from: number; to: number };
+  /** OSRS tinting, as for players: an HSL tint over client cycles. */
+  tint?: { startCycle: number; endCycle: number; hue: number; saturation: number; lightness: number; weight: number };
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
   /** The boat/static ship this NPC stands on (its deck) rather than the main world. */
@@ -262,7 +264,7 @@ export type ClientMessage =
   | { type: "npc_option"; index: number; clickType: number }
   | { type: "object_option"; id: number; x: number; y: number; clickType?: number; action?: string }
   | { type: "world_entity_option"; index: number; clickType: number }
-  | { type: "chat"; text: string; messageType: "public" | "game" | "friends_chat"; autoChat?: boolean }
+  | { type: "chat"; text: string; messageType: "public" | "game" | "friends_chat"; autoChat?: boolean; style?: ChatStyle }
   | { type: "friends_chat_action"; action: FriendsChatAction }
   | { type: "private_message"; recipient: string; text: string }
   | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
@@ -310,7 +312,7 @@ export type ClientMessage =
   | { type: "logout" }
   | { type: "login"; username: string; password: string; revision: number; flags: number }
   | { type: "login_forget"; username: string; token: string }
-  | { type: "handshake"; name: string; clientType: number };
+  | { type: "handshake"; name: string; clientType: number; capabilities: number };
 
 class Reader {
   private offset = 0;
@@ -788,9 +790,11 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       // Kind 3 is public chat the client's autochat timer repeats (chat_sendpublic type 1).
       const kind = reader.byte();
       const messageType = (["public", "game", "friends_chat"] as const)[kind] ?? "public";
+      const text = reader.string();
+      const style = readChatStyle(reader);
       return kind === CHAT_KIND_AUTOCHAT
-        ? { type: "chat", messageType: "public", autoChat: true, text: reader.string() }
-        : { type: "chat", messageType, text: reader.string() };
+        ? { type: "chat", messageType: "public", autoChat: true, text, ...(style && { style }) }
+        : { type: "chat", messageType, text, ...(style && { style }) };
     }
     case HighClientPacket.FRIENDS_CHAT_ACTION: {
       const actionCode = reader.byte();
@@ -942,7 +946,9 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       }
       // Trailing client mode byte: 1 = mobile, 0 = desktop (absent on old clients).
       const clientType = reader.remaining > 0 ? reader.byte() : 0;
-      return { type: "handshake", name, clientType };
+      // Trailing capability bits (HANDSHAKE_CAPABILITY_*), sent only by the official-client gateway.
+      const capabilities = reader.remaining > 0 ? reader.byte() : 0;
+      return { type: "handshake", name, clientType, capabilities };
     }
     default:
       return { type: "raw", opcode, payload: frame.subarray(frame.length - length) };
@@ -1030,13 +1036,45 @@ export const ChatType = {
   NPC_SAY: 116,
 } as const;
 
+/**
+ * Public chat's colour and effect, as typed with prefixes like "red:wave:" (OSRS chat colours 0-20,
+ * effects 0-5). Colours 13-20 are patterns: colour - 12 colour indices follow.
+ */
+export interface ChatStyle {
+  colour: number;
+  effect: number;
+  pattern?: number[];
+}
+
+const CHAT_STYLE_MAX_COLOUR = 20;
+const CHAT_STYLE_MAX_EFFECT = 5;
+const CHAT_STYLE_FIRST_PATTERN = 13;
+
+/** An optional style after a chat packet's text; builds that predate it send none. */
+function readChatStyle(reader: Reader): ChatStyle | undefined {
+  if (reader.remaining < 2) return undefined;
+  const colour = reader.byte();
+  const effect = reader.byte();
+  const patternLength = colour >= CHAT_STYLE_FIRST_PATTERN ? colour - CHAT_STYLE_FIRST_PATTERN + 1 : 0;
+  if (colour > CHAT_STYLE_MAX_COLOUR || effect > CHAT_STYLE_MAX_EFFECT || reader.remaining < patternLength) return undefined;
+  const pattern = patternLength > 0 ? Array.from(reader.bytes(patternLength)) : undefined;
+  return colour === 0 && effect === 0 ? undefined : { colour, effect, pattern };
+}
+
+function chatStyleBytes(style: ChatStyle | undefined): Buffer {
+  if (!style) return Buffer.alloc(0);
+  return Buffer.from([style.colour & 0xff, style.effect & 0xff, ...(style.pattern ?? []).map((value) => value & 0xff)]);
+}
+
 export function encodeChatMessage(
   messageType: "game" | "public" | "private_in" | "private_out" | "channel" | "clan" | "trade" | "server",
   text: string,
   from = "",
   prefix = "",
   playerId = -1,
-  chatType?: number
+  chatType?: number,
+  /** Public chat only: appended after the player index, for clients that colour overhead text. */
+  style?: ChatStyle
 ): Buffer {
   const defaultTypes: Record<typeof messageType, number> = {
     game: 0,
@@ -1052,7 +1090,7 @@ export function encodeChatMessage(
   const id = Buffer.alloc(2);
   id.writeUInt16BE(playerId & 0xffff);
   return encodeServerPacket(ServerPacketId.CHAT_MESSAGE, Buffer.concat([
-    string(text), Buffer.from([type & 0xff]), string(from), string(prefix), id,
+    string(text), Buffer.from([type & 0xff]), string(from), string(prefix), id, chatStyleBytes(style),
   ]));
 }
 
@@ -1181,8 +1219,10 @@ export function encodeBankSlot(slot: BankSlotView): Buffer {
   return encodeServerPacket(ServerPacketId.BANK_SLOT, encodeBankSlotPayload(slot));
 }
 
+export const GROUND_ITEM_BYTES = 33;
+
 function encodeGroundItem(stack: GroundItemView): Buffer {
-  const payload = Buffer.alloc(33);
+  const payload = Buffer.alloc(GROUND_ITEM_BYTES);
   payload.writeInt32BE(stack.id | 0);
   payload.writeUInt16BE(stack.itemId & 0xffff, 4);
   payload.writeInt32BE(stack.quantity | 0, 6);
@@ -2224,6 +2264,10 @@ export function encodeGameframeTabSetup(group: number, root: number = 161): Buff
 
 // Transient player attribute set from the handshake's clientType byte.
 export const MOBILE_CLIENT_ATTRIBUTE = "mobile-client";
+// The session is an official OSRS client behind the gateway (gateway/): it gets the fields the
+// browser wire leaves out. Transient, set from HANDSHAKE_CAPABILITY_NATIVE_CLIENT.
+export const NATIVE_CLIENT_ATTRIBUTE = "native-client";
+export const HANDSHAKE_CAPABILITY_NATIVE_CLIENT = 0x1;
 export const XPDROPS_ENABLED_ATTRIBUTE = "xp-drops:enabled";
 // Mobile clients boot the Stock mobile toplevel (toplevel_osm); the client maps
 // the standard 161 mounts onto it via cache enum 1745.
@@ -2602,6 +2646,7 @@ const NPC_MASK = {
   BASE_ANIMATIONS: 0x2000,
   TRANSPARENCY: 0x8000,
   SPOT_ANIM: 0x20000,
+  TINT: 0x100,
 } as const;
 
 /** Overhead prayer icons (sprite group headicons_prayer); an NPC's head icon is an index in it. */
@@ -2728,6 +2773,7 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.animation ? NPC_MASK.ANIMATION : 0) |
     (view.hits || view.bars?.length ? NPC_MASK.HIT : 0) |
     (view.forcedChat !== undefined ? NPC_MASK.FORCED_CHAT : 0) |
+    (view.tint ? NPC_MASK.TINT : 0) |
     (view.exactMove ? NPC_MASK.EXACT_MOVE : 0) |
     (view.faceTile ? NPC_MASK.FACE_TILE : 0) |
     (view.modelCustomisation ? NPC_MASK.MODEL_CUSTOMISATION : 0) |
@@ -2806,6 +2852,15 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
   }
   if (view.hits || view.bars?.length) writeHits(bytes, view, true);
   if (view.forcedChat !== undefined) writeText(bytes, view.forcedChat);
+  if (view.tint) {
+    // After the say text, as the client reads an NPC's blocks (not the player block's order).
+    shortBEA(bytes, view.tint.startCycle & 0xffff);
+    shortBEA(bytes, view.tint.endCycle & 0xffff);
+    byteC(bytes, view.tint.hue);
+    byteS(bytes, view.tint.saturation);
+    byteC(bytes, view.tint.lightness);
+    byteS(bytes, view.tint.weight);
+  }
   if (view.graphics?.length) {
     bytes.push(view.graphics.length);
     for (const graphic of view.graphics) {

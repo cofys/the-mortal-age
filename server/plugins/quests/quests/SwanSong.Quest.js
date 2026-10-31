@@ -24,9 +24,10 @@
  * Npc/Item/Object identifier files.
  *
  * Gaps/approximations:
- * - The 100-QP requirement is not enforced; the two quest prerequisites (One
- *   Small Favour, Garden of Tranquillity) are checked through quest:is-complete,
- *   and a 66-Magic boost is not required to start (the transcript gates nothing).
+ * - The 100-QP requirement and the two quest prerequisites (One Small Favour,
+ *   Garden of Tranquillity) are checked through the "does not meet the quest
+ *   requirements" branch at Herman, and a 66-Magic boost is not required to
+ *   start (the transcript gates nothing).
  * - Cutscenes (the Wise Old Man's flashbacks, the final battle) play as transcript
  *   dialogue only; there is no camera work and the emote/teleport stage directions
  *   just close the step.
@@ -68,12 +69,19 @@ module.exports = function registerSwanSongQuest(api) {
     ObjectManager,
     Skill,
   } = api.core;
-  const { registerQuest, refreshQuestList, loadTranscripts, startTranscript } = require("../QuestRuntime");
+  const {
+    registerQuest,
+    refreshQuestList,
+    loadTranscripts,
+    startTranscript,
+    QUEST_POINTS_ATTRIBUTE,
+  } = require("../QuestRuntime");
 
   const PAGE = "Swan Song";
 
   const VARP_SWAN_SONG = 723; // "swansong"
   const VARBIT_SWAN_SONG = 2098; // "swansong", varp 723 bits 0-8
+  const REQUIRED_QUEST_POINTS = 100;
 
   const STAGE_STARTED = 5;
   const STAGE_RUNES_WANTED = 10;
@@ -233,6 +241,7 @@ module.exports = function registerSwanSongQuest(api) {
 
   function meetsRequirements(player) {
     return (
+      (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) >= REQUIRED_QUEST_POINTS &&
       isQuestComplete(player, ONE_SMALL_FAVOUR_KEY) &&
       isQuestComplete(player, GARDEN_OF_TRANQUILLITY_KEY)
     );

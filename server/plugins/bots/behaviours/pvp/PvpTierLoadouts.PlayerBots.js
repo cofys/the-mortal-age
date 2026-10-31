@@ -52,6 +52,16 @@ function tierCombatLevel(entry, profile) {
   return archetypeCombatLevel(stats);
 }
 
+/**
+ * An archetype's main style, read from its kit: one that carries a spell to cast is a hybrid,
+ * one whose weapon fires ammunition or is thrown is ranged, and the rest fight in melee.
+ */
+function buildStyle(entry) {
+  if (entry.autocastSpell) return "hybrid";
+  const equipment = entry.equipment ?? {};
+  return equipment.ammo || typeof equipment.weapon?.amount === "number" ? "range" : "melee";
+}
+
 /** Every (loadout, archetype) pair of the PvP presets, built once; the tier filter does the rest. */
 let archetypeChoices;
 function getArchetypeChoices() {
@@ -78,10 +88,10 @@ function getArchetypeChoices() {
  * A deterministic loadout+archetype for `tier`: the `index`th of the eligible choices, sorted.
  * `style` ("range" / "magic") keeps a post's combat style; `band` overrides the tier's level
  * band (Bounty Hunter narrows it to the levels a player can be matched with); `excludeF2p`
- * leaves out the free-to-play presets (members-only minigames). Returns null for an unknown
- * tier.
+ * leaves out the free-to-play presets (members-only minigames); `build` keeps one buildStyle.
+ * Returns null for an unknown tier.
  */
-function pickTierChoice(tier, { index = 0, style = null, band = TIER_BANDS[tier], excludeF2p = false,
+function pickTierChoice(tier, { index = 0, style = null, build = null, band = TIER_BANDS[tier], excludeF2p = false,
   profileId = TIER_PROFILE_IDS[tier] } = {}) {
   if (!TIER_PROFILE_IDS[tier] || !band) {
     return null;
@@ -99,7 +109,7 @@ function pickTierChoice(tier, { index = 0, style = null, band = TIER_BANDS[tier]
     return !(minimumConfidence > 0 && Number(profile.confidenceTier ?? 2) < minimumConfidence);
   };
   const all = getArchetypeChoices().filter(eligible);
-  const styled = style ? all.filter((choice) => choice.tags.includes(style)) : all;
+  const styled = all.filter((choice) => (!style || choice.tags.includes(style)) && (!build || buildStyle(choice.entry) === build));
   const level = (choice) => tierCombatLevel(choice.entry, profile);
   let pool = styled.filter((choice) => level(choice) >= band.min && level(choice) <= band.max);
   if (pool.length === 0 && styled.length > 0) {
@@ -122,5 +132,6 @@ module.exports = {
   TIER_BANDS,
   archetypeCombatLevel,
   tierCombatLevel,
+  buildStyle,
   pickTierChoice,
 };

@@ -14,7 +14,12 @@ type LocalMovement = {
     pending: ContinuousMovementInput[]; blocked: boolean; ack: number;
 };
 
+/** A tile edge the local player's own walk was refused: from one tile to the next, at performance.now(). */
+export type ContinuousMovementRefusal = { fromX: number; fromY: number; toX: number; toY: number; level: number; at: number };
+
 export class ContinuousMovement {
+    /** The last edge collision stopped the local player at, for touch controls to find what is in the way. */
+    lastRefusal?: ContinuousMovementRefusal;
     private seq = 0;
     private clockAt = performance.now();
     private credit = 20;
@@ -80,15 +85,17 @@ export class ContinuousMovement {
         this.remote.clear();
     }
 
-    private move(position: { x: number; y: number }, input: ContinuousMovementInput, level: number) {
+    private move(position: { x: number; y: number }, input: ContinuousMovementInput, level: number, local = false) {
         return moveContinuous(position, input.dx, input.dy, WALK_SPEED * input.duration * (input.running ? 2 : 1),
             (ax, ay, bx, by) => {
                 const dx = bx - ax, dy = by - ay, direction = deltaToDirection(dx, dy);
                 if (direction === undefined) return false;
                 const plane = this.resolvePlane?.(bx, by, level) ?? level;
-                return !(this.flags(plane, bx, by) & MASKS[direction]) &&
+                const allowed = !(this.flags(plane, bx, by) & MASKS[direction]) &&
                     !(dx && dy && ((this.flags(plane, bx, ay) & (dx < 0 ? CollisionFlag.BLOCK_WEST : CollisionFlag.BLOCK_EAST)) ||
                         (this.flags(plane, ax, by) & (dy < 0 ? CollisionFlag.BLOCK_SOUTH : CollisionFlag.BLOCK_NORTH))));
+                if (!allowed && local) this.lastRefusal = { fromX: ax, fromY: ay, toX: bx, toY: by, level, at: performance.now() };
+                return allowed;
             });
     }
 
@@ -98,7 +105,7 @@ export class ContinuousMovement {
         const command = { ...this.input, duration, active, seq: ++this.seq };
         local.pending.push(command);
         if (duration && !local.blocked && local.pending.length <= MAX_PREDICTION_MS / 20) {
-            Object.assign(local, this.move(local, command, local.level));
+            Object.assign(local, this.move(local, command, local.level, true));
         }
         this.send(command);
     }

@@ -135,6 +135,16 @@ export class PlayerSyncManager {
         this.onWorldViewAssignment = opts.onWorldViewAssignment;
     }
 
+    /**
+     * The colour and effect of a public message, from its CHAT_MESSAGE, for the speaker's forced
+     * chat in the next frame (tsps shows public chat overhead as forced chat).
+     */
+    private readonly publicChatStyles = new Map<number, { color: number; effect: number; pattern?: Uint8Array }>();
+
+    setPublicChatStyle(serverId: number, style: { color: number; effect: number; pattern?: Uint8Array }): void {
+        this.publicChatStyles.set(serverId | 0, style);
+    }
+
     handleFrame(frame: PlayerSyncFrame): void {
         const frameTick = frame.loopCycle | 0;
         if (frameTick > this.lastServerTick) {
@@ -345,14 +355,17 @@ export class PlayerSyncManager {
             const existing = this.playerEcs.getIndexForServerId(serverId);
             const ecsIndex = existing !== undefined ? existing : this.ensurePlayer(serverId);
             if (ecsIndex === undefined) return;
+            const style = this.publicChatStyles.get(serverId);
             this.playerEcs.setOverheadChat(ecsIndex, {
                 text: forced,
-                color: 0,
-                effect: 0,
+                color: style?.color ?? 0,
+                effect: style?.effect ?? 0,
                 modIcon: -1,
+                pattern: style?.pattern ? decodeChatPattern(style.pattern) : undefined,
                 duration: OVERHEAD_CHAT_LINGER_TICKS,
             });
         });
+        this.publicChatStyles.clear();
 
         const onHitsplat = this.onHitsplat;
         if (onHitsplat) {

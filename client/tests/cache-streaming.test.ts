@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 
+import { CacheFiles } from "../rs/cache/CacheFiles";
+
 import { SoundEffectSystem, type PlaySoundOptions } from "../game/audio/SoundEffectSystem";
 import { ClientScriptLoader } from "../game/cs2/ClientScriptLoader";
 import type { SoundEffectLoader } from "../rs/audio/SoundEffectLoader";
@@ -267,7 +269,37 @@ function groundItemsRetryUntilRendererReady(): void {
     assert.equal(rebuildGroundItemsForMap({} as any, {} as any, undefined), false);
 }
 
+async function cacheWritesUseOrdinaryByteChunks(): Promise<void> {
+    const globals = globalThis as any;
+    const original = { caches: globals.caches, fetch: globals.fetch };
+    try {
+        for (const shared of [false, true]) {
+            let writes = 0;
+            globals.caches = { open: async () => ({
+                match: async () => undefined,
+                put: async (_path: string, response: Response) => {
+                    const reader = response.body!.getReader();
+                    const { value } = await reader.read();
+                    assert.ok(value!.buffer instanceof ArrayBuffer, "Response chunks must use ordinary ArrayBuffers");
+                    assert.deepEqual([...value!], [1, 2, 3]);
+                    assert.equal((await reader.read()).done, true);
+                    writes++;
+                },
+            }) };
+            globals.fetch = async () => new Response(new Uint8Array([1, 2, 3]));
+            const data = await CacheFiles.fetchSingleIndex("/cache/", "test", 0, shared);
+            assert.ok(data);
+            assert.equal(data instanceof SharedArrayBuffer, shared, "worker sharing must remain intact");
+            assert.deepEqual([...new Uint8Array(data)], [1, 2, 3]);
+            assert.equal(writes, 1);
+        }
+    } finally {
+        Object.assign(globals, original);
+    }
+}
+
 async function main(): Promise<void> {
+    await cacheWritesUseOrdinaryByteChunks();
     await shellActivationPreservesGameAssets();
     contentRangeParsing();
     exactRangeValidation();

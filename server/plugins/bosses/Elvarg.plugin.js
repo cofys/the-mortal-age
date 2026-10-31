@@ -159,6 +159,8 @@ function installCombatMethod() {
     hits(character, target) {
       const hit = new PendingHit(character, target, this, { delay: this.dragonfire ? 3 : 1, rollAccuracy: !this.dragonfire });
       hit.setTotalDamage(this.dragonfire ? (target.isPlayer() ? dragonfireDamage(target.getAsPlayer()) : Misc.randomInclusive(0, 70)) : Math.min(8, hit.getTotalDamage()));
+      // dragonfireDamage already applied Protect from Magic; leave the custom total alone.
+      if (this.dragonfire) hit.markProtectionBypassed();
       return [hit];
     }
     handleAfterHitEffects() {}

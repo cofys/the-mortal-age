@@ -7,6 +7,15 @@ import { ClickMode } from "../game/InputManager";
 import { shouldSkipWidgetClickInput } from "../game/widgets/input/widgetClickGuard";
 import { drawChooseOptionMenu } from "../widgets/gl/choose-option";
 import { UIInputBridge } from "../widgets/gl/ui-input";
+import { InputManager } from "../game/InputManager";
+import { WidgetInteractionController } from "../game/widgets/WidgetInteractionController";
+import { processWidgetClickInput } from "../game/widgets/input/widgetClickInput";
+import { processWidgetReleaseInput } from "../game/widgets/input/widgetReleaseInput";
+import { createPrimaryWidgetActionResolver } from "../game/widgets/input/widgetPrimaryAction";
+import { Cs2Vm } from "../rs/cs2/Cs2Vm";
+import { Opcodes } from "../rs/cs2/Opcodes";
+import { Script } from "../rs/cs2/Script";
+import { WidgetManager } from "../widgets/WidgetManager";
 
 // Inspect on the ToA obelisk must send object option 1, not an examine packet.
 const obeliskMenu = new MenuState();
@@ -182,5 +191,83 @@ drawKeyboardMenu();
 assert.equal(keyboardPicked, 1, "Space also invokes the selected inventory context menu action");
 assert.equal(menuUi.menu, undefined, "widget menu selection closes the native menu");
 assert.equal(consumedMenuClicks, 3, "an inventory keyboard menu selection cannot click through");
+
+// A Close press/release can both arrive before the render frame. Its onOp
+// unloads the modal before the world input pass. Keep this CI test cache-free:
+// minimal static widgets and script 29's IF_CLOSE/RETURN, with the real VM,
+// manager and input lifecycle. Cache decoding/rendered hit testing is separate.
+const closeScript = Object.assign(new Script(), {
+    id: 29,
+    instructions: Int32Array.from([Opcodes.IF_CLOSE, Opcodes.RETURN]),
+    intOperands: Int32Array.from([0, 0]),
+    stringOperands: [null, null],
+});
+const unloadedGroups: number[] = [];
+const closeManager = new WidgetManager({} as never, {
+    loadWidgetGroup(groupId: number) {
+        const node = (fileId: number, parentUid = -1): any => ({
+            uid: (groupId << 16) | fileId, groupId, fileId, parentUid,
+            type: 0, rawX: 0, rawY: 0, rawWidth: 200, rawHeight: 200,
+            hidden: false, isHidden: false,
+        });
+        const root = node(0);
+        const child = node(groupId === 161 ? 16 : 1, root.uid);
+        if (groupId === 807) Object.assign(child, {
+            actions: ["Close"], onOp: [closeScript.id],
+        });
+        return { root, widgets: new Map([[root.uid, root], [child.uid, child]]) };
+    },
+    unloadGroup(groupId: number) { unloadedGroups.push(groupId); },
+} as never);
+const closeVm = new Cs2Vm({
+    widgetManager: closeManager,
+    loadScript: (id: number) => id === closeScript.id ? closeScript : null,
+} as any);
+closeManager.setRootInterface(161);
+const modalParent = (161 << 16) | 16;
+closeManager.openSubInterface(modalParent, 807, 0);
+const nativeClose = closeManager.getWidgetByUid((807 << 16) | 1)!;
+let nativeCloses = 0;
+closeVm.context.sendIfClose = () => nativeCloses++;
+const nativeInput = new InputManager();
+nativeInput.clickMode1 = ClickMode.LEFT;
+nativeInput.clickMode2 = ClickMode.NONE;
+nativeInput.clickX = nativeInput.mouseX = 100;
+nativeInput.clickY = nativeInput.mouseY = 120;
+nativeInput.onFrameStart();
+const nativeInteraction = new WidgetInteractionController({
+    getWidgetManager: () => closeManager,
+    getInputManager: () => nativeInput,
+    getRendererCanvas: () => undefined,
+    getTradeRequestTargetsByName: () => new Map(),
+});
+const nativeDeps = {
+    getCs2Vm: () => closeVm,
+    getSpellSelection: () => ({ getWidgetTargetMask: () => 0 }),
+    getTransmitCycles: () => ({ cycleCntr: 1 }),
+    getSettings: () => ({}),
+    handleTradeWidgetAction: () => false,
+    buildWidgetActionPayload: () => null,
+    executeScriptListener: (widget: any, args: any[], event: any) => closeVm.runScriptEvent({ widget, args, ...event }),
+} as any;
+const nativeFrame = { input: nativeInput, mx: 100, my: 120,
+    collectFromAllRoots: () => [nativeClose], getWidgetFlags: (widget: any) => closeManager.getWidgetFlags(widget) } as any;
+const nativePrimary = createPrimaryWidgetActionResolver(nativeDeps, nativeInput, closeManager, nativeInteraction);
+processWidgetClickInput(nativeDeps, { cachedHoverHits: null } as any, nativeFrame, closeManager, nativeInteraction, nativePrimary, true);
+assert.equal(nativeCloses, 1, "Close's actual VM opcode sends IF_CLOSE once");
+assert.equal(closeManager.interfaceParents.has(modalParent), false, "actual CS2 closes the real modal");
+assert.deepEqual(unloadedGroups, [807], "Close unloads the modal through the real manager");
+assert.equal(closeManager.isGroupLoaded(807), false);
+assert.equal(closeVm.lastError, null);
+processWidgetReleaseInput(nativeDeps, nativeFrame, closeManager, nativeInteraction, nativePrimary, false);
+assert.equal(nativeInteraction.clickedWidget, null, "release clears transient widget custody");
+assert.equal(nativeInput.leftClickX, -1, "Close must not expose the same frame click to the later world input pass");
+assert.equal(nativeInput.clickMode2, ClickMode.NONE, "claiming a widget does not invent a held button");
+nativeInput.onFrameEnd();
+nativeInput.clickMode1 = ClickMode.LEFT;
+nativeInput.clickX = 220;
+nativeInput.clickY = 240;
+nativeInput.onFrameStart();
+assert.equal(nativeInput.leftClickX, 220, "a new independent world click remains usable");
 
 console.log("menu click consumption test passed");

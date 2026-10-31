@@ -307,6 +307,26 @@ test("loot scaling: linear above 1%, pet/clues untouched, pages stripped", () =>
   assert.deepEqual(none, []);
 });
 
+test("loot that doesn't fit lands at the corpse that was claimed, Eldric's as well as Branda's (#1595)", () => {
+  const floor = [];
+  Corpse.attach({
+    ...fakeApi,
+    core: {
+      ...fakeApi.core,
+      Item: class { constructor(id, amount) { this.id = id; this.amount = amount; } },
+      ItemDefinition: { forId: () => ({ getNoteId: () => -1, isStackable: () => true }) },
+    },
+    getItemOnGroundManager: () => ({ registerLocation: (owner, item, where) => floor.push(where) }),
+  });
+  const corpse = (x) => ({ isRegistered: () => true, getLocation: () => ({ x }) });
+  const branda = corpse(2905), eldric = corpse(2915);
+  const full = { getLocation: () => ({ x: 0 }), getInventory: () => ({ contains: () => false, getFreeSlots: () => 0 }) };
+  const session = { branda, eldric, area: null };
+  Corpse._test.spawnDrops(full, session, eldric, [{ itemId: 571, amount: 34 }]);
+  Corpse._test.spawnDrops(full, session, branda, [{ itemId: 569, amount: 34 }]);
+  assert.deepEqual(floor.map((where) => where.x), [2915, 2905]);
+});
+
 test("a clean kill completes Perfect, No time to pray and counts the streak", () => {
   completed.length = 0;
   const player = fakePlayer();

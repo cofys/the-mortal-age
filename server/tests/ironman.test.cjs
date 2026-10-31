@@ -10,6 +10,8 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
+const { DuelState } = require("../dist/game/content/Duelling");
+const DuelArena = require("../plugins/minigames/DuelArena.plugin");
 
 let core;
 const hooks = {};
@@ -30,6 +32,9 @@ before(async () => {
       custom[name]?.(payload);
     },
   }, { get: (target, key) => (key in target ? target[key] : on(String(key))) });
+  // DuelArena first: this harness keeps one handler per core hook, and the Ironman rules below
+  // must be the ones that answer.
+  DuelArena.register(api);
   require("../plugins/modes/Ironman.plugin").register(api);
 });
 
@@ -79,6 +84,70 @@ test("no trading either way, with the captured lines", () => {
   assert.equal(mains.handled, false, "two normal accounts trade as before");
 });
 
+test("onCanTrade refuses the window itself, whichever side is the Ironman", () => {
+  const iron = account("iron", "ironman");
+  const main = account("main");
+  const fromIron = { player: iron, target: main, allow: null };
+  hooks.onCanTrade(fromIron);
+  assert.deepEqual([fromIron.allow, iron.messages], [false, ["You are an Ironman. You stand alone."]]);
+  const toIron = { player: main, target: iron, allow: null };
+  hooks.onCanTrade(toIron);
+  assert.deepEqual([toIron.allow, main.messages], [false, ["iron is an Ironman. He stands alone."]]);
+  const mains = { player: main, target: account("other"), allow: null };
+  hooks.onCanTrade(mains);
+  assert.equal(mains.allow, null, "two normal accounts can still trade");
+});
+
+test("an Ironman can't stake in the Duel Arena; a free duel is fine", () => {
+  for (const mode of ["ironman", "ultimate", "hardcore"]) {
+    const player = account(`staker-${mode}`, mode);
+    const request = { player, allow: true, message: null };
+    custom["duelarena:can-stake"](request);
+    assert.deepEqual([request.allow, request.message],
+      [false, "As an Ironman, you cannot take part in a staked duel."]);
+    assert.deepEqual(player.messages, [], "the Duel Arena shows the request's message");
+  }
+  const main = { player: account("main"), allow: true, message: null };
+  custom["duelarena:can-stake"](main);
+  assert.equal(main.allow, true);
+});
+
+test("a mode change between the two final acceptances refuses the staked duel", (t) => {
+  const staker = account("staker");
+  const opponent = account("opponent");
+  for (const [player, x] of [[staker, 3330], [opponent, 3331]]) {
+    player.setLocation(new core.Location(x, 3250, 0));
+  }
+  staker.getInventory().adds(995, 1000);
+  const session = {
+    players: [staker, opponent], mask: 0, accepted: new Set(), stage: "confirm",
+    offers: new Map([[staker, new Map([[0, new core.Item(995, 1000)]])], [opponent, new Map()]]),
+  };
+  session.snapshots = session.players.map(DuelArena._test.snapshot);
+  for (const player of session.players) {
+    DuelArena._test.sessions.set(player, session);
+    player.getDueling().setState(DuelState.CONFIRM_SCREEN);
+  }
+
+  // The staker offers coins and confirms the duel as a normal account.
+  DuelArena._test.accept(staker, session);
+  assert.deepEqual([...session.accepted], [staker]);
+
+  const findPlayer = core.World.getPlayerByName;
+  core.World.getPlayerByName = (name) => (name === "staker" ? staker : undefined);
+  t.after(() => { core.World.getPlayerByName = findPlayer; });
+  hooks["command:ironman"]({ player: account("admin"), parts: ["ironman", "ironman", "staker"] });
+  staker.messages.length = 0;
+
+  // The opponent's confirmation re-checks the staker, who is now an Ironman.
+  DuelArena._test.accept(opponent, session);
+  assert.equal(session.stage, "confirm", "the duel never starts");
+  assert.deepEqual([...session.accepted], [staker], "the opponent is not accepted either");
+  assert.deepEqual(staker.messages, ["As an Ironman, you cannot take part in a staked duel."]);
+  assert.equal(staker.getInventory().getAmount(995), 1000, "the coins stay in the staker's inventory");
+  assert.equal(opponent.getDueling().getState(), DuelState.CONFIRM_SCREEN);
+});
+
 test("an Ironman can't pick up other players' items; their own and world spawns are fine", () => {
   const iron = account("iron", "ironman");
   const pick = (owner) => {
@@ -94,6 +163,34 @@ test("an Ironman can't pick up other players' items; their own and world spawns 
   const event = { player: main, groundItem: { getOwner: () => "someoneelse" }, handled: false };
   hooks.onGroundItemPickup(event);
   assert.equal(event.handled, false, "normal accounts pick up as before");
+});
+
+test("stacks from different owners never merge, so an Ironman can't inherit a drop", t => {
+  const iron = account("iron", "ironman");
+  const main = account("main");
+  const manager = core.ItemOnGroundManager;
+  const { State } = require("../dist/game/entity/impl/grounditem/ItemOnGround");
+  const items = core.World.getItems(), previous = items.splice(0);
+  t.after(() => items.splice(0, items.length, ...previous));
+
+  // A main's drop cannot join the Ironman's public stack...
+  const ironPile = manager.registerLocation(iron, new core.Item(995, 10), new core.Location(3200, 3200));
+  ironPile.setState(State.SEEN_BY_EVERYONE);
+  const mainPile = manager.registerLocation(main, new core.Item(995, 5), new core.Location(3200, 3200));
+  assert.deepEqual([ironPile.getItem().getAmount(), mainPile.getItem().getAmount()], [10, 5]);
+  assert.equal(mainPile.getOwner(), "main");
+
+  // ...and the Ironman's drop cannot join the main's public stack.
+  const mainPublic = manager.registerLocation(main, new core.Item(995, 7), new core.Location(3201, 3200));
+  mainPublic.setState(State.SEEN_BY_EVERYONE);
+  const own = manager.registerLocation(iron, new core.Item(995, 3), new core.Location(3201, 3200));
+  assert.deepEqual([own.getOwner(), own.getItem().getAmount(), mainPublic.getItem().getAmount()],
+    ["iron", 3, 7]);
+
+  // The same owner still stacks, and the Ironman keeps it.
+  const merged = manager.registerLocation(iron, new core.Item(995, 2), new core.Location(3201, 3200));
+  assert.equal(own.getItem().getAmount(), 5);
+  assert.equal(items.includes(merged), false, "merged into the Ironman's own stack");
 });
 
 test("a kill another player helped with gives an Ironman nothing; a solo kill keeps its drop", () => {

@@ -182,6 +182,22 @@ test('the ammo slot comes first when the weapon can fire it (Wiki)', () => {
   assert.equal(Quiver.firedAmmunition(crossbow), null);
 });
 
+test("Dizana's max cape is a worn blessed quiver: filled, it fires and adds Sunfire (#1596)", () => {
+  for (const cape of [I.DIZANAS_MAX_CAPE, I.DIZANAS_MAX_CAPE_L_]) {
+    const player = fakePlayer({ cape, ammo: [I.DRAGON_ARROW, 100] });
+    click(player, 2);
+    assert.equal(player.worn[Equipment.AMMUNITION_SLOT].getId(), -1, 'Fill empties the ammo slot');
+    assert.equal(Ammunition.getFor(player), Ammunition.getForItem(I.DRAGON_ARROW), `item ${cape}`);
+    assert.equal(PluginManager.checkRangedAmmo(player, 1, true), true);
+    assert.equal(sunfireBonuses(player)[4], 10, 'blessed: no charges needed');
+  }
+  // Broken, it's no quiver at all; its death rules are broken-items.json's.
+  const broken = fakePlayer({ cape: I.DIZANAS_MAX_CAPE_BROKEN_, ammo: [I.DRAGON_ARROW, 100] });
+  click(broken, 2);
+  assert.equal(Quiver.firedAmmunition(broken), null);
+  assert.equal(Quiver._test.stageOf(I.DIZANAS_MAX_CAPE), null, 'the quiver plugin leaves its death to broken-items');
+});
+
 test('without a quiver worn, its ammo is not fired', () => {
   const player = fakePlayer({ ammo: [I.DRAGON_ARROW, 100] });
   click(player, 2);

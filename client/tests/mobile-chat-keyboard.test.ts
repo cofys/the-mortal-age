@@ -62,8 +62,8 @@ test("mobile chat keeps its native caret above the keyboard and preserves chat i
             touchEvent = type;
             const event = new dom.window.Event(type, { cancelable: true });
             Object.assign(event, {
-                touches: type === "touchstart" ? [{ clientX: 100, clientY: 100 }] : [],
-                changedTouches: [{ clientX: 100, clientY: 100 }],
+                touches: type === "touchstart" ? [{ clientX: 100, clientY: 100, target: canvas }] : [],
+                changedTouches: [{ clientX: 100, clientY: 100, target: canvas }],
             });
             canvas.dispatchEvent(event);
             touchEvent = "";

@@ -210,12 +210,14 @@ function scaleDrops(drops, share, keepAlways) {
   return out;
 }
 
-/** Turns drops into the player's inventory, excess to the floor (Araxxor pattern). */
-function spawnDrops(player, session, drops) {
+/**
+ * Turns drops into the player's inventory, excess to the floor (Araxxor pattern) at the
+ * claimed corpse, where the capture plays its titan's loot sound.
+ */
+function spawnDrops(player, session, corpse, drops) {
   const { Item, ItemDefinition } = core;
   const manager = api.getItemOnGroundManager();
-  const corpse = session.branda?.isRegistered() ? session.branda : session.eldric;
-  const where = corpse?.getLocation() ?? player.getLocation();
+  const where = corpse?.isRegistered() ? corpse.getLocation() : player.getLocation();
   const { area } = session;
   const inventory = player.getInventory();
   for (const drop of drops ?? []) {
@@ -271,7 +273,7 @@ function loot(player, session, npc, share) {
   later(Shared.CLAIM_LOOT_TICKS, () => {
     if (!player.isRegistered()) return;
     api.emitCustomEvent("npc-drops:roll", { player, npc, npcId: id, drops });
-    spawnDrops(player, session, drops);
+    spawnDrops(player, session, npc, drops);
     player.getPacketSender().sendSoundEffect(Shared.CLAIM_SOUND[id], 1, 0);
   });
 }
@@ -291,7 +293,7 @@ function sacrifice(player, session, npc) {
       player.sendMessage(Shared.SACRIFICE_MISS);
     }
     api.emitCustomEvent("npc-drops:roll", { player, npc, npcId: id, drops });
-    spawnDrops(player, session, drops);
+    spawnDrops(player, session, npc, drops);
     player.getPacketSender().sendSoundEffect(Shared.CLAIM_SOUND[id], 1, 0);
   });
 }
@@ -315,7 +317,7 @@ function pages(player, session, npc, share) {
     const drops = [...tertiary];
     if (amount > 0) drops.push({ itemId: PAGES_ITEM_ID, amount });
     api.emitCustomEvent("npc-drops:roll", { player, npc, npcId: id, drops });
-    spawnDrops(player, session, drops);
+    spawnDrops(player, session, npc, drops);
     player.getPacketSender().sendSoundEffect(Shared.CLAIM_SOUND[id], 1, 0);
   });
 }
@@ -391,5 +393,5 @@ function attach(pluginApi) {
 
 module.exports = {
   attach,
-  _test: { shareOf, scaleDrops },
+  _test: { shareOf, scaleDrops, spawnDrops },
 };

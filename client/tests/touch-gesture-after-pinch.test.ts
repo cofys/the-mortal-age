@@ -40,7 +40,7 @@ function touchInput() {
     input.element = { width: 800, height: 400,
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }) };
     input.onCanvasTouchStart = () => true;
-    const touch = (x = 100, y = 100) => ({ clientX: x, clientY: y });
+    const touch = (x = 100, y = 100) => ({ clientX: x, clientY: y, target: input.element });
     const event = (touches: unknown[], changedTouches = touches) => ({ touches, changedTouches, preventDefault() {} });
     return { input, touch, event };
 }

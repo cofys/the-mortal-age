@@ -71,6 +71,13 @@ export class PlayerSave {
         }
     }
 
+    /** Every persisted attribute the player doesn't have starts at its default; a new account has no save to load them. */
+    public static applyAttributeDefaults(player: Player): void {
+        for (const [key, value] of PlayerSave.attributeDefaults) {
+            if (player.getAttribute(key) === undefined) player.setAttribute(key, JSON.parse(value));
+        }
+    }
+
     private static readonly CAMEL_CASE_ATTRIBUTE_KEY = /([a-z0-9])([A-Z])/g;
     /** Save migration: camelCase attribute keys were renamed to kebab-case. */
     private static migrateAttributeKey(key: string): string {
@@ -621,10 +628,9 @@ export class PlayerSave {
         for (const key of PlayerSave.persistentAttributeKeys) {
             if (Object.prototype.hasOwnProperty.call(this.attributes ?? {}, key)) {
                 player.setAttribute(key, PlayerSave.cloneAttribute(key, this.attributes[key]));
-            } else if (PlayerSave.attributeDefaults.has(key) && player.getAttribute(key) === undefined) {
-                player.setAttribute(key, JSON.parse(PlayerSave.attributeDefaults.get(key)!));
             }
         }
+        PlayerSave.applyAttributeDefaults(player);
 
         const friendList = player.getRelations().getFriendList();
         friendList.length = 0;

@@ -328,6 +328,45 @@ test("absorption: only in a dream; 50 a dose up to 1,000; it takes monsters' dam
   assert.equal(varbit(p, 'nzone_absorb_potion_effects'), 0);
 });
 
+test('real executeHit protects before absorption spends points', () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { PlayerSession } = require('../dist/net/PlayerSession');
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { PendingHit } = require('../dist/game/content/combat/hit/PendingHit');
+  const { CombatType } = require('../dist/game/content/combat/CombatType');
+
+  const channel = { isOpen: () => true, send: () => true, close() {}, onData() {}, onError() {}, onClose() {} };
+  const player = new Player(new PlayerSession(channel), new core.Location(2608, 3116, 0));
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.setHitpoints(99);
+  player.setAutoRetaliate(false);
+  player.getSkillManager().setMaxLevel(core.Skill.PRAYER, 99);
+  player.getSkillManager().setCurrentLevel(core.Skill.PRAYER, 99, false);
+  player.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MELEE] = true;
+  player.setAttribute('nightmare-zone:absorb', 50);
+
+  const npc = new core.NPC(1, new core.Location(2608, 3117, 0));
+  npc.setRegistered(true);
+  npc.setHitpoints(100);
+
+  const method = { type: () => CombatType.MELEE, accuracyDefenceType: () => undefined, handleAfterHitEffects() {} };
+  const hit = new PendingHit(npc, player, method, {
+    damage: 20, rollAccuracy: false, experience: false, handleAfterHitEffects: false,
+  });
+
+  Common.dreams.set(player, { player });
+  PluginManager.createApi('NightmareZoneOrderRegression').onPlayerHitModify(Potions.absorb);
+  try {
+    CombatFactory.executeHit(hit);
+  } finally {
+    Common.dreams.delete(player);
+  }
+
+  assert.equal(Potions.absorbOf(player), 50, 'the prayer blocked the 20 before absorption could spend points');
+  assert.equal(player.getHitpoints(), 99, 'the protected hit dealt no damage');
+});
+
 test('overload: not under 51 Hitpoints; +floor(15%)+5 to the combat skills, 50 damage of its own, 5 minutes, 50 back at the end', () => {
   const p = dreamer();
   p.hp = 50;

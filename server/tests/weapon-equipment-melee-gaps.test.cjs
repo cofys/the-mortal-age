@@ -68,7 +68,9 @@ test('fixed Magic hits keep Elysian and incoming damage reductions', () => {
     const { registerIncomingDamageModifier } = require('../dist/game/content/combat/EquipmentEffects');
     registerIncomingDamageModifier((entity, damage) => { if (entity === victim) damage.multiplyDamage(0.5); });
     const hit = new core.PendingHit(source, victim, { type: () => CombatType.MAGIC, accuracyDefenceType: (type) => type }, { damage: 16, rollAccuracy: false });
-    assert.equal(hit.getTotalDamage(), 6, '16 reduced by Elysian25%, then incoming50%');
+    assert.equal(hit.getTotalDamage(), 16, 'the roll is not reduced before impact');
+    core.CombatFactory.applyHitTimeDefences(hit);
+    assert.equal(hit.getTotalDamage(), 6, '16 reduced by Elysian25%, then incoming50% at impact');
   } finally { core.DamageFormulas.sourceHitBounds = oldBounds; Math.random = oldRandom; }
 });
 test('guild cyclopes reject real lightning through existing non-melee immunity and give no XP', () => {

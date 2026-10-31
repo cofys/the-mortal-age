@@ -60,6 +60,11 @@ export abstract class Area {
         // By default, do nothing in process.
     }
 
+    /** Automatic music for this area; null retains the normal map/instance track. */
+    public getMusicTrack(player: Player): number | null {
+        return null;
+    }
+
     // Rule hooks for actors standing in this area. Core asks the area before the global
     // plugin hooks, so a rule that only applies here costs nothing for anyone elsewhere.
     // null means "no opinion" and falls through to the plugin hooks.

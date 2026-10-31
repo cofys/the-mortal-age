@@ -625,3 +625,74 @@ test('"during The Digsite quest." is The Dig Site: its completion and a later lo
   assert.deepEqual(saved.messages, []);
   completedQuests = new Set();
 });
+
+test('area music follows actual same-region movement, dynamic selection and manual mode without replaying', async t => {
+  await setup();
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { AreaManager } = require('../dist/game/model/areas/AreaManager');
+  const core = PluginManager.getCoreApi();
+  core.RegionManager.init();
+  MusicPlugin.register(PluginManager.createApi('Music'));
+  const delivered = [];
+  const session = new PlayerSession({ isOpen: () => true, send: frame => delivered.push(Buffer.from(frame)) });
+  const player = new Player(session);
+  session.setPlayer(player);
+  player.setUsername('areamusic');
+  assert.equal(core.World.getPlayers().add(player), true);
+  player.setLocation(new Location(3222, 3218, 0));
+  player.setNeedsPlacement(false);
+  const regionTrack = core.Music.forRegion(12850);
+  const [first, second, third] = catalog.allTrackIds.filter(id => id !== regionTrack && !catalog.autoUnlockTrackIds.includes(id));
+  let selected = first;
+  class MusicArea extends core.Area { getMusicTrack() { return selected; } }
+  const area = new MusicArea([new core.Boundary(3220, 3221, 3218, 3218, 0)]);
+  PluginManager.createApi('MusicAreaTest').registerArea(area);
+  t.after(() => {
+    if (player.getArea()) player.getArea().leave(player, true);
+    player.setArea(null);
+    const index = AreaManager.areas.indexOf(area);
+    if (index >= 0) AreaManager.areas.splice(index, 1);
+    core.World.getPlayers().remove(player);
+  });
+  let tick = 0;
+  const songIds = frames => frames.filter(frame => frame[0] === 133).map(frame => frame.readUInt16BE(frame.length - 10));
+  async function flush() {
+    session.flush(++tick);
+    const frames = [...session.pendingPackets]; // Observe real native encoder output before its normal microtask delivery.
+    await Promise.resolve();
+    return songIds(frames);
+  }
+  function walkTo(x) {
+    player.getMovementQueue().addSteps(new Location(x, 3218, 0));
+    for (let step = 0; step < 8 && player.getLocation().getX() !== x; step++) {
+      player.getMovementQueue().process();
+      AreaManager.process(player);
+    }
+    assert.equal(player.getLocation().getX(), x, 'the actual movement queue reaches its destination');
+  }
+  assert.deepEqual(await flush(), [regionTrack]);
+  walkTo(3221);
+  assert.equal(player.getArea(), area);
+  assert.deepEqual(await flush(), [first], 'entering an area inside the same map region changes the selected song');
+  assert.equal(session.getCurrentMusicTrack(), first);
+  assert.equal(Progress.isUnlocked(player, first), true);
+  assert.deepEqual(await flush(), [], 'ordinary ticks must not restart the area song');
+  player.getPacketSender().sendJingle(18);
+  assert.deepEqual(songIds(session.pendingPackets), [first], 'the real jingle prelude resumes the area selection');
+  await Promise.resolve();
+  selected = second;
+  assert.deepEqual(await flush(), [second], 'a live area policy change is observed without moving regions');
+  player.setAudioSetting(18, 1);
+  assert.deepEqual(await flush(), []);
+  selected = third;
+  assert.deepEqual(await flush(), [], 'manual mode must not start the new area song');
+  assert.equal(Progress.isUnlocked(player, third), true, 'manual mode still unlocks the entered area track');
+  assert.deepEqual(await flush(), []);
+  player.setAudioSetting(18, 0);
+  assert.deepEqual(await flush(), [third], 'automatic mode starts the current area selection');
+  walkTo(3222);
+  assert.equal(player.getArea(), null);
+  assert.deepEqual(await flush(), [regionTrack], 'leaving the area restores the normal region song');
+  assert.deepEqual(await flush(), []);
+  assert.ok(delivered.length > 0, 'the real session delivers its encoded client packets');
+});

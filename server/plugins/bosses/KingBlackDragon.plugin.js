@@ -96,22 +96,29 @@ function combatClass(pluginApi) {
       if (target.isPlayer()) {
         const player = target.getAsPlayer();
         if (this.currentAttackType === CombatType.MAGIC && this.currentBreath === Breath.DRAGON) {
-          if (
-            PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC) &&
-            CombatEquipment.hasDragonProtectionGear(player) &&
-            !player.getCombat().getFireImmunityTimer().finished()
-          ) {
+          const prayer = PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC);
+          const shield = CombatEquipment.hasDragonProtectionGear(player);
+          const antifire = !player.getCombat().getFireImmunityTimer().finished();
+          // The table below applies Protect from Magic itself; the generic impact stage
+          // must not reduce the custom breath again.
+          hit.markProtectionBypassed();
+          if (prayer) {
+            // The base magic roll used to be prayer-reduced before this custom damage was
+            // added. Keep that part of the old order now that impact defences are deferred.
+            for (const damage of hit.getHits()) damage.setDamage(0);
+          }
+          if (prayer && shield && antifire) {
             target.sendMessage("You're protected against the dragonfire breath.");
             return [hit];
           }
           let extendedHit = 25;
-          if (PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC)) {
+          if (prayer) {
             extendedHit -= 5;
           }
-          if (!player.getCombat().getFireImmunityTimer().finished()) {
+          if (antifire) {
             extendedHit -= 10;
           }
-          if (CombatEquipment.hasDragonProtectionGear(player)) {
+          if (shield) {
             extendedHit -= 10;
           }
           player.sendMessage("The dragonfire burns you.");

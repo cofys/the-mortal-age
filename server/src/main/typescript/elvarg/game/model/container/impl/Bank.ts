@@ -111,6 +111,8 @@ export class Bank extends ItemContainer {
     public static readonly ITEM_SLOT_FLAGS = 0x7fe | (2 << 17) | (1 << 20) | (1 << 21);
     /** The same slots' ops, as IF_SETEVENTS_V2 sends them: OP1-OP11, op 11 being Examine. */
     public static readonly ITEM_SLOT_OPS = 0x7ff;
+    /** Ops 1-10, drag depth 1, drop target. */
+    public static readonly TAB_BUTTON_FLAGS = 0x7fe | (1 << 17) | (1 << 20);
     public static readonly EXAMINE_OP = 11;
 
     constructor(public player: Player) {
@@ -1159,6 +1161,10 @@ export class Bank extends ItemContainer {
             // The empty space after each tab's items is a drop target (one per tab).
             .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD,
                 Bank.TAB_DROP_SLOT_OFFSET, Bank.TAB_DROP_SLOT_OFFSET + 9, 1 << 20)
+            // The tab bar: click a tab, drop an item on one (or on the new-tab slot) to move it there,
+            // drag a tab to reorder. The official client only allows what is enabled here.
+            .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.TABS_CHILD,
+                Bank.TAB_BUTTON_SLOT_OFFSET, Bank.TAB_BUTTON_SLOT_OFFSET + 9, Bank.TAB_BUTTON_FLAGS)
             .sendInterfaceFlagsRange((Bank.SIDE_INTERFACE_ID << 16) | 3, 0, 27, 3278846)
             .sendVarbit(12393, 1)
             .sendString(`Bank of ${GameConstants.NAME}`, (Bank.MAIN_INTERFACE_ID << 16) | 3);

@@ -8,6 +8,7 @@ let core,group,items,bobble;
 before(async()=>{
  await CachePipeline.initialize(path.resolve(__dirname,'..'));core=PM.getCoreApi();
  require('../plugins/world/HolidayRewards.plugin.js').register(PM.createApi('HolidayRewards'));
+ require('../plugins/items/HolidayToys.plugin.js').register(PM.createApi('HolidayToys'));
  group=core.CacheDefinitions.getInterfaceId('rareitems_diango');items=core.CacheDefinitions.getComponentId('rareitems_diango:items');bobble=core.CacheDefinitions.getObjId('win05_hat1');
 });
 function fixture(){const p=new Player(null);p.setUsername('holidayqa');const packets=[];p.getSession=()=>({sendClientPacket:packet=>{packets.push(Buffer.from(packet));return true;}});const messages=[];p.sendMessage=m=>messages.push(m);return {p,messages,packets};}
@@ -15,6 +16,27 @@ function unlock(p,names=['win05_hat1']){const e={player:p,items:names};PM.emitCu
 function open(p){const npc=core.NPC.create(core.NpcIdentifiers.DIANGO,new core.Location(3081,3247));return PM.emitNpcInteraction({player:p,npc,npcId:npc.getId(),action:'Holiday-items',clickType:4,handled:false});}
 function take(p,slot=20,opId=1){return PM.emitInterfaceActionClick({player:p,buttonId:items,slot,opId,action:opId,handled:false});}
 test('new account native Diango menu opens but cannot claim locked rewards',()=>{const {p}=fixture();open(p);assert.equal(p.getInterfaceId(),group);take(p);assert.equal(p.getInventory().getAmount(bobble),0);});
+
+test('snow globe native inventory Look at opens its viewer without consuming the toy; stale slots cannot reopen',async()=>{
+ const {PlayerSession}=require('../dist/net/PlayerSession');
+ const {ClientConnection}=require('../dist/net/NetworkBuilder');
+ const packets=[],channel={kind:'test',remoteAddress:'127.0.0.1',isOpen:()=>true,
+  send:packet=>{packets.push(packet);return true;},close(){},onData(){},onError(){},onClose(){}};
+ const p=new Player(new PlayerSession(channel)),connection=new ClientConnection(channel);connection.player=p;
+ const c=core.CacheDefinitions,id=c.getObjId('xmas16_snowglobe'),viewer=c.getInterfaceId('xmas16_snow_globe');
+ assert.equal(c.getItem(id).inventoryActions[0],'Look at');
+ p.getInventory().addItem(new core.Item(id,1));
+ async function click(){await connection.dispatch([{type:'widget_action',widgetId:149<<16,groupId:149,childId:0,
+  slot:0,itemId:id,buttonNum:2}]);connection.processTurnPackets();}
+ await click();assert.equal(p.getInterfaceId(),viewer);
+ assert.equal(p.getInventory().getAmount(id),1);
+ await connection.dispatch([{type:'interface_close'}]);connection.processTurnPackets();
+ assert.equal(p.getInterfaceId(),-1,'native IF_CLOSE releases the viewer');
+ await click();assert.equal(p.getInterfaceId(),viewer);
+ p.getPacketSender().sendInterfaceRemoval();p.getInventory().deleteAtSlot(0,1);await click();
+ assert.notEqual(p.getInterfaceId(),viewer,'forged stale inventory click cannot open the viewer');
+ assert.ok(packets.length>0);
+});
 test('unlocked native enum slot gives exactly one item; replay cannot duplicate',()=>{const {p}=fixture();unlock(p);open(p);take(p);take(p);assert.equal(p.getInventory().getAmount(bobble),1);});
 test('unlock request validates the whole set before persisting',()=>{const {p}=fixture();unlock(p,['win05_hat1','not-a-holiday-object']);open(p);take(p);assert.equal(p.getInventory().getAmount(bobble),0);});
 test('full inventory refuses without losing unlock; capacity restored allows retrieval',()=>{const {p,messages}=fixture();unlock(p);for(let n=0;n<28;n++)p.getInventory().setItem(n,new core.Item(core.ItemIdentifiers.COINS,1));open(p);take(p);assert.ok(messages.includes("You don't have enough inventory space to take that."));p.getInventory().deleteAtSlot(0,1);take(p);assert.equal(p.getInventory().getAmount(bobble),1);});

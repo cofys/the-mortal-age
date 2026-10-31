@@ -976,6 +976,16 @@ export class InputManager {
         return [((x1 + x2) / 2) | 0, ((y1 + y2) / 2) | 0];
     }
 
+    /**
+     * Touch events list every active touch on the page, including fingers
+     * resting on HUD overlays like the movement joystick. Those must never pinch
+     * or drag the camera, so gestures only count touches on the game surface.
+     */
+    private gameTouches(event: TouchEvent): Touch[] {
+        if (!this.element) return [];
+        return Array.from(event.touches).filter((touch) => touch.target === this.element);
+    }
+
     private onTouchStart = (event: TouchEvent) => {
         if (!this.element) return;
         this.idleTime = 0;
@@ -983,16 +993,18 @@ export class InputManager {
         this.lastTouchInputTimeMs = this.lastInputTimeMs;
         this.isTouch = true;
 
-        // Two-finger pinch gesture
-        if (event.touches.length === 2) {
+        const game = this.gameTouches(event);
+
+        // Two-finger pinch gesture starts here, from game-surface fingers only.
+        if (game.length === 2) {
             this.touchAdapter.onCancel();
             this.isPinching = true;
-            const distance = this.getTouchDistance(event.touches[0], event.touches[1]);
+            const distance = this.getTouchDistance(game[0], game[1]);
             this.pinchStartDistance = distance;
             this.lastPinchDistance = distance;
             this.pinchNotchRemainder = 0;
             this.pinchZoomRemainder = 0;
-            const [cx, cy] = this.getTouchCenter(event.touches[0], event.touches[1]);
+            const [cx, cy] = this.getTouchCenter(game[0], game[1]);
             this.pinchCenterX = cx;
             this.pinchCenterY = cy;
             // Point at pinch center so UI (minimap / widgets) hit-tests like a wheel event.
@@ -1003,7 +1015,7 @@ export class InputManager {
         }
 
         // Single touch — gesture FSM decides tap / long-press / orbit.
-        const [x, y] = getMousePos(this.element, event.touches[0]);
+        const [x, y] = getMousePos(this.element, game[0]);
         this.prevTouchY = y;
         this.prevTouchTime = performance.now();
         this.touchScrollVelocityY = 0;
@@ -1023,8 +1035,9 @@ export class InputManager {
         this.lastTouchInputTimeMs = this.lastInputTimeMs;
 
         // Keep coarse widget scrolling and continuous camera zoom from the same gesture.
-        if (this.isPinching && event.touches.length === 2) {
-            const distance = this.getTouchDistance(event.touches[0], event.touches[1]);
+        const game = this.gameTouches(event);
+        if (this.isPinching && game.length === 2) {
+            const distance = this.getTouchDistance(game[0], game[1]);
             const delta = distance - this.lastPinchDistance;
             this.pinchZoomDelta += -delta * WHEEL_NOTCH_DELTA / PINCH_PX_PER_WHEEL_NOTCH;
             // Widgets keep discrete notches; the camera also receives the continuous travel.
@@ -1036,7 +1049,7 @@ export class InputManager {
                 this.pinchNotchRemainder -= sign * PINCH_PX_PER_WHEEL_NOTCH;
             }
             this.lastPinchDistance = distance;
-            const [cx, cy] = this.getTouchCenter(event.touches[0], event.touches[1]);
+            const [cx, cy] = this.getTouchCenter(game[0], game[1]);
             this.pinchCenterX = cx;
             this.pinchCenterY = cy;
             this.mouseX = cx;
@@ -1045,8 +1058,10 @@ export class InputManager {
             return;
         }
 
-        if (event.touches.length === 1) {
-            const [x, y] = getMousePos(this.element, event.touches[0]);
+        // A HUD finger (e.g. the movement joystick) moves freely without orbiting
+        // the camera; only a lone game-surface finger drives the gesture FSM.
+        if (game.length === 1 && !this.isPinching) {
+            const [x, y] = getMousePos(this.element, game[0]);
             this.touchAdapter.onFingerMove(x, y, this.lastInputTimeMs);
         }
         event.preventDefault();
@@ -1057,15 +1072,16 @@ export class InputManager {
         this.lastInputTimeMs = this.nowMs();
         this.lastTouchInputTimeMs = this.lastInputTimeMs;
 
-        // If we were pinching and now have less than 2 fingers, end the pinch
-        if (this.isPinching && event.touches.length < 2) {
+        // If we were pinching and now have less than 2 game fingers, end the pinch
+        const game = this.gameTouches(event);
+        if (this.isPinching && game.length < 2) {
             this.isPinching = false;
             this.pinchStartDistance = 0;
             this.lastPinchDistance = 0;
-            // If one finger remains, start a fresh one-finger gesture: it may orbit the camera,
+            // If one game finger remains, start a fresh one-finger gesture: it may orbit the camera,
             // but lifting it is the end of the pinch, not a tap where it rests.
-            if (event.touches.length === 1 && this.element) {
-                const [x, y] = getMousePos(this.element, event.touches[0]);
+            if (game.length === 1 && this.element) {
+                const [x, y] = getMousePos(this.element, game[0]);
                 this.prevTouchY = y;
                 this.prevTouchTime = performance.now();
                 this.touchScrollVelocityY = 0;
@@ -1076,11 +1092,15 @@ export class InputManager {
             return;
         }
 
-        if (event.changedTouches.length >= 1 && this.element) {
-            const [x, y] = getMousePos(this.element, event.changedTouches[0]);
+        // Lift of a game-surface finger ends its gesture; a HUD finger lifting
+        // (movement joystick) must not cancel an active camera drag or tap.
+        const ended = Array.from(event.changedTouches).find((touch) => touch.target === this.element);
+        if (ended && this.element) {
+            const [x, y] = getMousePos(this.element, ended);
             this.touchAdapter.onFingerUp(x, y, this.lastInputTimeMs);
         } else {
-            this.touchAdapter.onCancel();
+            // Only a HUD finger lifted; the game gesture, if any, is untouched.
+            return;
         }
 
         // Reset touch scroll tracking (but keep velocity for momentum)

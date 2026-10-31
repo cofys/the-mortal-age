@@ -18,8 +18,9 @@ function setup() {
     CombatEquipment: { hasDragonProtectionGear: () => protectionShield },
     PrayerHandler: { PROTECT_FROM_MAGIC: 4, isActivated: () => protectionPrayer },
     PendingHit: class {
-      constructor(attacker, target, method, config) { Object.assign(this, { attacker, target, method, config, total: 12 }); }
+      constructor(attacker, target, method, config) { Object.assign(this, { attacker, target, method, config, total: 12, bypassed: false }); }
       setTotalDamage(value) { this.total = value; } getTotalDamage() { return this.total; }
+      markProtectionBypassed() { this.bypassed = true; }
     },
     Projectile: { createProjectile(...args) { const shot = { args, withAngle(value) { this.angle = value; return this; }, withProgress(value) { this.progress = value; return this; }, sendProjectile() { projectiles.push(this); } }; return shot; } },
   },

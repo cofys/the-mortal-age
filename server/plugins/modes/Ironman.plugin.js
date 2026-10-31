@@ -13,6 +13,7 @@ module.exports = {
     require("./ironman/Commands.Ironman")(api);
     require("./ironman/Trading.Ironman")(api);
     require("./ironman/Loot.Ironman")(api);
+    require("./ironman/Duelling.Ironman")(api);
     require("./ironman/Shops.Ironman")(api);
     require("./ironman/Ultimate.Ironman")(api);
     require("./ironman/Hardcore.Ironman")(api);

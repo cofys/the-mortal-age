@@ -5,12 +5,13 @@ require('../dist/Server').Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Player } = require('../dist/game/entity/impl/player/Player');
-let core, Data, Patches, hooks;
+let core, Data, Model, Patches, hooks;
 before(async () => {
     await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
     core = PluginManager.getCoreApi();
     require('../plugins/skills/farming/Core.Farming').init({ core });
     Data = require('../plugins/skills/farming/Data.Farming');
+    Model = require('../plugins/skills/farming/Model.Farming');
     Patches = require('../plugins/skills/farming/Patches.Farming');
     Data.initializeFarmingData();
     hooks = {};
@@ -52,7 +53,27 @@ test('a seed is dibbed with its sound and named with the patch three ticks later
     assert.equal(f.state.crop, undefined);
     ticks(1);
     assert.equal(f.state.crop, 'POTATO');
+    assert.equal(f.state.plantedTick, Model.tickIndex(f.state.plantedAt, Patches.farmFor(f.player).offset));
     assert.deepEqual(f.said, [['spam', 'You plant 3 potato seeds in the allotment.']]);
+});
+
+test('planting below the crop level is refused before a seed or patch state changes', t => {
+    const f = fixture(t, 'HERB', ['Seed dibber', 'Ranarr seed']);
+    f.player.getSkillManager().setCurrentLevel(core.Skill.FARMING, 31, false);
+    f.use('Ranarr seed');
+    assert.deepEqual(f.said, [['game', 'You need level 32 Farming to plant that.']]);
+    assert.equal(f.player.getInventory().getAmount(Data.itemId('Ranarr seed')), 1);
+    assert.equal(f.state.crop, undefined);
+    ticks(3);
+    assert.equal(f.state.crop, undefined, 'a refused seed schedules no growth');
+});
+
+test('the crop level from the wiki is the planting gate, and boosts count', t => {
+    const f = fixture(t, 'HERB', ['Seed dibber', 'Ranarr seed']);
+    f.player.getSkillManager().setMaxLevels(core.Skill.FARMING, 30, false).setCurrentLevel(core.Skill.FARMING, 32, false);
+    f.use('Ranarr seed');
+    ticks(3);
+    assert.equal(f.state.crop, 'RANARR');
 });
 
 test('a sapling is dug in and named the next tick; hardwood saplings are "the plantpot"', t => {

@@ -84,8 +84,11 @@ test("the bonus cannot bypass the Slayer weapon immunity at impact", () => {
   }
 });
 
-test("the miss fallback passes through ordinary PvP protection prayer reduction", () => {
-  assert.equal(resolve({ playerTarget: true, protection: true, random: 0.9 }).getTotalDamage(), 3);
+test("the miss fallback passes through ordinary PvP protection prayer reduction at impact", () => {
+  const hit = resolve({ playerTarget: true, protection: true, random: 0.9 });
+  assert.equal(hit.getTotalDamage(), 5, "the roll itself is not reduced");
+  core.CombatFactory.applyHitTimeDefences(hit);
+  assert.equal(hit.getTotalDamage(), 3, "Protect from Melee applies when the blow lands");
 });
 
 test("Hammer Blow keeps its energy cost and accuracy boost for every registered variant", () => {

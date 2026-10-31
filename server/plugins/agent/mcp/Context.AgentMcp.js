@@ -273,7 +273,7 @@ function createContext(core, server) {
       const isDeckObject = deckArea?.getObjects?.().includes(object);
       if (options?.length || isDeckObject || viewedArea?.getObjects()?.includes(object) || (name && name !== "null")) {
         const spawnedBy = object.getSpawnedBy?.();
-        objects.push({ id: object.getId(), displayId: definition?.id ?? object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY(), ...(spawnedBy ? { spawnedBy } : {}) });
+        objects.push({ id: object.getId(), displayId: definition?.id ?? object.getId(), name, options: options ?? [], type: object.getType(), x: at.getX(), y: at.getY(), z: at.getZ(), ...(spawnedBy ? { spawnedBy } : {}) });
       }
     }
 
@@ -292,6 +292,7 @@ function createContext(core, server) {
       return {
         index: npc.getIndex(), id: npc.getContentId?.(p) ?? definition?.getId?.() ?? npc.getId(), name: definition?.getName(),
         hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(), headIcon: npc.getHeadIcon?.() ?? -1,
+        combatLevel: definition?.getCombatLevel?.() ?? 0, interactingIndex: npc.getInteractingMobile?.()?.getIndex?.() ?? -1,
         animation: animation.id, animationTick: animation.tick,
         chat: animation.chat, chatTick: animation.chatTick,
         options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),

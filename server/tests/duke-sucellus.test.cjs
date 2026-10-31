@@ -52,8 +52,8 @@ test('one styled strike invokes positive damage equipment reactions only once',t
   const h=H.harness(t);h.enter();h.fight.wake();
   const effects=require('../dist/game/content/combat/EquipmentEffects');let charges=0;
   effects.registerIncomingDamageModifier((victim,hit)=>{if(victim===h.p && hit.getDamage()>0)charges++;});
-  t.mock.method(Math,'random',()=>.99);h.C.strike(h.fight,'magic',48);
-  assert.equal(charges,1);
+  t.mock.method(Math,'random',()=>.99);h.C.strike(h.fight,'magic',48);h.step();
+  assert.equal(charges,1,'the reaction runs once when the queued strike lands');
 });
 test('powder yield, atomic vat fermentation and two doses wake exactly once',t=>{
   const h=H.harness(t),s=h.enter(),i=h.C.data.items;

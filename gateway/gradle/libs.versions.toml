@@ -1,0 +1,20 @@
+[versions]
+kotlin = "2.2.10"
+rsprot = "1.0.0-ALPHA-20261014"
+netty = "4.2.2.Final"
+junit = "5.11.4"
+commons-compress = "1.27.1"
+slf4j = "2.0.16"
+
+[libraries]
+rsprot-api = { module = "net.rsprot:osrs-241-api", version.ref = "rsprot" }
+rsprot-desktop = { module = "net.rsprot:osrs-241-desktop", version.ref = "rsprot" }
+netty-bom = { module = "io.netty:netty-bom", version.ref = "netty" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

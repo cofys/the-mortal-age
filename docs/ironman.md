@@ -42,7 +42,7 @@ Each rule comes from the rsprox capture database (https://rsprox.net/database) o
 | Rule | Modes | Message |
 | --- | --- | --- |
 | No trading with players, either way | all | "You are an Ironman. You stand alone." (captured); to someone asking an Ironman: "*name* is an Ironman. He/She stands alone." (captured) |
-| No picking up items other players own (their drops and kills, also once public; unowned spawns are fine) | all | "You're an Ironman, so you can't take items that other players have dropped." (captured) |
+| No picking up items other players own (their drops and kills, also once public; unowned spawns are fine). Stacks from different owners never merge, so a public stack cannot absorb someone else's drop | all | "You're an Ironman, so you can't take items that other players have dropped." (captured) |
 | No drop from a kill another player damaged in the last 60 seconds (the same damage record that decides the killer; 0-damage hits aren't recorded) | all | "As an Ironman, you don't get loot if other players helped you kill the monster." (captured) |
 | A warning when attacking an npc another player damaged (once per npc) | all | "As an Ironman, you might not receive kill-credit for this monster." (captured) |
 | Loot from a player an Ironman kills is the fallen player's (Wiki: Ironmen can't take PvP loot) | all | none |
@@ -50,14 +50,22 @@ Each rule comes from the rsprox capture database (https://rsprox.net/database) o
 | Shops sell only their own stock, never what players sold to them (Wiki) | all | "As an Ironman, you can only buy the shop's own stock." *(ours)* |
 | No Grand Exchange (Wiki) | all | "As an Ironman, you cannot use the Grand Exchange." *(ours)* |
 | No presets: this server's PvP loadouts hand out items. Covers `::presets`, the interface, and the automatic opening after a death, which is skipped quietly | all | "As an Ironman, you cannot use presets." *(ours)* |
+| No staking in the Duel Arena; a free duel is still allowed (Wiki: Ironmen can't stake) | all | "As an Ironman, you cannot take part in a staked duel." *(ours)* |
 | No bank (the Ironman tutor, captured) | Ultimate | "As an Ultimate Ironman, you cannot use the bank." *(ours)* |
 | All items dropped on death, none kept (the Ironman tutor, captured) | Ultimate | none |
 | One life: a dangerous death makes them a standard Ironman; a safe death (a minigame) doesn't | Hardcore | "You have fallen as a Hardcore Ironman. You are now a standard Ironman." *(ours)* |
 
+**Item-on-player:** the only hand-off that actually moves an item into the target's inventory
+is a bond (`Bonds.plugin.js`), and the Wiki lets Ironmen give and receive bonds; Shield of
+Arrav's half certificates are the other hand-off the Wiki exempts. Both are left alone, and no
+other item-on-player route transfers an item (Castle Wars bandages and Hunter butterflies aid,
+they don't give one), so there is nothing else to refuse.
+
 ## How it hooks in
 
 Existing hooks:
-- `onTradeRequest`
+- `onTradeRequest` (the trade request) and `onCanTrade` (the trade window itself, so a mode
+  set mid-trade or a trade started directly still closes)
 - `onGroundItemPickup`
 - `onCanAttack`
 - `onPlayerDeathItemDrop`
@@ -72,6 +80,9 @@ Generic additions for these rules:
 - **Presets** ask `presets:can-use` `{ player, allow, message }` before opening or applying one.
 - **`ShopManager`** asks `shop:buy-limit` `{ player, shopId, itemId, available, original, limit, message }` before a purchase.
 - **The Grand Exchange** asks `grand-exchange:can-open` `{ player, allow, message }` before opening.
+- **The Duel Arena** asks `duelarena:can-stake` `{ player, session, allow, message }` before an
+  item is offered and, whenever a staked duel is accepted, for both players, so a mode change
+  between the two final confirmations still refuses it.
 
 ## Not done yet
 

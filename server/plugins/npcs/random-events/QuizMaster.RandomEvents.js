@@ -13,9 +13,11 @@ const { FLAG_OP1, TYPE_RECTANGLE, TYPE_TEXT, TYPE_MODEL, createWidgetGroup } =
 const GROUP = 30012;
 const MAIN_MODAL_UID = (161 << 16) | 16;
 const COMPONENT = { ROOT: 0, BACKGROUND: 1, TITLE: 2, ITEM_0: 3, ITEM_1: 4, ITEM_2: 5 };
-const GEMS = [6189, 6190, 6191, 6192, 6193, 6194, 6195, 6196, 6197, 6198];
-const CATEGORY = new Map([[6189, "food"], [6190, "food"], [6191, "weapon"], [6192, "weapon"],
-  [6193, "armour"], [6194, "armour"], [6195, "tool"], [6196, "tool"], [6197, "jewellery"]]);
+// The cache's macro quiz items, two per category (RuneLite ItemID MACRO_QUIZ_FOOD1/2,
+// WEAPON1/2, ARMOUR1/2, TOOL1/2, JEWEL1/2).
+const CATEGORIES = [[6189, 6190], [6191, 6192], [6193, 6194], [6195, 6196], [6197, 6198]];
+// The contestant's tile: the walled single tile on plane 1 facing the Quiz Master (1952, 4768, 1).
+const ARRIVAL = { x: 1952, y: 4764, z: 1 };
 const WINS_NEEDED = 4;
 
 const WRONG = ["WRONG! That's just WRONG!", "BZZZZZZZ! WRONG!", "No! That is not the odd one out!",
@@ -75,7 +77,7 @@ module.exports = function attach(api, Events) {
         options: [
           ["Yes please, I'm so excited!", () => teleport({
             kind: "quiz",
-            arrive: { x: 1952, y: 4774, z: 0 },
+            arrive: ARRIVAL,
             teleportRefusal: "The quiz isn't over yet!",
             onStart: start,
           })],
@@ -99,14 +101,12 @@ module.exports = function attach(api, Events) {
     player.getPacketSender().sendString("Pick the odd one out.", (GROUP << 16) | COMPONENT.TITLE);
   }
 
+  // OSRS: "Each question has two of one item type and one of another."
   function question(session) {
-    const odd = GEMS[Math.floor(Math.random() * GEMS.length)];
-    const majority = shuffledPool(GEMS.filter(item => CATEGORY.get(item) !== CATEGORY.get(odd))).slice(0, 2);
-    const items = [odd, ...majority];
-    for (let i = items.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [items[i], items[j]] = [items[j], items[i]];
-    }
+    const pair = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+    const others = CATEGORIES.filter(category => category !== pair).flat();
+    const odd = others[Math.floor(Math.random() * others.length)];
+    const items = shuffledPool([...pair, odd]);
     session.data.odd = odd;
     session.data.items = items;
     const sender = session.player.getPacketSender();

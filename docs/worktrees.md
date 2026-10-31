@@ -15,13 +15,15 @@ scripts/wt rm feat/my-change      # when the branch is merged
 
 Each worktree gets a slot from 1 to 99, written into a marked block in its root `.env`:
 
-| | Client | Game (WebSocket) | Agent MCP |
-| --- | --- | --- | --- |
-| Main checkout | 3000 | 43594 | 49700 |
-| Slot N | 3100 + N | 43700 + N | 49800 + N |
+| | Client | Game (WebSocket) | Agent MCP | Gateway (official client) |
+| --- | --- | --- | --- | --- |
+| Main checkout | 3000 | 43594 | 49700 | 43595 |
+| Slot N | 3100 + N | 43700 + N | 49800 + N | 43900 + N |
 
 - **The client** connects to its own slot's server by default, under the branch's name on the
   login screen. Each port is its own browser origin, so each tab remembers its own login.
+- **The gateway** ([gateway/README.md](../gateway/README.md)) listens on `GATEWAY_PORT` for the
+  official client through RSProx. 43900 + N stays clear of RSProx's own 43600 + N.
 - **Voice** signalling uses the authenticated game connection, so it needs no separate port.
 - **`BROWSER=none`** stops `yarn start` opening a tab per worktree.
 - **The agent MCP** is registered as `tsps` for that worktree only (`claude mcp add -s local`),

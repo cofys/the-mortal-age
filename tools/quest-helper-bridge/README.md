@@ -26,12 +26,24 @@ cd tools/quest-helper-bridge && ./gradlew test installDist
 
 ## Run
 
-The bridge and the game server share a secret of at least 24 characters:
+The bridge and the game server share a secret of at least 24 characters. From the repository
+root, `yarn bridge` reads `QUEST_HELPER_TOKEN` from `.env`, finds a JDK 21 and starts the built
+install, so nothing has to be exported by hand:
+
+```bash
+yarn bridge
+```
+
+By hand (any JDK 21 on `PATH`, or `QUEST_HELPER_JAVA_HOME`):
 
 ```bash
 export QUEST_HELPER_TOKEN=$(openssl rand -hex 32) QUEST_HELPER_PORT=16471
 tools/quest-helper-bridge/build/install/offline-quest-helper-bridge/bin/offline-quest-helper-bridge
 ```
+
+One bridge serves every worktree: sessions are per-request UUIDs, so nothing is shared between
+them. The agent MCP's `quest_helper` tool drives this bridge headless — see
+[server/docs/agents/quest-helper-testing.md](../../server/docs/agents/quest-helper-testing.md).
 
 - Start the server with the same `QUEST_HELPER_TOKEN` (and `QUEST_HELPER_PORT`, if you changed it).
 - Without the bridge, Quest Helper says its engine hasn't been started. The native Tutorial Island and Recipe for Disaster routes still work, because the server provides them.

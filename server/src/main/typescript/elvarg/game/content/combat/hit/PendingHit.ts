@@ -12,6 +12,7 @@ import { PluginManager } from "../../../../plugins/PluginManager";
 import { CombatSpecial } from "../CombatSpecial";
 import { DamageFormulas } from "../formula/DamageFormulas";
 import type { SpecialDamageBounds } from "../CombatFactory";
+import { resolveSpecialAttackType } from "../WeaponSpecialTraits";
 import type { WeaponSpecialTraits } from "../WeaponSpecialTraits";
 import type { CombatSpell } from "../magic/CombatSpell";
 import { Spell, SpellCastContext } from "../magic/Spell";
@@ -64,6 +65,13 @@ export class PendingHit {
     private spell: CombatSpell | null = null;
     /** A roll hook (Verac's set) let this hit through protection prayers. */
     private protectionBypassed = false;
+    /** Attack kind whose protection prayer is checked when the hit lands. */
+    private protectionType: CombatType;
+    /** Protection/Elysian stages already run on this hit object, so a replay cannot double them. */
+    private impactProtectionApplied = false;
+    private impactIncomingApplied = false;
+    /** A scripted producer fills this hit in manipulateHit; run Elysian/equipment after it. */
+    private incomingDamageDeferred = false;
     /** Index of the `firstSuccessfulAccuracyDamageRanges` branch that landed; -1 when every roll missed. */
     private firstSuccessfulRangeIndex: number | undefined;
 
@@ -73,6 +81,7 @@ export class PendingHit {
         this.target = target;
         this.method = method;
         this.combatType = method.type();
+        this.protectionType = this.combatType;
 
         let resolvedDelay = 0;
         let resolvedHandleAfterHitEffects = true;
@@ -112,10 +121,13 @@ export class PendingHit {
         const armed = this.ordinary && attacker?.isSpecialActivated?.() === true;
         if (armed) attacker.setSpecialActivated(false);
         try {
+            // Defensive reactions are resolved when the hit lands, not when it is rolled:
+            // a PendingHit only records the raw damage (already capped to the target's HP).
             this.hits = Spell.withCastContext(attacker, this.spellContext, () =>
-                this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
-                    typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
-                    typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true));
+                CombatFactory.duringHitRoll(() =>
+                    this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
+                        typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
+                        typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true)));
         } finally {
             if (armed) attacker.setSpecialActivated(true);
         }
@@ -186,6 +198,45 @@ export class PendingHit {
         return this.protectionBypassed;
     }
 
+    /** Content that rerolls the hit later may still declare it prayer-piercing. */
+    public markProtectionBypassed(): void {
+        this.protectionBypassed = true;
+    }
+
+    /** The attack kind whose protection prayer is checked at impact. */
+    public getProtectionType(): CombatType {
+        return this.protectionType;
+    }
+
+    public hasAppliedImpactProtection(): boolean {
+        return this.impactProtectionApplied;
+    }
+
+    public markImpactProtectionApplied(): void {
+        this.impactProtectionApplied = true;
+    }
+
+    public hasAppliedImpactIncoming(): boolean {
+        return this.impactIncomingApplied;
+    }
+
+    public markImpactIncomingApplied(): void {
+        this.impactIncomingApplied = true;
+    }
+
+    /** Content that resolves its own scripted damage in manipulateHit defers equipment reactions. */
+    public deferIncomingDamageUntilImpact(): void {
+        this.incomingDamageDeferred = true;
+    }
+
+    public defersIncomingDamage(): boolean {
+        return this.incomingDamageDeferred;
+    }
+
+    public completeDeferredIncomingDamage(): void {
+        this.incomingDamageDeferred = false;
+    }
+
     public setTotalDamage(damage: number): void {
         for (let hit of this.hits) {
             hit.setDamage(damage);
@@ -237,6 +288,13 @@ export class PendingHit {
             this.hitDelays = [...traits.hitDelayTicks].map((tick) => Math.max(0, Math.trunc(tick)));
         }
 
+        // Which overhead is checked when the blow lands. A special that changes the
+        // damage type (Favour, magic specials) must keep that type after it is disarmed.
+        this.protectionType = resolveSpecialAttackType(traits?.damageType) ?? this.combatType;
+        if (bypassProtectionPrayer || traits?.ignoreProtectionPrayer === true) {
+            this.protectionBypassed = true;
+        }
+
         this.totalDamage = 0;
 
         // Damage is capped to the HP the target had when the blow was rolled, the
@@ -244,7 +302,8 @@ export class PendingHit {
         // what makes tick-eating work: healing after the roll but before the hit
         // lands leaves the already-capped damage non-lethal. It also keeps XP
         // honest, since XP is awarded from this total at swing time rather than
-        // from an uncapped overkill roll.
+        // from an uncapped overkill roll. Protection, Elysian and incoming-damage
+        // reactions are deliberately not applied here: they are read at impact.
         let remaining = Math.max(0, this.target.getHitpoints());
         const capToRemaining = (damage: HitDamage): HitDamage => {
             if (damage.getDamage() > remaining) {
@@ -260,20 +319,18 @@ export class PendingHit {
             if (roll.bypassProtectionPrayer) this.protectionBypassed = true;
             let damage: HitDamage = new HitDamage(0, HitMask.BLUE);
             this.accurate = false;
-            const bestOf = fixedDamage === undefined && this.bestOf > 1;
-            const rollDamage = bestOf ? CombatFactory.rollHitDamage : CombatFactory.getHitDamage;
             for (let attempt = fixedDamage === undefined ? this.bestOf : 1; attempt > 0; attempt--) {
                 const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
                 const rolled: HitDamage = resolved.accurate
                     ? ServerPerf.measurePhase(
                         "combat.process.method_hits.damage",
-                        () => rollDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer,
+                        () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer,
                             fixedDamage === undefined ? resolved.bounds : {
                                 minimumMultiplier: 0,
                                 maximumMultiplier: 0,
                                 minimumBonus: fixedDamage,
                                 maximumBonus: fixedDamage,
-                            }, fixedDamage === undefined)
+                            }, fixedDamage === undefined, false)
                     )
                     : new HitDamage(0, HitMask.BLUE);
                 if (rolled.getDamage() > damage.getDamage() || (resolved.accurate && !this.accurate)) {
@@ -281,17 +338,19 @@ export class PendingHit {
                     this.accurate = resolved.accurate;
                 }
             }
-            if (bestOf && this.accurate) {
-                damage = CombatFactory.applyIncomingHitDamage(this.attacker, this.target, this.combatType, damage);
-            }
-            if (this.damageMultiplier !== 1) {
-                damage.setDamage(Math.floor(damage.getDamage() * this.damageMultiplier));
-            }
             if (this.accurate && this.attacker.isPlayer() && this.target.isPlayer()) {
                 ArceuusSpells.applyCorruption(this.attacker.getAsPlayer(), this.target.getAsPlayer());
             }
             this.emitHitDamage(damage);
+            // Cap the roll to the HP held when it was made, before the hit-time
+            // protection/Elysian reductions, so tick-eating and XP see this value.
             capToRemaining(damage);
+            if (this.damageMultiplier !== 1) {
+                damage.setDamage(Math.floor(damage.getDamage() * this.damageMultiplier));
+                // The multiplier is a size bonus, never an excuse for an overkill splat.
+                const hitpointCap = Math.max(0, this.target.getHitpoints());
+                if (damage.getDamage() > hitpointCap) damage.setDamage(hitpointCap);
+            }
             this.totalDamage = damage.getDamage();
             return [damage];
         }
@@ -323,7 +382,7 @@ export class PendingHit {
             this.accurate = resolved.accurate;
             let damage: HitDamage = this.accurate ? ServerPerf.measurePhase(
                 "combat.process.method_hits.damage",
-                () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer, resolved.bounds)
+                () => CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, roll.bypassProtectionPrayer, resolved.bounds, true, false)
             ) : new HitDamage(0, HitMask.BLUE);
             if (this.accurate && this.attacker.isPlayer() && this.target.isPlayer()) {
                 ArceuusSpells.applyCorruption(this.attacker.getAsPlayer(), this.target.getAsPlayer());
@@ -452,7 +511,7 @@ export class PendingHit {
                 maximumMultiplier: range.maximumDamageMultiplier,
                 reduction: range.maximumDamageReduction ?? 0,
             };
-            const base = CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, bypassProtectionPrayer, bounds).getDamage();
+            const base = CombatFactory.getHitDamage(this.attacker, this.target, this.combatType, bypassProtectionPrayer, bounds, true, false).getDamage();
             if (bypassProtectionPrayer) this.protectionBypassed = true;
             const distributed = range.distributeDamage?.(base, hitCount);
             const hits: HitDamage[] = [];

@@ -291,7 +291,7 @@ import {
     shouldStartScheduledLoginMusic,
 } from "./login";
 import { NpcMovementSync } from "./movement/NpcMovementSync";
-import { ContinuousMovement } from "./movement/ContinuousMovement";
+import { ContinuousMovement, type ContinuousMovementRefusal } from "./movement/ContinuousMovement";
 import { PlayerMovementSync } from "./movement/PlayerMovementSync";
 import { NpcInstanceFlushController } from "./npc/NpcInstanceFlushController";
 import { ClientPluginManager } from "./plugins/ClientPluginManager";
@@ -3254,6 +3254,9 @@ export class OsrsClient {
                         msg.playerId | 0,
                     );
                 }
+                if (msg.style && msg.playerId !== undefined) {
+                    this.playerSyncManager?.setPublicChatStyle(msg.playerId, msg.style);
+                }
                 const text = isTradeRequest && msg.from ? `${msg.from} ${msg.text}` : msg.text;
                 const normalizedSender = (msg.from ?? "").replace(/<img=\d+>/g, "").trim().toLowerCase();
                 const isFromFriend = (this.cs2Vm.context.friendList ?? []).some(
@@ -3952,6 +3955,9 @@ export class OsrsClient {
     }
 
     stopKeyboardMovement(deactivate = false): void { this.continuousMovement?.stop(deactivate); }
+
+    /** The last tile edge collision refused the local player's keyboard/touch walk. */
+    getKeyboardMovementRefusal(): ContinuousMovementRefusal | undefined { return this.continuousMovement?.lastRefusal; }
 
     stopPlayerWalking(): void {
         this.playerMovementSync?.stopKeyboardMovement(this.controlledPlayerServerId);

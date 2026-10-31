@@ -172,6 +172,14 @@ function renderStakes(player, session) {
       .sendInterfaceFlagsRange(uid(OPTIONS, component), 0, 27, own ? 1180734 : 0);
   }
 }
+/** Content may refuse a stake (an Ironman cannot stake); the offer screen itself stays usable. */
+function allowStake(player, session) {
+  const request = { player, session, allow: true, message: null };
+  pluginApi.emitCustomEvent("duelarena:can-stake", request);
+  if (request.allow !== false) return true;
+  if (request.message) player.sendMessage(request.message);
+  return false;
+}
 function handleStake(event) {
   event.handled = true;
   const { player, buttonId, itemId, slot } = event;
@@ -182,6 +190,8 @@ function handleStake(event) {
   }
   if (!Number.isInteger(slot) || slot < 0 || slot >= 28) return;
   const removing = buttonId === uid(OPTIONS, UI.YOUR_ITEMS);
+  // Removing is always allowed: a stake that is already offered must be takeable back.
+  if (!removing && !allowStake(player, session)) return;
   const offer = session.offers.get(player);
   const inventorySlot = removing ? [...offer.keys()][slot] : slot;
   const item = removing ? offer.get(inventorySlot) : player.getInventory().getItems()[slot];
@@ -614,6 +624,11 @@ function start(session) {
 function accept(player, session, botEvent = "duelarena:accept") {
   if (!session.players.every(inZone) || !nearby(...session.players) || session.players.some(p => p.getHitpoints() <= 0 || inCombat(p))) return end(session);
   if (session.players.some((p, i) => snapshot(p) !== session.snapshots[i])) return showOptions(session, "Items changed. Please review the duel again.");
+  // Either side's stake commits both: an Ironman refuses a staked duel even when the stake is
+  // the opponent's, so they can never win it. Re-check both players on every acceptance, since
+  // a mode can change between the two final confirmations. A free duel is still fine.
+  if ([...session.offers.values()].some(offer => offer.size)
+      && !session.players.map(p => allowStake(p, session)).every(Boolean)) return;
   if (!canStart(session)) return;
   if (session.accepted.has(player)) return acceptBots(session, botEvent);
   session.accepted.add(player);
@@ -785,6 +800,6 @@ module.exports = {
     api.onServerShutdown(shutdown);
     Scoreboard.attach(api);
   },
-  /** For server/tests/pvp-arena-scoreboard.test.cjs. */
-  _test: { end, sessions },
+  /** For server/tests/pvp-arena-scoreboard.test.cjs and server/tests/ironman.test.cjs. */
+  _test: { accept, end, sessions, snapshot },
 };

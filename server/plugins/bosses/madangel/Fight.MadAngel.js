@@ -217,6 +217,9 @@ class Fight {
     const { PendingHit, CombatFactory } = this.core;
     const hit = new PendingHit(this.npc, this.player, meleeStyle(),
       { delay: 0, rollAccuracy: false, experience: false, damage: 0, bypassProtectionPrayer: true });
+    // resolveBlow fills this same object at impact; its Elysian/equipment reactions
+    // must run on that scripted damage, not on the zero placeholder.
+    hit.deferIncomingDamageUntilImpact();
     blows.set(hit, kind);
     CombatFactory.addPendingHit(hit);
   }

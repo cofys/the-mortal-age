@@ -3355,7 +3355,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         widget: w,
                         sequenceId,
                         sequenceFrame,
-                        depthTest: true,
+                        // Native UI models use cache face priorities/painter order.
+                        // Z rejection hides contents painted after translucent faces.
+                        depthTest: false,
                     },
                     // The model is drawn in logical pixels: a model bigger than its widget is cut
                     // to the larger of the logical and drawn sizes.

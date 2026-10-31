@@ -175,7 +175,9 @@ test('generic pre-rolled hits retain ordinary prayer blocking unless explicit mi
         f.player.getPrayerActive()[core.PrayerHandler.PROTECT_FROM_MELEE]=true;
         const method=new(class extends core.CombatMethod {type(){return core.CombatType.MELEE;}hits(){return[];}})();
         const hit=new core.PendingHit(f.boss,f.player,method,{damage:28,rollAccuracy:false,bypassProtectionPrayer});
-        assert.equal(hit.getTotalDamage(),bypassProtectionPrayer?28:0);
+        assert.equal(hit.getTotalDamage(),28,'the roll is made before the overhead is read');
+        core.CombatFactory.applyHitTimeDefences(hit);
+        assert.equal(hit.getTotalDamage(),bypassProtectionPrayer?28:0,'the overhead is read when the hit lands');
     }
 });
 

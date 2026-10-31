@@ -51,7 +51,7 @@ assert.ok(types(bank.fingerUp(100, 100, 50)).includes("tap"), "a tap still withd
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }) };
     input.onCanvasTouchStart = () => "afterHold";
     const event = (x: number, y: number, ended = false) => {
-        const touches = [{ clientX: x, clientY: y }];
+        const touches = [{ clientX: x, clientY: y, target: input.element }];
         return { touches: ended ? [] : touches, changedTouches: touches, preventDefault() {} };
     };
     let now = 1000;

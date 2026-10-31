@@ -146,6 +146,11 @@ function harness() {
     variant: player => variants[0]({ player, npcId: ODD_OLD_MAN }),
     start: player => (custom['npc-dialogue:hook'][0])({ player, npcId: ODD_OLD_MAN, hook: START_HOOK }),
     line: (player, text) => (custom['npc-dialogue:line'][0])({ player, npcId: ODD_OLD_MAN, text }),
+    questItem: (player, itemId) => {
+      const event = { player, itemId, allowed: undefined };
+      (custom['npc-drops:quest-item'] ?? []).forEach(handler => handler(event));
+      return event;
+    },
     action: (player, stepId) => {
       const event = { player, npcId: ODD_OLD_MAN, stepId, handled: false, end: false };
       (custom['npc-dialogue:action'][0])(event);
@@ -154,7 +159,6 @@ function harness() {
   };
 }
 
-const loc = new core.Location(3362, 3502, 0);
 const objectEvent = (player, itemId) => ({ player, itemId, objectId: POT_BOILER, handled: false });
 
 test('fresh stage 0, decline and accept follow the start contract on wire 1', () => {
@@ -199,11 +203,13 @@ test('mandatory route: eight drops, vinegar, boiler cleaning, hand-in and comple
   assert.equal(p.items.get(core.ItemIdentifiers.JUG_OF_VINEGAR) ?? 0, 0);
   assert.equal(p.items.get(core.ItemIdentifiers.POT) ?? 0, 0);
 
-  // Every helper monster is a real cache name and drops its quest bone while stage 1.
+  // Every helper monster is a real cache name; its bone row is quest-conditioned and this
+  // plugin allows it only while the quest still needs that species.
   for (const bone of BONES) {
     assert.equal(core.NpcDefinition.forId(bone.npcId).getName(), bone.npcName);
-    h.npcDeath[0]({ killer: p, npc: { getLocation: () => loc }, npcId: bone.npcId });
-    assert.equal(h.ground.at(-1)[0], bone.raw);
+    const drop = h.questItem(p, bone.raw);
+    assert.equal(drop.allowed, true);
+    assert.equal(h.questItem(p, bone.vinegar).allowed, undefined, 'only the raw bone row is gated');
     p.items.set(bone.raw, 1);
     h.itemOnItem[0]({
       player: p, usedItemId: bone.raw, usedWithItemId: core.ItemIdentifiers.POT_OF_VINEGAR, handled: false,
@@ -241,6 +247,9 @@ test('mandatory route: eight drops, vinegar, boiler cleaning, hand-in and comple
   assert.equal(p.xp.get(core.Skill.COOKING), 500);
   assert.equal(p.xp.get(core.Skill.PRAYER), 500);
   assert.equal(Number(p.getAttribute('quest.points')), 1);
+  for (const bone of BONES) {
+    assert.equal(h.questItem(p, bone.raw).allowed, false, 'a completed quest no longer drops its bones');
+  }
 
   runtime.sendQuestVarps({ player: p });
   assert.equal(p.lastConfig(VARP), 4, 'login/replay resends the completed wire value');

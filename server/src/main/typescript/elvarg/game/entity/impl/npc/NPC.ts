@@ -368,6 +368,8 @@ export class NPC extends Mobile {
             if (PluginManager.emitNpcBeforeDeath({ npc: this, preventDeath: false })) {
                 return;
             }
+            // A transformed or respawned NPC must not reuse rolls cached for its old state.
+            CombatFactory.clearHitRollCache(this);
             TaskManager.submit(new NPCDeathTask(this));
             this.isDying = true;
         }

@@ -19,8 +19,8 @@ function fixture(increment = 25) {
     input.element = { width: 800, height: 400,
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }) };
     let distance = 100, zoom = 0, uiCalls = 0, minimapCalls = 0, blocked = false, readbackLoss = 0;
-    const event = () => ({ touches: [{ clientX: 100, clientY: 100 },
-        { clientX: 100 + distance, clientY: 100 }], preventDefault() {} });
+    const event = () => ({ touches: [{ clientX: 100, clientY: 100, target: input.element },
+        { clientX: 100 + distance, clientY: 100, target: input.element }], preventDefault() {} });
     const camera = { uid: 1, type: 0, eventHandlers: { onScroll: { scriptId: 39 } } };
     const frame: any = { input, mx: 150, my: 100, hits: [camera] };
     const manager: any = { isEffectivelyHidden: () => false };

@@ -26,6 +26,8 @@ interface RawNpcSpawnDefinition {
     level: number;
     wanderRadius?: number;
     direction?: number;
+    /** A spawn patch entry that removes the matching persisted spawn. */
+    remove?: boolean;
 }
 
 export class NpcSpawnDefinitionLoader extends DefinitionLoader {
@@ -61,24 +63,59 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         let unsupported = 0;
         let vetoed = 0;
 
+        // Merge sources in priority order, applying their records in file order.
+        // A later source can replace a spawn at the same tile (wander/facing),
+        // and a remove marker drops the spawns recorded before it. An addition
+        // after that marker survives, which is how a spawn moved onto its own
+        // original tile still loads.
+        const merged: Array<{ raw: RawNpcSpawnDefinition; source: string } | undefined> = [];
+        const indicesByKey = new Map<string, number[]>();
         for (const source of loaded.sources) {
             totalCandidates += source.definitions.length;
             for (const raw of source.definitions) {
-                const definition = this.toDefinition(raw, source.name);
-                if (!definition) {
-                    invalid++;
+                const key = raw && typeof raw === "object"
+                    ? NpcSpawnDefinitionLoader.spawnKey(raw)
+                    : undefined;
+                if (raw && typeof raw === "object" && raw.remove === true) {
+                    if (key === undefined) continue;
+                    for (const index of indicesByKey.get(key) ?? []) merged[index] = undefined;
+                    indicesByKey.delete(key);
                     continue;
                 }
-                if (definition.getId() >= CacheDefinitions.getCounts().npcs) {
-                    unsupported++;
-                    continue;
+                if (key !== undefined) {
+                    const survivors: number[] = [];
+                    for (const index of indicesByKey.get(key) ?? []) {
+                        const entry = merged[index];
+                        if (!entry) continue;
+                        // A later source replaces the earlier records; duplicates
+                        // inside one source are all kept.
+                        if (entry.source !== source.name) merged[index] = undefined;
+                        else survivors.push(index);
+                    }
+                    survivors.push(merged.length);
+                    indicesByKey.set(key, survivors);
                 }
-                if (PluginManager.emitCanSpawnNpc(definition.getId(), definition.getPosition()) === false) {
-                    vetoed++;
-                    continue;
-                }
-                definitions.push(definition);
+                merged.push({ raw, source: source.name });
             }
+        }
+
+        for (const entry of merged) {
+            if (!entry) continue;
+            const { raw, source } = entry;
+            const definition = this.toDefinition(raw, source);
+            if (!definition) {
+                invalid++;
+                continue;
+            }
+            if (definition.getId() >= CacheDefinitions.getCounts().npcs) {
+                unsupported++;
+                continue;
+            }
+            if (PluginManager.emitCanSpawnNpc(definition.getId(), definition.getPosition()) === false) {
+                vetoed++;
+                continue;
+            }
+            definitions.push(definition);
         }
 
         NpcSpawnDefinition.replace(definitions);
@@ -94,6 +131,28 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
 
     public file(): string {
         return NpcSpawnDefinitionLoader.DEFINITION_TYPE;
+    }
+
+    /** Stable identity for spawn overrides and removals: type id plus tile and plane. */
+    private static spawnKey(raw: RawNpcSpawnDefinition): string | undefined {
+        const keyed = typeof raw?.key === "string" && raw.key.length > 0
+            ? (NpcIdentifiers as unknown as Record<string, number | undefined>)[raw.key]
+            : undefined;
+        if (typeof raw?.key === "string" && raw.key.length > 0 && typeof keyed !== "number") return undefined;
+        const id = Math.trunc(Number(keyed ?? raw?.id));
+        const x = Math.trunc(Number(raw?.x));
+        const y = Math.trunc(Number(raw?.y));
+        const z = Math.trunc(Number(raw?.level));
+        if (
+            !Number.isFinite(id) ||
+            id < 0 ||
+            !Number.isFinite(x) ||
+            !Number.isFinite(y) ||
+            !Number.isFinite(z)
+        ) {
+            return undefined;
+        }
+        return `${id}:${x}:${y}:${z}`;
     }
 
     private toDefinition(

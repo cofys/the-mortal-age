@@ -47,6 +47,12 @@ const KALPHITE_QUEEN_NOTED_ITEMS = new Set([
 const LOOTING_BAG = "Looting bag";
 const LOOTING_BAG_EXCLUDED = new Set(["Aviansie", "Abyssal demon", "Black chinchompa"]);
 
+/**
+ * The dumper's quest condition for a row, still free text until the export carries it as a
+ * field: "Quest requirement: WikiQuestDropRequirement(questKey=..., mode=...)".
+ */
+const QUEST_REQUIREMENT_NOTE = /^Quest requirement: WikiQuestDropRequirement\(questKey=([^,]+), mode=([A-Za-z]+)\)$/;
+
 /** NPC param the cache sets on bosses. */
 const NPC_BOSS_PARAM = 1361;
 /** world.json pluginConfig: how many times likelier a boss's rare drops are (1, the default, is OSRS). */
@@ -148,6 +154,23 @@ function applyOverrides(dump, subtables, overrides) {
     }
   }
   for (const [name, table] of Object.entries(overrides.subtables ?? {})) subtables[name] ??= table;
+}
+
+/**
+ * The row's Wiki quest condition, or null. The export has no field for it yet, so it is parsed
+ * out of the row's note and cached on the entry.
+ */
+function questRequirement(entry) {
+  if (entry.quest_requirement !== undefined) return entry.quest_requirement;
+  let requirement = null;
+  for (const note of entry.notes || []) {
+    const match = QUEST_REQUIREMENT_NOTE.exec(note);
+    if (match) {
+      requirement = { key: match[1], mode: match[2] };
+      break;
+    }
+  }
+  return entry.quest_requirement = requirement;
 }
 
 function applyWikiCorrections(tableById) {
@@ -624,6 +647,33 @@ function killContext(player, npc) {
 }
 
 /**
+ * Quest plugins answer `npc-drops:quest-item` `{ player, npc, npcId, itemId, requirement,
+ * allowed }` for the rows the Wiki gates behind a quest: `allowed: true` drops a row that the
+ * 1/1 conditional rule in rollTable would skip, `false` suppresses one that rolled. Leaving it
+ * undefined keeps the row's normal handling (other quests still obtain theirs from the table).
+ */
+function questItemVerdicts(player, npc, table) {
+  const verdicts = new Map();
+  for (const field of ["entries", "tertiary"]) {
+    for (const entry of table[field] || []) {
+      const requirement = questRequirement(entry);
+      if (!requirement || verdicts.has(entry.item_id)) continue;
+      const request = {
+        player,
+        npc,
+        npcId: npc?.getId?.() ?? null,
+        itemId: entry.item_id,
+        requirement,
+        allowed: undefined,
+      };
+      pluginApi?.emitCustomEvent("npc-drops:quest-item", request);
+      verdicts.set(entry.item_id, request.allowed);
+    }
+  }
+  return verdicts;
+}
+
+/**
  * One kill: guaranteed drops, then a pre-roll (which replaces the main roll when it hits),
  * then a single weighted main-table roll, then independent separate/tertiary rolls. A table
  * with `rolls` repeats everything but the guaranteed, tertiary and `once_per_kill` drops that many times.
@@ -631,6 +681,7 @@ function killContext(player, npc) {
  */
 function rollTable(table, player, npc, context = killContext(player, npc), source = sourceName(npc)) {
   const chance = chanceRules(player, npc, source);
+  const questVerdicts = questItemVerdicts(player, npc, table);
   const selected = OrderedRewards.select(table, player, pluginApi, Math.random, rate => entryMultiplier(table, rate, chance));
   const drops = [];
   const entries = Array.isArray(table.entries) ? table.entries : [];
@@ -653,12 +704,17 @@ function rollTable(table, player, npc, context = killContext(player, npc), sourc
   }
   const hitNames = new Set();
   for (const entry of table.tertiary || []) {
+    const questVerdict = questVerdicts.get(entry.item_id);
+    if (questVerdict === false) {
+      continue;
+    }
     // A tertiary at 1/1 is a conditional drop, not a guaranteed one: the wiki writes
     // "Always" for things that always drop *given* a condition (an active clue step, a quest,
     // a diary), and the condition only exists as free text in `notes`. Genuine 100% drops are
     // in the guaranteed section with `always`. Dropping these unconditionally hands out clue
-    // keys and quest items from every kill, so skip them.
-    if (Number(entry.out_of) <= 1) {
+    // keys and quest items from every kill, so skip them unless a quest plugin answered above
+    // (`npc-drops:quest-item`) that this player meets the condition right now.
+    if (questVerdict !== true && Number(entry.out_of) <= 1) {
       conditionalTertiarySkipped++;
       continue;
     }
@@ -682,9 +738,15 @@ function rollTable(table, player, npc, context = killContext(player, npc), sourc
   }
 
   selected.commit?.();
-  return context?.handledItemIds?.size
-    ? drops.filter(drop => !context.handledItemIds.has(drop.itemId))
+  // A quest-conditional row that rolled although the player does not meet its condition now
+  // (a main-table row, or one the quest plugin refuses) is dropped here. Filtering after the
+  // roll keeps the other rows' published weights intact; the row is an empty slot instead.
+  const allowed = questVerdicts.size
+    ? drops.filter((drop) => questVerdicts.get(drop.itemId) !== false)
     : drops;
+  return context?.handledItemIds?.size
+    ? allowed.filter(drop => !context.handledItemIds.has(drop.itemId))
+    : allowed;
 }
 
 /**

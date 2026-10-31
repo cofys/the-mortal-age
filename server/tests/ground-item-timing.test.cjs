@@ -90,9 +90,10 @@ test("a public stack topped up by a stack going public reports its new timer", t
   });
   const mine = ItemOnGroundManager.registerLocation(player, new Item(995, 10), tile);
   for (let i = 0; i < 50; i++) cycle();
-  // Someone else's public coins on the same tile, later in the list than ours.
-  const theirs = new ItemOnGround(State.SEEN_BY_EVERYONE, "Other", tile, new Item(995, 5), false, -1, null);
-  ItemOnGroundManager.register(theirs);
+  // The owner's public coins on the same tile, later in the list than ours. Added directly:
+  // registering would merge the private stack into it at once instead of when it goes public.
+  const theirs = new ItemOnGround(State.SEEN_BY_EVERYONE, player.getUsername(), tile, new Item(995, 5), false, -1, null);
+  World.getItems().push(theirs);
   while (!mine.isPendingRemoval()) cycle();
   assert.equal(theirs.getItem().getAmount(), 15);
   assert.equal(sent.length, 1);

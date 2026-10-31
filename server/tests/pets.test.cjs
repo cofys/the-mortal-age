@@ -69,6 +69,24 @@ Pets.register({
   log() {},
 });
 
+const BarbarianAssault = require("../plugins/minigames/BarbarianAssault.plugin");
+const baEvents = new Map();
+const baDeathHooks = [];
+BarbarianAssault.register({
+  core: { NpcIdentifiers, ItemIdentifiers },
+  persistAttribute() {},
+  onNpcDeath: (handler) => baDeathHooks.push(handler),
+  onNpcInteraction() {},
+  onCustomEvent: (name, handler) => {
+    const previous = baEvents.get(name);
+    baEvents.set(name, previous ? event => { previous(event); handler(event); } : handler);
+  },
+  emitCustomEvent: (name, request) => {
+    // The Pets plugin already owns pets:award in the shared `events` map.
+    (events.get(name) ?? baEvents.get(name))?.(request);
+  },
+});
+
 const GIANT_SQUIRREL = 20659;
 const AIR_RIFT_GUARDIAN = 20667;
 const BLOOD_RIFT_GUARDIAN = 20691;
@@ -586,4 +604,69 @@ test("no shop sells pet items", () => {
       assert.ok(!petItems.has(itemId), `${shop.name} still sells pet item ${itemId}`);
     }
   }
+});
+
+test("Penance Princess is gated behind a Queen kill and a 500-point high gamble", () => {
+  const player = createPlayer();
+  assert.deepEqual(BarbarianAssault._test.highGamble(player, () => 0), {
+    allowed: false, reason: "queen", pet: false, awarded: false,
+  });
+  assert.equal(player.inventory.includes(BarbarianAssault._test.PENANCE_PET_ITEM_ID), false);
+
+  BarbarianAssault._test.recordQueenKill(player);
+  assert.equal(BarbarianAssault._test.queenKilled(player), true);
+  assert.equal(BarbarianAssault._test.honourOf(player), BarbarianAssault._test.QUEEN_KILL_HONOUR);
+  assert.equal(BarbarianAssault._test.highGamble(player, () => 0).reason, "points");
+
+  BarbarianAssault._test.addHonour({ player, points: 500 });
+  assert.deepEqual(BarbarianAssault._test.highGamble(player, () => 0), {
+    allowed: true, pet: true, awarded: true,
+  });
+  assert.ok(player.inventory.includes(BarbarianAssault._test.PENANCE_PET_ITEM_ID));
+  assert.equal(BarbarianAssault._test.honourOf(player), BarbarianAssault._test.QUEEN_KILL_HONOUR);
+  assert.equal(player.getAttribute("barbarian-assault:high-gambles"), 1);
+});
+
+test("a high gamble can miss the pet and still spends the honour points", () => {
+  const player = createPlayer();
+  BarbarianAssault._test.recordQueenKill(player);
+  BarbarianAssault._test.addHonour({ player, points: 500 });
+  assert.deepEqual(BarbarianAssault._test.highGamble(player, () => 0.999999), {
+    allowed: true, pet: false, awarded: false,
+  });
+  assert.equal(player.inventory.includes(BarbarianAssault._test.PENANCE_PET_ITEM_ID), false);
+  assert.equal(BarbarianAssault._test.honourOf(player), BarbarianAssault._test.QUEEN_KILL_HONOUR);
+});
+
+test("the Penance Queen's death records the kill for the high gamble", () => {
+  const player = createPlayer();
+  const before = BarbarianAssault._test.honourOf(player);
+  baDeathHooks[0]({ npc: { getId: () => NpcIdentifiers.PENANCE_QUEEN }, killer: player });
+  assert.equal(BarbarianAssault._test.queenKilled(player), true);
+  assert.equal(BarbarianAssault._test.honourOf(player), before + BarbarianAssault._test.QUEEN_KILL_HONOUR);
+});
+
+test("the other quest and activity pet sources stay explicit and single", () => {
+  const caskets = require("../data/definitions/clue-caskets.json");
+  assert.equal(caskets.tables.master.tertiary.filter(entry => entry.item_id === 19730).length, 1,
+    "Bloodhound has one master-casket tertiary");
+  const drops = require("../data/definitions/npc-drops.json");
+  assert.equal(drops.tables.tz_tok_jad.tertiary.filter(entry => entry.item_id === 13225).length, 1,
+    "TzRek-Jad has one Fight Caves tertiary");
+
+  const hunter = createPlayer();
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    events.get("hunter:success")({
+      player: hunter, skill: Skill.HUNTER, method: "herbiboar",
+      npcId: NpcIdentifiers.HERBIBOAR, petChance: 1, xp: 0,
+    });
+  } finally {
+    Math.random = originalRandom;
+  }
+  assert.ok(hunter.inventory.includes(21509), "Herbi comes from the herbiboar success roll");
+
+  const kitten = Pets.__internals.PET_BY_ITEM_ID.get(1555);
+  assert.equal(Pets.__internals.catInfoOf(kitten).stage, "kitten", "Gertrude's kitten starts the growth clock");
 });

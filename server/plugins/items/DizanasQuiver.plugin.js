@@ -98,6 +98,16 @@ function stageOf(itemId) {
   return null;
 }
 
+/**
+ * The stage of a worn quiver. Dizana's max cape "retains the perks of the blessed Dizana's
+ * quiver" (Wiki), so it is one while worn; its death rules stay with broken-items.json.
+ */
+function wornStageOf(itemId) {
+  const I = itemIdentifiers();
+  if (itemId === I.DIZANAS_MAX_CAPE || itemId === I.DIZANAS_MAX_CAPE_L_) return "blessed";
+  return stageOf(itemId);
+}
+
 function isLocked(itemId) {
   const I = itemIdentifiers();
   return itemId === I.DIZANAS_QUIVER_L_UNCHARGED_ || itemId === I.DIZANAS_QUIVER_L_ || itemId === I.BLESSED_DIZANAS_QUIVER_L_;
@@ -149,7 +159,7 @@ function isQuiver(itemId) {
 
 function wornQuiverItem(player) {
   const item = player.getEquipment().getItems()[core().Equipment.CAPE_SLOT];
-  return item && stageOf(item.getId()) ? item : null;
+  return item && wornStageOf(item.getId()) ? item : null;
 }
 
 function wornQuiver(player) {
@@ -508,7 +518,7 @@ function decrementAmmo(player, pos, amount, delayTicks = 0) {
 function hasSunfire(player) {
   const quiver = wornQuiverItem(player);
   if (!quiver) return false;
-  const stage = stageOf(quiver.getId());
+  const stage = wornStageOf(quiver.getId());
   return stage === "blessed" || (stage === "charged" && itemCharges(quiver) > 0);
 }
 

@@ -670,6 +670,15 @@ function awardPet(player, itemId) {
   return drop(player, pet.itemId, true);
 }
 
+/**
+ * `pets:award` { player, itemId, source }: content-owned sources (a minigame reward,
+ * a gamble) ask the follower system to deliver a pet through the normal award path.
+ */
+function awardPetRequest(request) {
+  if (!request?.player || !Number.isInteger(request.itemId)) return;
+  request.awarded = awardPet(request.player, request.itemId);
+}
+
 /** Does the player hold this pet item anywhere (follower, inventory, bank)? */
 function holdsPetItem(player, itemId) {
   const current = player.getAttribute?.(CURRENT_PET_ATTRIBUTE);
@@ -1937,6 +1946,7 @@ module.exports = {
     api.onCustomEvent("pets:definitions", answerPetDefinitions);
     api.onCustomEvent("pets:eligible", answerPetEligibility);
     api.onCustomEvent("pets:release", releasePet);
+    api.onCustomEvent("pets:award", awardPetRequest);
     api.onItemDropPolicy(onPetItemDropPolicy);
     api.onItemOnNpc(handleItemOnCat);
     api.onItemOnNpc(handleGullFeed);

@@ -563,7 +563,12 @@ public final class BridgeEngine implements AutoCloseable {
       if (field(step, "geInterfaceIcon") instanceof List<?> ge && !ge.isEmpty())
         o.add("geItems", GSON.toJsonTree(ge));
       o.add("widgets", new JsonArray());
-      o.add("overlays", overlays(step));
+      // A custom overlay may project through Perspective. A snapshot without camera geometry
+      // (headless evaluation) must lose the drawing, not the step.
+      JsonArray overlayDiagnostics = new JsonArray();
+      PresentationExport.part(o, "overlays", overlayDiagnostics, () -> overlays(step));
+      if (!o.has("overlays")) o.add("overlays", new JsonArray());
+      o.add("overlayDiagnostics", overlayDiagnostics);
       return o;
     }
 

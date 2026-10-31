@@ -95,6 +95,8 @@ test('paid hit calculations retain their context while preserving explicit prote
     const hit=new core.PendingHit(f.p,target,new core.MagicCombatMethod(),{rollAccuracy:false,bypassProtectionPrayer},true,context);
     assert.equal(hit.getSpellContext(),context);
     assert.equal(f.p.getAttribute('cast-context-test:calculation'),context);
+    assert.equal(hit.getTotalDamage(),9,'the roll is not reduced before impact');
+    core.CombatFactory.applyHitTimeDefences(hit);
     assert.equal(hit.getTotalDamage(),bypassProtectionPrayer?9:5);
     assert.equal(core.Spell.getCalculationContext(f.p,f.spell),null);
   }

@@ -1148,6 +1148,39 @@ test('Quiz Master wrong answers only reset the streak', t => {
   assert.match(p.messages.at(-1), /WRONG|Wrong|No!|not the odd/);
 });
 
+test('Quiz Master seats the player in the walled tile facing him on plane 1', t => {
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 11);
+  h.hooks['Quiz Master']['Talk-to']({ player: p, npc, handled: false });
+  choose(h, p, 0);
+  assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [1952, 4764, 1]);
+  assert.ok(Teleports.sessionOf(p), 'arriving upstairs keeps the session');
+  // The core area that holds the session must cover the seat on its plane, or arriving would end it.
+  const { Area } = require('../dist/game/model/areas/Area');
+  const { Boundary } = require('../dist/game/model/Boundary');
+  Teleports.initialize(new Proxy({ core: { Area, Boundary } }, { get: (target, name) => target[name] ?? (() => {}) }), {});
+  const seat = new Location(1952, 4764, 1);
+  assert.ok(Teleports.createAreas().some(area => area.getBoundaries()[0].inside(seat)), 'the quiz area is on plane 1');
+});
+
+test('Quiz Master questions have two items of one category and one odd one out', t => {
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 11);
+  h.hooks['Quiz Master']['Talk-to']({ player: p, npc, handled: false });
+  choose(h, p, 0);
+  const session = Teleports.sessionOf(p);
+  // RuneLite ItemID MACRO_QUIZ_FOOD1/2, WEAPON1/2, ARMOUR1/2, TOOL1/2, JEWEL1/2.
+  const category = item => Math.floor((item - 6189) / 2);
+  for (let i = 0; i < 200; i++) {
+    const { items, odd } = session.data;
+    const others = items.filter(item => item !== odd);
+    assert.equal(items.length, 3);
+    assert.equal(others.length, 2, `the odd item appears once: ${items}`);
+    assert.equal(category(others[0]), category(others[1]), `the other two share a category: ${items}`);
+    assert.notEqual(category(odd), category(others[0]), `the odd one is from another category: ${items}`);
+    // A wrong answer asks a fresh question without ending the event.
+    h.emit('InterfaceActionClick', { player: p, buttonId: (QUIZ_GROUP << 16) | (3 + items.indexOf(others[0])), action: 1 });
+  }
+});
+
 test('Drill Demon accepts four matching exercises in a row for the camo top', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 12);
   h.hooks['Sergeant Damien']['Talk-to']({ player: p, npc, handled: false });

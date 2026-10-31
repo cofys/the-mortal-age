@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import { GameConstants } from "../game/GameConstants";
 import { World } from "../game/World";
 import { Player } from "../game/entity/impl/player/Player";
+import { PlayerSave } from "../game/entity/impl/player/persistence/PlayerSave";
 import { Appearance } from "../game/model/Appearance";
 import { Flag } from "../game/model/Flag";
 import { Location } from "../game/model/Location";
@@ -18,6 +19,7 @@ import { BrowserHostHttpBridge, BROWSER_HOST_BRIDGE_HTML } from "./BrowserHostHt
 import { PlayerSession } from "./PlayerSession";
 import { CachePipeline } from "../game/cache/CachePipeline";
 import { ContentApi } from "./http/ContentApi";
+import { GatewayTarget } from "./http/GatewayTarget";
 import { CacheDefinitions } from "../game/cache/CacheDefinitions";
 import {
   CREATION_MENU_GROUP_ID,
@@ -25,11 +27,14 @@ import {
   CREATION_MENU_MAX_QUANTITY,
   CREATION_MENU_LAST_ITEM_ATTRIBUTE,
 } from "./packet/PacketSender";
+import { Equipment } from "../game/model/container/impl/Equipment";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import {
   decodeClientPackets,
   MAIN_INVENTORY_GROUP_ID,
   MOBILE_CLIENT_ATTRIBUTE,
+  NATIVE_CLIENT_ATTRIBUTE,
+  HANDSHAKE_CAPABILITY_NATIVE_CLIENT,
   XPDROPS_ENABLED_ATTRIBUTE,
   encodeDefaultAnimations,
   encodeGameframeBootstrap,
@@ -109,7 +114,7 @@ export async function connectHeadlessClient(username: string, password: string):
   const connection = new ClientConnection(new HeadlessBinaryChannel());
   connection.inject([
     { type: "login", username, password, revision: CachePipeline.getActive().revision, flags: 0 },
-    { type: "handshake", name: username, clientType: 0 },
+    { type: "handshake", name: username, clientType: 0, capabilities: 0 },
   ]);
   await connection.idle();
   const player = connection.getPlayer();
@@ -211,9 +216,12 @@ type PendingLogin = {
   loginTokens: LoginTokenEntry[] | null;
 };
 
+/** Whether `username` is one of `DEV_USERNAME`'s accounts (comma-separated). */
 export function isConfiguredDeveloperUsername(username: string): boolean {
-  const developerUsername = process.env.DEV_USERNAME?.trim();
-  return !!developerUsername && developerUsername.toLowerCase() === username.toLowerCase();
+  const name = username.toLowerCase();
+  return (process.env.DEV_USERNAME ?? "")
+    .split(",")
+    .some((developer) => developer.trim() !== "" && developer.trim().toLowerCase() === name);
 }
 
 export class NetworkBuilder {
@@ -243,6 +251,12 @@ export class NetworkBuilder {
           response.setHeader(header, value);
         }
         response.end(content.body);
+        return;
+      }
+      const gatewayTarget = GatewayTarget.resolve(request.url ?? "", port);
+      if (gatewayTarget) {
+        response.setHeader("Content-Type", gatewayTarget.contentType);
+        response.end(gatewayTarget.body);
         return;
       }
       if (request.url === "/regions") {
@@ -624,7 +638,7 @@ export class ClientConnection {
         case "chat":
           if (this.player) {
             if (packet.messageType === "public") {
-              ChatPacketListener.handleText(this.player, packet.text, packet.autoChat === true);
+              ChatPacketListener.handleText(this.player, packet.text, packet.autoChat === true, packet.style);
             } else if (packet.messageType === "friends_chat") {
               PluginManager.emitSocialPacket({
                 player: this.player, packet: packet as typeof packet & { messageType: "friends_chat" }, handled: false,
@@ -1045,7 +1059,7 @@ export class ClientConnection {
           await forgetLoginToken(packet.username, packet.token);
           continue;
         case "handshake":
-          this.enterWorld(packet.clientType);
+          this.enterWorld(packet.clientType, packet.capabilities);
           continue;
         case "logout":
           // Answered on the next tick (World.answerLogoutRequest), which closes the socket.
@@ -1194,7 +1208,7 @@ export class ClientConnection {
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
   }
 
-  private enterWorld(clientType: number = 0): void {
+  private enterWorld(clientType: number = 0, capabilities: number = 0): void {
     if (!this.pending || this.player) return;
     if (this.closed) {
       this.releasePendingName();
@@ -1212,7 +1226,9 @@ export class ClientConnection {
     // Transient (not persisted) so a mobile login never overwrites the layout
     // saved from a desktop session; resolveGameframeRoot reads it at boot.
     if (clientType === 1) player.setAttribute(MOBILE_CLIENT_ATTRIBUTE, true);
+    if (capabilities & HANDSHAKE_CAPABILITY_NATIVE_CLIENT) player.setAttribute(NATIVE_CLIENT_ATTRIBUTE, true);
     if (pending.save) pending.save.applyToPlayer(player);
+    else PlayerSave.applyAttributeDefaults(player);
     if (isConfiguredDeveloperUsername(player.getUsername())) player.setRights(PlayerRights.DEVELOPER);
     player.setPasswordHashWithSalt(pending.passwordHash);
     if (pending.loginTokens) player.setAttribute(LOGIN_TOKENS_ATTRIBUTE, pending.loginTokens);
@@ -1261,6 +1277,9 @@ export class ClientConnection {
       // and membership panels read; everyone on a members world is a member.
       .sendInterfaceScript(828, [isMembersWorld() ? 1 : 0])
       .sendItemContainer(player.getInventory(), 3214)
+      // Worn equipment: the browser reads it from appearance; the official client (native
+      // attribute) gets inventory 94 itself, quantities included.
+      .sendItemContainer(player.getEquipment(), Equipment.INVENTORY_INTERFACE_ID)
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();

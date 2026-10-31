@@ -71,14 +71,24 @@ test("leaving the crater removes owned spawn and acid state", () => {
   assert.equal(Specials.fights.has(boss), false);
 });
 
-test("Vorkath wakes into the quest form before completion and the stronger form after it", () => {
+test("only the Dragon Slayer II Vorkath step uses the quest form; everyone else gets 750", () => {
   const player = (stage) => ({ getAttribute: (key) => key === "quest.dragon_slayer_ii.stage" ? stage : undefined });
-  assert.equal(Shared.awakeIdForPlayer(player(8)), 8060);
+  // The quest form exists for the one stage where she blocks the laboratory, and drops nothing.
+  assert.equal(Shared.awakeIdForPlayer(player(Shared.QUEST_FIGHT_STAGE)), 8060);
   assert.equal(Shared.maxHitpointsForId(8060), 460);
-  assert.equal(Shared.awakeIdForPlayer(player(14)), 8061);
+  // Not started (0), the earlier stages and every stage past the fight: the post-quest boss.
+  for (const stage of [0, 1, 7, 9, 13, 14]) {
+    assert.equal(Shared.awakeIdForPlayer(player(stage)), 8061, `stage ${stage}`);
+  }
   assert.equal(Shared.maxHitpointsForId(8061), 750);
   assert.equal(Shared.isAwakeNpc({ getId: () => 8060 }), true);
   assert.equal(Shared.isAwakeNpc({ getId: () => 8061 }), true);
+});
+
+test("the post-quest form carries her loot table and the quest form drops nothing", () => {
+  const drops = require("../data/definitions/npc-drops.json");
+  assert.deepEqual(drops.npcs[Shared.AWAKE_ID].tables, ["vorkath"]);
+  assert.deepEqual(drops.npcs[Shared.QUEST_AWAKE_ID].tables, []);
 });
 
 test("standard attacks follow the captured mix", () => {

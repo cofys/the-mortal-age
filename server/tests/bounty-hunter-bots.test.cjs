@@ -6,7 +6,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 const Bots = require('../plugins/minigames/bountyhunter/Bots.BountyHunter');
-const { pickTierChoice, TIER_BANDS, archetypeCombatLevel } = require('../plugins/bots/behaviours/pvp/PvpTierLoadouts.PlayerBots');
+const { buildStyle, pickTierChoice, TIER_BANDS, archetypeCombatLevel } = require('../plugins/bots/behaviours/pvp/PvpTierLoadouts.PlayerBots');
 
 const Entry = require('../plugins/minigames/bountyhunter/Entry.BountyHunter');
 const Coffer = require('../plugins/minigames/bountyhunter/Coffer.BountyHunter');
@@ -65,6 +65,16 @@ test('generated equipment selects wearable alternatives instead of dropping an i
     assert.ok(preset.getEquipment().every((item) => canEquipPresetItem(preset, item)));
     assert.ok(preset.getEquipment().some((item) => item.getDefinition().getEquipmentType().getSlot() === core.Equipment.BODY_SLOT));
     assert.ok(preset.getEquipment().every((item) => item.getId() !== core.ItemIdentifiers.OBSIDIAN_PLATEBODY));
+    random.mock.restore();
+  }
+  // Inventory switches come from the same pools: a 1 Defence pure never carries a 40 Defence top.
+  const pure = { pvp: { profileId: 'veteran', loadoutId: 'budget_pk', generatedArchetypeId: 'budget_pure_tribrid' } };
+  for (const roll of [0, 0.5, 0.99]) {
+    const random = t.mock.method(Math, 'random', () => roll);
+    const { preset } = buildGeneratedPreset(null, pure);
+    const switches = preset.getInventory().filter((item) => item.getDefinition().getEquipmentType().getSlot() >= 0);
+    assert.ok(switches.length > 0);
+    assert.ok(switches.every((item) => canEquipPresetItem(preset, item)), switches.map((item) => item.getDefinition().getName()).join(', '));
     random.mock.restore();
   }
 });
@@ -139,8 +149,17 @@ test('the capped roster fills one per tick across combat bands and restores bots
     assert.equal(spawned.length, index + 1, 'at most one spawn per tick');
   }
   assert.deepEqual(spawned.map((bot) => bot.getUsername()), Array.from({ length: 60 }, (_, i) => `BhBot${i + 1}`));
+  const { PVP_LOADOUT_DEFINITIONS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
+  const archetypes = new Map(PVP_LOADOUT_DEFINITIONS.archetypes.map((entry) => [entry.id, entry]));
+  const styleOf = (bot) => buildStyle(archetypes.get(runtime.botStatesByName.get(bot.getUsername()).pvp.generatedArchetypeId));
   for (const band of Bots._test.BOT_BANDS) {
-    assert.equal(spawned.filter((bot) => bot.band.min === band.min).length, 12, `${band.min}-${band.max}`);
+    const inBand = spawned.filter((bot) => bot.band.min === band.min);
+    assert.equal(inBand.length, 12, `${band.min}-${band.max}`);
+    // 45/30/25 of 12 is 5.4/3.6/3: each style within one bot of its share.
+    for (const [style, weight] of Object.entries(Bots._test.STYLE_WEIGHTS)) {
+      const count = inBand.filter((bot) => styleOf(bot) === style).length;
+      assert.ok(Math.abs(count - (weight / 100) * 12) <= 1, `${band.min}-${band.max} ${style}: ${count}`);
+    }
   }
   assert.deepEqual([...new Set(spawned.map((bot) => runtime.botStatesByName.get(bot.getUsername()).pvp.profileId))].sort(),
     ['elite', 'novice', 'standard', 'veteran'], 'the high end includes the advanced shared PvP profile');
@@ -507,4 +526,36 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     f.tick((cycle + 1) * 600);
     assert.equal(f.logouts(), 1);
   });
+});
+
+test('every PvP build can wear what it names, and the researched builds keep their level and style', () => {
+  const { canEquipPresetItem } = require('../plugins/modes/pvp/Presets.PvpMode');
+  const { PVP_LOADOUT_DEFINITIONS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
+  const pools = PVP_LOADOUT_DEFINITIONS.pools;
+  const names = (spec) => spec == null ? [] : Array.isArray(spec) ? spec.flatMap(names)
+    : typeof spec === 'string' ? (spec.startsWith('@') ? pools[spec.slice(1)] : [spec])
+    : spec.item ? names(spec.item) : spec.magicStaff ? [spec.magicStaff] : [];
+  const item = (name) => new core.Item(core.ItemIdentifiers[name], 1);
+  for (const entry of PVP_LOADOUT_DEFINITIONS.archetypes) {
+    const preset = { getStats: () => entry.stats };
+    // A slot of only nulls is deliberately empty (no shield beside a two-hander).
+    for (const [slot, spec] of Object.entries(entry.equipment).filter(([, spec]) => names(spec).length > 0)) {
+      assert.ok(names(spec).some((name) => canEquipPresetItem(preset, item(name))), `${entry.id} ${slot}`);
+    }
+    // Switches and spare ammunition are worn mid-fight; a pool offers only what the build can wear.
+    entry.inventory.forEach((spec, index) => {
+      const gear = names(spec).filter((name) => item(name).getDefinition().getEquipmentType().getSlot() >= 0);
+      if (gear.length) assert.ok(gear.some((name) => canEquipPresetItem(preset, item(name))), `${entry.id} inventory ${index}: ${gear}`);
+    });
+  }
+  const builds = {
+    ags_pure: [88, 'melee'], range_pure: [74, 'range'], low_prayer_pure: [67, 'melee'], thirteen_def_pure: [84, 'melee'],
+    proselyte_pure: [89, 'melee'], rigour_zerker: [102, 'range'], granite_fifty_def: [102, 'melee'], defence_pure: [49, 'melee'],
+    f2p_magic_tank: [71, 'hybrid'], f2p_rune_tank: [82, 'melee'], max_melee_main: [126, 'melee'], max_range_tank: [126, 'range'],
+  };
+  for (const [id, [level, style]] of Object.entries(builds)) {
+    const entry = PVP_LOADOUT_DEFINITIONS.archetypes.find((archetype) => archetype.id === id);
+    assert.deepEqual([archetypeCombatLevel(entry.stats), buildStyle(entry)], [level, style], id);
+    assert.ok(PVP_LOADOUT_DEFINITIONS.loadouts.some((loadout) => loadout.archetypes.includes(id)), `${id} is in a loadout`);
+  }
 });

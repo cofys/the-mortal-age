@@ -488,11 +488,24 @@ export class ClientBinaryEncoder {
      * Kind byte: 0 public, 1 game, 2 friends chat, 3 public autochat (chat_sendpublic type 1,
      * the phrase the cache's autochat timer repeats; listeners see it as message type 90/91).
      */
-    encodeChat(text: string, messageType?: "public" | "game" | "friends_chat", autoChat = false): Uint8Array {
+    encodeChat(
+        text: string,
+        messageType?: "public" | "game" | "friends_chat",
+        autoChat = false,
+        style?: { colorId?: number; effectId?: number; pattern?: number[] },
+    ): Uint8Array {
         this.buffer.reset();
         const kind = messageType === "friends_chat" ? 2 : messageType === "game" ? 1 : autoChat ? 3 : 0;
         this.buffer.writeByte(kind);
         this.buffer.writeString(text);
+        // Public chat's colour and effect ("red:wave:"), then a pattern's colours (colours 13-20).
+        const colour = (style?.colorId ?? 0) | 0;
+        const effect = (style?.effectId ?? 0) | 0;
+        if (kind !== 2 && (colour !== 0 || effect !== 0)) {
+            this.buffer.writeByte(colour);
+            this.buffer.writeByte(effect);
+            for (const value of style?.pattern ?? []) this.buffer.writeByte(value | 0);
+        }
         return this.buffer.toPacket(ClientPacketId.CHAT);
     }
 
@@ -690,7 +703,7 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
             return clientEncoder.encodeTradeAction(payload);
 
         case "chat":
-            return clientEncoder.encodeChat(payload.text, payload.messageType, payload.chatType === AUTOCHAT_CHAT_TYPE);
+            return clientEncoder.encodeChat(payload.text, payload.messageType, payload.chatType === AUTOCHAT_CHAT_TYPE, payload);
 
         case "friends_chat_action":
             return clientEncoder.encodeFriendsChatAction(payload);

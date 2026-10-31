@@ -1,0 +1,152 @@
+/* On-screen joystick. The wrapper is inert; only the stick base takes touches. */
+.touch-controls {
+    --stick-size: 120px;
+    --knob-size: 52px;
+    --stick-offset: 16px;
+    position: absolute;
+    inset: 0;
+    z-index: 12;
+    pointer-events: none;
+}
+
+.touch-joystick {
+    position: absolute;
+    left: calc(var(--stick-offset) + env(safe-area-inset-left, 0px));
+    bottom: calc(var(--stick-offset) + env(safe-area-inset-bottom, 0px));
+    width: var(--stick-size);
+    height: var(--stick-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.25);
+    opacity: 0.7;
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s;
+}
+
+.touch-joystick.is-active {
+    opacity: 1;
+}
+
+.touch-joystick-knob {
+    width: var(--knob-size);
+    height: var(--knob-size);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    transition: transform 0.12s ease-out;
+}
+
+/* Follow the finger directly; only the spring back to centre animates. */
+.touch-joystick.is-active .touch-joystick-knob {
+    transition: none;
+}
+
+/* Action button: bottom right, just left of the mobile tab stones. Its column reaches the top
+   so a long list of options scrolls instead of running off screen. */
+.touch-action {
+    position: absolute;
+    top: calc(var(--stick-offset) + env(safe-area-inset-top, 0px));
+    right: calc(var(--stones-inset, 0px) + var(--stick-offset) + env(safe-area-inset-right, 0px));
+    bottom: calc(var(--stick-offset) + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.touch-action-button,
+.touch-action-option {
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    color: #fff;
+    /* The game's own fonts (index.css), with its hard one-pixel shadow. */
+    font-family: "OSRS Bold", sans-serif;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.touch-action-button {
+    flex-shrink: 0;
+    width: 84px;
+    height: 84px;
+    padding: 6px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    overflow: hidden;
+}
+
+.touch-action-button:active {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.touch-action-option-label {
+    font-size: 16px;
+    line-height: 1.1;
+}
+
+/* Names in the game's own menu colours: cyan objects, yellow NPCs, orange items. */
+.touch-action-target {
+    color: #0ff;
+    font-family: "OSRS Small", sans-serif;
+    font-size: 14px;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.touch-action-target.is-npc {
+    color: #ff0;
+}
+
+.touch-action-target.is-obj {
+    color: #ff9040;
+}
+
+.touch-action-list {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+    touch-action: pan-y;
+}
+
+.touch-action-option {
+    flex-shrink: 0;
+    touch-action: pan-y;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.7);
+    font-size: 16px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.touch-action-option .touch-action-target {
+    font-family: inherit;
+    font-size: 16px;
+}

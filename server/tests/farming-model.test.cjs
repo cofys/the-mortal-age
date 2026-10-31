@@ -9,7 +9,7 @@ const Model = require("../plugins/skills/farming/Model.Farming");
 const assert = require("node:assert/strict");
 
 const now = Date.UTC(2026, 8, 30);
-for (const key of ["RANARR", "APPLE", "OAK", "WHITE_LILY", "ATTAS", "GRAPE", "CELASTRUS", "SPIRIT_TREE"]) {
+for (const key of ["RANARR", "APPLE", "OAK", "MAPLE", "MAGIC", "YEW", "REDWOOD", "POTATO", "CACTUS", "POTATO_CACTUS", "WHITE_LILY", "ATTAS", "GRAPE", "CELASTRUS", "SPIRIT_TREE"]) {
     Data.CROPS.set(key, { ...Data.CACHE.timing[key], key, seed: 1, produce: 2, level: 1, plant: 0, harvest: 0,
         check: ["APPLE", "OAK"].includes(key) ? 1 : 0, seedCount: 1, payment: [] });
 }
@@ -80,9 +80,56 @@ assert.equal(Model.patchValue(celastrus, { ...oak, crop: "CELASTRUS", checked: t
 assert.equal(Model.diseaseChance(Data.CROPS.get("RANARR"), 0, false, false), 27 / 128);
 assert.equal(Model.diseaseChance(Data.CROPS.get("RANARR"), 3, false, false), 3 / 128);
 assert.equal(Model.diseaseChance(Data.CROPS.get("RANARR"), 3, false, true), 1 / 128);
+assert.equal(Model.diseaseChance(Data.CROPS.get("APPLE"), 0, false, false), 18 / 128, "published fruit-tree rate");
+assert.equal(Model.diseaseChance(Data.CROPS.get("MAPLE"), 0, false, false), 13 / 128, "published maple rate");
+assert.equal(Model.diseaseChance(Data.CROPS.get("MAGIC"), 0, false, false), 9 / 128, "published magic-tree rate");
+assert.equal(Model.diseaseChance(Data.CROPS.get("POTATO"), 0, false, false), 16 / 128, "unpublished crops use the explicit estimate");
 assert.equal(Model.saveLifeChance(Data.CROPS.get("RANARR"), 99), 81 / 256);
 assert.equal(Model.saveLifeChance(Data.CROPS.get("RANARR"), 99, true, true), 93 / 256);
 assert.equal(Model.nextGrowth(now, 20, 7 * Model.MINUTE) - now, 13 * Model.MINUTE);
+assert.equal(Data.diseasedMinutes(Data.CROPS.get("RANARR")), 40, "disease pauses an herb for the next slower cycle");
+assert.equal(Data.diseasedMinutes(Data.CROPS.get("REDWOOD")), 640, "the slowest cycle has no slower tier");
+assert.equal(Data.stageMinutes(Data.CROPS.get("YEW"), 0), 5, "a yew's first stage is five minutes");
+assert.equal(Data.stageMinutes(Data.CROPS.get("YEW"), 1), 40, "later yew stages use the tree cycle");
+
+// A protected crop follows the wiki growth-time table exactly: each stage lasts its cycle,
+// except a yew's five-minute first stage.
+// The wiki schedule is aligned to the 640-minute tier, so every crop's cycle starts on a
+// boundary of that base.
+const GROWTH_EPOCH = Date.UTC(2025, 5, 9);
+function scheduled(key) {
+    const crop = Data.CROPS.get(key);
+    const base = GROWTH_EPOCH + Math.floor((now - GROWTH_EPOCH) / (640 * Model.MINUTE)) * (640 * Model.MINUTE);
+    const patch = Data.CACHE.patches.find(p => p.type === crop.type);
+    const farm = { offset: 0, patches: {}, tools: {}, autoWeed: false };
+    const state = Model.emptyPatch(base, farm);
+    Object.assign(state, { crop: key, stage: 0, status: "growing", protected: true, plantedAt: base,
+        plantedTick: Model.tickIndex(base, 0), nextAt: Model.nextGrowth(base, Data.stageMinutes(crop, 0), 0) });
+    farm.patches[Data.patchKey(patch)] = state;
+    return { farm, state, crop, base };
+}
+function stageAfter(key, minutes) {
+    const planted = scheduled(key);
+    Model.advanceFarm(planted.farm, planted.base + minutes * Model.MINUTE, () => 1);
+    return planted.state;
+}
+for (const [key, stageMinutes, grownAt] of [["POTATO", 10, 40], ["RANARR", 20, 80], ["OAK", 40, 160],
+    ["YEW", 40, 360], ["APPLE", 160, 960], ["CACTUS", 80, 560], ["POTATO_CACTUS", 10, 70],
+    ["GRAPE", 5, 35], ["REDWOOD", 640, 6400]]) {
+    const crop = Data.CROPS.get(key);
+    const first = key === "YEW" ? 5 : stageMinutes;
+    assert.equal(stageAfter(key, first - 1).stage, 0, `${key} does not grow early`);
+    assert.equal(stageAfter(key, first).stage, 1, `${key} first stage at ${first} minutes`);
+    assert.equal(stageAfter(key, grownAt - 1).status, "growing", `${key} is not grown early`);
+    const grown = stageAfter(key, grownAt);
+    assert.equal(grown.stage, crop.stages, `${key} reaches its last stage at ${grownAt} minutes`);
+    assert.equal(grown.status, "grown", `${key} is grown at ${grownAt} minutes`);
+}
+const plantedYew = scheduled("YEW");
+assert.equal(Model.stageAt(plantedYew.crop, 0, 0), 0);
+assert.equal(Model.stageAt(plantedYew.crop, 0, 1), 1, "yew first stage takes one five-minute tick");
+assert.equal(Model.stageAt(plantedYew.crop, 0, 8), 2, "yew's second stage lands on the next 40-minute tick");
+assert.equal(Model.stageAt(plantedYew.crop, 0, 9 * 8), 10, "yew's later stages take eight five-minute ticks each");
 assert.equal(Data.CACHE.patches.filter(p => p.type === "HERB").length, 10);
 assert.ok(Data.CACHE.patches.some(p => p.type === "FLOWER" && p.x === 3601 && p.y === 3525), "Port Phasmatys flower patch uses regional weed models");
 assert.ok(Data.CACHE.patches.some(p => p.type === "COMPOST" && p.x === 3610 && p.y === 3522), "Port Phasmatys compost bin uses regional models");

@@ -37,6 +37,28 @@ test('sendSystemUpdate emits the SYSTEM_UPDATE packet (opcode 220, big-endian se
   assert.deepEqual(Buffer.from(frames[0]), Buffer.from([220, 0, 0, 0, 125]));
 });
 
+test('sendTab runs toplevel_sidebutton_switch (script 915) rather than writing a 1-byte opcode 106', () => {
+  // 106 is WIDGET_SET_HIDDEN (uid + hidden, five bytes), so the old one-byte packet was
+  // dropped by the encoder and the tab never switched: quick-prayer setup, alchemy's return
+  // to the spellbook and ring alchemy's inventory tab all silently did nothing.
+  const frames = [];
+  const fake = Object.assign(Object.create(PacketSender.prototype), {
+    player: { getSession: () => ({ sendClientPacket: (frame) => { frames.push(Buffer.from(frame)); return true; } }) },
+  });
+  for (const tab of [3, 5, 6]) {
+    const result = fake.sendTab(tab);
+    assert.equal(result, fake, 'chainable');
+    const frame = frames.at(-1);
+    assert.equal(frame[0], 170, 'RUN_CLIENT_SCRIPT');
+    assert.equal(frame.readUInt16BE(1), 8, 'script id + one integer argument');
+    assert.equal(frame.readUInt16BE(3), 915, 'toplevel_sidebutton_switch');
+    assert.equal(frame[5], 1, 'one argument');
+    assert.equal(frame[6], 1, 'integer argument tag');
+    assert.equal(frame.readInt32BE(7), tab, 'the tab index');
+  }
+  assert.equal(frames.length, 3);
+});
+
 test('sendCollectionLogSnapshot emits opcode 190 with the owned collection_log items', () => {
   let frame;
   const fake = {
@@ -67,6 +89,8 @@ test("a dialogue box opened again resends its texts: the client turns 'Click her
   const updater = new FrameUpdater();
   const fake = {
     chatboxGroupId: -1,
+    subInterfaceTargets: new Map(),
+    rememberSubInterface: PacketSender.prototype.rememberSubInterface,
     emitInterfaceClosed() {},
     player: {
       getSession: () => ({ sendClientPacket: (frame) => { frames.push(Buffer.from(frame)); return true; } }),
@@ -151,4 +175,85 @@ test('NPC spawn payload preserves current-cache16-bit type IDs and a16-bit index
   assert.equal(body.readUInt16BE(9),21);
   // count8, three spawns(index16, flags3, offsets5+5, rotation3, type16), sentinel16.
   assert.equal(body.subarray(11).toString('hex'),'0000070000003100080000403100090000409affff');
+});
+
+test('sub-interface mount ownership survives same-ID replacement, relocation and another player',async()=>{
+  require('../dist/Server').Server.installProductionPathResolver();
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  const {PluginManager}=require('../dist/plugins/PluginManager');
+  const {Player}=require('../dist/game/entity/impl/player/Player');
+  const {PlayerSession}=require('../dist/net/PlayerSession');
+  const {encodeWidgetCloseSub}=require('../dist/net/protocol/ClientProtocol');
+  const core=PluginManager.getCoreApi();
+  const target=core.CacheDefinitions.getComponentId('toplevel:overlay_atmosphere');
+  const group=core.CacheDefinitions.getInterfaceId('fade_overlay');
+  assert.ok(Number.isInteger(target)&&Number.isInteger(group));
+  const delivered=[];
+  const session=new PlayerSession({isOpen:()=>true,send:frame=>delivered.push(Buffer.from(frame))});
+  const player=new Player(session);session.setPlayer(player);player.setUsername('mountowner');
+  const sender=player.getPacketSender();
+  const first=sender.mountSubInterface(target,group,1);
+  assert.equal(Object.isFrozen(first),true,'a caller cannot mutate the sender-owned mount identity');
+  assert.equal(sender.getSubInterfaceAt(target),first);
+  assert.equal(sender.sendSubInterface(target,group,1),sender,'legacy chaining still returns the sender');
+  const replacement=sender.getSubInterfaceAt(target);
+  assert.notEqual(replacement,first,'same-ID remount has its own lifetime');
+  const before=session.pendingPackets.length;
+  assert.equal(sender.closeSubInterfaceMount(first),false,'delayed cleanup must not close the replacement');
+  assert.equal(session.pendingPackets.length,before,'stale cleanup emits no native close packet');
+  assert.equal(sender.closeSubInterfaceMount(replacement),true);
+  assert.ok(session.pendingPackets.at(-1).equals(encodeWidgetCloseSub(target)));
+  assert.equal(sender.getSubInterfaceAt(target),undefined);
+  assert.equal(sender.closeSubInterfaceMount(replacement),false);
+  const moving=sender.mountSubInterface(target,group,1);
+  sender.sendSubInterface(target+1,group,1);
+  assert.equal(sender.getSubInterfaceAt(target),undefined,'a group moved to another parent no longer occupies its old target');
+  assert.equal(sender.closeSubInterfaceMount(moving),false);
+  const moved=sender.getSubInterfaceAt(target+1);
+  const otherSession=new PlayerSession({isOpen:()=>true,send:()=>{}}),other=new Player(otherSession);otherSession.setPlayer(other);
+  const otherSender=other.getPacketSender(),otherMount=otherSender.mountSubInterface(target+1,group,1);
+  assert.equal(otherSender.closeSubInterfaceMount(moved),false,'a different player cannot supply this sender a valid mount token');
+  assert.equal(otherSender.getSubInterfaceAt(target+1),otherMount);
+  assert.equal(otherSender.closeSubInterfaceMount(otherMount),true);
+  assert.equal(sender.closeSubInterfaceMount(moved),true,'the legitimate current owner can still clean up');
+  const prayerTarget=(161<<16)|81;
+  const prayer=sender.mountSubInterface(prayerTarget,541,1);
+  sender.sendTabInterface(5,17200);
+  const afterPrayer=session.pendingPackets.length;
+  assert.equal(sender.closeSubInterfaceMount(prayer),false,'legacy tab replacement also retires an old token');
+  assert.equal(session.pendingPackets.length,afterPrayer);
+  assert.equal(sender.getSubInterfaceAt(prayerTarget).groupId,77);
+  const chatTarget=(162<<16)|568;
+  const chat=sender.mountSubInterface(chatTarget,231,0);
+  sender.sendChatboxInterface(233);
+  assert.equal(sender.closeSubInterfaceMount(chat),false);
+  const currentChat=sender.getSubInterfaceAt(chatTarget);
+  sender.closeInterface(233);
+  assert.equal(sender.closeSubInterfaceMount(currentChat),false,'native chatbox close retires the mount');
+  sender.sendChatboxInterface(231);
+  const removedChat=sender.getSubInterfaceAt(chatTarget);
+  sender.sendInterfaceRemoval();
+  assert.equal(sender.closeSubInterfaceMount(removedChat),false,'modal removal retires the chatbox mount');
+  await Promise.resolve();
+  assert.ok(delivered.length,'the actual session delivers the native mount/close packets');
+});
+
+test('a crater full of ground items goes as a snapshot and deltas, each inside one game message', () => {
+  // A browser-host world drops the connection on a message over 64 KiB; Bounty Hunter bot loot
+  // made one ground-items snapshot pass that, so dying there disconnected the player.
+  const { MAX_GAME_MESSAGE_BYTES } = require('../dist/net/BinaryChannel');
+  const frames = [];
+  const player = { getUsername: () => 'p', getIndex: () => 1, getSession: () => ({ sendClientPacket: (frame) => { frames.push(frame); return true; } }) };
+  const items = Array.from({ length: 5000 }, (_, id) => ({
+    getId: () => id, getItem: () => ({ getId: () => 526, getAmount: () => 1 }),
+    getPosition: () => ({ getX: () => 3423, getY: () => 4061, getZ: () => 0 }),
+  }));
+  new PacketSender(player).sendGroundItems(items);
+  assert.ok(frames.length > 1);
+  assert.ok(frames.every((frame) => frame.length <= MAX_GAME_MESSAGE_BYTES), 'every frame fits one message');
+  assert.deepEqual(frames.map((frame) => frame[0]), [54, ...frames.slice(1).map(() => 55)], 'snapshot, then deltas');
+  // Header: opcode, u16 size, i32 serial, u16 stack count.
+  assert.equal(frames.reduce((total, frame) => total + frame.readUInt16BE(7), 0), items.length);
+  new PacketSender(player).sendGroundItems([]);
+  assert.equal(frames.at(-1)[0], 54, 'an empty view still clears the client');
 });

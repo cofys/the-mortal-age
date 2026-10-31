@@ -398,6 +398,7 @@ export function buildObjectSpawnExport(
 ): ObjectSpawn[] | undefined {
     const regionId = (x: number, y: number) => ((x >> 6) << 8) | (y >> 6);
     const regions = new Set(edits.filter((edit) => edit.kind !== "npc" &&
+        edit.kind !== "npcDelete" && edit.kind !== "npcWander" &&
         (!saveToJson || edit.kind === "place" || edit.kind === "delete" || edit.kind === "clear")
     ).map((edit) => regionId(edit.tileX, edit.tileY)));
     const result = spawns.filter((spawn) => !regions.has(regionId(spawn.position.x, spawn.position.y)));

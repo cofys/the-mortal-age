@@ -163,6 +163,19 @@ test("an attribute equal to its default isn't saved, and loads as the default wh
   assert.equal(resaved.attributes["test:keybind"], 0, "an empty value that isn't the default is kept");
 });
 
+test("a new account, with no save to load, starts every persisted attribute at its default", () => {
+  // A first-session kill count read as undefined + 1 = NaN made every save fail until relog.
+  PlayerSave.persistAttribute("test:kills", 0);
+  const player = new Player(null);
+  player.setAttribute("test:kept", 5);
+  PlayerSave.persistAttribute("test:kept", 0);
+  PlayerSave.applyAttributeDefaults(player);
+  assert.equal(player.getAttribute("test:kills"), 0);
+  assert.equal(player.getAttribute("test:kept"), 5, "a value already set stays");
+  player.setAttribute("test:kills", player.getAttribute("test:kills") + 1);
+  assert.equal(PlayerSave.fromPlayer(player).attributes["test:kills"], 1);
+});
+
 test("a saved member rejoins an offline owner's channel with saved settings and rank", () => {
   const { Misc } = require("../dist/util/Misc");
   const { FriendsChatManager, CLAN_CHAT_ATTRIBUTE } = require("../plugins/interface/FriendsChatManager");

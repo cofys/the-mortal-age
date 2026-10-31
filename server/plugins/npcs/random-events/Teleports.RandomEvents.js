@@ -22,7 +22,8 @@ const DESTINATIONS = [
   { kind: "eviltwin", minX: 1848, maxX: 1888, minY: 5116, maxY: 5148 },
   { kind: "maze", minX: 2884, maxX: 2940, minY: 4548, maxY: 4604 },
   { kind: "mime", minX: 2000, maxX: 2020, minY: 4746, maxY: 4766 },
-  { kind: "quiz", minX: 1940, maxX: 1966, minY: 4756, maxY: 4782 },
+  // The quiz show set is upstairs, on plane 1.
+  { kind: "quiz", minX: 1940, maxX: 1966, minY: 4756, maxY: 4782, z: 1 },
   { kind: "exam", minX: 1876, maxX: 1896, minY: 5014, maxY: 5038 },
   { kind: "frogland", minX: 2450, maxX: 2478, minY: 4764, maxY: 4794 },
   // The pillory cages: Varrock, Seers' Village and Yanille.
@@ -55,7 +56,7 @@ function destinationBounds(kind) {
 
 /** Any random-event destination tile, for crash recovery on login. */
 function insideAnyDestination(location) {
-  return DESTINATIONS.some(bounds => location.getZ() === 0 &&
+  return DESTINATIONS.some(bounds => location.getZ() === (bounds.z ?? 0) &&
     location.getX() >= bounds.minX && location.getX() <= bounds.maxX &&
     location.getY() >= bounds.minY && location.getY() <= bounds.maxY);
 }
@@ -244,7 +245,7 @@ function createAreas() {
   return DESTINATIONS.map(bounds => {
     class RandomEventArea extends Area {
       constructor() {
-        super([new Boundary(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, 0)]);
+        super([new Boundary(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, bounds.z ?? 0)]);
       }
       canTeleport(player) {
         const session = sessions.get(player);

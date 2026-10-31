@@ -562,3 +562,54 @@ test("a flicked smite is queued at 0: the player's Ring of life isn't spent on a
   assert.equal(player.getEquipment().getItems()[Equipment.RING_SLOT].getId(), core.ItemIdentifiers.RING_OF_LIFE, "the ring is kept");
   assert.equal(teleports.length, 0, "no teleport");
 });
+
+test("a scripted Mad Angel blow reaches Elysian and incoming equipment after it is resolved", (t) => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const { PlayerSession } = require("../dist/net/PlayerSession");
+  const { NPC } = require("../dist/game/entity/impl/npc/NPC");
+  const { attachFight } = require("../plugins/bosses/madangel/Fight.MadAngel");
+  const { Equipment, ItemIdentifiers, Skill } = core;
+  const api = PluginManager.createApi("MadAngelImpactOrderRegression");
+  Common.init(api);
+  attachFight(api);
+
+  const channel = { isOpen: () => true, send: () => true, close() {}, onData() {}, onError() {}, onClose() {} };
+  const player = new Player(new PlayerSession(channel), new Location(2530, 2205, 0));
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.setRegistered(true);
+  player.setHitpoints(99);
+  player.setAutoRetaliate(false);
+  player.getSkillManager().setMaxLevel(Skill.HITPOINTS, 99);
+  player.getSkillManager().setCurrentLevel(Skill.HITPOINTS, 99, false);
+  player.getEquipment().set(Equipment.SHIELD_SLOT, new core.Item(ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD));
+
+  const npc = new NPC(Common.data.npcs.fighting, new Location(2532, 2215, 0));
+  npc.setRegistered(true);
+  npc.setHitpoints(1000);
+  const fight = new Fight({ player }, npc);
+  npc.__madAngel = { player, fight };
+
+  let incoming = 0;
+  api.registerIncomingDamageModifier((victim, hit) => {
+    if (victim === player && hit.getDamage() > 0) incoming++;
+  });
+  t.mock.method(Math, "random", () => 0.5);
+
+  const originalAdd = core.CombatFactory.addPendingHit;
+  let queued = null;
+  core.CombatFactory.addPendingHit = (hit) => { queued = hit; };
+  try {
+    fight.blow("sweep");
+  } finally {
+    core.CombatFactory.addPendingHit = originalAdd;
+  }
+  assert.ok(queued, "the producer queued its zero placeholder");
+
+  core.CombatFactory.executeHit(queued);
+  assert.equal(queued.getTotalDamage(), 12, "the 16 sweep is cut by the 25% Elysian proc");
+  assert.equal(incoming, 1, "equipment reactions see the scripted damage once");
+
+  player.getCombat().getHitQueue().process(core.World.getProcessCycle() + 1);
+  assert.equal(player.getHitpoints(), 87, "the Elysian-reduced blow lands");
+});

@@ -29,6 +29,9 @@ at `/api/world` on the game server's HTTP/WebSocket port. The local map editor
 uses its game connection address to fetch this data. Production does not register
 this endpoint. `/api/world/shops` and `/api/world/npc-interactions` provide the
 canonical documents for local editing; export downloads the edited JSON files.
+`/api/world/npc-spawns` supplies the persisted spawns the editor renders, and
+saved spawn edits download as `npc-spawns-custom.json` (added spawns, moved
+spawns and `remove` markers), which the server merges over the canonical file.
 Browser-host editors continue using host messaging.
 
 ## Definition plugins

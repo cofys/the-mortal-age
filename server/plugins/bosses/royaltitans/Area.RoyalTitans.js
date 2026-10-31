@@ -263,6 +263,13 @@ function graveOutside(request) {
   request.tile = { x, y, z };
 }
 
+/** A Giantsoul amulet is kept beyond the kept-item count on a death here (Wiki). */
+function keepGiantsoul(event) {
+  const { GIANTSOUL_AMULET, GIANTSOUL_AMULET_UNCHARGED_ } = core.ItemIdentifiers;
+  const id = event.item?.getId?.();
+  if ((id === GIANTSOUL_AMULET || id === GIANTSOUL_AMULET_UNCHARGED_) && sessionOfPlayer(event.player)) event.keep = true;
+}
+
 function countDeath({ player }) {
   if (!sessionOfPlayer(player)) return;
   player.setAttribute(DEATHS_ATTRIBUTE, player.getAttribute(DEATHS_ATTRIBUTE) + 1);
@@ -464,9 +471,10 @@ function attach(pluginApi) {
   api.onPlayerLogin(recoverOnLogin);
   api.onPlayerDeath(countDeath);
   api.onCustomEvent("gravestones:grave-location", graveOutside);
+  api.onShouldKeepItemOnDeath(keepGiantsoul);
 }
 
 module.exports = {
   attach, sessions, world, sessionOfPlayer, spawnEncounter,
-  _test: { joinable, sessions },
+  _test: { joinable, sessions, keepGiantsoul },
 };

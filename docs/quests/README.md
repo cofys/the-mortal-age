@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 30 · ⚠️ passed with issues: 21 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 5 · untested: 123
+185 quests · ✅ passed: 30 · ⚠️ passed with issues: 22 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 6 · untested: 120
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -14,7 +14,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [A Kingdom Divided](a-kingdom-divided/README.md) | untested |  |  |  |  |
 | [A Night at the Theatre](a-night-at-the-theatre/README.md) | untested |  |  |  |  |
 | [A Porcine of Interest](a-porcine-of-interest/README.md) | ✅ passed | 2026-10-23 | agent |  | 1 |
-| [A Ruff Situation](a-ruff-situation/README.md) | ✅ passed | 2026-10-25 | agent |  | 1 |
+| [A Ruff Situation](a-ruff-situation/README.md) | ✅ passed | 2026-10-30 | agent | claude-haiku-5-5 |  |
 | A Soul's Bane | untested |  |  |  |  |
 | [A Tail of Two Cats](a-tail-of-two-cats/README.md) | untested |  |  |  |  |
 | [A Taste of Hope](taste-of-hope/README.md) | untested |  |  |  |  |
@@ -63,7 +63,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Ethically Acquired Antiquities](ethically-acquired-antiquities/README.md) | untested |  |  |  |  |
 | Fairytale I - Growing Pains | untested |  |  |  |  |
 | [Fairytale II - Cure a Queen](fairytale-ii-cure-a-queen/README.md) | untested |  |  |  |  |
-| Fallen From Grace | untested |  |  |  |  |
+| [Fallen From Grace](fallen-from-grace/README.md) | 🔁 needs recheck | 2026-10-30 | agent | claude-haiku-5-5 | 8 |
 | Family Crest | untested |  |  |  |  |
 | [Fight Arena](fight-arena/README.md) | ✅ passed | 2026-10-23 | agent |  |  |
 | [Fishing Contest](fishing-contest/README.md) | ✅ passed |  | agent |  |  |
@@ -97,7 +97,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Merlin's Crystal](merlins-crystal/README.md) | untested |  |  |  |  |
 | [Misthalin Mystery](misthalin-mystery/README.md) | 🔁 needs recheck | 2026-10-29 | agent | grok-4.7 | 1 |
 | [Monk's Friend](monks-friend/README.md) | ✅ passed |  | agent |  |  |
-| [Monkey Madness I](monkey-madness-i/README.md) | untested |  |  |  |  |
+| [Monkey Madness I](monkey-madness-i/README.md) | 🔄 in progress | 2026-10-31 | agent | claude-haiku-5-5 | 6 |
 | [Monkey Madness II](monkey-madness-ii/README.md) | untested |  |  |  |  |
 | Mountain Daughter | untested |  |  |  |  |
 | [Mourning's End Part I](mournings-end-part-i/README.md) | untested |  |  |  |  |
@@ -192,7 +192,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Waterfall Quest](waterfall-quest/README.md) | 🔁 needs recheck | 2026-10-29 | agent | grok-4.7 | 3 |
 | [What Lies Below](what-lies-below/README.md) | untested |  |  |  |  |
 | [While Guthix Sleeps](while-guthix-sleeps/README.md) | untested |  |  |  |  |
-| [Witch's House](witchs-house/README.md) | untested |  |  |  | 1 |
+| [Witch's House](witchs-house/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | claude-haiku-5-5 | 6 |
 | [Witch's Potion](witchs-potion/README.md) | ✅ passed | 2026-10-25 | community |  |  |
 | [X Marks the Spot](x-marks-the-spot/README.md) | ⚠️ passed with issues | 2026-10-25 | community |  | 1 |
 | [Zogre Flesh Eaters](zogre-flesh-eaters/README.md) | ❌ failed |  | agent |  | 1 |

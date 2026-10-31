@@ -6,8 +6,8 @@
 #   scripts/wt ls                    every worktree with its branch, URL and ports
 #   scripts/wt rm <path|branch>      remove a worktree
 #
-# Slot N (1-99) uses client 3100+N, game 43700+N and agent MCP 49800+N. The main
-# checkout keeps the defaults (3000, 43594, 49700) and has no slot.
+# Slot N (1-99) uses client 3100+N, game 43700+N, agent MCP 49800+N and gateway 43900+N.
+# The main checkout keeps the defaults (3000, 43594, 49700, 43595) and has no slot.
 set -euo pipefail
 
 MAIN=$(git rev-parse --path-format=absolute --git-common-dir | xargs dirname)
@@ -42,6 +42,7 @@ WT_SLOT=$n
 PORT=$((3100 + n))
 WEBSOCKET_PORT=$((43700 + n))
 AGENT_MCP_PORT=$((49800 + n))
+GATEWAY_PORT=$((43900 + n))
 BROWSER=none
 REACT_APP_DEFAULT_WS_URL=ws://localhost:$((43700 + n))
 REACT_APP_DEFAULT_SERVER_ADDRESS=localhost:$((43700 + n))
@@ -82,19 +83,20 @@ case "${1:-ls}" in
     write_slot "$(cd "${2:-.}" && git rev-parse --show-toplevel)"
     ;;
   ls)
-    printf '%-4s %-36s %-24s %-6s %-6s %s\n' SLOT BRANCH CLIENT GAME MCP STATE
+    printf '%-4s %-36s %-24s %-6s %-6s %-7s %s\n' SLOT BRANCH CLIENT GAME MCP GATEWAY STATE
     for dir in $(worktrees); do
       n=$(slot_of "$dir")
       client=$(env_of "$dir" PORT) game=$(env_of "$dir" WEBSOCKET_PORT) mcp=$(env_of "$dir" AGENT_MCP_PORT)
-      client=${client:-3000} game=${game:-43594} mcp=${mcp:-49700}
+      gateway=$(env_of "$dir" GATEWAY_PORT)
+      client=${client:-3000} game=${game:-43594} mcp=${mcp:-49700} gateway=${gateway:-43595}
       branch=$(git -C "$dir" branch --show-current) state=stopped
       lsof -nP -iTCP:"$game" -sTCP:LISTEN >/dev/null 2>&1 && state=running
       if [ -z "$n" ] && [ "$dir" != "$MAIN" ]; then
         printf '%-4s %-36s %s\n' - "${branch:-detached}" "no slot: scripts/wt slot $dir"
         continue
       fi
-      printf '%-4s %-36s %-24s %-6s %-6s %s\n' "${n:-main}" "${branch:-detached}" \
-        "http://localhost:$client" "$game" "$mcp" "$state"
+      printf '%-4s %-36s %-24s %-6s %-6s %-7s %s\n' "${n:-main}" "${branch:-detached}" \
+        "http://localhost:$client" "$game" "$mcp" "$gateway" "$state"
     done
     ;;
   rm)

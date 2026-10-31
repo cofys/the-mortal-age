@@ -1,4 +1,6 @@
 import { ArchiveVarBitTypeLoader } from "./codec/rs/config/vartype/bit/VarBitTypeLoader";
+import { ArchiveIdkTypeLoader } from "./codec/rs/config/idktype/IdkTypeLoader";
+import type { IdkType } from "./codec/rs/config/idktype/IdkType";
 import type { VarManager } from "./codec/rs/config/vartype/VarManager";
 import type { Archive } from "./codec/rs/cache/Archive";
 import { CacheIndexDat2 } from "./codec/rs/cache/CacheIndex";
@@ -40,6 +42,7 @@ export class CacheDefinitions {
     private static state?: {
         npcs: ArchivedTypeLoader<NpcType>;
         varbits: ArchiveVarBitTypeLoader;
+        identKits: ArchiveIdkTypeLoader;
         items: PostProcessedObjTypeLoader;
         objects: ArchivedTypeLoader<LocType>;
         objArchives: ArchivedTypeLoader<ObjType>;
@@ -92,6 +95,7 @@ export class CacheDefinitions {
             id => archives.getSource("obj", id), () => archives.getCount("obj"));
         this.state = {
             varbits: new ArchiveVarBitTypeLoader(info, configs.getArchive(ConfigType.DAT2.varbits)),
+            identKits: new ArchiveIdkTypeLoader(info, configs.getArchive(ConfigType.DAT2.identkits)),
             npcs: new ArchivedTypeLoader(native.npc, NpcType,
                 id => archives.getSource("npc", id), () => archives.getCount("npc")),
             items: new PostProcessedObjTypeLoader(objArchives),
@@ -383,6 +387,12 @@ export class CacheDefinitions {
         }
         this.enumValues.set(id, values);
         return values;
+    }
+
+    /** Every identity kit (player body part), in id order. */
+    static getIdentKits(): IdkType[] {
+        const loader = this.getState().identKits;
+        return Array.from({ length: loader.getCount() }, (_, id) => loader.load(id));
     }
 
     static getVarbit(id: number) {

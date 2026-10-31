@@ -38,13 +38,47 @@ Compared against [PR #141](https://github.com/RSPSApp/tsps/pull/141) at
   available. The reference's simplified seed counts, harvest lives, compost-bin
   mixing, and growth rules were not substituted for our existing mechanics.
 
+## Levels, XP and growth timing
+
+Crop levels, planting/harvest/check-health XP and seed counts are the Wiki's
+[Seeds](https://oldschool.runescape.wiki/w/Seeds) tables and each crop page,
+held as explicit rows in `Data.Farming.js`. Planting reads the player's current
+Farming level (so boosts count) and refuses a lower level with
+`You need level <n> Farming to plant that.` before taking a seed or touching
+the patch. Herbs defer their planting XP until the final pick, as the Wiki
+describes.
+
+Growth is part of the server's one-tick Farming task. `Model.nextGrowth`
+aligns every stage to the Wiki's fixed 5/10/20/40/80/160/320/640-minute cycle
+and the player's persistent negative offset; `Model.stageAt` exposes the same
+table as a pure stage calculation. The one documented exception is a yew's
+five-minute first stage, after which it rejoins the 40-minute tree grid. A
+diseased crop pauses for the next slower growth cycle (for example, a herb
+stops for 40 minutes), not twice its normal cycle.
+
+`Data.FORMULAS` makes every probability explicit:
+
+- Disease per cycle: herbs 27/128, fruit trees 18/128, maple 13/128, magic
+  9/128 and coral 8/128, all from
+  [Disease (Farming)](https://oldschool.runescape.wiki/w/Disease_(Farming)).
+  Compost multipliers are 1, 0.5, 0.2 and 0.1; Iasor is 0.2.
+- Yield uses the published 256 denominator, 10% magic-secateurs, 5% Farming
+  cape and 5% Attas factors.
+- Pruning failure is 25%, amulet-of-bounty seed saving is 25%, redwood
+  depletion is 1/11 with a 200-tick regrowth, and the compost and belladonna
+  tables are named constants.
+
 ## Fidelity limits
 
 This is **not a verified 1:1 implementation**. In particular:
 
-- Unpublished disease/watering probabilities, some yield endpoints, Kronos
-  skip probability, barbarian training failure probability, and Hespori's
-  special/poison scheduling use estimates marked `ponytail:` in the code.
+- Disease, compost, watering, yield, Kronos and barbarian rates live in
+  `Data.Farming.js`'s `FORMULAS` table, not inside the model. Published rates
+  cite the Wiki; entries marked `ponytail:` are explicit estimates. The
+  unpublished watering multiplier, non-listed crop disease rate, Kronos skip
+  probability and barbarian training failure probability are still estimates.
+  Some yield endpoints and Hespori's special/poison scheduling use the same
+  `ponytail:` marker.
 - Tree chopping uses the existing Woodcutting plugin's axe and success-rate model.
   Player-grown redwoods have four private chopping spots: each depletes with a
   1/11 roll per successful log and regrows independently after 200 game ticks
@@ -148,7 +182,7 @@ From `server/`:
 
 ```powershell
 npx.cmd tsc --noEmit
-node --test tests/farming-model.test.cjs
+node --test tests/farming-model.test.cjs tests/farming-capture-lines.test.cjs
 node --test tests/farming-redwood.test.cjs tests/woodcutting-guild.test.cjs
 node --test tests/bologa-blessing.test.cjs tests/belladonna-harvest.test.cjs
 node --test tests/farming-coral-yields.test.cjs
@@ -176,11 +210,13 @@ the actual boss wake-up, unchanged flowers, charge conservation and normal recoi
 Source: [Hespori](https://oldschool.runescape.wiki/w/Hespori).
 
 The second command checks the state machine and mocked hooks without server startup
-or sockets. It covers offline/save equivalence,
-disease/death, mature immunity, private stump regrowth, herb formulas, critical
-cache states, Tithe growth/scoring, null bank tabs, growth cadence, seedling deadlines
-and nearby patch selection across region boundaries. Cache-only audits also checked crop item
-resolution and growing, diseased, dead, and mature visual values.
+or sockets. It covers every documented crop cycle at its exact stage times (including
+yew's five-minute first stage and the 640-minute diseased pause), the planting level
+gate and boosted levels, offline/save equivalence, disease/death, mature immunity,
+private stump regrowth, herb formulas, critical cache states, Tithe growth/scoring,
+null bank tabs, growth cadence, seedling deadlines and nearby patch selection across
+region boundaries. Cache-only audits also checked crop item resolution and growing,
+diseased, dead, and mature visual values.
 
 Redwood regressions cover independent spots/players, exact tick deadlines between
 minute sweeps, saved offline deadlines, old whole-tree stump saves, all sixteen

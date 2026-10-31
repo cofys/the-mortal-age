@@ -214,6 +214,8 @@ export type ChatMessageEvent = {
     from?: string;
     prefix?: string;
     playerId?: number;
+    /** Public chat's colour and effect, for the speaker's overhead text. */
+    style?: { color: number; effect: number; pattern?: Uint8Array };
 };
 
 export type {

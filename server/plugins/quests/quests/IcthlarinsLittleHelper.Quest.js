@@ -32,7 +32,8 @@
  *   western door (44059); the traps, mummies and scarabs are not simulated;
  * - the apparition fight spawns the jar's guardian owner-only and ends on the
  *   NPC death event; the guardian potion drop is not reproduced;
- * - the tree-sap knife interaction is not hooked (bring a bucket of sap);
+ * - tree sap is gathered by using a knife on any "Evergreen tree" with a bucket
+ *   (the wiki's route), so the supply is recoverable if it is lost;
  * - a wrong riddle answer removes cat items and the owned cat follower;
  * - the post-quest cat cutscene and the sarcophagus "Search" loot are left to
  *   their default handlers.
@@ -127,6 +128,13 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
     NpcIdentifiers.RAETUL_2, // 11599
     NpcIdentifiers.RAETUL_3, // 11600
   ]);
+  // Jex is not indexed against this transcript page (his id belongs to Contact!),
+  // so his quest lines need an explicit interaction instead of a variant selector.
+  const JEX_NPC_IDS = new Set([
+    NpcIdentifiers.JEX, // 3875
+    NpcIdentifiers.JEX_2, // 11562
+    NpcIdentifiers.JEX_3, // 11563
+  ]);
   const SIAMUN_NPC_IDS = new Set([NpcIdentifiers.SIAMUN, NpcIdentifiers.SIAMUN_2]); // 4205, 11601
   const APPARITION_NPC_IDS = new Set([
     NpcIdentifiers.APPARITION, // 4195, Het
@@ -149,6 +157,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
     ...CARPENTER_NPC_IDS,
     ...RAETUL_NPC_IDS,
     ...SIAMUN_NPC_IDS,
+    ...JEX_NPC_IDS,
   ]);
   // Nameless multi id that transforms to the ceremony High Priest (11602/11603) on
   // varbit 418; spawned for the ceremony (no generated identifier exists).
@@ -185,6 +194,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   // ==========================================================================
 
   const TINDERBOX_ITEM_ID = ItemIdentifiers.TINDERBOX;
+  const KNIFE_ITEM_ID = ItemIdentifiers.KNIFE; // 946
   const WATERSKIN_FULL_ITEM_IDS = [
     ItemIdentifiers.WATERSKIN_4_, // 1823
     ItemIdentifiers.WATERSKIN_4__2, // 1824
@@ -196,6 +206,13 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   const PILE_OF_SALT_ITEM_ID = ItemIdentifiers.PILE_OF_SALT; // 4689
   const BUCKET_OF_SALTWATER_ITEM_ID = ItemIdentifiers.BUCKET_OF_SALTWATER; // 4693
   const LINEN_ITEM_ID = ItemIdentifiers.LINEN; // 4684
+  /** Quest-only leftovers removed once the ceremony is saved. */
+  const CEREMONY_ITEM_IDS = [
+    BUCKET_OF_SAP_ITEM_ID,
+    PILE_OF_SALT_ITEM_ID,
+    BUCKET_OF_SALTWATER_ITEM_ID,
+    LINEN_ITEM_ID,
+  ];
   const HOLY_SYMBOL_ITEM_ID = 4682; // ics_little_holy_symbol
   const UNHOLY_SYMBOL_ITEM_ID = 4683; // ics_little_unholy_symbol
   const SPHINX_TOKEN_ITEM_ID = 4691; // ics_little_sphinxstatue
@@ -232,6 +249,8 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   const EAST_DOOR_ID = ObjectIdentifiers.DOOR_666; // 44060
   const ROCK_ENTRANCE_ID = 6621; // ics_little_entrance_multi, opens to 6623 at stage 2
   const SARCOPHAGUS_MULTI_ID = 44600; // ics_sarcophigi_door_2 multi
+  // The embalmer's "cone-shaped" coniferous trees: any cache loc with this name.
+  const SAP_TREE_OBJECT_NAME = "Evergreen tree";
 
   // ==========================================================================
   // Locations
@@ -357,6 +376,25 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
   function hasAnyJar(player) {
     return JARS.some((jar) => held(player, jar.itemId));
+  }
+
+  function removeInventoryItem(player, itemId) {
+    const amount = player.getInventory().getAmount(itemId);
+    if (amount > 0) player.getInventory().deleteNumber(itemId, amount);
+  }
+
+  /** Quest-only items do not survive the quest; the jar and unused supplies are destroyed. */
+  function clearQuestItems(player) {
+    for (const jar of JARS) removeInventoryItem(player, jar.itemId);
+    for (const itemId of [
+      SPHINX_TOKEN_ITEM_ID,
+      HOLY_SYMBOL_ITEM_ID,
+      UNHOLY_SYMBOL_ITEM_ID,
+      ...CEREMONY_ITEM_IDS,
+    ]) {
+      removeInventoryItem(player, itemId);
+    }
+    player.setAttribute(JAR_ATTRIBUTE, "");
   }
 
   function loseCat(player) {
@@ -585,6 +623,21 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   }
 
   /**
+   * Jex is indexed to Contact!'s "Jex" page, not this one, so the variant selector
+   * never sees him. Play the Icthlarin lines directly while this quest owns him and
+   * fall through to Contact!/standard dialogue otherwise.
+   */
+  function jexTalkTo(event) {
+    const { player } = event;
+    if (!JEX_NPC_IDS.has(event.npcId)) return false;
+    const variant = selectJexVariant(player, quest.getStage(player));
+    if (!variant) return false;
+    event.handled = true;
+    startTranscript(api, player, event.npcId, PAGE, variant);
+    return true;
+  }
+
+  /**
    * The Doors plugin pairs 44059/44060 with consecutive same-model locs and claims
    * them before the global object hook. Claim them here instead, only when this quest
    * owns the stage, so the generic door still opens otherwise.
@@ -632,11 +685,15 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
     if (EMBALMER_NPC_IDS.has(npcId)) return selectEmbalmerVariant(player, stage);
     if (CARPENTER_NPC_IDS.has(npcId)) return selectCarpenterVariant(player, stage);
     if (RAETUL_NPC_IDS.has(npcId)) {
+      if (stage >= STAGE_SOPHANEM && stage < STAGE_JAR_RETURNED) {
+        return "city-of-the-dead-talking-to-raetul";
+      }
       if (stage === STAGE_PREPARE && hasBit(player, BIT_EMBALMER_MET)) {
         return "ceremony-preparations-aiding-the-embalmer-buying-linen-from-raetul";
       }
       return null;
     }
+    if (JEX_NPC_IDS.has(npcId)) return selectJexVariant(player, stage);
     if (SIAMUN_NPC_IDS.has(npcId)) {
       return stage >= STAGE_SOPHANEM && stage < STAGE_JAR_RETURNED
         ? "city-of-the-dead-talking-to-siamun"
@@ -750,6 +807,16 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
     return "ceremony-preparations-aiding-the-carpenter-talking-to-the-carpenter-again";
   }
 
+  function selectJexVariant(player, stage) {
+    if (stage < STAGE_SOPHANEM || stage >= STAGE_JAR_RETURNED) return null;
+    // Once the jar is stolen, the quest variant's "lesser gods" choice is a
+    // cross-page reference to Transcript:Jex, which this page cannot resolve.
+    // Let the indexed Jex transcript play instead; it has the same greeting and
+    // the working explanation with its follow-up menu.
+    if (stage >= STAGE_FLASHBACK_2) return null;
+    return "city-of-the-dead-talking-to-jex";
+  }
+
   // ==========================================================================
   // Conditions
   // ==========================================================================
@@ -799,6 +866,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
       case "i6RE2X":
         return !held(player, SPHINX_TOKEN_ITEM_ID);
       case "eXmHe5":
+      case "Obm1lw":
         return held(player, SPHINX_TOKEN_ITEM_ID);
       case "Q7PciU":
       case "GpRiuU":
@@ -940,10 +1008,14 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
         }
         return;
       case "exQl3V":
+        // The hypnotised player wakes up holding the stolen jar. Only the
+        // starting conversation may hand it out.
+        if (quest.getStage(player) !== STAGE_STARTED) return;
         rememberJar(player);
         grantJar(player);
         return;
       case "0pXftE":
+        if (quest.getStage(player) !== STAGE_STARTED) return;
         event.handled = true;
         setStage(player, STAGE_SOPHANEM);
         teleport(player, SOPHANEM_WAKE);
@@ -952,11 +1024,13 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
       // First flashback.
       case "ZzAs_W":
+        if (quest.getStage(player) !== STAGE_FLASHBACK_1) return;
         event.handled = true;
         setStage(player, STAGE_SOPHANEM);
         teleport(player, SOPHANEM_WAKE);
         return;
       case "U696Aj":
+        if (quest.getStage(player) !== STAGE_FIRST_MEMORY) return;
         event.handled = true;
         setStage(player, STAGE_TALK_SPHINX);
         teleport(player, SOPHANEM_WAKE);
@@ -964,37 +1038,50 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
       // Sphinx riddle.
       case "qojI7N":
+        if (quest.getStage(player) !== STAGE_TALK_SPHINX) return;
         event.handled = true;
         loseCat(player);
         return;
       case "bnsTsz":
       case "rmgkdX":
+        if (quest.getStage(player) !== STAGE_TALK_SPHINX) return;
         event.handled = true;
         loseCat(player);
         return;
       case "SqSxtA":
+        if (quest.getStage(player) !== STAGE_TALK_SPHINX) return;
         if (!held(player, SPHINX_TOKEN_ITEM_ID)) player.getInventory().adds(SPHINX_TOKEN_ITEM_ID, 1);
         setStage(player, STAGE_TALK_HIGH_PRIEST);
         return;
       case "-btvsf":
+        if (quest.getStage(player) !== STAGE_TALK_HIGH_PRIEST) return;
         if (!held(player, SPHINX_TOKEN_ITEM_ID)) player.getInventory().adds(SPHINX_TOKEN_ITEM_ID, 1);
         return;
       case "6qP-S3":
+        if (quest.getStage(player) !== STAGE_TALK_HIGH_PRIEST) return;
         if (held(player, SPHINX_TOKEN_ITEM_ID)) player.getInventory().deleteNumber(SPHINX_TOKEN_ITEM_ID, 1);
         setStage(player, STAGE_FLASHBACK_2);
         return;
       case "rQcSO2":
+        if (quest.getStage(player) >= STAGE_JAR_RETURNED) return;
         grantJar(player);
         return;
 
       // Returning the jar / pyramid entry.
       case "2cyI1G":
       case "4TL_gG":
+        if (quest.getStage(player) >= STAGE_JAR_RETURNED) return;
         grantJar(player);
         return;
       case "zeRYgo":
       case "ZDfXBL":
+        if (quest.getStage(player) !== STAGE_FLASHBACK_2 && quest.getStage(player) !== STAGE_JAR_HELD) return;
+        event.handled = true;
+        setBit(player, BIT_ENTERED_PYRAMID);
+        teleport(player, PYRAMID_SOUTH);
+        return;
       case "WIfuzl":
+        if (quest.getStage(player) !== STAGE_RITUAL) return;
         event.handled = true;
         setBit(player, BIT_ENTERED_PYRAMID);
         teleport(player, PYRAMID_SOUTH);
@@ -1003,37 +1090,44 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
         event.handled = true;
         return;
       case "GO06qT":
+        if (quest.getStage(player) !== STAGE_APPARITION) return;
         event.handled = true;
         setStage(player, STAGE_GUARDIAN_DEAD);
         player.sendMessage("(The player defeats the apparition.)");
         return;
       case "kIq4Pq":
+        if (quest.getStage(player) !== STAGE_GUARDIAN_DEAD) return;
         rememberJar(player);
         grantJar(player);
         setStage(player, STAGE_JAR_HELD);
         return;
       case "w37dWs":
+        if (quest.getStage(player) !== STAGE_JAR_HELD) return;
         event.handled = true;
         setStage(player, STAGE_FLASHBACK_2_END);
         teleport(player, PYRAMID_SOUTH);
         return;
       case "3yABi3":
         {
+          if (quest.getStage(player) !== STAGE_RETURN_JAR && quest.getStage(player) !== STAGE_FLASHBACK_2_END) return;
           const jar = chosenJar(player);
           if (held(player, jar.itemId)) player.getInventory().deleteNumber(jar.itemId, 1);
           setStage(player, STAGE_JAR_RETURNED);
         }
         return;
 
-      // Ceremony preparations.
+      // Ceremony preparations. Every hand-in is owned by STAGE_PREPARE, so a
+      // replayed or spoofed dialogue cannot skip a preparation step.
       case "wicewv":
       case "0cuTDj":
+        if (quest.getStage(player) !== STAGE_PREPARE) return;
         if (held(player, BUCKET_OF_SAP_ITEM_ID)) player.getInventory().deleteNumber(BUCKET_OF_SAP_ITEM_ID, 1);
         clearBit(player, BIT_NEEDS_SAP);
         setBit(player, BIT_EMBALMER_MET | BIT_EMBALMER_GAVE);
         return;
       case "qpmBy3":
       case "vOXcKj":
+        if (quest.getStage(player) !== STAGE_PREPARE) return;
         if (held(player, PILE_OF_SALT_ITEM_ID)) player.getInventory().deleteNumber(PILE_OF_SALT_ITEM_ID, 1);
         if (held(player, BAG_OF_SALT_ITEM_ID)) player.getInventory().deleteNumber(BAG_OF_SALT_ITEM_ID, 1);
         clearBit(player, BIT_NEEDS_SALT);
@@ -1041,15 +1135,18 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
         return;
       case "YmyQBe":
       case "M83RRg":
+        if (quest.getStage(player) !== STAGE_PREPARE) return;
         if (held(player, LINEN_ITEM_ID)) player.getInventory().deleteNumber(LINEN_ITEM_ID, 1);
         clearBit(player, BIT_NEEDS_LINEN);
         setBit(player, BIT_EMBALMER_MET | BIT_EMBALMER_GAVE);
         return;
       case "v-TFI2":
+        if (quest.getStage(player) !== STAGE_PREPARE || !hasBit(player, BIT_NEEDS_SALT)) return;
         if (held(player, BUCKET_OF_SALTWATER_ITEM_ID)) player.getInventory().deleteNumber(BUCKET_OF_SALTWATER_ITEM_ID, 1);
         if (!held(player, PILE_OF_SALT_ITEM_ID)) player.getInventory().adds(PILE_OF_SALT_ITEM_ID, 1);
         return;
       case "uBXp8K":
+        if (quest.getStage(player) !== STAGE_PREPARE || !hasBit(player, BIT_NEEDS_LINEN)) return;
         if (held(player, COINS_ITEM_ID, 30)) {
           player.getInventory().deleteNumber(COINS_ITEM_ID, 30);
           if (!held(player, LINEN_ITEM_ID)) player.getInventory().adds(LINEN_ITEM_ID, 1);
@@ -1057,6 +1154,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
         return;
       case "-BYp-2":
       case "T25MCO":
+        if (quest.getStage(player) !== STAGE_PREPARE || hasBit(player, BIT_SYMBOL_GIVEN)) return;
         if (held(player, WILLOW_LOGS_ITEM_ID)) player.getInventory().deleteNumber(WILLOW_LOGS_ITEM_ID, 1);
         setBit(player, BIT_CARPENTER_MET | BIT_CARPENTER_LOGS);
         return;
@@ -1064,6 +1162,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
       case "XO50xP":
       case "agi1bx":
       case "FnTufS":
+        if (quest.getStage(player) !== STAGE_PREPARE) return;
         if (!held(player, HOLY_SYMBOL_ITEM_ID)) player.getInventory().adds(HOLY_SYMBOL_ITEM_ID, 1);
         setBit(player, BIT_CARPENTER_MET | BIT_SYMBOL_GIVEN);
         if (!needsEmbalmerItems(player) && hasBit(player, BIT_EMBALMER_MET)) {
@@ -1073,15 +1172,20 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
       // Third flashback / ceremony.
       case "aEUIIO":
+        if (quest.getStage(player) !== STAGE_FLASHBACK_3) return;
         if (held(player, UNHOLY_SYMBOL_ITEM_ID)) player.getInventory().deleteNumber(UNHOLY_SYMBOL_ITEM_ID, 1);
         setStage(player, STAGE_FLASHBACK_3_END);
         teleport(player, PYRAMID_SOUTH);
         return;
       case "jqHLk2":
+        if (quest.getStage(player) !== STAGE_FIGHT) return;
         event.handled = true;
         setStage(player, STAGE_SAVED);
         return;
       case "Ochbk1":
+        // The ceremony High Priest's variant selection already advances SAVED to
+        // FLASHBACK_4 before the transcript runs.
+        if (quest.getStage(player) !== STAGE_SAVED && quest.getStage(player) !== STAGE_FLASHBACK_4) return;
         if (held(player, HOLY_SYMBOL_ITEM_ID)) player.getInventory().deleteNumber(HOLY_SYMBOL_ITEM_ID, 1);
         return;
 
@@ -1090,9 +1194,11 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
         event.handled = true;
         return;
       case "6y5c1d":
+        if (quest.getStage(player) !== STAGE_FINISH) return;
         event.handled = true;
         event.end = true;
         if (!quest.isComplete(player)) {
+          clearQuestItems(player);
           syncVarbits(player);
           quest.complete(player);
         }
@@ -1116,6 +1222,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
         teleport(player, INSIDE_CITY);
         return;
       case HOLE_ID:
+        if (stage < STAGE_SOPHANEM) return;
         event.handled = true;
         teleport(player, OUTSIDE_HOLE);
         return;
@@ -1136,11 +1243,12 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
         handleLadder(event, player, stage);
         return;
       case SUNTRAP_ID:
+        if (stage !== STAGE_PREPARE) return;
         event.handled = true;
         playCutscene(player, NpcIdentifiers.EMBALMER, "ceremony-preparations-aiding-the-embalmer-using-the-suntrap");
         return;
       case WATER_EDGE_ID:
-        if (!held(player, BUCKET_ITEM_ID)) return;
+        if (stage !== STAGE_PREPARE || !held(player, BUCKET_ITEM_ID)) return;
         event.handled = true;
         player.getInventory().deleteNumber(BUCKET_ITEM_ID, 1);
         player.getInventory().adds(BUCKET_OF_SALTWATER_ITEM_ID, 1);
@@ -1154,6 +1262,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   }
 
   function handlePyramidDoor(event, player, stage) {
+    if (stage < STAGE_SOPHANEM) return;
     if (stage === STAGE_SOPHANEM) {
       event.handled = true;
       playCutscene(player, NpcIdentifiers.WANDERER_2, "figuring-out-what-on-gielinor-is-going-on-flashback-1-touching-the-door-of-klenter-s-pyramid");
@@ -1367,9 +1476,48 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
       return;
     }
     if (itemId === BUCKET_OF_SALTWATER_ITEM_ID && objectId === SUNTRAP_ID) {
+      if (quest.getStage(player) !== STAGE_PREPARE || !hasBit(player, BIT_NEEDS_SALT)) return;
       event.handled = true;
       playCutscene(player, NpcIdentifiers.EMBALMER, "ceremony-preparations-aiding-the-embalmer-using-the-suntrap");
     }
+  }
+
+  /**
+   * The embalmer's sap is the one ceremony supply with no NPC to re-issue it:
+   * the wiki route is a knife on an evergreen tree while carrying the bucket.
+   * Hooking it makes a lost bucket of sap recoverable and consumes only the
+   * empty bucket.
+   */
+  function handleKnifeOnTree(event) {
+    const { player, itemId } = event;
+    if (itemId !== KNIFE_ITEM_ID) return false;
+    if (quest.getStage(player) !== STAGE_PREPARE || !hasBit(player, BIT_NEEDS_SAP)) return false;
+    event.handled = true;
+    if (held(player, BUCKET_OF_SAP_ITEM_ID)) {
+      player.sendMessage("You already have a bucket of sap.");
+      return true;
+    }
+    if (!held(player, BUCKET_ITEM_ID)) {
+      player.sendMessage("You need a bucket to collect the tree sap.");
+      return true;
+    }
+    player.getInventory().deleteNumber(BUCKET_ITEM_ID, 1);
+    player.getInventory().adds(BUCKET_OF_SAP_ITEM_ID, 1);
+    player.sendMessage("You cut the tree and allow some sap to drip into your bucket.");
+    return true;
+  }
+
+  /** Cache-granted "Empty" on the quest buckets: the bucket itself is reusable. */
+  function emptyCeremonyBucket(event) {
+    const { player, itemId, option } = event;
+    if (option !== "Empty") return false;
+    if (itemId !== BUCKET_OF_SAP_ITEM_ID && itemId !== BUCKET_OF_SALTWATER_ITEM_ID) return false;
+    event.handled = true;
+    // Empty acts on the clicked bucket only; the player may carry several.
+    player.getInventory().deleteNumber(itemId, 1);
+    player.getInventory().adds(BUCKET_ITEM_ID, 1);
+    player.sendMessage(itemId === BUCKET_OF_SAP_ITEM_ID ? "You empty the bucket of sap." : "You empty the bucket of salt water.");
+    return true;
   }
 
   // ==========================================================================
@@ -1408,6 +1556,9 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
       player.setAttribute(BITS_ATTRIBUTE, 0);
       player.setAttribute(JAR_ATTRIBUTE, "");
     }
+    // Players who finished before the cleanup hook may still hold the jar or
+    // unused ceremony supplies; a relog clears them like the final hand-in does.
+    if (quest.isComplete(player)) clearQuestItems(player);
     syncVarbits(player);
     refreshQuestList(player);
   }
@@ -1633,6 +1784,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onNpcInteraction("Sphinx", { "Talk-to": sphinxTalkTo });
   api.onNpcInteraction("High Priest", { "Talk-to": highPriestTalkTo });
+  api.onNpcInteraction("Jex", { "Talk-to": jexTalkTo });
   api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
@@ -1640,6 +1792,9 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject);
+  api.onItemOnObject("Knife", SAP_TREE_OBJECT_NAME, handleKnifeOnTree);
+  api.onItemAction("Bucket of sap", { Empty: emptyCeremonyBucket });
+  api.onItemAction("Bucket of saltwater", { Empty: emptyCeremonyBucket });
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);

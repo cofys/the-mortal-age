@@ -683,6 +683,7 @@ test("his bolts and fur balls are rolled as they land, after the player's prayer
     Fight._test.distantHitLands(event);
     assert.notEqual(event.hit, queued[0], "rolled as it lands");
     assert.equal(event.hit.getCombatType(), stance);
+    CombatFactory.applyHitTimeDefences(event.hit);
     return event.hit.getTotalDamage();
   };
   for (const [action, stance, prayer] of [

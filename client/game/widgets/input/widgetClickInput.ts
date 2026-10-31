@@ -9,6 +9,7 @@ import {
 } from "../../../widgets/menu/utils";
 import { runWidgetJsOp } from "../../../widgets/custom/dynamicWidgets";
 import { ClientState } from "../../ClientState";
+import { ClickMode } from "../../InputManager";
 import type { WidgetInteractionController } from "../WidgetInteractionController";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
 import type { WidgetInputControllerDeps, WidgetInputFrame, WidgetInputState } from "./widgetInputTypes";
@@ -155,6 +156,10 @@ export function processWidgetClickInput(
                     // Use absolute position (from hit detection) for event_mousey calculation
                     widgetInteraction.clickedWidgetX = input.leftClickX - (w._absX ?? w.x ?? 0);
                     widgetInteraction.clickedWidgetY = input.leftClickY - (w._absY ?? w.y ?? 0);
+                    // Scripts can close/unload this widget before the later world
+                    // input pass. Consume this frame's press now; keep the held
+                    // button and saved coordinates for widget drag/release.
+                    input.clickMode3 = ClickMode.NONE;
                     // Mark the clicked widget dirty immediately so the held-click
                     // translucency is visible on the same frame.
                     widgetManager.invalidateWidgetRender(w);

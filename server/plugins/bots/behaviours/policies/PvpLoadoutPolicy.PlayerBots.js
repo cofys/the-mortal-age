@@ -254,13 +254,16 @@ function buildConfiguredEquipment(definition, magicPackage) {
 }
 
 function buildConfiguredInventory(definition, magicPackage) {
+  const preset = { getStats: () => definition.stats };
+  // Switches are worn mid-fight, so a pool only offers gear the build can wear, as equipment does.
+  const wearable = (id) => item(id).getDefinition().getEquipmentType().getSlot() < 0 || canEquipPresetItem(preset, item(id));
   const inventory = [];
   for (const spec of definition.inventory ?? []) {
     const repeat = typeof spec === "object" && !Array.isArray(spec)
       ? Number(spec?.repeat ?? 1)
       : 1;
     for (let i = 0; i < repeat; i++) {
-      const resolved = resolveConfiguredItem(spec, magicPackage);
+      const resolved = resolveConfiguredItem(spec, magicPackage, wearable);
       if (resolved) inventory.push(resolved);
     }
   }

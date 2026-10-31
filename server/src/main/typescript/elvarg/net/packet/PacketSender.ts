@@ -3,6 +3,7 @@ import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot,
   type SongFades,
 } from "../protocol/ClientProtocol";
 import { BIT_MASKS } from "../../game/cache/codec/rs/MathConstants";
+import { MAX_GAME_MESSAGE_BYTES } from "../BinaryChannel";
 import { PacketBuilder } from "./PacketBuilder";
 import { ValueType } from "./ValueType";
 import { ByteOrder } from "./ByteOrder";
@@ -20,12 +21,14 @@ import { Misc } from "../../util/Misc";
 import {
   encodeBankSnapshot,
   encodeChatMessage,
+  type ChatStyle,
   encodeCollectionLogSnapshot,
   encodeContentData,
   encodeDestination,
   encodeHintArrow,
   encodeGroundItems,
   encodeGroundItemsDelta,
+  GROUND_ITEM_BYTES,
   encodeLocAddChange,
   encodeLocAnim,
   encodeTileSpotAnim,
@@ -65,6 +68,7 @@ import {
   encodeWidgetOpen,
   encodeWidgetOpenSub,
   encodeWidgetRunScript,
+  NATIVE_CLIENT_ATTRIBUTE,
   encodeWidgetSetAnimation,
   encodeWidgetSetFlags,
   encodeWidgetSetFlagsRange,
@@ -96,6 +100,8 @@ import {
 import { CacheDefinitions } from "../../game/cache/CacheDefinitions";
 const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 568;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
+/** The gameframe's side button click: selects the tab and runs its setup. */
+const TAB_SWITCH_SCRIPT = 915; // toplevel_sidebutton_switch
 /** PluginManager, loaded on first use (it imports this module, so not at load time). */
 let pluginManager: typeof import("../../plugins/PluginManager").PluginManager | null = null;
 const VARBIT_MULTICOMBAT_AREA = 4605;
@@ -150,10 +156,24 @@ export const CREATION_MENU_LAST_ITEM_ATTRIBUTE = "creation-menu:last-item";
 // WidgetActionRouter.shouldTransmitAction on the client) - ops 1-5 are Make 1/5/10/X/All.
 const CREATION_MENU_OP_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
 
+// One packet has to fit one game message: a browser-host world drops the connection over a larger
+// one, and a crater full of bot loot (Bounty Hunter) passes it. The rest of the stacks go as deltas.
+const GROUND_ITEMS_PER_PACKET = Math.floor((MAX_GAME_MESSAGE_BYTES - 16) / GROUND_ITEM_BYTES);
+
+/** Immutable identity of one mount; remounting the same group creates a new identity. */
+export interface SubInterfaceMount {
+  readonly targetUid: number;
+  readonly groupId: number;
+  readonly type: number;
+}
+
+/** OSRS's worn-equipment inventory. */
+const WORN_INVENTORY_ID = 94;
+
 export class PacketSender {
   private groundItemSerial = 0;
   private readonly varps = new Map<number, number>();
-  private subInterfaceTargets = new Map<number, { targetUid: number; type: number }>();
+  private subInterfaceTargets = new Map<number, SubInterfaceMount>();
   private chatboxGroupId = -1;
   private chatboxOwner: object | undefined;
   private presentingChatboxOwner: object | undefined;
@@ -431,6 +451,7 @@ export class PacketSender {
     // old mount closes), so the prayer and magic tabs get theirs back (sendGameframeTabSetup).
     if (tabId === 5) {
       const group = interfaceId === 17200 ? 77 : 541;
+      this.rememberSubInterface((161 << 16) | 81, group, 1);
       this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | 81, group));
       return this.sendGameframeTabSetup(group);
     }
@@ -445,9 +466,11 @@ export class PacketSender {
         this.sendConfig(id, value);
       }
       this.sendVarbit(4070, spellbook);
+      this.rememberSubInterface((161 << 16) | 82, 218, 1);
       this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | 82, 218));
       return this.sendGameframeTabSetup(218);
     }
+    this.rememberSubInterface((161 << 16) | tabId, interfaceId, 1);
     this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | tabId, interfaceId));
     return this;
   }
@@ -457,11 +480,13 @@ export class PacketSender {
     return this;
   }
 
+  /**
+   * Switches the sidebar to `id`, the way the gameframe's side button does. The switch is a
+   * client script, not a packet: there is no tab-switch opcode, and 106 is WIDGET_SET_HIDDEN
+   * (uid + hidden, five bytes), so the old one-byte packet was rejected by the encoder.
+   */
   public sendTab(id: number): PacketSender {
-    let out = new PacketBuilder(106);
-    out.puts(id, ValueType.C);
-    this.player.getSession().write(out);
-    return this;
+    return this.sendClientScript(TAB_SWITCH_SCRIPT, id);
   }
 
   public sendChatboxInterface(id: number): PacketSender {
@@ -483,6 +508,7 @@ export class PacketSender {
     // wait..." when clicked), which this per-player cache never sees.
     this.player.getFrameUpdater().clearGroup(id);
     this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, false));
+    this.rememberSubInterface(CHATBOX_MODAL_TARGET_UID, id, 0);
     this.player.getSession().sendClientPacket(encodeWidgetOpenSub(CHATBOX_MODAL_TARGET_UID, id, 0));
     return this;
   }
@@ -697,9 +723,9 @@ export class PacketSender {
   }
 
   /** `chatType` overrides the public type 2: ChatType.AUTOTYPER / MODAUTOTYPER for autochat. */
-  sendPublicChat(message: string, from: string, playerId: number, chatType?: number): this {
+  sendPublicChat(message: string, from: string, playerId: number, chatType?: number, style?: ChatStyle): this {
     this.player.getSession().sendClientPacket(
-      encodeChatMessage("public", message, from, "", playerId, chatType)
+      encodeChatMessage("public", message, from, "", playerId, chatType, style)
     );
     return this;
   }
@@ -787,9 +813,8 @@ export class PacketSender {
       this.chatboxGroupId = -1;
     }
     if (targets.size === 0) return false;
-    for (const target of targets) this.player.getSession().sendClientPacket(encodeWidgetCloseSub(target));
+    for (const target of targets) this.closeSubInterface(target);
     if (hadChatbox) this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, true));
-    for (const [groupId] of closable) this.subInterfaceTargets.delete(groupId);
     if (hadChatbox) this.emitInterfaceClosed(chatbox);
     return true;
   }
@@ -819,7 +844,7 @@ export class PacketSender {
     this.chatboxGroupId = -1;
     this.chatboxOwner = undefined;
     if (resetDialogue) this.player.getDialogueManager?.()?.reset?.();
-    this.player.getSession().sendClientPacket(encodeWidgetCloseSub(CHATBOX_MODAL_TARGET_UID));
+    this.closeSubInterface(CHATBOX_MODAL_TARGET_UID);
     this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, true));
     this.emitInterfaceClosed(group);
     return this;
@@ -907,6 +932,18 @@ export class PacketSender {
     }
     if (container?.constructor?.name === "Equipment") {
       this.player.getUpdateFlag().flag(Flag.APPEARANCE);
+      // The browser builds worn equipment from the appearance block; the official client needs
+      // the inventory (94) itself, with quantities (darts, knives), which appearance can't carry.
+      if (this.player.getAttribute(NATIVE_CLIENT_ATTRIBUTE) === true) {
+        const slots = Array.from({ length: capacity }, (_, slot) => ({
+          slot,
+          itemId: items?.[slot]?.getId?.() ?? -1,
+          quantity: items?.[slot]?.getAmount?.() ?? 0,
+        })).filter((slot) => slot.itemId >= 0);
+        this.player.getSession().sendClientPacket(
+          encodeWidgetRunScript(-1, [], undefined, undefined, { [WORN_INVENTORY_ID]: { capacity, slots } })
+        );
+      }
       return this;
     }
     return this;
@@ -1242,9 +1279,12 @@ export class PacketSender {
   }
 
   sendGroundItems(items: any[]): this {
-    this.player.getSession().sendClientPacket(encodeGroundItems(
-      ++this.groundItemSerial, items.map((item) => this.groundItemView(item))
-    ));
+    const stacks = items.map((item) => this.groundItemView(item));
+    const session = this.player.getSession();
+    session.sendClientPacket(encodeGroundItems(++this.groundItemSerial, stacks.slice(0, GROUND_ITEMS_PER_PACKET)));
+    for (let i = GROUND_ITEMS_PER_PACKET; i < stacks.length; i += GROUND_ITEMS_PER_PACKET) {
+      session.sendClientPacket(encodeGroundItemsDelta(++this.groundItemSerial, stacks.slice(i, i + GROUND_ITEMS_PER_PACKET), []));
+    }
     return this;
   }
 
@@ -1336,16 +1376,22 @@ export class PacketSender {
     type = 1,
     options: Parameters<typeof encodeWidgetOpenSub>[3] = {}
   ): this {
+    this.mountSubInterface(targetUid, groupId, type, options);
+    return this;
+  }
+
+  /** Mount as usual, returning the exact lifetime owned by this call, even if an opened hook replaces it. */
+  mountSubInterface(
+    targetUid: number,
+    groupId: number,
+    type = 1,
+    options: Parameters<typeof encodeWidgetOpenSub>[3] = {}
+  ): SubInterfaceMount {
     const existing = this.subInterfaceTargets.get(groupId);
     if (existing && existing.targetUid !== targetUid) {
       this.player.getSession().sendClientPacket(encodeWidgetCloseSub(existing.targetUid));
     }
-    for (const [mountedGroupId, mounted] of this.subInterfaceTargets) {
-      if (mounted.targetUid === targetUid && mountedGroupId !== groupId) {
-        this.subInterfaceTargets.delete(mountedGroupId);
-      }
-    }
-    this.subInterfaceTargets.set(groupId, { targetUid, type });
+    const mount = this.rememberSubInterface(targetUid, groupId, type);
     // A (re)mounted group starts with its cache text, so resend everything written to it.
     this.player.getFrameUpdater().clearGroup(groupId);
     this.player.getSession().sendClientPacket(encodeWidgetOpenSub(targetUid, groupId, type, options));
@@ -1355,7 +1401,31 @@ export class PacketSender {
       );
     }
     this.emitInterfaceOpened(targetUid, groupId, type);
-    return this;
+    return mount;
+  }
+
+  /** Include legacy native mounts without changing their packet or event sequence. */
+  private rememberSubInterface(targetUid: number, groupId: number, type: number): SubInterfaceMount {
+    for (const [mountedGroupId, mounted] of this.subInterfaceTargets) {
+      if (mounted.targetUid === targetUid) this.subInterfaceTargets.delete(mountedGroupId);
+    }
+    const mount: SubInterfaceMount = Object.freeze({ targetUid, groupId, type });
+    this.subInterfaceTargets.set(groupId, mount);
+    return mount;
+  }
+
+  getSubInterfaceAt(targetUid: number): SubInterfaceMount | undefined {
+    for (const mount of this.subInterfaceTargets.values()) {
+      if (mount.targetUid === targetUid) return mount;
+    }
+    return undefined;
+  }
+
+  /** A delayed owner may close only its own still-current mount, never a replacement. */
+  closeSubInterfaceMount(mount: SubInterfaceMount): boolean {
+    if (this.subInterfaceTargets.get(mount.groupId) !== mount) return false;
+    this.closeSubInterface(mount.targetUid);
+    return true;
   }
 
   /**

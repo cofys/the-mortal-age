@@ -41,12 +41,14 @@ function scene(t, { protect = true, roll = 31, prayer = 50, spectral = false, fo
 }
 for (const form of [core.NpcIdentifiers.KALPHITE_QUEEN_2, core.NpcIdentifiers.KALPHITE_QUEEN_3]) test(`KQ ${form}: positive ranged rolls drain at impact through Protect from Missiles`, t => {
   const f = scene(t, { form }); const [hit] = f.method.hits(f.queen, f.player);
+  core.CombatFactory.applyHitTimeDefences(hit);
   assert.equal(hit.getTotalDamage(), 0, 'protection still blocks HP damage');
   assert.equal(f.prayer(), 50, 'no drain before impact');
   f.method.handleAfterHitEffects(hit); assert.equal(f.prayer(), 49);
 });
 test('positive unprotected ranged hits drain one Prayer', t => {
   const f = scene(t, { protect: false }); const [hit] = f.method.hits(f.queen, f.player);
+  core.CombatFactory.applyHitTimeDefences(hit);
   assert.equal(hit.getTotalDamage(), 31); f.method.handleAfterHitEffects(hit); assert.equal(f.prayer(), 49);
 });
 for (const protect of [true, false]) test(`zero ranged rolls do not drain Prayer (protect=${protect})`, t => {
@@ -55,18 +57,23 @@ for (const protect of [true, false]) test(`zero ranged rolls do not drain Prayer
 });
 for (const [random, expected] of [[0.25, 49], [0.75, 50]]) test(`Spectral shield protected drain random=${random}`, t => {
   const f = scene(t, { spectral: true }); t.mock.method(Math, 'random', () => random);
-  const [hit] = f.method.hits(f.queen, f.player); f.method.handleAfterHitEffects(hit); assert.equal(f.prayer(), expected);
+  const [hit] = f.method.hits(f.queen, f.player);
+  core.CombatFactory.applyHitTimeDefences(hit);
+  f.method.handleAfterHitEffects(hit); assert.equal(f.prayer(), expected);
 });
 test('a ranged drain cannot take Prayer below zero', t => {
   const f = scene(t, { prayer: 0 }); const [hit] = f.method.hits(f.queen, f.player);
+  core.CombatFactory.applyHitTimeDefences(hit);
   f.method.handleAfterHitEffects(hit); assert.equal(f.prayer(), 0);
 });
 test('the pending ranged hit keeps its drain when the next attack style changes', t => {
   const f = scene(t); const [hit] = f.method.hits(f.queen, f.player); f.method.attackType = core.CombatType.MAGIC;
+  core.CombatFactory.applyHitTimeDefences(hit);
   f.method.handleAfterHitEffects(hit); assert.equal(f.prayer(), 49);
 });
 for (const type of [core.CombatType.MELEE, core.CombatType.MAGIC]) test(`KQ ${type} attacks do not drain Prayer`, t => {
   const f = scene(t); f.method.attackType = type; const [hit] = f.method.hits(f.queen, f.player);
+  core.CombatFactory.applyHitTimeDefences(hit);
   f.method.handleAfterHitEffects(hit); assert.equal(f.prayer(), 50);
 });
 
@@ -83,6 +90,7 @@ test('nearby ranged targets retain independent pre-protection rolls and Prayer d
   t.mock.method(core.Misc, 'randomInclusive', (min, max) => min === 0 && max === 31 ? rolls.shift() : min);
   const hits = f.method.hits(f.queen, f.player);
   assert.equal(hits.length, 2);
+  for (const hit of hits) core.CombatFactory.applyHitTimeDefences(hit);
   assert.deepEqual(hits.map(h => h.getTotalDamage()), [0, 0]);
   for (const hit of hits) f.method.handleAfterHitEffects(hit);
   assert.equal(f.prayer(), 49);

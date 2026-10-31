@@ -88,3 +88,26 @@ test('an autochat line reaches listeners as type 90, or 91 from a player with a 
     World.getNearbyPlayersForUpdate = nearby;
   }
 });
+
+// "red:wave:" and the pattern colours: colour (0-20) and effect (0-5) follow the text, then a
+// pattern's colour - 12 indices for colours 13-20. Builds that send none decode as before.
+const styledChatPacket = (kind, text, style) => {
+  const body = [kind, ...Buffer.from(text, 'latin1'), 0, ...style];
+  return Buffer.from([CHAT, body.length, ...body]);
+};
+
+test('CHAT carries the colour and effect typed with a public message', () => {
+  assert.deepEqual(decodeClientPacket(styledChatPacket(0, 'hello', [1, 1])),
+    { type: 'chat', messageType: 'public', text: 'hello', style: { colour: 1, effect: 1, pattern: undefined } });
+  assert.deepEqual(decodeClientPacket(styledChatPacket(0, 'hi', [14, 0, 3, 4])),
+    { type: 'chat', messageType: 'public', text: 'hi', style: { colour: 14, effect: 0, pattern: [3, 4] } });
+  assert.deepEqual(decodeClientPacket(styledChatPacket(0, 'x', [21, 0])), { type: 'chat', messageType: 'public', text: 'x' }, 'no colour 21');
+});
+
+test('each copy of a public message carries its style after the speaker index', () => {
+  const { encodeChatMessage } = require('../dist/net/protocol/ClientProtocol');
+  const plain = encodeChatMessage('public', 'hi', 'Bob', '', 7);
+  const styled = encodeChatMessage('public', 'hi', 'Bob', '', 7, undefined, { colour: 14, effect: 2, pattern: [3, 4] });
+  assert.deepEqual([...styled.subarray(styled.length - 4)], [14, 2, 3, 4]);
+  assert.equal(styled.length - plain.length, 4);
+});

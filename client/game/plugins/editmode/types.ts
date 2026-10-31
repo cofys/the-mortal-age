@@ -1,3 +1,4 @@
+import type { BrowserHostNpcSpawn } from "./hostProtocol/npcSpawnMessage";
 import type { ObjectSpawn } from "./hostProtocol/objectSpawnsMessage";
 /** Loc shape ids, mirrored from rs/config/loctype/LocModelType. */
 export const LOC_SHAPE_NORMAL = 10;
@@ -123,12 +124,16 @@ export interface EditModeBuildingProfile {
 }
 
 export interface EditModeEdit extends EditModeTile {
-    kind: "place" | "delete" | "npc" | "terrain" | "clear" | "height" | "flag" | "underlay";
+    kind: "place" | "delete" | "npc" | "npcDelete" | "npcWander" | "terrain" | "clear" | "height" | "flag" | "underlay";
     /** Loc id, NPC type id, overlay id, or explicit terrain height (0-255). */
     locId: number;
     /** Loc shape, or overlay shape for terrain; unused for NPCs. */
     shape: number;
     rotation: number;
+    /** Wandering range for a spawn; 0 keeps the NPC anchored. */
+    wanderRadius?: number;
+    /** Facing of a persisted spawn, preserved when it is moved or overridden. */
+    direction?: number;
 }
 
 export interface EditModePluginConfig {
@@ -165,6 +170,14 @@ export interface EditModeSelection extends EditModeTile {
     locName: string;
     shape?: number;
     rotation?: number;
+    /** The selected NPC instance, used to despawn it while editing. */
+    npcServerId?: number;
+    /** Whether the selected NPC is a persisted spawn or an editor-placed one. */
+    npcSource?: "spawn" | "custom";
+    /** The persisted spawn the selection came from, when known. */
+    npcSpawn?: BrowserHostNpcSpawn;
+    /** Current wandering range; 0 keeps the NPC anchored. */
+    npcWanderRadius?: number;
     tileEndX?: number;
     tileEndY?: number;
     planeEnd?: number;
@@ -262,6 +275,8 @@ export interface EditModeHost {
     describeDefinition?(kind: EditModeSearchKind, id: number): EditModeDefinitionSummary | undefined;
     loadShops?(): Promise<EditModeShop[]>;
     loadNpcInteractions?(): Promise<EditModeNpcInteractions>;
+    /** Saved npc-spawns-custom.json records, converted to editor edits. */
+    loadPersistedNpcSpawnEdits?(): Promise<EditModeEdit[]>;
     getNpcMenuOptions?(npcTypeId: number): readonly EditModeNpcMenuOption[];
     /** Cache-backed overlay colours and textures for the terrain palette. */
     isWaterOverlay?(id: number): boolean;
@@ -271,6 +286,10 @@ export interface EditModeHost {
     /** Spawns a cache NPC client-side. Returns the synthetic server id used. */
     spawnNpc(npcTypeId: number, tile: EditModeTile, rotation: number): number | undefined;
     despawnNpc(serverId: number): void;
+    /** Hides the client-side NPC for a persisted game spawn until it is shown again. */
+    hideNpcSpawn?(spawn: BrowserHostNpcSpawn): void;
+    /** Puts a hidden persisted game spawn back in the scene. */
+    showNpcSpawn?(spawn: BrowserHostNpcSpawn): void;
     /** Paints a floor overlay on a tile and reloads the map square. */
     setTerrainOverlay(tile: EditModeTile, overlay: number, shape: number, rotation: number): void;
     clearTerrainOverride(tile: EditModeTile): void;

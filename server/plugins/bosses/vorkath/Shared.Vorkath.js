@@ -28,6 +28,13 @@ const WAKING_ID = 8058;
 const QUEST_AWAKE_ID = 8060;
 const AWAKE_ID = 8061;
 const SPAWN_ID = 8063;
+/**
+ * Dragon Slayer II's KEYS stage (`S.KEYS` in DragonSlayerII.Quest.js), the only one where
+ * Vorkath blocks the way into the laboratory and has to be killed. Every other stage -
+ * including before the quest and after it - meets the post-quest boss, so a player who has not
+ * started the quest still gets her 750 hitpoints and her drop table.
+ */
+const QUEST_FIGHT_STAGE = 8;
 
 const SIZE = 7;
 const SPAWN_TILE = [2269, 4062, 0];
@@ -86,9 +93,8 @@ const ATTR_FIRST_ATTACK_AT = "vorkath:first-attack-at";
 const ATTR_AWAKE_ID = "vorkath:awake-id";
 
 function awakeIdForPlayer(player) {
-  return Number(player?.getAttribute?.("quest.dragon_slayer_ii.stage") ?? 0) >= 14
-    ? AWAKE_ID
-    : QUEST_AWAKE_ID;
+  const stage = Number(player?.getAttribute?.("quest.dragon_slayer_ii.stage") ?? 0);
+  return stage === QUEST_FIGHT_STAGE ? QUEST_AWAKE_ID : AWAKE_ID;
 }
 
 function awakeIdForNpc(npc) {
@@ -353,6 +359,7 @@ module.exports = {
   QUEST_AWAKE_ID,
   AWAKE_ID,
   SPAWN_ID,
+  QUEST_FIGHT_STAGE,
   SIZE,
   SPAWN_TILE,
   TELEPORT_TILE,

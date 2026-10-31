@@ -308,8 +308,9 @@ fn getMaterial(textureId: u32) -> Material {
     let data5 = textureLoad(u_textureMaterials, vec2<i32>(i32(textureId), 5), 0);
 
     var material: Material;
-    material.animU = i32(data.r);
-    material.animV = i32(data.g);
+    // The atlas is rgba8uint, but scroll velocities are signed bytes.
+    material.animU = i32(data.r ^ 128u) - 128;
+    material.animV = i32(data.g ^ 128u) - 128;
     material.alphaCutOff = f32(data.b & 0xFFu) / 255.0;
     material.frameCount = i32(data.a & 0xFFu);
     material.animSpeed = i32(data1.r & 0xFFu);

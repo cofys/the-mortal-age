@@ -70,6 +70,14 @@ function npcKey(edit: EditModeEdit): string {
     return `${edit.tileX},${edit.tileY},${edit.plane},${edit.locId}`;
 }
 
+/** Stable identity for deduplicating edits imported from a spawn patch. */
+function editKey(edit: EditModeEdit): string {
+    return JSON.stringify([
+        edit.kind, edit.locId, edit.tileX, edit.tileY, edit.plane,
+        edit.shape, edit.rotation, edit.wanderRadius, edit.direction,
+    ]);
+}
+
 function toInt(value: unknown, fallback: number, min: number, max: number): number {
     const numeric = Math.floor(Number(value));
     if (!Number.isFinite(numeric)) return fallback;
@@ -263,11 +271,13 @@ export class EditModePlugin {
     markMapEditsSaved(packs: readonly { regionId: number; data: Uint8Array }[], spawns?: ObjectSpawn[]): void {
         this.host?.markMapEditsSaved?.(packs, spawns);
         // Saved map/object data is the new base for subsequent edits and export-mode changes.
-        this.setConfig({ edits: this.config.edits.filter((edit) => edit.kind === "npc") });
+        this.setConfig({ edits: this.config.edits.filter((edit) =>
+            edit.kind === "npc" || edit.kind === "npcDelete" || edit.kind === "npcWander") });
     }
 
     exportObjectSpawns() {
-        if (!this.config.edits.some((edit) => edit.kind !== "npc")) return undefined;
+        if (!this.config.edits.some((edit) =>
+            edit.kind !== "npc" && edit.kind !== "npcDelete" && edit.kind !== "npcWander")) return undefined;
         return this.host?.exportObjectSpawns?.(this.config.edits);
     }
 
@@ -277,7 +287,8 @@ export class EditModePlugin {
         if (!exportRegionPack) return [];
         const tiles = new Map<number, EditModeTile>();
         for (const edit of this.config.edits) {
-            if (edit.kind === "npc" || (this.config.saveObjectSpawns && (edit.kind === "place" || edit.kind === "delete"))) continue;
+            if (edit.kind === "npc" || edit.kind === "npcDelete" || edit.kind === "npcWander" ||
+                (this.config.saveObjectSpawns && (edit.kind === "place" || edit.kind === "delete"))) continue;
             tiles.set(((edit.tileX >> 6) << 8) | (edit.tileY >> 6), edit);
         }
         const packs: Array<{ regionId: number; data: Uint8Array }> = [];
@@ -432,6 +443,25 @@ export class EditModePlugin {
         return this.host?.loadNpcInteractions?.() ?? Promise.reject(new Error("NPC interaction data is unavailable"));
     }
 
+    /** The saved npc-spawns-custom.json patch as editor edits, for a fresh profile. */
+    loadPersistedNpcSpawnEdits(): Promise<EditModeEdit[]> {
+        return this.host?.loadPersistedNpcSpawnEdits?.() ?? Promise.resolve([]);
+    }
+
+    /** Merges imported spawn edits once, replaying them into the preview. */
+    importNpcSpawnEdits(edits: readonly EditModeEdit[]): boolean {
+        const seen = new Set(this.config.edits.map(editKey));
+        const fresh = edits.filter((edit) => {
+            const key = editKey(edit);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        if (fresh.length === 0) return false;
+        this.commitEdits(fresh);
+        return true;
+    }
+
     getNpcMenuOptions(npcTypeId: number) {
         return this.host?.getNpcMenuOptions?.(npcTypeId) ?? [];
     }
@@ -518,19 +548,32 @@ export class EditModePlugin {
 
     duplicateSelection(): void {
         this.cancelMove();
-        if (!this.selection || this.selection.kind === "npc" || this.selection.locId < 0) return;
+        const selection = this.selection;
+        if (!selection || selection.locId < 0) return;
+        if (selection.kind === "npc") {
+            this.setConfig({ tool: "place", placeKind: "npc", npcId: selection.locId });
+            return;
+        }
+        if (selection.kind !== "loc") return;
         this.setConfig({
             tool: "place",
             placeKind: "loc",
-            locId: this.selection.locId,
-            shape: this.selection.shape ?? this.config.shape,
-            rotation: this.selection.rotation ?? this.config.rotation,
+            locId: selection.locId,
+            shape: selection.shape ?? this.config.shape,
+            rotation: selection.rotation ?? this.config.rotation,
         });
     }
 
     moveSelection(): void {
         const selection = this.selection;
-        if (!selection || selection.kind !== "loc" || selection.locId < 0) return;
+        if (!selection || selection.locId < 0) return;
+        if (selection.kind === "npc") {
+            this.setConfig({ tool: "place", placeKind: "npc", npcId: selection.locId });
+            // The source NPC stays put until the destination click is applied.
+            this.movingSelection = { ...selection };
+            return;
+        }
+        if (selection.kind !== "loc") return;
         this.duplicateSelection();
         this.movingSelection = { ...selection, shape: this.config.shape, rotation: this.config.rotation };
         this.host?.onLocDel(
@@ -543,6 +586,9 @@ export class EditModePlugin {
         const moving = this.movingSelection;
         if (!moving) return;
         this.movingSelection = undefined;
+        // NPC moves leave the source in place until the destination click, so
+        // there is nothing to restore. Loc previews removed it up front.
+        if (moving.kind !== "loc") return;
         // Preview removal never enters saved edits; cancellation restores the source.
         this.host?.onLocAddChange(moving.locId,
             { x: moving.tileX, y: moving.tileY }, moving.plane,
@@ -584,22 +630,154 @@ export class EditModePlugin {
     }
 
     deleteSelection(): void {
-        if (!this.selection || this.selection.kind === "npc" || this.selection.locId < 0) return;
+        const selection = this.selection;
+        if (!selection) return;
         if (this.movingSelection) this.setConfig({ tool: "select" });
+        if (selection.kind === "npc") {
+            this.deleteNpcSelection(selection);
+            return;
+        }
+        if (selection.kind !== "loc" || selection.locId < 0) return;
         this.commitEdits([
             {
                 kind: "delete",
                 locId: 0,
-                tileX: this.selection.tileX,
-                tileY: this.selection.tileY,
-                plane: this.selection.plane,
-                shape: this.selection.shape ?? this.config.shape,
-                rotation: this.selection.rotation ?? this.config.rotation,
+                tileX: selection.tileX,
+                tileY: selection.tileY,
+                plane: selection.plane,
+                shape: selection.shape ?? this.config.shape,
+                rotation: selection.rotation ?? this.config.rotation,
             },
         ]);
         this.selection = undefined;
         this.host?.clearSelectionHighlight?.();
         this.commit();
+    }
+
+    /**
+     * Editor-placed NPCs lose their edits; persisted game spawns get a removal
+     * marker so saving keeps them gone.
+     */
+    private deleteNpcSelection(selection: EditModeSelection): void {
+        if (selection.npcSource === undefined) {
+            // A live server NPC (logged-in editing): hide it for this session only.
+            if (selection.npcServerId !== undefined) this.host?.despawnNpc(selection.npcServerId);
+            this.selection = undefined;
+            this.host?.clearSelectionHighlight?.();
+            this.commit();
+            return;
+        }
+        if (this.customNpcEditIndex(selection) >= 0) {
+            // A saved patch can hold a removal marker beside the replacement at
+            // this tile (a canonical spawn moved away and back). Keep the marker:
+            // it is what suppresses the canonical spawn, so dropping it would
+            // bring the original back as soon as the patch reloads.
+            this.removeEdits(this.npcReplacementIndicesAt(selection));
+        } else {
+            this.removeEdits(this.npcEditIndicesAt(selection));
+            const spawn = selection.npcSpawn ?? {
+                id: selection.locId,
+                tileX: selection.tileX,
+                tileY: selection.tileY,
+                plane: selection.plane,
+            };
+            this.commitEdits([{
+                kind: "npcDelete",
+                locId: spawn.id,
+                tileX: spawn.tileX,
+                tileY: spawn.tileY,
+                plane: spawn.plane,
+                shape: 0,
+                rotation: 0,
+            }]);
+        }
+        this.selection = undefined;
+        this.host?.clearSelectionHighlight?.();
+        this.commit();
+    }
+
+    /**
+     * Changes a spawn's wandering range; 0 keeps it anchored. Editor-placed
+     * NPCs carry it on the spawn edit, persisted spawns on a small override.
+     */
+    setSelectionWanderRadius(radius: number): void {
+        const selection = this.selection;
+        if (!selection || selection.kind !== "npc" || selection.locId < 0) return;
+        if (selection.npcSource === undefined) return;
+        const wanderRadius = Math.max(0, Math.min(255, Math.trunc(radius)));
+        if (!Number.isFinite(wanderRadius)) return;
+        const customIndex = this.customNpcEditIndex(selection);
+        if (customIndex >= 0) {
+            const edits = this.config.edits.map((edit, index) =>
+                index === customIndex ? { ...edit, wanderRadius } : edit,
+            );
+            this.setConfig({ edits });
+        } else {
+            const indices = this.npcEditIndicesAt(selection).filter((index) =>
+                this.config.edits[index].kind === "npcWander",
+            );
+            this.removeEdits(indices);
+            this.commitEdits([{
+                kind: "npcWander",
+                locId: selection.locId,
+                tileX: selection.tileX,
+                tileY: selection.tileY,
+                plane: selection.plane,
+                shape: 0,
+                rotation: 0,
+                wanderRadius,
+                ...(selection.npcSpawn?.direction === undefined
+                    ? {}
+                    : { direction: selection.npcSpawn.direction }),
+            }]);
+        }
+        this.selection = { ...selection, npcWanderRadius: wanderRadius };
+        this.commit();
+    }
+
+    /** Index of the editor-placed NPC edit a selection points at, if any. */
+    private customNpcEditIndex(selection: EditModeSelection): number {
+        return this.config.edits.findIndex((edit) =>
+            edit.kind === "npc" &&
+            edit.locId === selection.locId &&
+            edit.tileX === selection.tileX &&
+            edit.tileY === selection.tileY &&
+            edit.plane === selection.plane,
+        );
+    }
+
+    /** Every NPC edit (spawn, removal or wander override) at the selected tile. */
+    private npcEditIndicesAt(selection: EditModeSelection): number[] {
+        return this.config.edits.flatMap((edit, index) =>
+            (edit.kind === "npc" || edit.kind === "npcDelete" || edit.kind === "npcWander") &&
+            edit.locId === selection.locId &&
+            edit.tileX === selection.tileX &&
+            edit.tileY === selection.tileY &&
+            edit.plane === selection.plane
+                ? [index]
+                : [],
+        );
+    }
+
+    /**
+     * The edits that make up an editor-placed NPC at the selected tile: its
+     * spawn and wander override, never a removal marker. A marker with the same
+     * type and tile suppresses the canonical spawn the replacement stands in
+     * for, so removing the replacement has to leave it behind.
+     */
+    private npcReplacementIndicesAt(selection: EditModeSelection): number[] {
+        return this.npcEditIndicesAt(selection).filter((index) =>
+            this.config.edits[index].kind !== "npcDelete");
+    }
+
+    private removeEdits(indices: readonly number[]): void {
+        if (indices.length === 0) return;
+        const removed = new Set(indices);
+        const removedEdits = this.config.edits.filter((_, index) => removed.has(index));
+        for (const edit of removedEdits) this.revert(edit);
+        const next = this.config.edits.filter((_, index) => !removed.has(index));
+        this.setConfig({ edits: next });
+        this.refreshSpecialRegions(removedEdits, next);
     }
 
     getSelectionOverlay(): number | undefined {
@@ -794,7 +972,7 @@ export class EditModePlugin {
         if (this.movingSelection) this.setConfig({ tool: "select" });
         const edits = this.config.edits;
         for (const edit of edits) {
-            if (edit.kind === "npc" || edit.kind === "terrain") this.revert(edit);
+            if (edit.kind === "npc" || edit.kind === "npcDelete" || edit.kind === "terrain") this.revert(edit);
         }
         this.setConfig({ edits: [] });
         this.refreshSpecialRegions(edits, []);
@@ -808,6 +986,15 @@ export class EditModePlugin {
                 this.host?.despawnNpc(serverId);
                 this.spawnedNpcs.delete(key);
             }
+            return;
+        }
+        if (edit.kind === "npcDelete") {
+            this.host?.showNpcSpawn?.({
+                id: edit.locId,
+                tileX: edit.tileX,
+                tileY: edit.tileY,
+                plane: edit.plane,
+            });
             return;
         }
         if (edit.kind === "terrain") {
@@ -879,7 +1066,38 @@ export class EditModePlugin {
             rotation: this.config.rotation,
         };
         const moving = this.movingSelection;
-        if (moving && edit.kind === "place") {
+        if (moving && placingNpc && moving.kind === "npc") {
+            this.movingSelection = undefined;
+            this.selection = undefined;
+            host.clearSelectionHighlight?.();
+            const customIndex = this.customNpcEditIndex(moving);
+            // Moving a replacement away leaves the canonical spawn's removal
+            // marker in place, exactly as deleting it does; otherwise the
+            // original returns beside the moved copy.
+            this.removeEdits(customIndex >= 0
+                ? this.npcReplacementIndicesAt(moving)
+                : this.npcEditIndicesAt(moving));
+            if (moving.npcWanderRadius !== undefined) edit.wanderRadius = moving.npcWanderRadius;
+            if (moving.npcSpawn?.direction !== undefined) edit.direction = moving.npcSpawn.direction;
+            const edits: EditModeEdit[] = [];
+            if (customIndex < 0) {
+                if (moving.npcSource === "spawn") {
+                    edits.push({
+                        kind: "npcDelete",
+                        locId: moving.locId,
+                        tileX: moving.tileX,
+                        tileY: moving.tileY,
+                        plane: moving.plane,
+                        shape: 0,
+                        rotation: 0,
+                    });
+                } else if (moving.npcServerId !== undefined) {
+                    this.host?.despawnNpc(moving.npcServerId);
+                }
+            }
+            this.commitEdits([...edits, edit]);
+            this.setConfig({ tool: "select" });
+        } else if (moving && edit.kind === "place") {
             this.movingSelection = undefined;
             this.selection = undefined;
             host.clearSelectionHighlight?.();
@@ -1082,6 +1300,18 @@ export class EditModePlugin {
             return;
         }
 
+        if (edit.kind === "npcDelete") {
+            host.hideNpcSpawn?.({
+                id: edit.locId,
+                tileX: edit.tileX,
+                tileY: edit.tileY,
+                plane: edit.plane,
+            });
+            return;
+        }
+
+        if (edit.kind === "npcWander") return;
+
         if (edit.kind === "terrain") {
             host.setTerrainOverlay(
                 { tileX: edit.tileX, tileY: edit.tileY, plane: edit.plane },
@@ -1248,7 +1478,8 @@ export class EditModePlugin {
         // lose every "r" to the rotate shortcut.
         if (!this.handlesCanvasInput()) return;
         const key = event.key.toLowerCase();
-        if (this.selection?.kind === "loc" && (key === "c" || key === "m") &&
+        const moveableSelection = this.selection?.kind === "loc" || this.selection?.kind === "npc";
+        if (moveableSelection && (key === "c" || key === "m") &&
             !event.ctrlKey && !event.metaKey && !event.altKey) {
             event.preventDefault();
             event.stopPropagation();
@@ -1256,6 +1487,13 @@ export class EditModePlugin {
                 if (key === "c") this.duplicateSelection();
                 else this.moveSelection();
             }
+            return;
+        }
+        if (event.key === "Delete" && moveableSelection &&
+            !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!event.repeat) this.deleteSelection();
             return;
         }
         if (EDITOR_CAMERA_KEYS.has(event.code) && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -1501,6 +1739,8 @@ export class EditModePlugin {
                         (edit.kind === "place" ||
                             edit.kind === "delete" ||
                             edit.kind === "npc" ||
+                            edit.kind === "npcDelete" ||
+                            edit.kind === "npcWander" ||
                             edit.kind === "terrain" ||
                             edit.kind === "clear" ||
                             edit.kind === "height" ||
@@ -1515,6 +1755,12 @@ export class EditModePlugin {
                     plane: toInt(edit.plane, 0, 0, 3),
                     shape: toInt(edit.shape, LOC_SHAPE_NORMAL, 0, 22),
                     rotation: toInt(edit.rotation, 0, 0, 3),
+                    ...(edit.wanderRadius === undefined
+                        ? {}
+                        : { wanderRadius: toInt(edit.wanderRadius, 0, 0, 255) }),
+                    ...(edit.direction === undefined
+                        ? {}
+                        : { direction: toInt(edit.direction, 0, 0, 7) }),
                 })),
         };
     }

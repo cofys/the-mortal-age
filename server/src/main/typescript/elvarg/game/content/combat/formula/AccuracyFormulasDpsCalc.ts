@@ -71,6 +71,11 @@ export class AccuracyFormulasDpsCalc {
         return next;
     }
 
+    /** Forgets a dead entity's cached effective levels and rolls before it respawns. */
+    public static clearRollCache(entity: Mobile): void {
+        this.rollCache.delete(entity);
+    }
+
     static randomFloat() {
         return Math.random();
     }

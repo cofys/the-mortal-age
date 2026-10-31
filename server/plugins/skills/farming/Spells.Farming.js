@@ -75,7 +75,7 @@ function farmingSpell(event, patch) {
         if (Math.floor(Math.random() * 256) < successes) {
             state.resurrected = true;
             state.status = "growing";
-            state.nextAt = Model.nextGrowth(Date.now(), Data.CROPS.get(state.crop).minutes, Patches.farmFor(player).offset);
+            state.nextAt = Model.nextGrowth(Date.now(), Data.stageMinutes(Data.CROPS.get(state.crop), state.stage), Patches.farmFor(player).offset);
             player.sendMessage("You restore the crop to life.");
         } else { Patches.clearPatch(player, patch); player.sendMessage("The spell fails and clears the dead crop."); }
     }

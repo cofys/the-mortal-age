@@ -267,7 +267,7 @@ export abstract class Mobile extends Entity {
 
     /**
      * Tints the actor's model towards an HSL colour over client cycles (OSRS tinting): `weight`
-     * is how strongly, 0-255. `ActorTint.NONE` takes a tint away. Only players send it so far.
+     * is how strongly, 0-255. `ActorTint.NONE` takes a tint away.
      */
     tint(tint: ActorTint): void {
         this.tintState = tint;

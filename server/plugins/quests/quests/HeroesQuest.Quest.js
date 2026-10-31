@@ -20,9 +20,17 @@
  */
 module.exports = function registerHeroesQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
+  const { registerQuest, startTranscript, refreshQuestList, QUEST_POINTS_ATTRIBUTE } = require("../QuestRuntime");
 
   const PAGE = "Heroes' Quest";
+  const REQUIRED_QUEST_POINTS = 55;
+  /** Quests that must be complete before Achietties will talk about membership. */
+  const REQUIRED_QUESTS = [
+    ["shield_of_arrav", "Shield of Arrav"],
+    ["lost_city", "Lost City"],
+    ["merlins_crystal", "Merlin's Crystal"],
+    ["dragon_slayer_i", "Dragon Slayer I"],
+  ];
 
   const ACHIETTIES_IDS = new Set([
     NpcIdentifiers.ACHIETTIES,
@@ -241,12 +249,27 @@ module.exports = function registerHeroesQuest(api) {
     const value = String(text).toLowerCase();
     if (value.includes("skill levels are lower than the quest requirements")) return false;
     if (value.includes("full inventory")) return false;
-    void player;
+    if (value.includes("quest requirements to start")) return !meetsRequirements(player);
     return null;
+  }
+
+  function questComplete(player, key) {
+    const request = { player, key, complete: false };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
+  /** Start gate: 55 Quest points and the four prerequisite quests (skills are only needed later). */
+  function meetsRequirements(player) {
+    return (
+      (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) >= REQUIRED_QUEST_POINTS &&
+      REQUIRED_QUESTS.every(([key]) => questComplete(player, key))
+    );
   }
 
   function handleStartHook({ player, npcId, hook }) {
     if (!ACHIETTIES_IDS.has(npcId) || hook !== START_HOOK) return;
+    if (!meetsRequirements(player)) return;
     if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
   }
 

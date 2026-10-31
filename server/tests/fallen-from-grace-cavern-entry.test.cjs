@@ -100,12 +100,12 @@ function ownSkiffAtApproach(h) {
   assert.equal(Sailing.board(h.player, 'wyrmscraig'), null);
   const boat = Sailing.instanceAboard(h.player);
   assert.ok(boat, 'real owned skiff is aboard');
-  // Capture P2 tick 10 root (2533.5,2188.25), heading east along the real open-sea approach.
-  boat.fineX = 324288;
-  boat.fineY = 280096;
+  // Capture P2 tick 26 root (2554.5,2200.75), angle 1408: the real crossing toward the portal at 2559,2203.
+  boat.fineX = 326656;
+  boat.fineY = 281696;
   boat.level = 0;
-  boat.angle = 1536;
-  boat.heading = 1536;
+  boat.angle = 1408;
+  boat.heading = 1408;
   boat.moveMode = BoatMoveMode.Half;
   return boat;
 }
@@ -137,7 +137,9 @@ test('real hull reaches the captured approach line and auto-enters without an ob
   assert.equal(h.player.getLocation(), deckLocation, 'deck projection is unchanged');
   assert.equal(h.sailing.boats[0].location.kind, 'at_sea');
   assert.equal(h.sailing.boats[0].location.dock, 'wyrmscraig_cave');
-  assert.equal(h.tasks().length, 0, 'watch stops after entry');
+  // The cave effect's own timers (remove at 2 ticks, close the mount at 5) run out; the watch is gone.
+  for (let tick = 0; tick < 5; tick++) for (const task of h.tasks().splice(0)) task.run();
+  assert.equal(h.tasks().length, 0, 'watch and cave effect timers stop after entry');
 
   assert.equal(Sailing.disembark(h.player, 'wyrmscraig_cave'), null);
   assert.equal(h.player.getLocation().getX(), 2583);

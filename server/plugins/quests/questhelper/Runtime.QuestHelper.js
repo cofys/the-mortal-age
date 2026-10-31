@@ -9,13 +9,102 @@ function helperConfig(value){if(!record(value))return undefined;const out={};for
 function lockSection(value){return record(value)&&Number.isSafeInteger(value.section)&&value.section>=0&&value.section<4096&&typeof value.locked==='boolean'?{section:value.section,locked:value.locked}:undefined;}
 const status=(q,p)=>q.isComplete(p)?'FINISHED':q.isStarted(p)?'IN_PROGRESS':'NOT_STARTED';
 function items(container){return container.getItems().flatMap((item,slot)=>item&&item.getId()>0&&item.getAmount()>0?[{id:item.getId(),quantity:item.getAmount(),slot}]:[]);}
+const MAX_EVENTS=1024;
+// One round per value the helper discovers, because SnapshotClient.varbit() throws on the first
+// missing id: Ernest's six-lever condition tree needs six rounds in a single call. The bound is
+// above the largest number of distinct varbits any single helper file reads (55, Mourning's End
+// Part II), and it exists only so a bridge that keeps asking cannot spin forever.
+const MAX_REQUEST_ROUNDS=64;
+const validEvents=events=>Array.isArray(events)&&events.length<=MAX_EVENTS&&events.every(event=>record(event)&&typeof event.type==='string'&&event.type.length<=128);
 
 class QuestHelperRuntime {
- constructor({getQuests,bridge,send,nativeResult,projectState,varbitDefinition,eligibility}){this.getQuests=getQuests;this.bridge=bridge;this.send=send;this.nativeResult=nativeResult;this.projectState=projectState;this.varbitDefinition=varbitDefinition;this.eligibility=eligibility;this.players=new Map();this.catalogData=null;}
+ constructor({getQuests,bridge,send,nativeResult,projectState,varbitDefinition,eligibility,contract,fillRequests}){this.getQuests=getQuests;this.bridge=bridge;this.send=send;this.nativeResult=nativeResult;this.projectState=projectState;this.varbitDefinition=varbitDefinition;this.eligibility=eligibility;this.contract=contract;this.fillRequests=fillRequests;this.players=new Map();this.agents=new Map();this.catalogData=null;}
  progress(player){const eligibility=this.eligibility?.(player);return this.getQuests().map(q=>({questKey:q.key,status:status(q,player),stage:q.getStage(player),...(eligibility?{eligibility:eligibility.get(q.key)}:{})}));}
+ quests(){return this.getQuests().map(q=>({key:q.key,name:q.name}));}
+ describe(player,questKey){const quest=this.getQuests().find(q=>q.key===questKey);if(!quest)return null;const wire=this.wire(player,quest),complete=quest.isComplete(player);return {questKey:quest.key,name:quest.name,status:status(quest,player),stage:quest.getStage(player),complete,wire,contract:this.contract?.(quest.name,wire,complete)??null};}
+ /** The progress varp/varbit a quest mirrors its stage to, plus the value the client would hold. */
+ wire(player,quest){const stage=quest.getStage(player);if(quest.varbitId!==undefined){const definition=this.varbitDefinition?.(quest.varbitId);return {kind:'varbit',id:quest.varbitId,value:quest.varbitValue(stage,player),...(definition?{varp:definition.baseVar,lsb:definition.startBit,msb:definition.endBit}:{})};}if(quest.varpId!==undefined)return {kind:'varp',id:quest.varpId,value:quest.varpValue(stage,player)};return null;}
  emit(player,data){for(const frame of encodeChunkedPluginMessage(data))this.send(player,frame);}
+ async catalog(){if(!this.catalogPromise)this.catalogPromise=this.bridge.catalog().catch(error=>{this.catalogPromise=null;throw error;});this.catalogData=await this.catalogPromise;return this.catalogData;}
+ helperVariants(questKey){const mapping=this.catalogData?.quests.find(q=>q.questKey===questKey);return mapping?[mapping.helperVariant,...(mapping.variants||[]).map(v=>v.helperVariant)].filter(v=>typeof v==='string'):[];}
+ /** Select-time checks tolerate a catalog that has not loaded yet; evaluation does not. */
+ checkVariant(questKey,variant,strict){if(variant===undefined)return;const mapping=this.catalogData?.quests.find(q=>q.questKey===questKey);if(!mapping){if(strict)throw new Error('Unknown helper variant');return;}if(!this.helperVariants(questKey).includes(variant))throw new Error('Unknown helper variant');}
  async close(player){const state=this.players.get(player);if(!state)return;this.players.delete(player);state.active=false;state.assembler.clear();await this.bridge.close(state.engineSession).catch(()=>{});}
- async shutdown(){await Promise.all([...this.players.keys()].map(p=>this.close(p)));}
+ async closeAgent(player){const state=this.agents.get(player);if(!state)return;this.agents.delete(player);await this.bridge.close(state.engineSession).catch(()=>{});}
+ async closePlayer(player){await this.close(player);await this.closeAgent(player);}
+ async shutdown(){const players=new Set([...this.players.keys(),...this.agents.keys()]);await Promise.all([...players].map(p=>this.closePlayer(p)));}
+ /** The last result a connected client received, or the last headless one. Read by the agent MCP. */
+ lastResult(player){return this.players.get(player)?.lastResult??null;}
+ lastAgentResult(player){return this.agents.get(player)?.lastResult??null;}
+ /** One evaluation's request, shared by the client path and the headless one. */
+ requestFor(player,state,data){
+  const quest=this.getQuests().find(q=>q.key===data.questKey);
+  if(!quest)throw new Error('Unknown quest');
+  const snapshot=this.authoritative(player,data.snapshot,quest.key);
+  return {quest,request:{protocol:1,session:state.engineSession,sequence:data.sequence,questKey:quest.key,helperVariant:data.helperVariant,snapshot,events:data.events,config:helperConfig(data.config),lockSection:lockSection(data.lockSection),...(data.bankTab===true?{bankTab:true}:{})}};
+ }
+ /** The server's own renderers, or null when only the Java bridge can answer. */
+ nativeOf(quest,request,player){return quest.key==='learning_the_ropes'?tutorialResult(request,quest.getStage(player)):(this.nativeResult?.(request,player)??null);}
+ async compute(player,state,data){
+  const {quest,request}=this.requestFor(player,state,data);
+  return this.nativeOf(quest,request,player)??await this.bridge.evaluate(request);
+ }
+ /**
+  * Evaluate a quest for an agent with no client attached. `snapshot` is built from server state;
+  * authoritative() then replaces every var, quest state, item, skill and position with the
+  * server's own. Sessions are per player and separate from a browser's, so a live client keeps
+  * its own helper engine and neither call sees the other's sequence.
+  */
+ async evaluateHeadless(player,options){
+  if(!record(options))throw new Error('Invalid Quest Helper request');
+  const quest=this.getQuests().find(q=>q.key===options.questKey);
+  if(!quest)throw new Error(`Unknown quest ${String(options.questKey)}`);
+  if(!record(options.snapshot))throw new Error('Invalid helper snapshot');
+  if(options.events!==undefined&&!validEvents(options.events))throw new Error('Invalid helper events');
+  const variant=options.helperVariant;
+  let state=this.agents.get(player);
+  if(state&&(state.questKey!==quest.key||state.helperVariant!==variant||options.fresh===true)){await this.closeAgent(player);state=null;}
+  if(!state){state={session:'agent',engineSession:randomUUID(),questKey:quest.key,helperVariant:variant,sequence:0,busy:false};this.agents.set(player,state);}
+  if(state.busy)throw new Error('Quest Helper is still evaluating the previous headless call');
+  state.busy=true;
+  try {
+   let snapshot=options.snapshot,response=null,rounds=0,unresolved=[],lastRequests='';
+   // Values already discovered for this route, refreshed from the server on every call: the chain
+   // is walked once, not once per tool call.
+   state.requested??=new Set();
+   if(state.requested.size&&this.fillRequests){
+    const seeded=this.fillRequests(player,[...state.requested].map(id=>({kind:'varbit',id})),snapshot);
+    if(seeded)snapshot=seeded.snapshot;
+   }
+   for(;;){
+    const data={questKey:quest.key,helperVariant:variant,snapshot,events:options.events??[],config:options.config,lockSection:options.lockSection,bankTab:options.bankTab,sequence:state.sequence+1};
+    state.sequence=data.sequence;
+    // The native routes never touch the bridge, so they must not depend on it having started.
+    response=this.nativeOf(quest,this.requestFor(player,state,data).request,player);
+    if(response===null){
+     const catalogError=await this.catalog().then(()=>null,error=>error);
+     this.checkVariant(quest.key,data.helperVariant,true);
+     // rebuilt: authoritative() writes the catalogue's numeric quest ids into questStates.
+     const request=this.requestFor(player,state,data).request;
+     response=await this.bridge.evaluate(request).catch(error=>{throw catalogError??error;});
+    }
+    if(this.agents.get(player)!==state)throw new Error('Quest Helper session was closed while evaluating');
+    // A step that reads state the snapshot omits asks for it instead of failing. Answer from the
+    // server and ask again, bounded: the browser does the same between two snapshots.
+    const requests=Array.isArray(response.requests)?response.requests:[];
+    const signature=JSON.stringify(requests);
+    const filled=requests.length&&this.fillRequests&&rounds<MAX_REQUEST_ROUNDS?this.fillRequests(player,requests,snapshot):null;
+    // No new value to learn and the same ask again: the chain is stuck, report it rather than spin.
+    if(!filled||(signature===lastRequests&&!filled.ids.some(id=>!state.requested.has(id)))){unresolved=requests;break;}
+    for(const id of filled.ids)state.requested.add(id);
+    snapshot=filled.snapshot;unresolved=filled.unsupported;rounds+=1;lastRequests=signature;
+   }
+   if(this.agents.get(player)!==state)throw new Error('Quest Helper session was closed while evaluating');
+   const result={...response,type:'result',protocol:1,session:state.session,sequence:state.sequence,questKey:quest.key,questProgress:this.progress(player),...(rounds?{requestsFilled:rounds}:{}),...(unresolved.length?{requestsUnresolved:unresolved}:{})};
+   state.lastResult={at:Date.now(),result};
+   return result;
+  }finally{state.busy=false;}
+ }
  async receive(player,frame){
   if(!record(frame)||!validSession(frame.session)||frame.protocol!==1)return;
   let state=this.players.get(player);
@@ -33,26 +122,25 @@ class QuestHelperRuntime {
    const quest=this.getQuests().find(q=>q.key===data.questKey);
    if(!quest)throw new Error('Unknown quest');
    if(data.type==='select'){
-    const mapping=this.catalogData?.quests.find(q=>q.questKey===quest.key);
-    if(data.helperVariant!==undefined&&mapping&&![mapping.helperVariant,...(mapping.variants||[]).map(v=>v.helperVariant)].includes(data.helperVariant))throw new Error('Unknown helper variant');
+    this.checkVariant(quest.key,data.helperVariant,false);
     const old=state.engineSession;state.engineSession=randomUUID();state.questKey=quest.key;state.helperVariant=data.helperVariant;state.sequence=0;state.generation=(state.generation||0)+1;state.busy=false;
     await this.bridge.close(old).catch(()=>{});return;
    }
    if(data.type!=='evaluate'||quest.key!==state.questKey)throw new Error('Select a quest before evaluating');
    if(!Number.isSafeInteger(data.sequence)||data.sequence<=state.sequence||state.busy)return;
    if(data.helperVariant!==state.helperVariant)throw new Error('Helper variant changed without selecting');
-   if(!record(data.snapshot)||!Array.isArray(data.events)||data.events.length>1024||!data.events.every(e=>record(e)&&typeof e.type==='string'&&e.type.length<=128))throw new Error('Invalid helper snapshot/events');
+   if(!record(data.snapshot)||!validEvents(data.events))throw new Error('Invalid helper snapshot/events');
    state.sequence=data.sequence;state.busy=true;const generation=state.generation;
    try {
     if(this.catalogPromise)this.catalogData=await this.catalogPromise;
     if(this.players.get(player)!==state||state.generation!==generation)return;
-    const mapping=this.catalogData?.quests.find(q=>q.questKey===quest.key);
-    if(data.helperVariant!==undefined&&(!mapping||![mapping.helperVariant,...(mapping.variants||[]).map(v=>v.helperVariant)].includes(data.helperVariant)))throw new Error('Unknown helper variant');
-    const snapshot=this.authoritative(player,data.snapshot,quest.key);
-    const request={protocol:1,session:state.engineSession,sequence:data.sequence,questKey:quest.key,helperVariant:data.helperVariant,snapshot,events:data.events,config:helperConfig(data.config),lockSection:lockSection(data.lockSection),...(data.bankTab===true?{bankTab:true}:{})};
-    const response=quest.key==='learning_the_ropes'?tutorialResult(request,quest.getStage(player)):(this.nativeResult?.(request,player)??await this.bridge.evaluate(request));
+    this.checkVariant(quest.key,data.helperVariant,true);
+    const response=await this.compute(player,state,data);
     if(this.players.get(player)!==state||!state.active||state.generation!==generation)return;
-    this.emit(player,{...response,type:'result',protocol:1,session:state.session,sequence:data.sequence,questKey:quest.key,questProgress:this.progress(player)});
+    const result={...response,type:'result',protocol:1,session:state.session,sequence:data.sequence,questKey:quest.key,questProgress:this.progress(player)};
+    // Kept for the agent MCP's conformance check: what a real client was just told.
+    state.lastResult={at:Date.now(),result};
+    this.emit(player,result);
    }finally{if(state.generation===generation)state.busy=false;}
   }catch(error){if(this.players.get(player)===state)this.emit(player,{type:'error',protocol:1,session:state.session,code:'QUEST_HELPER_UNAVAILABLE',message:String(error.message).slice(0,1024)});}
  }
@@ -82,4 +170,4 @@ class QuestHelperRuntime {
   return snapshot;
  }
 }
-module.exports={QuestHelperRuntime,helperConfig,lockSection};
+module.exports={QuestHelperRuntime,helperConfig,lockSection,MAX_REQUEST_ROUNDS};

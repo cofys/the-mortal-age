@@ -67,7 +67,12 @@ const DEFAULT_AUDIO_SETTINGS: Readonly<Record<number, number>> = {
     169: 100,
     872: 100,
     3796: 100,
+    // The levels the mute buttons restore: varbits of options_save_sounds (music, sound effects,
+    // area sounds, jingles) and options_save_sounds2 (master). Packed, so not clamped to 100.
+    3109: 0,
+    3797: 0,
 };
+const PACKED_AUDIO_VARPS = new Set([3109, 3797]);
 
 export class Player extends Mobile {
     public static readonly INFINITE_HEALTH_ATTRIBUTE = "admin:infinite-health";
@@ -266,6 +271,8 @@ export class Player extends Mobile {
             if (PluginManager.emitPlayerBeforeDeath(beforeDeath)) {
                 return;
             }
+            // A respawn is the same Player object; drop rolls cached against the state it died in.
+            CombatFactory.clearHitRollCache(this);
             TaskManager.submit(new PlayerDeathTask(this, beforeDeath.announce !== false));
             this.isDying = true;
         }
@@ -766,7 +773,7 @@ export class Player extends Mobile {
 
     public setAudioSetting(varpId: number, value: number): boolean {
         if (!(varpId in DEFAULT_AUDIO_SETTINGS) || !Number.isFinite(value)) return false;
-        const maximum = varpId === 18 ? 2 : 100;
+        const maximum = varpId === 18 ? 2 : PACKED_AUDIO_VARPS.has(varpId) ? 0x7fffffff : 100;
         this.audioSettings[varpId] = Math.max(0, Math.min(maximum, Math.trunc(value)));
         return true;
     }

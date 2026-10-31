@@ -335,6 +335,7 @@ test('real PendingHits preserve Dawn full protection and Dusk partial melee prot
       method.start(npc, player);
       const hits = method.hits(npc, player);
       assert.ok(hits.every(hit => hit instanceof core.PendingHit && hit.isAccurate()));
+      for (const hit of hits) core.CombatFactory.applyHitTimeDefences(hit);
       assert.deepEqual(hits.map(hit => hit.getTotalDamage()), active ? protectedDamage : unprotected);
     }
     player.setPrayerActive(prayer, false);
@@ -359,6 +360,7 @@ test('enraged ranged orbs use the 60% cap, a fixed first hit and two rolls for t
     rolls.length = 0;
     method.start(dusk, player);
     const hits = method.hits(dusk, player);
+    for (const hit of hits) core.CombatFactory.applyHitTimeDefences(hit);
     assert.deepEqual(hits.map(hit => hit.getTotalDamage()), active ? [7,3] : [15,3]);
     assert.deepEqual(rolls, active ? [[0,7],[0,7]] : [[0,15],[0,10]]);
   }
@@ -370,8 +372,10 @@ test('enraged ranged orbs use the 60% cap, a fixed first hit and two rolls for t
     damage.multiplyDamage(0.5);
   });
   rolls.length = 0;
-  assert.deepEqual(method.hits(dusk, player).map(hit => hit.getTotalDamage()), [3,1]);
-  assert.equal(incoming, 2, 'incoming damage modifiers apply once per orb, after partial prayer protection');
+  const orbs = method.hits(dusk, player);
+  for (const hit of orbs) core.CombatFactory.applyHitTimeDefences(hit);
+  assert.deepEqual(orbs.map(hit => hit.getTotalDamage()), [3,1]);
+  assert.equal(incoming, 2, 'incoming damage modifiers apply once per orb at impact, after partial prayer protection');
 });
 
 test('the fixed ranged orb still misses and respects the real PendingHit HP cap', t => {

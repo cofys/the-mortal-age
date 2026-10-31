@@ -17,6 +17,7 @@ const { CombatSpecial } = require('../dist/game/content/combat/CombatSpecial');
 const { PrayerHandler } = require('../dist/game/content/PrayerHandler');
 const { DamageFormulas } = require('../dist/game/content/combat/formula/DamageFormulas');
 const { AccuracyFormulasDpsCalc } = require('../dist/game/content/combat/formula/AccuracyFormulasDpsCalc');
+const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
 
 before(async () => {
   await CachePipeline.initialize(process.cwd());
@@ -59,6 +60,7 @@ function shot(t, { protection = false, shield = false, roll = 'max', level = 99,
   if (!offensiveBonuses) t.mock.method(DamageFormulas, 'sourceMaxHit', () => 100);
   t.mock.method(AccuracyFormulasDpsCalc, 'rollAccuracy', () => { throw Error('Soulshot must not roll accuracy'); });
   const hit = CombatSpecial.getById('seercull').getCombatMethod().hits(attacker, target)[0];
+  CombatFactory.applyHitTimeDefences(hit);
   return hit;
 }
 

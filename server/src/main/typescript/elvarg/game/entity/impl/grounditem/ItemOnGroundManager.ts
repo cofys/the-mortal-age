@@ -143,18 +143,11 @@ export class ItemOnGroundManager {
                 continue;
             }
 
-            // Check if the ground item is private...
-            // If we aren't the owner, we shouldn't modify it.
-            if (item_.getState() === State.SEEN_BY_PLAYER) {
-                let flag = true;
-                if (item_.getOwner() && item.getOwner()) {
-                    if (item_.getOwner() === item.getOwner()) {
-                        flag = false;
-                    }
-                }
-                if (flag) {
-                    continue;
-                }
+            // Stacks from different owners never merge, private or public: ownership decides
+            // who may take the item (an Ironman may only take its own), so one player's drop
+            // must not join another player's stack.
+            if (item_.getOwner() !== item.getOwner()) {
+                continue;
             }
 
             // Modify the existing item.

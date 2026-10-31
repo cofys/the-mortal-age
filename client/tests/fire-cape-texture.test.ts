@@ -4,6 +4,8 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { SceneBuffer, getModelFaces } from "../render/buffer/SceneBuffer";
+import { createActorShaderModule } from "../render/webgpu/shaders/actor.wgsl";
+import { createMainVertexWgsl } from "../render/webgpu/shaders/main.vert.wgsl";
 import { CacheSystem } from "../rs/cache/CacheSystem";
 import { getCacheLoaderFactory } from "../rs/cache/loader/CacheLoaderFactory";
 import { loadCache, loadCacheInfos, loadCacheList } from "../scripts/cache/load-util";
@@ -48,6 +50,31 @@ assert.doesNotMatch(shader, /\) \+ 1\) \* isTextured/, "Shader must not offset t
 
 console.log("Fire cape texture regression test passed");
 
+test("WebGPU material reads preserve signed scroll speeds for capes and other animated textures", () => {
+    let actorShader = "";
+    createActorShaderModule({ createShaderModule: ({ code }: GPUShaderModuleDescriptor) => {
+        actorShader = code;
+        return {};
+    } } as GPUDevice, { alpha: false });
+    for (const shader of [createMainVertexWgsl(), actorShader]) {
+        for (const component of ["U", "V"]) {
+            // Execute the scalar read emitted by the shader, using the unsigned atlas bytes.
+            const expression = shader.match(new RegExp(`material\\.anim${component} = ([^;]+);`))![1];
+            const read = new Function("data", "i32", `return ${expression.replace(/(\d+)u\b/g, "$1")};`);
+            for (let speed = -128; speed <= 127; speed++) {
+                const byte = new Uint8Array(new Int8Array([speed]).buffer)[0];
+                assert.equal(read({ r: byte, g: byte }, (value: number) => value | 0), speed);
+            }
+        }
+    }
+    for (const [itemId, textureId, speed] of [[6570, 40, -2], [21295, 59, -1]]) {
+        const cape = factory.getObjTypeLoader().load(itemId);
+        assert.ok(factory.getModelLoader().getModel(cape.maleModel)?.faceTextures?.includes(textureId));
+        const material = textureLoader.getMaterial(textureId);
+        assert.deepEqual([material.animU, material.animV, material.frameCount], [0, speed, 1]);
+    }
+});
+
 test("texture preloads leave missing and empty sparse textures available for later uploads", async (t) => {
     t.mock.method(console, "error", () => {});
     t.mock.method(console, "log", () => {});
@@ -61,7 +88,8 @@ test("texture preloads leave missing and empty sparse textures available for lat
     const client = {
         loadedCache: { info: { game: "oldschool", revision: 235 } },
         textureLoader: {
-            getTextureIds: () => [1, 2, 3], isSd: () => true, getMaterial: () => ({}),
+            getTextureIds: () => [1, 2, 3], isSd: () => true,
+            getMaterial: (id: number) => textureLoader.getMaterial(id === 1 ? 40 : 59),
             getPixelsArgb: (id: number) => {
                 if (id === 2) throw new Error("sprite still downloading");
                 return id === 3 ? new Int32Array() : pixels;
@@ -69,15 +97,20 @@ test("texture preloads leave missing and empty sparse textures available for lat
         },
         clientPlugins: { createWebGPUSceneExtension: () => undefined },
     };
+    let materialBytes: Uint8Array | undefined;
     const device = {
         limits: { maxTextureArrayLayers: 2048 },
         createBuffer: () => ({ destroy() {} }),
-        createTexture: () => ({ createView: () => ({}), destroy() {} }),
+        createTexture: ({ label }: GPUTextureDescriptor) => ({ label, createView: () => ({}), destroy() {} }),
         createBindGroupLayout: () => ({}), createBindGroup: () => ({}), createSampler: () => ({}),
         createPipelineLayout: () => ({}), createShaderModule: () => ({}), createRenderPipeline: () => ({}),
-        queue: { writeTexture() {} },
+        queue: { writeTexture(destination: GPUImageCopyTexture, data: Int8Array) {
+            if (destination.texture.label === "webgpu material lookup") materialBytes = new Uint8Array(data.buffer.slice(0));
+        } },
     };
     const world = await WorldResources.create(device, client, "rgba8unorm");
+    assert.deepEqual(Array.from(materialBytes!.slice(4, 6)), [0, 254], "Fire cape's -2 is uploaded as unsigned byte 254");
+    assert.deepEqual(Array.from(materialBytes!.slice(8, 10)), [0, 255], "Infernal cape's -1 is uploaded as unsigned byte 255");
     assert.deepEqual([...world.loadedTextureIds], [1], "WebGPU only skips textures with real uploaded pixels");
     world.uploadMapTextures(new Map([[2, pixels], [3, pixels]]));
     assert.deepEqual([...world.loadedTextureIds], [1, 2, 3], "worker results can fill previously missing layers");

@@ -323,7 +323,12 @@ varp 531, as the cache's script 956 reads. Quiz Master's cache interface (191)
 has no item components, so the three items of "Odd One Out" are shown on a
 server-defined interface (`registerCustomInterface`, group 30012) whose model
 components are set with the macro quiz items 6189-6198; clicks are ordinary
-widget ops.
+widget ops. Each question follows the wiki's "Each question has two of one item type
+and one of another": both items of one category (RuneLite's MACRO_QUIZ_FOOD/WEAPON/
+ARMOUR/TOOL/JEWEL 1 and 2) and one item of another. The quiz set is on plane 1: the
+Quiz Master stands at 1952, 4768, 1 (the world's spawn), and the cache map walls a
+single tile in front of him, 1952, 4764, 1, with four invisible walls (loc 38848);
+the player is placed there, so the quiz area is the one destination on plane 1.
 
 Rewards follow each wiki page: outfit pieces are granted in the page's order and
 skipped when `Teleports.owns` finds them in inventory, equipment or bank; once

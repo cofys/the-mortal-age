@@ -12,6 +12,7 @@ const {
   DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID,
   ATTACK_PRIORITY_PLAYER_BUTTONS_UID,
   ATTACK_PRIORITY_NPC_BUTTONS_UID,
+  NATIVE_CLIENT_ATTRIBUTE,
 } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
 const { getWorldDefinition } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
@@ -24,6 +25,51 @@ const XPDROPS_OVERLAY_UID = (ROOT_INTERFACE << 16) | 9; // toplevel_osrs_stretch
 const XPDROPS_INTERFACE_ID = 122;
 const XPDROPS_SETUP_INTERFACE_ID = 137;
 const XPDROPS_ENABLED_VARBIT = 4702;
+// XP drops setup: each dropdown's option rows are created in a list component paired with its
+// header (scripts 1010, 1030, 1031), and the cache's script 1036 sets that dropdown's varbit to
+// the row's sub - 1 on op1. The lists and their varbits, in script 1010's order:
+const XPDROPS_SETUP_DROPDOWNS = new Map([
+  [51, 4692], // position
+  [52, 4693], // size
+  [53, 4694], // duration
+  [54, 4697], // counter
+  [55, 4698], // progress bar
+  [56, 4695], // colour
+  [57, 4696], // group
+  [58, 4722], // speed
+  [59, 8120], // fake drops
+].map(([component, varbit]) => [(XPDROPS_SETUP_INTERFACE_ID << 16) | component, varbit]));
+const XPDROPS_SETUP_MAX_ROW = 31;
+// The varps behind them, saved as whole values: the browser transmits them, the official client
+// only reports the row it chose.
+const XPDROPS_SETUP_ATTRIBUTE = "settings:xpdrops-setup";
+
+// The side panel's volume sliders: the cache's scripts (9232, 9238, 9244, 9250) set the varp in
+// the client, then trigger the slider's op (if_triggeroplocal) with the new volume when it is
+// released or reaches or leaves 0. That is how the server learns it, and it sends it back at login.
+// The client only sends a component's trigger once the server has set its transmit-trigger
+// event (bit 23), as live does for these four on the settings tab (RSProx captures); without
+// it the sliders change the volume until relog. The browser forwards triggers regardless.
+const SETTINGS_SIDE_GROUP = 116;
+const TRANSMIT_TRIGGER = 1 << 23;
+const WELCOME_PLAY_BUTTON = (378 << 16) | 72;
+const VOLUME_SLIDER_VARPS = new Map([
+  [(116 << 16) | 95, 3796], // master
+  [(116 << 16) | 109, 168], // music
+  [(116 << 16) | 123, 169], // sound effects
+  [(116 << 16) | 137, 872], // area sounds
+]);
+
+// The mute button beside each slider. Live toggles it on the server (RSProx captures): muting
+// saves the level in a varbit of options_save_sounds (3109) or, for master, options_save_sounds2
+// (3797) and sets the volume to 0; unmuting puts the saved level back.
+const VOLUME_MUTE_BUTTONS = new Map([
+  [(116 << 16) | 96, { volumeVarp: 3796, savedVarp: 3797, shift: 0, bits: 8 }], // master
+  [(116 << 16) | 110, { volumeVarp: 168, savedVarp: 3109, shift: 0, bits: 8 }], // music
+  [(116 << 16) | 124, { volumeVarp: 169, savedVarp: 3109, shift: 8, bits: 7 }], // sound effects
+  [(116 << 16) | 138, { volumeVarp: 872, savedVarp: 3109, shift: 15, bits: 7 }], // area sounds
+]);
+const UNMUTED_DEFAULT_VOLUME = 100;
 
 // Settings > Display: "Game client layout" dropdown. The row label is built by
 // cache script 7992 from entry enum 3509 and its option rows are dynamic
@@ -531,11 +577,115 @@ function syncXpDrops({ player }) {
   player.getPacketSender().sendVarbit(XPDROPS_ENABLED_VARBIT, player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) === true ? 1 : 0);
 }
 
+/** The first script-trigger argument: an int as a zigzag varint. */
+function readIntArg(argsData) {
+  if (!argsData?.length) return undefined;
+  let value = 0;
+  let shift = 0;
+  for (const byte of argsData) {
+    value |= (byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) return (value >>> 1) ^ -(value & 1);
+    shift += 7;
+  }
+  return undefined;
+}
+
+function enableVolumeSliders(player) {
+  for (const slider of VOLUME_SLIDER_VARPS.keys()) player.getPacketSender?.()?.sendInterfaceFlagsRange?.(slider, -1, -1, TRANSMIT_TRIGGER);
+}
+
+/** The gameframe (and the settings tab in it) is mounted at login and again on Play. */
+function enableVolumeSlidersLater({ player }) {
+  queueMicrotask(() => enableVolumeSliders(player));
+  return false;
+}
+
+function enableVolumeSlidersOnTab({ player, group }) {
+  if (group === SETTINGS_SIDE_GROUP) queueMicrotask(() => enableVolumeSliders(player));
+}
+
+function releaseVolumeSlider({ player, buttonId, argsData, scriptTrigger }) {
+  if (scriptTrigger !== true) return false;
+  const volume = readIntArg(argsData);
+  if (volume === undefined) return false;
+  player.applyAudioSettingFromClient?.(VOLUME_SLIDER_VARPS.get(buttonId), volume);
+  return true;
+}
+
+function toggleMute({ player, buttonId }) {
+  const mute = VOLUME_MUTE_BUTTONS.get(buttonId);
+  const settings = player.getAudioSettings?.();
+  if (!mute || !settings) return false;
+  const mask = ((1 << mute.bits) - 1) << mute.shift;
+  const packed = settings[mute.savedVarp] ?? 0;
+  const volume = settings[mute.volumeVarp] ?? 0;
+  if (volume > 0) {
+    player.setAudioSetting(mute.savedVarp, (packed & ~mask) | (volume << mute.shift));
+    player.getPacketSender().sendConfig(mute.savedVarp, player.getAudioSettings()[mute.savedVarp]);
+    player.applyAudioSettingFromClient(mute.volumeVarp, 0);
+  } else {
+    player.applyAudioSettingFromClient(mute.volumeVarp, ((packed & mask) >>> mute.shift) || UNMUTED_DEFAULT_VOLUME);
+  }
+  player.getPacketSender().sendConfig(mute.volumeVarp, player.getAudioSettings()[mute.volumeVarp]);
+  return true;
+}
+
+/** The varps holding the XP drops setup; looked up once, as every transmitted varp asks. */
+let xpDropsVarps = null;
+
+function xpDropsSetupVarps() {
+  xpDropsVarps ??= new Set([...XPDROPS_SETUP_DROPDOWNS.values()].map((varbit) => CacheDefinitions.getVarbit(varbit).baseVar));
+  return xpDropsVarps;
+}
+
+function saveXpDropsSetup(player, varpId, value) {
+  player.setAttribute(XPDROPS_SETUP_ATTRIBUTE, { ...(player.getAttribute(XPDROPS_SETUP_ATTRIBUTE) ?? {}), [varpId]: value | 0 });
+}
+
+function restoreXpDropsSetup({ player }) {
+  const saved = player.getAttribute(XPDROPS_SETUP_ATTRIBUTE);
+  if (!saved || typeof saved !== "object") return;
+  const varps = xpDropsSetupVarps();
+  for (const [varpId, value] of Object.entries(saved)) {
+    if (varps.has(Number(varpId)) && Number.isInteger(value)) player.getPacketSender().sendConfig(Number(varpId), value);
+  }
+}
+
+/** The browser applies the setup itself and transmits the varp; keep it for the next login. */
+function transmitXpDropsSetup(transmission) {
+  const { player, varpId, value } = transmission;
+  if (!xpDropsSetupVarps().has(varpId)) return;
+  saveXpDropsSetup(player, varpId, value);
+  // Keep the server's copy in step, so a later row click changes only its own bits.
+  player.getPacketSender().sendConfig(varpId, value);
+  transmission.handled = true;
+}
+
+/** A row chosen in one of the setup's dropdowns. */
+function chooseXpDropsSetupRow({ player, buttonId, slot }) {
+  const varbit = XPDROPS_SETUP_DROPDOWNS.get(buttonId);
+  if (varbit === undefined || !Number.isInteger(slot) || slot < 1 || slot > XPDROPS_SETUP_MAX_ROW) return false;
+  const sender = player.getPacketSender();
+  sender.sendVarbit(varbit, slot - 1);
+  const varpId = CacheDefinitions.getVarbit(varbit).baseVar;
+  saveXpDropsSetup(player, varpId, sender.getVarp(varpId));
+  return true;
+}
+
+/** The official client transmits a row click only once the server enables it, as live does. */
+function enableXpDropsSetupRows(player) {
+  if (player.getAttribute(NATIVE_CLIENT_ATTRIBUTE) !== true) return;
+  for (const list of XPDROPS_SETUP_DROPDOWNS.keys()) {
+    player.getPacketSender().sendInterfaceFlagsRange(list, 1, XPDROPS_SETUP_MAX_ROW, TRANSMIT_OP1);
+  }
+}
+
 function clickXpDrops({ player, opId, action }) {
   const op = opId ?? action;
   const sender = player.getPacketSender();
   if (op === 2) {
     sender.sendSubInterface(MAIN_MODAL_UID, XPDROPS_SETUP_INTERFACE_ID, 0);
+    enableXpDropsSetupRows(player);
   } else if (op === 1) {
     const enabled = player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) !== true;
     player.setAttribute(XPDROPS_ENABLED_ATTRIBUTE, enabled);
@@ -564,6 +714,15 @@ module.exports = {
   register(api) {
     api.persistAttribute(XPDROPS_ENABLED_ATTRIBUTE);
     api.onPlayerLogin(syncXpDrops);
+    api.persistAttribute(XPDROPS_SETUP_ATTRIBUTE);
+    api.onPlayerLogin(restoreXpDropsSetup);
+    api.onCustomEvent("player:varp-transmit", transmitXpDropsSetup);
+    api.onInterfaceActionButton([...XPDROPS_SETUP_DROPDOWNS.keys()], chooseXpDropsSetupRow);
+    api.onInterfaceActionButton([...VOLUME_SLIDER_VARPS.keys()], releaseVolumeSlider);
+    api.onInterfaceActionButton([...VOLUME_MUTE_BUTTONS.keys()], toggleMute);
+    api.onPlayerLogin(enableVolumeSlidersLater);
+    api.onInterfaceActionButton(WELCOME_PLAY_BUTTON, enableVolumeSlidersLater);
+    api.onCustomEvent("gameframe:tab-mounted", enableVolumeSlidersOnTab);
     api.onInterfaceActionButton(xpDropsOrbIds(api), clickXpDrops);
     for (const tab of TAB_VARBIT_MAP) {
       api.persistAttribute(keybindAttribute(tab.varbit), tab.defaultKey);

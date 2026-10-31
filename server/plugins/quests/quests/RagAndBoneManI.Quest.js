@@ -36,8 +36,9 @@
  *  - The wish-list "Read" plays the wiki's phase text as-is (no per-bone
  *    strike-through); the Odd Old Man's run-down is the place that skips
  *    already-handed bones.
- *  - Drops are suppressed for bones already handed in and only while the quest
- *    is in progress (stage 1); the wiki only says each is a guaranteed drop.
+ *  - The Wiki lists each raw bone as a guaranteed drop only while the quest still wants it;
+ *    this plugin answers `npc-drops:quest-item` for the rows in npc-drops.json, so the tables
+ *    own the drop and it stops as soon as the bone is handed in or the quest completes.
  *  - The wiki does not document the boiler's Remove-Pot mid-boil, so it hands
  *    the bone in vinegar back; the item's Empty option (the wiki's bone-loss
  *    warning) is not implemented, so bones cannot be destroyed here.
@@ -54,11 +55,9 @@ module.exports = function registerRagAndBoneManIQuest(api) {
     DialogueChainBuilder,
     EndDialogue,
     GameObject,
-    Item,
     ItemDefinition,
     ItemIdentifiers,
     Location,
-    NpcDefinition,
     NpcIdentifiers,
     ObjectDefinition,
     ObjectIdentifiers,
@@ -117,20 +116,18 @@ module.exports = function registerRagAndBoneManIQuest(api) {
   const ALL_BONES = (1 << 8) - 1;
 
   const BONES = [
-    { bit: BIT_GOBLIN, label: "Goblin", raw: ItemIdentifiers.GOBLIN_SKULL, vinegar: ItemIdentifiers.BONE_IN_VINEGAR, cleaned: ItemIdentifiers.GOBLIN_SKULL_2, monsters: ["Goblin"] },
-    { bit: BIT_BEAR, label: "Bear", raw: ItemIdentifiers.BEAR_RIBS, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_2, cleaned: ItemIdentifiers.BEAR_RIBS_2, monsters: ["Black bear", "Grizzly bear"] },
-    { bit: BIT_BIG_FROG, label: "Big Frog", raw: ItemIdentifiers.BIG_FROG_LEG, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_33, cleaned: ItemIdentifiers.BIG_FROG_LEG_2, monsters: ["Big frog"] },
-    { bit: BIT_RAM, label: "Ram", raw: ItemIdentifiers.RAM_SKULL, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_3, cleaned: ItemIdentifiers.RAM_SKULL_2, monsters: ["Ram"] },
-    { bit: BIT_UNICORN, label: "Unicorn", raw: ItemIdentifiers.UNICORN_BONE, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_4, cleaned: ItemIdentifiers.UNICORN_BONE_2, monsters: ["Unicorn"] },
-    { bit: BIT_MONKEY, label: "Monkey", raw: ItemIdentifiers.MONKEY_PAW, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_15, cleaned: ItemIdentifiers.MONKEY_PAW_2, monsters: ["Monkey"] },
-    { bit: BIT_GIANT_RAT, label: "Giant Rat", raw: ItemIdentifiers.GIANT_RAT_BONE, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_5, cleaned: ItemIdentifiers.GIANT_RAT_BONE_2, monsters: ["Giant rat"] },
-    { bit: BIT_GIANT_BAT, label: "Giant Bat", raw: ItemIdentifiers.GIANT_BAT_WING, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_6, cleaned: ItemIdentifiers.GIANT_BAT_WING_2, monsters: ["Giant bat"] },
+    { bit: BIT_GOBLIN, label: "Goblin", raw: ItemIdentifiers.GOBLIN_SKULL, vinegar: ItemIdentifiers.BONE_IN_VINEGAR, cleaned: ItemIdentifiers.GOBLIN_SKULL_2 },
+    { bit: BIT_BEAR, label: "Bear", raw: ItemIdentifiers.BEAR_RIBS, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_2, cleaned: ItemIdentifiers.BEAR_RIBS_2 },
+    { bit: BIT_BIG_FROG, label: "Big Frog", raw: ItemIdentifiers.BIG_FROG_LEG, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_33, cleaned: ItemIdentifiers.BIG_FROG_LEG_2 },
+    { bit: BIT_RAM, label: "Ram", raw: ItemIdentifiers.RAM_SKULL, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_3, cleaned: ItemIdentifiers.RAM_SKULL_2 },
+    { bit: BIT_UNICORN, label: "Unicorn", raw: ItemIdentifiers.UNICORN_BONE, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_4, cleaned: ItemIdentifiers.UNICORN_BONE_2 },
+    { bit: BIT_MONKEY, label: "Monkey", raw: ItemIdentifiers.MONKEY_PAW, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_15, cleaned: ItemIdentifiers.MONKEY_PAW_2 },
+    { bit: BIT_GIANT_RAT, label: "Giant Rat", raw: ItemIdentifiers.GIANT_RAT_BONE, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_5, cleaned: ItemIdentifiers.GIANT_RAT_BONE_2 },
+    { bit: BIT_GIANT_BAT, label: "Giant Bat", raw: ItemIdentifiers.GIANT_BAT_WING, vinegar: ItemIdentifiers.BONE_IN_VINEGAR_6, cleaned: ItemIdentifiers.GIANT_BAT_WING_2 },
   ];
   const RAW_BONE_BY_ITEM = new Map(BONES.map((bone) => [bone.raw, bone]));
   const VINEGAR_BONE_BY_ITEM = new Map(BONES.map((bone) => [bone.vinegar, bone]));
   const CLEANED_BONE_BY_ITEM = new Map(BONES.map((bone) => [bone.cleaned, bone]));
-  const BONE_BY_MONSTER_NAME = new Map();
-  for (const bone of BONES) for (const name of bone.monsters) BONE_BY_MONSTER_NAME.set(name, bone);
 
   /** The wish-list run-down, one need-line and one hint per bone. */
   const WISH_LIST_LINE_PREFIXES = [
@@ -526,15 +523,14 @@ module.exports = function registerRagAndBoneManIQuest(api) {
   // Bones from monsters
   // ==========================================================================
 
-  function handleNpcDeath(event) {
-    const { killer, npc, npcId } = event;
-    if (!killer?.isPlayer?.() || !npc) return;
-    if (quest.getStage(killer) !== STAGE_STARTED) return;
-    const bone = BONE_BY_MONSTER_NAME.get(NpcDefinition.forId(npcId)?.getName?.());
-    if (!bone || hasHanded(killer, bone.bit)) return;
-    const location = npc.getLocation?.() ?? npc.getSpawnLocation?.();
-    if (!location) return;
-    api.getItemOnGroundManager().registerLocation(killer, new Item(bone.raw, 1), location);
+  /**
+   * npc-drops.json marks each raw bone row with the Wiki's quest condition; this answers it, so
+   * the bone drops only while Rag and Bone Man I is in progress and still wants that species.
+   */
+  function handleQuestItem(event) {
+    const bone = RAW_BONE_BY_ITEM.get(event.itemId);
+    if (!bone) return;
+    event.allowed = quest.getStage(event.player) === STAGE_STARTED && !hasHanded(event.player, bone.bit);
   }
 
   function handleLogin({ player }) {
@@ -628,6 +624,6 @@ module.exports = function registerRagAndBoneManIQuest(api) {
     "Remove-Bone": handleRemoveBone,
   });
   api.onObjectInteraction("Wish-list", { Read: handleReadWishList });
-  api.onNpcDeath(handleNpcDeath);
+  api.onCustomEvent("npc-drops:quest-item", handleQuestItem);
   api.onPlayerLogin(handleLogin);
 };

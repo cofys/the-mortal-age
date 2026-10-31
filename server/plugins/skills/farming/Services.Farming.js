@@ -356,7 +356,7 @@ function growSeedlings(player, now) {
             if (!crop) continue;
             const at = item.getMetaValue("farming:sapling-at");
             if (!at) {
-                const due = Model.nextGrowth(now, 5, Patches.farmFor(player).offset);
+                const due = Model.nextGrowth(now, Data.FORMULAS.growth.tickMinutes, Patches.farmFor(player).offset);
                 item.setMetaValue("farming:sapling-at", due);
                 next = Math.min(next, due);
             } else if (now >= at) { item.setId(crop.sapling).setMetaValue("farming:sapling-at", undefined); changed = true; }
@@ -567,7 +567,7 @@ function askGardener(player, npc, p) {
         if (!Patches.nearPatch(player, p) || Patches.stateFor(player, p) !== state || state.protected || !canPay(player, crop.payment)) return;
         pay(player, crop.payment);
         state.protected = true;
-        if (state.status === "diseased") { state.status = "growing"; state.nextAt = Model.nextGrowth(Date.now(), crop.minutes, farm.offset); }
+        if (state.status === "diseased") { state.status = "growing"; state.nextAt = Model.nextGrowth(Date.now(), Data.stageMinutes(crop, state.stage), farm.offset); }
         Patches.spam(player, `You pay the gardener ${paymentText(crop.payment)} to protect the patch.`);
         gardenerSays(player, npc, `That'll do nicely, ${player.getAppearance().isMale() ? "sir" : "madam"}. Leave it with me - I'll make sure that patch grows for you.`);
     };
