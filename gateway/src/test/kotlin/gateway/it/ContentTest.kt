@@ -8,7 +8,10 @@ import net.rsprox.protocol.game.outgoing.model.info.npcinfo.NpcUpdateType
 import net.rsprox.protocol.game.outgoing.model.info.playerinfo.PlayerInfo
 import net.rsprox.protocol.game.outgoing.model.info.playerinfo.PlayerUpdateType
 import net.rsprox.protocol.game.outgoing.model.interfaces.IfOpenSub
+import net.rsprox.protocol.game.outgoing.model.interfaces.IfSetEventsV2
 import net.rsprox.protocol.game.outgoing.model.interfaces.IfSetText
+import net.rsprox.protocol.game.outgoing.model.inv.UpdateInvFull
+import net.rsprox.protocol.game.outgoing.model.inv.UpdateInvPartial
 import net.rsprox.protocol.game.outgoing.model.map.RebuildLoginV2
 import net.rsprox.protocol.game.outgoing.model.misc.client.ServerTickEnd
 import net.rsprox.protocol.game.outgoing.model.misc.player.UpdateStatV2
@@ -90,6 +93,44 @@ class ContentTest {
         }
     }
 
+    @Test
+    fun `high level alchemy on an inventory item turns it into coins`() {
+        LiveGateway.login(developer()).use { game ->
+            game.expect<RebuildLoginV2>()
+            var magic = 0
+            var slotEvents: IfSetEventsV2? = null
+            val inventory = HashMap<Int, Pair<Int, Int>>()
+            val track: (Any) -> Unit = { message ->
+                when (message) {
+                    is UpdateStatV2 -> if (message.stat == MAGIC) magic = message.currentLevel
+                    is IfSetEventsV2 -> if (message.interfaceId == INVENTORY && message.componentId == 0) slotEvents = message
+                    is UpdateInvFull ->
+                        if (message.inventoryId == MAIN_INVENTORY) {
+                            inventory.clear()
+                            message.objs.forEachIndexed { slot, obj -> if (obj.id >= 0) inventory[slot] = obj.id to obj.count }
+                        }
+                    is UpdateInvPartial ->
+                        if (message.inventoryId == MAIN_INVENTORY) {
+                            for (obj in message.objs) if (obj.id >= 0) inventory[obj.slot] = obj.id to obj.count else inventory.remove(obj.slot)
+                        }
+                }
+            }
+            game.ticks(SETTLE_TICKS, each = track)
+            // The official client only casts on (or uses onto) a slot whose events make it a target.
+            val events = requireNotNull(slotEvents) { "the inventory's slots get their events" }.events1
+            assertEquals(INVENTORY_TARGET_EVENTS, events and INVENTORY_TARGET_EVENTS, "live's target events on the inventory")
+            if (magic < HIGH_ALCHEMY_LEVEL) game.command("setlevel magic $HIGH_ALCHEMY_LEVEL")
+            for ((item, count) in HIGH_ALCHEMY_ITEMS) game.command("item $item $count")
+            game.ticks(2, each = track)
+            val coinsBefore = inventory.values.filter { it.first == COINS }.sumOf { it.second }
+            val slot = requireNotNull(inventory.entries.firstOrNull { it.value.first == BRONZE_AXE }?.key) { "the axe is in $inventory" }
+            game.buttonT((SPELLBOOK shl 16) or HIGH_ALCHEMY, NONE, NONE, INVENTORY shl 16, slot, BRONZE_AXE)
+            game.ticks(ALCHEMY_TICKS, each = track)
+            assertTrue(inventory.values.none { it.first == BRONZE_AXE }, "the axe is gone: $inventory")
+            assertTrue(inventory.values.filter { it.first == COINS }.sumOf { it.second } > coinsBefore, "coins came instead: $inventory")
+        }
+    }
+
     private fun developer(): String {
         val developer = LiveGateway.developerName
         assumeTrue(developer != null, "DEV_USERNAME isn't set; the tests teleport and spawn runes")
@@ -146,5 +187,18 @@ class ContentTest {
         const val VARROCK_Z = 3424
         const val LANDING = 6
         const val TELEPORT_TICKS = 10
+
+        const val INVENTORY = 149
+        const val MAIN_INVENTORY = 93
+        const val INVENTORY_TARGET_EVENTS = (0x3F shl 11) or (1 shl 21)
+        const val HIGH_ALCHEMY = 47
+        const val HIGH_ALCHEMY_LEVEL = 55
+        const val BRONZE_AXE = 1351
+        const val COINS = 995
+        const val NONE = 0xFFFF
+        const val ALCHEMY_TICKS = 4
+
+        /** Nature and fire runes, and the axe to alch. */
+        val HIGH_ALCHEMY_ITEMS = listOf(561 to 1, 554 to 5, BRONZE_AXE to 1)
     }
 }

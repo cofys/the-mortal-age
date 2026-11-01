@@ -239,11 +239,35 @@ module.exports = function registerSwanSongQuest(api) {
     return request.complete === true;
   }
 
+  /** Wiki: 66 Magic, 62 Cooking, 62 Fishing, 45 Smithing, 42 Firemaking and 40 Crafting. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.MAGIC, level: 66, label: "Magic" },
+    { skill: Skill.COOKING, level: 62, label: "Cooking" },
+    { skill: Skill.FISHING, level: 62, label: "Fishing" },
+    { skill: Skill.SMITHING, level: 45, label: "Smithing" },
+    { skill: Skill.FIREMAKING, level: 42, label: "Firemaking" },
+    { skill: Skill.CRAFTING, level: 40, label: "Crafting" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function meetsRequirements(player) {
     return (
       (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) >= REQUIRED_QUEST_POINTS &&
       isQuestComplete(player, ONE_SMALL_FAVOUR_KEY) &&
-      isQuestComplete(player, GARDEN_OF_TRANQUILLITY_KEY)
+      isQuestComplete(player, GARDEN_OF_TRANQUILLITY_KEY) &&
+      missingSkillRequirements(player).length === 0
     );
   }
 
@@ -658,6 +682,10 @@ module.exports = function registerSwanSongQuest(api) {
 
     if (npcId === HERMAN_NPC_ID) {
       if (stage === 0 && text === "Yes, that's right. And do watch out for the sea trolls!") {
+        if (!meetsRequirements(player)) {
+          notifySkillRequirements(player);
+          return;
+        }
         quest.setStage(player, STAGE_STARTED);
         return;
       }

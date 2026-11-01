@@ -140,15 +140,16 @@ function container(size) {
 }
 
 function player() {
-  const attrs = new Map(), varbits = new Map(), messages = [], xp = [];
+  const attrs = new Map(), varbits = new Map(), configs = new Map(), messages = [], xp = [];
   let location = new core.Location(2465, 3496, 0), text = '';
   const inventory = container(28), equipment = container(14);
   const packet = new Proxy({
-    sendConfig: noop, sendVarbit: (id, value) => varbits.set(id, value), getVarbit: id => varbits.get(id) ?? 0,
+    sendConfig: (id, value) => configs.set(id, value), sendVarbit: (id, value) => varbits.set(id, value),
+    getVarbit: id => varbits.get(id) ?? 0,
     getVarp: () => 0, sendInterfaceRemoval: noop,
   }, { get: (t, key) => t[key] ?? (() => packet) });
   let manager;
-  const p = { attrs, varbits, messages, xp, inventory, equipment,
+  const p = { attrs, varbits, configs, messages, xp, inventory, equipment,
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     getInventory: () => inventory, getEquipment: () => equipment, getPacketSender: () => packet,
     getDialogueManager: () => manager,
@@ -198,6 +199,15 @@ function captureClimbs(h) {
   h.api.onCustomEvent('ladders:climbDown', request => climbs.push({ direction: 'down', ...request }));
   return climbs;
 }
+
+/** Whether the imported transcript has this exact spoken line (a matched line must exist). */
+function transcriptLine(text) {
+  const pages = require('../data/definitions/npc-dialogues.json');
+  return JSON.stringify(pages['Monkey Madness I']).includes(JSON.stringify(text));
+}
+
+/** mm_main as the client last saw it. */
+const MM_MAIN = 365;
 
 /** The tile a climb lands on. */
 function tile(climb) {
@@ -260,8 +270,10 @@ test('Monkey Madness I: stage 0 route reaches completion and grants the reward o
   // Crash Island: Waydar persuades Lumdo; Lumdo rows to the atoll.
   assert.equal(h.variant(p, N.WAYDAR).variant, 'chapter-1-landing-on-crash-island-speaking-to-waydar-on-crash-island');
   assert.equal(h.variant(p, N.WAYDAR).variant, 'chapter-1-landing-on-crash-island-returning-to-waydar-on-crash-island');
+  assert.equal(p.configs.get(MM_MAIN), 2, 'chapter 1 is mm_main 1-2 on the wire');
   h.action(p, N.WAYDAR, '7EU-SF');
   assert.equal(h.quest.getStage(p), STAGE.atoll);
+  assert.equal(p.configs.get(MM_MAIN), 3, 'Quest Helper keys chapter 2 on mm_main 3');
   assert.equal(h.variant(p, N.LUMDO_3).variant, 'chapter-2-talking-to-lumbo-on-crash-island');
   h.line(p, N.LUMDO_3, 'As you wish.');
   assert.equal(p.getLocation().getX(), 2803);
@@ -295,8 +307,9 @@ test('Monkey Madness I: stage 0 route reaches completion and grants the reward o
   assert.equal(p.getAttribute('quest.monkey_madness_i.zooknock-met'), undefined);
   h.line(p, N.ZOOKNOCK,
     'I am Zooknock, the 10th squad mage. These are Bunkwicket and Waymottin, two of our finest sappers. I assume you will want to know how we got here?');
-  h.line(p, N.ZOOKNOCK,
-    'I have the necessary magic to perform the shapeshifting spell, but we needed a human to transform.');
+  const shapeshiftLine = 'Garkor had long decided that we need a monkey insider. I have the necessary magic to perform the shapeshifting spell, but we needed a human to transform.';
+  assert.ok(transcriptLine(shapeshiftLine), 'the line the plugin matches is the transcript line');
+  h.line(p, N.ZOOKNOCK, shapeshiftLine);
   assert.equal(p.varbits.get(127), 5, 'Quest Helper advances after the Garkor/Zooknock conversation');
   p.inventory.adds(I.GOLD_BAR, 1);
   // Item-on-NPC starts the transcript, whose message steps run the real
@@ -359,6 +372,7 @@ test('Monkey Madness I: stage 0 route reaches completion and grants the reward o
   h.action(p, N.ZOOKNOCK, 'hOYpYN');
   assert.equal(p.inventory.getAmount(I.KARAMJAN_MONKEY_GREEGREE), 1);
   assert.equal(h.quest.getStage(p), STAGE.chapters);
+  assert.equal(p.configs.get(MM_MAIN), 4, 'Quest Helper keys the zoo trip on mm_main 4');
   equip(p, core.Equipment.WEAPON_SLOT, I.KARAMJAN_MONKEY_GREEGREE);
 
   // Ardougne Zoo: talk the minder as a monkey, take a monkey, then leave.
@@ -392,6 +406,7 @@ test('Monkey Madness I: stage 0 route reaches completion and grants the reward o
   h.object(p, O.AWOWOGEI, 'Talk-to');
   assert.equal(p.getAttribute('quest.monkey_madness_i.monkey-delivered'), true);
   assert.equal(p.inventory.getAmount(I.MONKEY), 0);
+  assert.equal(p.configs.get(MM_MAIN), 5, 'Quest Helper keys the sigil on mm_main 5');
   assert.equal(h.variant(p, N.GARKOR).variant, 'chapter-3-returning-to-garkor');
   h.action(p, N.GARKOR, 'NP0anE');
   assert.equal(h.variant(p, N.GARKOR).variant, 'chapter-4');
@@ -399,16 +414,27 @@ test('Monkey Madness I: stage 0 route reaches completion and grants the reward o
   assert.equal(p.varbits.get(126), 6, 'Quest Helper sees the squad sigil handover');
   assert.equal(p.inventory.getAmount(I._10TH_SQUAD_SIGIL), 1);
 
-  // Sigil: spawn and fight the owner-only demon, then report to Narnode.
+  // Sigil: the squad and the owner-only demon, the fight, Zooknock's way out.
   h.action(p, N.GARKOR, 'vEetSW');
+  assert.equal(h.condition(p, N.GARKOR, 'VcMNHp'), true, 'the first wear plays "the final battle begins!"');
   const demon = h.npcs.find(npc => npc.getId() === N.JUNGLE_DEMON);
   assert.ok(demon, 'owner-only Jungle Demon spawned');
+  const squad = h.npcs.filter(npc => npc.getId() === N.GARKOR || npc.getId() === N.ZOOKNOCK);
+  assert.equal(squad.length, 2, 'Garkor and Zooknock are summoned with the player');
   assert.equal(p.getLocation().getZ(), 1);
+  assert.equal(h.variant(p, N.ZOOKNOCK).variant, 'chapter-4-talking-to-garkor-or-zooknock-during-the-final-battle');
   h.death(demon, p);
   assert.equal(p.getAttribute('quest.monkey_madness_i.demon-killed'), true);
+  assert.equal(p.configs.get(MM_MAIN), 6, 'Quest Helper keys the return to Narnode on mm_main 6');
+  assert.equal(h.variant(p, N.GARKOR).variant, 'chapter-4-talking-to-garkor-after-killing-the-jungle-demon');
+  assert.equal(h.variant(p, N.ZOOKNOCK).variant, 'chapter-4-talking-to-zooknock');
+  h.action(p, N.ZOOKNOCK, '44E_SM');
+  assert.equal(p.getLocation().getZ(), 0, 'Zooknock teleports the player out of the arena');
+  assert.ok(squad.every(npc => npc.removed), 'the arena NPCs are removed with the player gone');
   assert.equal(h.variant(p, N.KING_NARNODE_SHAREEN).variant, 'chapter-4-returning-to-king-narnode');
   h.action(p, N.KING_NARNODE_SHAREEN, 'iKXnuQ');
   assert.equal(h.quest.getStage(p), STAGE.complete);
+  assert.equal(p.configs.get(MM_MAIN), 9);
   assert.equal(p.inventory.getAmount(I.COINS), 10000);
   assert.equal(p.inventory.getAmount(I.DIAMOND), 3);
   assert.ok(p.messages.some(text => text.includes('Congratulations')));
@@ -635,4 +661,182 @@ test('MM1 yields throne object 4771 once MM2 is complete; MM2 canonical dialogue
     calls.some(call => call.page === 'Awowogei' && call.variant === 'after-completing-monkey-madness-ii'),
     `expected MM2 canonical variant, got ${JSON.stringify(calls)}`
   );
+});
+
+test('Monkey Madness I: a second sigil wear plays the "again" line', () => {
+  const { h, p } = monkeyMadness();
+  h.quest.setStage(p, 8);
+  h.action(p, N.GARKOR, 'vEetSW');
+  assert.equal(h.condition(p, N.GARKOR, 'VcMNHp'), true);
+  h.action(p, N.GARKOR, 'vEetSW');
+  assert.equal(h.condition(p, N.GARKOR, 'VcMNHp'), false);
+  assert.equal(h.condition(p, N.GARKOR, 'pgN5Sw'), true);
+  assert.equal(h.npcs.filter(npc => !npc.removed).length, 3, 'a re-wear replaces the earlier arena');
+});
+
+test('Monkey Madness I: a login back in the arena re-summons the squad, not a dead demon', () => {
+  const { h, p } = monkeyMadness();
+  h.quest.setStage(p, 8);
+  h.action(p, N.GARKOR, 'vEetSW');
+  h.condition(p, N.GARKOR, 'VcMNHp');
+  p.setAttribute('quest.monkey_madness_i.demon-killed', true);
+  (h.hooks.onPlayerLogout ?? []).forEach(fn => fn({ player: p }));
+  assert.ok(h.npcs.every(npc => npc.removed), 'logout clears the arena');
+  (h.hooks.onPlayerLogin ?? []).forEach(fn => fn({ player: p }));
+  const live = h.npcs.filter(npc => !npc.removed).map(npc => npc.getId()).sort((a, b) => a - b);
+  assert.deepEqual(live, [N.GARKOR, N.ZOOKNOCK].sort((a, b) => a - b));
+});
+
+test('Monkey Madness I: mm_main follows the live scale while saved stages stay', () => {
+  const { h, p } = monkeyMadness();
+  const wire = stage => h.quest.varpValue(stage, p);
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(wire), [0, 1, 2, 2, 2, 2, 2, 3, 4, 9, 10]);
+  p.setAttribute('quest.monkey_madness_i.monkey-delivered', true);
+  assert.equal(wire(8), 5);
+  p.setAttribute('quest.monkey_madness_i.demon-killed', true);
+  assert.equal(wire(8), 6);
+});
+
+test("Monkey Madness I: Daero's Travel in the Grand Tree returns the player to the hangar", () => {
+  const { h, p } = monkeyMadness();
+  const starts = [];
+  h.api.onCustomEvent('npc-dialogue:start', event => starts.push(event.variant));
+  h.quest.setStage(p, 7);
+  p.moveTo(new core.Location(2482, 3486, 1));
+  assert.equal(h.npc(p, N.DAERO_2, 'Travel').handled, true);
+  assert.equal(starts.at(-1), 'chapter-1-the-underground-hangar-talking-to-daero-outside-of-the-bunker');
+  p.moveTo(new core.Location(2394, 9889, 0));
+  h.npc(p, N.DAERO_2, 'Travel');
+  assert.equal(starts.at(-1), 'chapter-1-the-underground-hangar-selecting-travel-at-daero-when-in-the-hangar',
+    'in the hangar Travel is the "how do I leave" quip');
+});
+
+test('Monkey Madness I: the Bamboo Gate crosses through its one gap', () => {
+  const { h, p } = monkeyMadness();
+  h.quest.setStage(p, 8);
+  equip(p, core.Equipment.WEAPON_SLOT, I.KARAMJAN_MONKEY_GREEGREE); // only a monkey passes
+  p.moveTo(new core.Location(2719, 2764, 0));
+  assert.equal(h.object(p, O.BAMBOO_GATE, 'Open').handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2720, 2767]);
+  p.moveTo(new core.Location(2722, 2770, 0));
+  h.object(p, O.BAMBOO_GATE_2, 'Open');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2720, 2765]);
+});
+
+test('Monkey Madness I owns the temple trapdoor and denture doorway before the Doors plugin', () => {
+  const { h, p } = monkeyMadness();
+  const climbs = captureClimbs(h);
+  h.quest.setStage(p, 7);
+  p.moveTo(new core.Location(2807, 2784, 0));
+  const trapdoor = { player: p, objectId: O.TRAPDOOR_20, location: { x: 2807, y: 2785, z: 0 }, handled: false };
+  h.emit('door:toggle', trapdoor);
+  assert.equal(trapdoor.handled, true, 'Doors would swap in the open trapdoor a tile off, out of reach');
+  assert.deepEqual(tile(climbs.at(-1)), [2808, 9200, 0]);
+
+  p.moveTo(new core.Location(2764, 2763, 0));
+  const doorway = { player: p, objectId: O.DOORWAY_7, location: { x: 2764, y: 2764, z: 0 }, handled: false };
+  h.emit('door:toggle', doorway);
+  assert.equal(doorway.handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2764, 2765]);
+
+  const elsewhere = { player: p, objectId: O.DOORWAY_7, location: { x: 3000, y: 3000, z: 0 }, handled: false };
+  h.emit('door:toggle', elsewhere);
+  assert.equal(elsewhere.handled, false, 'the same doorway id elsewhere stays with Doors');
+});
+
+test('Monkey Madness I: a caged player talks to the minder across the zoo fence', () => {
+  const { h, p } = monkeyMadness();
+  const route = request => { (h.hooks.onNpcRoute ?? []).forEach(fn => fn(request)); return request; };
+  p.moveTo(new core.Location(2606, 3280, 0));
+  assert.equal(route({ player: p, npcId: N.MONKEY_MINDER, range: 1 }).range, 1, 'not captured: normal reach');
+  p.setAttribute('quest.monkey_madness_i.monkey-captured', true);
+  const caged = route({ player: p, npcId: N.MONKEY_MINDER, range: 1 });
+  assert.equal(caged.range, 3);
+  assert.equal(caged.ignoreProjectileClip, true);
+});
+
+test('Monkey Madness I: Narnode plays the after-quest talk until Monkey Madness II starts', () => {
+  const { h, p } = monkeyMadness();
+  let mm2Stage = 0;
+  h.api.onCustomEvent('quest:get-stage', request => {
+    if (request.key === 'grand_tree') request.stage = 160;
+    if (request.key === 'monkey_madness_ii') request.stage = mm2Stage;
+  });
+  h.quest.setStage(p, 9);
+  assert.equal(h.variant(p, N.KING_NARNODE_SHAREEN).variant, 'after-monkey-madness-i');
+  mm2Stage = 5;
+  assert.equal(h.variant(p, N.KING_NARNODE_SHAREEN), null, 'a started Monkey Madness II owns Narnode');
+});
+
+test('Monkey Madness I: a human is jailed on every approach; Lumo counts the catches', () => {
+  const { h, p } = monkeyMadness();
+  const starts = [];
+  h.api.onCustomEvent('npc-dialogue:start', event => starts.push(event.variant));
+  h.quest.setStage(p, 7);
+  const atCell = () => p.getLocation().getX() === 2772 && p.getLocation().getY() === 2795;
+
+  h.zone(p);
+  assert.ok(atCell(), 'the first approach jails the player');
+  h.object(p, O.JAIL_DOOR, 'Pick-lock');
+  assert.equal(p.getAttribute('quest.monkey_madness_i.jail'), 2);
+  h.zone(p);
+  assert.ok(atCell(), 'so does every later one (wiki: "placed in the jail cell again")');
+  assert.equal(p.getAttribute('quest.monkey_madness_i.jail'), 1, 'the lock can be picked again');
+  assert.equal(p.getAttribute('quest.monkey_madness_i.jail-count'), 2);
+  assert.ok(p.messages.includes('You have been hit by poisoned arrows and knocked out!'));
+
+  p.moveTo(new core.Location(2720, 2764, 0));
+  h.object(p, O.BAMBOO_GATE, 'Open');
+  assert.ok(atCell(), 'a human opening the Bamboo Gate is shot down too');
+
+  p.setAttribute('quest.monkey_madness_i.jail-count', 9);
+  assert.equal(h.condition(p, N.LUMO_3, 'rpSCo_'), false);
+  h.zone(p);
+  assert.equal(h.condition(p, N.LUMO_3, 'rpSCo_'), true, 'the tenth catch plays "ten times now"');
+  assert.equal(h.condition(p, N.LUMO_3, '2JIjG3'), false);
+
+  p.setAttribute('quest.monkey_madness_i.jail-count', 100);
+  h.action(p, N.LUMO_3, 'rB_S-V');
+  assert.equal(p.inventory.getAmount(I.STUFFED_MONKEY), 1, 'Lumo throws the stuffed monkey');
+
+  equip(p, core.Equipment.WEAPON_SLOT, I.KARAMJAN_MONKEY_GREEGREE);
+  p.moveTo(new core.Location(2720, 2750, 0));
+  h.zone(p);
+  assert.equal(p.getLocation().getY(), 2750, 'monkey form walks past the archers');
+  equip(p, core.Equipment.WEAPON_SLOT, -1);
+  h.quest.setStage(p, 9);
+  h.zone(p);
+  assert.equal(p.getLocation().getY(), 2750, 'no jail once the quest is complete');
+});
+
+test('Monkey Madness I: the sent-back page is a random block plus the catch-count conditions', () => {
+  // The plugin plays either one count condition (by id) or the random block; that only
+  // holds while the export keeps this shape.
+  const pages = require('../data/definitions/npc-dialogues.json');
+  const page = pages['Monkey Madness I'].variants['chapter-2-getting-sent-back-to-jail'];
+  assert.equal(page.filter(step => step.type === 'random').length, 1);
+  assert.deepEqual(page.filter(step => step.type === 'condition').map(step => step.id),
+    ['rpSCo_', '2JIjG3', 'KVGnoh', 'k9jVap', 'YoHOAf']);
+});
+
+test('Monkey Madness I: the south-east bridge ladder, the jump and the hangar exit', () => {
+  const { h, p } = monkeyMadness();
+  const climbs = captureClimbs(h);
+  p.moveTo(new core.Location(2803, 2735, 0));
+  const up = climbRequest(p, O.BAMBOO_LADDER, 2803, 2734, 0);
+  h.emit('ladders:climb', up);
+  assert.equal(up.handled, true, 'Ladders finds nothing on plane 1 above this ladder');
+  assert.deepEqual(tile(climbs.at(-1)), [2803, 2733, 2]);
+  const down = climbRequest(p, O.BAMBOO_LADDER_2, 2803, 2734, 2);
+  h.emit('ladders:climb', down);
+  assert.equal(down.handled, true);
+  assert.deepEqual(tile(climbs.at(-1)), [2803, 2735, 0]);
+
+  p.moveTo(new core.Location(2803, 2728, 2));
+  assert.equal(h.object(p, O.END_OF_BRIDGE, 'Jump off').handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2806, 2724, 0]);
+
+  p.moveTo(new core.Location(2398, 9872, 0));
+  assert.equal(h.object(p, O.TELEPORTATION_DEVICE_2, 'Operate').handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2393, 3466]);
 });

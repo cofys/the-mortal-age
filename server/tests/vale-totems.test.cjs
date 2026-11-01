@@ -55,6 +55,7 @@ function createPlayer({ fletching = 99, items = [] } = {}) {
   const stacks = (id) => PluginManager.getCoreApi().ItemDefinition.forId(id)?.isStackable?.() === true;
   const xp = {};
   const said = [];
+  const dialogueChains = [];
   const messages = [];
   const animations = [];
   const attributes = new Map();
@@ -80,7 +81,7 @@ function createPlayer({ fletching = 99, items = [] } = {}) {
     sendRunEnergy: () => sender,
   };
   const player = {
-    inventory, xp, said, messages, animations, attributes,
+    inventory, xp, said, dialogueChains, messages, animations, attributes,
     menu: () => menu,
     isPlayerBot: () => false,
     getLocation: () => location,
@@ -92,7 +93,11 @@ function createPlayer({ fletching = 99, items = [] } = {}) {
     setPositionToFace() {},
     getRunEnergy: () => energy,
     setRunEnergy: (value) => { energy = value; },
-    getDialogueManager: () => ({ startDialogues: (builder) => said.push([...builder.getDialogues().values()][0].getText()) }),
+    getDialogueManager: () => ({ startDialogues: (builder) => {
+      const entries = [...builder.getDialogues().values()];
+      dialogueChains.push(entries);
+      said.push(entries[0].getText());
+    } }),
     getEquipment: () => ({ contains: () => false }),
     getSkillManager: () => ({
       getCurrentLevel: (skill) => (skill.getName?.() ?? String(skill)).toLowerCase().includes("fletch") ? fletching : 1,
@@ -214,9 +219,13 @@ test("as captured: decorating - an item every two ticks, the fourth is the final
   assert.equal(site(player, "decorations"), 1);
   ticks(6);
   assert.equal(site(player, "decorations"), 4);
-  assert.deepEqual(player.messages, ["You decorate the totem.", "You decorate the totem.", "You decorate the totem.", "You add the final decoration to the totem."]);
+  assert.deepEqual(player.messages, ["You decorate the totem.", "You decorate the totem.", "You decorate the totem."]);
+  const final = player.dialogueChains.at(-1);
+  assert.equal(final[0].getText(), "You add the final decoration to the totem.");
+  assert.equal(final.length, 1, "the player line is quest-only");
   assert.equal(player.getInventory().contains(obj("unstrung_willow_shortbow")), true, "only the totem's own wood");
   assert.equal(Math.round(player.xp.fletching * 10), 2048);
+  player.said.length = 0;
   click(player, "Oak totem", "Decorate");
   assert.deepEqual(player.said, ["You have already added as many decorations as possible to the<br>totem."]);
 });

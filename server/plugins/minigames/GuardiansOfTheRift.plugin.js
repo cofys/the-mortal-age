@@ -8,6 +8,8 @@
 module.exports = {
   name: "GuardiansOfTheRift",
   members: true,
+  // Records owns the "ABYSSAL PEARLS" shop currency, replacing Shopkeepers' item handler.
+  dependsOn: ["Shopkeepers"],
   register(api) {
     require("./guardiansoftherift/Shared.GuardiansOfTheRift").bind(api);
     require("./guardiansoftherift/Records.GuardiansOfTheRift").attach(api);

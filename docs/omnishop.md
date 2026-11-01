@@ -13,12 +13,14 @@ The interface draws itself from those tables. `server/plugins/interface/Omnishop
 | Event | Payload | Who answers |
 | --- | --- | --- |
 | `omnishop:open` | `{ player, shop }`, where `shop` is the DB row's gameval name | anyone opening it |
-| `omnishop:currency` | `{ player, shop, currency, balance, set }` | the owner, for currencies with no obj: set `balance` and a `set(value)` |
+| `omnishop:currency` | `{ player, shop, currency, itemId, balance, set }` | the owner: set `balance` and a `set(value)`. No-obj currencies have no fallback owner; an obj currency is claimed only if the owner answers |
 | `omnishop:describe` | `{ player, shop, stock, description }` | the owner: the info text, which the cache doesn't carry |
 | `omnishop:can-buy` | `{ player, shop, stock, itemId, cancel, unlock }` | before payment: `cancel` refuses (the owner sends the message); `unlock` needs no inventory space |
 | `omnishop:purchase` | `{ player, shop, stock, itemId, handled }` | after payment: `handled` means nothing is handed over |
 
-A currency with an obj is that item in the inventory, and the plugin handles it itself.
+A currency with an obj is that item in the inventory unless its owner claims it through
+`omnishop:currency`. Guardians of the Rift's abyssal pearls do: the cache's currency row still
+names the old item, but the shop reads and writes the saved pearl balance.
 
 ## Protocol
 

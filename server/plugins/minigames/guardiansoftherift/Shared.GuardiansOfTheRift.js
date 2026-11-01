@@ -64,6 +64,7 @@ const ITEM = {
   POLYELEMENTAL_STONE: "gotr_guardian_stone_polyelemental",
   POLYCATALYTIC_STONE: "gotr_guardian_stone_polycatalytic",
   UNCHARGED_CELL: "gotr_cell_uncharged",
+  PEARL: "abyssal_pearl",
   CELLS: ["gotr_cell_tier1", "gotr_cell_tier2", "gotr_cell_tier3", "gotr_cell_tier4"],
   PORTAL_TALISMANS: [
     "gotr_portal_talisman_air", "gotr_portal_talisman_water", "gotr_portal_talisman_earth",

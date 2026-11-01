@@ -450,6 +450,13 @@ function checkpoint(run, tile) {
   return best;
 }
 
+/** The Hallowed ring negates the Sepulchre's environmental trap damage. */
+function wearingHallowedRing(player) {
+  const { Equipment, ItemIdentifiers } = Common.core;
+  const ring = player.getEquipment().getItems?.()[Equipment.RING_SLOT]?.getId?.();
+  return ring === ItemIdentifiers.HALLOWED_RING || ring === ItemIdentifiers.HALLOWED_RING_2;
+}
+
 function hit(run, tier, tile) {
   const { player } = run;
   const { HitDamage, HitMask } = Common.core;
@@ -459,8 +466,10 @@ function hit(run, tier, tile) {
   traps.pendingHit = null;
   traps.pendingPad = null;
   const to = checkpoint(run, tile);
-  const [low, high] = T().damage[String(tier)];
-  player.addTickHit(player.decrementHealth(new HitDamage(Common.randomInt(low, high), HitMask.RED)));
+  if (!wearingHallowedRing(player)) {
+    const [low, high] = T().damage[String(tier)];
+    player.addTickHit(player.decrementHealth(new HitDamage(Common.randomInt(low, high), HitMask.RED)));
+  }
   player.getMovementQueue().reset();
   player.getMovementQueue().setBlockMovement?.(true);
   run.schedule(respawn.deathAt, () => {

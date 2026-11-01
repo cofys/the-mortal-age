@@ -79,7 +79,7 @@ function container() {
   };
 }
 
-function fakePlayer({ agility = 99, thieving = 99 } = {}) {
+function fakePlayer({ agility = 99, thieving = 99, ring = null } = {}) {
   const attributes = new Map();
   const p = {
     location: new Location(2387, 5982, 0), area: null, messages: [], spam: [], boxes: [], anims: [], graphics: [],
@@ -93,15 +93,19 @@ function fakePlayer({ agility = 99, thieving = 99 } = {}) {
     getArea: () => p.area, setArea(area) { p.area = area; },
     getAttribute: (k) => attributes.get(k), setAttribute: (k, v) => attributes.set(k, v),
     getInventory: () => p.inventory,
-    getEquipment: () => ({ getItems: () => [] }),
+    getEquipment: () => {
+      const items = [];
+      if (ring) items[Common.core.Equipment.RING_SLOT] = { getId: () => ring };
+      return { getItems: () => items };
+    },
     sendMessage: (m) => p.messages.push(m),
     performAnimation: (a) => p.anims.push(a.getId()),
     performGraphic: (g) => p.graphics.push(g.getId()),
     setRunEnergy() {},
-    hits: [], blocked: false,
+    hits: [], decrements: [], blocked: false,
     getMovementQueue: () => ({ reset() {}, setBlockMovement(v) { p.blocked = v; } }),
     getCombat: () => ({ reset() {} }),
-    decrementHealth: (hit) => hit,
+    decrementHealth: (hit) => { p.decrements.push(hit.getDamage()); return hit; },
     addTickHit: (hit) => p.hits.push(hit.getDamage()),
     setForceMovement: (f) => { if (f) p.forced.push(f); },
     getForceMovement: () => null,
@@ -529,8 +533,8 @@ test('floor 5: the barriers by the Grand Hallowed Coffin let the player through 
 const Traps = require('../plugins/minigames/hallowedsepulchre/Traps.HallowedSepulchre');
 
 /** A run on `floor` (layout `variant`) with its traps built, the player at template `tile`. */
-function trapFloor(floor, variant, tile) {
-  const p = fakePlayer();
+function trapFloor(floor, variant, tile, ring = null) {
+  const p = fakePlayer({ ring });
   const run = startRun(p);
   onFloor(run, p, floor, variant, tile);
   run.lastLanding = Common.data.floors[floor - 1].variants[variant].start;
@@ -567,6 +571,22 @@ test('fire: standing in a blast on its first tick is a hit; then the death, the 
   ticks(2);
   assert.deepEqual(run.area.templateOf(p.getLocation()), [2282, 6000, 2], 'recorded respawn (1862 T19070)');
   run.finish();
+});
+
+test('the Hallowed ring negates trap damage but still sends the player back to the checkpoint', () => {
+  for (const ring of [Common.core.ItemIdentifiers.HALLOWED_RING, Common.core.ItemIdentifiers.HALLOWED_RING_2]) {
+    const { p, run } = trapFloor(1, 0, [2282, 5992, 2], ring);
+    trapsTo(run, 3);
+    Traps.tick(run);
+    assert.equal(p.decrements.length, 0, `no damage with ring ${ring}`);
+    assert.equal(p.hits.length, 0, `no hitsplat with ring ${ring}`);
+    assert.equal(run.traps.recovering, true, 'the hit still plays out');
+    ticks(2);
+    assert.equal(p.anims.at(-1), Common.seq('human_death'));
+    ticks(2);
+    assert.deepEqual(run.area.templateOf(p.getLocation()), [2282, 6000, 2], 'still back at the checkpoint');
+    run.finish();
+  }
 });
 
 test('crossbows: the recorded lane (2264,6002) shoots from 2260 to 2246 three tiles a tick', () => {

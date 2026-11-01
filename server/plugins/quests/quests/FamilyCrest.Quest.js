@@ -195,9 +195,40 @@ module.exports = function registerFamilyCrestQuest(api) {
     return null;
   }
 
+  /** Wiki: 59 Magic, 40 Mining, 40 Smithing and 40 Crafting. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.MAGIC, level: 59, label: "Magic" },
+    { skill: Skill.MINING, level: 40, label: "Mining" },
+    { skill: Skill.SMITHING, level: 40, label: "Smithing" },
+    { skill: Skill.CRAFTING, level: 40, label: "Crafting" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function meetsSkillRequirements(player) {
+    return missingSkillRequirements(player).length === 0;
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (!DIMINTHEIS_NPC_IDS.has(npcId) || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_SPOKEN_DIMINTHEIS) quest.setStage(player, STAGE_SPOKEN_DIMINTHEIS);
+    if (quest.getStage(player) < STAGE_SPOKEN_DIMINTHEIS) {
+      if (!meetsSkillRequirements(player)) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_SPOKEN_DIMINTHEIS);
+    }
   }
 
   /** The quest choices the transcript dump left without an id, matched on text. */

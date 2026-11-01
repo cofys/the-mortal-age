@@ -1,4 +1,4 @@
-// From server/: node --test tests/qh728-q002.test.cjs
+﻿// From server/: node --test tests/qh728-q002.test.cjs
 // Another Slice of H.A.M. (q002) contract: the full stage-0-to-completion route
 // through the plugin's registered handlers, plus the sixth-artefact gate and
 // recovery after leaving the outpost/railway.
@@ -12,7 +12,16 @@ require('node:test').before(async () => {
     require('node:path').resolve(__dirname, '..'));
 });
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const { CombatSpecial } = require('../dist/game/content/combat/CombatSpecial');
 const runtime = require('../plugins/quests/QuestRuntime');
+
+// The quest identifies the ancient mace special from the hit's retained combat method, so the
+// registry must hold the real special exactly as the combat plugin registers it.
+require('../plugins/combat/specials/AncientMace.SpecialAttack')({
+  core: PluginManager.getCoreApi(),
+  registerCombatSpecial: (definition) => CombatSpecial.register(definition),
+  onCombatHitRoll: () => {},
+});
 
 const transcripts = [];
 runtime.startTranscript = (api, player, npcId, page, variant, select) => {
@@ -39,7 +48,8 @@ function setup(options = {}) {
   const N = core.NpcIdentifiers;
   const hooks = {
     custom: new Map(), conditions: [], npcNamed: new Map(), objects: [],
-    itemOnObject: [], itemOnNpc: [], itemDrop: [], login: [], logout: [], zoneEnter: [],
+    itemOnObject: [], itemOnNpc: [], itemAction: [], namedItemActions: new Map(), itemDrop: [],
+    login: [], logout: [], zoneEnter: [],
     hitModify: [], npcDeath: [], interfaceButtons: [],
   };
   const spawned = [], removed = [], tasks = [], attacks = [];
@@ -49,6 +59,9 @@ function setup(options = {}) {
   let location = new core.Location(2955, 3507, 0);
   let hitpoints = 100;
   let movementBlocked = false;
+  let specialActive = false;
+  let combatSpecial = null;
+  let weapon = null;
 
   const inventoryApi = {
     getAmount: (id) => inventory.get(id) ?? 0,
@@ -103,7 +116,13 @@ function setup(options = {}) {
     getPacketSender: () => sender,
     sendMessage(message) { messages.push(message); },
     getInventory: () => inventoryApi,
-    getEquipment: () => ({ get: () => null, contains: () => false }),
+    getEquipment: () => ({
+      get: (slot) => slot === core.Equipment.WEAPON_SLOT ? weapon : null,
+      contains: () => false,
+    }),
+    isSpecialActivated: () => specialActive,
+    setSpecialActivated(value) { specialActive = value; },
+    getCombatSpecial: () => combatSpecial,
     getSkillManager: () => ({
       getMaxLevel: () => 99,
       getCurrentLevel: () => 99,
@@ -151,6 +170,10 @@ function setup(options = {}) {
     onObjectInteraction(fn) { hooks.objects.push(fn); },
     onItemOnObject(fn) { hooks.itemOnObject.push(fn); },
     onItemOnNpc(fn) { hooks.itemOnNpc.push(fn); },
+    onItemAction(name, actions) {
+      if (typeof name === 'function') hooks.itemAction.push(name);
+      else hooks.namedItemActions.set(name, actions);
+    },
     onItemDropPolicy(fn) { hooks.itemDrop.push(fn); },
     onZoneEnter(zone, fn) { hooks.zoneEnter.push({ zone, fn }); },
     onPlayerLogin(fn) { hooks.login.push(fn); },
@@ -235,6 +258,30 @@ function setup(options = {}) {
     player, emit, talk, answer, enterZone, lastVariant, advance, dispatchObject,
     setLocation(x, y, z = 0) { location = new core.Location(x, y, z); },
     getLocation() { return location; },
+    setWeapon(id) { weapon = id === null ? null : { getId: () => id }; },
+    setSpecial(active, id = 'ancient_mace') {
+      specialActive = active;
+      combatSpecial = active ? { getId: () => id } : null;
+    },
+    hitSigmund(options = {}) {
+      let damage = options.damage ?? 10;
+      const hit = {
+        getAttacker: () => player,
+        getCombatType: () => options.combatType ?? core.CombatType.MELEE,
+        isAccurate: () => options.accurate !== false,
+        // The launched special's combat method; the armed flag clears as soon as the swing
+        // queues the hit, so an armed-but-cleared launch still carries it here.
+        getCombatMethod: () => options.combatMethod ?? (
+          specialActive && weapon?.getId?.() === I.ANCIENT_MACE
+            ? CombatSpecial.getForWeaponId(I.ANCIENT_MACE)?.getCombatMethod?.() ?? null
+            : null
+        ),
+        getTotalDamage: () => damage,
+        setTotalDamage(value) { damage = value; },
+      };
+      for (const fn of hooks.hitModify) fn({ npc: { getId: () => N.SIGMUND_8 }, hit });
+      return damage;
+    },
   };
 }
 
@@ -402,14 +449,25 @@ test('Another Slice of H.A.M.: stage 0 to completion through registered handlers
   assert.equal(h.lastVariant(), 'climbing-down-to-the-railway');
   assert.ok(h.spawned.some((npc) => npc.getId() === N.SIGMUND_8));
 
-  // Stage 10: the mace hit line, the death transcript, untie, and completion action.
-  h.hooks.hitModify[0]({ npc: { getId: () => N.SIGMUND_8 }, hit: { getAttacker: () => h.player } });
+  // Stage 10: only the ancient mace special breaks Sigmund's prayer.
+  h.setWeapon(h.I.ANCIENT_MACE);
+  h.setSpecial(false);
+  assert.equal(h.hitSigmund(), 0, 'ordinary hits are absorbed by the prayer');
+  assert.equal(h.quest.getStage(h.player), 10);
+  h.setSpecial(true);
+  assert.equal(h.hitSigmund(), 10, 'the ancient mace special lands');
   h.advance();
   assert.equal(h.lastVariant(), 'attacking-him-with-the-ancient-mace-special');
   for (const fn of h.hooks.npcDeath) fn({ killer: h.player, npcId: N.SIGMUND_8, npc: { getId: () => N.SIGMUND_8 } });
   assert.equal(h.lastVariant(), 'defeating-sigmund');
   h.hooks.objects[0]({ player: h.player, objectId: 23284, location: { x: 2542, y: 5512, z: 0 } });
   assert.equal(h.lastVariant(), 'defeating-sigmund');
+
+  // The completion action waits for the untie and the train-line opening.
+  h.emit('npc-dialogue:action', { npcId: N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 10);
+  h.emit('npc-dialogue:action', { npcId: N.SIGMUND_8, stepId: 'VcaIcO' });
+  h.emit('npc-dialogue:action', { npcId: N.SIGMUND_8, stepId: '09Lek1' });
   h.emit('npc-dialogue:action', { npcId: N.SIGMUND_8, stepId: 'jiiizC' });
   assert.equal(h.quest.getStage(h.player), 11);
   assert.equal(h.quest.isComplete(h.player), true);
@@ -674,3 +732,152 @@ test('Another Slice of H.A.M.: real NPC combat targets and permission survive di
     for (const npc of h.spawned) h.core.World.markNpcCombatActive(npc, false);
   }
 });
+
+test('Another Slice of H.A.M.: objectives stay ordered and the mace special gates the showdown', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 10);
+  h.attrs.set('quest.another_slice_of_ham.train-agreement', true);
+  h.attrs.set('quest.another_slice_of_ham.sigmund-exposed', true);
+  h.setWeapon(h.I.ANCIENT_MACE);
+  h.setSpecial(false);
+
+  // Ordinary attacks cannot progress the showdown.
+  assert.equal(h.hitSigmund(), 0, 'ordinary hits are absorbed');
+  assert.equal(h.lastVariant(), 'climbing-down-to-the-railway-if-sigmund-is-attacked-with-melee');
+  for (const fn of h.hooks.npcDeath) fn({ killer: h.player, npcId: h.N.SIGMUND_8, npc: { getId: () => h.N.SIGMUND_8 } });
+  assert.equal(h.quest.getStage(h.player), 10, 'death before the special does not advance');
+  assert.ok(h.messages.some((text) => text.includes("prayer protects")));
+  assert.ok(h.spawned.some((npc) => npc.getId() === h.N.SIGMUND_8), 'Sigmund is restored for a retry');
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 10, 'completion is blocked before the special');
+
+  // A special from anything but the equipped mace does not count.
+  h.setSpecial(true);
+  h.setWeapon(null);
+  assert.equal(h.hitSigmund(), 0, 'the special needs the mace equipped');
+  h.setWeapon(h.I.ANCIENT_MACE);
+  assert.equal(h.hitSigmund(), 10, 'the mace special lands');
+  h.advance();
+  assert.equal(h.lastVariant(), 'attacking-him-with-the-ancient-mace-special');
+
+  for (const fn of h.hooks.npcDeath) fn({ killer: h.player, npcId: h.N.SIGMUND_8, npc: { getId: () => h.N.SIGMUND_8 } });
+  assert.equal(h.lastVariant(), 'defeating-sigmund');
+
+  // Untie and the train-line opening are separate, ordered actions.
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 10);
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'VcaIcO' });
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 10, 'the train opening is required before completion');
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: '09Lek1' });
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 11);
+  assert.equal(h.quest.isComplete(h.player), true);
+});
+
+test('Another Slice of H.A.M.: the queued ancient mace special lands after the armed flag clears', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 10);
+  h.attrs.set('quest.another_slice_of_ham.train-agreement', true);
+  h.attrs.set('quest.another_slice_of_ham.sigmund-exposed', true);
+  h.attrs.delete('quest.another_slice_of_ham.mace-special-used');
+  h.setWeapon(h.I.ANCIENT_MACE);
+  h.setSpecial(true);
+
+  // Combat.executeAttack clears the armed flag as soon as it has queued the special's hit;
+  // the impact runs the hit queue with that flag already cleared, so the delivered hit is the
+  // launched special even though the player no longer reads as armed.
+  const launchedMethod = CombatSpecial.getForWeaponId(h.I.ANCIENT_MACE)?.getCombatMethod?.() ?? null;
+  assert.ok(launchedMethod, 'the ancient mace special is registered');
+  h.setSpecial(false);
+  assert.equal(h.hitSigmund({ combatMethod: launchedMethod }), 10,
+    'the queued ancient mace special is not rejected once the armed flag cleared');
+  assert.equal(h.attrs.get('quest.another_slice_of_ham.mace-special-used'), true,
+    'the landed ancient mace special marks the showdown objective used');
+
+  for (const fn of h.hooks.npcDeath) fn({ killer: h.player, npcId: h.N.SIGMUND_8, npc: { getId: () => h.N.SIGMUND_8 } });
+  assert.equal(h.lastVariant(), 'defeating-sigmund');
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 10);
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'VcaIcO' });
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: '09Lek1' });
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 11);
+  assert.equal(h.quest.isComplete(h.player), true);
+});
+
+test('Another Slice of H.A.M.: Sigmund and the H.A.M. members are named interactions', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 10);
+
+  const sigmund = h.hooks.npcNamed.get('Sigmund');
+  assert.ok(sigmund?.['Talk-to'], 'Sigmund has a Talk-to interaction');
+  sigmund['Talk-to']({ player: h.player, npcId: h.N.SIGMUND_8 });
+  assert.equal(h.lastVariant(), 'climbing-down-to-the-railway', 'the confrontation exposes Sigmund');
+  sigmund['Talk-to']({ player: h.player, npcId: h.N.SIGMUND_8 });
+  assert.ok(h.messages.some((text) => text.includes("ancient mace's special attack")));
+
+  h.quest.setStage(h.player, 5);
+  for (const [name, npcId] of [['H.A.M. Archer', h.N.H_A_M_ARCHER], ['H.A.M. Mage', h.N.H_A_M_MAGE]]) {
+    const member = h.hooks.npcNamed.get(name);
+    assert.ok(member?.['Talk-to'], `${name} has a Talk-to interaction`);
+    member['Talk-to']({ player: h.player, npcId });
+  }
+  assert.ok(h.messages.some((text) => text.includes('too busy fighting the goblins')));
+});
+
+test('Another Slice of H.A.M.: quest items expose their checks and route use', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 10);
+
+  const mace = h.hooks.namedItemActions.get('Ancient mace');
+  assert.ok(mace?.Wield, 'the ancient mace has a Wield action');
+  assert.equal(mace.Wield({ player: h.player, itemId: h.I.ANCIENT_MACE, handled: false }), false,
+    'the quest never swallows the equip action');
+  assert.ok(h.messages.some((text) => text.includes("special attack")));
+
+  h.quest.setStage(h.player, 4);
+  h.inventory.set(h.I.GOBLIN_VILLAGE_SPHERE, 1);
+  const sphere = h.hooks.namedItemActions.get('Goblin village sphere');
+  assert.ok(sphere?.Break, 'the route sphere has a Break action');
+  assert.equal(sphere.Break({ player: h.player, itemId: h.I.GOBLIN_VILLAGE_SPHERE, handled: false }), true);
+  assert.equal(h.inventory.get(h.I.GOBLIN_VILLAGE_SPHERE) ?? 0, 0, 'breaking consumes the route item');
+  assert.equal(h.quest.getStage(h.player), 5, 'breaking the sphere is the Goblin Village teleport');
+  assert.deepEqual([h.getLocation().getX(), h.getLocation().getY()], [2955, 3507]);
+});
+
+test('Another Slice of H.A.M.: the journal lists the three objectives in order', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 10);
+  h.attrs.set('quest.another_slice_of_ham.sigmund-exposed', true);
+  const lines = h.quest.buildJournal(h.player, h.quest);
+  assert.ok(lines[0].includes('train agreement'), 'objective 1: the train agreement');
+  assert.ok(lines[1].includes('Expose and fight Sigmund'), 'objective 2: expose and fight Sigmund');
+  assert.ok(lines[2].includes("ancient mace's special attack"), 'objective 3: the mace special');
+  assert.ok(lines[0].startsWith('<str>'), 'the agreement is already complete');
+  assert.ok(lines[1].startsWith('<str>'), 'the fight is underway');
+  assert.ok(!lines[2].startsWith('<str>'), 'the special is still outstanding');
+});
+
+test('Another Slice of H.A.M.: a dropped cleaned artefact goes back into its dig spot', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 2);
+  h.inventory.set(h.I.SPECIMEN_BRUSH, 1);
+  const spot = SPOTS[0];
+
+  h.hooks.itemOnObject[0]({ player: h.player, itemId: h.I.TROWEL, objectId: spot.objectId, handled: false });
+  assert.equal(h.varbits.get(3551), 1);
+  h.hooks.itemOnObject[0]({ player: h.player, itemId: h.I[spot.dirty], objectId: 23526, handled: false });
+  assert.equal(h.inventory.get(h.I[spot.clean]), 1);
+
+  const drop = { player: h.player, itemId: h.I[spot.clean], handled: false, dropToGround: true };
+  h.hooks.itemDrop[0](drop);
+  assert.equal(drop.handled, true);
+  assert.equal(drop.dropToGround, false, 'the artefact never becomes a ground item');
+  assert.equal(h.inventory.get(h.I[spot.clean]) ?? 0, 0);
+  assert.equal(h.varbits.get(3551), 0, 'the spot can be dug again');
+
+  h.hooks.itemOnObject[0]({ player: h.player, itemId: h.I.TROWEL, objectId: spot.objectId, handled: false });
+  assert.equal(h.inventory.get(h.I[spot.dirty]), 1, 're-digging recovers the artefact');
+});
+

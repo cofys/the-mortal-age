@@ -29,6 +29,46 @@ const MAX_DECORATIONS = 4;
 const BUILD_DELAY = 1;
 const KNIVES = ["knife", "fletching_knife"];
 
+// The miniquest (quests/quests/ValeTotems.Quest.js) writes these same varbits. The site is
+// usable during the quest only for the quest's own totem; after the miniquest every site is.
+const QUEST_STAGE_VARBIT = 17227; // ent_totems_intro
+const QUEST_CARVE_CHAT_VARBIT = 17229; // ent_totems_carve_chat
+const QUEST_DECORATE_CHAT_VARBIT = 17230; // ent_totems_decorate_chat
+const QUEST_SITE = 1;
+const QUEST_FIRST_STAGE = 10;
+const QUEST_COMPLETE_STAGE = 70;
+
+function questStage(player) {
+  return Number(player.getPacketSender().getVarbit(QUEST_STAGE_VARBIT)) || 0;
+}
+
+function questActive(player) {
+  const stage = questStage(player);
+  return stage >= QUEST_FIRST_STAGE && stage < QUEST_COMPLETE_STAGE;
+}
+
+function questChat(player, varbit) {
+  return Number(player.getPacketSender().getVarbit(varbit)) === 1;
+}
+
+/**
+ * The quest decides which sites are open. The request defaults to allowed so the minigame
+ * still works on its own (the plugin tests load it without the quest plugin).
+ */
+function questAllows(player, site) {
+  const request = { player, site, allowed: true };
+  Shared.api().emitCustomEvent("vale-totems:access", request);
+  return request.allowed !== false;
+}
+
+function blocked(player) {
+  if (questActive(player)) {
+    Shared.statement(player, "You should probably talk to Ranulph and Isadora before doing that.");
+    return;
+  }
+  player.sendMessage("You need to complete the Vale Totems miniquest before you can help the ents here.");
+}
+
 function article(word) {
   return /^[aeiou]/.test(word) ? `an ${word}` : `a ${word}`;
 }
@@ -69,6 +109,10 @@ function build(event) {
   const { player } = event;
   const site = siteOf(event);
   if (site == null) return false;
+  if (!questAllows(player, site)) {
+    blocked(player);
+    return true;
+  }
   State.join(player);
   if (State.totem(player, site).points >= DATA.offeringsLimit) {
     Shared.statement(player, "You should take some of the offerings already here before building a new totem.");
@@ -95,6 +139,10 @@ function erect(player, site, { wood, index }) {
   if (Shared.ownsHouse(player)) Shared.addXp(player, "CONSTRUCTION", player.getSkillManager().getMaxLevel(Shared.core().Skill.CONSTRUCTION));
   player.setRunEnergy(player.getRunEnergy() + DATA.runEnergyRestore);
   player.getPacketSender().sendRunEnergy();
+  if (questActive(player) && site === QUEST_SITE && !questChat(player, QUEST_CARVE_CHAT_VARBIT)) {
+    Shared.statement(player, `You erect ${article(wood.name)} totem. It's now ready to be carved. Ranulph and Isadora might be able to tell you how.`);
+    return;
+  }
   player.sendMessage(`You erect ${article(wood.name)} totem.`);
   openCarveMenu(player, site);
 }
@@ -103,6 +151,10 @@ function carve(event) {
   const { player } = event;
   const site = siteOf(event);
   if (site == null) return false;
+  if (questActive(player) && site === QUEST_SITE && !questChat(player, QUEST_CARVE_CHAT_VARBIT)) {
+    Shared.statement(player, "You're not quite sure how to carve the totem. Ranulph and Isadora might be able to help.");
+    return true;
+  }
   State.join(player);
   Shared.face(player, State.tileOf(site));
   openCarveMenu(player, site);
@@ -133,9 +185,19 @@ function carveAnimal(player, site, animal) {
   Shared.face(player, State.tileOf(site));
   Shared.animate(player, Shared.SEQ.CARVE);
   Shared.sound(player, Shared.SOUND.CARVE, Shared.SOUND_DELAY.CARVE);
-  State.carve(player, site, animal, wood.durability);
+  const last = State.carve(player, site, animal, wood.durability);
   Shared.addXp(player, "FLETCHING", wood.carveXp);
   player.sendMessage(`You carve ${article(DATA.animals[animal - 1].name)} into the totem.`);
+  if (questActive(player) && site === QUEST_SITE) {
+    // The third carving's finish mesbox would replace the warning dialogue, so only warn on
+    // the carvings that leave room for it.
+    if (!last && !State.animals(player, site).includes(animal)) {
+      Shared.api().emitCustomEvent("vale-totems:wrong-carve", { player, site, animal });
+    }
+    if (last) {
+      Shared.statement(player, "You finish carving the totem, but it still seems to be missing something. Ranulph and Isadora might know what to do next.");
+    }
+  }
 }
 
 /** The first decoration of the totem's wood in the inventory, or null. */
@@ -144,21 +206,37 @@ function decorationFor(player, wood) {
   return name ? Shared.obj(name) : null;
 }
 
+/** Whether the player is carrying a decoration of some other wood. */
+function hasOtherWoodDecoration(player, wood) {
+  return DATA.woods.some((candidate) => candidate !== wood
+    && candidate.decorations.some((item) => player.getInventory().contains(Shared.obj(item))));
+}
+
 function decorate(event) {
   const { player } = event;
   const site = siteOf(event);
   if (site == null) return false;
+  if (questActive(player) && site === QUEST_SITE && !questChat(player, QUEST_DECORATE_CHAT_VARBIT)) {
+    Shared.statement(player, "You're not quite sure how to decorate the totem. Ranulph and Isadora might be able to help.");
+    return true;
+  }
   State.join(player);
   const totem = State.totem(player, site);
   if (!totem.carved) return carve(event);
   Shared.face(player, State.tileOf(site));
   if (totem.decorations >= MAX_DECORATIONS) {
-    Shared.statement(player, "You have already added as many decorations as possible to the<br>totem.");
+    Shared.statement(player, questActive(player) && site === QUEST_SITE
+      ? "You have already fully decorated the totem. Ranulph and Isadora might know what to do next."
+      : "You have already added as many decorations as possible to the<br>totem.");
     return true;
   }
   const wood = woodOf(totem.wood);
   if (decorationFor(player, wood) == null) {
-    player.sendMessage("You don't have anything to decorate the totem with.");
+    if (hasOtherWoodDecoration(player, wood)) {
+      Shared.statement(player, "You may only add decorations which match the wood used to build the totem.");
+    } else {
+      player.sendMessage("You don't have anything to decorate the totem with.");
+    }
     return true;
   }
   Shared.startAction(player, (tick) => (tick % 2 === 0 ? startDecoration(player, wood) : addDecoration(player, site, wood)));
@@ -182,7 +260,11 @@ function addDecoration(player, site, wood) {
   State.set(player, site, { decorations });
   Shared.addXp(player, "FLETCHING", wood.decorationXp * Math.max(0, 1 - DATA.wrongAnimalXpPenalty * wrongAnimals(player, site)));
   if (decorations >= MAX_DECORATIONS) {
-    player.sendMessage("You add the final decoration to the totem.");
+    if (questActive(player) && site === QUEST_SITE) {
+      Shared.statementThenPlayer(player, "You add the final decoration to the totem.", "There we go! I's say that's the totem finished!");
+    } else {
+      Shared.statement(player, "You add the final decoration to the totem.");
+    }
     return false;
   }
   player.sendMessage("You decorate the totem.");

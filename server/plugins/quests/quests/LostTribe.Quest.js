@@ -51,8 +51,9 @@
  *  - The maze has no trap state here; the dirt tunnel is walkable end to end, so wrong
  *    paths cost nothing (no swamp gas, no pit) and the symbol rocks keep their default
  *    Look-at.
- *  - No light-source or skill requirements are enforced (17 Mining, 13 Agility,
- *    13 Thieving); Sigmund's pickpocket only checks 13 Thieving.
+ *  - No light-source requirement is enforced; 17 Mining, 13 Agility and 13
+ *    Thieving are checked at the start, and Sigmund's pickpocket re-checks 13
+ *    Thieving.
  *  - The H.A.M. trapdoor is opened by swapping 6434 -> 6435 (open trapdoor) for the
  *    whole world; Ladders/ClimbLinks handle the climb itself.
  *  - Sigmund's post-firing spawn (6290 -> 5323) also stands around the H.A.M. hideout
@@ -517,10 +518,60 @@ module.exports = function registerLostTribeQuest(api) {
   // Transcript events
   // ==========================================================================
 
+  /** Wiki: 17 Mining, 13 Agility, 13 Thieving, Goblin Diplomacy and Rune Mysteries. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.MINING, level: 17, label: "Mining" },
+    { skill: Skill.AGILITY, level: 13, label: "Agility" },
+    { skill: Skill.THIEVING, level: 13, label: "Thieving" },
+  ];
+  const REQUIRED_QUESTS = [
+    { key: "goblin_diplomacy", name: "Goblin Diplomacy" },
+    { key: "rune_mysteries", name: "Rune Mysteries" },
+  ];
+
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
+  function missingQuestRequirements(player) {
+    return REQUIRED_QUESTS.filter(({ key }) => !questIsComplete(player, key));
+  }
+
+  function notifyQuestRequirements(player) {
+    for (const requirement of missingQuestRequirements(player)) {
+      player.sendMessage(`You must complete ${requirement.name} to start this quest.`);
+    }
+  }
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleDialogueHook(event) {
     const { player, npcId, hook } = event;
     if (hook !== START_HOOK || !SIGMUND_IDS.has(npcId)) return;
-    if (quest.getStage(player) === 0) quest.setStage(player, STAGE_ASK_PEOPLE);
+    if (quest.getStage(player) === 0) {
+      if (missingSkillRequirements(player).length > 0) {
+        notifySkillRequirements(player);
+        return;
+      }
+      if (missingQuestRequirements(player).length > 0) {
+        notifyQuestRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_ASK_PEOPLE);
+    }
   }
 
   function answerCondition(event) {

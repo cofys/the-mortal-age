@@ -330,9 +330,32 @@ module.exports = function registerTempleOfIkovQuest(api) {
   // Dialogue hooks
   // ==========================================================================
 
+  /** Wiki: 42 Thieving and 40 Ranged. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.THIEVING, level: 42, label: "Thieving" },
+    { skill: Skill.RANGED, level: 40, label: "Ranged" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (!LUCIEN_NPC_IDS.has(npcId) || hook !== START_HOOK) return;
     if (quest.getStage(player) < STAGE_STARTED) {
+      if (missingSkillRequirements(player).length > 0) {
+        notifySkillRequirements(player);
+        return;
+      }
       quest.setStage(player, STAGE_STARTED);
       if (!held(player, PENDANT_OF_LUCIEN_ITEM_ID)) {
         player.getInventory().adds(PENDANT_OF_LUCIEN_ITEM_ID, 1);

@@ -25,6 +25,8 @@ const BIG_SEARCH = 5;
 const SEARCH_TICKS = 3;
 const LOOT_SOUND = 2581;
 const INTRICATE_FREE_SLOTS = 2;
+/** Wiki: instead of a point of each type, 25 abyssal pearls buy one search. */
+const PEARL_SEARCH_COST = 25;
 /** "once" rewards and the gotr_perm_0/gotr_rewards_perm varbits that remember them. */
 const ONCE_VARBITS = {
   gotr_book: "gotr_book_obtained",
@@ -116,10 +118,16 @@ function rollSearch(player) {
 
 // ------------------------------------------------------------------ giving
 
+/** Pearls are the saved shop currency, so a pearl roll never needs an inventory slot. */
+function isPearl(reward) {
+  return reward.item === Shared.ITEM.PEARL;
+}
+
 /** Free slots a set of rewards needs: none for a stack already held (a pet may need one). */
 function slotsNeeded(player, rewards) {
   const inventory = player.getInventory();
   return rewards.filter((reward) => {
+    if (isPearl(reward)) return false;
     const itemId = Shared.obj(reward.item);
     return !(Shared.core().ItemDefinition.forId(itemId)?.isStackable?.() && inventory.contains(itemId));
   }).length;
@@ -133,8 +141,11 @@ function give(player, reward) {
     Shared.api().emitCustomEvent("npc-drops:roll", event);
     if (event.drops.length === 0) return true;
   }
-  player.getInventory().adds(itemId, reward.amount);
-  player.getInventory().refreshItems();
+  if (isPearl(reward)) Records.addPearls(player, reward.amount);
+  else {
+    player.getInventory().adds(itemId, reward.amount);
+    player.getInventory().refreshItems();
+  }
   if (reward.once && ONCE_VARBITS[reward.item]) Records.setSetting(player, ONCE_VARBITS[reward.item], 1);
   Shared.api().emitCustomEvent("collection-log:obtain", { player, itemId, amount: reward.amount });
   Shared.spam(player, `You found some loot: ${reward.amount} x ${itemName(itemId)}`);
@@ -146,19 +157,32 @@ function searchesLeft(player) {
   return Math.min(points.elemental, points.catalytic);
 }
 
+/** A point of each type pays first; with none, 25 pearls buy the search (Wiki). */
+function canSearch(player) {
+  return searchesLeft(player) > 0 || Records.pearls(player) >= PEARL_SEARCH_COST;
+}
+
+function payForSearch(player) {
+  const points = Records.points(player);
+  if (points.elemental > 0 && points.catalytic > 0) {
+    Records.setPoints(player, points.elemental - 1, points.catalytic - 1);
+    return true;
+  }
+  return Records.spendPearls(player, PEARL_SEARCH_COST);
+}
+
 /**
  * One search: the whole roll must fit before anything is given, then its points are spent and
  * every reward handed over. False when there are no searches left or no room.
  */
 function searchOnce(player) {
-  if (searchesLeft(player) <= 0) return false;
+  if (!canSearch(player)) return false;
   const rewards = rollSearch(player);
   if (slotsNeeded(player, rewards) > player.getInventory().getFreeSlots()) {
     player.getInventory().full();
     return false;
   }
-  const points = Records.points(player);
-  Records.setPoints(player, points.elemental - 1, points.catalytic - 1);
+  if (!payForSearch(player)) return false;
   Records.addSearches(player, 1);
   for (const reward of rewards) give(player, reward);
   return true;
@@ -178,7 +202,7 @@ function search({ player, objectId }) {
   const pin = { player, feature: "rewards-guardian", resume: () => search({ player, objectId }) };
   Shared.api().emitCustomEvent("bank-pin:guard", pin);
   if (pin.locked) return true;
-  if (searchesLeft(player) <= 0) {
+  if (!canSearch(player)) {
     Shared.statement(player, "There doesn't seem to be anything in the rift for you.");
     return true;
   }
@@ -190,7 +214,7 @@ function search({ player, objectId }) {
     Shared.animate(player, "picking_low_shorter");
     if (!searchOnce(player)) return false;
     Shared.sound(player, LOOT_SOUND);
-    if (searchesLeft(player) > 0) return true;
+    if (canSearch(player)) return true;
     emptied(player);
     return false;
   });
@@ -203,7 +227,7 @@ function bigSearch({ player, objectId }) {
   const pin = { player, feature: "rewards-guardian", resume: () => bigSearch({ player, objectId }) };
   Shared.api().emitCustomEvent("bank-pin:guard", pin);
   if (pin.locked) return true;
-  if (searchesLeft(player) <= 0) {
+  if (!canSearch(player)) {
     Shared.statement(player, "There doesn't seem to be anything in the rift for you.");
     return true;
   }
@@ -213,7 +237,7 @@ function bigSearch({ player, objectId }) {
     let searched = 0;
     while (searched < BIG_SEARCH && searchOnce(player)) searched++;
     if (searched > 0) Shared.sound(player, LOOT_SOUND);
-    if (searchesLeft(player) <= 0) emptied(player);
+    if (!canSearch(player)) emptied(player);
     return false;
   });
   return true;
@@ -274,7 +298,7 @@ function openPouch({ player }) {
 }
 
 module.exports = {
-  DATA, rollSearch, rollIntricate, missingPouch, searchesLeft,
+  DATA, rollSearch, rollIntricate, missingPouch, searchesLeft, canSearch, PEARL_SEARCH_COST,
   attach(api) {
     api.onObjectInteraction("<col=ffff00>Rewards Guardian</col>", { Search: search, Check: check, "Big-search": bigSearch });
     api.onItemOnObject("Needle", "<col=ffff00>Rewards Guardian</col>", needleOnRift);

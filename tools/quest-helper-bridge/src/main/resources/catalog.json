@@ -366,6 +366,17 @@
     "native": false
   },
   {
+    "questKey": "daddys_home",
+    "sourceKey": "DaddysHome",
+    "variants": [
+      {
+        "helperVariant": "DADDYS_HOME",
+        "helperClass": "com.questhelper.helpers.miniquests.daddyshome.DaddysHome"
+      }
+    ],
+    "native": false
+  },
+  {
     "questKey": "darkness_of_hallowvale",
     "sourceKey": "DarknessOfHallowvale",
     "variants": [
@@ -438,6 +449,17 @@
       {
         "helperVariant": "THE_DEPTHS_OF_DESPAIR",
         "helperClass": "com.questhelper.helpers.quests.thedepthsofdespair.TheDepthsOfDespair"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "bear_your_soul",
+    "sourceKey": "BearYourSoul",
+    "variants": [
+      {
+        "helperVariant": "BEAR_YOUR_SOUL",
+        "helperClass": "com.questhelper.helpers.quests.bearyoursoul.BearYourSoul"
       }
     ],
     "native": false
@@ -911,6 +933,17 @@
       {
         "helperVariant": "HEROES_QUEST",
         "helperClass": "com.questhelper.helpers.quests.heroesquest.HeroesQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "his_faithful_servants",
+    "sourceKey": "HisFaithfulServants",
+    "variants": [
+      {
+        "helperVariant": "HIS_FAITHFUL_SERVANTS",
+        "helperClass": "com.questhelper.helpers.miniquests.hisfaithfulservants.HisFaithfulServants"
       }
     ],
     "native": false
@@ -1658,6 +1691,17 @@
       {
         "helperVariant": "SHILO_VILLAGE",
         "helperClass": "com.questhelper.helpers.quests.shilovillage.ShiloVillage"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "skippy_and_the_mogres",
+    "sourceKey": "SkippyAndTheMogres",
+    "variants": [
+      {
+        "helperVariant": "SKIPPY_AND_THE_MOGRES",
+        "helperClass": "com.questhelper.helpers.miniquests.skippyandthemogres.SkippyAndTheMogres"
       }
     ],
     "native": false

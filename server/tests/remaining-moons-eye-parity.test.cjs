@@ -84,7 +84,7 @@ function harness(name) {
     },
     itemOnNpc(p, itemId, npcId) { const event = { player: p, itemId, npcId }; for (const fn of hooks.onItemOnNpc ?? []) fn(event); return event; },
     itemOnItem(p, usedItemId, usedWithItemId) { const event = { player: p, usedItemId, usedWithItemId }; for (const fn of hooks.onItemOnItem ?? []) fn(event); return event; },
-    itemAction(p, itemId, option) { const event = { player: p, itemId, option }; for (const fn of hooks.onItemAction ?? []) fn(event); return event; },
+    itemAction(p, itemId, option) { const event = { player: p, itemId, option }; for (const fn of (hooks.onItemAction ?? []).filter(fn => typeof fn === 'function')) fn(event); return event; },
     tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); },
     choose(p, text) { const prompt = p.prompt; assert.ok(prompt, `no menu for ${text}`); const index = prompt.options.findIndex(label => label === text); assert.ok(index >= 0, `missing ${text} in ${prompt.options}`); p.prompt = null; prompt.pairs[index * 2 + 1](); },
     continueUntil(p, predicate, limit = 120) { while (!predicate()) { assert.ok(limit-- > 0, `dialogue stalled at ${p.text}`); assert.ok(p.manager.getCurrent(), `dialogue ended at ${p.text}`); p.manager.advance(); } },
@@ -407,6 +407,260 @@ test('Temple of the Eye follows varbit stages 5..125 through dialogue, items, al
   assert.equal(p.attrs.get('quest.points'), 1);
   assert.deepEqual(p.xp.filter(([skill]) => skill === core.Skill.RUNECRAFTING.getIndex()).reduce((sum, [, amount]) => sum + amount, 0), 9210);
   assert.equal(p.items.get(I.MEDIUM_POUCH), 1);
+});
+
+test('Temple of the Eye refuses to start without both requirements', () => {
+  const h = harness('TempleOfTheEye');
+  const accept = p => h.emit('npc-dialogue:choice', {
+    player: p, npcId: N.WIZARD_PERSTEN, option: 'Yes.',
+  });
+
+  const lowLevel = player();
+  lowLevel.level = 9;
+  lowLevel.attrs.set('quest.rune_mysteries.stage', 6);
+  accept(lowLevel);
+  assert.equal(h.quest.getStage(lowLevel), 0);
+  assert.ok(lowLevel.messages.some(message => /Runecrafting level of 10/.test(message)));
+
+  const noAbyss = player();
+  noAbyss.level = 99;
+  accept(noAbyss);
+  assert.equal(h.quest.getStage(noAbyss), 0);
+  assert.ok(noAbyss.messages.some(message => /Runecrafting level of 10/.test(message)));
+});
+
+test('Temple of the Eye objectives reject out-of-order transcript actions', () => {
+  const h = harness('TempleOfTheEye'), p = player();
+  const stage = () => h.quest.getStage(p);
+  const act = (npcId, stepId) => h.action(p, npcId, stepId);
+
+  act(N.MAGE_OF_ZAMORAK, '5SxUiq');
+  act(N.DARK_MAGE, 'BOdA6N');
+  act(N.ARCHMAGE_SEDRIDOR, 'DLPFdT');
+  act(N.ARCHMAGE_SEDRIDOR, 'I_aoEy');
+  act(N.ARCHMAGE_SEDRIDOR, 'MKvLzs');
+  act(N.WIZARD_PERSTEN_4, 'Wc3Ys0');
+  act(N.ARCHMAGE_SEDRIDOR, '2OgBfc');
+  act(N.ARCHMAGE_SEDRIDOR, 'wd6dSZ');
+  act(N.ARCHMAGE_SEDRIDOR, '9-Wilv');
+  assert.equal(stage(), 0, 'stage-0 players cannot skip chapters');
+  assert.equal(h.quest.isComplete(p), false);
+
+  h.quest.setStage(p, 10);
+  act(N.MAGE_OF_ZAMORAK, 'FJLAsS');
+  assert.equal(stage(), 10, 'the amulet must be carried to the Mage');
+  p.items.set(I.EYE_AMULET, 1);
+  act(N.MAGE_OF_ZAMORAK, 'FJLAsS');
+  assert.equal(stage(), 15);
+
+  act(N.MAGE_OF_ZAMORAK, '4t9kd_');
+  assert.equal(stage(), 15, 'tea and water are both required');
+  p.items.set(I.BUCKET_OF_WATER, 1);
+  act(N.MAGE_OF_ZAMORAK, '4t9kd_');
+  assert.equal(stage(), 15, 'tea is still required');
+  p.items.set(I.STRONG_CUP_OF_TEA, 1);
+  act(N.MAGE_OF_ZAMORAK, '4t9kd_');
+  assert.equal(stage(), 20);
+  assert.equal(p.items.get(I.STRONG_CUP_OF_TEA), 0);
+
+  p.items.delete(I.BUCKET_OF_WATER);
+  act(N.MAGE_OF_ZAMORAK, '5SxUiq');
+  assert.equal(stage(), 20, 'the teleport needs the bucket');
+  p.items.set(I.BUCKET_OF_WATER, 1);
+  act(N.MAGE_OF_ZAMORAK, '5SxUiq');
+  assert.equal(stage(), 25);
+
+  p.items.delete(I.BUCKET_OF_WATER);
+  act(N.DARK_MAGE, 'BOdA6N');
+  assert.equal(stage(), 25, 'the Dark Mage needs the bucket');
+  p.items.set(I.BUCKET_OF_WATER, 1);
+  act(N.DARK_MAGE, 'BOdA6N');
+  assert.equal(stage(), 30);
+  assert.equal(p.items.get(I.BUCKET_OF_WATER), 0, 'throwing the water consumes it');
+
+  p.items.delete(I.EYE_AMULET);
+  act(N.DARK_MAGE, '5f9QJZ');
+  assert.equal(stage(), 30, 'the Dark Mage needs the amulet');
+  p.items.set(I.EYE_AMULET, 1);
+  act(N.DARK_MAGE, '5f9QJZ');
+  assert.equal(stage(), 35);
+  act(N.DARK_MAGE, '9mZfyI');
+  assert.equal(stage(), 35, 'no incantation before the puzzle is solved');
+
+  h.quest.setStage(p, 40);
+  act(N.DARK_MAGE, '9mZfyI');
+  assert.equal(stage(), 45);
+  assert.equal(p.items.get(I.ABYSSAL_INCANTATION), 1);
+  p.items.delete(I.ABYSSAL_INCANTATION);
+  act(N.WIZARD_PERSTEN, 'qOBPPr');
+  assert.equal(stage(), 45, 'Persten needs the incantation');
+  p.items.set(I.ABYSSAL_INCANTATION, 1);
+  act(N.WIZARD_PERSTEN, 'qOBPPr');
+  assert.equal(stage(), 50);
+  p.items.delete(I.EYE_AMULET);
+  act(N.WIZARD_PERSTEN, 'MZvnSC');
+  assert.equal(stage(), 50, 'Persten needs the amulet back');
+  p.items.set(I.EYE_AMULET, 1);
+  act(N.WIZARD_PERSTEN, 'MZvnSC');
+  assert.equal(stage(), 55);
+
+  h.quest.setStage(p, 50);
+  p.items.set(I.EYE_AMULET, 1);
+  act(N.WIZARD_PERSTEN, 'MZvnSC');
+  assert.equal(stage(), 55);
+  assert.equal(p.items.get(I.EYE_AMULET), 0);
+
+  h.quest.setStage(p, 60);
+  p.items.delete(I.ABYSSAL_INCANTATION);
+  act(N.ARCHMAGE_SEDRIDOR, 'anGHDo');
+  assert.equal(stage(), 60, 'Sedridor needs the incantation');
+  p.items.set(I.ABYSSAL_INCANTATION, 1);
+  act(N.ARCHMAGE_SEDRIDOR, 'anGHDo');
+  assert.equal(stage(), 65);
+  assert.equal(p.items.get(I.ABYSSAL_INCANTATION), 0);
+
+  h.quest.setStage(p, 75);
+  act(N.WIZARD_TRAIBORN, 'PUnmxV');
+  assert.equal(stage(), 75, 'Traiborn only sets off fireworks after all three riddles');
+  h.quest.setStage(p, 80);
+  act(N.WIZARD_TRAIBORN, 'PUnmxV');
+  assert.equal(stage(), 85);
+
+  h.quest.setStage(p, 80);
+  act(N.ARCHMAGE_SEDRIDOR, 'DLPFdT');
+  assert.equal(stage(), 80, 'the incantation cutscene starts at 85');
+  h.quest.setStage(p, 85);
+  act(N.ARCHMAGE_SEDRIDOR, 'DLPFdT');
+  assert.equal(stage(), 90);
+  h.quest.setStage(p, 85);
+  act(N.ARCHMAGE_SEDRIDOR, 'I_aoEy');
+  assert.equal(stage(), 85);
+  h.quest.setStage(p, 90);
+  act(N.ARCHMAGE_SEDRIDOR, 'I_aoEy');
+  assert.equal(stage(), 95);
+  act(N.ARCHMAGE_SEDRIDOR, 'MKvLzs');
+  assert.equal(stage(), 100);
+  act(N.WIZARD_PERSTEN_4, 'Wc3Ys0');
+  assert.equal(stage(), 100);
+  h.quest.setStage(p, 105);
+  act(N.WIZARD_PERSTEN_4, 'Wc3Ys0');
+  assert.equal(stage(), 110);
+  h.quest.setStage(p, 105);
+  act(N.ARCHMAGE_SEDRIDOR, '2OgBfc');
+  assert.equal(stage(), 105);
+  h.quest.setStage(p, 110);
+  act(N.ARCHMAGE_SEDRIDOR, '2OgBfc');
+  assert.equal(stage(), 115);
+
+  p.attrs.set('temple-of-the-eye:tutorial', 60);
+  act(N.ARCHMAGE_SEDRIDOR, 'wd6dSZ');
+  assert.equal(stage(), 115);
+  p.attrs.set('temple-of-the-eye:tutorial', 70);
+  act(N.ARCHMAGE_SEDRIDOR, 'wd6dSZ');
+  assert.equal(stage(), 120);
+  act(N.ARCHMAGE_SEDRIDOR, '9-Wilv');
+  assert.equal(stage(), 120);
+  h.quest.setStage(p, 120);
+  act(N.ARCHMAGE_SEDRIDOR, '_nVw7q');
+  assert.equal(stage(), 125);
+  h.quest.setStage(p, 125);
+  act(N.ARCHMAGE_SEDRIDOR, '9-Wilv');
+  assert.equal(stage(), 130);
+  assert.equal(h.quest.isComplete(p), true);
+});
+
+test('Temple quest-only items recover from their NPCs and are cleaned up when consumed', () => {
+  const h = harness('TempleOfTheEye'), p = player();
+  p.attrs.set('temple-of-the-eye:stage-schema', 2);
+
+  h.quest.setStage(p, 10);
+  p.attrs.set('quest.temple_of_the_eye.amulet-given', 1);
+  assert.equal(p.items.get(I.EYE_AMULET) ?? 0, 0);
+  h.namedNpcs.get('Wizard Persten')['Talk-to']({ player: p, npcId: N.WIZARD_PERSTEN });
+  assert.equal(p.items.get(I.EYE_AMULET), 1, 'Persten replaces a lost eye amulet');
+  assert.equal(h.quest.getStage(p), 10, 'recovery does not skip the investigation');
+
+  h.quest.setStage(p, 60);
+  p.attrs.set('quest.temple_of_the_eye.incantation-given', 1);
+  assert.equal(p.items.get(I.ABYSSAL_INCANTATION) ?? 0, 0);
+  h.namedNpcs.get('Archmage Sedridor')['Talk-to']({ player: p, npcId: N.ARCHMAGE_SEDRIDOR });
+  assert.equal(p.items.get(I.ABYSSAL_INCANTATION), 1, 'Sedridor replaces a lost incantation');
+  assert.equal(h.quest.getStage(p), 60);
+
+  h.quest.setStage(p, 50);
+  p.items.set(I.EYE_AMULET, 1);
+  h.action(p, N.WIZARD_PERSTEN, 'MZvnSC');
+  assert.equal(p.items.get(I.EYE_AMULET), 0, 'the returned amulet is consumed');
+  assert.equal(h.quest.getStage(p), 55);
+
+  h.quest.setStage(p, 60);
+  p.items.set(I.ABYSSAL_INCANTATION, 1);
+  h.action(p, N.ARCHMAGE_SEDRIDOR, 'anGHDo');
+  assert.equal(p.items.get(I.ABYSSAL_INCANTATION), 0, 'the handed-in incantation is consumed');
+  assert.equal(h.quest.getStage(p), 65);
+
+  h.quest.setStage(p, 125);
+  p.items.set(I.EYE_AMULET, 2);
+  p.items.set(I.ABYSSAL_INCANTATION, 1);
+  h.action(p, N.ARCHMAGE_SEDRIDOR, '9-Wilv');
+  assert.equal(h.quest.isComplete(p), true);
+  assert.equal(p.items.get(I.EYE_AMULET), 0, 'completion destroys leftover amulets');
+  assert.equal(p.items.get(I.ABYSSAL_INCANTATION), 0, 'completion destroys leftover incantations');
+
+  const done = player();
+  h.quest.setStage(done, 130);
+  done.items.set(I.EYE_AMULET, 1);
+  done.items.set(I.ABYSSAL_INCANTATION, 1);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: done });
+  assert.equal(done.items.get(I.EYE_AMULET), 0, 'login cleans a completed save');
+  assert.equal(done.items.get(I.ABYSSAL_INCANTATION), 0, 'login cleans a completed save');
+});
+
+test('Temple named NPC, object and item handlers are registered and stage-gated', () => {
+  const h = harness('TempleOfTheEye'), p = player();
+  for (const name of ['Wizard Persten', 'Mage of Zamorak', 'Tea Seller', 'Dark Mage',
+    'Archmage Sedridor', 'Wizard Traiborn', 'Apprentice Cordelia', 'Apprentice Felix',
+    'Apprentice Tamara', 'The Great Guardian']) {
+    assert.ok(h.namedNpcs.has(name), `registered ${name}`);
+  }
+  for (const name of ['Chaos altar', 'Abyssal Rift', 'Portal', 'Weak cells', 'Uncharged cells',
+    'Inactive cell tile', 'Essence pile (elemental)', 'Essence pile (catalytic)', 'Workbench',
+    'Guardian of Mind', 'Guardian of Water', 'Altar']) {
+    assert.ok(h.namedObjects.has(name), `registered ${name}`);
+  }
+  assert.ok(h.hooks.onNpcDeath?.length > 0, 'npc death hook is registered');
+
+  h.quest.setStage(p, 0);
+  assert.equal(h.namedObjects.get('Chaos altar')['Pray-at']({ player: p, objectId: 61 }), false);
+  assert.equal(h.namedObjects.get('Abyssal Rift').Enter({ player: p, objectId: 26149 }), false);
+  assert.equal(h.namedObjects.get('Portal').Enter({ player: p, objectId: O.PORTAL_106 }), false);
+  assert.equal(h.quest.getStage(p), 0);
+
+  h.quest.setStage(p, 5);
+  p.items.set(I.EYE_AMULET, 1);
+  assert.equal(h.namedObjects.get('Chaos altar')['Pray-at']({ player: p, objectId: 61 }), true);
+  assert.ok(p.messages.some(message => /Mage of Zamorak/.test(message)));
+  assert.equal(h.object(p, O.CHAOS_ALTAR, { x: 3259, y: 3381, z: 0 }).handled, true,
+    'the generic object dispatcher also reaches the chapel');
+
+  h.quest.setStage(p, 35);
+  assert.equal(h.namedObjects.get('Abyssal Rift').Enter({ player: p, objectId: 26149 }), true);
+  assert.equal(h.object(p, O.ABYSSAL_RIFT, { x: 3038, y: 4831, z: 0 }).handled, true,
+    'the generic object dispatcher also reaches the Abyss centre');
+  h.quest.setStage(p, 100);
+  assert.equal(h.namedObjects.get('Abyssal Rift').Enter({ player: p, objectId: 43713 }), true);
+
+  h.quest.setStage(p, 10);
+  const inspect = h.itemAction(p, I.EYE_AMULET, 'Inspect');
+  assert.equal(inspect.handled, true);
+  assert.ok(p.messages.some(message => /abyssal energy/.test(message)));
+  h.quest.setStage(p, 45);
+  p.items.set(I.ABYSSAL_INCANTATION, 1);
+  const read = h.itemAction(p, I.ABYSSAL_INCANTATION, 'Read');
+  assert.equal(read.handled, true);
+  assert.ok(p.messages.some(message => /Zamorakian hand/.test(message)));
+  const destroy = h.itemAction(p, I.EYE_AMULET, 'Destroy');
+  assert.notEqual(destroy.handled, true, 'Destroy falls through to the default handler');
 });
 
 test('Perilous Moons completes naturally from Attala to the Moons on the real stage scale', () => {

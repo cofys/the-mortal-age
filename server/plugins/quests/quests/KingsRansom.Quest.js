@@ -472,9 +472,49 @@ module.exports = function registerKingsRansomQuest(api) {
   // Choice handling
   // ==========================================================================
 
+  /** Wiki: 65 Defence and 45 Magic. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.DEFENCE, level: 65, label: "Defence" },
+    { skill: Skill.MAGIC, level: 45, label: "Magic" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
+  const REQUIRED_QUESTS = [
+    { key: "holy_grail", name: "Holy Grail" },
+    { key: "one_small_favour", name: "One Small Favour" },
+    { key: "murder_mystery", name: "Murder Mystery" },
+    { key: "black_knights_fortress", name: "Black Knights' Fortress" },
+  ];
+
+  function notifyQuestRequirements(player) {
+    for (const requirement of REQUIRED_QUESTS) {
+      if (!isQuestComplete(player, requirement.key)) {
+        player.sendMessage(`You must complete ${requirement.name} to start this quest.`);
+      }
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (hook !== "quest:king-s-ransom:start" || npcId !== GOSSIP_ID) return;
     if (stageOf(player) !== STAGE_NOT_STARTED) return;
+    if (missingSkillRequirements(player).length > 0) {
+      notifySkillRequirements(player);
+      return;
+    }
+    notifyQuestRequirements(player);
+    if (REQUIRED_QUESTS.some((requirement) => !isQuestComplete(player, requirement.key))) return;
     quest.setStage(player, STAGE_STARTED);
   }
 

@@ -21,7 +21,7 @@ const Records = require("./Records.GuardiansOfTheRift");
 
 const SHOP_QUESTS = [["law", "troll_stronghold"], ["death", "mournings_end_part_ii"], ["blood", "sins_of_the_father"]];
 const SHOP_TARGET = "Temple Supplies";
-const PEARL = "abyssal_pearl";
+const PEARL_CURRENCY_ROW = "omnishop_currency_abyssal_pearl";
 const UNLOCK_PEARLS = 25;
 const REPAIR_PEARLS = 1;
 const DYES = { red: "abyssal_red_dye", green: "abyssal_green_dye", blue: "abyssal_blue_dye" };
@@ -83,6 +83,18 @@ function openShop(player) {
   Shared.api().emitCustomEvent("omnishop:open", { player, shop: shopFor(player), handled: false });
 }
 
+/**
+ * Every gotr_reward_shop_* row prices its stock in the cache's abyssal-pearl currency. That row
+ * has an obj (the old item), but pearls are the saved balance now: answer the Omnishop's
+ * currency request so one purchase takes its price once from `Records`.
+ */
+function currency(request) {
+  if (!request.shop.startsWith("gotr_reward_shop_")) return;
+  if (request.currency !== Shared.core().CacheDefinitions.getDbRowId(PEARL_CURRENCY_ROW)) return;
+  request.balance = Records.pearls(request.player);
+  request.set = (value) => Records.setPearls(request.player, value);
+}
+
 function trade({ player, npcId }) {
   if (!isFelix(npcId)) return false;
   openShop(player);
@@ -108,7 +120,7 @@ function exchangeDye(player, from, to) {
 // ------------------------------------------------------------------ Cordelia
 
 function pearls(player) {
-  return Shared.count(player, PEARL);
+  return Records.pearls(player);
 }
 
 function hasDecayedPouch(player) {
@@ -140,15 +152,15 @@ function repairOption({ player, npcId }) {
 }
 
 function repair(player) {
-  player.getInventory().delete(Shared.obj(PEARL), REPAIR_PEARLS);
-  player.getInventory().refreshItems();
+  if (!Records.spendPearls(player, REPAIR_PEARLS)) return false;
   Shared.api().emitCustomEvent("runecrafting:repair-pouches", { player, repaired: 0 });
+  return true;
 }
 
 function unlock(player) {
-  player.getInventory().delete(Shared.obj(PEARL), UNLOCK_PEARLS);
-  player.getInventory().refreshItems();
+  if (!Records.spendPearls(player, UNLOCK_PEARLS)) return false;
   Records.setSetting(player, REPAIR_VARBIT, 1);
+  return true;
 }
 
 // ------------------------------------------------------------------ transcripts
@@ -205,13 +217,14 @@ function chatter() {
 }
 
 module.exports = {
-  shopFor,
+  shopFor, currency,
   attach(api) {
     api.onNpcInteraction("Apprentice Felix", { Trade: trade });
     api.onNpcInteraction("Apprentice Cordelia", { "Talk-to": talkToCordelia, Repair: repairOption });
     api.onItemOnNpc(dyeOnFelix);
     api.onNpcDialogueCondition(answerCondition);
     api.onCustomEvent("npc-dialogue:action", dialogueAction);
+    api.onCustomEvent("omnishop:currency", currency);
     Game.on("tick", chatter);
   },
 };

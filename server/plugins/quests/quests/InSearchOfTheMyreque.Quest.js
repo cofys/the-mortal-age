@@ -399,9 +399,40 @@ module.exports = function registerInSearchOfTheMyrequeQuest(api) {
     return entry ? entry.flag : "veliaf_after";
   }
 
+  /** Wiki: 25 Agility and Nature Spirit. */
+  const AGILITY_REQUIREMENT = 25;
+
+  function meetsSkillRequirements(player) {
+    return player.getSkillManager().getMaxLevel(Skill.AGILITY) >= AGILITY_REQUIREMENT;
+  }
+
+  function notifySkillRequirements(player) {
+    if (!meetsSkillRequirements(player)) {
+      player.sendMessage(
+        `You need an Agility level of at least ${AGILITY_REQUIREMENT} to start this quest.`
+      );
+    }
+  }
+
+  function natureSpiritComplete(player) {
+    const request = { player, key: "nature_spirit", complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (hook !== START_HOOK || !VANSTROM_NPC_IDS.has(npcId)) return;
-    if (quest.getStage(player) === STAGE_UNSTARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) === STAGE_UNSTARTED) {
+      if (!meetsSkillRequirements(player)) {
+        notifySkillRequirements(player);
+        return;
+      }
+      if (!natureSpiritComplete(player)) {
+        player.sendMessage("You must complete Nature Spirit to start this quest.");
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   function handInWeapons(player) {

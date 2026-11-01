@@ -92,6 +92,7 @@ const OBJECT = {
 };
 
 const NPC = {
+  IGNISIA: 7374,
   PYROMANCER: 7371,
   INCAPACITATED_PYROMANCER: 7372,
   FIRE: 7373,
@@ -108,6 +109,7 @@ const ITEM = {
   REJUVENATION_2: 20701,
   REJUVENATION_1: 20702,
   KNIFE: 946,
+  FLETCHING_KNIFE: 31043,
   HAMMER: 2347,
   TINDERBOX: 590,
   BRONZE_AXE: 1351,
@@ -117,6 +119,9 @@ const ITEM = {
 
 /** Rejuvenation potion doses, from 4 down to 1. */
 const POTIONS = [ITEM.REJUVENATION_4, ITEM.REJUVENATION_3, ITEM.REJUVENATION_2, ITEM.REJUVENATION_1];
+
+/** An extra supply crate's roll count rides on the item's meta. */
+const CRATE_ROLLS_META = "wintertodt:crate-rolls";
 
 /** Fuel is taken from everyone in the prison when a round ends. */
 const FUEL_ITEMS = [ITEM.BRUMA_ROOT, ITEM.BRUMA_KINDLING];
@@ -373,7 +378,7 @@ module.exports = {
   PRISON_ZONE, CAMP_ZONE, ENTER_AREA, EXIT_AREA, FIREMAKING_REQUIRED,
   MAX_ENERGY, MAX_WARMTH, DRAIN_PER_PYROMANCER, RECOVERY_PER_TICK, BREAK_TICKS, HUD_PERIOD,
   REWARD_POINTS, MAX_REWARDS, CORNERS, BRAZIER, STORM_TILE, STORM_SOURCE, SAFE_AREA,
-  OBJECT, NPC, ITEM, POTIONS, FUEL_ITEMS, PRISON_ITEMS, VARP, VARBIT, INTERFACE, SCRIPT, ANIM, SOUND, GFX, PROJECTILE,
+  OBJECT, NPC, ITEM, POTIONS, CRATE_ROLLS_META, FUEL_ITEMS, PRISON_ITEMS, VARP, VARBIT, INTERFACE, SCRIPT, ANIM, SOUND, GFX, PROJECTILE,
   COLD_SPLAT, WARMTH_BAR, OVERLAY_HUD_UID,
   loc, inZone, inSafeArea, distance, randomTile, later, repeat, statement, options, fade, fadeMove,
   hasItem, removeItems, level, addXp, sound, spam, animate, startAction, stopAction, actionOf, firemakingLevel,

@@ -90,6 +90,17 @@ test('the shield bash covers the captured shapes', (t) => {
   assert.equal(Vetion._test.bashTiles(npc, at(1883, 11545)).length, 16);
 });
 
+test('rebirth restores the combat stats the first form drained', () => {
+  const restored = new Map();
+  Vetion._test.restoreStats({
+    getMaxLevel: () => 99,
+    setCurrentLevels: (skill, level) => restored.set(skill, level),
+  });
+  assert.deepEqual([...restored.keys()],
+    [core.Skill.ATTACK, core.Skill.STRENGTH, core.Skill.DEFENCE, core.Skill.MAGIC, core.Skill.RANGED]);
+  assert.ok([...restored.values()].every((level) => level === 99));
+});
+
 test('the sticky web is the captured 37-tile shape', () => {
   const tiles = new Set(Spiders._test.WEB_PATTERN.map(([dx, dy]) => `${dx},${dy}`));
   assert.equal(tiles.size, 37);

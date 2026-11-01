@@ -428,9 +428,25 @@ module.exports = function registerRegicideQuest(api) {
     return null;
   }
 
+  /** Wiki: 56 Agility and 10 Crafting. */
+  function missingStartSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    const missing = [];
+    if (skills.getMaxLevel(Skill.AGILITY) < 56) missing.push("56 Agility");
+    if (skills.getMaxLevel(Skill.CRAFTING) < 10) missing.push("10 Crafting");
+    return missing;
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (!KING_LATHAS_IDS.has(npcId) || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_SPOKEN_LATHAS) quest.setStage(player, STAGE_SPOKEN_LATHAS);
+    if (quest.getStage(player) < STAGE_SPOKEN_LATHAS) {
+      const missing = missingStartSkillRequirements(player);
+      if (missing.length > 0) {
+        player.sendMessage(`You need ${missing.join(" and ")} to start this quest.`);
+        return;
+      }
+      quest.setStage(player, STAGE_SPOKEN_LATHAS);
+    }
   }
 
   /** Message and action ids from the transcript drive the hand-ins and stages. */

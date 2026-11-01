@@ -3,6 +3,7 @@
 // Overlay: interface 373 (TZHAAR_FIGHTPIT). Its script 70 renders varp 560 as
 // "Foes Remaining: N", or "You're the Winner!" at 0.
 // Room and arena tiles were read from the cache's collision map for region 9552.
+// Since 25 March 2026 TzHaar-Mej-Kah's Talk-to can disable combat experience inside the pit.
 let core;
 let api;
 
@@ -30,6 +31,11 @@ const START_DELAY_TICKS = 20;
 const GAS_TICKS = 1150; // 11.5 minutes.
 const SPAWN_INTERVAL_TICKS = 50;
 const MAX_MONSTERS = 10;
+/** TzHaar-Mej-Kah's Talk-to toggle (25 March 2026). */
+const XP_DISABLED_ATTRIBUTE = "fight-pits:combat-xp-disabled";
+const DISABLE_XP_PROMPT = "Disable XP gains?";
+const ENABLE_XP_PROMPT = "Enable XP gains?";
+const COMBAT_SKILLS = ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC", "HITPOINTS"];
 
 const state = {
   phase: "idle", // idle | countdown | active
@@ -43,6 +49,8 @@ const state = {
 const present = new Set();
 const shown = new WeakMap();
 const champions = new WeakSet();
+/** The target state of the toggle prompt the player is looking at (true = enable). */
+const pendingXpToggle = new WeakMap();
 
 function inside(player, zone) {
   const location = player.getLocation();
@@ -242,6 +250,38 @@ function pitCanAttack(event) {
   event.allow = state.phase === "active" && state.participants.has(attacker) && state.participants.has(target);
 }
 
+// TzHaar-Mej-Kah's transcript asks these two prose conditions before offering the toggle.
+function fightPitXpEnabled({ player, npcId, text }) {
+  if (npcId !== core.NpcIdentifiers.TZHAAR_MEJ_KAH) return null;
+  if (/Fight Pit experience gain is .*disabled:/i.test(text)) {
+    return player.getAttribute(XP_DISABLED_ATTRIBUTE) === true;
+  }
+  if (/Fight Pit experience gain is .*enabled:/i.test(text)) {
+    return player.getAttribute(XP_DISABLED_ATTRIBUTE) !== true;
+  }
+  return null;
+}
+
+/** Remember which way the "Disable/Enable XP gains?" prompt goes, so its Yes can act. */
+function noteXpPrompt({ player, npcId, prompt }) {
+  if (npcId !== core.NpcIdentifiers.TZHAAR_MEJ_KAH) return;
+  if (prompt !== DISABLE_XP_PROMPT && prompt !== ENABLE_XP_PROMPT) pendingXpToggle.delete(player);
+  else pendingXpToggle.set(player, prompt === ENABLE_XP_PROMPT);
+}
+
+function chooseXpToggle({ player, npcId, option }) {
+  if (npcId !== core.NpcIdentifiers.TZHAAR_MEJ_KAH) return;
+  const enable = pendingXpToggle.get(player);
+  pendingXpToggle.delete(player);
+  if (option === "Yes." && enable !== undefined) player.setAttribute(XP_DISABLED_ATTRIBUTE, !enable);
+}
+
+/** No combat experience inside the arena while the toggle is off. */
+function blockFightPitXp(event) {
+  if (event.player?.getAttribute?.(XP_DISABLED_ATTRIBUTE) !== true || !inside(event.player, ARENA)) return;
+  if (COMBAT_SKILLS.some((name) => core.Skill[name] === event.skill)) event.allow = false;
+}
+
 // The champion's skull lasts an hour, but goes (Wiki) on a teleport of any kind, a change of
 // weapons or armour after leaving the Fight Pits, an overhead prayer, logging out, monster
 // damage - and here also on leaving Mor Ul Rek.
@@ -289,11 +329,17 @@ module.exports = {
   _test: {
     enterArena, leaveArena, ATTACK_OPTION_SLOT, endGame, dropChampionSkull,
     championTeleports, championChangesGear, championPrays, championHitByMonster,
+    fightPitXpEnabled, noteXpPrompt, chooseXpToggle, blockFightPitXp, XP_DISABLED_ATTRIBUTE,
     isChampion: (player) => champions.has(player),
   },
   register(pluginApi) {
     api = pluginApi;
     core = pluginApi.core;
+    pluginApi.persistAttribute(XP_DISABLED_ATTRIBUTE, false);
+    pluginApi.onNpcDialogueCondition(fightPitXpEnabled);
+    pluginApi.onCustomEvent("npc-dialogue:menu", noteXpPrompt);
+    pluginApi.onCustomEvent("npc-dialogue:choice", chooseXpToggle);
+    pluginApi.onCanGainExperience(blockFightPitXp);
     pluginApi.onZoneEnter(WAITING, enterPit);
     pluginApi.onZoneExit(WAITING, leavePit);
     pluginApi.onZoneEnter(ARENA, enterArena);

@@ -643,8 +643,61 @@ module.exports = function registerCurseOfArravQuest(api) {
     }
   }
 
+  /** Wiki: 64 Mining, 62 Thieving, 62 Ranged, 61 Agility, 58 Strength, 37 Slayer, Defender of Varrock and Troll Romance. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.MINING, level: 64, label: "Mining" },
+    { skill: Skill.THIEVING, level: 62, label: "Thieving" },
+    { skill: Skill.RANGED, level: 62, label: "Ranged" },
+    { skill: Skill.AGILITY, level: 61, label: "Agility" },
+    { skill: Skill.STRENGTH, level: 58, label: "Strength" },
+    { skill: Skill.SLAYER, level: 37, label: "Slayer" },
+  ];
+  const REQUIRED_QUESTS = [
+    { key: "defender_of_varrock", name: "Defender of Varrock" },
+    { key: "troll_romance", name: "Troll Romance" },
+  ];
+
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
+  function missingQuestRequirements(player) {
+    return REQUIRED_QUESTS.filter(({ key }) => !questIsComplete(player, key));
+  }
+
+  function notifyQuestRequirements(player) {
+    for (const requirement of missingQuestRequirements(player)) {
+      player.sendMessage(`You must complete ${requirement.name} to start this quest.`);
+    }
+  }
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleDialogueHook(event) {
     if (event.hook !== START_HOOK || event.npcId !== ELIAS_NPC_ID) return;
+    if (event.player && quest.getStage(event.player) < STAGE_STARTED) {
+      if (missingSkillRequirements(event.player).length > 0) {
+        notifySkillRequirements(event.player);
+        return;
+      }
+      if (missingQuestRequirements(event.player).length > 0) {
+        notifyQuestRequirements(event.player);
+        return;
+      }
+    }
     ensureStage(event.player, STAGE_STARTED);
   }
 

@@ -42,6 +42,7 @@ const ITEM_CURRENCIES = [
 ];
 
 const POINT_CURRENCIES = [
+  "Abyssal pearls",
   "Bounty Hunter Points",
   "Deadman Points",
   "event points",

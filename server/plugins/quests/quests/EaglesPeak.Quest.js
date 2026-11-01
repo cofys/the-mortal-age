@@ -519,7 +519,13 @@ module.exports = function registerEaglesPeakQuest(api) {
   function handleDialogueChoice({ npcId, player, option }) {
     const choice = optionText(option);
     if (npcId === CHARLIE_NPC_ID && choice === "Sure. Any idea where I should start looking?") {
-      if (quest.getStage(player) === 0 && hunterLevel(player) >= HUNTER_REQUIREMENT) {
+      if (quest.getStage(player) === 0) {
+        if (hunterLevel(player) < HUNTER_REQUIREMENT) {
+          player.sendMessage(
+            `You need a Hunter level of at least ${HUNTER_REQUIREMENT} to start this quest.`
+          );
+          return;
+        }
         quest.setStage(player, STAGE_STARTED);
       }
       return;

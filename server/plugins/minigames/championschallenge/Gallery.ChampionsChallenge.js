@@ -18,6 +18,7 @@
  */
 const Common = require("./Common.ChampionsChallenge");
 const Rules = require("./Rules.ChampionsChallenge");
+const Combat = require("./Combat.ChampionsChallenge");
 
 const CHUNK = 8;
 const TELEPORT_REFUSAL = "There's a ladder for a reason.";
@@ -53,6 +54,10 @@ function areaClass() {
 
     canAttack(attacker, target, method) {
       return Rules.canAttack(this.session, attacker, target, method);
+    }
+
+    process(mobile) {
+      if (this.session?.champion === mobile) Combat.processChampion(this.session, mobile);
     }
 
     destroy() {
@@ -179,7 +184,31 @@ class Session {
     this.ended = true;
     sessions.delete(this.player);
     this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
+    rescueScrolls(this);
     if (!this.area.isDestroyed()) this.area.destroy();
+  }
+}
+
+/**
+ * Wiki: a champion's scroll dropped before the fight can be picked up after it. The basement is
+ * a private instance that is torn down on leaving, so a scroll left on its floor would otherwise
+ * vanish with it: take it back, or place it beside the trapdoor when the pack is full.
+ */
+function rescueScrolls(session) {
+  const { World, ItemOnGroundManager, Item } = Common.core;
+  if (typeof World?.getItems !== "function" || typeof ItemOnGroundManager?.deregister !== "function" || !Item) return;
+  const scrollIds = new Set(Common.SCROLL_CHAMPIONS.map((champion) => champion.scroll));
+  const player = session.player;
+  const outside = Common.toLocation(Common.DATA.tiles.outside);
+  for (const ground of [...World.getItems()]) {
+    // Native pickup credits the inventory and only marks the ground source pending until the
+    // next ground-item pass; recovering it here would award the same scroll twice.
+    if (ground?.isPendingRemoval?.() || ground?.getPrivateArea?.() !== session.area) continue;
+    const item = ground.getItem?.();
+    if (!item || !scrollIds.has(item.getId())) continue;
+    ItemOnGroundManager.deregister(ground);
+    if (player.getInventory().getFreeSlots() > 0) player.getInventory().adds(item.getId(), item.getAmount());
+    else ItemOnGroundManager.registerLocation(player, new Item(item.getId(), item.getAmount()), outside, null);
   }
 }
 
@@ -295,4 +324,4 @@ function attachGallery(api) {
   api.onCustomEvent("gravestones:grave-location", graveByTrapdoor);
 }
 
-module.exports = { attachGallery, sessionOf, sessionOfNpc };
+module.exports = { attachGallery, rescueScrolls, sessionOf, sessionOfNpc };

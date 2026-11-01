@@ -1085,6 +1085,27 @@ module.exports = function registerEnakhrasLamentQuest(api) {
     }
   }
 
+  /** Wiki: 50 Crafting, 45 Firemaking, 43 Prayer and 39 Magic. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.CRAFTING, level: 50, label: "Crafting" },
+    { skill: Skill.FIREMAKING, level: 45, label: "Firemaking" },
+    { skill: Skill.PRAYER, level: 43, label: "Prayer" },
+    { skill: Skill.MAGIC, level: 39, label: "Magic" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleLazimChoice(player, stepId, option) {
     if (stepId === "u5ihBN" || stepId === "0uv69v" || stepId === "D9Ee_i" || stepId === "6LjurH") {
       handInSandstone(player, itemForBaseChoice(stepId), true);
@@ -1101,7 +1122,13 @@ module.exports = function registerEnakhrasLamentQuest(api) {
 
     if (option === "Of course!" || option === "Okay, I'll get on with it.") {
       clearBit(player, BIT_DECLINED);
-      if (quest.getStage(player) === STAGE_NOT_STARTED) quest.setStage(player, STAGE_STARTED);
+      if (quest.getStage(player) === STAGE_NOT_STARTED) {
+        if (missingSkillRequirements(player).length > 0) {
+          notifySkillRequirements(player);
+          return;
+        }
+        quest.setStage(player, STAGE_STARTED);
+      }
       return;
     }
     if (option === "I don't know, that sounds like a lot of work.") {

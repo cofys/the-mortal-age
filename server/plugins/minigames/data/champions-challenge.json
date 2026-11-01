@@ -54,12 +54,14 @@
       "key": "imp", "npc": 3355, "scroll": 6803, "bit": 5, "name": "Imp", "xp": 160,
       "rule": { "special": true },
       "aggressive": true,
+      "teleports": true,
       "letter": ["How about picking on someone your own size? I'll", "see you at the Champions' Guild."], "signature": "Champion of Imps"
     },
     {
       "key": "goblin", "npc": 3353, "scroll": 6801, "bit": 3, "name": "Goblin", "xp": 128,
       "rule": { "only": "Magic" },
       "aggressive": false,
+      "prayerDrain": 1,
       "letter": ["Fight me if you think you can human, I'll wait for", "you in the Champions's Guild."], "signature": "Champion of Goblins"
     },
     {
@@ -102,6 +104,7 @@
       "key": "jogre", "npc": 3356, "scroll": 6804, "bit": 6, "name": "Jogre", "xp": 480,
       "rule": { "not": "Ranged" },
       "aggressive": true,
+      "poison": 8,
       "letter": ["You think you can defeat me? Come to the", "Champions' Guild and prove it!"], "signature": "Champion of Jogres"
     },
     {

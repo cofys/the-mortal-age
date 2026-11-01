@@ -28,7 +28,7 @@ References: [The Restless Ghost](https://oldschool.runescape.wiki/w/The_Restless
 
 ## Romeo & Juliet
 
-Varp144 follows the captured0→10→20→30→40→50→60→100 sequence. Stage10 follows Romeo's kiss wording, stage30 follows reading the message, stage40 is the crypt/potion instruction, and stage50 is the request for berries. Handing over message755 immediately removes it, but a delivered flag lets interrupted reading resume. Berries753 remain until potion756 is actually handed out, so cancelling mixing cannot destroy the ingredient. The mix uses3283, graphic188(height64), sound1930 and a delay before the final handover box.
+Varp144 follows the captured0→10→20→30→40→50→60→100 sequence. Stage10 follows Romeo's kiss wording, stage30 follows reading the message, stage40 is the crypt/potion instruction, and stage50 is the request for berries. Handing over message755 immediately removes it, but a delivered flag lets interrupted reading resume. Berries753 leave with the "You hand over the berries" box, as its text says (#1673); a saved `romeo-and-juliet:berries-handed-over` flag lets a mix cancelled before potion756 is handed out resume on the next talk, so it cannot destroy the ingredient. The mix uses3283, graphic188(height64), sound1930 and a delay before the final handover box.
 
 Father Lawrence's congregation segment uses its own chathead5042 and fixed14tick camera sequence with three overhead player fragments. It no longer asks for several Continues on duplicate imported fragments.
 

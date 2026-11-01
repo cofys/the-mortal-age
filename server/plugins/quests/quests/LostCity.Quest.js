@@ -189,14 +189,32 @@ module.exports = function registerLostCityQuest(api) {
     ];
   }
 
+  /** Wiki: 31 Crafting and 36 Woodcutting. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.CRAFTING, level: 31, label: "Crafting" },
+    { skill: Skill.WOODCUTTING, level: 36, label: "Woodcutting" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function answerCondition({ player, text }) {
     const value = String(text).toLowerCase();
     if (value.includes("lower than 45 combat")) {
-      const skills = player.getSkillManager();
-      const combat = typeof skills.getCombatLevel === "function" ? skills.getCombatLevel() : 999;
-      const crafting = skills.getCurrentLevel(Skill.CRAFTING);
-      const woodcutting = skills.getCurrentLevel(Skill.WOODCUTTING);
-      return combat < 45 && (crafting < 31 || woodcutting < 36);
+      return (
+        player.getSkillManager().getCombatLevel() < 45 &&
+        missingSkillRequirements(player).length > 0
+      );
     }
     return null;
   }
@@ -259,7 +277,13 @@ module.exports = function registerLostCityQuest(api) {
 
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== WARRIOR_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (missingSkillRequirements(player).length > 0) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   function handleTreeSpiritDeath({ killer, npcId, npc }) {

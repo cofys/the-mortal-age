@@ -7,7 +7,8 @@
  * Captures (recordings 3254, 3262): chopping swings on tick 2 ("You swing your axe at the
  * roots.") and gives a root every 3 ticks from tick 3 ("You get a bruma root."); fletching is
  * anim 1248, a kindling every 4 ticks ("You carefully fletch the root into a bundle of
- * kindling."), refused in the safe area ("Your hands are too cold to fletch here - move closer
+ * kindling."), then every 3 while a fletching knife is carried or worn, from the second
+ * kindling on (Wiki); refused in the safe area ("Your hands are too cold to fletch here - move closer
  * to the braziers."); picking is anim 2282 and a herb every 3 ticks with synth 2581 ("You pick a
  * bruma herb."); potions are mixed on the click, 2 ticks later, then every 3; drinking is anim
  * 829 and synth 2401 ("You drink some of your potion.", "You have 3 doses of potion left.");
@@ -30,6 +31,8 @@ const CHOP_TICKS = 3;
 /** The swing (animation and line) comes on tick 2, a tick before the first root. */
 const SWING_TICK = 2;
 const FLETCH_TICKS = 4;
+/** A carried or worn fletching knife makes every kindling after the first a tick faster (Wiki). */
+const FLETCH_KNIFE_TICKS = 3;
 const PICK_TICKS = 3;
 /** The second potion is mixed 2 ticks after the first, then one every 3 ticks. */
 const MIX_SECOND_TICK = 2;
@@ -113,9 +116,12 @@ function fletch(event) {
     player.sendMessage("Your hands are too cold to fletch here - move closer to the braziers.");
     return true;
   }
+  /** The first kindling keeps the full interval; the knife speeds up every one after it. */
+  let nextTick = FLETCH_TICKS - 1;
   Shared.startAction(player, "fletch", (ticks) => {
-    if (ticks % FLETCH_TICKS !== FLETCH_TICKS - 1) return true;
+    if (ticks < nextTick) return true;
     if (!fletchOne(player)) return false;
+    nextTick = ticks + (Shared.hasItem(player, Shared.ITEM.FLETCHING_KNIFE) ? FLETCH_KNIFE_TICKS : FLETCH_TICKS);
     if (slotOf(player, Shared.ITEM.BRUMA_ROOT) < 0) return false;
     Shared.animate(player, Shared.ANIM.FLETCH);
     return true;

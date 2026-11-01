@@ -470,6 +470,24 @@ test('the eight dolmens open the temple door and advance to stage 800', () => {
   assert.ok(p.log.some(entry => entry[0] === 'sendVarbit' && entry[1] === 10815 && entry[2] === 0), 'the door varbit is cleared');
 });
 
+test('the Khazard Launderer spawns inside the laundry building', () => {
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const launderers = spawns.filter(spawn => spawn.id === 13516);
+  assert.equal(launderers.length, 1, 'there is one Khazard Launderer spawn');
+  const [spawn] = launderers;
+  assert.equal(spawn.level, 0);
+  // The laundry building west of the Fight Arena: sink at 2563,3172 and
+  // tables/chairs around 2567-2570,3171-3173. Issue #1641 placed him 30 tiles
+  // north, outdoors, so a player standing in the house (2567,3171) saw nobody.
+  assert.ok(spawn.x >= 2563 && spawn.x <= 2571 && spawn.y >= 3166 && spawn.y <= 3174,
+    `the launderer spawn ${spawn.x},${spawn.y} is inside the laundry building`);
+  const region = RegionManager.getRegion(spawn.x, spawn.y);
+  assert.equal(region?.isUnderRoof(spawn.x & 63, spawn.y & 63, spawn.level), true,
+    'the spawn tile is under the laundry building roof');
+  assert.ok(!spawns.some(other => other.id === 13516 && other.x === 2565 && other.y === 3202),
+    'the old outdoor spawn north of the building is gone');
+});
+
 test('the druid at the enriched snapdragon patch replaces a lost harvest', () => {
   const h = harness();
   const p = makePlayer();

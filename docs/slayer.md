@@ -84,6 +84,10 @@ A master only assigns rows the player qualifies for:
 - its combat level, unless combat checks are off (Krystilia never checks);
 - its stat requirements;
 - its required unlock, and no unlock that removes it;
+- its quests: any one of them complete (Abyssal demons take Priest in Peril or Fairytale II), or
+  only started where the Wiki needs a quest partly done (Dragon Slayer I for the dragons, Olaf's
+  Quest for brine rats...). A quest tsps doesn't have yet doesn't block its task, so Venators
+  (The Blood Moon Rises) aren't in the list;
 - not blocked with that master.
 
 A row is picked by weight. Its amount is the row's range, or the extension's range with that

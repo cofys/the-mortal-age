@@ -13,7 +13,7 @@
  * action and finishes the quest; talking at 11 replays that completion tail so
  * an interrupted final hand-in is not a dead end.
  *
- * Gaps (no dump/index support): the Druidic Ritual requirement is not enforced
+ * Gaps (no dump/index support): the Druidic Ritual requirement is enforced at the start hook
  * (no condition in the transcript); the "obtained from a monster drop" freshness
  * branch is always answered false because freshness is not tracked; cleaning the
  * jungle herbs is supplied here because the Herblore skill plugin does not list
@@ -194,9 +194,21 @@ module.exports = function registerJunglePotionQuest(api) {
     return null;
   }
 
+  function druidicRitualComplete(player) {
+    const request = { player, key: "druidic_ritual", complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== TRUFITUS_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (!druidicRitualComplete(player)) {
+        player.sendMessage("You must complete Druidic Ritual to start this quest.");
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   /** The chosen "player has the clean herb" branch consumes it and advances. */

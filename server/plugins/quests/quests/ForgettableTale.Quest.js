@@ -895,6 +895,25 @@ module.exports = function registerForgettableTaleQuest(api) {
     }
   }
 
+  /** Wiki: 22 Cooking and 17 Farming. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.COOKING, level: 22, label: "Cooking" },
+    { skill: Skill.FARMING, level: 17, label: "Farming" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleAction(event) {
     const { player, stepId } = event;
     switch (stepId) {
@@ -907,7 +926,21 @@ module.exports = function registerForgettableTaleQuest(api) {
         return;
       case "KmAed5":
         event.handled = true;
-        if (stageOf(player) === 0) quest.setStage(player, STAGE_STARTED);
+        if (stageOf(player) === 0) {
+          if (missingSkillRequirements(player).length > 0) {
+            notifySkillRequirements(player);
+            return;
+          }
+          if (!questComplete(player, "giant_dwarf")) {
+            player.sendMessage("You must complete The Giant Dwarf to start this quest.");
+            return;
+          }
+          if (!questComplete(player, "fishing_contest")) {
+            player.sendMessage("You must complete Fishing Contest to start this quest.");
+            return;
+          }
+          quest.setStage(player, STAGE_STARTED);
+        }
         player.moveTo(DWARF_HOUSE_TILE);
         return;
       case "7E9t4X":

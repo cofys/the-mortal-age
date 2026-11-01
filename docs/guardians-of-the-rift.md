@@ -410,6 +410,16 @@ Ticks from the rift opening:
 - **End of game:** see the Power-up section above for the captured lines. The points and the XP
   both need 300 energy in the game (Wiki). Each closed rift counts in the collection log's
   Guardians of the Rift category.
+- **Pearls:** [Abyssal pearls](https://oldschool.runescape.wiki/w/Abyssal_pearls) are the
+  minigame's reward currency. Here they are a saved balance (`shop-currency:Abyssal pearls`,
+  the Shopkeepers point-currency convention), not an inventory item, so relogging keeps them
+  and Felix's shop and Cordelia spend the same number. A won game pays each player who made a
+  valid contribution `1 + performance / 100` pearls (performance is contribution points plus
+  energy, capped at 100); standing in the game without doing anything pays none. A
+  Rewards Guardian pearl roll credits the same balance, and with no points 25 pearls buy one
+  search. Accounts from before the currency change have their inventory and bank pearl items
+  converted into the balance once, on login; the items are removed in the same save. The
+  per-game rate is ours; the Wiki's 14-16 pearls belong to the Guardian's loot table.
 - **Rewards Guardian** (captured):
   - Check: mesbox "You have 3 catalytic energy and 2 elemental energy. You can use them to search
     the rift 2 times. You have searched the rift 4,003 times."
@@ -418,13 +428,13 @@ Ticks from the rift opening:
   - When the searches run out: mesbox "There doesn't seem to be anything else in the rift for
     you." With none at all: "There doesn't seem to be anything in the rift for you."
   - Big-search: the animation, and three ticks later up to five rewards at once.
-  - A search costs an elemental and a catalytic point (Wiki). Searching with 25 pearls instead
-    isn't built.
+  - A search costs an elemental and a catalytic point (Wiki); with no points, 25 pearls buy
+    the search instead. The points are spent first.
   - A search is rolled first and given only if the whole roll fits. Otherwise the inventory-full
     message shows and the points stay.
 - **Loot** (Wiki; `server/plugins/minigames/data/guardians-of-the-rift-rewards.json`):
   - The main table out of 140: pouches, runes, talismans, pearls, the intricate pouch, ashes and
-    the needle.
+    the needle. Its 14-16 pearls credit the saved pearl balance rather than the inventory.
   - The rare table rolls apart: Atlax's diary (once), the catalytic talisman, the abyssal needle
     (once), the lantern and the dyes. The Abyssal protector is 1/4,000, through the pets plugin.
   - The pouch is the next one the player lacks, else the table rolls again.
@@ -447,12 +457,12 @@ Ticks from the rift opening:
     capture) and swaps it. Selling dyes and lanterns isn't built.
 - **Apprentice Cordelia** (her transcript; the opening line is captured):
   - 25 pearls unlock the repairs (`gotr_cordelia_repair_pouch`, which gives her the Repair
-    option). Each repair then costs 1 pearl and repairs every decayed pouch.
+    option). Each repair then costs 1 pearl and repairs every decayed pouch. Both take the
+    saved balance: a refused purchase leaves it untouched.
   - The Repair option's chat lines are ours.
 - **Chatter:** Tamara and Cordelia say the captured lines during a game, every 25-50 ticks (ours).
 - **Not built:** the abyssal lantern's effects ("Your lantern gets you a bonus rune."),
-  combination runes and polyelemental stones, Tamara's barrier lock (themed worlds only), and
-  searching with pearls.
+  combination runes and polyelemental stones, and Tamara's barrier lock (themed worlds only).
 
 ## Existing code it touches
 

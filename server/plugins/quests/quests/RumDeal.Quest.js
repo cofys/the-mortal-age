@@ -235,14 +235,31 @@ module.exports = function registerRumDealQuest(api) {
   const hasFreeSlot = (player) => freeSlots(player) > 0;
   const level = (player, skill) => player.getSkillManager().getCurrentLevel(skill);
 
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function meetsRequirements(player) {
     return (
       level(player, Skill.FARMING) >= 40 &&
       level(player, Skill.FISHING) >= 50 &&
       level(player, Skill.PRAYER) >= 47 &&
       level(player, Skill.CRAFTING) >= 42 &&
-      level(player, Skill.SLAYER) >= 42
+      level(player, Skill.SLAYER) >= 42 &&
+      questIsComplete(player, "zogre_flesh_eaters") &&
+      questIsComplete(player, "priest_in_peril")
     );
+  }
+
+  function notifyQuestRequirements(player) {
+    if (!questIsComplete(player, "zogre_flesh_eaters")) {
+      player.sendMessage("You must complete Zogre Flesh Eaters to start this quest.");
+    }
+    if (!questIsComplete(player, "priest_in_peril")) {
+      player.sendMessage("You must complete Priest in Peril to start this quest.");
+    }
   }
 
   function wearingSlayerGloves(player) {
@@ -559,13 +576,23 @@ module.exports = function registerRumDealQuest(api) {
   function handleChoice({ player, npcId, option }) {
     if (!PETE_NPC_IDS.has(npcId) || quest.getStage(player) !== 0) return;
     if (String(option).toLowerCase().includes("keep the money")) {
+      if (!meetsRequirements(player)) {
+        notifyQuestRequirements(player);
+        return;
+      }
       quest.setStage(player, STAGE_STARTED);
     }
   }
 
   function handleHook({ player, npcId, hook }) {
     if (!PETE_NPC_IDS.has(npcId) || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (!meetsRequirements(player)) {
+        notifyQuestRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   /** Dialogue action/message steps: stage transitions and message-step hand-outs. */

@@ -1,4 +1,4 @@
-# Giant Mole burrowing
+# Giant Mole burrowing and attacks
 
 The Mole's burrow check runs after an eligible hitsplat has taken HP, through the
 existing damage-application event and its applied observer. Starting the dig when
@@ -23,6 +23,19 @@ ordinary combat. Magic splashes never apply damage; poison and reflected damage
 are excluded. Once buried, another hit already landing still deals its damage,
 without scheduling a second dig. A single lethal hit never starts a dig.
 
+## Attacks and entering the lair
+
+Npc 5779 takes its attack, defend and death animations from its entry in
+`data/definitions/npc-combat-defs.json` (`mole_attack` 3312, `mole_defend` 3311,
+`mole_death` 3310), rather than the cache scan's guessed sequence. The Wiki's
+four-tick attack speed is asserted against the loaded definition.
+
+A spade used on a Mole hill performs the shared dig animation (830) and moves the
+player to the lair entrance; the rope at the Mole hole climbs back out to the
+well. Both paths and the wrong-location refusal are covered by the regression
+suite. The Wiki does not describe a stun that interrupts a dig, so none is
+implemented.
+
 The plugin remains members-only. Its transient buried attribute uses a namespaced,
 kebab-case key. Registration only attaches named handlers with the existing core
 API; no generated definitions or shared combat code are changed.
@@ -32,10 +45,11 @@ API; no generated definitions or shared combat code are changed.
 The regression suite runs the real hit queue and combat hit execution with
 cache-backed NPC definitions. It covers damage preservation, projectile delay,
 health boundaries (including exactly 10), zeros and splashes, two-hit attacks,
-poison, failed rolls, resurfacing, loss of the combat target, and the real thrall
-summoning/attack task. Nine of its 21 cases fail against the original plugin;
-all 21 pass with the fix. The related hit-queue and thrall suites also pass
-(34 tests across the three suites). The server TypeScript build passed.
+poison, failed rolls, resurfacing, loss of the combat target, the real thrall
+summoning/attack task, the combat animations and speed, and the spade dig-in and
+rope climb-out. Nine of its earlier 21 cases fail against the original plugin;
+all 24 cases pass now. The related hit-queue, hitsplat-source and thrall suites
+also pass (19 tests across the three suites). The server TypeScript build passed.
 
 A running-world combat check used a max-level player with an abyssal whip and
 explicit damage immunity, then lowered the Mole to 80 HP after establishing a

@@ -790,9 +790,61 @@ module.exports = function registerGhostsAhoyQuest(api) {
     return null;
   }
 
+  /** Wiki: 25 Agility, 20 Cooking, Priest in Peril and The Restless Ghost. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.AGILITY, level: 25, label: "Agility" },
+    { skill: Skill.COOKING, level: 20, label: "Cooking" },
+  ];
+  const REQUIRED_QUESTS = [
+    { key: "priest_in_peril", name: "Priest in Peril" },
+    { key: "the_restless_ghost", name: "The Restless Ghost" },
+  ];
+
+  function missingQuestRequirements(player) {
+    return REQUIRED_QUESTS.filter(({ key }) => {
+      const request = { player, key, complete: undefined };
+      api.emitCustomEvent("quest:is-complete", request);
+      return request.complete !== true;
+    });
+  }
+
+  function notifyQuestRequirements(player) {
+    for (const requirement of missingQuestRequirements(player)) {
+      player.sendMessage(`You must complete ${requirement.name} to start this quest.`);
+    }
+  }
+
+  function meetsStartRequirements(player) {
+    return missingSkillRequirements(player).length === 0 && missingQuestRequirements(player).length === 0;
+  }
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function meetsSkillRequirements(player) {
+    return missingSkillRequirements(player).length === 0;
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== VELORINA_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) <= 0) setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) <= 0) {
+      if (!meetsStartRequirements(player)) {
+        notifySkillRequirements(player);
+        notifyQuestRequirements(player);
+        return;
+      }
+      setStage(player, STAGE_STARTED);
+    }
   }
 
   /** Chosen-condition side effects: hand-ins and stage advances. */
@@ -838,7 +890,14 @@ module.exports = function registerGhostsAhoyQuest(api) {
       // The short "Yes, I do" branch's "Start the Ghosts Ahoy quest?" prompt was
       // lost in the transcript dump, leaving the branch a dead end; the option is
       // already consent, so start the quest here.
-      if (quest.getStage(player) <= 0) setStage(player, STAGE_STARTED);
+      if (quest.getStage(player) <= 0) {
+        if (!meetsStartRequirements(player)) {
+          notifySkillRequirements(player);
+          notifyQuestRequirements(player);
+          return;
+        }
+        setStage(player, STAGE_STARTED);
+      }
       return;
     }
     if (npcId === AK_HARANU_NPC_ID && value.includes("get you your bow")) {

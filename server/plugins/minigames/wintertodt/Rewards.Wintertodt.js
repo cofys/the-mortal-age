@@ -150,4 +150,13 @@ function roll(player, random = Math.random) {
   return rollMain(player, random);
 }
 
-module.exports = { SKILL_TABLES, interpolate, roll, owned, pyromancerPiece, rollSkillTable };
+/**
+ * One roll from an extra supply crate (Wiki "Extra supply crate"): the dragon axe is the only
+ * unique it can give; there are no pages, phoenix, tome, gloves, torch or outfit pieces.
+ */
+function rollCrate(player, random = Math.random) {
+  if (oneIn(random, UNIQUE_CHANCE.DRAGON_AXE)) return { id: ids().DRAGON_AXE, amount: 1 };
+  return rollMain(player, random);
+}
+
+module.exports = { SKILL_TABLES, interpolate, roll, rollCrate, owned, pyromancerPiece, rollSkillTable };

@@ -102,6 +102,14 @@ function itemStatement(player, itemId, text) {
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0, itemId, text)));
 }
 
+/** A mesbox followed by a player chathead line, e.g. the final decoration. */
+function statementThenPlayer(player, statementText, playerText) {
+  const { DialogueChainBuilder, StatementDialogue, PlayerDialogue } = core();
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder()
+    .add(new StatementDialogue(0, statementText))
+    .add(new PlayerDialogue(1, playerText)));
+}
+
 /** Room for `amount` of an item: one slot (or its stack) if it stacks, a slot each if not. */
 function hasRoomFor(player, itemId, amount = 1) {
   const inventory = player.getInventory();
@@ -158,5 +166,5 @@ function stopAction(player) {
 module.exports = {
   DATA, SEQ, SOUND, SOUND_DELAY,
   init, api, core, obj, loc, npc, animate, sound, face, level, addXp, ownsHouse, itemName, numberWord,
-  statement, itemStatement, hasRoomFor, later, startAction, stopAction,
+  statement, itemStatement, statementThenPlayer, hasRoomFor, later, startAction, stopAction,
 };

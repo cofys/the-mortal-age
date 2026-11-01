@@ -12,6 +12,7 @@
  */
 
 const Shared = require("./Shared.GuardiansOfTheRift");
+const Game = require("./Game.GuardiansOfTheRift");
 
 const SOUND = 2586;
 const FULL_SOUND = 2277;
@@ -53,6 +54,7 @@ function chisel(player) {
   Shared.animate(player, "gotr_chisel_essence");
   Shared.sound(player, SOUND);
   Shared.addXp(player, "CRAFTING", craftingXp(player));
+  Game.addContribution(player, 1);
   return true;
 }
 

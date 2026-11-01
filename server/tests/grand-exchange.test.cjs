@@ -16,6 +16,10 @@ const {
   sellPrice,
   changePrice,
   collectionOutputId,
+  payout,
+  tax,
+  taxExempt,
+  TAX_CAP,
   fillDelayMs,
   remainingLimit,
   recordLimit,
@@ -79,6 +83,104 @@ test('collection menus collect the item or its note they name', () => {
   // Items without a noted form are never converted.
   assert.equal(collectionOutputId(NO_NOTE, 1, 1), NO_NOTE);
   assert.equal(collectionOutputId(NO_NOTE, 1, 2), NO_NOTE);
+});
+
+const TAX_EXEMPT = [
+  'Old school bond',
+  'Games necklace(8)',
+  'Ring of dueling(8)',
+  'Ardougne teleport',
+  'Camelot teleport',
+  'Civitas illa fortis teleport',
+  'Falador teleport',
+  'Kourend castle teleport',
+  'Lumbridge teleport',
+  'Teleport to house',
+  'Varrock teleport',
+  'Bass',
+  'Bread',
+  'Bronze arrow',
+  'Bronze dart',
+  'Cake',
+  'Cooked chicken',
+  'Cooked meat',
+  'Herring',
+  'Iron arrow',
+  'Iron dart',
+  'Lobster',
+  'Mackerel',
+  'Meat pie',
+  'Mind rune',
+  'Pike',
+  'Salmon',
+  'Shrimps',
+  'Steel arrow',
+  'Steel dart',
+  'Tuna',
+  'Chisel',
+  'Gardening trowel',
+  'Glassblowing pipe',
+  'Hammer',
+  'Needle',
+  'Pestle and mortar',
+  'Rake',
+  'Saw',
+  'Secateurs',
+  'Seed dibber',
+  'Shears',
+  'Spade',
+];
+const EXEMPT_ITEMS = TAX_EXEMPT.map((name, index) => {
+  const id = 4000 + index;
+  define(id, { getName: () => name });
+  return id;
+});
+const ENERGY_4 = 4100;
+define(ENERGY_4, { getName: () => 'Energy potion(4)' });
+const WATERING_CAN_8 = 4101;
+define(WATERING_CAN_8, { getName: () => 'Watering can(8)' });
+const SUPER_ENERGY_4 = 4102;
+define(SUPER_ENERGY_4, { getName: () => 'Super energy potion(4)' });
+const CHOCOLATE_CAKE = 4103;
+define(CHOCOLATE_CAKE, { getName: () => 'Chocolate cake' });
+const TAXED = 4104;
+define(TAXED, { getGrandExchangeValue: () => 100, getGrandExchangeSellValue: () => 90 });
+const LEGACY_WHIP = 4105;
+define(LEGACY_WHIP, {
+  getName: () => 'Abyssal whip',
+  getGrandExchangeValue: () => 733_639,
+  getGrandExchangeSellValue: () => 733_639,
+});
+
+test('the sale tax is 2% per item, rounded down and capped at 5M', () => {
+  const sale = (price, quantity = 1) => ({ itemId: TAXED, sell: true, price, quantity, total: price * quantity });
+  assert.equal(tax(sale(1)), 0);
+  assert.equal(tax(sale(49)), 0);
+  assert.equal(tax(sale(49, 2)), 0);
+  assert.equal(tax(sale(50)), 1);
+  assert.equal(tax(sale(50, 2)), 2);
+  assert.equal(tax(sale(99)), 1);
+  assert.equal(tax(sale(100)), 2);
+  assert.equal(tax(sale(149)), 2);
+  assert.equal(tax(sale(150)), 3);
+  assert.equal(tax(sale(249_999_999)), TAX_CAP - 1);
+  assert.equal(tax(sale(250_000_000)), TAX_CAP);
+  assert.equal(tax(sale(0x7fffffff)), TAX_CAP);
+  assert.equal(tax(sale(0x7fffffff, 2)), 2 * TAX_CAP);
+});
+
+test('exempt items, buys and aborted offers do not pay the sale tax', () => {
+  for (const itemId of [...EXEMPT_ITEMS, ENERGY_4, WATERING_CAN_8]) {
+    assert.equal(taxExempt(itemId), true);
+    assert.equal(tax({ itemId, sell: true, price: 10_000, quantity: 2, total: 20_000 }), 0);
+  }
+  for (const itemId of [TAXED, SUPER_ENERGY_4, CHOCOLATE_CAKE]) {
+    assert.equal(taxExempt(itemId), false);
+    assert.ok(tax({ itemId, sell: true, price: 10_000, quantity: 2, total: 20_000 }) > 0);
+  }
+  const offer = { itemId: TAXED, price: 10_000, quantity: 2, total: 20_000 };
+  assert.equal(tax({ ...offer, sell: false }), 0);
+  assert.equal(tax({ ...offer, sell: true, aborted: true }), 0);
 });
 
 test('price controls step by one, five percent and the guide', () => {
@@ -423,13 +525,60 @@ test('a token payment whose change has no free slot is refused and takes nothing
 test('trades above the coin stack pay with tokens and collect as tokens plus coins', t => {
   const { MAX_TRADE, payout } = plugin._test;
   assert.equal(MAX_TRADE, 2_149_631_130_647);
-  assert.deepEqual(payout({ sell: true, total: 3_000_000_123 }), [{ itemId: 13204, amount: 3_000_000 }, { itemId: 995, amount: 123 }]);
-  assert.deepEqual(payout({ sell: true, total: MAX_TRADE }), [{ itemId: 13204, amount: 2_147_483_647 }, { itemId: 995, amount: 2_147_483_647 }]);
-  assert.deepEqual(payout({ sell: true, total: 500 }), [{ itemId: 995, amount: 500 }]);
+  const sale = (price, quantity) => ({ itemId: PRICED, sell: true, price, quantity, total: price * quantity });
+  assert.deepEqual(payout(sale(1_500_000_061, 2)), [{ itemId: 13204, amount: 2_990_000 }, { itemId: 995, amount: 122 }]);
+  assert.deepEqual(payout(sale(0x7fffffff, 1001)), [{ itemId: 13204, amount: 2_144_626_130 }, { itemId: 995, amount: 647 }]);
+  assert.deepEqual(payout(sale(500, 1)), [{ itemId: 995, amount: 490 }]);
   const { inventory, place } = exchange(t);
   inventory.add(new Item(995, 2_000_000_000), false);
   inventory.add(new Item(13204, 1_500_000), false);
   assert.equal(place(false, UNLIMITED, 1_000, 3_000_000).total, 3_000_000_000);
   assert.equal(inventory.getAmount(995), 0);
   assert.equal(inventory.getAmount(13204), 500_000);
+});
+
+test('a completed sale collects its total less the tax', t => {
+  t.mock.method(Math, 'random', () => 0.01);
+  const { inventory, place, click, timers } = exchange(t);
+  inventory.add(new Item(PRICED, 10), false);
+  const offer = place(true, PRICED, 10, 1_000);
+  assert.equal(offer.total, 10_000);
+  assert.equal(inventory.getAmount(PRICED), 0);
+  timers[0].callback();
+  click(24);
+  assert.equal(inventory.getAmount(995), 9_800);
+});
+
+test('a saved sale without a price is taxed at its historical unit price', t => {
+  const { p, inventory, hooks, click, timers } = exchange(t);
+  // A 10-whip sale at 700,000 each, saved before prices were adjustable; the current
+  // sell guide is 733,639, so using it would charge 146,720 instead of 140,000.
+  const saved = {
+    itemId: LEGACY_WHIP,
+    sell: true,
+    slot: 0,
+    quantity: 10,
+    total: 7_000_000,
+    finished: true,
+    completesAt: null,
+  };
+  assert.equal(tax(saved), 140_000);
+  assert.deepEqual(payout(saved), [{ itemId: 995, amount: 6_860_000 }]);
+  p.setAttribute(OFFERS_ATTRIBUTE, { 0: saved });
+  hooks.onPlayerLogin({ player: p });
+  assert.equal(timers.length, 0);
+  click(7, 0);
+  click(24);
+  assert.equal(inventory.getAmount(995), 6_860_000);
+});
+
+test('an aborted sale returns the items without tax', t => {
+  t.mock.method(Math, 'random', () => 0.99);
+  const { inventory, place, click } = exchange(t);
+  inventory.add(new Item(PRICED, 10), false);
+  place(true, PRICED, 10, 1_000);
+  click(23);
+  click(24);
+  assert.equal(inventory.getAmount(PRICED), 10);
+  assert.equal(inventory.getAmount(995), 0);
 });

@@ -31,6 +31,7 @@ const areas = [];
 const combatProviders = [];
 const hitRollHandlers = [];
 const objectHooks = {};
+let onTaskAnswer = () => false;
 const api = new Proxy(
   {
     core,
@@ -40,6 +41,9 @@ const api = new Proxy(
     onCombatHitRoll: (handler) => hitRollHandlers.push(handler),
     onObjectInteraction: (name, actions) => {
       objectHooks[name] = { ...(objectHooks[name] ?? {}), ...actions };
+    },
+    emitCustomEvent: (name, event) => {
+      if (name === "slayer:on-task") event.onTask = onTaskAnswer(event);
     },
   },
   { get: (target, key) => target[key] ?? (() => {}) }
@@ -149,6 +153,20 @@ test("the room is multicombat and the boss walks through the room", () => {
   areas[0].process({ isNpc: () => true, getId: () => Common.SMOKE_DEVIL_ID, setFlag: (flag) => minionFlags.push(flag) });
   assert.deepEqual(minionFlags, []);
   areas[0].process({ isPlayer: () => true });
+});
+
+test("the room refuses an attack off a smoke devil task", () => {
+  const area = areas[0];
+  const player = { isPlayer: () => true, getAsPlayer: () => player };
+  const npcs = [Common.BOSS_ID, Common.SMOKE_DEVIL_ID].map((id) => ({ isNpc: () => true, getId: () => id }));
+  onTaskAnswer = () => false;
+  for (const npc of npcs) {
+    assert.equal(area.canAttack(player, npc), false);
+    assert.equal(area.canAttack({ isPlayer: () => false }, npc), null);
+  }
+  onTaskAnswer = (request) => npcs.includes(request.npc);
+  for (const npc of npcs) assert.equal(area.canAttack(player, npc), null);
+  assert.equal(area.canAttack(player, { isNpc: () => false }), null);
 });
 
 test("smoke devils punish players without a mask", () => {

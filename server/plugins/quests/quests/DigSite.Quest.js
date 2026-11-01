@@ -233,9 +233,39 @@ module.exports = function registerDigSiteQuest(api) {
     return null;
   }
 
+  /** Wiki: 25 Thieving, 10 Herblore and 10 Agility. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.THIEVING, level: 25, label: "Thieving" },
+    { skill: Skill.HERBLORE, level: 10, label: "Herblore" },
+    { skill: Skill.AGILITY, level: 10, label: "Agility" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function meetsSkillRequirements(player) {
+    return missingSkillRequirements(player).length === 0;
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (!EXAMINER_NPC_IDS.has(npcId) || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (!meetsSkillRequirements(player)) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   /** Terry's discovery turn-in completes the quest. */

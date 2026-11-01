@@ -1,11 +1,11 @@
 ---
 quest: Monkey Madness I
 key: monkey_madness_i
-status: in-progress
+status: passed-with-issues
 tested: 2026-10-31
 tester: agent
-model: claude-haiku-5-5
-commit: 5f1155177
+model: claude-opus-5-5
+commit: 1182ccc20
 cache: osrs-241_2026-10-20
 start: checkpoint
 travel: travel_to
@@ -13,20 +13,131 @@ travel: travel_to
 
 # Monkey Madness I
 
-Chapter 1 (stages 0 to 7) was played start to finish on a watched client: the Narnode start, the Karamja shipyard, the hangar and the Reinitialisation Panel, the Crash Island landing and the Lumdo boat to Ape Atoll. Chapters 2 to 4 are not played, so the quest is not passed. The run also found a transcript bug (pronoun placeholders) that is not fixed yet.
+The quest is played to the end across two watched runs: chapter 1 in the first, then chapters 2 to 4,
+the rewards, Daero's training, the repeat talk and a relog in the second. The second run fixed eight
+quest bugs, including two soft-locks (the zoo pen and the demon arena) and the mm_main wire values
+Quest Helper keys on. A later focused check covered the jail on every approach, the human
+exit from Marim and the hangar exit. Open findings are the pronoun placeholders, a core varp
+overwrite (#1647), and the sliding puzzle the plugin does not have.
 
 ## Findings
 
-Newest first. Nothing is filed as an issue or PR yet.
+Newest first. Nothing is filed as an issue yet; the fixes are in this branch's PR and #1645.
 
-- **open** Transcript pronoun placeholders show literally: "[He is/She is/They are]" in Daero's hangar briefing, and "[him/her/them]" in Waydar's Lumdo menu. The quest needs a pronoun substitution for the player.
-- **open** Quest Helper is stale from stage 5: after the Panel it says "Talk to Garkor", then at stage 6 and 7 "Return to King Narnode Shareen". In the hangar, before the Panel, it showed the Ardougne Zoo step. This is helper integration, not quest code.
-- **open** The hangar Teleportation Devices (objects 4869 and 4870, Operate) do nothing. Daero's "teleporter round the corner" line leads nowhere. The flight to Crash Island is Waydar's talk ("Yes, let's go."). Whether the device should work is unverified.
-- **open** The hangar sliding puzzle is not implemented. Operating the Reinitialisation Panel completes stage 5, as the plugin documents.
-- **open** On Ape Atoll, walking from the Lumdo landing stalls inside the Greegrees area. The planner also reports the Bamboo Gate (object 4787 at 2720, 2765) as needing Monkey Madness II, so the route to Garkor is not established. Whether this is a travel or quest issue is unresolved.
-- **open** `travel_to` returns `no-route` for the Tree Gnome Stronghold, since it needs a Spirit Tree, glider or teleport. Its legs also name ladders by their live ids, which differ from the data ids (matched by name).
+- **fixed** The hangar Teleportation Device (4868-4870, Operate) did nothing. It is the hangar's
+  exit (wiki): it now lands the player south of the Gnome Ball field at 2393,3466.
+- **fixed** A human could not leave Marim except by the gate or a teleport: the south-east Bamboo
+  Ladder (4743/4744) climbs from plane 0 straight to plane 2, so the Ladders plugin found nothing
+  above it, and End of bridge (4745, Jump off) had no handler. The quest now owns both ends of the
+  ladder and the jump, with the landing tiles from Shortest Path's transport rows.
+- **fixed** The jail happened only once, and the Bamboo Gate let a human through. During the quest
+  a human is now knocked out and jailed on every approach up the valley or click on the gate (the
+  wiki's guide: "placed in the jail cell again"); only monkey form passes. Each catch is counted
+  for Lumo's sent-back lines, his 10/15/20/50/100-times lines and the one-time stuffed monkey
+  (3169). As exported those count lines sit after a random block that ends every option, so the
+  plugin plays the matching count's condition, or the random block, on its own.
+
+- **fixed** King Narnode's repeat talk after the quest played The Grand Tree's generic line. The
+  plugin handed Narnode to Monkey Madness II whenever The Grand Tree was complete, which is always
+  true here, so the "after Monkey Madness I" talk was unreachable. It now yields only once Monkey
+  Madness II has started.
+- **fixed** The Jungle Demon arena had no way out. In live the whole 10th squad is summoned and
+  Zooknock teleports the player out. Only the demon was spawned, so after the kill the player was
+  stuck. Garkor (1434) and Zooknock (1442), the final-battle NPCs, are now summoned with it and play
+  the battle and after-battle talks. A login back in the arena summons them again.
+- **fixed** The first sigil teleport played "the final battle begins... again!". The shake message
+  set the used flag before the transcript's first-time check.
+- **fixed** A player caged in the Ardougne Zoo monkey pen could not leave. The minders walk outside
+  the fence, the pen has no gate, and talking to one said "I can't reach that!". A caged player now
+  reaches a minder across the fence.
+- **fixed** The Bamboo Gate (4787/4788 at 2719-2722, 2766) moved the player along the gate row and
+  could wall them in at 2718,2766. It now crosses at x 2720, between 2720,2765 and 2720,2767, as the
+  live transport data does.
+- **fixed** The temple trapdoor (4879 at 2807,2785): the shared Doors plugin took its Open and
+  swapped in the open trapdoor (4880) a tile east, where Climb-down was out of reach. The quest now
+  claims the Open through `door:toggle` and drops the player into the temple dungeon.
+- **fixed** The denture building's south doorway (4710 at 2764,2764) did nothing. Its open leaf
+  (4711) has no name, so Doors can't pair it. The quest now passes the player through, both ways.
+- **fixed** mm_zooknock (varbit 127) never reached 5. The plugin matched only half of Zooknock's
+  "Garkor had long decided..." line. The route test fed it the same half line, so it passed.
+- **fixed** varp 365 (mm_main) carried the plugin's own stage numbers. Quest Helper keys on the live
+  values (3 chapter 2, 4 the zoo, 5 the sigil, 6 back to Narnode, 9 complete), so its step was wrong
+  from chapter 2 on ("Return to King Narnode" while on Ape Atoll). Saved stages are unchanged; a
+  `varpValue` mapping sends the live value. Where live moves 1 to 2 inside chapter 1 is not recorded
+  (saved stages 3 to 6 send 2).
+- **fixed** Daero's Travel option in the Grand Tree always played the in-hangar "How do I leave?"
+  line, so it never took the player back to the hangar. Outside the hangar it now plays his
+  "return to the hangar?" talk.
+- **open** Core: mounting the magic tab sends `SPELL_UNLOCK_VARPS`, which writes varp 365 =
+  0x7fffffff (for the Ape Atoll Dungeon Teleport). Unwielding the greegree did that mid-quest, so
+  the client saw the quest as complete until the next login. Not quest code (`PacketSender`); #1647.
+- **open** Transcript pronoun placeholders show literally: "[He is/She is/They are]" in Daero's
+  hangar briefing, "[him/her/them]" in Waydar's Lumdo menu and in Caranock's line in the chapter 4
+  cutscene. Shared dialogue runtime or dumper.
+- **open** The hangar sliding puzzle is not implemented. Operating the Reinitialisation Panel
+  completes stage 5, as the plugin documents.
+- **open** Zooknock's first talk repeats its opening three lines. The Wiki transcript has the same
+  repeat, so the export is faithful to it.
+- **open** `travel_to`: the Grand
+  Tree's Tree Doors (1967/1968) and the Stronghold gate (190) came back `blocked` even though the
+  doors were already open and walkable. It has no route out of the mould cavern or from the dungeon
+  to Marim, since ropes and dungeon ladders aren't in its data. Its legs name the Grand Tree ladders
+  by their live ids, which differ from the data ids (matched by name).
+- **open** `travel_to` returns `no-route` for the Tree Gnome Stronghold, since it needs a spirit
+  tree, glider or teleport (from the first run).
 
 ## Runs
+
+### 2026-10-31 · agent · claude-opus-5-5 (focused)
+
+- **Start:** a fresh headless account set to stage 7 with the quest command and placed on Ape Atoll
+  with `::tele` (diagnostic positioning, not a playthrough), on the branch stacked on #1645.
+- **Checked:** the first valley approach jails with the newcomer line; after picking the lock, the
+  south-east ladder climbs to 2803,2733 (plane 2) and the bridge jump lands on 2806,2724. A second
+  approach jails again with a random sent-back line, and so does a human opening the gate from
+  inside Marim. Wielding the greegree, the gate opens to 2720,2765. In the hangar the Teleportation
+  Device lands on 2393,3466. The count lines and the stuffed monkey are covered by the route test.
+- **Not checked:** the denture house's light floor (in live it sends the player back to jail), the
+  guard patrol and the Monkey's Aunt, a jailing after the quest, and a watched client.
+
+### 2026-10-31 · agent · claude-opus-5-5
+
+- **Start:** checkpoint from the first run: Tester at the Lumdo landing on Ape Atoll, varp 365 =
+  7 (saved stage 7), 7 quest points, all skills 99, inventory Gnome amulet and Gnome royal seal.
+  Declared setup: a gold bar, a ball of wool, 5 bananas, 10 sharks, Varrock teleport runes, one
+  Monkey bones (the ordinary Karamja monkey drop; the Monkey Archers here drop ninja bones), and
+  `::infhp` as a combat aid. No `::tele`.
+- **Route:** valley to the knock-out and jail, Lumo's talk, pick-lock out, Garkor (mm_garkor 2). The
+  denture crate, the hole crate down to the mould cavern, the mould crate, the rope up. Varrock
+  teleport, the Grand Exchange spirit tree to the Stronghold, Daero's Travel to the hangar, Waydar
+  to Crash Island, Lumdo to Ape Atoll, the dungeon ladder down to Zooknock. Dentures, mould and gold
+  bar handed over, the enchanted bar returned. Through the Bamboo Gate, the temple trapdoor, the bar
+  on the wall of flame, the amulet strung and worn. The monkey child (uncle, bananas, toy) gave the
+  talisman. Back out through the gate to Zooknock: talisman and bones gave the Karamjan greegree and
+  the Caranock/Waydar cutscene (varp 365 = 4). Varrock teleport, spirit tree to the Battlefield of
+  Khazard, walked to the Ardougne Zoo: caught by the minder as a monkey, the zoo monkey into the
+  pack, the greegree off, out through a minder. Walked back to the Stronghold and flew Daero,
+  Waydar and Lumdo to Ape Atoll. Garkor disguised (mm_garkor 3), the Elder Guard, the west
+  watchtower and bridge to Kruk, Kruk to the throne room, Awowogei twice (varp 365 = 5). Garkor's
+  chapter 4 cutscene, the sigil (mm_garkor 6), the sigil worn to the arena. The Jungle Demon took
+  ordinary hits, then `set_npc_hitpoints` lowered it to 5 and combat finished it (varp 365 = 6).
+  Garkor, then Zooknock's teleport out. Varrock teleport, spirit tree to the Stronghold, Narnode.
+- **Result:** completion on Narnode's report: varp 365 = 9, quest points 7 to 10, 10,000 coins and 3
+  Diamonds, no XP. Quest Helper reports FINISHED and agrees with the cache's completion value 9.
+  Repeat talk to Narnode: no second reward. With the fix it plays the "after Monkey Madness I" talk
+  and the "requirements to start Monkey Madness II" message. Daero's training (strength and
+  stamina) gave +35,000 Strength and Hitpoints and +20,000 Attack and Defence, set varp 365 = 10,
+  and refused a second claim. Relog by the user: stage 10, quest points 10, XP and inventory
+  unchanged, and the offline save (written on logout) holds them. Quest Helper's step was right
+  from the first fix onwards.
+- **Fixes re-tested in game:** Daero's Travel, the temple trapdoor, the Bamboo Gate, the minder
+  across the fence, the arena squad (restored by the login after the restart) and Zooknock's way
+  out, the Narnode repeat talk. The Zooknock varbit and the sigil first-time line are covered by the
+  route test only. This account had passed both points before those fixes loaded.
+- **Not checked:** the hangar sliding puzzle (not implemented), Glough's 200,000-coin skip, the
+  monkey's aunt and the lost-toy talks, the attack-and-defence training choice, Bonzara, a lost
+  sigil from Waymottin in game (the route test covers it), teleporting with the monkey, and the
+  Quest Helper overlay in a client.
 
 ### 2026-10-31 · agent · claude-haiku-5-5
 

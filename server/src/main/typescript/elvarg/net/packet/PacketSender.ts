@@ -173,6 +173,8 @@ const WORN_INVENTORY_ID = 94;
 export class PacketSender {
   private groundItemSerial = 0;
   private readonly varps = new Map<number, number>();
+  /** The spell unlock states go out with the session's first spellbook mount only. */
+  private spellUnlocksSent = false;
   private subInterfaceTargets = new Map<number, SubInterfaceMount>();
   private chatboxGroupId = -1;
   private chatboxOwner: object | undefined;
@@ -457,13 +459,20 @@ export class PacketSender {
     }
     if (tabId === 6) {
       const spellbook = interfaceId === 12855 ? 1 : interfaceId === 29999 ? 2 : interfaceId === 39999 ? 3 : 0;
-      // A varbit can share storage with a quest varp. Send all varbits first,
-      // then the canonical quest varps so their exact completion stages win.
-      for (const [id, value] of SPELL_UNLOCK_VARBITS) {
-        this.sendVarbit(id, value);
-      }
-      for (const [id, value] of SPELL_UNLOCK_VARPS) {
-        this.sendConfig(id, value);
+      // Several unlock states are real quest varps (365 is Monkey Madness I's mm_main), which
+      // the quests re-send after the login bootstrap. The client keeps varps across re-mounts,
+      // so a later mount (a spellbook change, a ferry or carpet ride, a greegree) must not
+      // overwrite those stages with the unlocked value again.
+      if (!this.spellUnlocksSent) {
+        this.spellUnlocksSent = true;
+        // A varbit can share storage with a quest varp. Send all varbits first,
+        // then the canonical quest varps so their exact completion stages win.
+        for (const [id, value] of SPELL_UNLOCK_VARBITS) {
+          this.sendVarbit(id, value);
+        }
+        for (const [id, value] of SPELL_UNLOCK_VARPS) {
+          this.sendConfig(id, value);
+        }
       }
       this.sendVarbit(4070, spellbook);
       this.rememberSubInterface((161 << 16) | 82, 218, 1);

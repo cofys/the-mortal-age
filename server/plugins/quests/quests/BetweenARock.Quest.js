@@ -522,10 +522,63 @@ module.exports = function registerBetweenARockQuest(api) {
   // Transcript hooks / actions / conditions / choices
   // ==========================================================================
 
+  /** Wiki: 50 Smithing, 40 Mining, 30 Defence, Dwarf Cannon and Fishing Contest. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.SMITHING, level: 50, label: "Smithing" },
+    { skill: Skill.MINING, level: 40, label: "Mining" },
+    { skill: Skill.DEFENCE, level: 30, label: "Defence" },
+  ];
+  const REQUIRED_QUESTS = [
+    { key: "dwarf_cannon", name: "Dwarf Cannon" },
+    { key: "fishing_contest", name: "Fishing Contest" },
+  ];
+
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
+  function missingQuestRequirements(player) {
+    return REQUIRED_QUESTS.filter(({ key }) => !questIsComplete(player, key));
+  }
+
+  function notifyQuestRequirements(player) {
+    for (const requirement of missingQuestRequirements(player)) {
+      player.sendMessage(`You must complete ${requirement.name} to start this quest.`);
+    }
+  }
+
+  function meetsStartRequirements(player) {
+    return missingSkillRequirements(player).length === 0 && missingQuestRequirements(player).length === 0;
+  }
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function meetsSkillRequirements(player) {
+    return missingSkillRequirements(player).length === 0;
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleHook(event) {
     const { player, npcId, hook } = event;
     if (hook !== START_HOOK || !DONDAKAN_NPC_IDS.has(npcId)) return;
     if (quest.getStage(player) !== 0) return;
+    if (!meetsStartRequirements(player)) {
+      notifySkillRequirements(player);
+      notifyQuestRequirements(player);
+      return;
+    }
     quest.setStage(player, STAGE_STARTED);
     syncVarbits(player);
   }

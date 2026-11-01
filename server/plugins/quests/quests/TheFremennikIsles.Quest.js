@@ -1165,10 +1165,56 @@ module.exports = function registerTheFremennikIslesQuest(api) {
   // Transcript hook / choice / action handling
   // ==========================================================================
 
+  /** Wiki: 40 Agility, 20 Construction and The Fremennik Trials. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.AGILITY, level: 40, label: "Agility" },
+    { skill: Skill.CONSTRUCTION, level: 20, label: "Construction" },
+  ];
+  const REQUIRED_QUEST_KEY = "fremennik_trials";
+  const REQUIRED_QUEST_NAME = "The Fremennik Trials";
+
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
+  function meetsStartRequirements(player) {
+    return (
+      missingSkillRequirements(player).length === 0 && questIsComplete(player, REQUIRED_QUEST_KEY)
+    );
+  }
+
+  function notifyStartRequirements(player) {
+    notifySkillRequirements(player);
+    if (!questIsComplete(player, REQUIRED_QUEST_KEY)) {
+      player.sendMessage(`You must complete ${REQUIRED_QUEST_NAME} to start this quest.`);
+    }
+  }
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook(event) {
     const { player, npcId, hook } = event;
     if (hook !== START_HOOK || !MORD_IDS.has(npcId)) return;
-    if (stageOf(player) === 0) setStage(player, STAGE_STARTED);
+    if (stageOf(player) === 0) {
+      if (!meetsStartRequirements(player)) {
+        notifyStartRequirements(player);
+        return;
+      }
+      setStage(player, STAGE_STARTED);
+    }
   }
 
   function handleChoice(event) {

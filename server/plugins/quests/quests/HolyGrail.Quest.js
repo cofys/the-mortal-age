@@ -245,11 +245,30 @@ module.exports = function registerHolyGrailQuest(api) {
    * Merlin's Crystal's start while that quest is incomplete, and that choice is
    * not ours, so defer until the prerequisite is done.
    */
+  /** Wiki: 20 Attack. */
+  const ATTACK_REQUIREMENT = 20;
+
+  function meetsSkillRequirements(player) {
+    return player.getSkillManager().getMaxLevel(Skill.ATTACK) >= ATTACK_REQUIREMENT;
+  }
+
+  function notifySkillRequirements(player) {
+    if (!meetsSkillRequirements(player)) {
+      player.sendMessage(
+        `You need an Attack level of at least ${ATTACK_REQUIREMENT} to start this quest.`
+      );
+    }
+  }
+
   function handleChoice({ player, npcId, option }) {
     if (!KING_ARTHUR_NPC_IDS.has(npcId)) return;
     if (quest.getStage(player) !== 0) return;
     if (merlinsCrystalIncomplete(player)) return;
     if (String(option ?? "").replace(/[^a-z]/gi, "").toLowerCase() !== "yes") return;
+    if (!meetsSkillRequirements(player)) {
+      notifySkillRequirements(player);
+      return;
+    }
     quest.setStage(player, STAGE_STARTED);
   }
 

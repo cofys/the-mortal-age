@@ -12,8 +12,8 @@ in `server/plugins/bosses/thermonuclear/`. Ticks count from the attack unless st
 Reference implementations in other private servers (behaviour oracles only, never
 justification on their own): Near-Reality's `SmokeDevil.java`/`ThermonuclearBossArea.java`/
 `ThermonuclearSmokeDevilEntrance.java`/`ThermonuclearSmokeDevilProcessor.java`
-(content 9, code 3: the 644 projectile, the 14-tick respawn, the 100k private-room fee
-and the Slayer-task gate all come from there) and ReasonPS' boss sources (checked for
+(content 9, code 3: the 644 projectile, the 14-tick respawn and the 100k private-room
+fee come from there) and ReasonPS' boss sources (checked for
 the same mechanics; no Thermy-specific behaviour is taken from either without a Wiki
 or capture behind it).
 
@@ -22,7 +22,7 @@ or capture behind it).
 | `Common.ThermonuclearSmokeDevil.js` | Ids, tiles, animations, projectile, sound, small helpers. |
 | `Fight.ThermonuclearSmokeDevil.js` | The combat method: the single typeless magic style. |
 | `Typeless.ThermonuclearSmokeDevil.js` | Prayer bypass (100% prayer penetration). |
-| `Area.ThermonuclearSmokeDevil.js` | The multicombat boss room and walk-through flag. |
+| `Area.ThermonuclearSmokeDevil.js` | The multicombat boss room, walk-through flag and smoke devil task gate. |
 | `Entrance.ThermonuclearSmokeDevil.js` | The crevice in and out, with Peek. |
 
 ## Evidence
@@ -94,6 +94,8 @@ negating them, as the Wiki states). The punishment fires when the NPC lands a hi
 there is no ambient smoke tick for standing in the cave (both devils are non-aggressive
 per the definitions, as are dust devils elsewhere).
 - **93 Slayer** to damage it (Wiki; enforced by `Combat.Slayer` from the definition).
+- **Task gate:** the boss and the room's smoke devils can only be attacked on a smoke
+  devil task (Wiki), so `Area.canAttack` asks `slayer:on-task` and refuses an off-task hit.
 - **Max hit 8** comes from the engine (`monsters-complete.json` via
 `NpcDefinition.getMaxHit()`); the plugin creates a plain `PendingHit` and the test
 pins definition and data record together.
@@ -117,8 +119,8 @@ Spec'd Out and Hazard Prevention rules are follow-ups, not implemented here.
 
 ## Not built
 
-- Slayer-task-only attacks (Wiki: smoke devil task, or one diary kill via the Western
-Provinces diary at 93 without boosting) - as with the Kraken's task rule, a follow-up.
+- The Western Provinces diary's single off-task kill (Wiki: at 93 without boosting): the
+  task is not wired to the boss, so the room refuses every off-task attack.
 - Rented private instances (NR: 100k from bank/inventory via the crevice) and the
 Peek/private wording.
 - The exact per-cast projectile ends (they vary a little capture to capture); the fitted

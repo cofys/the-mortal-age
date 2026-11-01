@@ -294,6 +294,12 @@ module.exports = function registerTrollRomanceQuest(api) {
       player.sendMessage("You must complete Troll Stronghold before you can help Ug.");
       return;
     }
+    if (player.getSkillManager().getMaxLevel(Skill.AGILITY) < AGILITY_REQUIREMENT) {
+      player.sendMessage(
+        `You need an Agility level of at least ${AGILITY_REQUIREMENT} to start this quest.`
+      );
+      return;
+    }
     quest.setStage(player, STAGE_STARTED);
   }
 

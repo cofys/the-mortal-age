@@ -257,3 +257,20 @@ test('a crater full of ground items goes as a snapshot and deltas, each inside o
   new PacketSender(player).sendGroundItems([]);
   assert.equal(frames.at(-1)[0], 54, 'an empty view still clears the client');
 });
+
+test('a spellbook re-mount keeps the quest stages that share the spell unlock varps', async () => {
+  require('../dist/Server').Server.installProductionPathResolver();
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { PlayerSession } = require('../dist/net/PlayerSession');
+  const session = new PlayerSession({ isOpen: () => true, send: () => {} });
+  const player = new Player(session); session.setPlayer(player);
+  const sender = player.getPacketSender();
+  const MM_MAIN = 365, NORMAL_SPELLBOOK = 1151;
+  sender.sendTabInterface(6, NORMAL_SPELLBOOK);
+  assert.equal(sender.getVarp(MM_MAIN), 0x7fffffff, 'the login mount unlocks the Ape Atoll Dungeon Teleport');
+  sender.sendConfig(MM_MAIN, 3); // Monkey Madness I re-sends its stage after the bootstrap
+  sender.sendTabInterface(6, NORMAL_SPELLBOOK); // unwielding a greegree, a ferry, a spellbook change
+  assert.equal(sender.getVarp(MM_MAIN), 3, 'a later mount does not mark the quest complete again');
+  assert.equal(sender.getVarbit(4070), 0, 'the mount still publishes the spellbook');
+});

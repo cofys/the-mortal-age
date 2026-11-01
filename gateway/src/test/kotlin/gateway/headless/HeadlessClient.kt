@@ -190,6 +190,20 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
+        /** IF_BUTTONT: the selected component (a spell, or an item's Use) on a target component's slot. */
+        fun buttonT(selected: Int, selectedSub: Int, selectedObj: Int, target: Int, targetSub: Int, targetObj: Int) =
+            sendFixed(
+                IF_BUTTONT,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p4Alt1(target)
+                    p2Alt3(selectedObj)
+                    p4Alt2(selected)
+                    p2Alt3(targetObj)
+                    p2(targetSub)
+                    p2Alt3(selectedSub)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
         /** OPNPC2 (Attack on most NPCs). */
         fun npcOp2(index: Int) =
             sendFixed(
@@ -426,6 +440,7 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val KEEPALIVE_MS = 5_000L
         const val OPNPC2 = 44
         const val OPNPC1 = 92
+        const val IF_BUTTONT = 15
         const val RESUME_PAUSEBUTTON = 16
         const val FRIENDLIST_ADD = 14
         const val MESSAGE_PRIVATE = 50

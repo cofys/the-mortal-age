@@ -932,9 +932,19 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   // Dialogue hooks / actions
   // ==========================================================================
 
+  function gertrudesCatComplete(player) {
+    const request = { player, key: "gertrudes_cat", complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (hook !== START_HOOK || !WANDERER_NPC_IDS.has(npcId)) return;
     if (quest.getStage(player) === STAGE_NOT_STARTED) {
+      if (!gertrudesCatComplete(player)) {
+        player.sendMessage("You must complete Gertrude's Cat to start this quest.");
+        return;
+      }
       player.setAttribute(BITS_ATTRIBUTE, 0);
       player.setAttribute(JAR_ATTRIBUTE, "");
       setStage(player, STAGE_STARTED);

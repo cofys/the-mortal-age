@@ -630,9 +630,40 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
     }
   }
 
+  /** Wiki: 37 Thieving, 37 Mining, 37 Ranged and 33 Magic. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.THIEVING, level: 37, label: "Thieving" },
+    { skill: Skill.MINING, level: 37, label: "Mining" },
+    { skill: Skill.RANGED, level: 37, label: "Ranged" },
+    { skill: Skill.MAGIC, level: 33, label: "Magic" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function meetsSkillRequirements(player) {
+    return missingSkillRequirements(player).length === 0;
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== AWUSAH_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) === STAGE_NOT_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) === STAGE_NOT_STARTED) {
+      if (!meetsSkillRequirements(player)) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   /**

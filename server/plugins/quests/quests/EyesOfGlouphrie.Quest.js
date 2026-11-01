@@ -237,10 +237,24 @@ module.exports = function registerEyesOfGlouphrieQuest(api) {
   }
 
   function meetsStartRequirements(player) {
+    const skills = player.getSkillManager();
     return (
       grandTreeComplete(player) &&
-      player.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) >= CONSTRUCTION_REQUIREMENT
+      skills.getMaxLevel(Skill.CONSTRUCTION) >= CONSTRUCTION_REQUIREMENT &&
+      skills.getMaxLevel(Skill.MAGIC) >= MAGIC_REQUIREMENT
     );
+  }
+
+  function notifyStartRequirements(player) {
+    const skills = player.getSkillManager();
+    if (skills.getMaxLevel(Skill.CONSTRUCTION) < CONSTRUCTION_REQUIREMENT) {
+      player.sendMessage(
+        `You need a Construction level of at least ${CONSTRUCTION_REQUIREMENT} to start this quest.`
+      );
+    }
+    if (skills.getMaxLevel(Skill.MAGIC) < MAGIC_REQUIREMENT) {
+      player.sendMessage(`You need a Magic level of at least ${MAGIC_REQUIREMENT} to start this quest.`);
+    }
   }
 
   function hasRepairItems(player) {
@@ -566,7 +580,10 @@ module.exports = function registerEyesOfGlouphrieQuest(api) {
     if (event.hook !== START_HOOK || !isBrimstail(event.npcId)) return;
     const { player } = event;
     if (quest.getStage(player) !== STAGE_NOT_STARTED) return;
-    if (!meetsStartRequirements(player)) return;
+    if (!meetsStartRequirements(player)) {
+      notifyStartRequirements(player);
+      return;
+    }
     quest.setStage(player, STAGE_STARTED);
   }
 

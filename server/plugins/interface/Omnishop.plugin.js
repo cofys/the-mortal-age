@@ -8,9 +8,10 @@
  *
  * Shops plug in through custom events (the shop owns its currencies and descriptions):
  * - "omnishop:open" { player, shop } opens a shop by its DB row name (`mixology_rewards`).
- * - "omnishop:currency" { player, shop, currency, balance, set }: a currency with no obj
- *   (omnishop_currency_obj) is a points balance the owner answers: it sets `balance` and a
- *   `set(value)` function. A currency with an obj is that item in the inventory.
+ * - "omnishop:currency" { player, shop, currency, itemId, balance, set }: a currency's owner
+ *   answers with `balance` and a `set(value)` function. A currency with no obj has no other
+ *   source; one with an obj is that item in the inventory unless its owner claims it (GotR's
+ *   abyssal pearls are a saved balance).
  * - "omnishop:describe" { player, shop, stock, description }: the info panel's text, which the
  *   cache doesn't carry.
  * - "omnishop:can-buy" { player, shop, stock, itemId, cancel, unlock }: before each unit is
@@ -167,9 +168,18 @@ function currencyObj(currency) {
   return row ? int(row, TABLE.CURRENCY, "omnishop_currency_obj", -1) : -1;
 }
 
-/** The player's balance of a currency, with a setter. */
+/**
+ * The player's balance of a currency, with a setter. An owner may claim a currency even when
+ * the cache gives it an obj: Guardians of the Rift's abyssal pearls are saved as a balance,
+ * though the legacy currency row still names the item. Unclaimed obj currencies stay items.
+ */
 function wallet(player, shop, currency) {
   const obj = currencyObj(currency);
+  const request = { player, shop: shop.name, currency, itemId: obj > 0 ? obj : -1, balance: null, set: null };
+  pluginApi.emitCustomEvent("omnishop:currency", request);
+  if (typeof request.set === "function") {
+    return { balance: Number(request.balance) || 0, set: request.set };
+  }
   if (obj > 0) {
     const inventory = player.getInventory();
     return {
@@ -182,9 +192,7 @@ function wallet(player, shop, currency) {
       },
     };
   }
-  const request = { player, shop: shop.name, currency, balance: null, set: null };
-  pluginApi.emitCustomEvent("omnishop:currency", request);
-  return typeof request.set === "function" ? { balance: Number(request.balance) || 0, set: request.set } : null;
+  return null;
 }
 
 function description(player, shop, entry) {

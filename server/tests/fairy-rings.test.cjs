@@ -214,6 +214,27 @@ test("the rings' Zanaris, Configure and Last-destination options, as the cache n
   assert.equal(options["Last-destination"], T.lastDestination);
 });
 
+test("Zanaris' exit rings: Use teleports out without a staff (as captured for the shed ring)", () => {
+  const options = T.ringOptions();
+  for (const id of [core.ObjectIdentifiers.FAIRY_RING_3, core.ObjectIdentifiers.FAIRY_RING_2]) {
+    assert.equal(CacheDefinitions.getObject(id).actions[0], "Use");
+    assert.equal(options.Use, T.useExitRing);
+  }
+  const shed = { x: 2452, y: 4473, z: 0 };
+  const rec = player({ weapon: -1, at: new Location(shed.x, shed.y, shed.z) });
+  T.useExitRing({ player: rec.p, objectId: core.ObjectIdentifiers.FAIRY_RING_3, location: shed });
+  rec.nextTick();
+  const sent = runTicks(rec, 5).flat();
+  assert.deepEqual(sent.slice(0, 4), ["varbit 12393=1", "gfx 569", "anim 3265 delay 30", "sound 1098"]);
+  assert.ok(sent.includes("teleport 3201,3169"), sent.join(" | "));
+  assert.equal(rec.p.getAttribute(T.USED_CODES_ATTRIBUTE), undefined, "not a travel log code");
+
+  const market = { x: 2486, y: 4471, z: 0 };
+  const out = player({ weapon: -1, at: new Location(market.x, market.y, market.z) });
+  T.useExitRing({ player: out.p, objectId: core.ObjectIdentifiers.FAIRY_RING_2, location: market });
+  assert.ok(runTicks(out, 6).flat().includes("teleport 3260,3171"));
+});
+
 test("travel log favourites: add from a code's star, use and remove them", () => {
   const { p, varbits } = player();
   const aiq = T.rings().get("AIQ");

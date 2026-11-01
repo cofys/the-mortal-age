@@ -153,3 +153,21 @@ test("corruption drains 3, 6 and 9 prayer at 11, 21 and 31 ticks, as captured", 
   assert.equal(events.at(-2)[1], Common.data.corruption.end);
   assert.deepEqual([varbits[12142], varbits[12141], varbits[12140]], [0, 0, 0]);
 });
+
+test("the Muspah's attackable forms hold a freeze for 66% of its base duration", () => {
+  fakeApi.core.CombatMethod = class {};
+  fakeApi.core.CombatType = { RANGED: 0 };
+  fakeApi.registerNpcCombatMethodProvider = () => {};
+  fakeApi.onNpcHitModify = () => {};
+  fakeApi.onNpcBeforeDeath = () => {};
+  const Fight = require("../plugins/bosses/phantommuspah/Fight.PhantomMuspah");
+  Fight.attachFight(fakeApi);
+  for (const form of ["ranged", "melee", "shielded", "final"]) {
+    const freeze = { target: { getId: () => Common.data.npcs[form] }, ticks: 20 };
+    fakeApi.emitCustomEvent("combat:freeze-duration", freeze);
+    assert.equal(freeze.ticks, 20 * 0.66, form);
+  }
+  const teleport = { target: { getId: () => Common.data.npcs.teleport }, ticks: 20 };
+  fakeApi.emitCustomEvent("combat:freeze-duration", teleport);
+  assert.equal(teleport.ticks, 20);
+});

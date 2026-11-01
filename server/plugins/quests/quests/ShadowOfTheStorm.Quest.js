@@ -1333,11 +1333,15 @@ module.exports = function registerShadowOfTheStormQuest(api) {
 
   /** "The Golem" / "Demon Slayer" are the wiki prerequisites for this quest. */
   function shadowPrereqsMet(player) {
-    return questComplete(player, "the_golem") && questComplete(player, "demon_slayer");
+    return (
+      player.getSkillManager().getMaxLevel(Skill.CRAFTING) >= CRAFTING_REQUIREMENT &&
+      questComplete(player, "the_golem") &&
+      questComplete(player, "demon_slayer")
+    );
   }
 
   const PREREQUISITE_MESSAGE =
-    "You need to complete The Golem and Demon Slayer before you can start Shadow of the Storm.";
+    `You need ${CRAFTING_REQUIREMENT} Crafting, The Golem and Demon Slayer before you can start Shadow of the Storm.`;
 
   function refuseShadowStart(player) {
     // The transcript has no prerequisite refusal branch, so use the generic

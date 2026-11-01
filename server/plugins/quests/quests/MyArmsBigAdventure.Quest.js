@@ -914,14 +914,14 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
     return request.complete === true;
   }
 
-  /** Wiki requirements; The Feud has no plugin and is not gated. */
+  /** Wiki requirements: Eadgar's Ruse, The Feud, Jungle Potion, 29 Farming and 10 Woodcutting. */
   function meetsRequirements(player) {
     const skills = player.getSkillManager();
     if (skills.getCurrentLevel(Skill.FARMING) < FARMING_REQUIREMENT) return false;
     if (skills.getMaxLevel(Skill.WOODCUTTING) < WOODCUTTING_REQUIREMENT) return false;
     return (
       isQuestComplete(player, "eadgars_ruse") &&
-      isQuestComplete(player, "troll_stronghold") &&
+      isQuestComplete(player, "the_feud") &&
       isQuestComplete(player, "jungle_potion")
     );
   }

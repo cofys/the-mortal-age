@@ -304,6 +304,14 @@ function ringTiles(npc) {
   return offsets.map(([dx, dy]) => new core.Location(from.x + dx, from.y + dy, from.z));
 }
 
+/** His second form shakes off the first form's drains (Wiki: he resets stat reductions on changing). */
+function restoreStats(npc) {
+  const { ATTACK, STRENGTH, DEFENCE, MAGIC, RANGED } = core.Skill;
+  for (const skill of [ATTACK, STRENGTH, DEFENCE, MAGIC, RANGED]) {
+    npc.setCurrentLevels(skill, npc.getMaxLevel(skill));
+  }
+}
+
 /** His first death: reborn in his second form, with a ring of bolts as he rises. */
 function rebirth(npc, method, boss, fight) {
   fight.reborn = true;
@@ -327,6 +335,7 @@ function rebirth(npc, method, boss, fight) {
     if (!npc.isRegistered()) return;
     npc.setNpcTransformationId(boss.second);
     npc.setHitpoints(npc.getMaxHitpoints());
+    restoreStats(npc);
     fight.form = 2;
     fight.houndsCalled = false;
     fight.houndsPending = false;
@@ -448,4 +457,4 @@ function attach(pluginApi) {
   for (const boss of Object.values(BOSSES)) Common.FIGHTS.set(boss.key, { spawned, reset });
 }
 
-module.exports = { attach, _test: { BOSSES, bashTiles, ringTiles } };
+module.exports = { attach, _test: { BOSSES, bashTiles, ringTiles, restoreStats } };

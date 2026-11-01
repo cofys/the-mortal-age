@@ -24,7 +24,7 @@ const Shrine = require('../plugins/bosses/zulrah/Shrine.Zulrah');
 const Access = require('../plugins/bosses/zulrah/Access.Zulrah');
 const NpcDrops = require('../plugins/npcs/NpcDrops.plugin');
 
-const hooks = { objects: {}, npcs: {}, prompts: [], custom: {}, attack: [], drops: [], death: [], npcDeath: [], emitted: [] };
+const hooks = { objects: {}, npcs: {}, prompts: [], custom: {}, attack: [], drops: [], death: [], npcDeath: [], emitted: [], questStages: new Map() };
 let nextIndex = 1;
 
 function fakeNpc(id, x, y) {
@@ -76,7 +76,11 @@ function fakeApi() {
     onItemAction: () => {},
     onNpcDeath: (handler) => hooks.npcDeath.push(handler),
     onCustomEvent: (name, handler) => (hooks.custom[name] ??= []).push(handler),
-    emitCustomEvent: (name, payload) => { hooks.emitted.push([name, payload]); for (const fn of hooks.custom[name] ?? []) fn(payload); },
+    emitCustomEvent: (name, payload) => {
+      if (name === 'quest:get-stage' && hooks.questStages.has(payload.key)) payload.stage = hooks.questStages.get(payload.key);
+      hooks.emitted.push([name, payload]);
+      for (const fn of hooks.custom[name] ?? []) fn(payload);
+    },
     onNpcDialogueCondition: (fn) => { hooks.condition = fn; },
     onNpcHitModify() {},
     onCanAttack: (handler) => hooks.attack.push(handler),
@@ -157,6 +161,8 @@ before(async () => {
   RegionManager.init();
   ObjectDefinition.init();
   require('../plugins/items/ItemDefinitionLoader.plugin').register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
+  // The Wiki's Regicide requirement: boarding fixtures have reached Port Tyras unless a test says otherwise.
+  hooks.questStages.set('regicide', 15);
   const api = fakeApi();
   Access.attach(api);
   Shrine(api);
@@ -665,6 +671,93 @@ test("access starts at 0: the boat is refused with the priestess's own transcrip
   assert.equal(start[1].variant, Access.VARIANT.priestess.board);
   assert.equal(Fight.fightOf(player) ?? null, null, 'not rowed out');
   assert.equal(Access.stageOf(player), 0);
+});
+
+test('the Port Tyras gate is checked too: before Regicide stage 10 the boat is refused past the High Priestess, never with the sailing transcript', () => {
+  const player = fakePlayer();
+  hooks.questStages.set('regicide', 9);
+  try {
+    player.setAttribute('zulrah:access', 2);
+    hooks.emitted.length = 0;
+    assert.equal(Shrine.quickBoard({ player }), true);
+    let start = hooks.emitted.find(([name]) => name === 'npc-dialogue:start');
+    assert.ok(start, 'the priestess refuses');
+    assert.equal(start[1].variant, Access.VARIANT.priestess.board, 'not accepted: that transcript ends in the ritual');
+    assert.equal(Fight.fightOf(player) ?? null, null, 'not rowed out');
+
+    player.setAttribute('zulrah:access', 3);
+    hooks.emitted.length = 0;
+    Shrine.quickBoard({ player });
+    start = hooks.emitted.find(([name]) => name === 'npc-dialogue:start');
+    assert.equal(start[1].variant, Access.VARIANT.priestess.board, 'still refused past the High Priestess');
+    assert.equal(Fight.fightOf(player) ?? null, null);
+
+    // Her "Yes." menu emits the sail event directly; that must not get around the gate either.
+    player.dialogueActive = false;
+    for (const fn of hooks.custom[Access.SAIL_EVENT] ?? []) fn({ player });
+    ticks(2);
+    assert.equal(Fight.fightOf(player) ?? null, null, 'no sailing past the gate');
+  } finally {
+    hooks.questStages.set('regicide', 15);
+  }
+  Shrine.quickBoard({ player });
+  ticks(2);
+  const fight = Fight.fightOf(player);
+  assert.ok(fight, 'with Regicide played to Port Tyras the stage-3 boat sails');
+  fight.end();
+});
+
+test('the real Regicide quest allows boarding at the Port Tyras milestone (stage 10), not only on completion', () => {
+  const { ObjectIdentifiers } = PluginManager.getCoreApi();
+  const events = new Map();
+  let interact = null;
+  const base = {
+    core: PluginManager.getCoreApi(),
+    onCustomEvent: (name, handler) => (events.get(name) ?? events.set(name, []).get(name)).push(handler),
+    emitCustomEvent: (name, payload) => { for (const handler of events.get(name) ?? []) handler(payload); },
+    onObjectInteraction: (handler) => { interact = handler; },
+    persistAttribute() {},
+  };
+  const api = new Proxy(base, { get: (target, key) => (key in target ? target[key] : () => {}) });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const regicide = require('../plugins/quests/QuestRuntime').getRegisteredQuests().find((quest) => quest.key === 'regicide');
+  assert.ok(regicide, 'the real Regicide quest is registered');
+
+  const attributes = new Map();
+  let sender;
+  sender = new Proxy({}, { get: (_target, key) => (key === 'getVarbit' ? () => 0 : () => sender) });
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => sender,
+    getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+    getLocation: () => new Location(2303, 3214, 0),
+    moveTo() {},
+    sendMessage() {},
+  };
+
+  // Reach the camp the way Regicide does: stage 9, then the dense forest crossing sets stage 10.
+  regicide.setStage(player, 9);
+  interact({ player, objectId: ObjectIdentifiers.DENSE_FOREST_4, location: { x: 2303, y: 3214, z: 0 }, handled: false });
+  assert.equal(regicide.getStage(player), 10, 'the crossing is the Port Tyras milestone');
+  assert.equal(regicide.isComplete(player), false, 'Regicide is still unfinished');
+
+  const previous = Shared.api();
+  Shared.bind(api);
+  try {
+    player.setAttribute('zulrah:access', 3);
+    for (const stage of [10, 12, 14, 15]) {
+      regicide.setStage(player, stage);
+      const query = { player, key: 'regicide', stage: 0 };
+      api.emitCustomEvent('quest:get-stage', query);
+      assert.equal(query.stage, stage, `the runtime answers stage ${stage}`);
+      assert.equal(Access.refuseBoarding(player), false, `stage ${stage} boards`);
+    }
+    regicide.setStage(player, 9);
+    assert.equal(Access.refuseBoarding(player), true, 'pre-milestone boarding is refused');
+  } finally {
+    Shared.bind(previous);
+  }
 });
 
 test("the recorded lines move the stage: told 1, accepted 2, and the ritual's last line rows the player out (3)", () => {

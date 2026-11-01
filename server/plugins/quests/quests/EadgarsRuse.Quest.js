@@ -546,9 +546,27 @@ module.exports = function registerEadgarsRuseQuest(api) {
   // Dialogue events
   // ---------------------------------------------------------------------------
 
+  function meetsSkillRequirements(player) {
+    return player.getSkillManager().getMaxLevel(Skill.HERBLORE) >= HERBLORE_LEVEL;
+  }
+
+  function notifySkillRequirements(player) {
+    if (!meetsSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a Herblore level of at least ${HERBLORE_LEVEL} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== SANFEW_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (!meetsSkillRequirements(player)) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   function handleEadgarLine(event) {

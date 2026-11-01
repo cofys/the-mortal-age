@@ -148,9 +148,22 @@ test('Romeo message and potion changes occur on the captured lines and handover 
   h.line(p,N.ROMEO,'Father Lawrence?').before();assert.equal(h.quest.getStage(p),30);
   h.line(p,N.FATHER_LAWRENCE,"Then Romeo can collect her from the crypt! Go to the Apothecary, tell him I sent you and that you'll need a 'Cadava' potion.").before();assert.equal(h.quest.getStage(p),40);
   h.line(p,N.APOTHECARY,'I have all that, but I need some Cadava berries.').before();assert.equal(h.quest.getStage(p),50);
-  p.items.set(I.CADAVA_BERRIES,1);assert.deepEqual(h.action(p,N.APOTHECARY,'3oxHI6').box.items,[I.CADAVA_BERRIES]);assert.equal(p.items.get(I.CADAVA_BERRIES),1);
+  p.items.set(I.CADAVA_BERRIES,1);assert.deepEqual(h.action(p,N.APOTHECARY,'3oxHI6').box.items,[I.CADAVA_BERRIES]);assert.equal(p.items.get(I.CADAVA_BERRIES),0);
   h.action(p,N.APOTHECARY,'eeTqTE');assert.equal(p.items.get(I.CADAVA_BERRIES),0);assert.equal(p.items.get(I.CADAVA_POTION),1);
   assert.deepEqual(h.action(p,N.JULIET,'9YlDKS').box.items,[I.CADAVA_POTION]);assert.equal(h.quest.getStage(p),50);assert.equal(p.items.get(I.CADAVA_POTION),1);
+});
+
+test('Romeo berries handed over in a closed conversation still make one potion after a relog', () => {
+  const h=harness('RomeoAndJuliet'),p=player(),cond=text=>h.hooks.onNpcDialogueCondition.map(fn=>fn({player:p,npcId:N.APOTHECARY,text})).find(a=>a!==null&&a!==undefined);
+  h.quest.setStage(p,50);p.items.set(I.CADAVA_BERRIES,1);h.action(p,N.APOTHECARY,'Be9l32');
+  assert.equal(p.items.get(I.CADAVA_BERRIES),0);assert.equal(p.attrs.get('romeo-and-juliet:berries-handed-over'),1);
+  h.hooks.onPlayerLogout.at(-1)({player:p});assert.equal(cond('With some cadava berries:'),true);
+  p.full=true;h.action(p,N.APOTHECARY,'Be9l32');assert.equal(h.action(p,N.APOTHECARY,'Cw477j').end,true);
+  assert.equal(p.items.get(I.CADAVA_POTION)??0,0);assert.equal(p.attrs.get('romeo-and-juliet:berries-handed-over'),1);
+  p.full=false;h.action(p,N.APOTHECARY,'Be9l32');assert.equal(p.items.get(I.CADAVA_BERRIES),0);
+  h.action(p,N.APOTHECARY,'Cw477j');assert.equal(p.items.get(I.CADAVA_POTION),1);assert.equal(p.attrs.get('romeo-and-juliet:berries-handed-over'),0);
+  p.items.set(I.CADAVA_POTION,0);assert.equal(cond('Without any cadava berries:'),true);
+  h.action(p,N.APOTHECARY,'Cw477j');assert.equal(p.items.get(I.CADAVA_POTION),0);
 });
 
 test('Juliet and crypt scenes use separate copied maps, retain potion until the last line, and clean up', () => {

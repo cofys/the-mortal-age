@@ -91,7 +91,7 @@ module.exports = function registerCrabQuestQuest(api) {
   const ALL_LEADER_COUNT = 11;
   const SIX_LEADER_COUNT = 6;
   const REQUIREMENTS_MESSAGE =
-    "You need a Sailing level of 40 and a Fishing level of 30 to start this quest.";
+    "You need a Sailing level of 40, a Fishing level of 30 and Pandemonium completed to start this quest.";
 
   // Spawn the cache's raw parents; their stage varbit transform selects the
   // visible/content child. 16469 covers stages 5-40 (16471/16472), 16470 covers
@@ -547,11 +547,18 @@ module.exports = function registerCrabQuestQuest(api) {
     sender.sendVarbit(CRAB_PARTIAL_COMPLETE_VARBIT, 0);
   }
 
+  function pandemoniumComplete(player) {
+    const request = { player, key: "pandemonium", complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function meetsRequirements(player) {
     const skills = player.getSkillManager();
     return (
       skills.getMaxLevel(Skill.SAILING) >= SAILING_REQUIREMENT &&
-      skills.getMaxLevel(Skill.FISHING) >= FISHING_REQUIREMENT
+      skills.getMaxLevel(Skill.FISHING) >= FISHING_REQUIREMENT &&
+      pandemoniumComplete(player)
     );
   }
 

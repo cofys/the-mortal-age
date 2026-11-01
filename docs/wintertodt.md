@@ -8,9 +8,9 @@ Status:
   - roots, kindling, braziers, pyromancers, herbs, potions and the crates;
   - warmth and the Wintertodt's five attacks;
   - the reward cart and its loot;
+  - Ignisia's exchange: uniques for burnt pages or an extra supply crate;
   - the `::teleports` entry and developer commands.
 - **Not done:**
-  - Ignisia's exchange;
   - the discontinued supply crate item;
   - the tome of fire's pages;
   - combat achievements and the diary;
@@ -27,6 +27,8 @@ Status:
 | `Attacks.Wintertodt.js` | The Wintertodt's five attacks and their timing. |
 | `Effects.Wintertodt.js` | Temporary locs, projectiles and graphics for everyone in the prison. |
 | `Rewards.Wintertodt.js` | One search of the reward cart. |
+| `Ignisia.*` | The camp's Exchange: uniques for burnt pages or an extra supply crate. |
+| `Crates.*` | Opening an extra supply crate. |
 | `Doors.*` | The Doors of Dinh, the HUD zones, leaving the prison, login and logout. |
 | `Braziers.*` | Lighting, fixing and feeding braziers. |
 | `Supplies.*` | Roots, kindling, herbs, the crates, rejuvenation potions, Brew'ma, and supplies shattering when dropped. |
@@ -303,6 +305,32 @@ Otherwise the main table:
 - 1/25 each for 3-5 saltpetre and 3-5 dynamite.
 
 A skill table tries its items best first, each at `interpolate(level, low, high) / 256` with the module's values. The level is Crafting, Herblore, Farming, Woodcutting, Mining or Fishing. Materials come noted; seeds don't need to be.
+
+## Ignisia's exchange
+
+Ignisia (7374, in the camp) has an Exchange option. It trades spare Wintertodt uniques for burnt pages or an extra supply crate. The menu and the item-by-item confirmations are the captured ones (chisel 16367, 2553, 9760, 22407); the values are the Wiki's.
+
+**Burnt pages:**
+
+| Traded in | Pages |
+| --- | --- |
+| Each pyromancer piece (hood, garb, robe, boots) | 50 |
+| Warm gloves | 50 |
+| Bruma torch or bruma torch (off-hand) | 50 |
+| Tome of fire (empty) | 250 |
+| The whole outfit at once | 250 (not 4 x 50) |
+
+**Extra supply crate:** each of those items buys one crate. The whole outfit buys one crate holding five rolls instead of one. Its rolls use the reward cart's main table and the dragon axe (1/10,000); they never give the phoenix, burnt pages, the tome, warm gloves, the bruma torch or pyromancer pieces (Wiki). Opening the crate that many times drops overflow if the inventory is full ("Items may fall to the ground and be lost.").
+
+**Dialogue:**
+1. "Do you have something for me?" with "Yes, I do." / "Err... nope. Sorry.".
+2. With a whole outfit: "Would you like to trade in a entire set?" Yes trades the outfit; No goes to the pieces.
+3. "What would you like to trade [your Pyromancer pieces] for?" with "Extra Crate." / "Burnt Pages.".
+4. One title confirmation per item type held: "Trade in 2x Warm gloves for supply crates?" or "Trade in 1x Pyromancer garb for 50x burnt pages?".
+
+Confirmations are rechecked when accepted: equipping, banking or dropping the item while the confirmation is open cancels that payout, and a whole outfit is rechecked before any piece is removed.
+
+A charged tome of fire is refused: "I think you may want to remove the pages before handing that over to me." Empty it first.
 
 ## Not captured yet
 

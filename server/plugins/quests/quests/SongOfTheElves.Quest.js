@@ -3820,9 +3820,10 @@ module.exports = function registerSongOfTheElves(api) {
     }
   }
 
-  // These cache staircases are partly blocked by the castle collision map. Send
-  // the click to the open side of the stair, then let the normal climb task play
-  // with the landing paired to the opposite floor's stair.
+  // The castle's two throne staircases are partly blocked by the collision map.
+  // Keep the click at the player's current tile; `ladders:climb` performs the
+  // same paired-floor transition as the cache staircase action. The prison stair
+  // below has a walkable foot, so it keeps the normal walk-to-object route.
   function routeCastleThroneStairs(event) {
     const object = event?.object;
     const tile = object?.getLocation?.();
@@ -3831,12 +3832,9 @@ module.exports = function registerSongOfTheElves(api) {
     const z = event?.sourceLocation?.z;
     const up = event?.objectId === 15645 && x === 2571 && y === 3295 && z === 0;
     const down = event?.objectId === 15648 && x === 2571 && y === 3295 && z === 1;
-    const prison = event.objectId === PRISON_ENTRY && x === 2569 && y === 3295 && z === 0;
-    if (!up && !down && !prison) return;
+    if (!up && !down) return;
     // There is no walkable interaction tile beside the colliding staircase.
-    // Keep the click at the player's current tile; `ladders:climb` performs the
-    // same paired-floor transition as the cache staircase action.
-    event.destination = prison ? { x: 2571, y: 3293, z: 0 } : { ...event.sourceLocation };
+    event.destination = { ...event.sourceLocation };
   }
 
   function claimCastleThroneStairs(event) {

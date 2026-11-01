@@ -8,6 +8,11 @@
  * multicombat throughout the Slayer-area box. The boss walks through other
  * monsters/players (Wiki), so the flag is ensured for every boss in the room on every
  * tick - a fresh or respawned boss never gets stuck on the room's smoke devils.
+ *
+ * Wiki: the boss and the room's smoke devils can only be attacked on a smoke devil
+ * task, so attacks here are refused unless slayer:on-task covers the target. The one
+ * off-task kill for the Western Provinces Diary is not modelled: the diary task is not
+ * wired to the boss yet.
  */
 const Common = require("./Common.ThermonuclearSmokeDevil");
 
@@ -38,6 +43,12 @@ function areaClass() {
 
     process(character) {
       if (character?.isNpc?.() && Common.isBoss(character)) ensureWalkThrough(character);
+    }
+
+    /** Only a player whose task covers the room's monsters may attack them (Wiki). */
+    canAttack(attacker, target) {
+      if (!attacker?.isPlayer?.() || !target?.isNpc?.()) return null;
+      return Common.onTask(attacker.getAsPlayer(), target) ? null : false;
     }
   };
 }

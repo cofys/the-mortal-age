@@ -155,10 +155,19 @@ function depleteStall(object, ticks) {
   }));
 }
 
+/**
+ * Another character blocks line of sight (Wiki: Line of sight), which is why standing under
+ * the baker is the bakery stalls' documented safe spot. The owner's own check is separate:
+ * an owner sharing the thief's tile may still notice them.
+ */
+function hiddenFromGuards(nearby, player) {
+  return nearby.some((npc) => npc.getHitpoints() > 0 && npc.getLocation().equals(player.getLocation()));
+}
+
 /** A stall always succeeds unless a guard or its owner can see the thief. */
 function caughtStealing(player, stall) {
   const nearby = core.World.getNpcsNear(player.getLocation(), LOOKOUT_RADIUS, player.getPrivateArea());
-  const guards = nearby.filter((npc) => GUARDS.has(String(npc.getDefinition().getName() ?? "").toLowerCase()) && npc.getDefinition().isAttackable() && npc.getHitpoints() > 0 && !npc.getCombat().getTarget());
+  const guards = hiddenFromGuards(nearby, player) ? [] : nearby.filter((npc) => GUARDS.has(String(npc.getDefinition().getName() ?? "").toLowerCase()) && npc.getDefinition().isAttackable() && npc.getHitpoints() > 0 && !npc.getCombat().getTarget());
   const seesPlayer = (npc) => core.RegionManager.canProjectileAttackBounds(npc.getLocation(), player.getLocation(), npc.getSize(), npc.getSize(), 1, 1, player.getPrivateArea());
   const lookout = guards.find((npc) => !npc.getLocation().equals(player.getLocation()) && seesPlayer(npc))
     ?? nearby.find((npc) => stall.owners.includes(npc.getDefinition().getName()) && npc.getHitpoints() > 0

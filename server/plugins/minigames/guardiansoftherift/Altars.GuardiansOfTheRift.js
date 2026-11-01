@@ -243,6 +243,7 @@ function craft(event) {
   Shared.graphic(player, "runecrafting", 92);
   Shared.sound(player, CRAFT_SOUND);
   Shared.addXp(player, "RUNECRAFTING", essence * rune.xp);
+  Game.addContribution(player, essence);
   // Wiki / Mod Elena (30 March 2022): guardian essence cannot award a Rift guardian.
   // Keep the success receipt for other consumers without an ordinary altar pet rate.
   Shared.api().emitCustomEvent("runecrafting:success", {

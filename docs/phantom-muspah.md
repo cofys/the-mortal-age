@@ -59,6 +59,9 @@ Attack speeds are the Wiki's, and match the captures (ranged form 6 ticks, the r
 share is captured: 26 of 119 attacks in ranged form, 92 of 489 shielded, 32 of 167 after the
 shield, with no fixed pattern.
 
+The attackable forms (12077-12080) can be frozen, for 66% of the spell's base duration (Wiki: 33%
+freeze resistance); the teleporting form can't be attacked.
+
 | Attack | What happens | Source |
 | --- | --- | --- |
 | Ranged | Seq 9922; projectile 2329 (start 26, end 60, angle 5, progress 244, heights 32 to 25); sounds 6705 (delay 2), 6787 (21), 6692 (22); the hit lands 2 ticks later, with spot 2293 (delay 60) and sound 6774 when it hits. | capture (608 hits) |
@@ -204,7 +207,8 @@ With the agent MCP (`::muspah`, `::muspahhp`, `::muspahshield`, `::muspahkill`):
 - `tests/phantom-muspah-scoreboard.test.cjs`: the board's rows from the real kill hook, deaths,
   world records across players and a restart, the route to its front tile.
 - `tests/phantom-muspah.test.cjs`: the arena, instance tiles, durations, the frozen cache, Charged
-  ice, the Venator shard rule, the shockwave's shelter, corruption's ticks and drains.
+  ice, the Venator shard rule, the shockwave's shelter, corruption's ticks and drains, the freeze
+  resistance.
 
 How it all looks (graphics, the overlay, spikes rising and moving) is left to playing it.
 
@@ -213,7 +217,6 @@ How it all looks (graphics, the overlay, spikes rising and moving) is left to pl
 - Sergeant Raymond's warning at the crevice.
 - Enchanted sapphire bolts and corruption spells draining the shield.
 - The defence drain floor (125) and its reset when the shield goes up.
-- The 33% freeze resistance.
 - Combat Achievements counts the kill from the Muspah's death, so its task messages come before
   the kill count (live sends the kill count first). Counting it by event instead would lose the
   speed and other tasks derived from the fight.

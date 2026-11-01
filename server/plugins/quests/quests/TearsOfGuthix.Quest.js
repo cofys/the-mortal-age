@@ -228,11 +228,35 @@ module.exports = function registerTearsOfGuthixQuest(api) {
     return null;
   }
 
+  /** Wiki: 49 Firemaking with 43 quest points (20 Mining and 20 Crafting gate the cave). */
+  const START_REQUIRED_SKILLS = [
+    { skill: Skill.FIREMAKING, level: 49, label: "Firemaking" },
+    { skill: Skill.MINING, level: MIN_MINING_LEVEL, label: "Mining" },
+    { skill: Skill.CRAFTING, level: MIN_CRAFTING_LEVEL, label: "Crafting" },
+  ];
+
+  function missingStartSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return START_REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifyStartSkillRequirements(player) {
+    for (const requirement of missingStartSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== JUNA_NPC_ID || hook !== START_HOOK) return;
     if (quest.getStage(player) !== STAGE_NOT_STARTED) return;
     if (questPoints(player) < MIN_QUEST_POINTS) {
       player.sendMessage(`You need at least ${MIN_QUEST_POINTS} Quest Points to start this quest.`);
+      return;
+    }
+    if (missingStartSkillRequirements(player).length > 0) {
+      notifyStartSkillRequirements(player);
       return;
     }
     quest.setStage(player, STAGE_STONE_BOWL);

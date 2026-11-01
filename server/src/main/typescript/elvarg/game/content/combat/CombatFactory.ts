@@ -135,13 +135,14 @@ export class CombatFactory {
                 player.getCombat().setRangedWeapon(resolvedWeapon);
             }
 
-            if (
-                player.getCombat().getCastSpell() != null ||
-                (player.getCombat().getAutocastSpell() != null && player.getEquipment().hasStaffEquipped())
-            ) {
+            // An explicit spell click owns the action even if a weapon special is armed.
+            if (player.getCombat().getCastSpell() != null) {
                 return CombatFactory.MAGIC_COMBAT;
             }
 
+            // A weapon's own resolver knows its special method (the Toxic blowpipe's
+            // real method, including its drain and heal), so it comes before the
+            // registered special's generic fallback method.
             for (const resolver of PluginManager.getCombatMethodResolvers()) {
                 const resolved = resolver.resolve(attacker);
                 if (resolved) {
@@ -149,9 +150,15 @@ export class CombatFactory {
                 }
             }
 
+            // An activated special owns this swing even while a spell is autocast:
+            // OSRS lets the staff's special (Immolate/Invocate) override autocast.
             const special = getPlayerCombatSpecial(player);
             if (player.isSpecialActivated() && special != null) {
                 return special.getCombatMethod();
+            }
+
+            if (player.getCombat().getAutocastSpell() != null && player.getEquipment().hasStaffEquipped()) {
+                return CombatFactory.MAGIC_COMBAT;
             }
 
             if (player.getCombat().getRangedWeapon() != null) {
@@ -1045,7 +1052,18 @@ export class CombatFactory {
             if ((definition.isPoisonous() || venomous) && Misc.getRandom(10) <= 5) {
                 // Venom stores its starting damage rather than a severity, and
                 // escalates from there - see CombatPoisonData.getMeleeSeverity.
-                CombatFactory.poisonEntity(target, venomous ? 6 : 30, venomous ? 2 : 1);
+                const poison = {
+                    attacker,
+                    target,
+                    // Severity, not the first hit: see CombatPoisonEffect.damageFromSeverity.
+                    severity: venomous ? 6 : 30,
+                    venomous,
+                    handled: false,
+                };
+                PluginManager.emitCustomEvent("combat:npc-poison", poison);
+                if (!poison.handled && poison.severity > 0) {
+                    CombatFactory.poisonEntity(target, poison.severity, poison.venomous ? 2 : 1);
+                }
             }
         }
 

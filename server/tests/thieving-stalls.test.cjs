@@ -257,6 +257,30 @@ test('standing under the baker remains a safe spot', () => {
     assert.equal(baker.chats.length, 0);
 });
 
+test('a character on the thief\'s tile blocks a nearby guard\'s clear line of sight', () => {
+    const who = player();
+    const guard = npc('Guard', { attackable: true });
+    npc('Baker', { x: 3200 });
+    click(who, object());
+    advance();
+    assert.deepEqual(guard.attacks, []);
+    assert.deepEqual(guard.chats, []);
+    assert.equal(who.items.length, 1);
+    assert.deepEqual(who.xp, [92]);
+});
+
+test('a dead or distant character does not hide the thief from a guard', () => {
+    for (const options of [{ x: 3200, hp: 0 }, { x: 3204 }]) {
+        npcs = [];
+        npc('Baker', options);
+        const who = player(), guard = npc('Guard', { attackable: true });
+        click(who, object());
+        assert.deepEqual(guard.attacks, [who]);
+        assert.deepEqual(guard.chats, ["Hey! Get your hands off there!"]);
+        assert.equal(who.items.length, 0);
+    }
+});
+
 // rsprox recordings 3220 (tea) and 1554 (bread, silver, gem):
 // the reward and empty stall arrive one tick after the attempt animation.
 test('recorded stall theft rewards follow the attempt by one tick', () => {

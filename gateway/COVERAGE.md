@@ -74,7 +74,7 @@ sessions, so the browser wire format doesn't change.
 | IF_BUTTON (if1) / IF_BUTTONX | 13 / 91 | mapped | 2 | mapped early: returning accounts log in to the welcome screen, whose play button is an IF_BUTTONX |
 | IF_SUBOP | 89 | mapped | 4 | |
 | IF_BUTTOND | 1, or 242 INVENTORY_MOVE for 149:0 | mapped | 4–5 | |
-| IF_BUTTONT | 90, or 241 INVENTORY_USE_ON for item on item | mapped | 4–5 | |
+| IF_BUTTONT | 90, or 241 INVENTORY_USE_ON for item on item | mapped | 4–5 | the client only sends it onto a slot whose events make it a target: the gateway adds live's target events (bits 11-16 and 21) to tsps's inventory slots (149:0), which the browser builds its menus without |
 | IF_SCRIPT_TRIGGER | 30 IF_TRIGGEROPLOCAL | mapped | 4 | the script's crc goes in tsps's op field; the argument bytes pass through |
 | RESUME_PAUSEBUTTON / P_COUNT / P_NAME / P_STRING / P_LONG | 62 / 192 / 193 / 194 / 192 | mapped | 4 | a long count is clamped to an int |
 | CLOSE_MODAL | 55 IF_CLOSE | mapped | 4 | |

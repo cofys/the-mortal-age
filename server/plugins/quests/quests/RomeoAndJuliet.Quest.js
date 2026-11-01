@@ -52,11 +52,16 @@ module.exports = function registerRomeoAndJulietQuest(api) {
 
   const RJ = (variant) => ({ page: "Romeo & Juliet", variant });
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
+  const handedOverBerries = (player) => Boolean(player.getAttribute(BERRIES_ATTRIBUTE));
+  /** Carried berries, or berries already handed over in a conversation that ended before the potion. */
+  const hasBerries = (player) => held(player, CADAVA_BERRIES_ITEM_ID) || handedOverBerries(player);
 
   const PHILLIPA_NPC_ID=NpcIdentifiers.PHILLIPA, DRAUL_NPC_ID=NpcIdentifiers.DRAUL_LEPTOC;
   const CONGREGATION_NPC_ID=5042; // cache congregation1
   const JULIET_VARBIT=1838; // romeo_juliet_in_crypt
   const MESSAGE_ATTRIBUTE="romeo-and-juliet:message-delivered";
+  /** Berries the Apothecary took at "You hand over the berries" but has not yet turned into a potion. */
+  const BERRIES_ATTRIBUTE="romeo-and-juliet:berries-handed-over";
   const POTION_VARIANT="delivering-the-potion-talking-to-juliet", CRYPT_VARIANT="rescuing-juliet-talking-to-romeo";
   const POTION_FIRST_VARIANT="making-the-cadava-potion-talking-to-the-apothecary", POTION_AGAIN_VARIANT=POTION_FIRST_VARIANT+"-again";
   const LOOK_VARIANT=POTION_AGAIN_VARIANT+"-look-at-the-potion", DRINK_VARIANT=POTION_AGAIN_VARIANT+"-drinking-the-potion-at-the-apothecary-s", OUTSIDE_VARIANT=POTION_AGAIN_VARIANT+"-attempting-to-drink-the-potion-elsewhere";
@@ -158,7 +163,7 @@ module.exports = function registerRomeoAndJulietQuest(api) {
     }
     if (stage >= STAGE_SPOKEN_TO_APOTHECARY) {
       const carriedPotion = held(player, CADAVA_POTION_ITEM_ID);
-      const carriedBerries = held(player, CADAVA_BERRIES_ITEM_ID);
+      const carriedBerries = hasBerries(player);
       return [
         ...romeoLines,
         "",
@@ -272,10 +277,10 @@ module.exports = function registerRomeoAndJulietQuest(api) {
     if (npcId === APOTHECARY_NPC_ID) {
       if (value.includes("has not started romeo & juliet")) return stage < STAGE_SPOKEN_TO_ROMEO;
       if (value.includes("has completed romeo & juliet")) return stage >= STAGE_COMPLETE;
-      if (value.includes("does not have cadava berries")) return !held(player, CADAVA_BERRIES_ITEM_ID);
-      if (value.includes("has cadava berries")) return held(player, CADAVA_BERRIES_ITEM_ID);
-      if (value.includes("without any cadava berries")) return !held(player, CADAVA_BERRIES_ITEM_ID);
-      if (value.includes("with some cadava berries")) return held(player, CADAVA_BERRIES_ITEM_ID);
+      if (value.includes("does not have cadava berries")) return !hasBerries(player);
+      if (value.includes("has cadava berries")) return hasBerries(player);
+      if (value.includes("without any cadava berries")) return !hasBerries(player);
+      if (value.includes("with some cadava berries")) return hasBerries(player);
       if (value.includes("with the cadava potion")) return held(player, CADAVA_POTION_ITEM_ID);
       if (value.includes("after giving juliet the cadava potion")) {
         return stage >= STAGE_JULIET_IN_CRYPT;
@@ -369,7 +374,13 @@ module.exports = function registerRomeoAndJulietQuest(api) {
     }
 
     if (stepId === APOTHECARY_TAKES_BERRIES || stepId === APOTHECARY_TAKES_BERRIES_AGAIN) {
-      if (!held(player, CADAVA_BERRIES_ITEM_ID)) return;
+      // The berries leave the inventory with this box, as its text says. The saved attribute
+      // keeps them handed over if the conversation is closed before the potion is given.
+      if (!handedOverBerries(player)) {
+        if (!held(player, CADAVA_BERRIES_ITEM_ID)) return;
+        player.getInventory().deleteNumber(CADAVA_BERRIES_ITEM_ID,1);
+        player.setAttribute(BERRIES_ATTRIBUTE,1);
+      }
       berryHandover.add(player);mixed.delete(player);event.box={items:[CADAVA_BERRIES_ITEM_ID]};
       event.handled = true;
       event.end = false;
@@ -377,9 +388,17 @@ module.exports = function registerRomeoAndJulietQuest(api) {
     }
 
     if (stepId === APOTHECARY_GIVES_POTION || stepId === APOTHECARY_GIVES_POTION_AGAIN) {
-      if (!berryHandover.has(player) || !held(player,CADAVA_BERRIES_ITEM_ID)) {event.handled=true;event.end=true;return;}
+      if (!berryHandover.has(player) || !handedOverBerries(player)) {event.handled=true;event.end=true;return;}
+      // The slot the berries freed may have been filled since an interrupted hand-over:
+      // keep the saved hand-over so the player can make space and talk to him again.
+      if (player.getInventory().isFull()) {
+        berryHandover.delete(player);mixed.delete(player);
+        // shortcut: no capture of this case; wording follows Juliet's full-inventory message.
+        player.sendMessage("You need a free inventory space before the Apothecary can give you the potion.");
+        event.handled=true;event.end=true;return;
+      }
       {
-        player.getInventory().deleteNumber(CADAVA_BERRIES_ITEM_ID,1);berryHandover.delete(player);mixed.delete(player);
+        player.setAttribute(BERRIES_ATTRIBUTE,0);berryHandover.delete(player);mixed.delete(player);
         player.getInventory().adds(CADAVA_POTION_ITEM_ID, 1);
         event.box={items:[CADAVA_POTION_ITEM_ID]};
         if (quest.getStage(player) < STAGE_SPOKEN_TO_APOTHECARY) {
@@ -576,6 +595,7 @@ module.exports = function registerRomeoAndJulietQuest(api) {
   api.onObjectInteraction(pickCadavaBerries);
   api.onItemAction(handleItemAction);
   api.persistAttribute(MESSAGE_ATTRIBUTE,0);
+  api.persistAttribute(BERRIES_ATTRIBUTE,0);
   api.onPlayerLogin(restoreJuliet);
   api.onPlayerLogout(handleLogout);
 };

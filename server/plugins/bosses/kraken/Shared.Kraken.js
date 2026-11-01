@@ -60,4 +60,17 @@ function alive(entity) {
   return !!entity?.isRegistered?.() && (entity.getHitpoints?.() ?? 1) > 0;
 }
 
-module.exports = { bind, core, ids, surfacedFor, isMagicOnlyId, alive, SURFACE_ANIM };
+/**
+ * Whether the player's Slayer task covers this cove monster (Wiki: every creature in the
+ * cove can only be killed on a Kraken or cave kraken task). The tentacles belong to the
+ * Kraken fight but carry no task of their own, so they are asked about as the boss.
+ */
+function onTask(player, npc) {
+  const { BOSS, TENTACLE } = ids();
+  const npcId = npc?.getId?.() === TENTACLE ? BOSS : npc?.getId?.();
+  const request = { player, npc, npcId, location: npc?.getLocation?.(), onTask: false };
+  state.api.emitCustomEvent("slayer:on-task", request);
+  return request.onTask === true;
+}
+
+module.exports = { bind, core, ids, surfacedFor, isMagicOnlyId, alive, onTask, SURFACE_ANIM };

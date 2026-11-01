@@ -39,6 +39,8 @@ let ABYSS_INNER_RING;
 
 const RUNE_MYSTERIES_STAGE_ATTRIBUTE = "quest.rune_mysteries.stage";
 const RUNE_MYSTERIES_COMPLETE_STAGE = 6;
+const ENTER_THE_ABYSS_KEY = "enter_the_abyss";
+const ABYSS_LOCKED_MESSAGE = "You need to complete Enter the Abyss before you can enter the Abyss.";
 const ABYSS_OBSTACLE_XP = 25;
 const ABYSS_SKULL_SECONDS = 10 * 60;
 /**
@@ -302,6 +304,13 @@ function hasTool(player, itemIds) {
 function hasCompletedRuneMysteries(player) {
   const stage = Number(player.getAttribute(RUNE_MYSTERIES_STAGE_ATTRIBUTE));
   return Number.isFinite(stage) && stage >= RUNE_MYSTERIES_COMPLETE_STAGE;
+}
+
+/** The Mage of Zamorak only shares the Abyss after Enter the Abyss (Wiki). */
+function hasCompletedEnterTheAbyss(player) {
+  const request = { player, key: ENTER_THE_ABYSS_KEY, complete: false };
+  pluginApi.emitCustomEvent("quest:is-complete", request);
+  return request.complete === true;
 }
 
 function requestTeleport(player, destination) {
@@ -785,6 +794,10 @@ function afterTicks(ticks, action) {
 }
 
 function teleportToAbyss(player) {
+  if (!hasCompletedEnterTheAbyss(player)) {
+    player.sendMessage(ABYSS_LOCKED_MESSAGE);
+    return;
+  }
   if (!TeleportHandler.checkReqs(player, ABYSS_INNER_RING)) {
     return;
   }

@@ -467,8 +467,26 @@ module.exports = function registerFairytaleIGrowingPainsQuest(api) {
     player.setAttribute(GARDENERS_ATTRIBUTE, asked.join(","));
   }
 
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== MARTIN_NPC_ID || hook !== START_HOOK) return;
+    if (quest.getStage(player) === 0) {
+      const missing = [
+        { key: "lost_city", name: "Lost City" },
+        { key: "nature_spirit", name: "Nature Spirit" },
+      ].filter((requirement) => !questIsComplete(player, requirement.key));
+      if (missing.length > 0) {
+        for (const requirement of missing) {
+          player.sendMessage(`You must complete ${requirement.name} to start this quest.`);
+        }
+        return;
+      }
+    }
     advance(player, STAGE_STARTED);
     sendProgressVarbits(player);
   }

@@ -63,6 +63,13 @@ function isBoss(npc) {
   return npc?.getId?.() === BOSS_ID;
 }
 
+/** Whether the player's Slayer task is smoke devils (the boss can only be fought on one, Wiki). */
+function onTask(player, npc) {
+  const request = { player, npc, onTask: false };
+  api.emitCustomEvent("slayer:on-task", request);
+  return request.onTask === true;
+}
+
 /** Players fighting in the same room as `npc`: in the lair and alive. */
 function playersInRoom(npc) {
   const area = npc.getPrivateArea?.() ?? null;
@@ -75,7 +82,7 @@ module.exports = {
   LAIR, OUTSIDE_TILE, INSIDE_TILE,
   ANIM_ATTACK, PROJECTILE_ID, IMPACT_ID, ATTACK_SOUND,
   ATTACK_SPEED, ATTACK_DISTANCE, HIT_DELAY_TICKS,
-  init, location, within, inLair, isBoss, playersInRoom,
+  init, location, within, inLair, isBoss, onTask, playersInRoom,
   get api() { return api; },
   get core() { return core; },
 };

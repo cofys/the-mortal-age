@@ -90,6 +90,7 @@ class Fight {
     this.muspah = muspah;
     muspah.__skipDefaultRespawn = true;
     muspah.__muspahFight = this;
+    muspah.setFlag("combat:freezable", true);
     muspah.setMaxHitpoints(boss.hitpoints);
     muspah.setHitpoints(boss.hitpoints);
     muspah.setHealthBar(boss.healthBar);
@@ -418,6 +419,14 @@ function combatClass() {
   };
 }
 
+/** The Muspah's attackable forms hold a freeze for 66% of its base duration (Wiki). */
+function freezeDuration(event) {
+  const { npcs } = Common.data;
+  if (![npcs.ranged, npcs.melee, npcs.shielded, npcs.final].includes(event.target?.getId?.())) return;
+  event.ticks *= 0.66;
+}
+
+/** A hit on the Muspah: the shield, the shield skip, and the form switch's count. */
 function onMuspahHit({ npc, hit }) {
   npc?.__muspahFight?.hitMuspah(hit);
 }
@@ -442,6 +451,7 @@ function attachFight(api) {
   }
   api.onNpcHitModify(onMuspahHit);
   api.onNpcBeforeDeath(beforeDeath);
+  api.onCustomEvent("combat:freeze-duration", freezeDuration);
 }
 
 module.exports = { attachFight, start };

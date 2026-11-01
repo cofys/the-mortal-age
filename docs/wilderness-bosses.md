@@ -102,7 +102,7 @@ Damage in the second form is a quarter higher (Vet'ion's 35 bash becomes the Wik
 - **Lightning**, every attack he isn't bashing: a magic (`npc_vetion_attack_magic_01/02`, cast graphic 2344/2345) or a melee swing (`attack_melee_01/02`, graphic 2348), said aloud (19 captured lines; capitals in the second form). One bolt on or next to each player in the lair (up to 7) and 4 more within 8 tiles, shown at once (2346, orange 2347 in the second form); 3 ticks later each strikes its 3x3.
 - **Shield bash** (`defend_parry_01/02`, 8 captured lines, about one attack in six next to a player): shadows (1446) on one side two deep (widening by a tile each row), a corner's two-deep L, or one deep all round him; 3 ticks later dust (2184) and the hit on those standing in them, with "The shield bash staggers you, slowing your next attack!" and 8 ticks before they may attack.
 - **Hellhounds** at half health: 3 ticks after the hit that crossed, `defend_shield_01/02` and one of six lines, and two hounds within 6 tiles. He takes no damage while they live, and a tenth before they come. When the last dies he says one of four lines.
-- **Rebirth** at 0 in his first form, as captured: a tick on he becomes his rising form (12002 / 11995); the next tick "Now... DO IT AGAIN!!!" and twelve orange bolts in a ring 3 tiles from his middle (standing under him is safe); then `npc_vetion_enrage_01` with 2345; 5 ticks after the death he is his second form at full health, attacking every 5 ticks instead of 6.
+- **Rebirth** at 0 in his first form, as captured: a tick on he becomes his rising form (12002 / 11995); the next tick "Now... DO IT AGAIN!!!" and twelve orange bolts in a ring 3 tiles from his middle (standing under him is safe); then `npc_vetion_enrage_01` with 2345; 5 ticks after the death he is his second form at full health, his Attack, Strength, Defence, Magic and Ranged restored (the first form's reductions reset), attacking every 5 ticks instead of 6.
 - **His coffin** (Vet'ion (3293, 10210, 1), Calvar'ion (1885, 11554, 1)): 43108 while he lives, 46910 from his rebirth, 46911 when he dies.
 - **Death:** `npc_vetion_death_02` with one of five lines, loot and removal 6 ticks later; back 15 (Vet'ion) or 14 (Calvar'ion) ticks after that. First attack 5 ticks after the spawn (`npc_vetion_spawn_01`).
 
@@ -139,7 +139,7 @@ From the Wiki only: there is no capture of her fight or her cave.
 ## Not done, or not verified
 
 - The unpaid-fee and no-discount Check-Fee wording, the bank fee messages, the gate and teleport-lock messages, and a fee with a full discount (entered free, silently).
-- Spiderlings raising her damage and cutting the player's and thralls' (Wiki gives no numbers); Vet'ion's stat restore on rebirth; the second rising NPC (11996) captured beside him, a visual only.
+- Spiderlings raising her damage and cutting the player's and thralls' (Wiki gives no numbers); the second rising NPC (11996) captured beside him, a visual only.
 - Singles-plus is shown (the icon) but plays as singles.
 - **An abandoned fight starts over:** a lair boss that has had no target and not been hit for 100 ticks gets its hitpoints and first form back, its hounds, spiderlings, traps and webs go, and its damage record clears (our timing; OSRS's isn't known).
 - Scorpia's fight and cave are uncaptured.

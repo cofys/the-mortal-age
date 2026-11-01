@@ -325,10 +325,32 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
     return request.complete === true;
   }
 
+  /** Wiki: 72 Mining, 68 Agility, 66 Firemaking and 35 Construction. */
+  const SKILL_REQUIREMENTS = [
+    { skill: Skill.MINING, level: 72, label: "Mining" },
+    { skill: Skill.AGILITY, level: 68, label: "Agility" },
+    { skill: Skill.FIREMAKING, level: FIREMAKING_REQUIREMENT, label: "Firemaking" },
+    { skill: Skill.CONSTRUCTION, level: 35, label: "Construction" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return SKILL_REQUIREMENTS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function meetsRequirements(player) {
-    if (player.getSkillManager().getCurrentLevel(Skill.FIREMAKING) < FIREMAKING_REQUIREMENT) return false;
+    if (missingSkillRequirements(player).length > 0) return false;
     return (
       isQuestComplete(player, "my_arms_big_adventure") &&
+      isQuestComplete(player, "swan_song") &&
       isQuestComplete(player, "cold_war") &&
       isQuestComplete(player, "romeo_and_juliet")
     );
@@ -406,6 +428,10 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
 
   function startQuest(player) {
     if (quest.getStage(player) >= STAGE_STARTED) return;
+    if (!meetsRequirements(player)) {
+      notifySkillRequirements(player);
+      return;
+    }
     resetRunState(player);
     advanceTo(player, STAGE_STARTED);
   }

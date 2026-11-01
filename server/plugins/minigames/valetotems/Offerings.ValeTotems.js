@@ -65,6 +65,7 @@ function collect(player, site) {
   player.getInventory().refreshItems();
   State.set(player, site, { points: 0 });
   player.sendMessage(`You collect ${points} offerings.`);
+  Shared.api().emitCustomEvent("vale-totems:offerings-claimed", { player, site, points });
 }
 
 function inspectPile(event) {

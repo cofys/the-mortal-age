@@ -1,12 +1,15 @@
 "use strict";
 
 /**
- * Kraken Cove multicombat (see ../Kraken.plugin.js for behaviour and sources).
+ * Kraken Cove multicombat and task gate (see ../Kraken.plugin.js for behaviour and sources).
  *
  * The boss fights beside four tentacles and cave krakens swarm the lake, so the cove
  * is multicombat throughout its Slayer-area box (plugins/skills/data/slayer-areas.json:
  * Kraken Cove [[2240, 9984, 2300, 10048]]). Per-area opt-in, as AreaManager requires
  * outside the Wilderness.
+ *
+ * Wiki: every creature in the cove can only be killed on a Kraken or cave kraken task,
+ * so attacks here are refused unless slayer:on-task covers the target.
  */
 
 const Shared = require("./Shared.Kraken");
@@ -27,6 +30,12 @@ function areaClass() {
 
     isMulti() {
       return true;
+    }
+
+    /** Only a player whose task covers the cove's monsters may attack them (Wiki). */
+    canAttack(attacker, target) {
+      if (!attacker?.isPlayer?.() || !target?.isNpc?.()) return null;
+      return Shared.onTask(attacker.getAsPlayer(), target) ? null : false;
     }
   };
 }

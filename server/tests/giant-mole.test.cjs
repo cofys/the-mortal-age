@@ -13,6 +13,18 @@ before(async () => {
   new NpcDefinitionLoader().load();
   core = PluginManager.getCoreApi();
 });
+const NpcDefinition = require('../dist/game/definition/NpcDefinition').NpcDefinition;
+
+test('the mole fights with its own combat anims from the combat defs at speed 4', t => {
+  const defs = require('../data/definitions/npc-combat-defs.json').npcs;
+  assert.deepEqual(defs['5779'].anims, { attack: 3312, block: 3311, death: 3310 });
+  const def = NpcDefinition.forId(5779);
+  assert.equal(def.getAttackAnim(), 3312, 'mole_attack');
+  assert.equal(def.getDefenceAnim(), 3311, 'mole_defend');
+  assert.equal(def.getDeathAnim(), 3310, 'mole_death');
+  assert.equal(def.getAttackSpeed(), 4, 'wiki attack speed');
+});
+
 function scene(t, hp = 80, random = 0) {
   const hooks = {}, tasks = [];
   const api = new Proxy({ core, getTaskManager: () => core.TaskManager,
@@ -149,6 +161,25 @@ test('resurfacing restores targetability and moves to a different spot', t => {
   assert.equal(s.npc.isVisible(), true);
   assert.equal(s.npc.getCombat().getTarget(), null);
   assert.equal(s.npc.getLocation().equals(old), false);
+});
+
+test('a spade on the mole hill digs the player into the lair', t => {
+  const s = scene(t);
+  s.p.setLocation(new core.Location(2997, 3375, 0));
+  s.hooks.onItemOnObject({ player: s.p });
+  assert.ok(s.p.getLocation().equals(new core.Location(1752, 5236, 0)), 'lands at the lair entrance');
+  assert.equal(s.p.getAnimation()?.getId(), 830, 'shared dig animation');
+});
+
+test('the rope at the mole hole climbs the player back out of the lair', t => {
+  const s = scene(t);
+  s.p.setLocation(new core.Location(1752, 5136, 0));
+  assert.equal(s.hooks.onObjectFirstClick({ player: s.p, location: new core.Location(1752, 5136, 0) }), true);
+  assert.ok(s.p.getLocation().equals(new core.Location(2984, 3314, 0)));
+  const elsewhere = new core.Location(1750, 5130, 0);
+  s.p.setLocation(elsewhere);
+  assert.equal(s.hooks.onObjectFirstClick({ player: s.p, location: new core.Location(1750, 5130, 0) }), false);
+  assert.ok(s.p.getLocation().equals(elsewhere), 'a click away from the rope leaves the player put');
 });
 
 test('the real thrall attack path can trigger a burrow after its damage lands', t => {

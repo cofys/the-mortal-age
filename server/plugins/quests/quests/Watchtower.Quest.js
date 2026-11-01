@@ -859,9 +859,37 @@ module.exports = function registerWatchtowerQuest(api) {
     return null;
   }
 
+  /** Wiki: 40 Mining, 25 Agility, 15 Thieving, 14 Herblore and 14 Magic. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.MINING, level: 40, label: "Mining" },
+    { skill: Skill.AGILITY, level: 25, label: "Agility" },
+    { skill: Skill.THIEVING, level: 15, label: "Thieving" },
+    { skill: Skill.HERBLORE, level: 14, label: "Herblore" },
+    { skill: Skill.MAGIC, level: 14, label: "Magic" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== WIZARD_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (missingSkillRequirements(player).length > 0) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   function handInRelicPart(player, index) {

@@ -51,11 +51,11 @@
  * the cache dumps and the npc/item/object identifier files.
  *
  * Gaps / approximations:
- * - Enter the Abyss has no implementation on this server; the wiki "has not
- *   completed Enter the Abyss" condition is answered with Rune Mysteries
- *   completion (which Enter the Abyss itself requires), so the quest starts once
- *   Rune Mysteries is complete. The 10 Runecrafting requirement is enforced
- *   through the transcript's own condition (unboosted level).
+ * - Enter the Abyss is a real prerequisite. The Mage of Zamorak is left to that
+ *   miniquest until it is complete, so legacy saves that started or finished
+ *   Temple of the Eye before Enter the Abyss existed can still complete it.
+ *   The 10 Runecrafting requirement is enforced through the transcript's own
+ *   condition (unboosted level).
  * - The Guardians of the Rift minigame is not implemented; the quest only uses
  *   the temple lobby map that is in the cache. "Access to the minigame" is the
  *   portal in the Wizards' Tower basement and the temple map.
@@ -91,6 +91,13 @@
  *   played while this quest is complete (the pages are shared with other content).
  * - The Abyss one-time teleport from the Mage of Zamorak is handled here; the
  *   Runecrafting plugin's Abyss teleport (the "Teleport" option) is left alone.
+ * - The six journal objectives are ordered by the canonical stage. Every
+ *   state-changing transcript action and hand-in checks that stage and the items
+ *   the step consumes, so a skipped or replayed line cannot advance the quest.
+ * - The eye amulet and Abyssal incantation are reclaimable from Persten, the
+ *   Dark Mage or Sedridor while their hand-over is still current. They are
+ *   destroyed on hand-in, on completion, and on the next login of a completed
+ *   save; the tutorial's buckets, tea and cells are consumed by their steps.
  */
 module.exports = function registerTempleOfTheEyeQuest(api) {
   const {
@@ -152,6 +159,25 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const STAGE_CLOSED = 120;
   const STAGE_FINAL = 125;
   const STAGE_COMPLETE = 130;
+
+  // The six journal objectives, in the only order the stages allow. `at` is the
+  // stage on which the objective is complete; the journal strikes it through.
+  const OBJECTIVES = [
+    { at: STAGE_APPRAISED, text: "Investigate the eye amulet with Wizard Persten." },
+    { at: STAGE_TEA_DRUNK, text: "Bring Herbert, the Mage of Zamorak, a bucket of water and a strong cup of tea." },
+    { at: STAGE_ENERGY_DONE, text: "Solve the Dark Mage's rune-order puzzle in the Abyss." },
+    { at: STAGE_PORTAL_OPEN, text: "Open the Wizards' Tower portal." },
+    { at: STAGE_GUARDIAN, text: "Explore the Temple of the Eye." },
+    { at: STAGE_COMPLETE, text: "Complete the Guardians of the Rift tutorial to close the rift." },
+  ];
+
+  // Transcript message steps that change quest state. They are routed through
+  // handleMessageStep even if a caller omits the dialogue runner's `kind`.
+  const MESSAGE_STEP_IDS = new Set([
+    "MMRv1P", "pNBge3", "wIL3wh", "FJLAsS", "QDRpz2", "L04HOi", "4t9kd_",
+    "BOdA6N", "5f9QJZ", "PRt-AR", "qOBPPr", "9mZfyI", "SzAddC", "MZvnSC",
+    "VVjWKh", "dFEOfF", "7fimNu", "anGHDo", "LUkI-K",
+  ]);
 
   // Guardians of the Rift tutorial progress (the quest varbit stays at 115).
   const TUTORIAL_ATTRIBUTE = "temple-of-the-eye:tutorial";
@@ -275,6 +301,12 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   ];
 
   // Objects.
+  const CHAOS_ALTAR_OBJECT_ID = ObjectIdentifiers.CHAOS_ALTAR; // the Zamorakian chapel altar
+  const ABYSS_CENTRE_RIFT_OBJECT_ID = ObjectIdentifiers.ABYSSAL_RIFT; // Abyss centre
+  const TEMPLE_RIFT_OBJECT_IDS = new Set([
+    ObjectIdentifiers.ABYSSAL_RIFT_2,
+    ObjectIdentifiers.ABYSSAL_RIFT_3,
+  ]);
   const ALTAR_MIND_OBJECT_ID = ObjectIdentifiers.ALTAR_34; // 34761
   const ALTAR_WATER_OBJECT_ID = ObjectIdentifiers.ALTAR_35; // 34762
   const ALTAR_EXIT_MIND_OBJECT_ID = ObjectIdentifiers.PORTAL_40; // 34749
@@ -370,8 +402,6 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const FELIX_BIT = 2;
   const TAMARA_BIT = 4;
 
-  const RUNE_MYSTERIES_STAGE_ATTRIBUTE = "quest.rune_mysteries.stage";
-  const RUNE_MYSTERIES_COMPLETE_STAGE = 6;
   const RUNECRAFTING_REQUIREMENT = 10;
 
   // Per-player quest spawns (owner-only), keyed by player.
@@ -391,6 +421,65 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
 
   function stageOf(player) {
     return quest.getStage(player);
+  }
+
+  function stageBetween(player, min, max) {
+    const stage = stageOf(player);
+    return stage >= min && stage < max;
+  }
+
+  function meetsStartRequirements(player) {
+    const level = player.getSkillManager().getMaxLevel(Skill.RUNECRAFTING);
+    return Number(level) >= RUNECRAFTING_REQUIREMENT && hasAbyssAccess(player);
+  }
+
+  function takeAll(player, itemId) {
+    const amount = player.getInventory().getAmount(itemId);
+    if (amount > 0) player.getInventory().deleteNumber(itemId, amount);
+  }
+
+  function removeItem(player, itemId) {
+    takeAll(player, itemId);
+  }
+
+  /** Quest-only items leave the inventory for good once their hand-in is done. */
+  function clearConsumedQuestItems(player) {
+    const stage = stageOf(player);
+    if (stage >= STAGE_AMULET_RETURNED || quest.isComplete(player)) removeItem(player, EYE_AMULET_ITEM_ID);
+    if (stage >= STAGE_SEDRIDOR || quest.isComplete(player)) removeItem(player, ABYSSAL_INCANTATION_ITEM_ID);
+  }
+
+  function giveQuestItem(player, itemId) {
+    if (has(player, itemId)) return false;
+    if (freeSlots(player) === 0) {
+      player.sendMessage("You need a free inventory space for that.");
+      return false;
+    }
+    give(player, itemId);
+    return true;
+  }
+
+  /**
+   * The eye amulet and the Abyssal incantation are reclaimable from the NPCs
+   * that issued them. The persisted "given" flag proves the hand-over happened,
+   * so a replacement is only created when the item is actually missing.
+   */
+  function recoverQuestItems(player) {
+    const stage = stageOf(player);
+    if (stageBetween(player, STAGE_STARTED, STAGE_INCANTATION) && flag(player, AMULET_GIVEN_ATTRIBUTE)) {
+      giveQuestItem(player, EYE_AMULET_ITEM_ID);
+    }
+    if (stageBetween(player, STAGE_INCANTATION, STAGE_SEDRIDOR) && flag(player, INCANTATION_GIVEN_ATTRIBUTE)) {
+      giveQuestItem(player, ABYSSAL_INCANTATION_ITEM_ID);
+    }
+  }
+
+  function objectiveLines(stage) {
+    return OBJECTIVES.map((objective, index) => {
+      const done = stage >= objective.at;
+      const text = `Objective ${index + 1}: ${objective.text}`;
+      return done ? `<str>${text}</str>` : text;
+    });
   }
 
   function setStage(player, value) {
@@ -495,10 +584,9 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     return request.complete === true;
   }
 
-  /** Enter the Abyss is not implemented; Rune Mysteries is its prerequisite, so its
-   * completion stands in for it (see the header). */
+  /** The real prerequisite: Enter the Abyss (which itself requires Rune Mysteries). */
   function hasAbyssAccess(player) {
-    return attributeNumber(player, RUNE_MYSTERIES_STAGE_ATTRIBUTE) >= RUNE_MYSTERIES_COMPLETE_STAGE;
+    return isQuestComplete(player, "enter_the_abyss");
   }
 
   function teaState(player) {
@@ -524,7 +612,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   }
 
   function play(player, npcId, variant) {
-    startTranscript(api, player, npcId, PAGE, variant);
+    return startTranscript(api, player, npcId, PAGE, variant);
   }
 
   function moveTo(player, tile) {
@@ -1060,7 +1148,10 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     ) {
       return selectPerstenVariant(player, npcId);
     }
-    if (MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) return selectMageVariant(player);
+    if (MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) {
+      if (!isQuestComplete(player, "enter_the_abyss")) return null;
+      return selectMageVariant(player);
+    }
     if (npcId === TEA_SELLER_NPC_ID) return selectTeaSellerVariant(player);
     if (npcId === DARK_MAGE_NPC_ID) return selectDarkMageVariant(player);
     if (SEDRIDOR_NPC_IDS.has(npcId)) return selectSedridorVariant(player);
@@ -1241,6 +1332,10 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         // The wiki's "Same as below" acceptance section is not expanded into the
         // start variant's branch; start the quest here so the next talk reaches
         // Persten's amulet hand-over even if that branch only says "that's a shame".
+        if (!meetsStartRequirements(player)) {
+          player.sendMessage("You need a Runecrafting level of 10 and must have completed Enter the Abyss to start this quest.");
+          return;
+        }
         setFlag(player, AMULET_GIVEN_ATTRIBUTE, false);
         setFlag(player, DECLINED_ATTRIBUTE, false);
         setStage(player, STAGE_STARTED);
@@ -1256,7 +1351,12 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   function handleCondition(event) {
     const { player, npcId, stepId } = event;
     if (!player || !MY_NPC_IDS.has(npcId)) return;
-    if (stepId === "azV7CN" && npcId === PERSTEN_ALKHARID_NPC_ID && stageOf(player) === STAGE_INCANTATION) {
+    if (
+      stepId === "azV7CN" &&
+      npcId === PERSTEN_ALKHARID_NPC_ID &&
+      stageOf(player) === STAGE_INCANTATION &&
+      !has(player, EYE_AMULET_ITEM_ID)
+    ) {
       // Persten "finds" the lost amulet and keeps it.
       setStage(player, STAGE_COPIED);
     }
@@ -1265,7 +1365,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   function handleAction(event) {
     const { player, npcId, stepId } = event;
     if (!player || !stepId || !MY_NPC_IDS.has(npcId)) return;
-    if (event.kind === "message") {
+    if (event.kind === "message" || MESSAGE_STEP_IDS.has(stepId)) {
       handleMessageStep(player, stepId);
       return;
     }
@@ -1278,6 +1378,8 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         return;
       case "5SxUiq":
       case "YdNgEz": // the Mage of Zamorak's one-time teleport
+        if (stageOf(player) !== STAGE_TEA_DRUNK) return;
+        if (!has(player, EYE_AMULET_ITEM_ID) || !has(player, BUCKET_OF_WATER_ITEM_ID)) return;
         player.setAttribute(TELEPORT_ATTRIBUTE, teleports(player) | ABYSS_TELEPORT_BIT);
         player.getPacketSender().sendVarbit(13740, 1);
         moveTo(player, ABYSS_CENTRE_TILE);
@@ -1286,15 +1388,16 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         return;
       case "5mu1Ni":
       case "ZOWKkY": // Persten teleports the player to the Wizards' Tower entrance
+        if (stageOf(player) !== STAGE_TOWER || !has(player, ABYSSAL_INCANTATION_ITEM_ID)) return;
         player.setAttribute(TELEPORT_ATTRIBUTE, teleports(player) | TOWER_TELEPORT_BIT);
         player.getPacketSender().sendVarbit(13753, 1);
         moveTo(player, TOWER_ENTRANCE_TILE);
-        if (stageOf(player) < STAGE_TOWER) setStage(player, STAGE_TOWER);
         event.handled = true;
         return;
       case "DLPFdT":
       case "XJ8F74":
       case "itFyK-": // "Incantation cutscene begins below."
+        if (stageOf(player) !== STAGE_RIDDLE_DONE) return;
         setStage(player, STAGE_INCANTATION_READY);
         Scenes.controls(player, true, true);
         camera(player, [3107, 9563, 550], [3104, 9573, 250]);
@@ -1302,6 +1405,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         event.steps = variantSteps("enter-the-gate-incantation-cutscene");
         return;
       case "I_aoEy": // "Temple of the Eye cutscene continues below."
+        if (stageOf(player) !== STAGE_INCANTATION_READY) return;
         event.handled = true;
         moveTo(player, TEMPLE_ARRIVAL_TILE);
         setStage(player, STAGE_PORTAL_OPEN);
@@ -1309,11 +1413,13 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         event.steps = variantSteps("enter-the-gate-temple-of-the-eye-cutscene");
         return;
       case "MKvLzs": // "The cutscene ends." (the group is at the temple)
+        if (stageOf(player) !== STAGE_PORTAL_OPEN) return;
         event.handled = true;
         setStage(player, STAGE_TEMPLE);
         endScene(player);
         return;
       case "Wc3Ys0": // the vision begins
+        if (stageOf(player) !== STAGE_APPRENTICES) return;
         event.handled = true;
         setStage(player, STAGE_VISION);
         Scenes.controls(player, true, true);
@@ -1321,14 +1427,17 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         return;
       case "9R5c1w":
       case "9kzaP8": // "Abyssal rift cutscene continues below."
+        if (stageOf(player) !== STAGE_VISION) return;
         event.handled = true;
         event.steps = variantSteps("enter-the-gate-abyssal-rift-cutscene");
         return;
       case "dUuNRU": // the temple rumbles as the rift opens
+        if (stageOf(player) !== STAGE_VISION) return;
         event.handled = true;
         shakeRift(player);
         return;
       case "2OgBfc": // "Great Guardian cutscene continues below."
+        if (stageOf(player) !== STAGE_VISION) return;
         event.handled = true;
         setStage(player, STAGE_GUARDIAN);
         setTutorialProgress(player, TUTORIAL_START);
@@ -1336,22 +1445,27 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         event.steps = variantSteps("enter-the-gate-great-guardian-cutscene");
         return;
       case "PUnmxV": // Traiborn sets off fireworks
+        if (stageOf(player) !== STAGE_RIDDLE_TOLD) return;
         event.handled = true;
         setStage(player, STAGE_RIDDLE_DONE);
         return;
       case "Gs6Qdo": // Cordelia's "see the puzzle again"
+        if (stageOf(player) !== STAGE_RIDDLE) return;
         event.handled = true;
         openPuzzleLater(player, "cordelia");
         return;
       case "t_zXOj": // Felix's
+        if (stageOf(player) !== STAGE_RIDDLE) return;
         event.handled = true;
         openPuzzleLater(player, "felix");
         return;
       case "HDrYiF": // Tamara's
+        if (stageOf(player) !== STAGE_RIDDLE) return;
         event.handled = true;
         openPuzzleLater(player, "tamara");
         return;
       case "wd6dSZ": // "The player returns to the Wizards' Tower."
+        if (stageOf(player) !== STAGE_GUARDIAN || tutorialProgress(player) !== TUTORIAL_MEDIUM_CELL) return;
         moveTo(player, BASEMENT_LANDING_TILE);
         setTutorialProgress(player, TUTORIAL_CLOSED);
         setStage(player, STAGE_CLOSED);
@@ -1359,16 +1473,16 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
         return;
       case "_nVw7q": // "Sedridor cutscene continues below."
       case "m2nPIk":
+        if (stageOf(player) !== STAGE_CLOSED) return;
         event.handled = true;
         moveTo(player, BASEMENT_LANDING_TILE);
         setStage(player, STAGE_FINAL);
         event.steps = variantSteps("guardians-of-the-rift-sedridor-cutscene");
         return;
       case "9-Wilv": // "Congratulations! Quest complete!"
-        if (stageOf(player) >= STAGE_CLOSED) {
-          quest.complete(player);
-          syncSpawns(player);
-        }
+        if (stageOf(player) !== STAGE_FINAL) return;
+        quest.complete(player);
+        syncSpawns(player);
         event.handled = true;
         event.end = true;
         return;
@@ -1404,68 +1518,87 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       case "MMRv1P":
       case "pNBge3":
       case "wIL3wh": // Persten hands you the amulet
-        if (!has(player, EYE_AMULET_ITEM_ID)) give(player, EYE_AMULET_ITEM_ID);
+        if (!stageBetween(player, STAGE_STARTED, STAGE_INCANTATION)) return;
+        if (freeSlots(player) === 0 && !has(player, EYE_AMULET_ITEM_ID)) return;
+        giveQuestItem(player, EYE_AMULET_ITEM_ID);
         setFlag(player, AMULET_GIVEN_ATTRIBUTE);
         setFlag(player, DECLINED_ATTRIBUTE, false);
         if (stageOf(player) < STAGE_APPRAISED) setStage(player, STAGE_APPRAISED);
         return;
       case "FJLAsS": // the Mage of Zamorak appraises the amulet and asks for tea
+        if (stageOf(player) !== STAGE_APPRAISED || !has(player, EYE_AMULET_ITEM_ID)) return;
         player.getPacketSender().sendVarbit(13739, 1);
-        if (stageOf(player) < STAGE_TEA_GIVEN) setStage(player, STAGE_TEA_GIVEN);
+        setStage(player, STAGE_TEA_GIVEN);
         return;
       case "QDRpz2":
       case "L04HOi": // the Tea Seller hands you a strong cup of tea
-        if (!has(player, STRONG_CUP_OF_TEA_ITEM_ID)) give(player, STRONG_CUP_OF_TEA_ITEM_ID);
+        if (!stageBetween(player, STAGE_APPRAISED, STAGE_TEA_DRUNK)) return;
+        if (freeSlots(player) === 0 && !has(player, STRONG_CUP_OF_TEA_ITEM_ID)) return;
+        giveQuestItem(player, STRONG_CUP_OF_TEA_ITEM_ID);
         player.setAttribute(TEA_ATTRIBUTE, 1);
         player.getPacketSender().sendVarbit(13741, 1);
         return;
       case "4t9kd_": // the Mage of Zamorak takes and drinks the tea
-        if (has(player, STRONG_CUP_OF_TEA_ITEM_ID)) take(player, STRONG_CUP_OF_TEA_ITEM_ID);
+        if (stageOf(player) !== STAGE_TEA_GIVEN) return;
+        if (!has(player, STRONG_CUP_OF_TEA_ITEM_ID) || !has(player, BUCKET_OF_WATER_ITEM_ID)) return;
+        takeAll(player, STRONG_CUP_OF_TEA_ITEM_ID);
         player.setAttribute(TEA_ATTRIBUTE, 2);
-        if (stageOf(player) < STAGE_TEA_DRUNK) setStage(player, STAGE_TEA_DRUNK);
+        setStage(player, STAGE_TEA_DRUNK);
         return;
       case "BOdA6N": // the player throws the bucket of water over the Dark Mage
-        if (stageOf(player) === STAGE_IN_ABYSS) setStage(player, STAGE_DARK_MAGE);
+        if (stageOf(player) !== STAGE_IN_ABYSS) return;
+        if (!has(player, BUCKET_OF_WATER_ITEM_ID) || !has(player, EYE_AMULET_ITEM_ID)) return;
+        takeAll(player, BUCKET_OF_WATER_ITEM_ID);
+        setStage(player, STAGE_DARK_MAGE);
         return;
       case "5f9QJZ":
       case "PRt-AR": // the Dark Mage casts the spell on the amulet
-        if (darkMageState(player) === 0) {
-          player.setAttribute(DARK_MAGE_ATTRIBUTE, 1);
-          energyOrder(player);
-        }
-        if (stageOf(player) < STAGE_ENERGY) setStage(player, STAGE_ENERGY);
+        if (stageOf(player) !== STAGE_DARK_MAGE || darkMageState(player) !== 0) return;
+        if (!has(player, EYE_AMULET_ITEM_ID)) return;
+        player.setAttribute(DARK_MAGE_ATTRIBUTE, 1);
+        energyOrder(player);
+        setStage(player, STAGE_ENERGY);
         syncEnergyObjects(player);
         return;
       case "qOBPPr": // Persten copies the incantation
-        if (!has(player, ABYSSAL_INCANTATION_ITEM_ID)) give(player, ABYSSAL_INCANTATION_ITEM_ID);
+        if (stageOf(player) !== STAGE_INCANTATION || !has(player, ABYSSAL_INCANTATION_ITEM_ID)) return;
         setFlag(player, INCANTATION_GIVEN_ATTRIBUTE);
-        if (stageOf(player) < STAGE_COPIED) setStage(player, STAGE_COPIED);
+        setStage(player, STAGE_COPIED);
         return;
       case "9mZfyI":
       case "SzAddC": // the Dark Mage hands you an incantation
-        if (!has(player, ABYSSAL_INCANTATION_ITEM_ID)) give(player, ABYSSAL_INCANTATION_ITEM_ID);
+        if (stageOf(player) !== STAGE_ENERGY_DONE) return;
+        if (freeSlots(player) === 0 && !has(player, ABYSSAL_INCANTATION_ITEM_ID)) return;
+        giveQuestItem(player, ABYSSAL_INCANTATION_ITEM_ID);
         setFlag(player, INCANTATION_GIVEN_ATTRIBUTE);
         player.getPacketSender().sendVarbit(13746, 1);
-        if (stageOf(player) < STAGE_INCANTATION) setStage(player, STAGE_INCANTATION);
+        setStage(player, STAGE_INCANTATION);
         return;
       case "MZvnSC": // you give the amulet back to Persten
-        if (has(player, EYE_AMULET_ITEM_ID)) take(player, EYE_AMULET_ITEM_ID);
-        if (stageOf(player) < STAGE_AMULET_RETURNED) setStage(player, STAGE_AMULET_RETURNED);
+        if (stageOf(player) !== STAGE_COPIED || !has(player, EYE_AMULET_ITEM_ID)) return;
+        takeAll(player, EYE_AMULET_ITEM_ID);
+        setStage(player, STAGE_AMULET_RETURNED);
         return;
       case "VVjWKh":
       case "dFEOfF": // Persten hands you a copy of the incantation
-        if (!has(player, ABYSSAL_INCANTATION_ITEM_ID)) give(player, ABYSSAL_INCANTATION_ITEM_ID);
+        if (!stageBetween(player, STAGE_COPIED, STAGE_SEDRIDOR)) return;
+        if (freeSlots(player) === 0 && !has(player, ABYSSAL_INCANTATION_ITEM_ID)) return;
+        giveQuestItem(player, ABYSSAL_INCANTATION_ITEM_ID);
         setFlag(player, INCANTATION_GIVEN_ATTRIBUTE);
         return;
       case "7fimNu": // Persten finishes inspecting the amulet
-        if (stageOf(player) < STAGE_TOWER) setStage(player, STAGE_TOWER);
+        if (!stageBetween(player, STAGE_COPIED, STAGE_TOWER)) return;
+        setStage(player, STAGE_TOWER);
         return;
       case "anGHDo": // you give the incantation to Sedridor
-        if (has(player, ABYSSAL_INCANTATION_ITEM_ID)) take(player, ABYSSAL_INCANTATION_ITEM_ID);
+        if (stageOf(player) !== STAGE_TOWER || !has(player, ABYSSAL_INCANTATION_ITEM_ID)) return;
+        takeAll(player, ABYSSAL_INCANTATION_ITEM_ID);
         setStage(player, STAGE_SEDRIDOR);
         return;
       case "LUkI-K": // Tamara hands you the talisman
-        if (!has(player, PORTAL_TALISMAN_WATER_ITEM_ID)) give(player, PORTAL_TALISMAN_WATER_ITEM_ID);
+        if (!inTutorial(player) || tutorialProgress(player) !== TUTORIAL_MEDIUM_GUARDIAN) return;
+        if (freeSlots(player) === 0 && !has(player, PORTAL_TALISMAN_WATER_ITEM_ID)) return;
+        giveQuestItem(player, PORTAL_TALISMAN_WATER_ITEM_ID);
         return;
       default:
         return;
@@ -1481,6 +1614,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     const npcId = event.npcId ?? event.target?.getId?.();
     if (!player || npcId === undefined || npcId === null) return;
     if (itemId === EYE_AMULET_ITEM_ID && MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) {
+      if (!isQuestComplete(player, "enter_the_abyss")) return;
       if (stageOf(player) < STAGE_STARTED || stageOf(player) >= STAGE_TEA_GIVEN) return;
       const variant = selectMageVariant(player);
       if (!variant) return;
@@ -1513,7 +1647,23 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     ) {
       moveTo(player, WATER_ALTAR_TILE);
       event.handled = true;
+      return;
     }
+    if (itemId === EYE_AMULET_ITEM_ID && objectId === CHAOS_ALTAR_OBJECT_ID) {
+      if (!stageBetween(player, STAGE_STARTED, STAGE_TEA_DRUNK)) return;
+      player.sendMessage("The eye carved into the amulet stares back at the chaos altar.");
+      event.handled = true;
+    }
+  }
+
+  function useTalismanOnGuardian(event) {
+    handleItemOnObject(event);
+    return event.handled === true;
+  }
+
+  function useAmuletOnChapel(event) {
+    handleItemOnObject(event);
+    return event.handled === true;
   }
 
   // ---------------------------------------------------------------------------
@@ -1532,51 +1682,56 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
 
   function takeFloorChisel(event) {
     const { player } = event;
-    if (!inTutorial(player) || tutorialProgress(player) < TUTORIAL_CELL) return;
-    if (freeSlots(player) === 0) return;
+    if (!inTutorial(player) || tutorialProgress(player) < TUTORIAL_CELL) return false;
+    if (freeSlots(player) === 0) return false;
     give(player, CHISEL_ITEM_ID);
     event.handled = true;
+    return true;
   }
 
   function takeWeakCell(event) {
     const { player } = event;
-    if (!inTutorial(player) || tutorialProgress(player) < TUTORIAL_FELIX) return;
-    if (freeSlots(player) === 0) return;
+    if (!inTutorial(player) || tutorialProgress(player) < TUTORIAL_FELIX) return false;
+    if (freeSlots(player) === 0) return false;
     give(player, WEAK_CELL_ITEM_ID);
     event.handled = true;
+    return true;
   }
 
   function takeUnchargedCell(event) {
     const { player } = event;
-    if (!inTutorial(player) || tutorialProgress(player) < TUTORIAL_ESSENCE) return;
-    if (freeSlots(player) === 0) return;
+    if (!inTutorial(player) || tutorialProgress(player) < TUTORIAL_ESSENCE) return false;
+    if (freeSlots(player) === 0) return false;
     give(player, UNCHARGED_CELL_ITEM_ID);
     event.handled = true;
+    return true;
   }
 
   function placeCell(event) {
     const { player } = event;
-    if (!inTutorial(player)) return;
+    if (!inTutorial(player)) return false;
     const progress = tutorialProgress(player);
     if (progress === TUTORIAL_TAMARA && has(player, WEAK_CELL_ITEM_ID)) {
       take(player, WEAK_CELL_ITEM_ID);
       setTutorialProgress(player, TUTORIAL_CELL);
       play(player, TAMARA_TEMPLE_NPC_ID, "guardians-of-the-rift-after-placing-the-weak-cell-in-the-inactive-cell-tile");
       event.handled = true;
-      return;
+      return true;
     }
     if (progress === TUTORIAL_MIND_STONES && has(player, WEAK_CELL_ITEM_ID)) {
       take(player, WEAK_CELL_ITEM_ID);
       setTutorialProgress(player, TUTORIAL_REPOWERED);
       event.handled = true;
-      return;
+      return true;
     }
     if (progress === TUTORIAL_WATER_STONES_TWO && has(player, MEDIUM_CELL_ITEM_ID)) {
       take(player, MEDIUM_CELL_ITEM_ID);
       setTutorialProgress(player, TUTORIAL_MEDIUM_CELL);
       play(player, TAMARA_TEMPLE_NPC_ID, "guardians-of-the-rift-placing-the-medium-cell");
       event.handled = true;
+      return true;
     }
+    return false;
   }
 
   function spawnGuardian(player, npcId) {
@@ -1594,7 +1749,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
 
   function assemblePile(event, objectId) {
     const { player } = event;
-    if (!inTutorial(player) || !has(player, CHISEL_ITEM_ID)) return;
+    if (!inTutorial(player) || !has(player, CHISEL_ITEM_ID)) return false;
     const progress = tutorialProgress(player);
     if (progress === TUTORIAL_CELL && has(player, WEAK_CELL_ITEM_ID)) {
       take(player, WEAK_CELL_ITEM_ID);
@@ -1607,7 +1762,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       setTutorialProgress(player, TUTORIAL_PILE_ONE);
       play(player, FELIX_TEMPLE_NPC_ID, "guardians-of-the-rift-after-assembling-the-first-essence-pile");
       event.handled = true;
-      return;
+      return true;
     }
     if (progress === TUTORIAL_PILE_ONE && has(player, WEAK_CELL_ITEM_ID)) {
       take(player, WEAK_CELL_ITEM_ID);
@@ -1620,7 +1775,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       setTutorialProgress(player, TUTORIAL_PILES);
       play(player, FELIX_TEMPLE_NPC_ID, "guardians-of-the-rift-after-assembling-the-second-essence-pile");
       event.handled = true;
-      return;
+      return true;
     }
     if (progress === TUTORIAL_POWERED_TWO && has(player, MEDIUM_CELL_ITEM_ID)) {
       take(player, MEDIUM_CELL_ITEM_ID);
@@ -1628,63 +1783,72 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       setTutorialProgress(player, TUTORIAL_MEDIUM_GUARDIAN);
       play(player, FELIX_TEMPLE_NPC_ID, "guardians-of-the-rift-constructing-the-medium-elemental-guardian");
       event.handled = true;
+      return true;
     }
+    return false;
   }
 
   function workAtBench(event) {
     const { player } = event;
-    if (!inTutorial(player)) return;
+    if (!inTutorial(player)) return false;
     const progress = tutorialProgress(player);
-    if (progress < TUTORIAL_PILES || progress > TUTORIAL_MEDIUM_CELL) return;
+    if (progress < TUTORIAL_PILES || progress > TUTORIAL_MEDIUM_CELL) return false;
     const fragments = player.getInventory().getAmount(GUARDIAN_FRAGMENTS_ITEM_ID);
-    if (fragments <= 0) return;
+    if (fragments <= 0) return false;
     const used = Math.min(fragments, 5);
     take(player, GUARDIAN_FRAGMENTS_ITEM_ID, used);
     give(player, GUARDIAN_ESSENCE_ITEM_ID, used);
     if (progress === TUTORIAL_PILES) setTutorialProgress(player, TUTORIAL_ESSENCE);
     event.handled = true;
+    return true;
   }
 
   function mineFragments(event) {
     const { player } = event;
-    if (!inTutorial(player)) return;
+    if (!inTutorial(player)) return false;
     const progress = tutorialProgress(player);
-    if (progress < TUTORIAL_PILES || progress > TUTORIAL_MEDIUM_CELL) return;
+    if (progress < TUTORIAL_PILES || progress > TUTORIAL_MEDIUM_CELL) return false;
     if (!hasPickaxe(player)) {
       ensureGroundPickaxe(player);
       player.sendMessage("You need a pickaxe to mine the guardian remains.");
       event.handled = true;
-      return;
+      return true;
     }
-    if (freeSlots(player) === 0) return;
+    if (freeSlots(player) === 0) return false;
     const before = player.getInventory().getAmount(GUARDIAN_FRAGMENTS_ITEM_ID);
     give(player, GUARDIAN_FRAGMENTS_ITEM_ID);
     if (before < 5 && before + 1 >= 5) {
       play(player, FELIX_TEMPLE_NPC_ID, "guardians-of-the-rift-after-mining-5-fragments");
     }
     event.handled = true;
+    return true;
   }
 
   function enterMindAltar(event) {
     const { player } = event;
-    if (!inTutorial(player)) return;
+    if (!inTutorial(player)) return false;
     const progress = tutorialProgress(player);
-    if (progress < TUTORIAL_ESSENCE || progress > TUTORIAL_REPOWERED) return;
+    if (progress < TUTORIAL_ESSENCE || progress > TUTORIAL_REPOWERED) return false;
     moveTo(player, MIND_ALTAR_TILE);
     event.handled = true;
+    return true;
   }
 
   function enterWaterAltar(event) {
     const { player } = event;
-    if (!inTutorial(player)) return;
+    if (!inTutorial(player)) return false;
     const progress = tutorialProgress(player);
-    if (progress < TUTORIAL_POWERED_ONE || progress > TUTORIAL_WATER_STONES) return;
+    if (progress < TUTORIAL_POWERED_ONE || progress > TUTORIAL_WATER_STONES) return false;
     moveTo(player, WATER_ALTAR_TILE);
     event.handled = true;
+    return true;
   }
 
   function enterTemplePortal(event) {
-    moveTo(event.player, BASEMENT_LANDING_TILE);
+    const { player } = event;
+    if (!player) return;
+    if (stageOf(player) < STAGE_PORTAL_OPEN && !quest.isComplete(player)) return;
+    moveTo(player, BASEMENT_LANDING_TILE);
     event.handled = true;
   }
 
@@ -1780,6 +1944,14 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   function handleObjectInteraction(event) {
     const { player, objectId, clickType } = event;
     if (!player || event.handled) return;
+    if (objectId === CHAOS_ALTAR_OBJECT_ID) {
+      if (clickType === 1) handleChapelPray(event);
+      return;
+    }
+    if (objectId === ABYSS_CENTRE_RIFT_OBJECT_ID || TEMPLE_RIFT_OBJECT_IDS.has(objectId)) {
+      if (clickType === 1) handleAbyssalRift(event);
+      return;
+    }
     if (objectId === FLOOR_CHISEL_OBJECT_ID) {
       if (clickType === 1) takeFloorChisel(event);
       return;
@@ -1842,6 +2014,197 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     }
   }
 
+  function assembleElementalPile(event) {
+    return assemblePile(event, ESSENCE_PILE_ELEMENTAL_OBJECT_ID);
+  }
+
+  function assembleCatalyticPile(event) {
+    return assemblePile(event, ESSENCE_PILE_CATALYTIC_OBJECT_ID);
+  }
+
+  function craftMindRune(event) {
+    return craftGuardianEssence(event, "mind");
+  }
+
+  function craftWaterRune(event) {
+    return craftGuardianEssence(event, "water");
+  }
+
+  /** Named "Portal" hook for the Wizards' Tower and temple exits. */
+  function handleNamedPortal(event) {
+    const { objectId } = event;
+    if (
+      objectId !== TEMPLE_EXIT_OBJECT_ID &&
+      objectId !== BLUE_PORTAL_OBJECT_ID &&
+      objectId !== ALTAR_EXIT_MIND_OBJECT_ID &&
+      objectId !== ALTAR_EXIT_WATER_OBJECT_ID
+    ) {
+      return false;
+    }
+    handleObjectInteraction(event);
+    return event.handled === true;
+  }
+
+  /** The rift at the centre of the Abyss, and the underwater temple rift. */
+  function handleAbyssalRift(event) {
+    const { player, objectId } = event;
+    if (!player) return false;
+    if (objectId === ABYSS_CENTRE_RIFT_OBJECT_ID) {
+      if (stageOf(player) !== STAGE_ENERGY) return false;
+      player.sendMessage("The rift is the source of the abyssal energy.");
+      event.handled = true;
+      return true;
+    }
+    if (!TEMPLE_RIFT_OBJECT_IDS.has(objectId)) return false;
+    if (stageOf(player) < STAGE_TEMPLE) return false;
+    player.sendMessage(
+      stageOf(player) === STAGE_GUARDIAN
+        ? "The barrier holds the rift shut."
+        : "A cold abyssal wind spills from the rift."
+    );
+    event.handled = true;
+    return true;
+  }
+
+  /** Praying at the Zamorakian chapel points a quest player at Herbert. */
+  function handleChapelPray(event) {
+    const { player } = event;
+    if (!player || !stageBetween(player, STAGE_STARTED, STAGE_TEA_DRUNK)) return false;
+    player.sendMessage(
+      stageBetween(player, STAGE_STARTED, STAGE_APPRAISED)
+        ? "The chapel reeks of sulphur. The Mage of Zamorak is here."
+        : "The chapel reeks of sulphur. The Mage of Zamorak is waiting for his tea."
+    );
+    event.handled = true;
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Named NPC and item handlers
+  // ---------------------------------------------------------------------------
+
+  const PERSTEN_NPC_IDS = new Set([
+    PERSTEN_ALKHARID_NPC_ID,
+    PERSTEN_TOWER_NPC_ID,
+    PERSTEN_CUTSCENE_NPC_ID,
+    PERSTEN_TEMPLE_NPC_ID,
+  ]);
+
+  function eventNpcId(event) {
+    return event.npcId ?? event.definition?.getId?.() ?? event.npc?.getId?.();
+  }
+
+  function beginNamedTalk(event, npcId, variant) {
+    if (!variant || !event.player) return false;
+    if (!play(event.player, npcId, variant)) return false;
+    event.handled = true;
+    return true;
+  }
+
+  function handlePerstenTalk(event) {
+    const { player } = event;
+    const npcId = eventNpcId(event);
+    if (!player || !PERSTEN_NPC_IDS.has(npcId)) return false;
+    recoverQuestItems(player);
+    return beginNamedTalk(event, npcId, selectPerstenVariant(player, npcId));
+  }
+
+  function handleMageTalk(event) {
+    const { player } = event;
+    const npcId = eventNpcId(event);
+    if (!player || !MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) return false;
+    // Legacy saves can have started (or finished) this quest before Enter the
+    // Abyss existed. Leave the shared mage to that miniquest until it is done.
+    if (!isQuestComplete(player, "enter_the_abyss")) return false;
+    recoverQuestItems(player);
+    return beginNamedTalk(event, npcId, selectMageVariant(player));
+  }
+
+  function handleTeaSellerTalk(event) {
+    const { player } = event;
+    const npcId = eventNpcId(event);
+    if (!player || npcId !== TEA_SELLER_NPC_ID) return false;
+    return beginNamedTalk(event, npcId, selectTeaSellerVariant(player));
+  }
+
+  function handleDarkMageTalk(event) {
+    const { player } = event;
+    const npcId = eventNpcId(event);
+    if (!player || npcId !== DARK_MAGE_NPC_ID) return false;
+    recoverQuestItems(player);
+    return beginNamedTalk(event, npcId, selectDarkMageVariant(player));
+  }
+
+  function handleSedridorTalk(event) {
+    const { player } = event;
+    const npcId = eventNpcId(event);
+    if (!player || !SEDRIDOR_NPC_IDS.has(npcId)) return false;
+    recoverQuestItems(player);
+    return beginNamedTalk(event, npcId, selectSedridorVariant(player));
+  }
+
+  function handleTraibornTalk(event) {
+    const { player } = event;
+    const npcId = eventNpcId(event);
+    if (!player || (npcId !== TRAIBORN_NPC_ID && npcId !== TRAIBORN_CUTSCENE_NPC_ID)) return false;
+    return beginNamedTalk(event, npcId, selectTraibornVariant(player));
+  }
+
+  function handleApprenticeTalk(event) {
+    const { player } = event;
+    const npcId = eventNpcId(event);
+    if (!player) return false;
+    const apprentice = TOWER_APPRENTICES.get(npcId) ?? TEMPLE_APPRENTICES.get(npcId);
+    if (!apprentice) return false;
+    const stage = stageOf(player);
+    if (stage < STAGE_SEDRIDOR || stage >= STAGE_COMPLETE) return false;
+    return beginNamedTalk(event, npcId, selectVariant({ player, npcId }));
+  }
+
+  function inspectEyeAmulet(event) {
+    const { player, itemId } = event;
+    if (!player || itemId !== EYE_AMULET_ITEM_ID) return false;
+    if (stageOf(player) < STAGE_STARTED || stageOf(player) >= STAGE_COMPLETE) return false;
+    player.sendMessage("The amulet is cold to the touch. A slit of abyssal energy shifts behind the eye.");
+    if (stageOf(player) >= STAGE_APPRAISED) {
+      player.sendMessage("The Mage of Zamorak said its origin could be traced in the Abyss.");
+    }
+    event.handled = true;
+    return true;
+  }
+
+  function readAbyssalIncantation(event) {
+    const { player, itemId } = event;
+    if (!player || itemId !== ABYSSAL_INCANTATION_ITEM_ID) return false;
+    if (stageOf(player) < STAGE_INCANTATION || stageOf(player) >= STAGE_SEDRIDOR) return false;
+    player.sendMessage("The incantation is written on thin flesh in a cramped Zamorakian hand.");
+    player.sendMessage(
+      stageOf(player) < STAGE_TOWER
+        ? "Wizard Persten will want to see this."
+        : "Archmage Sedridor will want to see this."
+    );
+    event.handled = true;
+    return true;
+  }
+
+  function handleQuestItemAction(event) {
+    const itemId = event?.itemId;
+    if (itemId === EYE_AMULET_ITEM_ID && event.option === "Inspect") return inspectEyeAmulet(event);
+    if (itemId === ABYSSAL_INCANTATION_ITEM_ID && event.option === "Read") {
+      return readAbyssalIncantation(event);
+    }
+    // Destroy is deliberately left to the default handler; the NPC handlers
+    // above are the recovery route for a destroyed quest item.
+    return false;
+  }
+
+  function handleNpcDeath(event) {
+    const npcId = event?.npcId ?? event?.npc?.getId?.();
+    if (!event?.killer || !MY_NPC_IDS.has(npcId)) return;
+    // The quest's guardians are tutorial props. Their death never advances an
+    // objective; the tutorial only uses the Great Guardian's Power-up option.
+  }
+
   // ---------------------------------------------------------------------------
   // Login / logout
   // ---------------------------------------------------------------------------
@@ -1855,6 +2218,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
 
   function handleLogin({ player }) {
     migrateLegacyStage(player);
+    clearConsumedQuestItems(player);
     syncSpawns(player);
     syncTowerPuzzleVarbits(player);
     syncEnergyObjects(player);
@@ -1896,6 +2260,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       lines.push("<col=ff0000>QUEST COMPLETE!</col>");
       return lines;
     }
+    lines.push(...objectiveLines(stage), "");
     lines.push("Wizard Persten wants me to trace the origin of an ancient eye amulet.");
     if (stage < STAGE_APPRAISED) {
       lines.push("", "I should show the <col=800000>eye amulet</col> to the <col=800000>Mage of Zamorak</col> in south-east Varrock.");
@@ -2018,6 +2383,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   }
 
   function grantReward(player) {
+    clearConsumedQuestItems(player);
     player.getPacketSender().sendVarbit(13757, 1);
     player.getSkillManager().addExperiences(Skill.RUNECRAFTING, 5000);
     if (!has(player, MEDIUM_POUCH_ITEM_ID) && !has(player, MEDIUM_POUCH_ITEM_ID_2)) {
@@ -2066,17 +2432,61 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     onReward: grantReward,
   });
 
+  api.onNpcInteraction("Wizard Persten", { "Talk-to": handlePerstenTalk });
+  api.onNpcInteraction("Mage of Zamorak", { "Talk-to": handleMageTalk });
+  api.onNpcInteraction("Tea Seller", { "Talk-to": handleTeaSellerTalk });
+  api.onNpcInteraction("Dark Mage", { "Talk-to": handleDarkMageTalk });
+  api.onNpcInteraction("Archmage Sedridor", { "Talk-to": handleSedridorTalk });
+  api.onNpcInteraction("Wizard Traiborn", { "Talk-to": handleTraibornTalk });
+  api.onNpcInteraction("Apprentice Cordelia", { "Talk-to": handleApprenticeTalk });
+  api.onNpcInteraction("Apprentice Felix", { "Talk-to": handleApprenticeTalk });
+  api.onNpcInteraction("Apprentice Tamara", { "Talk-to": handleApprenticeTalk });
+  api.onNpcInteraction("The Great Guardian", { "Power-up": powerUpGreatGuardian });
+  api.onNpcDeath(handleNpcDeath);
+
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onItemAction("Eye amulet", { Inspect: inspectEyeAmulet });
+  api.onItemAction("Abyssal incantation", { Read: readAbyssalIncantation });
+  api.onItemAction(handleQuestItemAction);
   api.onItemOnNpc(handleItemOnNpc, { noted: false });
+  api.onItemOnObject("Portal talisman (water)", "Guardian of Water", useTalismanOnGuardian, { noted: false });
+  api.onItemOnObject("Eye amulet", "Chaos altar", useAmuletOnChapel, { noted: false });
   api.onItemOnObject(handleItemOnObject, { noted: false });
+  api.onObjectInteraction("Chaos altar", { "Pray-at": handleChapelPray });
+  api.onObjectInteraction("Abyssal Rift", { Enter: handleAbyssalRift, "Pass-through": handleAbyssalRift });
+  api.onObjectInteraction("Portal", {
+    Enter: handleNamedPortal,
+    "Pass-through": handleNamedPortal,
+    Use: handleNamedPortal,
+  });
+  api.onObjectInteraction("Weak cells", { Take: takeWeakCell, "Take-chisel": takeFloorChisel });
+  api.onObjectInteraction("Uncharged cells", {
+    Take: takeUnchargedCell,
+    "Take-10": takeUnchargedCell,
+    "Take-1": takeUnchargedCell,
+  });
+  api.onObjectInteraction("Inactive cell tile", { "Place-cell": placeCell });
+  api.onObjectInteraction("Essence pile (elemental)", { Assemble: assembleElementalPile });
+  api.onObjectInteraction("Essence pile (catalytic)", { Assemble: assembleCatalyticPile });
+  api.onObjectInteraction("Workbench", { "Work-at": workAtBench });
+  api.onObjectInteraction("Guardian parts", { Mine: mineFragments });
+  api.onObjectInteraction("Guardian remains", { Mine: mineFragments });
+  api.onObjectInteraction("Large guardian remains", { Mine: mineFragments });
+  api.onObjectInteraction("Huge guardian remains", { Mine: mineFragments });
+  api.onObjectInteraction("Fallen guardian", { Mine: mineFragments });
+  api.onObjectInteraction("Guardian of Mind", { Enter: enterMindAltar });
+  api.onObjectInteraction("Guardian of Water", { Enter: enterWaterAltar });
+  api.onObjectInteraction("Altar", { "Craft-rune": craftMindRune });
+  api.onObjectInteraction("Altar", { "Craft-rune": craftWaterRune });
+  api.onObjectInteraction("Chisel", { Take: takeFloorChisel });
+  api.onObjectInteraction("<col=ff9040>Chisel</col>", { Take: takeFloorChisel });
   api.onObjectInteraction(handleObjectInteraction);
   api.onInterfaceActionButton(PUZZLE_CLOSE_UID, closePuzzle);
-  api.onNpcInteraction("The Great Guardian", { "Power-up": powerUpGreatGuardian });
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

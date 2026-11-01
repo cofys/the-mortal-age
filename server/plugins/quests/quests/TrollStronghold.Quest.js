@@ -493,9 +493,40 @@ module.exports = function registerTrollStrongholdQuest(api) {
     return null;
   }
 
+  /** Wiki: 15 Agility and Death Plateau. */
+  const START_AGILITY_REQUIREMENT = 15;
+
+  function meetsStartSkillRequirements(player) {
+    return player.getSkillManager().getMaxLevel(Skill.AGILITY) >= START_AGILITY_REQUIREMENT;
+  }
+
+  function notifyStartSkillRequirements(player) {
+    if (!meetsStartSkillRequirements(player)) {
+      player.sendMessage(
+        `You need an Agility level of at least ${START_AGILITY_REQUIREMENT} to start this quest.`
+      );
+    }
+  }
+
+  function deathPlateauComplete(player) {
+    const request = { player, key: "death_plateau", complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (!DENULTH_NPC_IDS.has(npcId) || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (!meetsStartSkillRequirements(player)) {
+        notifyStartSkillRequirements(player);
+        return;
+      }
+      if (!deathPlateauComplete(player)) {
+        player.sendMessage("You must complete Death Plateau to start this quest.");
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   /** Dad's death opens the stronghold; a Troll General drops the prison key. */

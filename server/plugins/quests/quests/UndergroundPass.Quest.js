@@ -893,9 +893,38 @@ module.exports = function registerUndergroundPassQuest(api) {
     return null;
   }
 
+  /** Wiki: 25 Ranged. */
+  const START_RANGED_REQUIREMENT = 25;
+
+  function meetsStartSkillRequirements(player) {
+    return player.getSkillManager().getMaxLevel(Skill.RANGED) >= START_RANGED_REQUIREMENT;
+  }
+
+  function notifyStartSkillRequirements(player) {
+    if (!meetsStartSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a Ranged level of at least ${START_RANGED_REQUIREMENT} to start this quest.`
+      );
+    }
+  }
+
+  function biohazardComplete(player) {
+    const request = { player, key: "biohazard", complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (hook !== START_HOOK || !player) return;
     if (npcId !== undefined && !KING_LATHAS_IDS.has(npcId)) return;
+    if (!meetsStartSkillRequirements(player)) {
+      notifyStartSkillRequirements(player);
+      return;
+    }
+    if (!biohazardComplete(player)) {
+      player.sendMessage("You must complete Biohazard to start this quest.");
+      return;
+    }
     if (!testBit(player, BIT_STARTED)) setBit(player, BIT_STARTED);
     if (quest.getStage(player) < STAGE_SPOKEN_KOFTIK) {
       quest.setStage(player, STAGE_SPOKEN_KOFTIK);

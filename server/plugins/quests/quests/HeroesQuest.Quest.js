@@ -260,16 +260,41 @@ module.exports = function registerHeroesQuest(api) {
   }
 
   /** Start gate: 55 Quest points and the four prerequisite quests (skills are only needed later). */
+  /** Wiki: 53 Cooking, 53 Fishing, 50 Mining and 25 Herblore. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.COOKING, level: 53, label: "Cooking" },
+    { skill: Skill.FISHING, level: 53, label: "Fishing" },
+    { skill: Skill.MINING, level: 50, label: "Mining" },
+    { skill: Skill.HERBLORE, level: 25, label: "Herblore" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifyRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function meetsRequirements(player) {
     return (
       (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) >= REQUIRED_QUEST_POINTS &&
-      REQUIRED_QUESTS.every(([key]) => questComplete(player, key))
+      REQUIRED_QUESTS.every(([key]) => questComplete(player, key)) &&
+      missingSkillRequirements(player).length === 0
     );
   }
 
   function handleStartHook({ player, npcId, hook }) {
     if (!ACHIETTIES_IDS.has(npcId) || hook !== START_HOOK) return;
-    if (!meetsRequirements(player)) return;
+    if (!meetsRequirements(player)) {
+      if (quest.getStage(player) === 0) notifyRequirements(player);
+      return;
+    }
     if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
   }
 

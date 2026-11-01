@@ -41,22 +41,63 @@ prints its modulus for the RSProx target.
 Gradle runs on any JDK 11+ and builds with a JDK 17 toolchain. The test client builds RSProx's
 revision-241 protocol module from a pinned commit into `gateway/build/rsprox` on first run.
 
-## Connecting the official client
+## Playing with RuneLite
 
-tsps serves a jav_config and world list for RSProx on its own port. `yarn gateway` prints the
-target; add it in RSProx as a custom target (YAML):
+RSProx launches the client, RuneLite or the native one, and connects it to the gateway. tsps
+serves the jav_config and world list RSProx needs on its own port.
 
-```yaml
-config:
-  - name: tsps
-    jav_config_url: http://127.0.0.1:<WEBSOCKET_PORT>/gateway/jav_config.ws
-    modulus: <printed by yarn gateway>
-    revision: 241
-    game_server_port: <GATEWAY_PORT>
-```
+1. Start tsps and the gateway (above). `yarn gateway` prints the RSProx target: the jav_config
+   URL, the game port and the login key's modulus.
+2. Add it to RSProx's custom targets, `.rsprox/proxy-targets.yaml` in your home directory, with
+   the printed values:
 
-Launch the native client for that target and log in with a tsps account (unknown names are
-created, as in the browser).
+   ```yaml
+   config:
+     - name: tsps
+       jav_config_url: http://127.0.0.1:<WEBSOCKET_PORT>/gateway/jav_config.ws
+       revision: 241.1
+       game_server_port: <GATEWAY_PORT>
+       modulus: <printed by yarn gateway>
+   ```
+
+   Each worktree has its own ports and target. The modulus stays the same while
+   `gateway/keys/rsa.txt` exists.
+
+   For players on other machines, set two things in the root `.env`:
+   - `PUBLIC_HOST`: the IP address or domain they reach the server at. The jav_config and world
+     list give it instead of 127.0.0.1.
+   - `GATEWAY_BIND_HOST=0.0.0.0` (or one interface's address): the gateway's game listener
+     otherwise only takes connections from this machine. Behind NAT or a domain, `PUBLIC_HOST`
+     needn't be an address of this machine, so the two are separate.
+
+   Both `WEBSOCKET_PORT` (HTTP) and `GATEWAY_PORT` (game) must be reachable.
+3. In RSProx, pick the target and RuneLite as the client, and launch it. Log in with a tsps
+   account; unknown names are created, as in the browser.
+
+Restart `yarn gateway` after pulling gateway changes. tsps restarts itself on server changes,
+which logs everyone out.
+
+### What doesn't work
+
+[COVERAGE.md](COVERAGE.md) has every message. The ones you'll notice:
+
+- tsps's own interfaces: `::teleports`, `::commands`, custom shops and the other plugin
+  interfaces (group 30000 and up) aren't in the official cache
+- browser-only features: the quest helper, voice chat, plugin HUDs and custom items (shown as
+  their base item)
+- camera target tracking and glides, which have no revision-241 form
+- two players on one boat
+
+### Reporting a problem
+
+What helped most in fixing the gateway, roughly in order:
+
+- **The RSProx recording:** RSProx writes a session to `.rsprox/binary/<target name>/` in your
+  home directory, but only when the session ends, so log out first. RSProx recordings of live
+  OSRS show what the official client expects for the same thing.
+- **The gateway's `dropped:` line:** printed every minute, it counts what wasn't passed on.
+  `missing:<group>:<component>` is an interface message for a component the client doesn't have.
+- **RuneLite's log:** `.runelite/logs/client.log` in your home directory, for client errors.
 
 ## Layout
 

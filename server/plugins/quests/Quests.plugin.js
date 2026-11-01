@@ -20,8 +20,11 @@ const QUESTS = [
   "CabinFever", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
+  "DaddysHome",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
-  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI", "DesertTreasureII",
+  // BearYourSoul also searches the Arceuus Library shelves; DepthsOfDespair's active
+  // book step must claim that shared search first.
+  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "BearYourSoul", "DesertTreasureI", "DesertTreasureII",
   "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DragonSlayerII",
   "DreamMentor", "DruidicRitual", "DwarfCannon", "EadgarsRuse",
   "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnakhrasLament",
@@ -34,7 +37,7 @@ const QUESTS = [
   "GrandTree", "GreatBrainRobbery", "GrimTales", "HandInTheSand",
   "HammersInTheDark", "HauntedMine", "HazeelCult", "HeroesQuest", "HisFaithfulServants", "HolyGrail",
   "HorrorFromTheDeep", "IcthlarinsLittleHelper", "IdesOfMilk", "ImpCatcher",
-  "InAidOfTheMyreque", "InSearchOfTheMyreque", "JunglePotion", "KingsRansom",
+  "InAidOfTheMyreque", "InSearchOfKnowledge", "InSearchOfTheMyreque", "JunglePotion", "KingsRansom",
   "KnightsSword", "LandOfTheGoblins", "LearningTheRopes", "LegendsQuest", "LostCity",
   "LostTribe", "LunarDiplomacy", "MakingFriendsWithMyArm", "MakingHistory",
   "MeatAndGreet", "MerlinsCrystal", "MisthalinMystery", "MonkeyMadnessI",
@@ -50,16 +53,19 @@ const QUESTS = [
   "RumDeal", "RuneMysteries", "ScorpionCatcher", "Scrambled",
   "SeaSlug", "SecretsOfTheNorth", "ShadesOfMortton", "ShadowOfTheStorm",
   "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav", "SongOfTheElves",
-  "ShiloVillage", "SleepingGiants", "SlugMenace", "SoulsBane",
+  "ShiloVillage", "SkippyAndTheMogres", "SleepingGiants", "SlugMenace", "SoulsBane",
   "SpiritsOfTheElid", "SwanSong", "TaiBwoWannaiTrio", "TailOfTwoCats",
   "TaleOfTheRighteous", "TasteOfHope", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",
   "TheFeud", "TheFinalDawn", "TheFremennikIsles",
   "TheEmptyChair", "TheGolem", "TheHeartOfDarkness", "TheRedAxesAnswer", "TheTithesLedgers", "ThroneOfMiscellania", "TouristTrap",
   "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance",
   "TrollStronghold", "TroubledTortugans", "TwilightPromise", "UndergroundPass",
-  "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest",
+  "ValeTotems", "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest",
   "WhatLiesBelow", "WitchsHouse", "WitchsPotion", "WordsInTheDark", "XMarksTheSpot",
   "ZogreFleshEaters",
+  // Enter the Abyss shares the Mage of Zamorak with Temple of the Eye and Wanted.
+  // Registering it last lets their own stage windows claim the shared NPC first.
+  "EnterTheAbyss",
 ]
 
 // Free-to-play quests (OSRS wiki); the rest stay unloaded on a free-to-play world.

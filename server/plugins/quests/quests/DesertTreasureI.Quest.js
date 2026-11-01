@@ -261,7 +261,6 @@ module.exports = function registerDesertTreasureIQuest(api) {
   const take = (player, itemId, amount = 1) => player.getInventory().deleteNumber(itemId, amount);
   const hasAllSupplies = (player) => EBLIS_SUPPLIES.every((entry) => has(player, entry.itemId, entry.quantity));
   const hasAllDiamonds = (player) => DIAMOND_IDS.every((itemId) => has(player, itemId));
-  const magicLevel = (player) => player.getSkillManager().getCurrentLevel(Skill.MAGIC);
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
   const setAttr = (player, key, value) => player.setAttribute(key, value | 0);
   const wearingRing = (player) =>
@@ -273,8 +272,29 @@ module.exports = function registerDesertTreasureIQuest(api) {
     return getRegisteredQuests().find((entry) => entry.key === key);
   }
 
+  /** Wiki: 50 Magic, 50 Firemaking, 53 Thieving and 10 Slayer. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.MAGIC, level: 50, label: "Magic" },
+    { skill: Skill.FIREMAKING, level: 50, label: "Firemaking" },
+    { skill: Skill.THIEVING, level: 53, label: "Thieving" },
+    { skill: Skill.SLAYER, level: 10, label: "Slayer" },
+  ];
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function meetsPrerequisites(player) {
-    if (magicLevel(player) < 50) return false;
+    if (missingSkillRequirements(player).length > 0) return false;
     return PREREQUISITE_KEYS.every((key) => {
       const other = questHandle(key);
       return !other || other.isComplete(player);
@@ -643,7 +663,13 @@ module.exports = function registerDesertTreasureIQuest(api) {
 
   function handleStartHook({ player, npcId, hook }) {
     if (!ASGARNIA_IDS.has(npcId) || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (!meetsPrerequisites(player)) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   /** A transcript condition was chosen: run the hand-in it represents. */

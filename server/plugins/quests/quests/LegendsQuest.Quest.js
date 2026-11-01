@@ -286,17 +286,18 @@ module.exports = function registerLegendsQuest(api) {
   const JUNGLE_EDGE = { x: 2865, y: 2941, z: 0 };
   const RUNE_ORDER = [SOUL_RUNE, MIND_RUNE, EARTH_RUNE, LAW_RUNE, LAW_RUNE];
 
+  /** Wiki: 50 in most skills, 52 Mining, 56 Magic, 45 Herblore and 42 Prayer. */
   const REQUIRED_SKILLS = [
-    [Skill.AGILITY, "Agility"],
-    [Skill.CRAFTING, "Crafting"],
-    [Skill.HERBLORE, "Herblore"],
-    [Skill.MAGIC, "Magic"],
-    [Skill.MINING, "Mining"],
-    [Skill.PRAYER, "Prayer"],
-    [Skill.SMITHING, "Smithing"],
-    [Skill.STRENGTH, "Strength"],
-    [Skill.THIEVING, "Thieving"],
-    [Skill.WOODCUTTING, "Woodcutting"],
+    [Skill.AGILITY, 50, "Agility"],
+    [Skill.CRAFTING, 50, "Crafting"],
+    [Skill.HERBLORE, 45, "Herblore"],
+    [Skill.MAGIC, 56, "Magic"],
+    [Skill.MINING, 52, "Mining"],
+    [Skill.PRAYER, 42, "Prayer"],
+    [Skill.SMITHING, 50, "Smithing"],
+    [Skill.STRENGTH, 50, "Strength"],
+    [Skill.THIEVING, 50, "Thieving"],
+    [Skill.WOODCUTTING, 50, "Woodcutting"],
   ];
   const REQUIRED_QUEST_POINTS = 107;
   const REQUIRED_QUESTS = [
@@ -368,11 +369,18 @@ module.exports = function registerLegendsQuest(api) {
     return Number(player.getAttribute(CRYSTALS_ATTRIBUTE)) || 0;
   }
 
+  function waterfallQuestComplete(player) {
+    const request = { player, key: "waterfall_quest", complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function meetsRequirements(player) {
-    for (const [skill, label] of REQUIRED_SKILLS) {
-      if (skillLevel(player, skill) < 50) return false;
+    for (const [skill, level] of REQUIRED_SKILLS) {
+      if (player.getSkillManager().getMaxLevel(skill) < level) return false;
     }
     if ((Number(player.getAttribute("quest.points")) || 0) < REQUIRED_QUEST_POINTS) return false;
+    if (!waterfallQuestComplete(player)) return false;
     for (const [attribute, completeAt] of REQUIRED_QUESTS) {
       if ((Number(player.getAttribute(attribute)) || 0) < completeAt) return false;
     }
@@ -381,11 +389,11 @@ module.exports = function registerLegendsQuest(api) {
 
   function missingRequirementText(player) {
     const missing = REQUIRED_SKILLS
-      .filter(([skill]) => skillLevel(player, skill) < 50)
-      .map(([, label]) => label);
+      .filter(([skill, level]) => player.getSkillManager().getMaxLevel(skill) < level)
+      .map(([skill, level, label]) => `${label} ${level}`);
     const lines = ["You need to complete more quests and have 107 quest points before you may start this quest."];
-    lines.push("You also need these quests: Family Crest, Heroes' Quest, Shilo Village and Underground Pass.");
-    if (missing.length) lines.push(`You need level 50 in: ${missing.join(", ")}.`);
+    lines.push("You also need these quests: Family Crest, Heroes' Quest, Shilo Village, Underground Pass and Waterfall Quest.");
+    if (missing.length) lines.push(`You need: ${missing.join(", ")}.`);
     return lines;
   }
 

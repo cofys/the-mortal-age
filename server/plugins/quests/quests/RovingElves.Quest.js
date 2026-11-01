@@ -296,6 +296,10 @@ module.exports = function registerRovingElvesQuest(api) {
     if (!player || hook !== START_HOOK) return;
     if (!ISLWYN_NPC_IDS.has(npcId) && !ELUNED_NPC_IDS.has(npcId)) return;
     if (!questComplete(player, "regicide")) return;
+    if (!questComplete(player, "waterfall_quest")) {
+      player.sendMessage("You must complete Waterfall Quest to start this quest.");
+      return;
+    }
     if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
   }
 

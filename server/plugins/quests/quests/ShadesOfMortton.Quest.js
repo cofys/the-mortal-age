@@ -568,9 +568,54 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   }
 
   /** The diary's "Yes." starts the quest; the cured greetings mark first contact. */
+  /** Wiki: 20 Crafting, 15 Herblore, 5 Firemaking and Priest in Peril. */
+  const REQUIRED_SKILLS = [
+    { skill: Skill.CRAFTING, level: 20, label: "Crafting" },
+    { skill: Skill.HERBLORE, level: 15, label: "Herblore" },
+    { skill: Skill.FIREMAKING, level: 5, label: "Firemaking" },
+  ];
+
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
+  function meetsStartRequirements(player) {
+    return missingSkillRequirements(player).length === 0 && questIsComplete(player, "priest_in_peril");
+  }
+
+  function notifyStartRequirements(player) {
+    notifySkillRequirements(player);
+    if (!questIsComplete(player, "priest_in_peril")) {
+      player.sendMessage("You must complete Priest in Peril to start this quest.");
+    }
+  }
+
+  function missingSkillRequirements(player) {
+    const skills = player.getSkillManager();
+    return REQUIRED_SKILLS.filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+  }
+
+  function meetsSkillRequirements(player) {
+    return missingSkillRequirements(player).length === 0;
+  }
+
+  function notifySkillRequirements(player) {
+    for (const requirement of missingSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, hook }) {
     if (hook !== START_HOOK) return;
     if (quest.getStage(player) < STAGE_READ_DIARY) {
+      if (!meetsStartRequirements(player)) {
+        notifyStartRequirements(player);
+        return;
+      }
       quest.setStage(player, STAGE_READ_DIARY);
     }
   }

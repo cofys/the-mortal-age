@@ -16,6 +16,7 @@ const JewelleryBox = require("./JewelleryBox.Construction");
 const Menu = require("./Menu.Construction");
 const Mounted = require("./Mounted.Construction");
 const SuperiorGarden = require("./SuperiorGarden.Construction");
+const GardenPlants = require("./GardenPlants.Construction");
 const Lectern = require("./Lectern.Construction");
 const Stairs = require("./Stairs.Construction");
 const Workshop = require("./Workshop.Construction");
@@ -164,6 +165,26 @@ function releaseHouse(player, restoreLocation) {
 /** "construction:owns-house" { player, owns }: whether the player has bought a house. */
 function ownsHouse(request) {
   if (request?.player) request.owns = houseStateFor(request.player).owned !== false;
+}
+
+/**
+ * "construction:grant-house" { player, granted }: gives a starter house in Rimmington when the
+ * player has none (Daddy's Home). `granted` stays false if they already own one, so the caller
+ * can pay the Wiki's 1,000 coins instead.
+ */
+function grantHouse(request) {
+  if (!request?.player) return;
+  const house = houseStateFor(request.player);
+  if (house.owned !== false) {
+    request.granted = false;
+    return;
+  }
+  house.owned = true;
+  house.location = 1;
+  house.style = 0;
+  request.player.setAttribute(HOUSE_ATTRIBUTE, house);
+  syncHouseOptions(request.player);
+  request.granted = true;
 }
 
 function enterHouse(player, buildingMode) {
@@ -844,6 +865,8 @@ function getBuildMaterials(player, house, target, buildable) {
     return "That can only be built if the hotspot is empty.";
   }
   if (target && previous && existing !== previous) return "That can only be built by upgrading the previous piece of furniture.";
+  const plantRefusal = GardenPlants.refusal(player, buildable);
+  if (plantRefusal) return plantRefusal;
   const requiredItems = new Map();
   const listed = [];
   for (const material of buildable.materials) {
@@ -926,7 +949,7 @@ function buildFurniture(player, house, target, buildable) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const materials = getBuildMaterials(player, house, target, buildable);
   if (!(materials instanceof Map)) return Menu.refuse(player, materials);
-  hammer(player, buildable.buildAnimationId);
+  if (!GardenPlants.animate(player, buildable)) hammer(player, buildable.buildAnimationId);
   const nails = buildable.materials.find(material => material.source === "NAILS")?.amount ?? 0;
   if (nails === 0) return completeFurniture(player, house, target, buildable, materials);
   let used = 0;
@@ -956,6 +979,7 @@ function buildFurniture(player, house, target, buildable) {
 function completeFurniture(player, house, target, buildable, materials) {
   useMaterials(player, buildable, materials);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
+  GardenPlants.complete(player, buildable);
   house.setFurniture(target, buildable);
   // Keyed to the house, so a click straight after the build doesn't cancel the redraw.
   TaskManager.submit(new CountdownTask(house, 1, () => {
@@ -1356,6 +1380,7 @@ function attach(api) {
   api.onCustomEvent("spell:teleport-arrival", houseTeleportArrival);
   api.onCustomEvent("construction:house-tablet", houseTablet);
   api.onCustomEvent("construction:owns-house", ownsHouse);
+  api.onCustomEvent("construction:grant-house", grantHouse);
   api.onSpellDisabled(refuseHouseVengeance);
   api.onPlayerLogin(loginHouse);
   api.onPlayerMapSquareChange(recordRegionVisit);

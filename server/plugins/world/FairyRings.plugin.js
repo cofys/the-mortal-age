@@ -10,6 +10,9 @@
  *   Fairy Queen's Hideout and up to 10 favourites.
  * - Confirm, "Last-destination" and "Zanaris" play the fairy teleport. AJQ (Dorgesh-Kaan
  *   cave) first warns a player without a light source (interface 578).
+ * - Zanaris' two one-way exit rings ("Use") play the same teleport with no staff or quest
+ *   check (Wiki: Fairy ring (Zanaris)): the one by the shed's arrival tile to the Lumbridge
+ *   Swamp shed, the market's to behind Al Kharid bank.
  *
  * ponytail: Fairytale II - Cure a Queen is not implemented, so the quest check passes when the
  * quest is not registered rather than blocking every player.
@@ -72,6 +75,19 @@ const LAST_CODE_ATTRIBUTE = "fairy-rings:last";
 const USED_CODES_ATTRIBUTE = "fairy-rings:used";
 const FAVOURITES_ATTRIBUTE = "fairy-rings:favourites";
 const FAIRYQUEST_NAME = "Fairytale II - Cure a Queen";
+
+/**
+ * Zanaris' one-way exit rings by loc id. Lumbridge Swamp: rsprox capture 3173 (rev 232), the
+ * fairy teleport to (3201,3169). Al Kharid: no capture; the landing tile is RuneLite's
+ * transport data (plugins/agent/data/transports.json).
+ */
+let exitRings = new Map();
+function loadExitRings(ids) {
+  return new Map([
+    [ids.FAIRY_RING_3, { code: null, destination: new Location(3201, 3169, 0) }], // fairy_mushroom_ring
+    [ids.FAIRY_RING_2, { code: null, destination: new Location(3260, 3171, 0) }], // fairy_mushroom_ring3
+  ]);
+}
 
 let core = null;
 /** Players whose dials or warning close because they are going: busy stays set (as captured). */
@@ -219,6 +235,7 @@ function sendLastDestination(player, ring) {
 }
 
 function rememberUse(player, ring) {
+  if (!ring.code) return;
   const used = codeList(player, USED_CODES_ATTRIBUTE);
   if (!used.includes(ring.code)) player.setAttribute(USED_CODES_ATTRIBUTE, [...used, ring.code].join(","));
 }
@@ -430,6 +447,14 @@ function zanaris({ player, location }) {
   fairyTeleport(player, ring, ringTile(location), false);
 }
 
+/** "Use" on a Zanaris exit ring: the fairy teleport out, needing neither staff nor quest. */
+function useExitRing({ player, objectId, location }) {
+  const ring = exitRings.get(objectId);
+  if (!player || !ring) return;
+  if (!core.TeleportHandler.checkReqs(player, ring.destination, 20)) return;
+  fairyTeleport(player, ring, ringTile(location), false);
+}
+
 function sendLastOnLogin({ player }) {
   const ring = rings.get(String(player.getAttribute(LAST_CODE_ATTRIBUTE) ?? ""));
   if (ring) sendLastDestination(player, ring);
@@ -438,6 +463,7 @@ function sendLastOnLogin({ player }) {
 function attach(api) {
   core = api.core;
   rings = loadRings();
+  exitRings = loadExitRings(core.ObjectIdentifiers);
   ringsByComponent = new Map();
   for (const ring of rings.values()) {
     if (ring.logComponent > 0) ringsByComponent.set(ring.logComponent, ring);
@@ -447,7 +473,7 @@ function attach(api) {
 
 /** The rings' options, as the cache names them (op 3 is a plain "Last-destination", not a multiloc). */
 function ringOptions() {
-  return { Zanaris: zanaris, Configure: openDial, "Last-destination": lastDestination };
+  return { Zanaris: zanaris, Configure: openDial, "Last-destination": lastDestination, Use: useExitRing };
 }
 
 module.exports = {
@@ -461,6 +487,7 @@ module.exports = {
     openDial,
     confirmDial,
     lastDestination,
+    useExitRing,
     interfaceAction,
     interfaceClosed,
     hasLightSource,

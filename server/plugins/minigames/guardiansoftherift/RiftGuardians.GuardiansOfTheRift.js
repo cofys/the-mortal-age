@@ -101,6 +101,7 @@ function finish(player, pile) {
   Shared.addXp(player, "CRAFTING", CRAFTING_XP);
   Shared.addXp(player, "RUNECRAFTING", Cells.CELL[tier].xp);
   Game.addEnergy(player, pile.type, GUARDIAN_ENERGY[tier]);
+  Game.addContribution(player, 10);
   if (alive() >= Shared.RIFT_GUARDIAN_CAP) {
     player.sendMessage("The powers of the cell extend into the essence, but no guardian forms.");
     return;

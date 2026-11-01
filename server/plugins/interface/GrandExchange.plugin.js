@@ -58,6 +58,59 @@ const PLATINUM_TOKEN = ItemIdentifiers.PLATINUM_TOKEN;
 // an int prompt, so a unit price stays within MAX; only quantity x price can exceed it.
 const COINS_PER_TOKEN = 1000;
 const MAX_TRADE = MAX + MAX * COINS_PER_TOKEN;
+// Wiki: Grand_Exchange#Convenience_fee_and_item_sink. The 2% fee is charged per item,
+// rounded down (so anything under 50 coins is free), and capped at 5M per item.
+const TAX_DIVISOR = 50;
+const TAX_CAP = 5_000_000;
+// Wiki: Grand_Exchange#Exempt_from_tax. These are item names, not ids, so every
+// tradeable version of an item (a bond variant, a noted stack) is covered.
+const TAX_EXEMPT_NAMES = new Set([
+  "Old school bond",
+  "Games necklace(8)",
+  "Ring of dueling(8)",
+  "Ardougne teleport",
+  "Camelot teleport",
+  "Civitas illa fortis teleport",
+  "Falador teleport",
+  "Kourend castle teleport",
+  "Lumbridge teleport",
+  "Teleport to house",
+  "Varrock teleport",
+  "Bass",
+  "Bread",
+  "Bronze arrow",
+  "Bronze dart",
+  "Cake",
+  "Cooked chicken",
+  "Cooked meat",
+  "Herring",
+  "Iron arrow",
+  "Iron dart",
+  "Lobster",
+  "Mackerel",
+  "Meat pie",
+  "Mind rune",
+  "Pike",
+  "Salmon",
+  "Shrimps",
+  "Steel arrow",
+  "Steel dart",
+  "Tuna",
+  "Chisel",
+  "Gardening trowel",
+  "Glassblowing pipe",
+  "Hammer",
+  "Needle",
+  "Pestle and mortar",
+  "Rake",
+  "Saw",
+  "Secateurs",
+  "Seed dibber",
+  "Shears",
+  "Spade",
+]);
+// Dose and charge counts make these names vary, but the whole item is exempt.
+const TAX_EXEMPT_PREFIXES = ["Energy potion", "Watering can"];
 const MARKET_DATA_FILE = path.join(__dirname, "data", "grand-exchange.json");
 // OSRS: members get all 8 offer slots, free-to-play worlds the first 3.
 const usableSlots = () => (pluginApi.core.WorldDefinition.isMembersWorld() ? 8 : 3);
@@ -262,16 +315,41 @@ function allMarketVarps(player) {
   return varps;
 }
 
+function taxExempt(itemId) {
+  if (!(itemId > 0)) return false;
+  const name = ItemDefinition.forId(ItemDefinition.forId(itemId).unNote()).getName();
+  return TAX_EXEMPT_NAMES.has(name) || TAX_EXEMPT_PREFIXES.some((prefix) => name?.startsWith(prefix));
+}
+
+/**
+ * The convenience fee on a sell offer: 2% of the sale price per item, rounded down and capped
+ * at 5M per item. Exempt items, buy offers and aborted offers pay nothing.
+ */
+function tax(offer) {
+  if (!offer?.sell || offer.aborted || taxExempt(offer.itemId)) return 0;
+  const quantity = Math.max(0, Number(offer.quantity) || 0);
+  if (!quantity) return 0;
+  // Saved offers from before adjustable prices have no price. Use the unit price they
+  // actually sold at rather than today's guide, which may have moved since the sale.
+  const unitPrice = Number.isInteger(offer.price) && offer.price > 0
+    ? Math.min(MAX, offer.price)
+    : Math.floor((Number(offer.total) || 0) / quantity);
+  const perItem = Math.min(TAX_CAP, Math.floor(unitPrice / TAX_DIVISOR));
+  return perItem * quantity;
+}
+
 /**
  * What a finished offer hands over, as item stacks: the trade's result, or for an aborted offer
- * what was put in. Coin totals over a full stack are paid as platinum tokens plus the remaining coins.
+ * what was put in. A sale pays its total less the Grand Exchange tax. Coin totals over a full
+ * stack are paid as platinum tokens plus the remaining coins.
  */
 function payout(offer) {
   const coins = offer.sell !== Boolean(offer.aborted);
   if (!coins) return [{ itemId: offer.itemId, amount: offer.quantity }];
-  if (offer.total <= MAX) return [{ itemId: COINS, amount: offer.total }];
-  const tokens = Math.min(MAX, Math.floor(offer.total / COINS_PER_TOKEN));
-  return [{ itemId: PLATINUM_TOKEN, amount: tokens }, { itemId: COINS, amount: offer.total - tokens * COINS_PER_TOKEN }];
+  const total = Math.max(0, offer.total - tax(offer));
+  if (total <= MAX) return [{ itemId: COINS, amount: total }];
+  const tokens = Math.min(MAX, Math.floor(total / COINS_PER_TOKEN));
+  return [{ itemId: PLATINUM_TOKEN, amount: tokens }, { itemId: COINS, amount: total - tokens * COINS_PER_TOKEN }];
 }
 
 function collection(offer) {
@@ -744,6 +822,10 @@ module.exports = {
     changePrice,
     collectionOutputId,
     payout,
+    tax,
+    taxExempt,
+    TAX_CAP,
+    TAX_DIVISOR,
     MAX_TRADE,
     fillDelayMs,
     remainingLimit,

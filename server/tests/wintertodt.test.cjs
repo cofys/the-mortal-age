@@ -18,6 +18,8 @@ const Braziers = require('../plugins/minigames/wintertodt/Braziers.Wintertodt');
 const Supplies = require('../plugins/minigames/wintertodt/Supplies.Wintertodt');
 const Pyromancers = require('../plugins/minigames/wintertodt/Pyromancers.Wintertodt');
 const Cart = require('../plugins/minigames/wintertodt/Cart.Wintertodt');
+const Ignisia = require('../plugins/minigames/wintertodt/Ignisia.Wintertodt');
+const Crates = require('../plugins/minigames/wintertodt/Crates.Wintertodt');
 const Corners = require('../plugins/minigames/wintertodt/Corners.Wintertodt');
 const Warmth = require('../plugins/minigames/wintertodt/Warmth.Wintertodt');
 const Attacks = require('../plugins/minigames/wintertodt/Attacks.Wintertodt');
@@ -76,6 +78,9 @@ function container(size) {
       else slots[slots.indexOf(null)] = { id, amount: 1 };
       return self;
     },
+    add(item) {
+      return self.adds(item?.getId?.() ?? -1, item?.getAmount?.() || 1);
+    },
     delete(id, amount = 1) {
       for (let i = 0; i < slots.length && amount > 0; i++) {
         if (slots[i]?.id !== id) continue;
@@ -89,6 +94,12 @@ function container(size) {
     contains: (id) => slots.some((slot) => slot?.id === id),
     getAmount: (id) => slots.reduce((sum, slot) => sum + (slot?.id === id ? slot.amount : 0), 0),
     getFreeSlots: () => slots.filter((slot) => !slot).length,
+    forceAdd(player, item) {
+      const id = item?.getId?.() ?? -1;
+      const amount = item?.getAmount?.() || 1;
+      if (id > 0) self.adds(id, amount);
+      return self;
+    },
     refreshItems() { return self; },
   };
   return self;
@@ -139,6 +150,7 @@ function fakePlayer(name = 'Tester', { firemaking = 99, level = 99, x = 1631, y 
         sendGraphic: () => sender,
         sendSoundEffect: (id, loops, delay) => { p.sounds.push(delay ? [id, delay] : id); return sender; },
         sendTypedMessage: (type, text) => { p.spam.push(text); return sender; },
+        sendInterfaceRemoval: () => sender,
       };
       return sender;
     },
@@ -181,6 +193,8 @@ before(() => {
   Supplies(api);
   Pyromancers(api);
   Cart(api);
+  Ignisia(api);
+  Crates(api);
 });
 
 const attacksTick = Attacks.tick;
@@ -549,6 +563,35 @@ test('roots come every 3 ticks at 99 with a dragon axe; kindling every 4 outside
   assert.equal(player.spam.at(-1), 'You carefully fletch the root into a bundle of kindling.');
 });
 
+test('a carried or worn fletching knife speeds up every kindling after the first', () => {
+  startRound();
+  const player = fighter('Fletcher');
+  player.inventory.adds(Shared.ITEM.KNIFE);
+  for (let i = 0; i < 4; i++) player.inventory.adds(Shared.ITEM.BRUMA_ROOT);
+  player.inventory.adds(Shared.ITEM.FLETCHING_KNIFE);
+  hooks.itemOnItem['Knife|Bruma root']({ player });
+  ticks(3);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 1, 'the first keeps the normal 4 ticks');
+  ticks(2);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 1, 'the knife speeds up only from the second');
+  ticks(1);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 2, 'the second is 3 ticks later');
+  ticks(3);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 3);
+
+  const equipped = fighter('Wielder');
+  equipped.inventory.adds(Shared.ITEM.KNIFE);
+  for (let i = 0; i < 3; i++) equipped.inventory.adds(Shared.ITEM.BRUMA_ROOT);
+  equipped.equipment.adds(Shared.ITEM.FLETCHING_KNIFE);
+  hooks.itemOnItem['Knife|Bruma root']({ player: equipped });
+  ticks(3);
+  assert.equal(equipped.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 1);
+  ticks(3);
+  assert.equal(equipped.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 2, 'equipped works the same as carried');
+  ticks(3);
+  assert.equal(equipped.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 3);
+});
+
 test('the crates give one tool while you have none, and up to ten concoctions', () => {
   const player = fighter('Supplier');
   hooks.objects.Crate['Take-knife']({ player });
@@ -713,4 +756,155 @@ test('herbs, a healthy pyromancer and the torch swap follow the captures', () =>
   assert.equal(player.inventory.slots[0].id, Shared.ITEM.BRUMA_TORCH_OFFHAND);
   hooks.items['Bruma torch (off-hand)'].Swap({ player, slot: 0, itemId: Shared.ITEM.BRUMA_TORCH_OFFHAND });
   assert.equal(player.inventory.slots[0].id, Shared.ITEM.BRUMA_TORCH);
+});
+
+// ------------------------------------------------------------------ phase 4: Ignisia's exchange
+
+/** The last dialogue chain a fake player was shown. */
+function lastOption(player, index = 0) {
+  const dialogue = player.statements.at(-1)?.getDialogues().get(index);
+  assert.ok(dialogue, `no dialogue at ${index}`);
+  return dialogue;
+}
+
+test('Ignisia trades a full outfit for 250 pages through the captured menu', () => {
+  const player = fakePlayer('Ignisia');
+  for (const id of [I.PYROMANCER_HOOD, I.PYROMANCER_GARB, I.PYROMANCER_ROBE, I.PYROMANCER_BOOTS]) {
+    player.inventory.adds(id);
+  }
+  Ignisia.exchange({ player });
+  assert.equal(lastOption(player, 0).getText(), 'Do you have something for me?');
+  const hello = lastOption(player, 1);
+  assert.deepEqual(hello.getOptions(), ['Yes, I do.', 'Err... nope. Sorry.']);
+  hello.execute(1);
+
+  const setQuestion = lastOption(player);
+  assert.equal(setQuestion.getTitle(), 'Would you like to trade in a entire set?');
+  setQuestion.execute(1);
+
+  const menu = lastOption(player);
+  assert.equal(menu.getTitle(), 'What would you like to trade for?');
+  assert.deepEqual(menu.getOptions(), ['Extra Crate.', 'Burnt Pages.']);
+  menu.execute(2);
+
+  const confirm = lastOption(player);
+  assert.equal(confirm.getTitle(), 'Trade in 1x Pyromancer outfit for 250x burnt pages?');
+  confirm.execute(1);
+
+  assert.equal(player.inventory.getAmount(I.BURNT_PAGE), 250);
+  for (const id of [I.PYROMANCER_HOOD, I.PYROMANCER_GARB, I.PYROMANCER_ROBE, I.PYROMANCER_BOOTS]) {
+    assert.equal(player.inventory.getAmount(id), 0);
+  }
+});
+
+test('a piece, the gloves and either torch are 50 pages each; an empty tome is 250', () => {
+  const player = fakePlayer('Collector');
+  player.inventory.adds(I.PYROMANCER_HOOD, 2);
+  player.inventory.adds(I.PYROMANCER_GARB);
+  player.inventory.adds(I.WARM_GLOVES);
+  player.inventory.adds(Shared.ITEM.BRUMA_TORCH);
+  player.inventory.adds(Shared.ITEM.BRUMA_TORCH_OFFHAND);
+  player.inventory.adds(I.TOME_OF_FIRE_EMPTY_);
+  const groups = [...Ignisia.PIECES, ...Ignisia.OTHER];
+  const pages = groups.reduce((sum, group) => sum + Ignisia.countOf(player, group) * group.pages, 0);
+  assert.equal(pages, 550, '2 hoods + garb + gloves + two torches + tome');
+  for (const group of groups) {
+    const count = Ignisia.countOf(player, group);
+    if (count > 0) Ignisia.trade(player, 'pages', group, count);
+  }
+  assert.equal(player.inventory.getAmount(I.BURNT_PAGE), 550);
+  assert.equal(player.inventory.getAmount(I.TOME_OF_FIRE_EMPTY_), 0);
+});
+
+test('a whole outfit crate carries five rolls; every other crate carries one', () => {
+  const player = fakePlayer('Crafter');
+  for (const id of [I.PYROMANCER_HOOD, I.PYROMANCER_GARB, I.PYROMANCER_ROBE, I.PYROMANCER_BOOTS]) {
+    player.inventory.adds(id);
+  }
+  Ignisia.trade(player, 'crate', Ignisia.OUTFIT, 1);
+  assert.equal(player.inventory.getAmount(I.EXTRA_SUPPLY_CRATE), 1, 'one crate, not five');
+  player.inventory.adds(I.WARM_GLOVES);
+  Ignisia.trade(player, 'crate', Ignisia.OTHER[0], 1);
+  assert.equal(player.inventory.getAmount(I.EXTRA_SUPPLY_CRATE), 2);
+
+  const setCrate = new (Shared.core().Item)(I.EXTRA_SUPPLY_CRATE, 1, {
+    [Ignisia.CRATE_ROLLS_META]: 5,
+  });
+  assert.equal(Crates.rollsOf(setCrate), 5);
+  assert.equal(Crates.rollsOf(new (Shared.core().Item)(I.EXTRA_SUPPLY_CRATE, 1)), 1);
+
+  const original = Rewards.rollCrate;
+  Rewards.rollCrate = () => ({ id: I.SHARK, amount: 1 });
+  try {
+    player.inventory.slots.fill(null);
+    player.inventory.slots[0] = { id: I.EXTRA_SUPPLY_CRATE, amount: 1 };
+    assert.equal(Crates.openCrate({ player, item: setCrate, slot: 0, itemId: I.EXTRA_SUPPLY_CRATE }), true);
+    assert.equal(player.inventory.getAmount(I.SHARK), 5);
+    assert.equal(player.inventory.getAmount(I.EXTRA_SUPPLY_CRATE), 0);
+  } finally {
+    Rewards.rollCrate = original;
+  }
+});
+
+test('extra crate rolls never give a unique other than the dragon axe, nor pages', () => {
+  const player = fighter('Opener');
+  assert.equal(Rewards.rollCrate(player, () => 0).id, I.DRAGON_AXE);
+  const forbidden = new Set([
+    I.PHOENIX, I.TOME_OF_FIRE_EMPTY_, I.WARM_GLOVES, I.BRUMA_TORCH,
+    I.PYROMANCER_GARB, I.PYROMANCER_HOOD, I.PYROMANCER_ROBE, I.PYROMANCER_BOOTS, I.BURNT_PAGE,
+  ]);
+  for (let i = 0; i < 1000; i++) {
+    const reward = Rewards.rollCrate(player);
+    if (reward) assert.ok(!forbidden.has(reward.id), `${reward.id} is not an extra-crate unique`);
+  }
+});
+
+test('accepting a confirmation after equipping the item pays nothing', () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { EquipPacketListener } = require('../dist/net/packet/impl/EquipPacketListener');
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { OptionDialogue } = require('../dist/game/model/dialogues/entries/impl/OptionDialogue');
+
+  const player = new Player(null);
+  player.setUsername('Stale');
+  player.getSession = () => ({ sendClientPacket() {}, write() {} });
+  player.getFrameUpdater = () => ({
+    clearGroup() {}, shouldUpdate() { return true; }, interfaceTextMap: new Map(),
+  });
+  player.getInventory().adds(I.PYROMANCER_HOOD, 1);
+
+  Ignisia.exchange({ player });
+  const manager = player.getDialogueManager();
+  assert.equal(manager.handleResume((231 << 16) | 5, 1), true, 'continue the NPC line');
+  assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID, 1), true, 'Yes, I do.');
+  const menu = manager.getCurrent();
+  assert.equal(menu.getTitle(), 'What would you like to trade your Pyromancer pieces for?');
+  assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID, 2), true, 'Burnt Pages.');
+
+  const confirm = manager.getCurrent();
+  assert.equal(confirm.getTitle(), 'Trade in 1x Pyromancer hood for 50x burnt pages?');
+  const slot = player.getInventory().getItems().findIndex((item) => item.getId() === I.PYROMANCER_HOOD);
+  EquipPacketListener.equip(player, I.PYROMANCER_HOOD, slot, Inventory.INTERFACE_ID);
+  assert.equal(player.getEquipment().getAmount(I.PYROMANCER_HOOD), 1, 'the hood is worn');
+  assert.ok(manager.isActive(), 'native equipping leaves the chatbox confirmation open');
+
+  assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID, 1), true, 'Yes.');
+  assert.equal(player.getInventory().getAmount(I.BURNT_PAGE), 0, 'the stale offer pays nothing');
+  assert.equal(player.getInventory().getAmount(I.PYROMANCER_HOOD), 0);
+  assert.equal(player.getEquipment().getAmount(I.PYROMANCER_HOOD), 1);
+
+  assert.equal(Ignisia.trade(player, 'crate', Ignisia.PIECES[0], 1), false, 'the crate path rechecks too');
+  assert.equal(player.getInventory().getAmount(I.EXTRA_SUPPLY_CRATE), 0);
+});
+
+test('a stale outfit offer leaves every piece in place', () => {
+  const player = fakePlayer('StaleOutfit');
+  for (const id of [I.PYROMANCER_HOOD, I.PYROMANCER_GARB, I.PYROMANCER_ROBE, I.PYROMANCER_BOOTS]) {
+    player.inventory.adds(id);
+  }
+  player.inventory.delete(I.PYROMANCER_GARB, 1);
+  assert.equal(Ignisia.trade(player, 'pages', Ignisia.OUTFIT, 1), false);
+  assert.equal(player.inventory.getAmount(I.BURNT_PAGE), 0);
+  assert.equal(player.inventory.getAmount(I.PYROMANCER_HOOD), 1, 'nothing was removed');
+  assert.equal(player.inventory.getAmount(I.PYROMANCER_ROBE), 1);
 });

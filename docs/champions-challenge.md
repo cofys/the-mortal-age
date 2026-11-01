@@ -37,9 +37,10 @@ Varp 617 (`champions_defeated`) carries everything the client draws:
 | Arena ladder (10554) "Climb-up" | The player goes to (3185, 9758) and the statue closes. The fight is over, won or not (Wiki: the scroll is kept). |
 
 - **Instancing:** the capture shows a `rebuild_region` on the way down and instance coordinates on the way up. The basement is therefore one per player, so two players never share a champion.
-- **Teleports:** refused, with Larxus saying "There's a ladder for a reason." (Wiki).
-- **Leaving early:** logging out puts the player beside the trapdoor, and so does a login after a server stop.
-- **Death:** a death is not safe. The grave goes up on the guild's ground floor "a few tiles away from the trapdoor" (Wiki); the tile (3188, 3356) is ours.
+- **Teleports:** refused, with Larxus saying "There's a ladder for a reason." (Wiki). The ladders and the portcullis are ordinary object interactions, so they still work.
+- **Leaving early:** logging out puts the player beside the trapdoor, and so does a login after a server stop. The champion and the fight are removed.
+- **Ground scrolls:** a champion's scroll dropped in the instance is taken back (or placed beside the trapdoor if the pack is full) before the instance is destroyed, so an early exit or a death cannot silently lose it.
+- **Death:** a death is not safe. The grave goes up on the guild's ground floor "a few tiles away from the trapdoor" (Wiki); the tile (3188, 3356) is ours. Normal dangerous-death recovery applies to the scroll, as the Wiki says it can be recovered from the grave.
 
 ## Larxus
 
@@ -70,10 +71,10 @@ The transcript's "I'd like another one." branch ends after the second cape (the 
 | Zombies | No Magic | Magic is refused. |
 | Giant | Melee only | Other styles are refused. |
 | Hobgoblin | No Melee | Melee is refused. |
-| Ghoul | Weapons only | The statue refuses anything but weapons, worn or carried, the champion's scroll included: the Wiki says the inventory must hold no other items, and a scroll dropped before the fight and picked up after keeps working. Armour can't be put on in the fight. |
+| Ghoul | Weapons only | The statue refuses anything but a weapon in the weapon slot, and an inventory that isn't empty, the champion's scroll included: a scroll dropped before the fight and picked up after keeps working. Armour can't be put on in the fight. |
 | Earth Warrior | No Prayer | Prayers are turned off on the way down, and turning one on is refused. |
-| Jogre | No Ranged | Ranged is refused. |
-| Lesser Demon | No weapons or armour | The statue refuses anything worn or anything equippable carried. Equipping is refused ("You're not supposed to be using any weapons!" / "…armour!"). |
+| Jogre | No Ranged | Ranged is refused. Its hits poison, starting at 8 (Wiki). |
+| Lesser Demon | No weapons, armour or materials | The statue refuses anything worn or anything equippable carried, then the materials used to make equipment (logs, ores, bars, hides, fletching supplies, tools and the imbued heart). Runes and potions are allowed. Equipping is refused ("You're not supposed to be using any weapons!" / "…armour!"). |
 | Leon d'Cour | Only what is worn | The statue refuses an inventory that isn't empty. |
 
 - **How a refusal looks:** captured for the Giant. A game message, "You're only allowed to use Melee in this duel!", and Larxus: "I believe I mentioned you're only allowed to use Melee in this duel."
@@ -85,6 +86,10 @@ The transcript's "I'd like another one." branch ends after the second cape (the 
 - **Stats:** they come from the monster data, and the Wiki confirms them.
 - **Melee champions:** the Giant, Zombies, Earth Warrior, Jogre and Leon d'Cour use the core NPC melee, with their cache animations in `npc-combat-defs.json`. The Giant's animations (6368/6370/6369) and death sound 450 are captured.
 - **Ranged, magic and mixed champions:** the Imp, Goblin, Skeleton, Hobgoblin, Ghoul and Lesser Demon have their own attacks in `Combat.ChampionsChallenge.js`. The animations and spot animations come from the cache's `champions_*` names. The Ghoul and the Lesser Demon keep their distance and only swing at a player beside them (Wiki).
+- **Projectiles:** the Imp, Hobgoblin, Ghoul and Lesser Demon use the cache's launch/travel graphics and the engine's arc; the hit lands on the arrival tick. The Goblin's drain impact is delayed to its hit. The Skeleton has no named projectile in the cache, so it fires none.
+- **Imp teleports:** when damaged, it teleports a short distance to a free arena tile, never outside the arena (Wiki). The Wiki gives no rate; it is throttled so it cannot blink on every hit.
+- **Goblin prayer drain:** its spell drains one Prayer point per hit (the Wiki gives the effect, not an amount).
+- **Jogre poison:** its hits poison, starting at 8 (Wiki), through the normal NPC poison path.
 - **Aggression:** the champion comes for the player once they pass the portcullis (captured for the Giant). The Goblin isn't aggressive (Wiki).
 
 ## The kill
@@ -128,12 +133,7 @@ All of this was captured unless marked.
 
 ## Not yet done
 
-- **Unknown amounts:**
-  - the Goblin's prayer drain (the Wiki gives no amount);
-  - how often the Imp teleports about the arena (the Wiki gives no rate);
-  - the Jogre's poison: it uses the generic NPC poison, not the Wiki's "starting at 8".
-- **Uncaptured projectile timing:** for the Imp, Hobgoblin, Ghoul and Lesser Demon it uses a thrown weapon's arc. The Skeleton has no named projectile in the cache, so it fires none.
-- **The Lesser Demon's "materials to make them" refusal:** not checked.
+- **Unknown amounts:** the Wiki gives no number for the Goblin's Prayer drain (one point is used) or the Imp's teleport rate (it is throttled).
 - **The Champions' log on the POH adventure log (468):** not built.
 - **Dialogue pagination:** the long rule lines run onto a second page here, but fit one box in the capture. This is the dialogue runtime's pagination.
 
@@ -141,9 +141,10 @@ All of this was captured unless marked.
 
 `node --test server/tests/champions-challenge.test.cjs` checks:
 
-- the transcript covers every scroll and statue refusal;
-- the rules match the rule lines;
-- the reward conditions, Leon's unlock, the lamp order and scroll-drop gating.
+- the transcript covers every scroll, statue and Lesser Demon materials refusal;
+- the rules match the rule lines, including the Ghoul's empty inventory and the Lesser Demon's materials;
+- the reward conditions, Leon's unlock, the lamp order and scroll-drop gating;
+- the Goblin's Prayer drain, the Jogre's starting poison, projectile landing, the Imp's arena teleport and the ground-scroll rescue.
 
 Checked in-game with the agent MCP:
 

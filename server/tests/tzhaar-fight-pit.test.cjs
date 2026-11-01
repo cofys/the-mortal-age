@@ -24,9 +24,12 @@ const OUTSIDE_PITS = [2440, 5170];
 
 function fighter(name, at = ARENA_TILE) {
   let tile = new core.Location(at[0], at[1], 0);
+  const attributes = new Map();
   const player = {
     tokkul: 0, skullTicks: null, skullIcon: null,
     getUsername: () => name,
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
     isRegistered: () => true,
     isPlayer: () => true,
     isNpc: () => false,
@@ -100,4 +103,33 @@ test('a player who is not the champion is left alone', () => {
   T.championTeleports({ player: other, allow: null });
   T.championPrays({ player: other, prayer: PrayerData.PROTECT_FROM_MAGIC });
   assert.equal(other.skullTicks, null, 'never touched');
+});
+
+test('TzHaar-Mej-Kah toggles combat experience inside the arena', () => {
+  const NPC = core.NpcIdentifiers.TZHAAR_MEJ_KAH;
+  const enabled = 'If Fight Pit experience gain is curently enabled:';
+  const disabled = 'If Fight Pit experience gain is currently disabled:';
+  const player = fighter('toggle');
+  assert.equal(T.fightPitXpEnabled({ player, npcId: NPC, text: enabled }), true);
+  assert.equal(T.fightPitXpEnabled({ player, npcId: NPC, text: disabled }), false);
+
+  T.noteXpPrompt({ player, npcId: NPC, prompt: 'Disable XP gains?' });
+  T.chooseXpToggle({ player, npcId: NPC, option: 'Yes.' });
+  assert.equal(player.getAttribute(T.XP_DISABLED_ATTRIBUTE), true);
+  assert.equal(T.fightPitXpEnabled({ player, npcId: NPC, text: disabled }), true);
+
+  const inside = { player, skill: core.Skill.ATTACK, experience: 100, allow: null };
+  T.blockFightPitXp(inside);
+  assert.equal(inside.allow, false);
+  const nonCombat = { player, skill: core.Skill.COOKING, experience: 100, allow: null };
+  T.blockFightPitXp(nonCombat);
+  assert.equal(nonCombat.allow, null);
+
+  T.noteXpPrompt({ player, npcId: NPC, prompt: 'Enable XP gains?' });
+  T.chooseXpToggle({ player, npcId: NPC, option: 'Yes.' });
+  assert.equal(player.getAttribute(T.XP_DISABLED_ATTRIBUTE), false);
+  const outside = { player: fighter('outside', OUTSIDE_PITS), skill: core.Skill.ATTACK, experience: 100, allow: null };
+  player.setAttribute(T.XP_DISABLED_ATTRIBUTE, true);
+  T.blockFightPitXp(outside);
+  assert.equal(outside.allow, null, 'nothing is blocked outside the arena');
 });

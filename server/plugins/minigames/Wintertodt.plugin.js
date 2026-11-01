@@ -12,6 +12,8 @@ module.exports = {
     require("./wintertodt/Supplies.Wintertodt")(api);
     require("./wintertodt/Pyromancers.Wintertodt")(api);
     require("./wintertodt/Cart.Wintertodt")(api);
+    require("./wintertodt/Ignisia.Wintertodt")(api);
+    require("./wintertodt/Crates.Wintertodt")(api);
     require("./wintertodt/Commands.Wintertodt")(api);
     require("./wintertodt/CombatAchievements.Wintertodt")(api);
   },

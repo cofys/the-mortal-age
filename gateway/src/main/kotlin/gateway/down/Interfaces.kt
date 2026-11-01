@@ -200,7 +200,11 @@ class Interfaces(
     private fun events(uid: Int, start: Int, end: Int, flags: Int) {
         val ops = (flags ushr 1) and OLD_OP_BITS
         if (!exists(uid)) return dropped(uid)
-        send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start.signed16(), end.signed16(), flags and (OLD_OP_BITS shl 1).inv(), ops))
+        // The official client only lets a selected spell or Use land on a slot whose events say
+        // it's a target (bit 21), and an item's own Use reaches what bits 11-16 allow. tsps leaves
+        // them out, as the browser makes its inventory menus another way; live sets them.
+        val events = if (uid == INVENTORY) flags or INVENTORY_TARGET_EVENTS else flags
+        send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start.signed16(), end.signed16(), events and (OLD_OP_BITS shl 1).inv(), ops))
     }
 
     private fun stats(reader: TspsReader) {
@@ -232,6 +236,10 @@ class Interfaces(
 
     private companion object {
         const val MODAL = 0
+        const val INVENTORY = 149 shl 16
+
+        /** Live's inventory events beyond tsps's: Use on ground items, NPCs, locs, players, items and components (11-16), and being a target (21). */
+        const val INVENTORY_TARGET_EVENTS = (0x3F shl 11) or (1 shl 21)
         const val WELCOME_SCREEN = 378
         const val CUSTOM_INTERFACE_START = 30_000
         const val ARG_STRING = 0

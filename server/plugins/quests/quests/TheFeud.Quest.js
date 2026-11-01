@@ -15,7 +15,7 @@
  * post-quest transforms (e.g. 11871 Drunken Ali) switch at index 28, which is
  * why completion writes 28.
  *
- * Stages (varbit 334):
+ * Saved stages (the client's varbit 334 value differs for some; see FEUD_VAR_BY_STAGE):
  *   0 not started             15 have the jewels
  *   1 asked by Ali Morrisane  16 looking for the traitor
  *   2 learnt of the feud      17 told Ali the Operator
@@ -51,9 +51,13 @@
  *    trough, the bucket on the dung, a successful pickpocket/knock-out or the
  *    money pot, so those play short OSRS-style messages instead of invented
  *    dialogue; the safe itself is a two-page chatbox dial requiring 1,1,2,3,5,8.
- *  - The shared Doors plugin opens the mayor's house door without the keys; the
- *    keys still play their transcript and advance the stage, but the door cannot
- *    be locked against a player who skips them.
+ *  - The shared Doors plugin opens the mayor's house door; this plugin's named
+ *    Door handler refuses it before the stake-out and without the keys, then lets
+ *    the shared plugin perform the open.
+ *  - The journal tracks the three ordered objectives (travel, gang/Thieving
+ *    tasks, disguised burglary); each is derived from the canonical stage so it
+ *    cannot complete out of order. Quest-only leftovers are destroyed on
+ *    completion or on the next login of an already-completed save.
  *  - Damage/stun and the "thug attacks you" stage directions are applied
  *    (2 damage + stun on a failed pocket); the shared gang NPCs are not made
  *    aggressive, so the summoned Tough Guy / champion are the fights.
@@ -68,6 +72,7 @@ module.exports = function registerTheFeudQuest(api) {
     GameObject,
     HitDamage,
     HitMask,
+    Item,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -126,6 +131,33 @@ module.exports = function registerTheFeudQuest(api) {
   const STAGE_MAYOR = 26;
   const STAGE_FINAL = 27;
   const STAGE_COMPLETE = 28;
+
+  /**
+   * The feud_var value the client sees for each stage above, where it differs.
+   * The stages name the step just finished; feud_var names the step to do next.
+   * Mapping follows Quest Helper's TheFeud.java steps: 9 get the blackjack, 12 talk
+   * to Ali for the second job, 13 hide behind the cactus, 14 the whole heist (door
+   * open is feud_var_mayorsdoor), 16 the traitor (found is feud_found_trait), 17 the
+   * snake, 18 the dung, 22 poison the drink, then 23-27. The cache transforms on
+   * feud_var only switch at 28. Unlisted stages are sent as they are.
+   */
+  const FEUD_VAR_BY_STAGE = new Map([
+    [STAGE_POCKET_TWO, 9],
+    [STAGE_POCKET_THREE, 12],
+    [STAGE_SAFE_JOB, 13],
+    [STAGE_STAKED_OUT, 14],
+    [STAGE_INSIDE, 14],
+    [STAGE_TRAITOR_TOLD, 16],
+    [STAGE_POISON_PLAN, 17],
+    [STAGE_SNAKE_GIVEN, 18],
+    [STAGE_POISON_MADE, 22],
+    [STAGE_POISONED, 23],
+    [STAGE_REPORTED, 24],
+    [STAGE_TOUGH_GUY, 25],
+    [STAGE_CHAMPION, 26],
+    [STAGE_MAYOR, 27],
+  ]);
+  const feudVarValue = (stage) => FEUD_VAR_BY_STAGE.get(stage) ?? stage;
 
   const ALI_MORRISANE_ID = NpcIdentifiers.ALI_MORRISANE; // 3533
   const DRUNKEN_ALI_ID = NpcIdentifiers.DRUNKEN_ALI; // 3534
@@ -206,6 +238,27 @@ module.exports = function registerTheFeudQuest(api) {
   const DUNG_TILE = { x: 3342, y: 2959, z: 0 };
   const SAFE_SEQUENCE = [1, 1, 2, 3, 5, 8];
 
+  /** Leftovers the quest consumes; they do not survive its completion. */
+  const LEFTOVER_ITEM_IDS = [
+    KEYS_ITEM_ID,
+    JEWELS_ITEM_ID,
+    RECEIPT_ITEM_ID,
+    NOTE_FIBONACCI_ITEM_ID,
+    NOTE_NUMBERS_ITEM_ID,
+    UGTHANKI_DUNG_ITEM_ID,
+    HAGS_POISON_ITEM_ID,
+    RED_HOT_SAUCE_ITEM_ID,
+    SNAKE_BASKET_FULL_ITEM_ID,
+  ];
+
+  /** Items the quest hands out as rewards and keeps. */
+  const REWARD_ITEM_IDS = new Set([
+    OAK_BLACKJACK_ITEM_ID,
+    WILLOW_BLACKJACK_ITEM_ID,
+    ADAMANT_SCIMITAR_ITEM_ID,
+    DESERT_DISGUISE_ITEM_ID,
+  ]);
+
   // ==========================================================================
   // State
   // ==========================================================================
@@ -269,6 +322,20 @@ module.exports = function registerTheFeudQuest(api) {
 
   const freeSlots = (player) => player.getInventory().getFreeSlots();
 
+  function removeItem(player, itemId) {
+    const inventory = player.getInventory?.();
+    if (!inventory || typeof inventory.getAmount !== "function") return;
+    const amount = inventory.getAmount(itemId);
+    if (amount > 0) inventory.deleteNumber(itemId, amount);
+  }
+
+  /** Quest-only leftovers are destroyed when the quest ends; rewards are kept. */
+  function clearQuestItems(player) {
+    for (const itemId of LEFTOVER_ITEM_IDS) {
+      if (!REWARD_ITEM_IDS.has(itemId)) removeItem(player, itemId);
+    }
+  }
+
   function stage(player) {
     return quest.getStage(player);
   }
@@ -290,6 +357,13 @@ module.exports = function registerTheFeudQuest(api) {
     const head = player.getEquipment().get(Equipment.HEAD_SLOT);
     const id = head?.getId?.();
     return id === DESERT_DISGUISE_ITEM_ID || id === KARIDIAN_DISGUISE_ITEM_ID;
+  }
+
+  /** A combined desert disguise is never created twice, whether carried or worn. */
+  function hasDesertDisguise(player) {
+    if (held(player, DESERT_DISGUISE_ITEM_ID)) return true;
+    const head = player.getEquipment().get(Equipment.HEAD_SLOT);
+    return head?.getId?.() === DESERT_DISGUISE_ITEM_ID;
   }
 
   function wearingOakBlackjack(player) {
@@ -342,6 +416,16 @@ module.exports = function registerTheFeudQuest(api) {
   function start(player, variant, npcId = OPERATOR_ID) {
     if (!variant) return false;
     return startTranscript(api, player, npcId, PAGE, variant);
+  }
+
+  /** The quest requires 30 Thieving; a transcript hook must not bypass it. */
+  function meetsStartRequirements(player) {
+    const skills = player.getSkillManager?.();
+    const level =
+      skills?.getCurrentLevel?.(Skill.THIEVING) ??
+      skills?.getMaxLevel?.(Skill.THIEVING) ??
+      99;
+    return Number(level) >= 30;
   }
 
   function damageAndStun(player) {
@@ -841,6 +925,16 @@ module.exports = function registerTheFeudQuest(api) {
     }
   }
 
+  /** The rug merchant is not part of the objective chain, but the wiki page owns a Feud branch. */
+  function handleRugMerchantTalk(event) {
+    const { player } = event;
+    const current = stage(player);
+    if (!questActive(player) || current < STAGE_STARTED || current > STAGE_GANGS) return false;
+    if (!talk(player, "asking-the-locals-talking-to-the-rug-merchant", event.npcId)) return false;
+    event.handled = true;
+    return true;
+  }
+
   // ==========================================================================
   // Pickpocketing the villagers
   // ==========================================================================
@@ -859,8 +953,11 @@ module.exports = function registerTheFeudQuest(api) {
       return;
     }
     event.handled = true;
-    if (current === STAGE_JOINED || current === STAGE_POCKET_ONE || current === STAGE_BLACKJACK) {
-      if (current === STAGE_JOINED) quest.setStage(player, STAGE_POCKET_ONE);
+    if (current === STAGE_JOINED) {
+      player.sendMessage("You should speak to Ali the Operator before robbing anyone.");
+      return;
+    }
+    if (current === STAGE_POCKET_ONE || current === STAGE_BLACKJACK) {
       failPocket(player, npcId);
       return;
     }
@@ -916,7 +1013,7 @@ module.exports = function registerTheFeudQuest(api) {
     const itemId = event.itemId ?? event.inventoryItemId;
     if (npcId === DRUNKEN_ALI_ID && stage(player) === STAGE_STARTED) {
       event.handled = true;
-      if (itemId !== BEER_ITEM_ID) {
+      if (itemId !== BEER_ITEM_ID || !held(player, BEER_ITEM_ID)) {
         startTranscript(api, player, npcId, PAGE, "asking-the-locals-talking-to-drunken-ali-using-an-item-other-than-a-beer-on-him");
         return;
       }
@@ -959,7 +1056,14 @@ module.exports = function registerTheFeudQuest(api) {
     if (event.npcId !== ALI_MORRISANE_ID) return;
     const { player } = event;
     if (stage(player) === 0) {
+      if (!meetsStartRequirements(player)) {
+        player.sendMessage("You need a Thieving level of 30 to start this quest.");
+        return;
+      }
       quest.setStage(player, STAGE_STARTED);
+      player.setAttribute(BEERS_ATTRIBUTE, 0);
+      player.setAttribute(GANGS_ATTRIBUTE, 0);
+      player.setAttribute(RECEIPTS_ATTRIBUTE, 0);
     }
   }
 
@@ -972,12 +1076,14 @@ module.exports = function registerTheFeudQuest(api) {
       }
       return;
     }
-    if (npcId === URCHIN_ID && stage(player) === STAGE_POCKET_TWO) {
+    if (npcId === URCHIN_ID) {
+      const current = stage(player);
+      if (current !== STAGE_DISTRACTED && current !== STAGE_POCKET_TWO) return;
       if (option === "Here you go, thanks.") {
         if (held(player, COINS_ITEM_ID, 10)) {
           player.getInventory().deleteNumber(COINS_ITEM_ID, 10);
+          setFlag(player, FLAG_URCHIN_PAID);
         }
-        setFlag(player, FLAG_URCHIN_PAID);
       } else if (option === "What money?") {
         setFlag(player, FLAG_URCHIN_DENIED);
       }
@@ -987,6 +1093,8 @@ module.exports = function registerTheFeudQuest(api) {
   function handleConditionChosen(event) {
     const { stepId, player } = event;
     if (stepId === "9hcB0P" && held(player, COINS_ITEM_ID, 20)) {
+      const current = stage(player);
+      if (current !== STAGE_DISTRACTED && current !== STAGE_POCKET_TWO) return;
       player.getInventory().deleteNumber(COINS_ITEM_ID, 20);
       setFlag(player, FLAG_URCHIN_PAID);
     }
@@ -1001,17 +1109,18 @@ module.exports = function registerTheFeudQuest(api) {
       // Camel purchase: 500 / 1,000 coins for two receipts.
       case "1JYri1":
       case "8PdnLd": {
+        if (stage(player) !== STAGE_GANGS) return;
         const price = stepId === "1JYri1" ? 500 : 1000;
-        if (held(player, COINS_ITEM_ID, price) && freeSlots(player) >= 2) {
-          player.getInventory().deleteNumber(COINS_ITEM_ID, price);
-          player.getInventory().adds(RECEIPT_ITEM_ID, 2);
-        }
-        if (stage(player) < STAGE_RECEIPTS) quest.setStage(player, STAGE_RECEIPTS);
+        if (!held(player, COINS_ITEM_ID, price) || freeSlots(player) < 2) return;
+        player.getInventory().deleteNumber(COINS_ITEM_ID, price);
+        player.getInventory().adds(RECEIPT_ITEM_ID, 2);
+        quest.setStage(player, STAGE_RECEIPTS);
         event.handled = true;
         return;
       }
       // Camel man tops up missing receipts.
       case "KfEJLa":
+        if (stage(player) !== STAGE_RECEIPTS) return;
         if (!held(player, RECEIPT_ITEM_ID, 2) && freeSlots(player) >= 1) {
           player.getInventory().adds(RECEIPT_ITEM_ID, Math.min(2, 2 - player.getInventory().getAmount(RECEIPT_ITEM_ID)));
         }
@@ -1020,101 +1129,139 @@ module.exports = function registerTheFeudQuest(api) {
       // Hand a receipt to a gang.
       case "-Jb-bz":
       case "pHGlPz": {
-        if (held(player, RECEIPT_ITEM_ID)) {
-          player.getInventory().deleteNumber(RECEIPT_ITEM_ID, 1);
-        }
+        if (stage(player) !== STAGE_RECEIPTS || !held(player, RECEIPT_ITEM_ID)) return;
+        player.getInventory().deleteNumber(RECEIPT_ITEM_ID, 1);
         const bit = stepId === "-Jb-bz" ? RECEIPT_MENAPHITE : RECEIPT_BANDIT;
         const next = receipts(player) | bit;
         player.setAttribute(RECEIPTS_ATTRIBUTE, next);
         sendVarbit(player, VARBIT_COMP_GANGS, next === (RECEIPT_MENAPHITE | RECEIPT_BANDIT) ? 1 : 0);
-        if (next === (RECEIPT_MENAPHITE | RECEIPT_BANDIT) && stage(player) === STAGE_RECEIPTS) {
+        if (next === (RECEIPT_MENAPHITE | RECEIPT_BANDIT)) {
           quest.setStage(player, STAGE_JOINED);
         }
         event.handled = true;
         return;
       }
       case "z89WnM":
+        if (stage(player) !== STAGE_POCKET_ONE) return;
         damageAndStun(player);
         event.handled = true;
         return;
       case "S1K0jh":
-        if (!held(player, OAK_BLACKJACK_ITEM_ID)) player.getInventory().adds(OAK_BLACKJACK_ITEM_ID, 1);
-        if (stage(player) === STAGE_POCKET_TWO) quest.setStage(player, STAGE_BLACKJACK);
+        if (stage(player) !== STAGE_POCKET_TWO) return;
+        if (!held(player, OAK_BLACKJACK_ITEM_ID)) {
+          if (freeSlots(player) < 1) {
+            player.sendMessage("You need a free inventory space for the oak blackjack.");
+            return;
+          }
+          player.getInventory().adds(OAK_BLACKJACK_ITEM_ID, 1);
+        }
+        quest.setStage(player, STAGE_BLACKJACK);
         event.handled = true;
         return;
       case "GnwMcX":
       case "eI3U9S":
       case "Bbwgr6":
-        if (!held(player, KEYS_ITEM_ID)) player.getInventory().adds(KEYS_ITEM_ID, 1);
+        if (stage(player) < STAGE_SAFE_JOB || stage(player) > STAGE_STAKED_OUT) return;
+        if (!held(player, KEYS_ITEM_ID)) {
+          if (freeSlots(player) < 1) {
+            player.sendMessage("You need a free inventory space for the keys.");
+            return;
+          }
+          player.getInventory().adds(KEYS_ITEM_ID, 1);
+        }
         event.handled = true;
         return;
       case "KMB_VR":
-        if (stage(player) === STAGE_SAFE_JOB) quest.setStage(player, STAGE_STAKED_OUT);
+        if (stage(player) !== STAGE_SAFE_JOB) return;
+        if (!wearingGloves(player) || !wearingDisguise(player)) {
+          player.sendMessage("You need gloves and a desert disguise before staking out the house.");
+          return;
+        }
+        quest.setStage(player, STAGE_STAKED_OUT);
         event.handled = true;
         return;
       case "sxI5_2":
-        if (stage(player) === STAGE_STAKED_OUT) quest.setStage(player, STAGE_INSIDE);
+        if (stage(player) !== STAGE_STAKED_OUT || !held(player, KEYS_ITEM_ID)) return;
+        quest.setStage(player, STAGE_INSIDE);
         sendVarbit(player, VARBIT_MAYORSDOOR, 1);
         event.handled = true;
         return;
       // The study desk and the bed notes.
       case "zEZ9VR":
+        if (stage(player) !== STAGE_INSIDE || freeSlots(player) < 1) return;
         if (!held(player, NOTE_NUMBERS_ITEM_ID)) player.getInventory().adds(NOTE_NUMBERS_ITEM_ID, 1);
         event.handled = true;
         return;
       case "xacVn3":
+        if (stage(player) !== STAGE_INSIDE || freeSlots(player) < 1) return;
         if (!held(player, NOTE_FIBONACCI_ITEM_ID)) player.getInventory().adds(NOTE_FIBONACCI_ITEM_ID, 1);
         event.handled = true;
         return;
       // The safe opens with the jewels.
       case "Tj1PIq":
+        if (stage(player) !== STAGE_INSIDE || freeSlots(player) < 1) return;
         if (!held(player, JEWELS_ITEM_ID)) player.getInventory().adds(JEWELS_ITEM_ID, 1);
         setFlag(player, FLAG_SAFE_UNLOCKED);
-        if (stage(player) === STAGE_INSIDE) quest.setStage(player, STAGE_JEWELS);
+        quest.setStage(player, STAGE_JEWELS);
         event.handled = true;
         return;
       case "9K8uBx":
-        if (held(player, JEWELS_ITEM_ID)) player.getInventory().deleteNumber(JEWELS_ITEM_ID, 1);
-        if (stage(player) === STAGE_JEWELS) quest.setStage(player, STAGE_TRAITOR);
+        if (stage(player) !== STAGE_JEWELS || !held(player, JEWELS_ITEM_ID)) return;
+        player.getInventory().deleteNumber(JEWELS_ITEM_ID, 1);
+        quest.setStage(player, STAGE_TRAITOR);
         event.handled = true;
         return;
       // Snake charming and the poison.
       case "MzP-E3":
-        if (held(player, SNAKE_BASKET_ITEM_ID)) player.getInventory().deleteNumber(SNAKE_BASKET_ITEM_ID, 1);
+        if (stage(player) < STAGE_POISON_PLAN || stage(player) > STAGE_SNAKE_GIVEN) return;
+        if (!held(player, SNAKE_BASKET_ITEM_ID)) return;
+        player.getInventory().deleteNumber(SNAKE_BASKET_ITEM_ID, 1);
         player.getInventory().adds(SNAKE_BASKET_FULL_ITEM_ID, 1);
         event.handled = true;
         return;
       case "nEt0jL":
-        if (held(player, SNAKE_BASKET_FULL_ITEM_ID)) player.getInventory().deleteNumber(SNAKE_BASKET_FULL_ITEM_ID, 1);
-        if (stage(player) < STAGE_SNAKE_GIVEN) quest.setStage(player, STAGE_SNAKE_GIVEN);
+        if (stage(player) !== STAGE_POISON_PLAN || !held(player, SNAKE_BASKET_FULL_ITEM_ID)) return;
+        player.getInventory().deleteNumber(SNAKE_BASKET_FULL_ITEM_ID, 1);
+        quest.setStage(player, STAGE_SNAKE_GIVEN);
         event.handled = true;
         return;
       case "TiFd_S":
-        if (held(player, UGTHANKI_DUNG_ITEM_ID)) player.getInventory().deleteNumber(UGTHANKI_DUNG_ITEM_ID, 1);
-        player.getInventory().adds(HAGS_POISON_ITEM_ID, 1);
-        if (stage(player) < STAGE_POISON_MADE) quest.setStage(player, STAGE_POISON_MADE);
+        if (stage(player) !== STAGE_SNAKE_GIVEN || !held(player, UGTHANKI_DUNG_ITEM_ID)) return;
+        player.getInventory().deleteNumber(UGTHANKI_DUNG_ITEM_ID, 1);
+        if (freeSlots(player) < 1 && !held(player, HAGS_POISON_ITEM_ID)) {
+          player.sendMessage("You need a free inventory space for the poison.");
+          return;
+        }
+        if (!held(player, HAGS_POISON_ITEM_ID)) player.getInventory().adds(HAGS_POISON_ITEM_ID, 1);
+        quest.setStage(player, STAGE_POISON_MADE);
         event.handled = true;
         return;
       case "d72gnq":
+        if (stage(player) < STAGE_POISON_MADE || stage(player) >= STAGE_COMPLETE || held(player, HAGS_POISON_ITEM_ID)) return;
+        if (freeSlots(player) < 1) {
+          player.sendMessage("You need a free inventory space for the poison.");
+          return;
+        }
         player.getInventory().adds(HAGS_POISON_ITEM_ID, 1);
         event.handled = true;
         return;
       case "rQTsZU":
-        if (held(player, HAGS_POISON_ITEM_ID)) player.getInventory().deleteNumber(HAGS_POISON_ITEM_ID, 1);
-        if (stage(player) < STAGE_POISONED) {
-          quest.setStage(player, STAGE_POISONED);
-          sendVarbit(player, VARBIT_DRINK_FOUND, 1);
-        }
+        if (stage(player) !== STAGE_POISON_MADE || !held(player, HAGS_POISON_ITEM_ID)) return;
+        player.getInventory().deleteNumber(HAGS_POISON_ITEM_ID, 1);
+        quest.setStage(player, STAGE_POISONED);
+        sendVarbit(player, VARBIT_DRINK_FOUND, 1);
         event.handled = true;
         return;
       // The gang violence.
       case "AsCtr4": {
+        if (stage(player) !== STAGE_TOUGH_GUY) return;
         spawnLeaderGuard(player, MENAPHITE_LEADER_ID, TOUGH_GUY_ID, FLAG_TOUGH_SPAWNED);
         event.handled = true;
         return;
       }
       case "byv5b1":
       case "YLtyn7": {
+        if (stage(player) !== STAGE_CHAMPION) return;
         spawnLeaderGuard(player, BANDIT_LEADER_ID, BANDIT_CHAMPION_ID, FLAG_CHAMPION_SPAWNED);
         event.handled = true;
         return;
@@ -1124,6 +1271,7 @@ module.exports = function registerTheFeudQuest(api) {
         return;
       // The barman's free beer and Ali Morrisane's reward.
       case "hV9lSG":
+        if (stage(player) < STAGE_MAYOR || freeSlots(player) < 1) return;
         player.getInventory().adds(BEER_ITEM_ID, 1);
         event.handled = true;
         return;
@@ -1131,30 +1279,44 @@ module.exports = function registerTheFeudQuest(api) {
         event.handled = true;
         return;
       case "_jFbux":
+        if (stage(player) !== STAGE_FINAL) return;
         event.handled = true;
         event.end = true;
         if (!quest.isComplete(player)) {
+          clearQuestItems(player);
           quest.complete(player);
           syncVarbits(player);
         }
         return;
       // Kebab seller gives the red hot sauce.
       case "ekGbm6":
-        if (!held(player, RED_HOT_SAUCE_ITEM_ID)) player.getInventory().adds(RED_HOT_SAUCE_ITEM_ID, 1);
+        if (stage(player) < STAGE_SNAKE_GIVEN || stage(player) >= STAGE_POISON_MADE) return;
+        if (held(player, RED_HOT_SAUCE_ITEM_ID)) return;
+        if (freeSlots(player) < 1) {
+          player.sendMessage("You need a free inventory space for the sauce.");
+          return;
+        }
+        player.getInventory().adds(RED_HOT_SAUCE_ITEM_ID, 1);
         event.handled = true;
         return;
       // Snake charmer replacement pieces.
       case "Y3IL4b":
+        if (stage(player) < STAGE_POISON_PLAN || stage(player) >= STAGE_POISON_MADE) return;
+        if (held(player, SNAKE_BASKET_ITEM_ID) || freeSlots(player) < 1) return;
         player.getInventory().adds(SNAKE_BASKET_ITEM_ID, 1);
         event.handled = true;
         return;
       case "YJYlWt":
+        if (stage(player) < STAGE_POISON_PLAN || stage(player) >= STAGE_POISON_MADE) return;
+        if (held(player, SNAKE_CHARM_ITEM_ID) || freeSlots(player) < 1) return;
         player.getInventory().adds(SNAKE_CHARM_ITEM_ID, 1);
         event.handled = true;
         return;
       case "wXgto_":
-        player.getInventory().adds(SNAKE_CHARM_ITEM_ID, 1);
-        player.getInventory().adds(SNAKE_BASKET_ITEM_ID, 1);
+        if (stage(player) < STAGE_POISON_PLAN || stage(player) >= STAGE_POISON_MADE) return;
+        if ((held(player, SNAKE_CHARM_ITEM_ID) && held(player, SNAKE_BASKET_ITEM_ID)) || freeSlots(player) < 2) return;
+        if (!held(player, SNAKE_CHARM_ITEM_ID)) player.getInventory().adds(SNAKE_CHARM_ITEM_ID, 1);
+        if (!held(player, SNAKE_BASKET_ITEM_ID)) player.getInventory().adds(SNAKE_BASKET_ITEM_ID, 1);
         event.handled = true;
         return;
       default:
@@ -1202,100 +1364,277 @@ module.exports = function registerTheFeudQuest(api) {
     return String(actions[event.clickType - 1] ?? "");
   }
 
-  function handleObjectInteraction(event) {
+  function hideBehindCactus(event) {
     const { player, objectId } = event;
-    if (objectId === CACTUS_OBJECT_ID && actionOf(event) === "Hide-behind") {
-      const current = stage(player);
-      if (current < STAGE_SAFE_JOB || current > STAGE_STAKED_OUT) return;
-      event.handled = true;
-      startTranscript(api, player, OPERATOR_ID, PAGE, "staking-out-the-house-hiding-behind-the-cactus");
-      return;
+    if (objectId !== CACTUS_OBJECT_ID) return false;
+    // Every stage plays the transcript: its first branch (SN-vhR) is the "I'd feel a
+    // little silly" line before the safe job and after the robbery, and KMB_VR only
+    // advances the stage from STAGE_SAFE_JOB.
+    event.handled = true;
+    startTranscript(api, player, OPERATOR_ID, PAGE, "staking-out-the-house-hiding-behind-the-cactus");
+    return true;
+  }
+
+  function searchMayorDesk(event) {
+    const { player, objectId } = event;
+    if (objectId !== DESK_OBJECT_ID) return false;
+    if (stage(player) !== STAGE_INSIDE) return false;
+    event.handled = true;
+    startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-searching-the-mayor-s-study-desk");
+    return true;
+  }
+
+  function searchMayorBed(event) {
+    const { player, objectId } = event;
+    if (objectId !== BED_OBJECT_ID) return false;
+    if (stage(player) !== STAGE_INSIDE) return false;
+    event.handled = true;
+    startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-searching-the-mayor-s-bed");
+    return true;
+  }
+
+  function searchMayorLandscape(event) {
+    const { player, objectId } = event;
+    if (objectId !== LANDSCAPE_OBJECT_ID) return false;
+    if (stage(player) !== STAGE_INSIDE) return false;
+    event.handled = true;
+    if (hasFlag(player, FLAG_SAFE_UNLOCKED)) {
+      // The safe stays open once the dial is solved. Taking the jewels is the
+      // same objective edge as the transcript action, so do not leave the player
+      // holding them at stage 14.
+      if (!held(player, JEWELS_ITEM_ID)) player.getInventory().adds(JEWELS_ITEM_ID, 1);
+      quest.setStage(player, STAGE_JEWELS);
+      return true;
     }
-    if (objectId === DESK_OBJECT_ID && actionOf(event) === "Search") {
-      if (stage(player) !== STAGE_INSIDE) return;
+    player.sendMessage(
+      "On the wall hangs a rather nondescript picture. On closer inspection you notice that it's covering something: a safe."
+    );
+    openSafeDial(player);
+    return true;
+  }
+
+  /**
+   * The shared Doors plugin owns the actual open. This only refuses the mayor's
+   * door before the stake-out, so the keys cannot be skipped.
+   */
+  function openMayorDoor(event) {
+    const { player, objectId } = event;
+    if (objectId !== DOOR_LEFT_OBJECT_ID && objectId !== DOOR_RIGHT_OBJECT_ID) return false;
+    const current = stage(player);
+    if (current >= STAGE_INSIDE) return false; // already through / post-quest
+    if (current < STAGE_STAKED_OUT) {
+      player.sendMessage("The door is locked.");
       event.handled = true;
-      startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-searching-the-mayor-s-study-desk");
-      return;
+      return true;
     }
-    if (objectId === BED_OBJECT_ID && actionOf(event) === "Search") {
-      if (stage(player) !== STAGE_INSIDE) return;
+    if (!held(player, KEYS_ITEM_ID)) {
+      player.sendMessage("You need the mayor's keys to unlock the door.");
       event.handled = true;
-      startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-searching-the-mayor-s-bed");
-      return;
+      return true;
     }
-    if (objectId === LANDSCAPE_OBJECT_ID && actionOf(event) === "Search") {
-      if (stage(player) !== STAGE_INSIDE) return;
-      event.handled = true;
-      if (hasFlag(player, FLAG_SAFE_UNLOCKED)) {
-        if (!held(player, JEWELS_ITEM_ID)) player.getInventory().adds(JEWELS_ITEM_ID, 1);
-        return;
+    return false; // let the shared Doors plugin open it
+  }
+
+  /** The dung pile is a cache "Pick-up" loc as well as a bucket target. */
+  function pickUpDung(event) {
+    const { player } = event;
+    if (!questActive(player) || stage(player) < STAGE_SNAKE_GIVEN || stage(player) > STAGE_POISON_MADE) {
+      return false;
+    }
+    event.handled = true;
+    if (held(player, UGTHANKI_DUNG_ITEM_ID)) {
+      player.sendMessage("You already have some camel dung.");
+      return true;
+    }
+    if (freeSlots(player) < 1) {
+      player.sendMessage("You don't have enough room in your inventory to take the dung.");
+      return true;
+    }
+    player.getInventory().adds(UGTHANKI_DUNG_ITEM_ID, 1);
+    player.sendMessage("You pick up the camel dung.");
+    return true;
+  }
+
+  function handleObjectInteraction(event) {
+    const { objectId } = event;
+    const action = actionOf(event);
+    if (objectId === CACTUS_OBJECT_ID && action === "Hide-behind") {
+      return hideBehindCactus(event);
+    }
+    if (objectId === DESK_OBJECT_ID && action === "Search") {
+      return searchMayorDesk(event);
+    }
+    if (objectId === BED_OBJECT_ID && action === "Search") {
+      return searchMayorBed(event);
+    }
+    if (objectId === LANDSCAPE_OBJECT_ID && action === "Search") {
+      return searchMayorLandscape(event);
+    }
+    if (objectId === DUNG_OBJECT_ID && action === "Pick-up") {
+      return pickUpDung(event);
+    }
+    return false;
+  }
+
+  function coinOnMoneyPot(event) {
+    const { player, objectId } = event;
+    if (objectId !== MONEY_POT_OBJECT_ID) return false;
+    const current = stage(player);
+    if (!questActive(player) || current < STAGE_POISON_PLAN || current > STAGE_SNAKE_GIVEN) return false;
+    event.handled = true;
+    if (!held(player, COINS_ITEM_ID)) {
+      player.sendMessage("You need a coin to put in the money pot.");
+      return true;
+    }
+    if (freeSlots(player) < 2) {
+      player.sendMessage("You need two free inventory spaces for the snake charmer's kit.");
+      return true;
+    }
+    if (startTranscript(api, player, SNAKE_CHARMER_ID, "Ali the Snake Charmer", "standard-dialogue-using-a-coin-on-the-money-pot")) {
+      player.getInventory().deleteNumber(COINS_ITEM_ID, 1);
+    }
+    return true;
+  }
+
+  function sauceOnTrough(event) {
+    const { player, objectId } = event;
+    if (!TROUGH_OBJECT_IDS.has(objectId)) return false;
+    const current = stage(player);
+    if (!questActive(player) || current < STAGE_SNAKE_GIVEN || current >= STAGE_POISON_MADE) return false;
+    event.handled = true;
+    if (!held(player, RED_HOT_SAUCE_ITEM_ID)) {
+      player.sendMessage("You need the red hot sauce.");
+      return true;
+    }
+    player.getInventory().deleteNumber(RED_HOT_SAUCE_ITEM_ID, 1);
+    installDung();
+    player.sendMessage("You pour the red hot sauce into the trough.");
+    return true;
+  }
+
+  function bucketOnDung(event) {
+    const { player, objectId } = event;
+    if (objectId !== DUNG_OBJECT_ID) return false;
+    if (!questActive(player) || stage(player) < STAGE_SNAKE_GIVEN || stage(player) > STAGE_POISON_MADE) return false;
+    event.handled = true;
+    if (!held(player, BUCKET_ITEM_ID)) {
+      player.sendMessage("You need a bucket to collect the dung.");
+      return true;
+    }
+    if (freeSlots(player) < 1) {
+      player.sendMessage("You don't have enough room in your inventory for the dung.");
+      return true;
+    }
+    player.getInventory().deleteNumber(BUCKET_ITEM_ID, 1);
+    player.getInventory().adds(UGTHANKI_DUNG_ITEM_ID, 1);
+    player.sendMessage("You scoop the dung into the bucket.");
+    return true;
+  }
+
+  function poisonOnTable(event) {
+    const { player, objectId } = event;
+    if (objectId !== POISON_TABLE_OBJECT_ID) return false;
+    if (!questActive(player)) return false;
+    event.handled = true;
+    if (stage(player) !== STAGE_POISON_MADE || !held(player, HAGS_POISON_ITEM_ID)) {
+      if (stage(player) >= STAGE_POISONED) {
+        startTranscript(api, player, OPERATOR_ID, PAGE, "the-end-of-traitorous-ali-using-an-item-on-the-drink-after-poisoning-it");
+        return true;
       }
-      player.sendMessage(
-        "On the wall hangs a rather nondescript picture. On closer inspection you notice that it's covering something: a safe."
-      );
-      openSafeDial(player);
+      player.sendMessage("You shouldn't poison that drink yet.");
+      return true;
     }
+    startTranscript(api, player, OPERATOR_ID, PAGE, "the-end-of-traitorous-ali-using-the-hag-s-poison-on-the-table");
+    return true;
+  }
+
+  function itemOnPoisonedDrink(event) {
+    const { player, objectId } = event;
+    if (objectId !== POISON_TABLE_OBJECT_ID) return false;
+    if (!questActive(player) || stage(player) < STAGE_POISONED) return false;
+    event.handled = true;
+    startTranscript(api, player, OPERATOR_ID, PAGE, "the-end-of-traitorous-ali-using-an-item-on-the-drink-after-poisoning-it");
+    return true;
+  }
+
+  function keysOnMayorDoor(event) {
+    const { player, objectId } = event;
+    if (objectId !== DOOR_LEFT_OBJECT_ID && objectId !== DOOR_RIGHT_OBJECT_ID) return false;
+    if (!questActive(player) || stage(player) !== STAGE_STAKED_OUT) return false;
+    event.handled = true;
+    if (!held(player, KEYS_ITEM_ID)) {
+      player.sendMessage("You need the mayor's keys.");
+      return true;
+    }
+    startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-using-the-keys-on-the-mayor-s-house-door");
+    return true;
   }
 
   function handleItemOnObject(event) {
-    const { player, itemId, objectId } = event;
+    const { itemId, objectId } = event;
     if (objectId === MONEY_POT_OBJECT_ID && itemId === COINS_ITEM_ID) {
-      const current = stage(player);
-      if (!questActive(player) || current < STAGE_POISON_PLAN || current > STAGE_SNAKE_GIVEN) return;
-      event.handled = true;
-      if (startTranscript(api, player, SNAKE_CHARMER_ID, "Ali the Snake Charmer", "standard-dialogue-using-a-coin-on-the-money-pot")) {
-        player.getInventory().deleteNumber(COINS_ITEM_ID, 1);
-      }
-      return;
+      return coinOnMoneyPot(event);
     }
     if (TROUGH_OBJECT_IDS.has(objectId) && itemId === RED_HOT_SAUCE_ITEM_ID) {
-      if (!questActive(player) || stage(player) < STAGE_SNAKE_GIVEN) return;
-      event.handled = true;
-      player.getInventory().deleteNumber(RED_HOT_SAUCE_ITEM_ID, 1);
-      installDung();
-      player.sendMessage("You pour the red hot sauce into the trough.");
-      return;
+      return sauceOnTrough(event);
     }
     if (objectId === DUNG_OBJECT_ID && itemId === BUCKET_ITEM_ID) {
-      if (!questActive(player)) return;
-      event.handled = true;
-      player.getInventory().deleteNumber(BUCKET_ITEM_ID, 1);
-      player.getInventory().adds(UGTHANKI_DUNG_ITEM_ID, 1);
-      player.sendMessage("You scoop the dung into the bucket.");
-      return;
+      return bucketOnDung(event);
     }
     if (objectId === POISON_TABLE_OBJECT_ID && itemId === HAGS_POISON_ITEM_ID) {
-      if (!questActive(player) || stage(player) < STAGE_POISON_MADE) return;
-      event.handled = true;
-      startTranscript(api, player, OPERATOR_ID, PAGE, "the-end-of-traitorous-ali-using-the-hag-s-poison-on-the-table");
-      return;
+      return poisonOnTable(event);
     }
-    if (objectId === POISON_TABLE_OBJECT_ID && held(player, HAGS_POISON_ITEM_ID) === false) {
-      if (!questActive(player) || stage(player) < STAGE_POISONED) return;
-      event.handled = true;
-      startTranscript(api, player, OPERATOR_ID, PAGE, "the-end-of-traitorous-ali-using-an-item-on-the-drink-after-poisoning-it");
-      return;
+    if (objectId === POISON_TABLE_OBJECT_ID) {
+      return itemOnPoisonedDrink(event);
     }
     if ((objectId === DOOR_LEFT_OBJECT_ID || objectId === DOOR_RIGHT_OBJECT_ID) && itemId === KEYS_ITEM_ID) {
-      if (!questActive(player) || stage(player) < STAGE_STAKED_OUT) return;
-      event.handled = true;
-      startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-using-the-keys-on-the-mayor-s-house-door");
+      return keysOnMayorDoor(event);
     }
+    return false;
   }
 
   function handleItemOnItem(event) {
     const { player, usedItemId, usedWithItemId } = event;
     const pair = new Set([usedItemId, usedWithItemId]);
-    if (!pair.has(KHARIDIAN_HEADPIECE_ITEM_ID) || !pair.has(FAKE_BEARD_ITEM_ID)) return;
+    if (!pair.has(KHARIDIAN_HEADPIECE_ITEM_ID) || !pair.has(FAKE_BEARD_ITEM_ID)) return false;
+    if (!held(player, KHARIDIAN_HEADPIECE_ITEM_ID) || !held(player, FAKE_BEARD_ITEM_ID)) return false;
     event.handled = true;
-    if (held(player, DESERT_DISGUISE_ITEM_ID)) {
+    if (hasDesertDisguise(player)) {
       player.sendMessage("You already have a desert disguise.");
-      return;
+      return true;
     }
     player.getInventory().deleteNumber(KHARIDIAN_HEADPIECE_ITEM_ID, 1);
     player.getInventory().deleteNumber(FAKE_BEARD_ITEM_ID, 1);
     player.getInventory().adds(DESERT_DISGUISE_ITEM_ID, 1);
     player.sendMessage("You combine the headpiece and the fake beard into a desert disguise.");
+    return true;
+  }
+
+  /** Wielding the blackjack is the natural point to point out its Knock-Out option. */
+  function wieldBlackjack(event) {
+    const { player, itemId } = event;
+    if (itemId !== OAK_BLACKJACK_ITEM_ID && itemId !== WILLOW_BLACKJACK_ITEM_ID) return false;
+    if (stage(player) !== STAGE_BLACKJACK) return false;
+    player.sendMessage("With the blackjack equipped, a villager can be lured and then knocked out.");
+    return false; // never swallow the Wield action itself
+  }
+
+  /** Wearing the disguise is the natural point to remind the player about gloves. */
+  function wearDesertDisguise(event) {
+    const { player, itemId } = event;
+    if (itemId !== DESERT_DISGUISE_ITEM_ID) return false;
+    if (stage(player) < STAGE_SAFE_JOB || stage(player) >= STAGE_INSIDE) return false;
+    if (!wearingGloves(player)) player.sendMessage("You also need to wear gloves before staking out the mayor's house.");
+    return false; // never swallow the Wear action itself
+  }
+
+  /** The cache "Play" action is not the quest route; the charm is used on a snake. */
+  function playSnakeCharm(event) {
+    const { player } = event;
+    if (stage(player) < STAGE_POISON_PLAN || stage(player) > STAGE_SNAKE_GIVEN) return false;
+    event.handled = true;
+    player.sendMessage("Use the snake charm on a desert snake to catch one.");
+    return true;
   }
 
   // ==========================================================================
@@ -1338,6 +1677,11 @@ module.exports = function registerTheFeudQuest(api) {
   function pickSafeDigit(player, digit) {
     const state = safeDials.get(player);
     if (!state) return;
+    if (!questActive(player) || stage(player) !== STAGE_INSIDE) {
+      safeDials.delete(player);
+      player.getPacketSender().sendInterfaceRemoval();
+      return;
+    }
     if (SAFE_SEQUENCE[state.index] !== digit) {
       safeDials.delete(player);
       player.getPacketSender().sendInterfaceRemoval();
@@ -1375,10 +1719,13 @@ module.exports = function registerTheFeudQuest(api) {
     if (!player) return;
     const { npcId } = event;
     if (npcId === TOUGH_GUY_ID) {
+      if (stage(player) !== STAGE_TOUGH_GUY) return;
       setFlag(player, FLAG_TOUGH_DEAD);
       return;
     }
     if (npcId === BANDIT_CHAMPION_ID) {
+      // The drop is owned by this handler whichever event order the drops plugin
+      // uses; only the objective edge is gated on the champion stage.
       setFlag(player, FLAG_CHAMPION_DEAD);
       const reward = held(player, WILLOW_BLACKJACK_ITEM_ID)
         ? ADAMANT_SCIMITAR_ITEM_ID
@@ -1399,6 +1746,8 @@ module.exports = function registerTheFeudQuest(api) {
   }
 
   function handleLogin({ player }) {
+    // Saves completed before the cleanup hook may still hold quest leftovers.
+    if (quest.isComplete(player)) clearQuestItems(player);
     refreshQuestList(player);
     syncVarbits(player);
   }
@@ -1409,6 +1758,24 @@ module.exports = function registerTheFeudQuest(api) {
 
   function buildJournal(player, questHandle) {
     const current = questHandle.getStage(player);
+    return [
+      ...objectiveLines(current),
+      ...buildJournalDetails(player, questHandle, current),
+    ];
+  }
+
+  /** The three ordered objectives the quest gates on. */
+  function objectiveLines(current) {
+    const line = (text, complete) => (complete ? `<str>${text}</str>` : text);
+    return [
+      line("Travel to Pollnivneach and question Drunken Ali.", current >= STAGE_DRUNK),
+      line("Infiltrate the Pollnivneach gangs and complete the blackjack and Thieving tasks.", current >= STAGE_SAFE_JOB),
+      line("Enter the mayor's house in the desert disguise and steal the jewels.", current >= STAGE_JEWELS),
+      "",
+    ];
+  }
+
+  function buildJournalDetails(player, questHandle, current) {
     if (current >= STAGE_COMPLETE) {
       return [
         "<str>Ali Morrisane asked me to find his nephew Ali in Pollnivneach.</str>",
@@ -1544,6 +1911,16 @@ module.exports = function registerTheFeudQuest(api) {
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.THIEVING, 15000);
     player.getInventory().adds(COINS_ITEM_ID, 499);
+    // The disguise is one of the quest's rewards; a player who entered with a
+    // Karidian disguise (or lost it) still receives their own.
+    if (!hasDesertDisguise(player)) {
+      const inventory = player.getInventory();
+      if (typeof inventory.isFull === "function" && inventory.isFull()) {
+        inventory.forceAdd(player, new Item(DESERT_DISGUISE_ITEM_ID, 1));
+      } else {
+        inventory.adds(DESERT_DISGUISE_ITEM_ID, 1);
+      }
+    }
   }
 
   // ==========================================================================
@@ -1560,6 +1937,7 @@ module.exports = function registerTheFeudQuest(api) {
     name: "The Feud",
     varpId: 435,
     varbitId: VARBIT_FEUD_VAR,
+    varbitValue: feudVarValue,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
@@ -1584,6 +1962,7 @@ module.exports = function registerTheFeudQuest(api) {
   api.onNpcInteraction("Bandit", { "Talk-to": handleBanditTalk });
   api.onNpcInteraction("Bandit Leader", { "Talk-to": handleBanditLeaderTalk });
   api.onNpcInteraction("Cowardly Bandit", { "Talk-to": handleCowardlyBanditTalk });
+  api.onNpcInteraction("Rug Merchant", { "Talk-to": handleRugMerchantTalk });
   api.onNpcInteraction("Villager", {
     "Talk-to": handleVillagerTalk,
     Pickpocket: handleVillagerPickpocket,
@@ -1600,9 +1979,26 @@ module.exports = function registerTheFeudQuest(api) {
   api.onCustomEvent("npc-drops:context", handleDropContext);
 
   api.onItemOnNpc(handleItemOnNpc);
+  // Named forms first; the id-based handler stays as the fallback for transformed
+  // locs whose cache name is not the base one.
+  api.onItemOnObject("Coins", "Money Pot", coinOnMoneyPot, { noted: false });
+  api.onItemOnObject("Red hot sauce", "Trough", sauceOnTrough, { noted: false });
+  api.onItemOnObject("Bucket", "Dung", bucketOnDung, { noted: false });
+  api.onItemOnObject("Hag's poison", "Table", poisonOnTable, { noted: false });
+  api.onItemOnObject("Keys", "Door", keysOnMayorDoor, { noted: false });
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);
+  api.onObjectInteraction("Cactus", { "Hide-behind": hideBehindCactus });
+  api.onObjectInteraction("Study desk", { Search: searchMayorDesk });
+  api.onObjectInteraction("Bed", { Search: searchMayorBed });
+  api.onObjectInteraction("Landscape", { Search: searchMayorLandscape });
+  api.onObjectInteraction("Door", { Open: openMayorDoor });
+  api.onObjectInteraction("Dung", { "Pick-up": pickUpDung });
   api.onObjectInteraction(handleObjectInteraction);
+  api.onItemAction("Oak blackjack", { Wield: wieldBlackjack });
+  api.onItemAction("Willow blackjack", { Wield: wieldBlackjack });
+  api.onItemAction("Desert disguise", { Wear: wearDesertDisguise });
+  api.onItemAction("Snake charm", { Play: playSnakeCharm });
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
 };

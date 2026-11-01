@@ -218,9 +218,27 @@ module.exports = function registerTribalTotemQuest(api) {
     return null;
   }
 
+  function meetsSkillRequirements(player) {
+    return player.getSkillManager().getMaxLevel(Skill.THIEVING) >= THIEVING_REQUIREMENT;
+  }
+
+  function notifySkillRequirements(player) {
+    if (!meetsSkillRequirements(player)) {
+      player.sendMessage(
+        `You need a Thieving level of at least ${THIEVING_REQUIREMENT} to start this quest.`
+      );
+    }
+  }
+
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== KANGAI_MAU_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) < STAGE_STARTED) {
+      if (!meetsSkillRequirements(player)) {
+        notifySkillRequirements(player);
+        return;
+      }
+      quest.setStage(player, STAGE_STARTED);
+    }
   }
 
   /** The transcript's "Quest complete!" action consumes the totem and finishes. */

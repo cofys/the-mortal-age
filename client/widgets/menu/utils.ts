@@ -403,6 +403,11 @@ export function deriveRawMenuEntriesForWidget(
         // not just a placeholder for empty op slots.
         if (ops.length === 0 && verb) {
             ops.push({ text: verb, index: -1 });
+        } else if (verb && targetMask > 0 && !ops.some((op) => op.index < 0)) {
+            // OSRS lists a target component's verb between op5 and op6, so a spell with
+            // later ops (High Level Alchemy's Animation, Warnings) still left-clicks "Cast".
+            const after = ops.findIndex((op) => op.index >= 5);
+            ops.splice(after < 0 ? ops.length : after, 0, { text: verb, index: -1 });
         }
         for (const op of ops) {
             if (op.index >= 0) {

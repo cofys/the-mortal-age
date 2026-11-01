@@ -34,8 +34,8 @@ export class MagicSpellbook {
 
     public static changeSpellbook(player: Player, book: MagicSpellbook, bypassRequirements = false) {
         if (book === player.getSpellbook()) {
-            // Refresh the client spellbook. This also reapplies the client-side
-            // spell unlock states when a developer runs the current-book command.
+            // Refresh the client spellbook. The spell unlock states went out with the
+            // login mount and are not re-sent (quest varps share their storage).
             player.getPacketSender().sendTabInterface(6, book.getInterfaceId());
             return;
         }

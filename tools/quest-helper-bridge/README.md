@@ -88,7 +88,7 @@ Missing state produces `MISSING_STATE` with a structured request, and an unimple
 QUEST_HELPER_SOURCE=tools/quest-helper-bridge/quest-helper-upstream node tools/quest-helper-bridge/scripts/generate_catalog.cjs
 ```
 
-All 184 server quests map: 183 to Java routes, plus the native Tutorial Island route.
+All 186 server quests map: 185 to Java routes, plus the native Tutorial Island route.
 
 ## Coverage
 

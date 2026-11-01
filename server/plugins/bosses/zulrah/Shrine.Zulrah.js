@@ -69,7 +69,7 @@ function sailWhenRead({ player }) {
       if (!player.isRegistered()) return void this.stop();
       if (player.getDialogueManager().isActive?.()) return;
       this.stop();
-      if (!refusedBoarding(player)) sail(player);
+      if (!Access.refuseBoarding(player) && !refusedBoarding(player)) sail(player);
     }
   })());
 }

@@ -22,8 +22,10 @@ const VARPS_ATTRIBUTE = "vale-totems:varps";
 const SITES = Shared.DATA.sites.map((site) => site.site);
 const PIECES = ["low", "mid", "top"];
 const CARVED_OFFSET = 9;
+// ent_totems (varp 4758) is shared with the miniquest stage/chat bits and other Auburnvale
+// content; it is not this plugin's snapshot. The site varps hold all of the minigame's state.
 const PERSISTED_VARPS = [
-  "ent_totems", "ent_totems_transmit_1", "ent_totems_research_points",
+  "ent_totems_transmit_1", "ent_totems_research_points",
   ...SITES.flatMap((site) => [`ent_totems_site_${site}_a`, `ent_totems_site_${site}_b`]),
 ];
 

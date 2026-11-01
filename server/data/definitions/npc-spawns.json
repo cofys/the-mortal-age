@@ -30555,7 +30555,7 @@
   {"level":0,"name":"Catalytic Guardian","x":3611,"y":9473,"id":12384},
   {"id":13510,"x":2913,"y":3451,"level":0,"name":"Ivy Sophista","wanderRadius":0},
   {"id":13511,"x":2913,"y":3451,"level":1,"name":"Thaerisk","wanderRadius":0},
-  {"id":13516,"x":2565,"y":3202,"level":0,"name":"Khazard Launderer","wanderRadius":0},
+  {"id":13516,"x":2564,"y":3172,"level":0,"name":"Khazard Launderer","wanderRadius":0},
   {"level":0,"name":"Achtryn","x":3511,"y":3509,"id":13653},
   {"level":0,"name":"Laidee Gnonock","x":2879,"y":3547,"id":13647},
   {"level":1,"name":"Yadech Strongarm","x":2855,"y":3553,"id":13650},

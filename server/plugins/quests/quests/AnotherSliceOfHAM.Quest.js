@@ -108,6 +108,10 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   const ZANIK_AT_DIG_ATTRIBUTE = "quest.another_slice_of_ham.zanik-at-dig";
   const MACE_ATTRIBUTE = "quest.another_slice_of_ham.received-mace";
   const SPECIAL_ATTRIBUTE = "quest.another_slice_of_ham.mace-special-used";
+  const SIGMUND_EXPOSED_ATTRIBUTE = "quest.another_slice_of_ham.sigmund-exposed";
+  const ZANIK_UNTIED_ATTRIBUTE = "quest.another_slice_of_ham.zanik-untied";
+  const TRAIN_AGREEMENT_ATTRIBUTE = "quest.another_slice_of_ham.train-agreement";
+  const TRAIN_OPEN_ATTRIBUTE = "quest.another_slice_of_ham.train-open";
   const SNIPERS_ATTRIBUTE = "quest.another_slice_of_ham.snipers-dead"; // bit 1 archer, bit 2 mage
   const ESCORT_ATTRIBUTE = "quest.another_slice_of_ham.escort"; // sergeants following
   const SEPARATED_ATTRIBUTE = "quest.another_slice_of_ham.sergeants-separated";
@@ -319,7 +323,10 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   const KIDNAP_CUTSCENE_END_ACTION_ID = "oG2C9L";
   const PAY_COINS_ACTION_ID = "iF8XSH";
   const RECEIVE_MACE_ACTION_ID = "DXR-dR";
+  const UNTIE_ZANIK_ACTION_ID = "VcaIcO";
+  const TRAIN_OPENING_ACTION_ID = "09Lek1";
   const COMPLETE_ACTION_ID = "jiiizC";
+  const ANCIENT_MACE_SPECIAL_ID = "ancient_mace";
 
   // ==========================================================================
   // Quest state helpers
@@ -387,8 +394,70 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
 
   function hasAncientMace(player) {
     if (hasItem(player, ANCIENT_MACE_ITEM_ID)) return true;
-    const weapon = player.getEquipment().get(Equipment.WEAPON_SLOT);
+    return equippedAncientMace(player);
+  }
+
+  function equippedAncientMace(player) {
+    const weapon = player.getEquipment()?.get?.(Equipment.WEAPON_SLOT);
     return weapon?.getId?.() === ANCIENT_MACE_ITEM_ID;
+  }
+
+  /** Favour of the War God: the ancient mace must have launched its special at Sigmund. */
+  function isAncientMaceSpecial(hit) {
+    const method = hit?.getCombatMethod?.();
+    const maceMethod = api.core.CombatSpecial?.getById?.(ANCIENT_MACE_SPECIAL_ID)?.getCombatMethod?.() ?? null;
+    // The armed flag clears as soon as the swing has queued its hit (Combat.executeAttack);
+    // the launched special is what the hit retains, so it identifies the mace's special.
+    if (!method || !maceMethod) return false;
+    return method === maceMethod;
+  }
+
+  function specialUsed(player) {
+    return player.getAttribute(SPECIAL_ATTRIBUTE) === true;
+  }
+
+  function sigmundExposed(player) {
+    return player.getAttribute(SIGMUND_EXPOSED_ATTRIBUTE) === true;
+  }
+
+  function zanikUntied(player) {
+    return player.getAttribute(ZANIK_UNTIED_ATTRIBUTE) === true;
+  }
+
+  function trainOpen(player) {
+    return player.getAttribute(TRAIN_OPEN_ATTRIBUTE) === true;
+  }
+
+  function trainAgreed(player) {
+    // Saves made before the agreement attribute existed are already past the
+    // start dialogue, so their stage is the durable half of the same fact.
+    return player.getAttribute(TRAIN_AGREEMENT_ATTRIBUTE) === true || stageOf(player) >= STAGE_STARTED;
+  }
+
+  /** A blocked hit must read as a zero hitsplat, including multi-hit specials. */
+  function zeroHit(hit) {
+    if (!hit) return;
+    if (typeof hit.setTotalDamage === "function") {
+      hit.setTotalDamage(0);
+      return;
+    }
+    for (const part of hit.getHits?.() ?? []) part.setDamage?.(0);
+    hit.updateTotalDamage?.();
+  }
+
+  const lastProtectionLine = new WeakMap();
+  const prayerBlockedNotified = new WeakSet();
+  const maceHinted = new WeakSet();
+
+  /** Sigmund calls on Saradomin for each attack style until the mace special lands. */
+  function showProtectionLine(player, combatType) {
+    const { CombatType } = api.core;
+    const style = combatType === CombatType.MAGIC ? "magic"
+      : combatType === CombatType.RANGED ? "ranged" : "melee";
+    if (lastProtectionLine.get(player) === style) return;
+    lastProtectionLine.set(player, style);
+    startTranscript(api, player, SIGMUND_NPC_ID, PAGE,
+      `climbing-down-to-the-railway-if-sigmund-is-attacked-with-${style}`);
   }
 
   function questComplete(player, key) {
@@ -762,6 +831,35 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     startTranscript(api, player, npcId, PAGE, "talking-to-the-sergeants-in-the-lumbridge-swamp-talking-to-the-sergeants-on-the-surface-after-talking-to-them-in-the-cave");
   }
 
+  function talkSigmund(event) {
+    const { player, npcId } = event;
+    if (npcId !== SIGMUND_NPC_ID) return false;
+    const stage = stageOf(player);
+    if (stage !== STAGE_RAILWAY) return false;
+    if (!sigmundExposed(player)) {
+      // The railway descent cutscene is the canonical exposure; replay it if a
+      // client/relog dropped the player into the fight without it.
+      player.setAttribute(SIGMUND_EXPOSED_ATTRIBUTE, true);
+      startTranscript(api, player, npcId, PAGE, "climbing-down-to-the-railway");
+      return true;
+    }
+    if (!specialUsed(player)) {
+      player.sendMessage("Sigmund is protected by Saradomin. Use the ancient mace's special attack to break his prayer.");
+      return true;
+    }
+    player.sendMessage("Sigmund is beaten. Untie Zanik before the train arrives.");
+    return true;
+  }
+
+  function talkHamMember(event) {
+    const { player, npcId } = event;
+    if (npcId !== HAM_ARCHER_NPC_ID && npcId !== HAM_MAGE_NPC_ID) return false;
+    const stage = stageOf(player);
+    if (stage !== STAGE_VILLAGE && stage !== STAGE_SNIPERS_DEAD) return false;
+    player.sendMessage("The H.A.M. member is too busy fighting the goblins to talk.");
+    return true;
+  }
+
   // ==========================================================================
   // NPC dialogue conditions
   // ==========================================================================
@@ -808,7 +906,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   /** Grants and item hand-ins that the transcript branch alone cannot state. */
   function handleConditionChosen(event) {
     const { player, npcId, stepId } = event;
-    if (npcId !== TEGDAK_NPC_ID) return;
+    if (npcId !== TEGDAK_NPC_ID || stageOf(player) !== STAGE_DIGGING) return;
     switch (stepId) {
       case TROWEL_SPACE_CONDITION_ID:
         if (!hasTrowel(player)) addItem(player, TROWEL_ITEM_ID);
@@ -844,25 +942,34 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     const { player, npcId, hook } = event;
     if (hook !== START_HOOK) return;
     if (!UR_TAG_NPC_IDS.has(npcId) && npcId !== AMBASSADOR_ALVIJAR_NPC_ID) return;
-    if (stageOf(player) === 0) setStage(player, STAGE_STARTED);
+    if (!meetsRequirements(player)) return;
+    if (stageOf(player) === 0) {
+      setStage(player, STAGE_STARTED);
+      // Objective 1: the start conversation is the train agreement; the line
+      // itself is only declared open in the completion transcript.
+      player.setAttribute(TRAIN_AGREEMENT_ATTRIBUTE, true);
+      player.setAttribute(SIGMUND_EXPOSED_ATTRIBUTE, false);
+      player.setAttribute(ZANIK_UNTIED_ATTRIBUTE, false);
+      player.setAttribute(TRAIN_OPEN_ATTRIBUTE, false);
+    }
   }
 
   function handleAction(event) {
     const { player, npcId, stepId } = event;
     switch (stepId) {
       case OLDAK_SPHERE_ACTION_ID:
-        if (npcId !== OLDAK_NPC_ID) return;
+        if (npcId !== OLDAK_NPC_ID || stageOf(player) !== STAGE_SCRIBE) return;
         if (!hasItem(player, GOBLIN_VILLAGE_SPHERE_ITEM_ID)) addItem(player, GOBLIN_VILLAGE_SPHERE_ITEM_ID);
         return;
       case OLDAK_TELEPORT_ACTION_ID:
-        if (npcId !== OLDAK_NPC_ID) return;
+        if (npcId !== OLDAK_NPC_ID || stageOf(player) !== STAGE_SCRIBE) return;
         if (hasItem(player, GOBLIN_VILLAGE_SPHERE_ITEM_ID)) player.getInventory().deleteNumber(GOBLIN_VILLAGE_SPHERE_ITEM_ID, 1);
         setZanikAtDig(player, false);
         player.moveTo(VILLAGE_LANDING);
         setStage(player, STAGE_VILLAGE);
         return;
       case OLDAK_RETURN_TELEPORT_ACTION_ID:
-        if (npcId !== OLDAK_NPC_ID) return;
+        if (npcId !== OLDAK_NPC_ID || stageOf(player) < STAGE_VILLAGE || stageOf(player) >= STAGE_KIDNAPPED) return;
         player.moveTo(VILLAGE_LANDING);
         return;
       case VILLAGE_CUTSCENE_END_ACTION_ID:
@@ -879,16 +986,39 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
         player.sendMessage("The generals sent two sergeants to the Lumbridge Swamp Caves.");
         return;
       case PAY_COINS_ACTION_ID:
-        if (!GENERAL_NPC_IDS.has(npcId)) return;
+        if (!GENERAL_NPC_IDS.has(npcId) || stageOf(player) < STAGE_KIDNAPPED || stageOf(player) >= STAGE_COMPLETE) return;
         reclaimMace(player);
         return;
       case RECEIVE_MACE_ACTION_ID:
-        if (!GENERAL_NPC_IDS.has(npcId)) return;
+        if (!GENERAL_NPC_IDS.has(npcId) || stageOf(player) < STAGE_KIDNAPPED || stageOf(player) >= STAGE_COMPLETE) return;
         // PAY_COINS_ACTION_ID already delivered it atomically; replaying this is not a free reclaim.
+        return;
+      case UNTIE_ZANIK_ACTION_ID:
+        if (npcId !== SIGMUND_NPC_ID || stageOf(player) !== STAGE_RAILWAY) return;
+        if (!sigmundExposed(player) || !specialUsed(player)) {
+          event.handled = true;
+          player.sendMessage("Sigmund still holds Zanik. Defeat him first.");
+          return;
+        }
+        player.setAttribute(ZANIK_UNTIED_ATTRIBUTE, true);
+        return;
+      case TRAIN_OPENING_ACTION_ID:
+        if (npcId !== SIGMUND_NPC_ID || stageOf(player) !== STAGE_RAILWAY) return;
+        if (!zanikUntied(player)) return;
+        player.setAttribute(TRAIN_OPEN_ATTRIBUTE, true);
         return;
       case COMPLETE_ACTION_ID:
         if (npcId !== SIGMUND_NPC_ID) return;
         event.handled = true;
+        // The three objectives must be finished in order: the train agreement
+        // started the quest, then Sigmund was exposed and beaten only after the
+        // ancient mace special stripped his prayer. Zanik must be untied and the
+        // line declared open before the scroll can fire.
+        if (stageOf(player) !== STAGE_RAILWAY || !trainAgreed(player) || !sigmundExposed(player) ||
+            !specialUsed(player) || !zanikUntied(player) || !trainOpen(player)) {
+          player.sendMessage("You still have to defeat Sigmund and untie Zanik before the train arrives.");
+          return;
+        }
         if (!quest.isComplete(player)) quest.complete(player);
         return;
       default:
@@ -900,6 +1030,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     const { player, npcId, text } = event;
     const line = String(text ?? "");
     if (npcId === TEGDAK_NPC_ID && line.startsWith("Here, take this trowel")) {
+      if (stageOf(player) !== STAGE_STARTED) return;
       if (!hasTrowel(player)) addItem(player, TROWEL_ITEM_ID);
       if (!hasBrush(player)) addItem(player, SPECIMEN_BRUSH_ITEM_ID);
       setStage(player, STAGE_DIGGING);
@@ -917,6 +1048,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   function handleChoice(event) {
     const { player, npcId, option } = event;
     if (!SERGEANT_NPC_IDS.has(npcId)) return;
+    if (stageOf(player) < STAGE_KIDNAPPED || stageOf(player) > STAGE_TUNNEL) return;
     switch (option) {
       case "Both of you follow me":
         player.setAttribute(ESCORT_ATTRIBUTE, 2);
@@ -996,7 +1128,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
 
   function handleItemOnNpc(event) {
     const { player, npcId, itemId } = event;
-    if (npcId !== TEGDAK_NPC_ID) return;
+    if (npcId !== TEGDAK_NPC_ID || stageOf(player) !== STAGE_DIGGING) return;
     if (
       itemId === TROWEL_ITEM_ID ||
       itemId === SPECIMEN_BRUSH_ITEM_ID ||
@@ -1010,15 +1142,40 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   }
 
   function handleItemDropPolicy(event) {
-    const spot = DIG_SPOT_BY_DIRTY.get(event.itemId);
+    const spot = DIG_SPOT_BY_DIRTY.get(event.itemId) ?? DIG_SPOT_BY_CLEAN.get(event.itemId);
     if (!spot) return;
     const { player } = event;
+    if (stageOf(player) !== STAGE_DIGGING) return;
     event.handled = true;
     event.dropToGround = false;
-    if (hasItem(player, spot.dirty)) player.getInventory().deleteNumber(spot.dirty, 1);
+    if (hasItem(player, event.itemId)) player.getInventory().deleteNumber(event.itemId, 1);
     player.setAttribute(SPOTS_ATTRIBUTE, dugSpots(player) & ~spot.bit);
     player.getPacketSender().sendVarbit(spot.varbit, 0);
     startTranscript(api, player, TEGDAK_NPC_ID, PAGE, "the-archaeological-dig-dropping-an-artefact");
+  }
+
+  /** Route item: breaking the sphere is the quest's Goblin Village teleport. */
+  function breakRouteSphere(event) {
+    const { player } = event;
+    if (stageOf(player) !== STAGE_SCRIBE) return false;
+    if (!hasItem(player, GOBLIN_VILLAGE_SPHERE_ITEM_ID)) return false;
+    player.getInventory().deleteNumber(GOBLIN_VILLAGE_SPHERE_ITEM_ID, 1);
+    setZanikAtDig(player, false);
+    player.moveTo(VILLAGE_LANDING);
+    setStage(player, STAGE_VILLAGE);
+    player.sendMessage("The sphere shatters, carrying you and Zanik to the Goblin Village.");
+    return true;
+  }
+
+  /** Wielding the mace is the natural point to remind the player how it beats Sigmund. */
+  function wieldAncientMace(event) {
+    const { player } = event;
+    if (stageOf(player) < STAGE_KIDNAPPED) return false;
+    if (stageOf(player) === STAGE_RAILWAY && !specialUsed(player) && !maceHinted.has(player)) {
+      maceHinted.add(player);
+      player.sendMessage("The ancient mace's special attack can strip Sigmund's prayer protection.");
+    }
+    return false; // never swallow the Wield action itself
   }
 
   // ==========================================================================
@@ -1059,6 +1216,14 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
 
   function handleSigmundDeath(player) {
     if (stageOf(player) !== STAGE_RAILWAY) return;
+    if (!specialUsed(player)) {
+      // A poison/recoil/death that bypassed the hit modifier must not skip the
+      // mace objective: put him back and keep the showdown retryable.
+      forgetTracked(player, "sigmund");
+      spawnSigmund(player);
+      player.sendMessage("Sigmund's prayer protects him. Use the ancient mace's special attack.");
+      return;
+    }
     forgetTracked(player, "sigmund");
     startTranscript(api, player, SIGMUND_NPC_ID, PAGE, "defeating-sigmund");
   }
@@ -1068,10 +1233,27 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     if (!npc || npc.getId?.() !== SIGMUND_NPC_ID) return;
     const attacker = hit?.getAttacker?.();
     if (!attacker?.isPlayer?.()) return;
-    const player = attacker;
-    if (stageOf(player) !== STAGE_RAILWAY) return;
-    if (player.getAttribute(SPECIAL_ATTRIBUTE) === true) return;
-    if (!hasAncientMace(player)) return;
+    const player = attacker.getAsPlayer?.() ?? attacker;
+    if (stageOf(player) !== STAGE_RAILWAY) {
+      zeroHit(hit);
+      return;
+    }
+    if (!sigmundExposed(player)) {
+      zeroHit(hit);
+      player.sendMessage("Sigmund is protected by Saradomin. Confront him first.");
+      return;
+    }
+    if (specialUsed(player)) return;
+    if (!isAncientMaceSpecial(hit)) {
+      zeroHit(hit);
+      if (!prayerBlockedNotified.has(player)) {
+        prayerBlockedNotified.add(player);
+        player.sendMessage("Sigmund's prayer absorbs the blow. Use the ancient mace's special attack.");
+      }
+      showProtectionLine(player, hit.getCombatType?.());
+      return;
+    }
+    if (hit.isAccurate?.() === false) return;
     player.setAttribute(SPECIAL_ATTRIBUTE, true);
     // Deferred a tick: the chat is not opened from inside the hit pipeline.
     const { CountdownTask, TaskManager } = api.core;
@@ -1116,6 +1298,9 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   function descendToRailway(player) {
     if (stageOf(player) === STAGE_RAILWAY) {
       player.moveTo(RAILWAY_LANDING);
+      player.setAttribute(SIGMUND_EXPOSED_ATTRIBUTE, true);
+      if (player.getAttribute(ZANIK_UNTIED_ATTRIBUTE) === undefined) player.setAttribute(ZANIK_UNTIED_ATTRIBUTE, false);
+      if (player.getAttribute(TRAIN_OPEN_ATTRIBUTE) === undefined) player.setAttribute(TRAIN_OPEN_ATTRIBUTE, false);
       spawnSigmund(player);
       return;
     }
@@ -1127,6 +1312,9 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     clearTunnel(player);
     player.moveTo(RAILWAY_LANDING);
     setStage(player, STAGE_RAILWAY);
+    player.setAttribute(SIGMUND_EXPOSED_ATTRIBUTE, true);
+    player.setAttribute(ZANIK_UNTIED_ATTRIBUTE, false);
+    player.setAttribute(TRAIN_OPEN_ATTRIBUTE, false);
     spawnSigmund(player);
     startTranscript(api, player, SIGMUND_NPC_ID, PAGE, "climbing-down-to-the-railway");
   }
@@ -1240,7 +1428,12 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
       spawnTunnelNpcs(player);
       if (player.getAttribute(HIDING_ATTRIBUTE) === true) hideBehindCrate(player);
     }
-    if (stage === STAGE_RAILWAY) spawnSigmund(player);
+    if (stage === STAGE_RAILWAY) {
+      player.setAttribute(SIGMUND_EXPOSED_ATTRIBUTE, true);
+      if (player.getAttribute(ZANIK_UNTIED_ATTRIBUTE) === undefined) player.setAttribute(ZANIK_UNTIED_ATTRIBUTE, false);
+      if (player.getAttribute(TRAIN_OPEN_ATTRIBUTE) === undefined) player.setAttribute(TRAIN_OPEN_ATTRIBUTE, false);
+      spawnSigmund(player);
+    }
   }
 
   function handleLogout({ player }) {
@@ -1256,7 +1449,26 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   // Journal and rewards
   // ==========================================================================
 
+  function objectiveLines(player, stage) {
+    const done = stage >= STAGE_COMPLETE;
+    const line = (text, complete) =>
+      `${complete || done ? "<str>" : ""}${text}${complete || done ? "</str>" : ""}`;
+    return [
+      line("Negotiate the Dorgesh-Kaan - Keldagrim train agreement and clear the Lumbridge tunnel.", stage >= STAGE_STARTED),
+      line("Expose and fight Sigmund in the tunnel.", stage >= STAGE_RAILWAY && sigmundExposed(player)),
+      line("Use the ancient mace's special attack in the showdown.", specialUsed(player)),
+      "",
+    ];
+  }
+
   function buildJournal(player, handle) {
+    return [
+      ...objectiveLines(player, handle.getStage(player)),
+      ...buildJournalDetails(player, handle),
+    ];
+  }
+
+  function buildJournalDetails(player, handle) {
     const stage = handle.getStage(player);
     if (stage >= STAGE_COMPLETE) {
       return [
@@ -1350,6 +1562,10 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   api.persistAttribute(ZANIK_AT_DIG_ATTRIBUTE);
   api.persistAttribute(MACE_ATTRIBUTE);
   api.persistAttribute(SPECIAL_ATTRIBUTE);
+  api.persistAttribute(SIGMUND_EXPOSED_ATTRIBUTE, false);
+  api.persistAttribute(ZANIK_UNTIED_ATTRIBUTE, false);
+  api.persistAttribute(TRAIN_AGREEMENT_ATTRIBUTE, false);
+  api.persistAttribute(TRAIN_OPEN_ATTRIBUTE, false);
   api.persistAttribute(SNIPERS_ATTRIBUTE);
   api.persistAttribute(ESCORT_ATTRIBUTE);
   api.persistAttribute(SEPARATED_ATTRIBUTE);
@@ -1387,6 +1603,8 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnNpc(handleItemOnNpc, { noted: false });
+  api.onItemAction("Ancient mace", { Wield: wieldAncientMace });
+  api.onItemAction("Goblin village sphere", { Break: breakRouteSphere });
   api.onItemDropPolicy(handleItemDropPolicy);
   api.onObjectInteraction(handleObjectInteraction);
   api.onCustomEvent("ladders:climb", handleLaddersClimb);
@@ -1394,6 +1612,9 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
   api.onNpcInteraction("Ambassador Alvijar", { "Talk-to": talkAlvijar });
   api.onNpcInteraction("Tegdak", { "Talk-to": talkTegdak });
   api.onNpcInteraction("Zanik", { "Talk-to": talkZanik });
+  api.onNpcInteraction("Sigmund", { "Talk-to": talkSigmund });
+  api.onNpcInteraction("H.A.M. Archer", { "Talk-to": talkHamMember });
+  api.onNpcInteraction("H.A.M. Mage", { "Talk-to": talkHamMember });
   api.onNpcInteraction("Goblin scribe", { "Talk-to": talkScribe });
   api.onNpcInteraction("Oldak", { "Talk-to": talkOldak });
   api.onNpcInteraction("Builder", { "Talk-to": talkBuilder });

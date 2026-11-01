@@ -24,6 +24,20 @@ If setup is interrupted, run `npm run setup` again.
 
 Running several branches at once, one worktree each on its own ports: see [docs/worktrees.md](docs/worktrees.md).
 
+### Optional: Java sidecars
+
+Two optional local services are Java; neither is needed to run the server.
+
+| Command | What it enables | Setup |
+| --- | --- | --- |
+| `yarn bridge` | the in-game Quest Helper panel, from the upstream Java helper | **Java 21**, then the one-time build in [`tools/quest-helper-bridge`](tools/quest-helper-bridge/README.md) |
+| `yarn gateway` | the official OSRS client through RSProx, playing on this server | [`gateway/README.md`](gateway/README.md) |
+
+The bridge also needs `QUEST_HELPER_TOKEN` (any 24+ characters) in `.env`; without it the panel
+reports that the engine has not been started, while Tutorial Island and Recipe for Disaster still
+work because the server answers those itself. A separate single-client RuneLite 1.13.3 demo lives
+in [`tools/runelite-gateway`](tools/runelite-gateway/README.md).
+
 ## Publish your world
 
 Create a server token at [RSPS.app](https://rsps.app/) under **Settings → Server tokens**, then add it to `.env` in the repository root:
@@ -40,7 +54,7 @@ Run `yarn start`. Your world appears in the World list once it registers. Keep t
 
 ## Links
 
-- [Discord](https://discord.gg/aKsyakSppk) — questions, help and development chat
+- [Discord](https://discord.com/invite/TCTDGVzejn) — questions, help and development chat
 - [Progress](https://rsps.app/progress) — how much of OSRS is implemented, by category
 - [Host a world](https://rsps.app/host)
 

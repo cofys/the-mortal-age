@@ -8,8 +8,8 @@
  * rule and 93 Slayer level. Drops, spawns and kill counting already exist in
  * data/definitions and plugins; this plugin only adds the missing behaviour.
  *
- * Slayer-task-only attacks and rented private instances are follow-ups, not implemented
- * here (as with the Kraken's task rule).
+ * The room refuses attacks off-task (Area.ThermonuclearSmokeDevil.js); rented private
+ * instances are a follow-up, not implemented here.
  */
 const Common = require("./thermonuclear/Common.ThermonuclearSmokeDevil");
 const Fight = require("./thermonuclear/Fight.ThermonuclearSmokeDevil");

@@ -476,8 +476,38 @@ module.exports = function registerCreatureOfFenkenstrainQuest(api) {
     return null;
   }
 
+  function questIsComplete(player, key) {
+    const request = { player, key, complete: undefined };
+    api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  }
+
   function startQuest(player) {
-    if (quest.getStage(player) === 0) quest.setStage(player, STAGE_BODY_PARTS);
+    if (quest.getStage(player) !== 0) return;
+    const skills = player.getSkillManager();
+    const missingSkills = [
+      { skill: Skill.CRAFTING, level: 20, label: "Crafting" },
+      { skill: Skill.THIEVING, level: 25, label: "Thieving" },
+    ].filter((requirement) => skills.getMaxLevel(requirement.skill) < requirement.level);
+    if (missingSkills.length > 0) {
+      for (const requirement of missingSkills) {
+        player.sendMessage(
+          `You need a ${requirement.label} level of at least ${requirement.level} to start this quest.`
+        );
+      }
+      return;
+    }
+    const missing = [
+      { key: "priest_in_peril", name: "Priest in Peril" },
+      { key: "the_restless_ghost", name: "The Restless Ghost" },
+    ].filter((requirement) => !questIsComplete(player, requirement.key));
+    if (missing.length > 0) {
+      for (const requirement of missing) {
+        player.sendMessage(`You must complete ${requirement.name} to start this quest.`);
+      }
+      return;
+    }
+    quest.setStage(player, STAGE_BODY_PARTS);
   }
 
   function handleHook({ player, npcId, hook }) {
