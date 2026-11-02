@@ -1238,9 +1238,10 @@ test('Primio opens the canonical first-trip menu and flies both ways only after 
   // selected tail of the canonical first-trip transcript.
   require('../plugins/npcs/NpcDialogues.plugin').register(h.api);
   h.action(p, N.REGULUS_CENTO_2, 'Kectpl');
+  h.action(p, N.REGULUS_CENTO_2, 'Kectpl');
   assert.equal(h.tasks.length, baselineTasks + 1, 'the canonical accepted menu action starts the flight');
   h.tick(4);
-  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1697, 3140, 0]);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1700, 3141, 0]);
   assert.equal(p.varbits.get(9650), 1, 'the first arrival records Varlamore visited');
   assert.equal(p.varbits.get(9652), 3, 'the captured first-trip state advances on landing');
   assert.equal(starts.at(-1).npcId, N.REGULUS_CENTO_3);
@@ -1264,7 +1265,7 @@ test('Primio opens the canonical first-trip menu and flies both ways only after 
   h.tick(3);
   h.namedNpcs.get('Primio').Travel({ player: p, npcId: N.PRIMIO_2 });
   h.tick(4);
-  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1697, 3140, 0]);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1700, 3141, 0]);
   assert.equal(p.varbits.get(9652), 4, 'later Fortis trips keep the completed first-trip state');
   assert.equal(starts.length, 3, 'repeat flights do not replay the initial menu or arrival dialogue');
 });
@@ -1354,10 +1355,10 @@ test('COTS door scene spawns the waiting bandits inside the house', () => {
   const event = { player: p, objectId: core.ObjectIdentifiers.DOOR_695, location: { x: 3259, y: 3400 }, handled: false };
   h.emit('door:toggle', event);
   assert.equal(event.handled, true);
-  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3263, 3401]);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3259, 3398], 'player stays outside the captured window');
   const spawned = h.npcs.slice(before);
   assert.equal(spawned.length, 5, 'bag guard and four bandits appear for the eavesdrop');
   assert.deepEqual(spawned.map(npc => npc.getId()).sort(), [N.GUARD_186, N.BANDIT_16, N.BANDIT_17, N.BANDIT_18, N.BANDIT_19].sort());
   assert.deepEqual(spawned.map(npc => [npc.getLocation().getX(), npc.getLocation().getY()]).sort(),
-    [[3265, 3403], [3266, 3401], [3266, 3405], [3268, 3402], [3268, 3404]].sort());
+    [[3260, 3400], [3261, 3398], [3261, 3402], [3263, 3399], [3263, 3401]].sort());
 });

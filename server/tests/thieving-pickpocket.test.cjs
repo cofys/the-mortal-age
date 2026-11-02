@@ -13,7 +13,29 @@ const { World } = require('../dist/game/World');
 const Thieving = require('../plugins/skills/Thieving.plugin');
 const Pickpocket = require('../plugins/skills/thieving/Pickpocket.Thieving');
 const CoinPouch = require('../plugins/skills/thieving/CoinPouch.Thieving');
+const HamTrapdoor = require('../plugins/skills/thieving/HamTrapdoor.Thieving');
 const DATA = require('../plugins/skills/data/pickpocketing.json');
+
+/**
+ * Each target's own Wiki page charts its pickpocket chance as `low`/`high` out of 256
+ * ({{Skilling success chart}}, "Normal": low1/high1). Transcribed here, not read from the
+ * data file, so a wrong or stale chart in the data file fails this test instead of agreeing
+ * with itself. Pages: Thieving#Thievable NPCs links them.
+ */
+const WIKI_CHART = {
+    man: [180, 240], farmer: [150, 240], ham: [135, 239], warrior: [100, 240], rogue: [75, 240],
+    master_farmer: [90, 240], guard: [50, 240], wealthy_citizen: [35, 200], desert_bandit: [50, 240],
+    knight: [50, 240], menaphite_thug: [50, 160], watchman: [15, 160],
+    // Both cite Mod Ash: "LOW: 35 HIGH: 160" (Paladin) and "LOW: 33 HIGH: 140" (Gnome).
+    paladin: [35, 160], gnome: [33, 140], hero: [39, 160], vyre: [8, 128],
+    elf_lletya: [6, 100], elf_prifddinas: [6, 100], tzhaar_hur: [-200, 200],
+};
+/** The Wiki has no chart for these: each uses the one its `estimatedFrom` names. */
+const ESTIMATED_CHART = {
+    digsite_workman: 'warrior', cave_goblin: 'rogue', fremennik_citizen: 'guard',
+    knight_of_varlamore: 'knight', pirate: 'knight',
+    pollnivnian_bearded_bandit: 'menaphite_thug', pollnivnian_bandit: 'menaphite_thug',
+};
 
 const log = [];
 const submitted = [];
@@ -32,6 +54,7 @@ Thieving.register({
     onNpcsInteraction: (names, actions) => names.forEach((name) => Object.keys(actions).forEach((action) => interactions.push([name, action]))),
     onNpcInteraction: (name, actions) => interactions.push([name, Object.keys(actions)[0]]),
     onObjectInteraction: () => {},
+    onBeforeObjectInteraction: () => {},
     onItemAction: () => {},
     emitCustomEvent: (name, request) => {
         if (name === 'thieving:success') log.push(name);
@@ -44,6 +67,17 @@ Thieving.register({
     log: () => {},
 });
 Sounds.sendSound = () => {};
+
+test('the H.A.M. entrance uses its own published curve without repeat-failure scaling', () => {
+    const chance = HamTrapdoor._test.successChance;
+    assert.equal(chance(1, false), 11 / 256);
+    assert.equal(chance(99, false), 251 / 256);
+    assert.equal(chance(1, true), 61 / 256);
+    assert.equal(chance(99, true), 255 / 256);
+    assert.equal(chance(50, false), 131 / 256);
+    assert.equal(chance(50, true), 158 / 256);
+    assert.equal(chance(200, false), 1);
+});
 
 // Item names for the fake definitions: the data file's items plus the gear the plugin checks.
 const NAMES = new Map([
@@ -187,6 +221,31 @@ test('success follows the Wiki chart; gloves of silence and the Thieving cape sc
     assert.equal(successChance(both, man), 208 / 256, '189 * 1.1, rounded down');
     const tzhaar = DATA.targets.find((t) => t.key === 'tzhaar_hur');
     assert.equal(successChance(player({ level: 1 }), tzhaar), 0, 'a negative low stays at 0');
+});
+
+test("each target's chart is the Wiki's, so the success rate is the game's", () => {
+    for (const t of DATA.targets) {
+        const chart = WIKI_CHART[t.key] ?? WIKI_CHART[ESTIMATED_CHART[t.key]];
+        assert.ok(chart, `${t.key}: no Wiki chart recorded for it`);
+        assert.deepEqual([t.low, t.high], chart, `${t.key} (${t.wiki})`);
+        if (ESTIMATED_CHART[t.key]) assert.ok(t.estimatedFrom, `${t.key} says which chart it borrows`);
+    }
+    assert.equal(Object.keys(WIKI_CHART).length + Object.keys(ESTIMATED_CHART).length, DATA.targets.length,
+        'every target is checked, and no entry is left over');
+});
+
+test('the interpolation rounds as the Wiki module does, at a level where the sum is fractional', () => {
+    const { successChance } = Pickpocket._test;
+    // Warrior 100/240 at level 40: 100*59/98 + 240*39/98 = 155.71 -> floor(156.21) + 1 = 157.
+    // Flooring without the module's +0.5 would give 156/256 (61.0% instead of 61.3%).
+    const warrior = DATA.targets.find((t) => t.key === 'warrior');
+    assert.equal(successChance(player({ level: 40 }), warrior), 157 / 256);
+    // The two charts that had been transcribed stale (see WIKI_CHART above).
+    const at = (key, level) => successChance(player({ level }), DATA.targets.find((t) => t.key === key));
+    assert.equal(at('paladin', 70), 124 / 256, '48.4%, not the 51.9% of a 40/170 chart');
+    assert.equal(at('paladin', 99), 161 / 256);
+    assert.equal(at('gnome', 75), 115 / 256, '44.9%, not the 56.3% of a 43/175 chart');
+    assert.equal(at('gnome', 99), 141 / 256);
 });
 
 test('a success: the attempt message, then the animation, a coin pouch and the experience a tick later', (t) => {

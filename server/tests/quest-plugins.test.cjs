@@ -87,6 +87,7 @@ function mockApi() {
     npcHitModify: [],
     combatHitRoll: [],
     canBankItem: [],
+    canEquip: [],
   };
   const noop = () => {};
   const base = {
@@ -114,6 +115,8 @@ function mockApi() {
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
     onCombatHitRoll: h => handlers.combatHitRoll.push(h),
     onCanBankItem: h => handlers.canBankItem.push(h),
+    onCanEquip: h => handlers.canEquip.push(h),
+    getPluginConfig: (_key, fallback) => fallback,
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
     onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
     onItemOnObject: (...args) => handlers.itemOnObject.push(typeof args[0] === 'function' ? args[0] : args[2]),
@@ -146,11 +149,23 @@ function mockApi() {
   return { api, handlers };
 }
 
-test('Quests.plugin registers every quest through api.core without throwing', () => {
-  const { api } = mockApi();
+test('Quests.plugin registers every quest and enforces equipment requirements by default', () => {
+  const { api, handlers } = mockApi();
   const plugin = require('../plugins/quests/Quests.plugin');
   assert.equal(plugin.name, 'Quests');
   assert.doesNotThrow(() => plugin.register(api));
+  const messages = [];
+  const event = {
+    player: { getAttribute: () => undefined, sendMessage: message => messages.push(message) },
+    item: { getId: () => api.core.ItemIdentifiers.RUNE_PLATEBODY },
+    allow: null,
+  };
+  for (const handler of handlers.canEquip) handler(event);
+  assert.equal(event.allow, false);
+  assert.deepEqual(messages, [
+    'You have not earned the right to wear this yet.',
+    'You need to complete the Dragon Slayer I quest first.',
+  ]);
 });
 
 test('Lost City only warns about low combat when a starting skill is also missing', () => {
@@ -15921,10 +15936,27 @@ test('Priest in Peril unlocks the mausoleum Holy barrier only after completion',
     moveTo: (location) => moves.push([location.getX(), location.getY(), location.getZ()]),
     sendMessage: (text) => messages.push(text),
   };
-  for (stage of [0, 10, 50, quest.completionValue - 1]) {
+  for (stage of [0, 10, 46]) {
     assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
     assert.deepEqual(moves, [], 'unfinished quests cannot cross');
     assert.match(messages.at(-1), /complete Priest in Peril/);
+  }
+  // Once Drezel holds the barrier (stage 50 on), he stops the player himself.
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const played = [];
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = (...args) => { played.push(args[4]); return true; };
+  try {
+    require('../plugins/quests/quests/PriestInPeril.Quest')(api);
+    const stop = objects.get('Holy barrier')['Pass-through'];
+    for (stage of [50, quest.completionValue - 1]) {
+      assert.equal(stop({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+      assert.deepEqual(moves, [], 'unfinished quests cannot cross');
+      assert.equal(played.at(-1),
+        'after-drezel-is-freed-and-the-vampyre-is-sealed-attempting-to-pass-the-holy-barrier-before-securing-the-barrier');
+    }
+  } finally {
+    runtime.startTranscript = startTranscript;
   }
   for (stage of [quest.completionValue, quest.completionValue + 1]) {
     assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
@@ -16140,7 +16172,10 @@ test('Dragon Slayer II locator orb points on eight compass directions and cannot
     getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0, getFreeSlots: () => 20, adds: () => {} }),
     getLocation: () => ({ x: 0, y: 0, getX: () => 0, getY: () => 0 }),
     getHitpoints: () => hitpoints,
-    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pending.push(...hits) }) }),
+    getCombat: () => ({ getHitQueue: () => ({
+      addPendingDamage: (hits) => pending.push(...hits),
+      getQueuedDamage: () => pending.reduce((total, hit) => total + hit.getDamage(), 0),
+    }) }),
     sendMessage: (message) => messages.push(message),
   };
   const orbAction = { player, handled: false };
@@ -16149,6 +16184,7 @@ test('Dragon Slayer II locator orb points on eight compass directions and cannot
   assert.match(messages.at(-1), /north-east/);
   assert.equal(pending.at(-1).getDamage(), 10);
 
+  pending.length = 0;
   hitpoints = 4;
   actions.get('Locator orb').Feel({ player, handled: false });
   assert.equal(pending.at(-1).getDamage(), 3, 'orb damage stops at 1 hitpoint');
@@ -16162,6 +16198,57 @@ test('Dragon Slayer II locator orb points on eight compass directions and cannot
   const digAction = { player, handled: false };
   actions.get('Spade').Dig(digAction);
   assert.equal(digAction.handled, true, 'wrong dig spots are handled by the quest');
+});
+
+test('Dragon Slayer II locator orb still hurts after the key search and repeated Feels stop at one HP', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const feel = handlers.namedItemActions.get('Locator orb').Feel;
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const player = new Player(null);
+  player.setRegistered(true);
+  player.getSession = () => ({ sendClientPacket: () => true, write() {} });
+  const messages = [];
+  player.sendMessage = (message) => messages.push(message);
+  const orb = api.core.ItemIdentifiers.LOCATOR_ORB;
+  assert.equal(orb, 22081);
+  assert.equal(api.core.CacheDefinitions.getItem(orb).inventoryActions[0], 'Feel');
+  player.getInventory().add(new api.core.Item(orb, 1));
+  const queue = player.getCombat().getHitQueue();
+  let cycle = 0;
+
+  for (const stage of [14, 10, 8]) {
+    // No saved Morytania substep or locator target, as with a quest-completion unlock.
+    player.setAttribute('quest.dragon_slayer_ii.stage', stage);
+    player.setHitpoints(99);
+    const action = { player, handled: false };
+    feel(action);
+    assert.equal(action.handled, true, `Feel works at quest stage ${stage}`);
+    queue.process(++cycle);
+    assert.equal(player.getHitpoints(), 89);
+    assert.equal(messages.at(-1), 'The locator orb is unstable and hurts you as you use it.');
+  }
+  player.setAttribute('dragon-slayer-ii:morytania-step', 5);
+  player.setHitpoints(99);
+  feel({ player, handled: false });
+  queue.process(++cycle);
+  assert.equal(player.getHitpoints(), 89, 'a missing saved target still permits non-lethal damage');
+
+  for (const hp of [12, 10, 4, 1]) {
+    player.setHitpoints(hp);
+    for (let click = 0; click < 3; click++) feel({ player, handled: false });
+    queue.process(++cycle);
+    assert.equal(player.getHitpoints(), 1, `repeated clicks from ${hp} HP cannot kill`);
+  }
+
+  player.getInventory().resetItems();
+  player.setHitpoints(99);
+  const missing = { player, handled: false };
+  feel(missing);
+  queue.process(++cycle);
+  assert.equal(missing.handled, false, 'the orb must be carried');
+  assert.equal(player.getHitpoints(), 99);
+  assert.equal(queue.hasPendingWork(), false);
 });
 
 
