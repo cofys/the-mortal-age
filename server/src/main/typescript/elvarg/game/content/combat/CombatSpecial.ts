@@ -146,6 +146,9 @@ export class CombatSpecial {
         if (character.isPlayer()) {
             let p = character.getAsPlayer();
             CombatSpecial.updateBar(p);
+            // "combat-special:performed" { player, itemId }: a special attack performed, with the weapon wielded.
+            const { PluginManager } = require("../../../plugins/PluginManager");
+            PluginManager.emitCustomEvent("combat-special:performed", { player: p, itemId: p.getEquipment?.()?.get(Equipment.WEAPON_SLOT)?.getId?.() ?? -1 });
         }
     }
 
@@ -279,7 +282,7 @@ export class CombatSpecial {
             if (queuedAttack) {
                 const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
                 if (!developerQueuedAttackSpam && !CombatSpecial.affordable(player, spec, spec.getDrainAmountForWeaponId(equippedWeaponId))) {
-                    player.sendMessage("You do not have enough special attack energy left!");
+                    player.sendMessage("You don't have enough power left.");
                     player.setSpecialActivated(false);
                     CombatSpecial.updateBar(player);
                     return;
@@ -331,7 +334,7 @@ export class CombatSpecial {
         const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
         const drainAmount = spec.getDrainAmountForWeaponId(equippedWeaponId);
         if (!CombatSpecial.affordable(player, spec, drainAmount)) {
-            player.sendMessage("You do not have enough special attack energy left!");
+            player.sendMessage("You don't have enough power left.");
             return;
         }
 

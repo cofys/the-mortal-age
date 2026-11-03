@@ -557,7 +557,8 @@ function hasToolRequirements(player, tool) {
     return null;
   }
 
-  if ((tool.bait.length > 0 && findBait(player, tool) === undefined) || (tool.vessel && !tool.vessel.ready(player))) {
+  // A stand-in tool may fish without bait (`baitless`, a league relic's bare hands).
+  if ((tool.bait.length > 0 && !variant.baitless && findBait(player, tool) === undefined) || (tool.vessel && !tool.vessel.ready(player))) {
     if (tool.noBaitStatement) statement(player, tool.noBaitStatement);
     else player.sendMessage("You do not have the required bait.");
     return null;
@@ -675,7 +676,7 @@ function landCatch(player, tool, variant, caught) {
   // A listener may take over the session (the tutorial stops after one catch).
   // Depth modules (./fishing/) read the extra fields; emitters that omit them
   // (e.g. aerial fishing) are skipped gracefully by those modules.
-  const bait = findBait(player, tool);
+  const bait = variant.baitless ? undefined : findBait(player, tool);
   let stop = false;
   for (const fish of new Set(landed)) {
     if (fish.junk) continue;

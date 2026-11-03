@@ -2381,6 +2381,7 @@ export class PluginManager {
       Ammunition: require(`${combat}/ranged/RangedData`).Ammunition,
       WeaponProfiles: require(`${combat}/WeaponProfile`).WeaponProfiles,
       FightStyle: require(`${combat}/FightStyle`).FightStyle,
+      FightType: require(`${combat}/FightType`).FightType,
       WeaponInterfaceManager: require(`${combat}/WeaponInterfaceManager`).WeaponInterfaceManager,
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
       PrayerData: require("../game/content/PrayerHandler").PrayerData,
@@ -2427,6 +2428,12 @@ export class PluginManager {
       Location: require(`${model}/Location`).Location,
       Mobile: require("../game/entity/impl/Mobile").Mobile,
       encodePluginMessage: require("../net/protocol/ClientProtocol").encodePluginMessage,
+      encodeChatMessage: require("../net/protocol/ClientProtocol").encodeChatMessage,
+      encodeClanSettingsFull: require("../net/protocol/ClientProtocol").encodeClanSettingsFull,
+      encodeClanChannelFull: require("../net/protocol/ClientProtocol").encodeClanChannelFull,
+      encodeClanChannelDelta: require("../net/protocol/ClientProtocol").encodeClanChannelDelta,
+      encodeClanSettingsDelta: require("../net/protocol/ClientProtocol").encodeClanSettingsDelta,
+      encodeClanVar: require("../net/protocol/ClientProtocol").encodeClanVar,
       MOBILE_CLIENT_ATTRIBUTE: require("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE,
       XPDROPS_ENABLED_ATTRIBUTE: require("../net/protocol/ClientProtocol").XPDROPS_ENABLED_ATTRIBUTE,
       encodeGameframeBootstrap: require("../net/protocol/ClientProtocol").encodeGameframeBootstrap,
@@ -2562,6 +2569,7 @@ export class PluginManager {
         "secondClick",
         "thirdClick",
         "fourthClick",
+        "fifthClick",
       ] as const) {
         const action = definition[property];
         if (action === undefined) {
@@ -2622,7 +2630,8 @@ export class PluginManager {
         !normalized.firstClick &&
         !normalized.secondClick &&
         !normalized.thirdClick &&
-        !normalized.fourthClick
+        !normalized.fourthClick &&
+        !normalized.fifthClick
       ) {
         console.warn(
           `[plugins] ${pluginName} attempted empty NPC interaction definition registration`
@@ -4342,6 +4351,10 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerCombatEffectiveLevelModifier(modifier),
       registerMeleeStrengthPercentModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMeleeStrengthPercentModifier(modifier),
+      registerMeleeStrengthBonusModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerMeleeStrengthBonusModifier(modifier),
+      registerRestingLevelModifier: (modifier) =>
+        require("../game/content/skill/SkillManager").SkillManager.registerRestingLevelModifier(modifier),
       registerMeleeHitModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMeleeHitModifier(
           modifier

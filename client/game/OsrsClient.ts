@@ -1,3 +1,4 @@
+import { LISTENED_CLAN_TYPE, OWN_CLAN_TYPE } from "../common/social/Clans";
 import type { MinimapGeometry, SceneGeometry } from "./scene/SceneGeometry";
 import { vec3 } from "gl-matrix";
 import { closeOpenModal } from "./widgets/input/widgetKeyboardInput";
@@ -64,7 +65,6 @@ import {
     getCurrentTick,
     getServerTickPhaseNow,
     isServerConnected,
-    sendFaceTile,
     sendFriendsChatAction,
     sendGroundItemAction,
     sendIfTriggerOpLocal,
@@ -84,6 +84,7 @@ import {
     subscribeCombat,
     subscribeDisconnect,
     subscribeGroundItems,
+    subscribeClans,
     subscribeFriendsChat,
     subscribeHandshake,
     subscribeInventory,
@@ -202,6 +203,7 @@ import type { SkeletalSeqLoader } from "../rs/model/skeletal/SkeletalSeqLoader";
 import { SkillId } from "../rs/skill/skills";
 import { TextureLoader } from "../rs/texture/TextureLoader";
 import { faceAngleRs } from "../rs/utils/rotation";
+import { npcAddedRotation } from "./utils/rotation";
 import { getOsrsInterfaceScalingPercent, setOsrsInterfaceScalingPercent } from "../ui/UiScale";
 import {
     DEVICE_OPTION_SCREEN_BRIGHTNESS,
@@ -249,6 +251,8 @@ import {
     getTransmitCycles,
     isTransmitProcessingNeeded,
     markChatTransmit,
+    markClanChannelTransmit,
+    markClanSettingsTransmit,
     markClanTransmit,
     markFriendTransmit,
     markInvTransmit,
@@ -1053,6 +1057,7 @@ export class OsrsClient {
     private groundItemMeshesPending = false;
     private unsubscribeChatMessages?: () => void;
     private unsubscribeFriendsChat?: () => void;
+    private unsubscribeClans?: () => void;
     private unsubscribeSkills?: () => void;
     private unsubscribeRunEnergy?: () => void;
     private unsubscribeNotifications?: () => void;
@@ -1747,6 +1752,10 @@ export class OsrsClient {
                 if (idx === undefined || idx < 0) return 0;
                 return self.playerEcs.getAppearance(idx)?.gender ?? 0;
             },
+            getPlayerPronouns: () => {
+                const idx = self.playerEcs.getIndexForServerId(self.controlledPlayerServerId);
+                return idx === undefined || idx < 0 ? -1 : self.playerEcs.getAppearance(idx)?.pronouns ?? -1;
+            },
             getMinimapZoom: () => {
                 return self.minimapZoom;
             },
@@ -1819,6 +1828,9 @@ export class OsrsClient {
             onScriptFinished: (scriptId: number) => {
                 applyWildernessHudLayout(self.widgetManager, self.varManager, scriptId);
                 self.clientPlugins.onScriptFinished(scriptId);
+            },
+            onScriptPre: (scriptId: number) => {
+                self.clientPlugins.onScriptPreFired(scriptId);
             },
             clientRevision: 235,
             // Canvas dimensions as defined by the renderer's current UI layout space.
@@ -3352,6 +3364,18 @@ export class OsrsClient {
                 markClanTransmit();
             });
         } catch {}
+        try {
+            this.unsubscribeClans = subscribeClans((clans) => {
+                const context = this.cs2Vm.context;
+                context.clanSettings = clans.settings.get(OWN_CLAN_TYPE) ?? null;
+                context.clanChannel = clans.channels.get(OWN_CLAN_TYPE) ?? null;
+                context.listenedClanSettings = clans.settings.get(LISTENED_CLAN_TYPE) ?? null;
+                context.listenedClanChannel = clans.channels.get(LISTENED_CLAN_TYPE) ?? null;
+                context.clanVars = clans.vars;
+                markClanSettingsTransmit();
+                markClanChannelTransmit();
+            });
+        } catch {}
         // Subscribe to loot notifications and display via CS2 notification system
         try {
             this.unsubscribeNotifications = subscribeNotifications((event) => {
@@ -4711,11 +4735,6 @@ export class OsrsClient {
                 });
             }
             if (serverId !== undefined) {
-                if (tile && isServerConnected()) {
-                    try {
-                        sendFaceTile({ x: tile.tileX | 0, y: tile.tileY | 0 });
-                    } catch {}
-                }
                 try {
                     const localIdx = this.playerEcs.getIndexForServerId(
                         this.controlledPlayerServerId,
@@ -4765,6 +4784,9 @@ export class OsrsClient {
             // Sync equipment inventory only for local player
             const isLocalPlayer = serverId === this.controlledPlayerServerId;
             const pa = this.buildPlayerAppearanceFromPayload(appearance, isLocalPlayer);
+            if (isLocalPlayer && this.widgetManager.getInterfaceParentContainerUid(679) !== undefined) {
+                this.playerDesign?.preserveDraftAppearance(pa);
+            }
             this.playerEcs.setAppearance(ecsIndex, pa);
             // Keep the dedicated icon array in lockstep with the decoded
             // appearance for remote players as well as the local player.
@@ -4880,7 +4902,9 @@ export class OsrsClient {
         if (syncEquipment && !(Number(payload?.npcTransformationId) >= 0)) {
             this.syncEquipmentInventory(equip, equipQty);
         }
-        return new PlayerAppearance(gender, colors, kits, equip, headIcons, payload?.npcTransformationId);
+        const appearance = new PlayerAppearance(gender, colors, kits, equip, headIcons, payload?.npcTransformationId);
+        appearance.pronouns = Number.isInteger(payload?.pronouns) ? payload.pronouns : gender;
+        return appearance;
     }
 
     /** Sync the equipment inventory from appearance equip array for CS2 INV_GETOBJ(94, slot) */
@@ -5366,11 +5390,6 @@ export class OsrsClient {
             const connected = isServerConnected();
 
             if (serverId !== undefined && connected) {
-                if (tile) {
-                    try {
-                        sendFaceTile({ x: tile.tileX | 0, y: tile.tileY | 0 });
-                    } catch {}
-                }
                 const opNum = this.resolveNpcActionOpNum(
                     npcTypeId,
                     option,
@@ -7697,6 +7716,10 @@ export class OsrsClient {
                 },
                 { forceImmediateRotation: !!spawn.teleport },
             );
+            // Like a new one, a re-added NPC that never turns is drawn at angle 0 again.
+            if ((this.npcEcs.getRotationSpeed(existingEcs) | 0) === 0) {
+                this.npcEcs.setRotation(existingEcs, 0);
+            }
             this.npcEcs.setLevel(existingEcs, spawn.level | 0);
             this.npcEcs.setOccTile(existingEcs, localTileX, localTileY, spawn.level | 0);
             const nextWorldView = (spawn as any).worldViewId ?? -1;
@@ -7734,6 +7757,8 @@ export class OsrsClient {
         const size = Math.max(1, npcType?.size | 0);
         // A turn speed of 0 never turns (the Inferno's Ancestral Glyph slides side to side).
         const rotSpeed = Math.max(0, npcType?.rotationSpeed | 0);
+        // Such an NPC is drawn at angle 0 (Sir Tiffy's bench is part of his model, built for it).
+        const drawnRot = npcAddedRotation(rotSpeed, spawn.rot | 0);
         const localX = (localTileX * 128 + size * 64) | 0;
         const localY = (localTileY * 128 + size * 64) | 0;
 
@@ -7745,7 +7770,7 @@ export class OsrsClient {
             localX,
             localY,
             spawn.level | 0,
-            spawn.rot | 0,
+            drawnRot,
             localTileX,
             localTileY,
             rotSpeed,
@@ -7756,7 +7781,7 @@ export class OsrsClient {
             this.worldViewManager.addNpcToWorldView((spawn as any).worldViewId, ecsId);
         }
         this.npcEcs.setTargetRot(ecsId, spawn.rot | 0);
-        this.npcEcs.setRotation(ecsId, spawn.rot | 0);
+        this.npcEcs.setRotation(ecsId, drawnRot);
         this.npcEcs.setOccTile(ecsId, localTileX, localTileY, spawn.level | 0);
 
         // Actor world coords include size-based center offset (size * 64).
@@ -8539,9 +8564,10 @@ export class OsrsClient {
             console.warn("[OsrsClient] Renderer clearMaps error:", err);
         }
 
-        // Clear projectiles
+        // Clear projectiles. Through the getter: the WebGPU renderer keeps its manager elsewhere,
+        // and one left holding the old client clock froze every projectile after a relog (#1862).
         try {
-            (this.renderer as any)?.projectileManager?.clear?.();
+            this.renderer?.getProjectileManager()?.clear();
         } catch (err) {
             console.warn("[OsrsClient] ProjectileManager clear error:", err);
         }
@@ -8652,6 +8678,7 @@ export class OsrsClient {
             this.unsubscribeGroundItems,
             this.unsubscribeChatMessages,
             this.unsubscribeFriendsChat,
+            this.unsubscribeClans,
             this.unsubscribeSkills,
             this.unsubscribeRunEnergy,
             this.unsubscribeNotifications,

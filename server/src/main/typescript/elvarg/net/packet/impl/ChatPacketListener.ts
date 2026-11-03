@@ -34,7 +34,7 @@ export class ChatPacketListener {
     } catch {
       // ignore
     }
-    return player.getUsername();
+    return player.getDisplayName?.() || player.getUsername();
   }
 
   /** `autoChat`: the client's autochat timer sent it (shown as type 90/91; the "Autochat" public filter shows only these). */

@@ -86,6 +86,9 @@ export type WidgetOverlayDrawContext = {
     itemImage?(itemId: number, quantity: number, outline: number): HTMLCanvasElement | undefined;
     /** Where a movable overlay of this size (layout units) draws this frame; nothing while the HUD is hidden. */
     place(overlay: WidgetOverlay, width: number, height: number): OverlayPlacement | undefined;
+    /** HUD text scale on each canvas axis, including touch-display adjustments. */
+    overlayTextScale?(): { x: number; y: number };
+    inputScale?(): { x: number; y: number };
 };
 
 /**
@@ -241,6 +244,11 @@ export interface ClientPlugin {
     onHealthBar?(event: HealthBarEvent): void;
     /** A clientscript finished, nested calls included (RuneLite's ScriptPostFired). */
     onScriptFinished?(scriptId: number): void;
+    /**
+     * A clientscript is about to run, before pre-script listeners such as Bank Tags' (RuneLite's
+     * ScriptPreFired with a subscriber priority above theirs).
+     */
+    onScriptPreFired?(scriptId: number): void;
     /** A clientscript ran `runelite_callback`. */
     onScriptCallback?(event: ScriptCallbackEvent): void;
     /** A widget was dropped on another; return true to keep the drag from the server. */
@@ -449,6 +457,10 @@ export class ClientPluginManager {
 
     onScriptFinished(scriptId: number): void {
         for (const plugin of this.implementing("onScriptFinished")) plugin.onScriptFinished!(scriptId);
+    }
+
+    onScriptPreFired(scriptId: number): void {
+        for (const plugin of this.implementing("onScriptPreFired")) plugin.onScriptPreFired!(scriptId);
     }
 
     onScriptCallback(event: ScriptCallbackEvent): void {

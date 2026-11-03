@@ -3,6 +3,7 @@ package gateway.session
 import gateway.coverage.DropCounter
 import gateway.down.ActorBlocks
 import gateway.down.BlockReader
+import gateway.down.Clans
 import gateway.down.GroundItems
 import gateway.down.Interfaces
 import gateway.down.Items
@@ -12,6 +13,7 @@ import gateway.down.NpcSync
 import gateway.down.PlayerSync
 import gateway.down.Social
 import gateway.down.Trade
+import gateway.down.TRADE_QUANTITY_VARBIT
 import gateway.down.TspsChatMessage
 import gateway.down.World
 import gateway.down.TspsHandshake
@@ -72,12 +74,13 @@ class GatewaySession(
     private val groundItems = GroundItems(::send)
     private val stockMarket = StockMarket(::send)
     private val social = Social(::send)
+    private val clans = Clans(::send)
     private val worldUpdates = World(::send, boats::deckAt, boats::sessionWorld)
-    private val trade by lazy { Trade(::send, { tsps.send(it) }, items::carried) }
+    private val trade by lazy { Trade(::send, { tsps.send(it) }, items::carried, { varps.getVarbit(TRADE_QUANTITY_VARBIT) }) }
 
     /** Everything that turns tsps messages into OSRS packets, asked in turn. */
     private val translators: List<(TspsPacket) -> Boolean> by lazy {
-        listOf(interfaces::handle, items::handle, groundItems::handle, social::handle, worldUpdates::handle, trade::handle)
+        listOf(interfaces::handle, items::handle, groundItems::handle, social::handle, clans::handle, worldUpdates::handle, trade::handle)
     }
     private val interfaces = Interfaces(varps, InterfaceTree(context.enums), stockMarket, items::scriptInventories, context.components::exists, ::send)
     private val upstream =
@@ -87,6 +90,7 @@ class GatewaySession(
             interceptButton = { id, sub, obj, op -> trade.button(id, sub, obj, op) },
             interceptCount = { trade.count(it) },
             worldEntityIndex = boats::tspsIndex,
+            welcomeShown = { interfaces.welcomeShown },
         ) { tsps.send(it) }
     private val players = PlayerSync()
     private val npcs = NpcSync { index -> boats.deck(index)?.let { it.baseX to it.baseZ } }
@@ -160,7 +164,10 @@ class GatewaySession(
     }
 
     /** A decoded client packet, from [Session.processIncomingPackets] on this session's thread. */
-    fun onClientMessage(message: IncomingGameMessage) = upstream.handle(message)
+    fun onClientMessage(message: IncomingGameMessage) {
+        // A clan resync is answered here, from the state tsps sent; tsps has no handler for it.
+        if (!clans.resync(message)) upstream.handle(message)
+    }
 
     private val beforeHandshake = ArrayList<TspsPacket>()
 

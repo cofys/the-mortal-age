@@ -542,6 +542,16 @@ function applyScreenTransformToWidgetAbs(w: any, transform: RootRenderTransform)
         (w as any)._absLogicalY = logicalAbsY;
         w._absY = Math.round(logicalAbsY * transform.scaleY + transform.offsetY);
     }
+    if (typeof w.width === "number") {
+        const logicalX = typeof w._absLogicalX === "number" ? w._absLogicalX : 0;
+        w._absWidth = Math.max(1, Math.round((logicalX + w.width) * transform.scaleX + transform.offsetX) - w._absX);
+    }
+    if (typeof w.height === "number") {
+        const logicalY = typeof w._absLogicalY === "number" ? w._absLogicalY : 0;
+        w._absHeight = Math.max(1, Math.round((logicalY + w.height) * transform.scaleY + transform.offsetY) - w._absY);
+    }
+    w._absScaleX = transform.scaleX;
+    w._absScaleY = transform.scaleY;
 }
 
 /**
@@ -931,7 +941,7 @@ export function findBlockingWidgetInHits(
         );
         const hasTransmitOps = (flags & 0x7fe) !== 0;
         const hasSpellAction =
-            targetMask > 0 && !!sanitizeText(w?.spellActionName ?? w?.targetVerb);
+            targetMask > 0 && !!sanitizeText(w?.spellActionName || w?.targetVerb);
         const hasItem = typeof w?.itemId === "number" && (w.itemId | 0) >= 0;
         const isPauseWidget = isPauseButtonWidget(w, getWidgetFlags, getWidgetByUid);
         const isDraggable = !!(w?.isDraggable || w?.eventHandlers?.onDrag || w?.onDrag);

@@ -21,7 +21,7 @@ const Wilderness = require("./woodcutting/Wilderness.Woodcutting");
 const Mastery = require("./woodcutting/Mastery.Woodcutting");
 const Supply = require("./woodcutting/Supply.Woodcutting");
 const FarmedRedwood = require("./farming/Redwood.Farming");
-const { pauseForLevelUp } = require("./SkillActions");
+const { pauseForLevelUp, actionInterval } = require("./SkillActions");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -674,7 +674,10 @@ function findBestUsableAxe(player) {
     }
   }
 
-  return null;
+  // Content may stand in for the axe ("woodcutting:tool", a league relic's bare hands).
+  const request = { player, axes: AXES_BEST_FIRST, axe: null };
+  pluginApi?.emitCustomEvent("woodcutting:tool", request);
+  return request.axe;
 }
 
 // Bots only ever get the standard bronze-to-dragon axes.
@@ -1023,11 +1026,12 @@ function rollRespawnTicks(tree) {
     : tree.respawnTicks;
 }
 
+/** Fells the tree unless content keeps it standing ("woodcutting:deplete-tree", a league relic's endless trees); true when it fell. */
 function depleteTree(player, treeObject, tree) {
   const respawnTicks = rollRespawnTicks(tree);
   const event = { player, object: treeObject, respawnTicks, handled: false };
   pluginApi.emitCustomEvent("woodcutting:deplete-tree", event);
-  if (event.handled) return;
+  if (event.handled) return false;
   const stump = new GameObject(
     resolveStumpId(treeObject.getId(), tree),
     treeObject.getLocation().clone(),
@@ -1039,6 +1043,7 @@ function depleteTree(player, treeObject, tree) {
   ObjectManager.register(stump, true);
   sendRespawnTimer(player, stump, respawnTicks);
   TaskManager.submit(new TreeRespawnTask(respawnTicks, treeObject, stump));
+  return true;
 }
 
 function startWoodcutting(player, treeObject, tree, activeSessions) {
@@ -1178,7 +1183,8 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     if (currentTick < state.nextActionTick) {
       continue;
     }
-    state.nextActionTick = currentTick + WOODCUTTING_ACTION_INTERVAL_TICKS;
+    // Content may chop faster ("skills:action-interval", a league relic's 2-tick pace).
+    state.nextActionTick = currentTick + actionInterval(pluginApi, player, Skill.WOODCUTTING, "chop", WOODCUTTING_ACTION_INTERVAL_TICKS);
     // Content may turn a miss into a hit ("woodcutting:attempt", a league relic's second chance).
     const attempt = { player, object: activeTree, logId: state.tree.logId, success: rollLog(player, state.tree, state.axe, {
         location: {
@@ -1217,7 +1223,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         petRolled: petRoll.handled,
         logId: state.tree.logId,
         treeName: state.tree.name,
-        axeId: state.axe.id,
+        axeId: state.axe?.id ?? null,
         xpReward: state.tree.xpReward,
         location: {
           x: state.location.getX(),
@@ -1237,8 +1243,9 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         stopWoodcutting(activeSessions, player, false);
         continue;
       }
+      // A tree content keeps standing is chopped on, its despawn timer starting afresh.
+      if (!depleteTree(player, activeTree, state.tree)) continue;
       Sounds.sendSound(player, Sound.WOODCUTTING_TREE_DOWN);
-      depleteTree(player, activeTree, state.tree);
       stopWoodcutting(activeSessions, player);
       continue;
     }
