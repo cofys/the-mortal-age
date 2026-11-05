@@ -24,6 +24,7 @@ import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
 import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItemsPlugin";
 import { GroundMarkerPlugin } from "../../../game/plugins/groundmarkers/GroundMarkerPlugin";
+import { MultiLinesPlugin } from "../../../game/plugins/multilines/MultiLinesPlugin";
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { IdleNotifierPlugin } from "../../../game/plugins/idlenotifier/IdleNotifierPlugin";
 import { ImplingsPlugin } from "../../../game/plugins/implings/ImplingsPlugin";
@@ -36,6 +37,9 @@ import { ItemRarityPlugin } from "../../../game/plugins/itemrarity/ItemRarityPlu
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { MyKingdomPlugin } from "../../../game/plugins/mykingdom/MyKingdomPlugin";
 import { StallsPlugin } from "../../../game/plugins/shop/StallsPlugin";
+import { DoorKickerPlugin } from "../../../game/plugins/doorkicker/DoorKickerPlugin";
+import { InventorySetupsPlugin } from "../../../game/plugins/inventorysetups/InventorySetupsPlugin";
+import { LootTrackerPlugin } from "../../../game/plugins/loottracker/LootTrackerPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { ObjectIndicatorsPlugin } from "../../../game/plugins/objectindicators/ObjectIndicatorsPlugin";
 import { NpcIndicatorsPlugin } from "../../../game/plugins/npcindicators/NpcIndicatorsPlugin";
@@ -55,7 +59,7 @@ import { LegacyTileMarkersConfig } from "../../../game/plugins/tilemarkers/migra
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { AdminWorldMapPlugin } from "../../../game/plugins/adminworldmap/AdminWorldMapPlugin";
 import { TilePacksPlugin } from "../../../game/plugins/tilepacks/TilePacksPlugin";
-import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
+import { LowEndDevicePlugin } from "../../../game/plugins/lowenddevice/LowEndDevicePlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
 import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
 import { GuidePlugin } from "../../../game/plugins/optimalquestguide/GuidePlugin";
@@ -76,8 +80,12 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     PortraitModePlugin,
     GameFrame317Plugin,
     GroundItemsPlugin,
+    LootTrackerPlugin,
+    InventorySetupsPlugin,
+    DoorKickerPlugin,
     InteractHighlightPlugin,
     GroundMarkerPlugin,
+    MultiLinesPlugin,
     TileMarkersPlugin,
     TilePacksPlugin,
     MenuSwapperPlugin,
@@ -105,7 +113,6 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     ChatFilterPlugin,
     AnimationSmoothingPlugin,
     TimersPlugin,
-    WeatherPlugin,
     StatusBarsPlugin,
     BoostsPlugin,
     RegenMeterPlugin,
@@ -118,6 +125,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     PestControlPlugin,
     FairyRingPlugin,
     StretchedModePlugin,
+    LowEndDevicePlugin,
     GpuPlugin,
     CameraPlugin,
     QuestHelperPlugin,

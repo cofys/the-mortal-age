@@ -35,6 +35,7 @@ module.exports = {
     require("./cooking/Cookers.Cooking")(api);
     require("./cooking/Recipes.Cooking")(api);
     require("./cooking/Wine.Cooking")(api);
+    require("./cooking/SacredEel.Cooking")(api);
   },
   isCookingActive: Cookers.isCookingActive,
   // Data-driven recipes for bots: derived from the same cookables table the
