@@ -714,14 +714,16 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
 
         case ServerPacketId.NPC_INFO: {
             const loopCycle = reader.readInt();
-            const large = reader.readBoolean();
+            const npcFlags = reader.readByte();
+            const large = (npcFlags & 1) !== 0;
+            const crossFloor = (npcFlags & 2) !== 0;
             const rootTileX = reader.readShort();
             const rootTileY = reader.readShort();
             const packetLen = reader.readShort();
             const packet = reader.readBytes(packetLen);
             return {
                 type: "npc_info",
-                payload: { loopCycle, large, rootTileX, rootTileY, packet },
+                payload: { loopCycle, large, crossFloor, rootTileX, rootTileY, packet },
             };
         }
 
@@ -970,6 +972,23 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                     zoom: reader.readShort(),
                 },
             };
+
+        case ServerPacketId.WIDGET_SET_ROTATE_SPEED: {
+            // IF_SETROTATESPEED: uid, then y (yaw) speed in the high short and x in the low,
+            // both signed graphics-cycle deltas (recording 1723).
+            const uid = reader.readInt();
+            const packed = reader.readInt();
+            const signed = (value: number) => (value > 0x7fff ? value - 0x10000 : value);
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_rotate_speed",
+                    uid,
+                    speedX: signed(packed & 0xffff),
+                    speedY: signed((packed >>> 16) & 0xffff),
+                },
+            };
+        }
 
         case ServerPacketId.WIDGET_SET_POSITION:
             return {

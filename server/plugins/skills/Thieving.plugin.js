@@ -1,6 +1,7 @@
 const Pickpocket = require("./thieving/Pickpocket.Thieving");
 const CoinPouch = require("./thieving/CoinPouch.Thieving");
 const Stalls = require("./thieving/Stalls.Thieving");
+const ArdougneCastleDoors = require("./thieving/ArdougneCastleDoors.Thieving");
 
 const STALLS = Stalls._test.STALLS;
 const THIEVING_ANIMATION = 881;
@@ -143,10 +144,11 @@ module.exports = {
     require("./thieving/Blackjacking.Thieving")(api);
     Stalls(api);
     require("./thieving/HamTrapdoor.Thieving")(api);
+    ArdougneCastleDoors.register(api);
   },
 };
 
-module.exports._test = { ...Pickpocket._test, ...Stalls._test };
+module.exports._test = { ...Pickpocket._test, ...Stalls._test, ...ArdougneCastleDoors._test };
 
 // Bot entry points for citizen thieves.
 module.exports.stealFromStallBot = stealFromStallBot;

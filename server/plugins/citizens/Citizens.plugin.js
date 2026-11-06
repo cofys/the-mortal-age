@@ -855,6 +855,10 @@ function onFriendLoggedOut(event) {
 
 module.exports = {
   name: "Citizens",
+  // Citizens compile their activities into the PlayerBots activity registry,
+  // so PlayerBots must register first; when PlayerBots is disabled the loader
+  // skips Citizens cleanly instead of failing its register (2026-11-06 merge fix).
+  dependsOn: ["PlayerBots"],
   register(api) {
     initCitizens(api);
     initPartyPlay(api);

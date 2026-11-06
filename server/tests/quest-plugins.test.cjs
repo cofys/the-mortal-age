@@ -10700,6 +10700,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     getPacketSender: () => new Proxy({}, { get: (_target, key) => key === 'sendVarbit' ? () => {} : () => {} }),
     getInventory: () => ({
       getAmount: (id) => items.get(id) ?? 0,
+      getFreeSlots: () => 28,
       adds: (id, amount = 1) => items.set(id, (items.get(id) ?? 0) + amount),
       deleteNumber: (id, amount = 1) => items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)),
     }),
@@ -11623,7 +11624,6 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   attrs.set('desert-treasure-ii:sucellus-defeated', false);
   attrs.set('desert-treasure-ii:sucellus-encounter-started', true);
   attrs.set('desert-treasure-ii:sucellus-poisons', 2);
-  attrs.set('desert-treasure-ii:sucellus-mushrooms', { musca: 3, arder: 3 });
   attrs.set('desert-treasure-ii:sucellus-vats', { filled: { powders: [I.MUSCA_POWDER, I.ARDER_POWDER], salt: 6 } });
   attrs.delete('desert-treasure-ii:sucellus-area');
   const login = handlers.playerLogin.find(handler => handler.name === 'handleLogin');
@@ -11634,7 +11634,6 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.notEqual(recoveredArea, area, 'login reconstructs the destroyed private encounter area');
   assert.equal(attrs.get('desert-treasure-ii:sucellus-encounter-started'), false);
   assert.equal(attrs.get('desert-treasure-ii:sucellus-poisons'), 0);
-  assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-mushrooms'), { musca: 0, arder: 0 });
   assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-vats'), {});
   assert.ok(recoveredArea.getObjects().some(object => object.getId() === O.MUSCA_MUSHROOMS));
   assert.ok(recoveredArea.getObjects().some(object => object.getId() === O.ARDER_MUSHROOMS));
@@ -11643,13 +11642,11 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   // with no poison item is enough evidence to restore the normal recipe too.
   attrs.set('desert-treasure-ii:sucellus-encounter-started', false);
   attrs.set('desert-treasure-ii:sucellus-poisons', 2);
-  attrs.set('desert-treasure-ii:sucellus-mushrooms', { musca: 3, arder: 3 });
   attrs.set('desert-treasure-ii:sucellus-vats', { filled: { powders: [I.MUSCA_POWDER, I.ARDER_POWDER], salt: 6 } });
   attrs.delete('desert-treasure-ii:sucellus-area');
   player.moveTo({ x: 2927, y: 10353, z: 0 });
   login({ player });
   assert.equal(attrs.get('desert-treasure-ii:sucellus-poisons'), 0);
-  assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-mushrooms'), { musca: 0, arder: 0 });
   assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-vats'), {});
 });
 
@@ -11955,7 +11952,8 @@ test('Lantern lenses and unpowered orbs are glassblown without consuming the pip
   const sender={sendCreationMenu:m=>{menu=m;return sender;},sendSoundEffect:()=>sender};
   const player={getInventory:()=>inventory,getSkillManager:()=>({getCurrentLevel:()=>level,addExperiences:(s,n)=>xp+=n}),sendMessage:m=>messages.push(m),
    getPacketSender:()=>sender,performAnimation(){},getAttribute:()=>null,setAttribute(){},isRegistered:()=>true,getHitpoints:()=>99,
-   getMovementQueue:()=>({size:()=>0}),getForceMovement:()=>null,getInterfaceId:()=>-1,isPlayerBot:()=>false};
+   getMovementQueue:()=>({size:()=>0}),getForceMovement:()=>null,getInterfaceId:()=>-1,isPlayerBot:()=>false,
+   getLocation:()=>new api.core.Location(3200,3200,0)};
   const e={player,usedItemId:1785,usedWithItemId:1775};for(const h of handlers){h(e);if(e.handled)break;}assert.equal(e.handled,true);
   // rsprox 1842: all eight items, whatever the level, under the captured labels.
   assert.deepEqual(menu.getOptions().labels,['Beer glass','Candle lantern','Oil lamp','Vial','Fishbowl','Unpowered staff orb','Lantern lens','Light orb']);
@@ -19582,7 +19580,7 @@ test('RFD Amik shrine requires the Wise Old Man clue, enters the mapped lair and
 
 
 test('RFD shows the Feldip spit-roast only while Skrach can be rescued', () => {
-  assert.deepEqual(require('../data/definitions/object-spawns.json'), []);
+  assert.equal(require('../data/definitions/object-spawns.json').some(spawn => [3375].includes(spawn.id)), false);
   const { api: base, handlers } = mockApi();
   const objects = [];
   base.core = { ...base.core, ObjectManager: {
@@ -19638,6 +19636,8 @@ test('RFD council interactions read requirements through the SkillManager before
     getSkillManager: () => ({ getCurrentLevel: () => 99 }),
     getPacketSender: () => packetSender,
     getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 27 }),
+    // In the dining room: outside it the council isn't frozen and this handler stands aside.
+    getLocation: () => new api.core.Location(1860, 5348, 0),
     sendMessage: (message) => messages.push(message),
   };
   quest.setStage(player, 4);

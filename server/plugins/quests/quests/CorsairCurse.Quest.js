@@ -536,6 +536,8 @@ module.exports = function registerCorsairCurseQuest(api) {
         const doll = api.spawnNpc({ id: DOLL, x: 2505, y: 2839, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
         if (!doll) return;
         doll.__skipDefaultRespawn = true; dolls.set(player, doll);
+        // The captured route crosses the map's blocked edge between 2509,2839 and 2509,2838; queued steps are clipped.
+        doll.setFlag?.("movement:ignore-clipping");
         const path = [[2505,2840],[2506,2841],[2507,2842],[2508,2842],[2509,2841],[2509,2840],[2509,2839],[2509,2838],[2509,2839]];
         // moveTo teleports and resets movement; queue each tile so the doll uses its walk sequence.
         path.forEach(([x,y], index) => later(player, index + 1, () => {
@@ -874,6 +876,13 @@ module.exports = function registerCorsairCurseQuest(api) {
           // Water Strike (the Wiki transcript: "Ithoi casts Water Strike"): cast graphic 93, projectile 94, as CombatSpells.WATER_STRIKE.
           player.getPacketSender().sendProjectile(ithoi.getLocation(), new Location(2530, 2837, 0), 0, 90, 94, 43, 31, null, 51);
           placeDriftwood(player, WET_DRIFTWOOD_OBJECT);
+          // Wiki: he "returns to his hut". The tick he leaves isn't recorded: the next one is ours, to the foot of his stairs.
+          later(scene, 1, () => {
+            const destination = new Location(2532, 2833, 0);
+            const movement = ithoi.getMovementQueue?.();
+            if (movement?.addSteps) movement.addSteps(destination);
+            else ithoi.moveTo(destination);
+          });
         });
       });
       later(scene,22,()=>moveCamera(player,2531,2840,300,1));

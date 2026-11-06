@@ -451,8 +451,8 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
     const scene = scenes.get(player);
     if (!(scene instanceof VoyageScene) || npcId !== NED_SCENE_ID) return;
-    if (request.speaker === "Cabin Boy Jenkins") request.speakerId = JENKINS_SCENE_ID;
-    else if (request.speaker === "Captain Ned") request.speakerId = NED_SCENE_ID;
+    if (request.step?.speaker === "Cabin Boy Jenkins") request.speakerId = JENKINS_SCENE_ID;
+    else if (request.step?.speaker === "Captain Ned") request.speakerId = NED_SCENE_ID;
     if (text.startsWith("Ah, it's good to feel")) request.before = () => {
       camera(player, scene, [2077, 5518, 100], [2069, 5517, 25], 232, true); camera(player, scene, [2074, 5516, 100], null, 1); player.getPacketSender().sendCameraShake(1, 0, 10, 8);
     };
@@ -1177,7 +1177,8 @@ module.exports = function registerDragonSlayerQuest(api) {
         }
         killer.sendMessage("You cut off Elvarg's head as proof of your victory!");
         killer.getPacketSender().sendJingle(267, 0);
-        later(token, 3, () => { actions.delete(killer); killer.getMovementQueue().setBlockMovement(false); killer.setUntargetable(false); });
+        // Seq 6655 is 10.0 ticks in the cache (frame delays summed, 30 client ticks a tick): the player is held to its end. Cache length, ours.
+        later(token, 10, () => { actions.delete(killer); killer.getMovementQueue().setBlockMovement(false); killer.setUntargetable(false); });
       });
       return;
     }

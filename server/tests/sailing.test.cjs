@@ -910,6 +910,7 @@ test("the sail buttons follow their labels for each move mode", () => {
 function registerPlugin(file) {
   const hooks = { objects: {}, objectHandlers: [], npcs: {}, events: {}, emitted: [], interfaceClicks: [] };
   require(`../plugins/skills/sailing/${file}`).register({
+    core: { BoatManager },
     onObjectInteraction: (name, actions) => {
       if (typeof name === "function") hooks.objectHandlers.push(name);
       else hooks.objects[name] = actions;
@@ -941,9 +942,13 @@ test("the sailing plugins register their hooks and load the boat and dock data",
   const helm = registerPlugin("Helm.plugin");
   assert.deepEqual(Object.keys(helm.objects.Helm), ["Navigate", "Stop-navigating", "Escape"]);
   assert.equal(helm.interfaceClicks.length, 2, "the sail buttons and the wind catcher's release");
-  assert.deepEqual(Object.keys(registerPlugin("Sailing.plugin").events).sort(), ["sailing:boarded", "sailing:left"]);
-  assert.deepEqual(Object.keys(registerPlugin("Shipwright.plugin").npcs), ["Junior Jim"]);
+  assert.deepEqual(Object.keys(registerPlugin("Sailing.plugin").events).sort(),
+    ["sailing:board-supplied-panel", "sailing:boarded", "sailing:leave-supplied-panel", "sailing:left"]);
+  assert.deepEqual(Object.keys(registerPlugin("Shipwright.plugin").npcs).sort(),
+    ["Junior Jim", "Shipwright Sam"]);
   assert.ok(Sailing.getDock("the_pandemonium"));
+  assert.equal(Sailing.getDock("port_sarim").shipwright, "Shipwright Sam",
+    "Port Sarim's shipwright is Sam (Wiki)");
 });
 
 test("Navigate walks the player onto the helm's tile first", () => {
@@ -1061,6 +1066,34 @@ test("Junior Jim's Recover-boat asks which boat, takes the fee from the bank and
   h.choose(0);
   assert.equal(h.player.messages.at(-1), "That boat is already at the nearby dock. There's no need to recover it.");
   assert.equal(h.bank.getAmount(995), 750, "nothing is charged for a refused recovery");
+});
+
+test("the Recover-a-boat dialogue step is claimed, so it does not fall through uneaten", () => {
+  const shipwright = registerPlugin("Shipwright.plugin");
+  const action = shipwright.events["npc-dialogue:action"];
+  assert.equal(typeof action, "function", "Shipwright.plugin handles dialogue actions");
+  const player = sailor();
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.setInterfaceId = () => player;
+  const step = (target) => ({
+    player, npc: { getDefinition: () => ({ getName: () => "null" }) },
+    definition: { getName: () => "Junior Jim" },
+    action: "open_interface", target, handled: false, end: false,
+  });
+
+  // The transcript's step ("I'd like to recover a boat.") opens "Recover Boat"; nothing claimed it
+  // before, so the dialogue closed and the selection never appeared (#2747). It opens a tick later
+  // (once the dialogue has closed, as Destroy.Shipwright does), so the claim is what a unit test
+  // can see; the open itself is exercised in game.
+  const wanted = step("Recover Boat");
+  action(wanted);
+  assert.equal(wanted.handled, true, "the recover step is claimed");
+  assert.equal(wanted.end, true, "and ends the dialogue");
+
+  const other = step("Destroy Boat");
+  action(other);
+  assert.equal(other.handled, false, "another target is left to its own handler");
 });
 
 /** Junior Jim's Buy-boat with the real Omnishop plugin, on one custom-event bus. */

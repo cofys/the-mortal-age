@@ -22,6 +22,7 @@ import {
     tooltipsEnabledByDefault,
 } from "../common/utils/DeviceUtil";
 import { clamp } from "../common/utils/MathUtil";
+import { MINIMAP_STATE } from "../runelite/api/gameval/VarbitID";
 import {
     TRANSMIT_VARPS,
     VARBIT_COMBATLEVEL_TRANSMIT,
@@ -399,7 +400,7 @@ const TAB_SWITCH_SCRIPT = 914;
 /** Server-set widget properties held while their cache interface is not loaded. */
 const HELD_WIDGET_ACTIONS: ReadonlySet<string> = new Set([
     "set_text", "set_hidden", "set_model", "set_angle", "set_colour", "set_position", "set_item",
-    "set_npc_head", "set_animation", "set_player_head",
+    "set_npc_head", "set_animation", "set_player_head", "set_rotate_speed",
 ]);
 const DEFAULT_ROOT_INTERFACE = 161;
 const DEFAULT_DISPLAY_ENUM = 1130;
@@ -450,6 +451,10 @@ const SCRIPT_HIGHLIGHT_TEXTBOX_DEFAULT = 2465;
 // Chatbox search: its title says whether this one is a spawn search, and 138 closes it.
 const SCRIPT_CHATBOX_SEARCH = 750;
 const SCRIPT_CHATBOX_SEARCH_CLOSE = 138;
+// chatbox:meslayerinput (44) and its container (39). A server-run search (GE, bank) opens the
+// soft keyboard outside the touch that started it, which iOS refuses; tapping the text line is
+// the trusted gesture that brings it back.
+const CHATBOX_INPUT_UIDS: ReadonlySet<number> = new Set([(162 << 16) | 39, (162 << 16) | 44]);
 
 // Use shared OSRS rotation scale
 
@@ -2384,6 +2389,10 @@ export class OsrsClient {
                     this.mobileChatKeyboard.show();
                     return;
                 }
+                if (CHATBOX_INPUT_UIDS.has((widget?.uid ?? 0) | 0)) {
+                    this.mobileChatKeyboard.showFromGesture();
+                    return;
+                }
             }
         };
 
@@ -2877,6 +2886,13 @@ export class OsrsClient {
                     w.modelZoom = Number(payload.zoom) | 0;
                     this.widgetManager.invalidateWidgetRender(w, "server-set-angle");
                 }
+            } else if (payload?.action === "set_rotate_speed") {
+                // IF_SETROTATESPEED: yaw speed in the high short, x speed in the low, per cycle.
+                const w = this.widgetManager?.getWidgetByUid(Number(payload.uid) | 0);
+                if (w) {
+                    w.modelRotationSpeed = ((Number(payload.speedY) | 0) & 0xffff) << 16 | ((Number(payload.speedX) | 0) & 0xffff);
+                    this.widgetManager.invalidateWidgetRender(w, "server-set-rotate-speed");
+                }
             } else if (payload?.action === "set_colour") {
                 // IF_SETCOLOUR: as the cs2 op, the colour of text and rectangles alike.
                 const w = this.widgetManager?.getWidgetByUid(Number(payload.uid) | 0);
@@ -2961,6 +2977,7 @@ export class OsrsClient {
                     (w as any).isNpcChathead = npcId >= 0;
                     (w as any).npcTypeId = npcId >= 0 ? npcId : undefined;
                     (w as any).isPlayerChathead = false;
+                    (w as any).isPlayerModel = false;
                     (w as any).playerAppearance = undefined;
                     this.widgetManager.invalidateWidgetRender(w);
                 }
@@ -2986,9 +3003,11 @@ export class OsrsClient {
                     (w as any).isNpcChathead = false;
                     (w as any).npcTypeId = undefined;
                     (w as any).isPlayerChathead = true;
+                    (w as any).isPlayerModel = false;
                     (w as any).playerAppearance = appearance
                         ? {
                               gender: appearance.gender,
+                              npcTransformationId: appearance.npcTransformationId,
                               colors: Array.from(appearance.colors ?? []),
                               kits: Array.from(appearance.kits ?? []),
                               equip: Array.from(appearance.equip ?? []),
@@ -6795,6 +6814,14 @@ export class OsrsClient {
                         this.setRoofsHidden(varbitValue === 1);
                     }
                 } catch {}
+                // Varbit 6719 (minimap_state) rides in the toplevel_temp varp, so
+                // re-read it on every varp update: 2 and 5 hide the map, 3-5 the compass.
+                try {
+                    const minimapState = this.varManager.getVarbit(MINIMAP_STATE);
+                    if (minimapState !== undefined) {
+                        this.widgetManager?.setMinimapState(minimapState);
+                    }
+                } catch {}
                 // Varbit 4070 is packed into varp 439: track its value so a
                 // spellbook switch clears any spell selected in the old book.
                 try {
@@ -6857,6 +6884,14 @@ export class OsrsClient {
             // Phase 9: Preparing interface
             await showPhase(90, "Preparing interface...");
             this.widgetManager = new WidgetManager(this.cacheSystem);
+            try {
+                const initialMinimapState = this.varManager.getVarbit(MINIMAP_STATE);
+                if (initialMinimapState !== undefined) {
+                    this.widgetManager.setMinimapState(initialMinimapState);
+                }
+            } catch (err) {
+                console.warn("[OsrsClient] Failed to init minimap state", err);
+            }
             this.widgetManager.onGroupLoaded = (groupId) => {
                 for (const held of this.heldWidgetProperties.take(groupId)) this.handleWidgetPayload?.(held);
             };
@@ -7568,6 +7603,7 @@ export class OsrsClient {
 
         const decoded = this.npcUpdateDecoder.decode(payload.packet, {
             large: payload.large === true,
+            crossFloor: payload.crossFloor === true,
             loopCycle: payload.loopCycle | 0,
             clientCycle: getClientCycle() | 0,
             localTileX: decodeBase.tileX | 0,

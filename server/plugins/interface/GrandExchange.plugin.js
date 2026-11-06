@@ -501,7 +501,7 @@ function confirm(player, offer) {
     return;
   }
   // Plugins may veto an offer (e.g. an untradeable item that cannot be listed).
-  const confirmation = { player, itemId: offer.itemId, sell: offer.sell, accepted: true };
+  const confirmation = { player, itemId: offer.itemId, sell: offer.sell, quantity: amount, accepted: true };
   pluginApi.emitCustomEvent("ge:offer-confirmed", confirmation);
   if (confirmation.accepted === false) {
     return;
@@ -580,6 +580,8 @@ function collectionOutputId(baseId, amount, action, forceNotes = false) {
 function collect(player, action, slot = viewing.get(player), forceNotes = false) {
   const offer = completedOffers(player)[slot];
   if (!offer?.finished) return;
+  // A bank collection must obey the same account restrictions as bank access.
+  if (action === 3 && pluginApi.emitCanBank(player, "grand-exchange-collect") === false) return false;
   const inventory = player.getInventory();
   const parts = [];
   // Each part lands on a copy first, so a collection that does not fit hands over nothing.
@@ -654,11 +656,13 @@ function abort(player, slot = viewing.get(player)) {
 /** The Collect button (465:6, dynamic child 0): op 1 to the inventory (a slot of two or more as notes, a single item as the item), op 2 to the bank. */
 function collectAll(player, action) {
   const to = action === 2 ? 3 : 1;
-  for (const slot of Object.keys(completedOffers(player)).map(Number)) collect(player, to, slot, to === 1);
+  for (const slot of Object.keys(completedOffers(player)).map(Number)) {
+    if (collect(player, to, slot, to === 1) === false) break;
+  }
 }
 
 function openGrandExchange({ player }) {
-  // "grand-exchange:can-open": other content may keep a player out (an Ironman).
+  // "grand-exchange:can-open": other content may keep a player out.
   const request = { player, allow: true, message: null };
   pluginApi.emitCustomEvent("grand-exchange:can-open", request);
   if (!request.allow) {
@@ -742,7 +746,7 @@ function handleCollectionButton({ player, buttonId, slot, action }) {
   if (player.getInterfaceId() !== GE_COLLECT) return true;
   const child = buttonId & 0xffff;
   if ((child === 3 || child === 4) && action === 1) {
-    for (const index of Object.keys(completedOffers(player)).map(Number)) collect(player, child === 4 ? 3 : 1, index, child === 3);
+    collectAll(player, child === 4 ? 2 : 1);
   } else if (child >= 5 && child <= 12 && slot === 3 && action >= 1 && action <= 3) {
     collect(player, action, child - 5);
   }

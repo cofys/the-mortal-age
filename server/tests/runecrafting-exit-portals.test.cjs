@@ -48,6 +48,10 @@ before(async () => {
     emitCustomEvent: (name, payload) => {
       emitted.push([name, payload]);
       if (name === "diary:is-complete" && payload.diary === "ardougne" && payload.tier === "medium") payload.complete = ardougneMedium;
+      if (payload.key === "mournings_end_part_ii" && Number.isInteger(payload.player?.mourningsEndPartIIStage)) {
+        if (name === "quest:is-complete") payload.complete = payload.player.mourningsEndPartIIStage >= 60;
+        if (name === "quest:get-stage") payload.stage = payload.player.mourningsEndPartIIStage;
+      }
       return realApi.emitCustomEvent(name, payload);
     },
   };
@@ -175,6 +179,7 @@ test("a failed mine landing does not emit teleport completion", () => {
 // Wiki: talismans are used on ruins; a matching worn tiara reveals the Enter option.
 function runecrafter(headId = -1) {
   const player = visitor();
+  player.mourningsEndPartIIStage = 60;
   player.onEquipmentChanged = () => {};
   const bits = new Map();
   const equipment = new Equipment(player);
@@ -268,6 +273,44 @@ test("tiaras reveal Enter on login, reset on removal, and are checked by the ent
   assert.equal(handlers["Mysterious ruins:Enter"]({ player, objectId: 34813 }), false, "wrong worn tiara");
 });
 
+test("Death Altar access requires the quest, except at the stage-six crystal step", () => {
+  const deathRuins = ruinsData.find(({ name }) => name === "Death");
+  const player = runecrafter(deathRuins.tiaraId);
+  player.mourningsEndPartIIStage = 5;
+  handlers.login({ player });
+  player.log.length = 0;
+
+  assert.equal(handlers["Mysterious ruins:Enter"]({ player, objectId: deathRuins.ruinsId }), true);
+  assert.deepEqual(player.log, ["message You must solve the Death Altar puzzle during Mourning's End Part II before entering the Death Altar."]);
+
+  player.log.length = 0;
+  assert.equal(useOnRuins(player, deathRuins.ruinsId, deathRuins.talismanId), true);
+  assert.deepEqual(player.log, ["message You must solve the Death Altar puzzle during Mourning's End Part II before entering the Death Altar."]);
+
+  const stageSix = runecrafter(deathRuins.tiaraId);
+  stageSix.mourningsEndPartIIStage = 6;
+  const stageSixInventory = new Inventory(stageSix);
+  stageSix.getInventory = () => stageSixInventory;
+  stageSixInventory.addItem(new Item(ItemIdentifiers.NEWLY_MADE_CRYSTAL, 1));
+  let landing;
+  stageSix.moveTo = location => { landing = location; };
+  assert.equal(handlers["Mysterious ruins:Enter"]({ player: stageSix, objectId: deathRuins.ruinsId }), true);
+  assert.deepEqual([landing.getX(), landing.getY(), landing.getZ()], [2208, 4830, 0]);
+
+  const incomplete = crafter(65, [[ItemIdentifiers.PURE_ESSENCE, 1]]);
+  incomplete.mourningsEndPartIIStage = 5;
+  assert.equal(craft(incomplete, ObjectIdentifiers.ALTAR_56), true);
+  assert.equal(amount(incomplete, ItemIdentifiers.PURE_ESSENCE), 1);
+  assert.equal(amount(incomplete, ItemIdentifiers.DEATH_RUNE), 0);
+  assert.deepEqual(incomplete.xp, []);
+
+  const gotr = crafter(65, [[ItemIdentifiers.PURE_ESSENCE, 1]]);
+  gotr.mourningsEndPartIIStage = 5;
+  gotr.__gotrTrip = {};
+  assert.equal(craft(gotr, ObjectIdentifiers.ALTAR_56), true);
+  assert.equal(amount(gotr, ItemIdentifiers.DEATH_RUNE), 1, "GOTR altar trips use their own quest gate");
+});
+
 test("elemental and catalytic talismans and tiaras only admit their own altar group", () => {
   for (const ruins of ruinsData) {
     const talismanId = ruins.elemental ? 5516 : 26798;
@@ -323,6 +366,7 @@ const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
 
 function crafter(level, items) {
   const player = visitor();
+  player.mourningsEndPartIIStage = 60;
   const xp = [];
   const dialogues = [];
   const inventory = new Inventory(player);
@@ -752,3 +796,68 @@ for (const [level, runes] of [[77, 3], [78, 4], [103, 4], [104, 5]]) {
     noCraftEffects(player);
   });
 }
+
+// With no diary bonus, each accepted essence should credit its rolled rune.
+for (const headroom of [null, 2, 1, 0]) {
+  test(`Ourania preserves rolled runes with stack headroom ${headroom}`, () => {
+    const core = PluginManager.getCoreApi(), data = require("../plugins/skills/data/ourania-altar.json");
+    assert.equal(ItemIdentifiers.SOUL_RUNE, 566); assert.equal(ItemIdentifiers.PURE_ESSENCE, 7936);
+    for (const [id, name, stackable] of [[ItemIdentifiers.SOUL_RUNE, "Soul rune", true],
+      [ItemIdentifiers.PURE_ESSENCE, "Pure essence", false]]) {
+      const def = core.ItemDefinition.forId(id);
+      assert.equal(def.getId(), id); assert.equal(def.getName(), name); assert.equal(def.isStackable(), stackable);
+    }
+    assert.equal(data.runes[0].rune, "SOUL_RUNE"); assert.ok(data.levels[0].weights[0] > 0);
+    assert.equal(ardougneMedium, false, "no diary bonus");
+    const held = headroom === null ? 0 : 0x7fffffff - headroom;
+    const items = [[ItemIdentifiers.PURE_ESSENCE, 1], [ItemIdentifiers.PURE_ESSENCE, 1],
+      [ItemIdentifiers.RUNE_ESSENCE, 1]];
+    if (held) items.push([ItemIdentifiers.SOUL_RUNE, held]);
+    const player = crafter(1, items);
+    assert.equal(amount(player, ItemIdentifiers.PURE_ESSENCE), 2);
+    assert.equal(amount(player, ItemIdentifiers.SOUL_RUNE), held);
+    emitted.length = 0;
+    withRandom([0], () => assert.equal(craft(player, ObjectIdentifiers.ALTAR_31), true));
+    const credited = amount(player, ItemIdentifiers.SOUL_RUNE) - held;
+    const consumed = 2 - amount(player, ItemIdentifiers.PURE_ESSENCE);
+    assert.equal(credited, consumed, "one rolled rune per accepted pure essence");
+    assert.equal(amount(player, ItemIdentifiers.RUNE_ESSENCE), 1, "unrelated essence stays");
+    assert.ok(Math.abs(player.xp.reduce((a, n) => a + n, 0) - credited * 11 * 1.7) < 1e-9);
+    const successes = emitted.filter(([name, event]) => name === "runecrafting:success" && event.player === player);
+    assert.equal(successes.reduce((n, [, event]) => n + event.runeAmount, 0), credited);
+    assert.equal(successes.reduce((n, [, event]) => n + event.rolls, 0), consumed);
+    if (headroom === null || headroom === 2) assert.equal(credited, 2, "room control completes");
+  });
+}
+
+for (const headroom of [2, 1]) {
+  test(`Ourania diary bonus respects stack headroom ${headroom}`, () => {
+    ardougneMedium = true;
+    try {
+      const held = 0x7fffffff - headroom;
+      const player = crafter(99, [[ItemIdentifiers.PURE_ESSENCE, 1], [ItemIdentifiers.SOUL_RUNE, held]]);
+      emitted.length = 0;
+      withRandom([0], () => assert.equal(craft(player, ObjectIdentifiers.ALTAR_31), true));
+      const credit = amount(player, ItemIdentifiers.SOUL_RUNE) - held;
+      const consumed = 1 - amount(player, ItemIdentifiers.PURE_ESSENCE);
+      assert.equal(credit, 2 * consumed, "bonus runes are fully credited or the essence remains");
+      assert.equal(consumed, headroom === 2 ? 1 : 0, "exact capacity crafts; insufficient capacity refuses");
+      assert.ok(Math.abs(player.xp.reduce((a, n) => a + n, 0) - consumed * 11 * 1.7) < 1e-9);
+      const events = emitted.filter(([name, event]) => name === "runecrafting:success" && event.player === player);
+      assert.equal(events.reduce((n, [, e]) => n + e.runeAmount, 0), credit);
+      assert.equal(events.reduce((n, [, e]) => n + e.rolls, 0), consumed);
+    } finally { ardougneMedium = false; }
+  });
+}
+
+test("Ourania refuses the whole mixed batch when a later rolled stack is full", () => {
+  const player = crafter(1, [[ItemIdentifiers.PURE_ESSENCE, 1], [ItemIdentifiers.PURE_ESSENCE, 1],
+    [ItemIdentifiers.SOUL_RUNE, 0x7fffffff]]);
+  emitted.length = 0;
+  withRandom([0.9999, 0], () => assert.equal(craft(player, ObjectIdentifiers.ALTAR_31), true));
+  assert.equal(amount(player, ItemIdentifiers.PURE_ESSENCE), 2);
+  assert.equal(amount(player, ItemIdentifiers.SOUL_RUNE), 0x7fffffff);
+  assert.equal(amount(player, ItemIdentifiers.AIR_RUNE), 0);
+  assert.deepEqual(player.xp, []);
+  assert.equal(emitted.filter(([name, event]) => name === "runecrafting:success" && event.player === player).length, 0);
+});
