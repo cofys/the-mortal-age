@@ -1,4 +1,9 @@
+import { retainedInventory, stopInventoryTransmit } from "./sync/InventoryStopTransmit";
 import { openClientUrl } from "../common/openUrl";
+import { applyNpcSpecificEffect } from "./sync/NpcSpecificEffects";
+import { applyGlobalNpcHeadIcons, applyNpcSpecificHeadIcon } from "./sync/NpcHeadIcons";
+import { createNpcEcs, type NpcGraphicsEcs } from "./ecs/createNpcEcs";
+import { initializeWidgetItemModel } from "../widgets/WidgetItemModel";
 import { LISTENED_CLAN_TYPE, OWN_CLAN_TYPE } from "../common/social/Clans";
 import type { MinimapGeometry, SceneGeometry } from "./scene/SceneGeometry";
 import { vec3 } from "gl-matrix";
@@ -92,6 +97,7 @@ import {
     subscribeInventory,
     subscribeNotifications,
     subscribeNpcInfo,
+    subscribeNpcSpecificEffects,
     subscribePlayJingle,
     subscribePlaySong,
     subscribePlayerSync,
@@ -279,7 +285,6 @@ import { CombatOptionsController } from "./combat/CombatOptionsController";
 import { HitsplatFlushController } from "./combat/HitsplatFlushController";
 import { ClientScriptLoader } from "./cs2/ClientScriptLoader";
 import { ClientGroundItemStack, GroundItemStore } from "./data/ground/GroundItemStore";
-import { NpcEcs } from "./ecs/NpcEcs";
 import { PlayerEcs } from "./ecs/PlayerEcs";
 import { TileHighlightManager } from "./highlights/TileHighlightManager";
 import { PlayerInteractionSystem } from "./interactions/PlayerInteractionSystem";
@@ -306,6 +311,8 @@ import { headingIndicator } from "./sailing/HeadingIndicator";
 import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
 import type { GraphicsDefaults } from "../rs/config/defaults/GraphicsDefaults";
 import { interactionModes } from "./InteractionModes";
+import { npcOpsVisibility } from "./NpcOpsVisibility";
+import { groundObjOpsVisibility } from "./GroundObjOpsVisibility";
 import { RuneLite } from "../runelite/client/RuneLite";
 import { notifyActorGraphic, notifyActorHitsplat, notifyActorHealth } from "./ActorEventHooks";
 import { dispatchMenuAction, menuClickListeners, type MenuActionData } from "../ui/menu/menuEvents";
@@ -366,6 +373,7 @@ import { isPauseButtonWidget, setMenuObjTypeLookup } from "../widgets/menu/utils
 import { INVENTORY } from "../runelite/api/gameval/InterfaceID";
 import { RenderDataWorkerPool } from "./worker/RenderDataWorkerPool";
 import { WorldMapController, type WorldMapRenderedIcon } from "./worldMap/WorldMapController";
+import type { PluginWorldMapPointEntry, RenderedWorldMapPoint } from "@runelite/client/ui/overlay/worldmap/worldMapLayout";
 import type { WorldMapCitizenDot, WorldMapViewport } from "./worldMap/WorldMapTypes";
 import { WorldViewManager } from "./worldview/WorldViewManager";
 
@@ -495,6 +503,8 @@ export class OsrsClient {
             });
     }
 
+    /** Plugin markers on the world map (Quest Helper's step, RuneLite points via the WorldMapPointManager); the world map draws them. */
+    pluginWorldMapPoints?: PluginWorldMapPointEntry[];
     inputManager: InputManager = new InputManager();
     camera: Camera = new Camera(3242, -26, 3202, 245, 1862);
 
@@ -859,7 +869,7 @@ export class OsrsClient {
     // Appearance is server-driven; no client defaults.
 
     // ECS stores
-    npcEcs: NpcEcs = new NpcEcs();
+    npcEcs: NpcGraphicsEcs = createNpcEcs(() => this.renderer, serverId => this.npcHeadIcons.delete(serverId));
     /** The active renderer's scene geometry, for plugins drawing over the scene in 2D. */
     sceneGeometry?: SceneGeometry;
     /** The minimap as last drawn, for plugins marking it. */
@@ -974,6 +984,8 @@ export class OsrsClient {
     equipment: Inventory = new Inventory(14); // Equipment has 14 slots
     /** Bank container inventory (ID 95) - indexed 0..1409 for CS2 bankmain_build */
     bankInventory: Inventory = new Inventory(1410);
+    /** The bank's last contents for plugins: follows bankInventory but keeps them past a stop-transmit. */
+    readonly lastKnownBank: Inventory = retainedInventory(this.bankInventory);
     /** Collection log inventory (ID 620) - stores obtained items for CS2 inv_total queries */
     collectionInventory: Inventory = new Inventory(2048);
     /** Shop stock inventory (ID 516) - stores shop items for CS2 inv queries */
@@ -1050,6 +1062,7 @@ export class OsrsClient {
     private handleWidgetPayload?: (payload: any) => void;
     private heldWidgetProperties = new HeldWidgetProperties();
     private unsubscribeNpcInfo?: () => void;
+    private unsubscribeNpcSpecificEffects?: () => void;
     private unsubscribeCombat?: () => void;
     private unsubscribePlayerSync?: () => void;
     private unsubscribeSpot?: () => void;
@@ -1431,8 +1444,7 @@ export class OsrsClient {
      * gameframe root; -1 means the component has no equivalent in this layout
      * (e.g. the buff bar in fixed mode) and the mount is dropped.
      */
-    private mapGameframeTargetUid(uid: number): number {
-        const root = this.widgetManager?.rootInterface ?? STANDARD_GAMEFRAME_ROOT;
+    private mapGameframeTargetUid(uid: number, root = this.widgetManager?.rootInterface ?? STANDARD_GAMEFRAME_ROOT): number {
         if (root === STANDARD_GAMEFRAME_ROOT) return uid;
         if (((uid >>> 16) & 0xffff) !== STANDARD_GAMEFRAME_ROOT) return uid;
         const redirect = this.getGameframePaneRedirect(root);
@@ -1835,8 +1847,8 @@ export class OsrsClient {
                 applyWildernessHudLayout(self.widgetManager, self.varManager, scriptId);
                 self.clientPlugins.onScriptFinished(scriptId);
             },
-            onScriptPre: (scriptId: number) => {
-                self.clientPlugins.onScriptPreFired(scriptId);
+            onScriptPre: (scriptId: number, vm?: Cs2Vm) => {
+                self.clientPlugins.onScriptPreFired(scriptId, vm);
             },
             clientRevision: 235,
             // Canvas dimensions as defined by the renderer's current UI layout space.
@@ -2682,6 +2694,26 @@ export class OsrsClient {
                 console.log("[OsrsClient] Server setting root interface", payload.groupId);
                 if (this.widgetManager) {
                     const previousMounts = [...this.serverSubInterfaces];
+                    const previousRoot = this.widgetManager.rootInterface;
+                    const gameframes = [161, 164, 165, 548, 601];
+                    const transfers = gameframes.includes(previousRoot) && gameframes.includes(payload.groupId)
+                        ? new Map<number, number>() : undefined;
+                    const transferredTargets = new Set<number>();
+                    if (transfers) {
+                        // Nested mounts keep their component address when their containing pane moves.
+                        for (const [target] of this.widgetManager.interfaceParents) {
+                            if ((target >>> 16) !== previousRoot) transfers.set(target, target);
+                        }
+                        for (const [standardTargetUid, entry] of previousMounts) {
+                            const source = this.mapGameframeTargetUid(standardTargetUid, previousRoot);
+                            const target = this.mapGameframeTargetUid(standardTargetUid, payload.groupId);
+                            if (source >= 0 && target >= 0 &&
+                                this.widgetManager.getSubInterface(source)?.group === entry.payload.groupId) {
+                                transfers.set(source, target);
+                                transferredTargets.add(standardTargetUid);
+                            }
+                        }
+                    }
                     // Set varc 170 (display mode) based on the root interface
                     // Enum 185 maps: 0->1137 (161 widgets), 1->1101, 2->1067, 3->1175, 4->1293
                     // For interface 161/165, use mode 0 since Enum 1137 has interface 161 tab widgets
@@ -2712,14 +2744,16 @@ export class OsrsClient {
                             this.varManager.setVarbit(VARBIT_POPOUT_OPEN, 0);
                         }
                     }
-                    this.widgetManager.setRootInterface(payload.groupId);
+                    this.widgetManager.setRootInterface(payload.groupId, transfers);
+                    this.widgetInputController.invalidateHoverCache();
                     // PERF: Clear CS2 handler caches when switching root interfaces
                     // This prevents memory leaks from stale cached widget references
                     this.cs2Vm.clearHandlerCaches();
-                    // OSRS keeps server-mounted interfaces across a layout change by
-                    // moving them onto the new gameframe's components; set_root drops
-                    // them, so put each one back at its translated target.
+                    // Transfers preserve widgets and listeners, without replaying onLoad,
+                    // postScripts or the original hidden state. Only bootstrap opens and
+                    // panes previously absent from the layout need initialization.
                     for (const [standardTargetUid, entry] of previousMounts) {
+                        if (transferredTargets.has(standardTargetUid)) continue;
                         this.mountSubInterface({
                             ...entry.payload,
                             targetUid: standardTargetUid,
@@ -2962,6 +2996,7 @@ export class OsrsClient {
                         (w as any).itemId = normalizedItemId;
                         (w as any).itemQuantity = quantity;
                         (w as any).modelOrthog = true;
+                        if (obj) initializeWidgetItemModel(w, obj);
                         markWidgetInteractionDirty(w);
                         this.widgetManager.invalidateWidgetRender(w);
                     }
@@ -3061,6 +3096,8 @@ export class OsrsClient {
                         this.widgetManager.invalidateWidgetRender(parent, "flags-range");
                     }
                 }
+            } else if (payload?.action === "inventory_stop_transmit") {
+                stopInventoryTransmit(inventoriesMap, payload.inventoryId);
             } else if (payload?.action === "run_script") {
                 // RUNCLIENTSCRIPT packet - run a CS2 script with arguments
                 const scriptId = Number(payload.scriptId) | 0;
@@ -3174,6 +3211,14 @@ export class OsrsClient {
                 this.applyNpcInfo(payload);
             } catch (err) {
                 console.warn("[OsrsClient] npc_info error", err);
+            }
+        });
+        this.unsubscribeNpcSpecificEffects = subscribeNpcSpecificEffects(effect => {
+            if (effect.kind === "headicon") {
+                applyNpcSpecificHeadIcon(this.npcEcs, this.npcHeadIcons,
+                    typeId => this.npcTypeLoader?.load(typeId), effect);
+            } else {
+                applyNpcSpecificEffect(this.npcEcs, this.renderer, effect, getClientCycle());
             }
         });
         // Subscribe to server-side GFX (spot) messages and forward to renderer
@@ -4136,6 +4181,10 @@ export class OsrsClient {
 
     setRenderedCitizenDots(dots: WorldMapCitizenDot[]): void {
         this.worldMap.setRenderedCitizenDots(dots);
+    }
+
+    setRenderedWorldMapPoints(points: RenderedWorldMapPoint[]): void {
+        this.worldMap.setRenderedWorldMapPoints(points);
     }
 
     getWorldMapMenuEntriesAt(screenX: number, screenY: number): SimpleMenuEntry[] {
@@ -6895,6 +6944,9 @@ export class OsrsClient {
             this.widgetManager.onGroupLoaded = (groupId) => {
                 for (const held of this.heldWidgetProperties.take(groupId)) this.handleWidgetPayload?.(held);
             };
+            // RuneLite's WidgetLoaded and dialogue chat sources read the widget manager, which did not
+            // exist when RuneLite loaded in the constructor.
+            this.runeLite?.bindWidgetSources();
             if (graphicsDefaults && graphicsDefaults.compass >= 0) {
                 this.widgetManager.compassSpriteId = graphicsDefaults.compass;
             }
@@ -7617,9 +7669,7 @@ export class OsrsClient {
             level: decodeBase.level | 0,
         });
 
-        for (const npcId of decoded.removals) {
-            this.despawnNpcBinary(npcId | 0);
-        }
+        this.npcEcs.removeForNpcInfo(decoded, npcId => this.despawnNpcBinary(npcId));
 
         for (const spawn of decoded.spawns) {
             this.spawnNpcBinary(spawn, payload.loopCycle | 0);
@@ -7932,8 +7982,7 @@ export class OsrsClient {
         const ecsId = this.npcEcs.getEcsIdForServer(serverId);
 
         if (Array.isArray(block.headIcons)) {
-            if (block.headIcons.length > 0) this.npcHeadIcons.set(serverId, block.headIcons);
-            else this.npcHeadIcons.delete(serverId);
+            applyGlobalNpcHeadIcons(this.npcHeadIcons, serverId, block.headIcons);
         }
 
         if (ecsId !== undefined) {
@@ -8001,7 +8050,7 @@ export class OsrsClient {
         }
 
         if (block.say && ecsId !== undefined) {
-            this.npcEcs.setOverheadText(ecsId, block.say, 100);
+            this.npcEcs.setOverheadText(ecsId, this.clientPlugins.npcOverheadText(serverId, block.say), 100);
         }
 
         if (block.colorOverride && ecsId !== undefined) {
@@ -8149,7 +8198,8 @@ export class OsrsClient {
         const existingInstance = this.npcInstances.instanceMap.get(instanceKey);
         // Keep OSRS-style global NPC index array in sync for menuAction packet gates.
         ClientState.npcs[sid] = null;
-        this.npcHeadIcons.delete(sid);
+        // The ECS unmap callback owns head-icon cleanup. A remove/re-add in the same
+        // NPC_INFO can change this NPC's type without ending its customized icon lifetime.
         this.npcModelOverrides.delete(sid);
         try {
             (this.renderer as any)?.clearNpcHealthBars?.(sid);
@@ -8668,6 +8718,8 @@ export class OsrsClient {
             }
             // Live sets walk again before every logout; a dropped connection doesn't get that far.
             interactionModes.clear();
+            npcOpsVisibility.clear();
+            groundObjOpsVisibility.clear();
 
             // Clear the last account's varps and transient varcs, keeping persistent client
             // preferences loaded: the next login only sends its non-zero varps, so anything
@@ -8708,6 +8760,7 @@ export class OsrsClient {
             ...this.serverSubscriptions.splice(0),
             this.unsubscribeWidgetEvents,
             this.unsubscribeNpcInfo,
+            this.unsubscribeNpcSpecificEffects,
             this.unsubscribeCombat,
             this.unsubscribePlayerSync,
             this.unsubscribeSpot,

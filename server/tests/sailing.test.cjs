@@ -1068,7 +1068,7 @@ test("Junior Jim's Recover-boat asks which boat, takes the fee from the bank and
   assert.equal(h.bank.getAmount(995), 750, "nothing is charged for a refused recovery");
 });
 
-test("the Recover-a-boat dialogue step is claimed, so it does not fall through uneaten", () => {
+test("the shipwright's boat-service dialogue steps are claimed, so they do not fall through", () => {
   const shipwright = registerPlugin("Shipwright.plugin");
   const action = shipwright.events["npc-dialogue:action"];
   assert.equal(typeof action, "function", "Shipwright.plugin handles dialogue actions");
@@ -1082,18 +1082,32 @@ test("the Recover-a-boat dialogue step is claimed, so it does not fall through u
     action: "open_interface", target, handled: false, end: false,
   });
 
-  // The transcript's step ("I'd like to recover a boat.") opens "Recover Boat"; nothing claimed it
-  // before, so the dialogue closed and the selection never appeared (#2747). It opens a tick later
-  // (once the dialogue has closed, as Destroy.Shipwright does), so the claim is what a unit test
-  // can see; the open itself is exercised in game.
-  const wanted = step("Recover Boat");
-  action(wanted);
-  assert.equal(wanted.handled, true, "the recover step is claimed");
-  assert.equal(wanted.end, true, "and ends the dialogue");
+  // The transcript's steps for buy, customise and recover each fire open_interface with a target,
+  // and nothing claimed any of them, so the dialogue closed with nothing opened (#2747). Junior Jim
+  // is the only shipwright without the NPC options, so on him these steps are the only route.
+  // They open a tick later (once the dialogue has closed, as Destroy.Shipwright does), so the claim
+  // is what a unit test can see; the open itself is exercised in game.
+  for (const target of ["Boat Emporium", "Boat Customisation", "Recover Boat"]) {
+    const wanted = step(target);
+    action(wanted);
+    assert.equal(wanted.handled, true, `${target} is claimed`);
+    assert.equal(wanted.end, true, `${target} ends the dialogue`);
+  }
 
-  const other = step("Destroy Boat");
-  action(other);
-  assert.equal(other.handled, false, "another target is left to its own handler");
+  // Destroy Boat has its own listener in Destroy.Shipwright, and must not be swallowed here.
+  const destroy = step("Destroy Boat");
+  action(destroy);
+  assert.equal(destroy.handled, false, "Destroy Boat is left to its own handler");
+
+  // An unrelated target is still nobody's here.
+  const unknown = step("Something Else");
+  action(unknown);
+  assert.equal(unknown.handled, false, "an unknown target is not claimed");
+
+  // And a non-open_interface action is ignored outright.
+  const otherAction = { ...step("Recover Boat"), action: "receive" };
+  action(otherAction);
+  assert.equal(otherAction.handled, false, "only open_interface steps are claimed");
 });
 
 /** Junior Jim's Buy-boat with the real Omnishop plugin, on one custom-event bus. */
@@ -1473,6 +1487,30 @@ test("depositing and withdrawing follow the selected quantity and the op", () =>
   }
 });
 
+test("the hold refuses preset food (PvP presets), so it never comes back plain; Deposit inventory leaves it", () => {
+  const h = holdHarness();
+  try {
+    const SHARK = 385;
+    const preset = (amount) => {
+      const item = new Item(SHARK, amount);
+      for (const meta of [Item.UNTRADEABLE_META, Item.UNBANKABLE_META, Item.PRESET_META]) item.setMetaValue(meta, true);
+      return item;
+    };
+    h.player.getInventory().add(preset(1), false);
+    h.player.getInventory().add(preset(1), false);
+    h.give(SHARK);
+    h.open();
+    h.click(944, 1, 1, h.slotOf(SHARK), SHARK);
+    assert.equal(cargo.countIn(h.boat(), SHARK), 0, "the preset shark clicked is refused");
+    assert.equal(h.player.messages.at(-1), "Preset items cannot be used for this.");
+    h.click(943, 15, 1); // Deposit inventory
+    assert.equal(cargo.countIn(h.boat(), SHARK), 1, "only the plain shark goes in");
+    assert.equal(h.player.getInventory().getAmount(SHARK), 2, "the two preset sharks stay");
+  } finally {
+    h.done();
+  }
+});
+
 test("X prompts for an amount, and the hold refuses what it can't store", () => {
   const h = holdHarness();
   try {
@@ -1528,6 +1566,35 @@ test("tools go to the tools compartment and come back out, without using space",
     assert.deepEqual(h.player.messages.slice(-1), ["You collect some diving gear from the tools compartment."]);
     assert.deepEqual(h.player.getSailing().tools, [0]);
     assert.ok(h.sent.sounds.includes(2582));
+  } finally {
+    h.done();
+  }
+});
+
+test("a tool already in the tools compartment is not stored again, so a second copy is never deleted", () => {
+  const h = holdHarness();
+  try {
+    h.give(31803); // spyglass
+    h.open();
+    h.click(943, 15, 1); // Deposit inventory
+    assert.deepEqual(h.player.getSailing().tools, [1]);
+    assert.equal(h.player.getInventory().getAmount(31803), 0);
+
+    h.give(31803); // a second spyglass
+    h.click(943, 15, 1);
+    assert.equal(h.player.getInventory().getAmount(31803), 1, "Deposit inventory leaves the second spyglass held");
+    h.click(944, 1, 1, h.slotOf(31803), 31803); // Deposit-1 on it in the side panel
+    assert.equal(h.player.getInventory().getAmount(31803), 1, "Deposit-1 leaves it held too");
+    assert.equal(h.player.messages.at(-1), "You already have a spyglass in your tools compartment.");
+
+    h.give(7534);
+    h.give(7535);
+    h.click(943, 15, 1);
+    assert.deepEqual(h.player.getSailing().tools.sort(), [1, 4]);
+    h.give(7534);
+    h.give(7535);
+    h.click(943, 15, 1);
+    assert.equal(h.player.getInventory().getAmount(7534) + h.player.getInventory().getAmount(7535), 2, "a second set of diving gear stays held");
   } finally {
     h.done();
   }

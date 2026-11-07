@@ -38,6 +38,7 @@ const TOPS_MANY = new Set(["aJi_9W", "D8hzoV"]);
 /** Transcript message steps where he takes every pyramid top and pays for them. */
 const SELL_TOPS = new Set(["xCY7EK", "0iaVVb", "MoWeP6"]);
 const PYRAMID_TOP_COINS = 10000;
+const MAX_COIN_STACK = 0x7fffffff;
 
 /** How far the player is with Simon: never met, met and offered the job, sold him a top. */
 const SIMON_STAGE_ATTRIBUTE = "agility-pyramid:simon-stage";
@@ -129,28 +130,35 @@ function talk({ player, npcId }) {
 }
 
 function forget({ player }) {
+  // The artefacts are already gone: leaving before the next line still pays for them (logout saves after this hook).
+  if ((owed.get(player) ?? 0) > 0) pay({ player });
   owed.delete(player);
   offered.delete(player);
 }
 
 function takeAll(player) {
-  let coins = 0;
-  for (const [id, amount, each] of carried(player)) {
-    player.getInventory().deleteNumber(id, amount);
-    coins += amount * each;
-  }
+  const inventory = player.getInventory();
+  const items = carried(player);
+  const coins = items.reduce((total, [, amount, each]) => total + amount * each, 0);
+  if (coins > MAX_COIN_STACK || (coins > 0 && !paymentFits(inventory, items.length, coins))) return false;
+  for (const [id, amount] of items) inventory.deleteNumber(id, amount);
   owed.set(player, (owed.get(player) ?? 0) + coins);
   if (coins > 0) Common.getApi().emitCustomEvent("pyramid-plunder:artefacts-sold", { player });
+  return true;
 }
 
 function takeOne(player) {
   const itemId = offered.get(player);
   offered.delete(player);
   const key = itemId === undefined ? null : artefactKey(itemId);
-  if (!key || player.getInventory().getAmount(itemId) <= 0) return;
-  player.getInventory().deleteNumber(itemId, 1);
-  owed.set(player, (owed.get(player) ?? 0) + Common.DATA.artefacts[key].coins);
+  const inventory = player.getInventory();
+  if (!key || inventory.getAmount(itemId) <= 0) return true;
+  const coins = Common.DATA.artefacts[key].coins;
+  if (!paymentFits(inventory, 1, coins)) return false;
+  inventory.deleteNumber(itemId, 1);
+  owed.set(player, (owed.get(player) ?? 0) + coins);
   Common.getApi().emitCustomEvent("pyramid-plunder:artefacts-sold", { player });
+  return true;
 }
 
 function pay(request) {
@@ -159,20 +167,21 @@ function pay(request) {
   owed.delete(player);
   request.handled = true;
   if (coins <= 0) return;
-  player.getInventory().addItem(new (Common.getCore().Item)(Common.ids().item.coins, coins));
+  // Room was checked at the sale; a slot filled since (gear taken off) puts the rest at the player's feet.
+  player.getInventory().forceAdd(player, new (Common.getCore().Item)(Common.ids().item.coins, coins));
   player.sendMessage(`Simon hands you ${coins.toLocaleString("en-GB")} coins.`);
 }
 
 /**
  * Whether the whole payment fits: an existing coin stack must take all of it, and a new stack
- * can use the slot the tops leave behind.
+ * can use a slot the sold items leave behind.
  */
-function paymentFits(inventory, tops, coins) {
+function paymentFits(inventory, soldItems, coins) {
   const coinsId = Common.ids().item.coins;
   if (inventory.getAmount(coinsId) > 0) {
     return inventory.getAddableAmount(new (Common.getCore().Item)(coinsId, coins)) === coins;
   }
-  return tops > 0 || inventory.getFreeSlots() > 0;
+  return soldItems > 0 || inventory.getFreeSlots() > 0;
 }
 
 /**
@@ -190,7 +199,7 @@ function sellTops(request) {
   const coins = tops * PYRAMID_TOP_COINS;
   if (!paymentFits(player.getInventory(), tops, coins)) {
     request.end = true;
-    player.sendMessage("You don't have enough inventory space.");
+    player.sendMessage("You do not have enough room to carry all of those coins.");
     return;
   }
   player.getInventory().deleteNumber(Common.ids().item.pyramidTop, tops);
@@ -204,12 +213,13 @@ function onDialogueAction(request) {
   if (!isSimon(request.npcId)) return;
   if (SELL_TOPS.has(request.stepId)) {
     sellTops(request);
-  } else if (TAKE_ALL.has(request.stepId)) {
+  } else if (TAKE_ALL.has(request.stepId) || request.stepId === TAKE_ONE) {
     request.handled = true;
-    takeAll(request.player);
-  } else if (request.stepId === TAKE_ONE) {
-    request.handled = true;
-    takeOne(request.player);
+    const taken = TAKE_ALL.has(request.stepId) ? takeAll(request.player) : takeOne(request.player);
+    if (!taken) {
+      request.end = true;
+      request.player.sendMessage("You do not have enough room to carry all of those coins.");
+    }
   } else if (PAY.has(request.stepId)) {
     pay(request);
   }

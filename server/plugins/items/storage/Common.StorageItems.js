@@ -200,9 +200,7 @@ function inventoryIds(player) {
 
 /** How many of `id` the inventory has room for. */
 function inventoryRoom(player, id) {
-  const inventory = player.getInventory();
-  if (isStackable(id)) return inventory.contains(id) || inventory.getFreeSlots() > 0 ? Number.MAX_SAFE_INTEGER : 0;
-  return inventory.getFreeSlots();
+  return player.getInventory().getAddableAmount(new core.Item(id, Number.MAX_SAFE_INTEGER));
 }
 
 /**
@@ -229,10 +227,13 @@ function emptyToBank(player, family) {
   let moved = 0;
   for (const entry of contents(player, family)) {
     const tab = player.getBank(Bank.getTabForItem(player, entry.id));
-    if (tab.isFull() && !tab.contains(entry.id)) continue;
-    take(player, family, entry.id, entry.amount);
-    tab.add(new core.Item(entry.id, entry.amount), false);
-    moved += entry.amount;
+    const item = new core.Item(entry.id, entry.amount);
+    const accepted = tab.getAddableAmount(item);
+    if (accepted <= 0) continue;
+    const taken = take(player, family, entry.id, accepted);
+    if (taken <= 0) continue;
+    tab.add(item.setAmount(taken), false);
+    moved += taken;
   }
   refreshBank(player);
   return moved;

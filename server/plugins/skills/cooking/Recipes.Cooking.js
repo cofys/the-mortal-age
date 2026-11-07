@@ -5,6 +5,7 @@
  * captures (recordings 75, 564, 1858). None of these steps plays an animation or sound.
  */
 const Common = require("./Common.Cooking");
+const FreeToPlay = require("../../modes/FreeToPlay.plugin");
 
 /** The dough menu (rsprox captures): all four doughs, whatever the player's level. */
 const DOUGH_TITLE = "What sort of dough do you wish to make?";
@@ -39,8 +40,25 @@ function productName(recipe) {
   return Common.core.ItemDefinition.forId(recipe.productId).getName().toLowerCase();
 }
 
-/** Whether the player has the level; says why not in a message box. */
+/**
+ * A recipe is members-only when its product is (cache definition), so a first step made only from
+ * free items (a trout on a pie shell) is refused on a free world too. A row's own `members` field
+ * overrides the cache when the two disagree.
+ */
+function isMembersRecipe(recipe) {
+  return recipe.members ?? Common.core.CacheDefinitions.getItem(recipe.productId).isMembers === true;
+}
+
+function availableOnWorld(recipe) {
+  return Common.core.WorldDefinition.isMembersWorld() || !isMembersRecipe(recipe);
+}
+
+/** Whether the player can make the recipe; says why not when it is members-only here or the level is too low. */
 function canMake(player, recipe) {
+  if (!availableOnWorld(recipe)) {
+    player.sendMessage(FreeToPlay.ITEM_MESSAGE);
+    return false;
+  }
   if (Common.level(player) >= recipe.level) return true;
   Common.mesbox(player, `You need a Cooking level of ${recipe.level} to make ${Common.withArticle(productName(recipe))}.`);
   return false;
@@ -50,7 +68,7 @@ function canMake(player, recipe) {
 function makeOne(player, recipe) {
   const { Item, Skill } = Common.core;
   const inventory = player.getInventory();
-  if (!hasIngredients(inventory, recipe) || !hasRoom(inventory, recipe)) return false;
+  if (!availableOnWorld(recipe) || !hasIngredients(inventory, recipe) || !hasRoom(inventory, recipe)) return false;
   for (const { id, count } of recipe.ingredients) inventory.deleteNumber(id, count);
   inventory.addItem(new Item(recipe.productId, 1));
   for (const { id, count } of recipe.returns) inventory.addItem(new Item(id, count));
@@ -118,6 +136,7 @@ function offer(player, recipe, hooks) {
 function doughRecipe(dough, water, product) {
   return {
     productId: product.productId,
+    members: product.members,
     level: product.level,
     xp: 0,
     message: product.message,

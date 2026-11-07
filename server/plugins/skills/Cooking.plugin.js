@@ -37,6 +37,7 @@ module.exports = {
     require("./cooking/Wine.Cooking")(api);
     require("./cooking/SacredEel.Cooking")(api);
     require("./cooking/LeapingFish.Cooking")(api);
+    require("./cooking/Gnome.Cooking")(api);
   },
   isCookingActive: Cookers.isCookingActive,
   // Data-driven recipes for bots: derived from the same cookables table the

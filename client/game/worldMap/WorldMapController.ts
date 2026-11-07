@@ -10,6 +10,7 @@ import type { RenderDataWorkerPool } from "../worker/RenderDataWorkerPool";
 import { WorldMapState } from "../../rs/map/WorldMapArea";
 import type { TextureLoader } from "../../rs/texture/TextureLoader";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
+import type { RenderedWorldMapPoint } from "@runelite/client/ui/overlay/worldmap/worldMapLayout";
 import type { MinimapIcon } from "../../render/loader/SdMapData";
 import {
     applyPendingWorldMapDrag,
@@ -90,6 +91,7 @@ export class WorldMapController {
     worldMapWidgetUid: number = -1;
     renderedWorldMapIcons: WorldMapRenderedIcon[] = [];
     renderedCitizenDots: WorldMapCitizenDot[] = [];
+    renderedWorldMapPoints: RenderedWorldMapPoint[] = [];
     hoveredWorldMapIcons: Map<string, WorldMapRenderedIcon> = new Map();
     /** Where the map was last drawn, for turning a mouse position back into a tile. */
     worldMapViewport: WorldMapViewport | undefined;
@@ -211,6 +213,10 @@ export class WorldMapController {
 
     setRenderedCitizenDots(dots: WorldMapCitizenDot[]): void {
         this.renderedCitizenDots = Array.isArray(dots) ? dots : [];
+    }
+
+    setRenderedWorldMapPoints(points: RenderedWorldMapPoint[]): void {
+        this.renderedWorldMapPoints = Array.isArray(points) ? points : [];
     }
 
     updateWorldMapIconHover(screenX: number, screenY: number): void {

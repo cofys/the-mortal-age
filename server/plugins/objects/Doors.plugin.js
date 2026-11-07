@@ -7,6 +7,10 @@ let core;
 // 300 seconds (500 ticks @ 600ms/tick). Cross-checked against rsmod/OpenRune-Server
 // (DoorConstants.DURATION = 500) and a from-scratch OSRS-parity server (DOOR_AUTO_CLOSE_TICKS).
 const DOOR_AUTO_CLOSE_TICKS = 500;
+/** MovementQueue.IGNORE_CLIPPING_FLAG: the flagged mobile's steps go on whatever the map blocks. */
+const IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
+/** A walkOver opener keeps the flag until they are across, and no longer than this. */
+const WALK_OVER_MAX_TICKS = 2;
 
 // Single-door closed/open pairs are discovered from this server's own cache instead of a
 // hand-picked ID list: OSRS models every plain door as two consecutive loc ids where the
@@ -54,6 +58,7 @@ const NAMELESS_DOOR_LEAF_IDS = Object.freeze({
   ARENA_EXIT_OPEN: 3787, // troll_stronghold_arena_exit_inactive
   PRISON_DOOR_9_OPEN: 3781, // troll_stronghold_prison_door_open, capture 740
   GRUM_DOOR_OPEN: 1542, // Grum's Gold Exchange; capture 465
+  PIP_MAUSOLEUM_GATE_OPEN: 3446, // inacpip_underground_door; Priest in Peril capture 2026-11-02
   CRANDOR_SECRET_DOOR_OPEN: 25039, // dragonsecretdoor_open; capture 2951
   INVISWALL: 38848, // actionless collision blocker; captures 2951 and 740
 });
@@ -115,6 +120,15 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_11, O.LARGE_DOOR_14],
     [O.DOOR_180, O.DOOR_181],
     [O.DOOR_499, O.DOOR_498],
+    // Games Room experienced variants share the ordinary elf door's reverse
+    // open leaf (active rev241 cache; pinned Games Room reference next_loc_stage).
+    [O.DOOR_129, O.DOOR_132],
+    [O.DOOR_130, O.DOOR_132],
+    // Runeversi's ordinary same-tile counterpart is elfdoor_reverse at the
+    // exact coordinates on plane 0; the experienced cache variant shares it.
+    [O.DOOR_271, O.DOOR_132],
+    // RuneSquares experienced room: same close-only leaf as the normal room.
+    [O.DOOR_272, O.DOOR_132],
     // Vitur clothing-shop door is a transformed 61840 parent whose visible closed/open
     // children are 61842/61843. The unnamed parent cannot be catalogued by its cache name.
     [O.DOOR_837, O.DOOR_838],
@@ -150,7 +164,7 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // 21403/21405 at 2413,3797 face 3 open as 21404/21406 face 2/0 on the same tiles).
   // Yanille's south entrance door has blocked floor immediately west of the doorway, so its
   // map-backed open pose turns on the closed tile instead of swinging into that wall.
-  OWN_TILE_DOOR_IDS = new Set([O.GATE_155, O.GATE_157, O.DOOR_287]);
+  OWN_TILE_DOOR_IDS = new Set([O.GATE_155, O.GATE_157, O.DOOR_287, O.DOOR_129, O.DOOR_130, O.DOOR_271, O.DOOR_272]);
 
   // Tree Gnome Stronghold main gate: one 5x2 loc (190, face 2) opens into two
   // nameless 2x2 leaves (191/192), leaving the centre tile clear.
@@ -442,6 +456,35 @@ function defineDoorData({ ObjectIdentifiers: O }) {
       crossX: 3016,
       closeTicks: 2,
       openSoundId: 62, // the door sound, as captured
+    }),
+    // Priest in Peril mausoleum gates (RSProx recordings 2026-10-17 tick 1117, 2026-11-02 ticks
+    // 11016, 11664-11666 and 11708-11710): Open swaps the gate for INVISWALL on its own tile and
+    // the one inactive leaf on the tile beyond, the player steps through, and the gate is back two
+    // ticks later. The opener crosses with an ordinary walk (no exactmove in either recording), so
+    // they walk over the blocker (walkOver) instead of being carried; anyone else is stopped by it,
+    // which keeps the first gate's golden-key lock. The quest's key rule runs before this
+    // (door:toggle).
+    Object.freeze({
+      closed: [[O.GATE_70, 3405, 9895, 0, 3]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 3405, 9895, 0, 3],
+        [NAMELESS_DOOR_LEAF_IDS.PIP_MAUSOLEUM_GATE_OPEN, 3405, 9894, 0, 0],
+      ],
+      crossY: 9895,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 69,
+    }),
+    Object.freeze({
+      closed: [[O.GATE_71, 3431, 9897, 0, 2]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 3431, 9897, 0, 2],
+        [NAMELESS_DOOR_LEAF_IDS.PIP_MAUSOLEUM_GATE_OPEN, 3432, 9897, 0, 3],
+      ],
+      crossX: 3432,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 69,
     }),
     // Dragon Slayer's secret wall into Crandor's dungeon (capture 2951 ticks 85-89): the quest opens it
     // through door:open once the shortcut is unlocked. The player walks 2836,9598 -> 9599 -> 9600 while
@@ -798,6 +841,21 @@ function resolveClosedId(objectId) {
   return closedId ?? null;
 }
 
+// Several closed variants can share one open cache loc. The live leaf's full
+// identity identifies its retained original; the cache reverse map alone cannot.
+function currentSingleDoorState(object, privateArea) {
+  if (object.getOwner?.()) return null;
+  for (const state of OPEN_OBJECT_STATES.values()) {
+    if (state.closed?.length !== 1 || state.current?.length !== 1) continue;
+    const current = state.current[0];
+    if ((current.privateArea ?? null) === privateArea
+        && current.id === object.getId() && current.type === object.getType()
+        && current.face === object.getFace()
+        && locationKey(current.location) === locationKey(object.getLocation())) return state;
+  }
+  return null;
+}
+
 function findOpenDoorState(closedId, location, privateArea) {
   const directKey = doorStateKey(locationKey(location), privateArea);
   const direct = OPEN_OBJECT_STATES.get(directKey);
@@ -1100,12 +1158,13 @@ function handleMappedDoor(player, object, objectId, location) {
 
   const visibleObjectId = core.ObjectDefinition?.forPlayer?.(object.getId?.() ?? objectId, player)?.id
     ?? objectId;
-  const closedId = resolveClosedId(visibleObjectId);
+  const privateArea = player?.getPrivateArea?.() ?? null;
+  const tracked = currentSingleDoorState(object, privateArea);
+  const closedId = tracked ? (tracked.closedId ?? tracked.closed[0].id) : resolveClosedId(visibleObjectId);
   if (closedId == null) {
     return false;
   }
 
-  const privateArea = player?.getPrivateArea?.() ?? null;
   const [anchorKey, existingState] = findOpenDoorState(closedId, location, privateArea);
   const activeObject = existingState?.current?.[0]
     ? objectFromSnapshot(existingState.current[0], privateArea)
@@ -1423,6 +1482,42 @@ function carryOneTile(player, gate, x, y, z) {
       new core.Location(acrossX ? delta : 0, acrossX ? 0 : delta, 0), 0, 30, direction, GATE_WALK_ANIMATION)));
 }
 
+/** Players walking over a walkOver gate's blocker, with whether they had the flag before. */
+const WALKING_OVER = new WeakMap();
+
+function endWalkOver(player, token) {
+  const state = WALKING_OVER.get(player);
+  if (!state || (token && state.token !== token)) return;
+  WALKING_OVER.delete(player);
+  if (!state.previous) player.removeFlag?.(IGNORE_CLIPPING_FLAG);
+}
+
+/**
+ * A gate that keeps a blocker on its doorway while open, crossed with an ordinary walk: the opener's
+ * one step ignores clipping and the flag ends once they are across (at most WALK_OVER_MAX_TICKS),
+ * so the blocker stops everyone else and no forced movement is sent.
+ */
+function walkOverGate(player, destination) {
+  endWalkOver(player);
+  const token = {};
+  WALKING_OVER.set(player, { token, previous: player.hasFlag?.(IGNORE_CLIPPING_FLAG) === true });
+  player.setFlag?.(IGNORE_CLIPPING_FLAG, true);
+  const queue = player.getMovementQueue();
+  queue.reset();
+  queue.addSteps(destination);
+  let ticks = WALK_OVER_MAX_TICKS;
+  const task = new core.Task(1, false);
+  task.execute = () => {
+    const here = player.getLocation();
+    const across = here.getX() === destination.getX() && here.getY() === destination.getY();
+    if (across || --ticks <= 0 || (queue.size?.() ?? 0) === 0) {
+      task.stop();
+      endWalkOver(player, token);
+    }
+  };
+  core.TaskManager.submit(task);
+}
+
 /** The player crosses on the clicked row or column, from whichever side they stand on. */
 function stepThroughGate(player, gate, x, y, z) {
   if (gate.crossBetween) {
@@ -1436,6 +1531,10 @@ function stepThroughGate(player, gate, x, y, z) {
   const destination = gate.crossX != null
     ? cloneLocation(player.getLocation().getX() < gate.crossX ? gate.crossX : gate.crossX - 1, y, z)
     : cloneLocation(x, player.getLocation().getY() < gate.crossY ? gate.crossY : gate.crossY - 1, z);
+  if (gate.walkOver) {
+    walkOverGate(player, destination);
+    return;
+  }
   const queue = player.getMovementQueue();
   queue.reset();
   queue.addSteps(destination);

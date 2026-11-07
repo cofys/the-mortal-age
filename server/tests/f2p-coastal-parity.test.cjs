@@ -5,6 +5,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+const { MAX_STACK_AMOUNT } = require('../dist/game/model/container/StackType');
 const core = PluginManager.getCoreApi();
 before(async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
@@ -75,6 +76,11 @@ function player() {
   const index = actorIndex++;
   const inventory = {
     getAmount: (id) => items.get(id) || 0,
+    getAddableAmount: (item) => {
+      assert.equal(item.getId(), core.ItemIdentifiers.COINS, 'this mock only models coin capacity');
+      const held = items.get(item.getId()) || 0;
+      return held || inventory.getFreeSlots() > 0 ? Math.min(item.getAmount(), MAX_STACK_AMOUNT - held) : 0;
+    },
     adds: (id, amount) => items.set(id, (items.get(id) || 0) + amount),
     forceAdd: (_player, item) => items.set(item.getId(), (items.get(item.getId()) || 0) + item.getAmount()),
     deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) || 0) - amount)),
@@ -188,22 +194,45 @@ test("Pirate's Treasure crate packing uses the captured message boxes and Luthas
   assert.equal(p.items.get(995), 30);
 });
 
+const furnace = { getName: () => 'Furnace' };
+const smeltAt = (q, p) => { const event = { player: p, objectId: 24009, option: 'smelt', definition: furnace }; q.call('onBeforeObjectInteraction', event); return event; };
+
+test('as captured: Smelt on a furnace makes the Prince Ali key with no prompt, and smelting keeps other cases', () => {
+  const q = register('PrinceAliRescue', 'prince_ali_rescue'), p = player();
+  p.items.set(2423, 1); p.items.set(2349, 1);
+  q.quest.setStage(p, 10); assert.equal(smeltAt(q, p).handled, undefined, 'before Osman the furnace smelts normally');
+  q.quest.setStage(p, 20); p.items.delete(2349);
+  assert.equal(smeltAt(q, p).handled, undefined, 'without a bronze bar the furnace smelts normally');
+  p.items.set(2349, 1);
+  assert.equal(smeltAt(q, p).handled, true); assert.equal(q.prompts.length, 0);
+  assert.equal(p.items.get(2418) ?? 0, 0); q.tick(1);
+  assert.equal(p.items.get(2418), 1); assert.equal(p.items.get(2423), 0); assert.equal(p.items.get(2349), 0);
+  assert.deepEqual(p.xp, [[core.Skill.CRAFTING.getIndex(), 2]]); assert.equal(q.quest.getStage(p), 20);
+  assert.equal(smeltAt(q, p).handled, undefined, 'with the print used up Smelt opens the normal menu');
+});
+
 test('Prince Ali key can be made at a furnace without Osman and Leela accepts the prepared player at state20', () => {
   const q = register('PrinceAliRescue', 'prince_ali_rescue'), p = player(); q.quest.setStage(p, 20);
-  p.items.set(2423, 1); p.items.set(2349, 1);
-  q.call('onItemOnObject', { player: p, itemId: 2423, objectId: 24009, object: { getDefinition: () => ({ getName: () => 'Furnace' }) } });
-  assert.equal(q.prompts.at(-1).title, 'Create a key using the key print?'); choose(q.prompts.at(-1), 'No'); assert.equal(p.items.get(2423), 1);
-  q.call('onItemOnObject', { player: p, itemId: 2423, objectId: 24009, object: { getDefinition: () => ({ getName: () => 'Furnace' }) } });
-  choose(q.prompts.at(-1), 'Yes'); q.tick(1);
+  p.items.set(2423, 1);
+  q.call('onItemOnObject', { player: p, itemId: 2423, objectId: 24009, object: { getDefinition: () => furnace } });
+  assert.deepEqual(p.messages, ['You need a bronze bar to make the key.']); assert.equal(p.items.get(2423), 1);
+  p.items.set(2349, 1);
+  q.call('onItemOnObject', { player: p, itemId: 2423, objectId: 24009, object: { getDefinition: () => furnace } });
+  assert.equal(q.prompts.length, 0); q.tick(1);
   assert.equal(p.items.get(2418), 1); assert.equal(q.quest.getStage(p), 20); assert.deepEqual(p.xp, [[core.Skill.CRAFTING.getIndex(), 2]]);
   for (const id of [2419, 1013, 2424, 954]) p.items.set(id, 1);
   const variant = q.hooks.get('onNpcDialogueVariant')[0]({ player: p, npcId: core.NpcIdentifiers.LEELA });
-  assert.equal(variant.variant, 'preparations-for-rescue-talking-to-leela-after-having-all-the-required-items');
+  assert.equal(variant.variant, 'starting-out-talking-to-leela', 'as captured: the first visit takes its prepared branch');
+  const prepared = require('../data/definitions/npc-dialogues.json')['Prince Ali Rescue'].variants[variant.variant][2];
+  const condition = (text) => q.hooks.get('onNpcDialogueCondition')[0]({ player: p, npcId: core.NpcIdentifiers.LEELA, text });
+  assert.equal(condition(prepared.text), true);
+  assert.equal(prepared.steps[0].player, 'Yes. In fact, I already have everything we need.');
+  p.items.delete(954); assert.equal(condition(prepared.text), false, 'without the rope Leela explains the plan'); p.items.set(954, 1);
   const ready = { player: p, npcId: core.NpcIdentifiers.LEELA, text: "Good work. Now, before breaking the Prince out, you'll need to find a way to deal with his personal guard." };
   q.emit('npc-dialogue:line', ready); assert.equal(q.quest.getStage(p), 20); ready.before(); assert.equal(q.quest.getStage(p), 30);
 });
 
-test('Prince Ali three beers progress30→31→40, rescue needs Keli tied and retains the key', () => {
+test('Prince Ali three beers progress30→31→40, rescue needs Keli tied, and Hassan takes the key with the payment', () => {
   const q = register('PrinceAliRescue', 'prince_ali_rescue'), p = player(); q.quest.setStage(p, 30); p.items.set(1917, 3);
   q.emit('npc-dialogue:action', { player: p, npcId: core.NpcIdentifiers.JOE_5, stepId: 'TDhBVe' });
   assert.equal(q.quest.getStage(p), 31); assert.equal(p.items.get(1917), 2);
@@ -211,13 +240,13 @@ test('Prince Ali three beers progress30→31→40, rescue needs Keli tied and re
   q.emit('npc-dialogue:action', { player: p, npcId: core.NpcIdentifiers.JOE_5, stepId: 'KxLvNg' }); assert.equal(q.quest.getStage(p), 40);
   for (const id of [2418, 2419, 1013, 2424, 954]) p.items.set(id, 1);
   const escape = { player: p, npcId: core.NpcIdentifiers.PRINCE_ALI, stepId: 'WQdAq1' };
-  q.emit('npc-dialogue:action', escape); q.tick(4); assert.equal(q.quest.getStage(p), 40);
+  q.emit('npc-dialogue:action', escape); q.tick(3); assert.equal(q.quest.getStage(p), 40);
   q.call('onItemOnNpc', { player: p, npcId: core.NpcIdentifiers.LADY_KELI, itemId: 954 });
-  assert.equal(q.quest.getStage(p), 40); q.tick(4); assert.equal(q.quest.getStage(p), 50);
-  q.emit('npc-dialogue:action', escape); assert.equal(q.quest.getStage(p), 50); q.tick(4);
+  q.tick(2); assert.equal(q.quest.getStage(p), 40); q.tick(1); assert.equal(q.quest.getStage(p), 50);
+  q.emit('npc-dialogue:action', escape); q.tick(2); assert.equal(q.quest.getStage(p), 50); q.tick(1);
   assert.equal(q.quest.getStage(p), 100); assert.equal(p.items.get(2418), 1); assert.equal(p.items.get(2419), 0);
   q.emit('npc-dialogue:action', { player: p, npcId: core.NpcIdentifiers.CHANCELLOR_HASSAN, stepId: 'ctDkjC' });
-  assert.equal(q.quest.getStage(p), 110); assert.equal(p.items.get(995), 700);
+  assert.equal(q.quest.getStage(p), 110); assert.equal(p.items.get(995), 700); assert.equal(p.items.get(2418), 0);
 });
 
 const reachLine = (q, p, npcId, text) => {
@@ -406,6 +435,80 @@ test('Corsair Ithoi strikes land with their projectile at every range (#1862)', 
       assert.equal(core.MagicCombatMethod.hitDelay(npc,target,selected),core.Projectile.ticksToLand(flight.end),`${tiles} tiles: hit as it lands`);
     }
   } finally { core.MagicCombatMethod.prototype.start=start;core.Projectile.createProjectile=create;Math.random=random; }
+});
+
+test('Osman offers the garden help option after Prince Ali Rescue and records the choice', () => {
+  const q = register('PrinceAliRescue', 'prince_ali_rescue'), p = player();
+  require('../plugins/minigames/sorceressgarden/Apprentice.SorceresssGarden')(q.api);
+  q.quest.setStage(p, 110);
+
+  let builder;
+  p.getDialogueManager = () => ({ reset() {}, startDialogues(chain) { builder = chain; }, isActive: () => false });
+  const line = {
+    player: p,
+    npcId: core.NpcIdentifiers.OSMAN_9,
+    npc: { getId: () => core.NpcIdentifiers.OSMAN_9 },
+    text: 'Well done. A great rescue. I will remember you if I have anything dangerous to do.',
+  };
+  q.emit('npc-dialogue:line', line);
+  assert.equal(typeof line.after, 'function', 'the post-quest Osman line schedules the help menu');
+  line.after();
+
+  const menu = [...builder.getDialogues().values()].find((entry) => entry instanceof core.OptionDialogue);
+  assert.deepEqual(menu.getOptions(), ['Is there anything I can help you with?']);
+  assert.equal(p.getAttribute('sorceress-s-garden:osman-help-asked'), undefined);
+
+  const menuBuilder = builder;
+  menu.execute(1);
+  assert.equal(p.getAttribute('sorceress-s-garden:osman-help-asked'), true,
+    'selecting help persists the garden prerequisite');
+  assert.notEqual(builder, menuBuilder, 'the option starts Osman’s generated sq’irk dialogue');
+  assert.ok(builder.getDialogues().size > 0, 'the transcript branch is available');
+
+  const Juice = require('../plugins/minigames/sorceressgarden/Juice.SorceresssGarden');
+  Juice._test.setCore(core);
+  const NpcDialogues = require('../plugins/npcs/NpcDialogues.plugin');
+  const osman = require('../data/definitions/npc-dialogues.json').Osman;
+  const sqirkOption = osman.variants['sorceress-s-garden-related-dialogue'][0].options
+    .find((option) => option.text === "I'd like to talk about sq'irks.");
+  const lines = NpcDialogues.flatten(sqirkOption.steps, {
+    resolveCondition: (condition) => Juice._test.answerCondition({ player: p, stepId: condition.id }),
+  }).flatMap((step) => [step.player, step.npc].filter((line) => typeof line === 'string'));
+  assert.deepEqual(lines, ["I'd like to talk about sq'irks."],
+    'without juice, the generated help branch reaches the real topic line and skips the hand-in');
+
+  const winterJuice = require('../plugins/minigames/sorceressgarden/Gardens.SorceresssGarden').SEASONS.winter.juiceId;
+  p.getInventory().adds(winterJuice, 1);
+  const withJuice = NpcDialogues.flatten(sqirkOption.steps, {
+    resolveCondition: (condition) => Juice._test.answerCondition({ player: p, stepId: condition.id }),
+  });
+  const handInEnd = withJuice.findIndex((step) => step.type === 'end');
+  assert.deepEqual(withJuice.slice(0, handInEnd).flatMap((step) => [step.player, step.npc]
+    .filter((line) => typeof line === 'string')),
+  [
+    'I have some sq\'irk juice for you.',
+    'Thank you very much [player name]. If you get some more sq\'irks be sure to come back.',
+    "I will. It's been a pleasure doing business with you.",
+  ], 'the juice hand-in lines are selected only when the player actually carries juice');
+});
+
+test("Contact! players can unlock the garden from Osman's after-quest sq'irk option", () => {
+  const q = register('Contact', 'contact'), p = player();
+  require('../plugins/minigames/sorceressgarden/Apprentice.SorceresssGarden')(q.api);
+  q.quest.setStage(p, 130);
+
+  const npcId = core.NpcIdentifiers.OSMAN_9;
+  const variant = q.hooks.get('onNpcDialogueVariant')[0]({ player: p, npcId });
+  assert.equal(variant, 'standard-dialogue-after-contact');
+  const option = require('../data/definitions/npc-dialogues.json').Osman
+    .variants['standard-dialogue-after-contact'][1].options
+    .find((candidate) => candidate.text === "I'd like to talk about sq'irks.");
+  assert.ok(option?.steps?.some((step) => step.type === 'reference'
+    && step.variant === 'sorceress-s-garden-related-dialogue'), 'the captured after-Contact option opens the sq\'irk transcript');
+
+  q.emit('npc-dialogue:choice', { player: p, npcId, option: option.text });
+  assert.equal(p.getAttribute('sorceress-s-garden:osman-help-asked'), true,
+    'selecting the after-Contact option records the garden prerequisite');
 });
 
 test('Ned sells captured quest rope for 15 coins or four wool, refusing missing payment and full inventory', () => {

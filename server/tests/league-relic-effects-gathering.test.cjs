@@ -286,6 +286,14 @@ test("Power Miner: with the pickaxe, a second chance, four ores a rock, ore bank
   assert.ok(xp(who.relic, Skill.CRAFTING) > crafting);
   assert.equal(gather(who.relic, I.COAL, 1, Skill.MINING, 50).stored, 1);
   assert.deepEqual([banked(who.relic, I.COAL), banked(who.relic, I.STEEL_BAR)], [1, 1], "coal is banked as coal");
+  // Two ores, one already taken by another store: only the banked one is smelted, and only it pays Smithing XP.
+  const before = xp(who.relic, Skill.SMITHING);
+  gather(who.relic, I.IRON_ORE, 1, Skill.MINING, 35);
+  const one = xp(who.relic, Skill.SMITHING) - before;
+  const split = xp(who.relic, Skill.SMITHING);
+  assert.equal(gather(who.relic, I.IRON_ORE, 2, Skill.MINING, 35, 1).stored, 2);
+  // Steel's 17.5 rounds to 18 or 17 in the stored total; two bars' would be about 35.
+  assert.ok(Math.abs(xp(who.relic, Skill.SMITHING) - split - one) <= 1, "one bar's XP for one bar");
   assert.equal(gather(who.relic, I.LOGS, 1, Skill.WOODCUTTING, 25).stored, 0, "not another skill's take");
 
   const toggle = itemActions.get("Echo pickaxe").Toggle;
@@ -313,24 +321,36 @@ test("Power Miner: with the pickaxe, a second chance, four ores a rock, ore bank
   assert.equal(banked(who.other, I.STEEL_BAR), 0);
 });
 
-test("Power Miner counts rock attempts already kept by mining gloves", () => {
+// Listener-level guard: the producer is exercised separately by the native test.
+test("Power Miner does not spend its count on synthetic glove-held events", () => {
   const who = cases(POWER_MINER, 5, "ECHO_PICKAXE");
-  for (const gloveHeld of [[false, false, false, false], [true, false, false, false],
-    [true, true, false, false], [true, true, true, false]]) {
+  for (let saves = 0; saves <= 3; saves++) {
     const object = {};
-    const outcomes = gloveHeld.map(handled => emit("mining:deplete-rock", {
-      player: who.relic, object, rock: "Iron rocks", handled,
-    }).handled);
-    assert.deepEqual(outcomes, [true, true, true, false], "the fourth ore still exhausts the rock");
+    const deplete = (player, gloveSaveAdditive = false) => emit("mining:deplete-rock", {
+      player, object, rock: "Iron rocks", handled: gloveSaveAdditive, gloveSaveAdditive,
+    }).handled;
+    for (let i = 0; i < saves; i++) assert.equal(deplete(who.relic, true), true);
+    assert.deepEqual([deplete(who.relic), deplete(who.relic), deplete(who.relic), deplete(who.relic)],
+      [true, true, true, false], "four separate relic attempts after glove-held events");
+    assert.equal(deplete(who.relic), true, "count resets after depletion");
   }
+  // A separately handled event without the ordinary-rock additive marker retains
+  // the existing count policy (including finite-yield rocks); no retail claim.
+  const legacy = {};
+  for (let i = 0; i < 3; i++) {
+    assert.equal(emit("mining:deplete-rock", {player: who.relic, object: legacy,
+      rock: "Amethyst crystals", handled: true, gloveSaveAdditive: false}).handled, true);
+  }
+  assert.equal(emit("mining:deplete-rock", {player: who.relic, object: legacy,
+    rock: "Amethyst crystals", handled: false, gloveSaveAdditive: false}).handled, false);
   const shared = {};
-  const deplete = (player, handled = false) => emit("mining:deplete-rock", {
-    player, object: shared, rock: "Iron rocks", handled,
+  const deplete = (player, gloveSaveAdditive = false) => emit("mining:deplete-rock", {
+    player, object: shared, rock: "Iron rocks", handled: gloveSaveAdditive, gloveSaveAdditive,
   }).handled;
   assert.equal(deplete(who.relic), true);
   assert.equal(deplete(who.relic), true);
-  assert.equal(deplete(who.without, true), true, "another miner's glove saved the same rock");
-  assert.equal(deplete(who.relic), true, "that saved rock retained its relic count");
+  assert.equal(deplete(who.without, true), true, "another miner keeps the same rock with a glove");
+  assert.equal(deplete(who.relic), true, "the relic count survived the other miner's save");
   assert.equal(deplete(who.relic), false);
 });
 
