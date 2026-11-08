@@ -138,6 +138,11 @@ const LUMBERJACK_OUTFIT = [
 ];
 const LUMBERJACK_SET_BONUS = 0.005;
 
+// OSRS Wiki (Woodcutting, Maple tree): the Kandarin Diary medium reward makes the maples in Seers'
+// Village give 110 XP per log; the Lumberjack outfit bonus applies on top. The box is the diary's
+// own Seers' Village region (plugins/achievements/diaries/KandarinDiaryFinish.plugin.js).
+const SEERS_VILLAGE = { minX: 2670, maxX: 2780, minY: 3430, maxY: 3530, z: 0 };
+
 // OSRS Wiki seed nest table (1,011 slots). `text` is the seed as the search line names it (rsprox
 // captures 549, 552, 1723 and others); magic, mahogany and redwood are unrecorded and follow the
 // yew and teak lines.
@@ -402,6 +407,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 45,
     xpReward: 100,
+    diaryXp: { diary: "kandarin", tier: "medium", percent: 10, region: SEERS_VILLAGE },
     logId: ItemIds.MAPLE_LOGS, petBase: 221918,
     objectIds: [
       ObjectIds.MAPLE_TREE, ObjectIds.MAPLE_TREE_2, ObjectIds.MAPLE_TREE_3, ObjectIds.MAPLE_TREE_4,
@@ -679,18 +685,20 @@ function canUseAxe(player, axe) {
   );
 }
 
-function findBestUsableAxe(player) {
+// The default skips members axes on free worlds, as every chop does (Forestry's roots, Wintertodt and the Ent
+// trunk call it without a filter).
+function findBestUsableAxe(player, eligible = choppingAxeEligible) {
   const equippedWeaponId = getEquippedWeaponId(player);
   const inventory = player.getInventory();
 
   for (const axe of AXES_BEST_FIRST) {
-    if ((equippedWeaponId === axe.id || inventory.contains(axe.id)) && canUseAxe(player, axe)) {
+    if ((equippedWeaponId === axe.id || inventory.contains(axe.id)) && canUseAxe(player, axe) && eligible(axe)) {
       // An equally strong felling axe may supply its bonus even beside the ordinary axe.
       // Keep Infernal and no-ration priority; never promote a lower or unusable profile.
       if (!axe.felling && !axe.requiredFiremaking) {
         const felling = AXES_BEST_FIRST.find((candidate) => candidate.felling &&
           candidate.tier === axe.tier && candidate.requiredLevel === axe.requiredLevel &&
-          (equippedWeaponId === candidate.id || inventory.contains(candidate.id)) && canUseAxe(player, candidate));
+          (equippedWeaponId === candidate.id || inventory.contains(candidate.id)) && canUseAxe(player, candidate) && eligible(candidate));
         if (felling && availableFellingRations(player) > 0) return felling;
       }
       return axe;
@@ -704,9 +712,9 @@ function findBestUsableAxe(player) {
 }
 
 // Bots only ever get the standard bronze-to-dragon axes.
-function findBestUsableAxeByLevel(level) {
+function findBestUsableAxeByLevel(level, eligible = () => true) {
   for (const axe of AXES_BEST_FIRST) {
-    if (axe.standard && level >= axe.requiredLevel) {
+    if (axe.standard && level >= axe.requiredLevel && eligible(axe)) {
       return axe;
     }
   }
@@ -757,6 +765,21 @@ function rollLog(player, tree, axe, context = null) {
   pluginApi.emitCustomEvent("woodcutting:cut-chance", event);
   if (!(event.multiplier > 0)) return false;
   return Math.random() < chance * event.multiplier;
+}
+
+/** The tree's XP per log, with the diary reward a tier-complete player earns at that tree's site. */
+function treeBaseXp(player, tree, location) {
+  const reward = tree.diaryXp;
+  if (!reward) return tree.xpReward;
+  const { region } = reward;
+  const inRegion =
+    location.getZ() === region.z &&
+    location.getX() >= region.minX && location.getX() <= region.maxX &&
+    location.getY() >= region.minY && location.getY() <= region.maxY;
+  if (!inRegion) return tree.xpReward;
+  const request = { player, diary: reward.diary, tier: reward.tier, complete: false };
+  pluginApi.emitCustomEvent("diary:is-complete", request);
+  return request.complete === true ? (tree.xpReward * (100 + reward.percent)) / 100 : tree.xpReward;
 }
 
 // OSRS Wiki: hat 0.4%, top 0.8%, legs 0.6%, boots 0.2%, plus 0.5% for all four; forestry pieces count.
@@ -1129,11 +1152,19 @@ function depleteTree(player, treeObject, tree) {
   return true;
 }
 
+// Skip held axes marked members-only on free worlds.
+function choppingAxeEligible(axe) {
+  // Before register (a fixture calling the helpers directly) there is no world to ask: every axe counts.
+  if (!pluginApi) return true;
+  const { WorldDefinition, CacheDefinitions } = pluginApi.core;
+  return WorldDefinition.isMembersWorld() || CacheDefinitions.getItem(axe.id)?.isMembers !== true;
+}
+
 function startWoodcutting(player, treeObject, tree, activeSessions) {
   const request = { player, object: treeObject, allow: true };
   pluginApi.emitCustomEvent("woodcutting:validate-tree", request);
   if (!request.allow) return false;
-  const axe = findBestUsableAxe(player);
+  const axe = findBestUsableAxe(player, choppingAxeEligible);
   if (!axe) {
     player.sendMessage(NO_AXE_MESSAGE);
     return false;
@@ -1229,7 +1260,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       continue;
     }
 
-    const axe = findBestUsableAxe(player);
+    const axe = findBestUsableAxe(player, choppingAxeEligible);
     if (!axe) {
       player.sendMessage(NO_AXE_MESSAGE);
       stopWoodcutting(activeSessions, player);
@@ -1287,7 +1318,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     if (state.tree.logId >= 0 && !maybeDropBirdNest(player)) {
       const felling = fellingChop(player, state.axe);
       rollForesterRationEnergy(player, state.axe);
-      const baseXp = state.tree.xpReward * lumberjackXpMultiplier(player);
+      const baseXp = treeBaseXp(player, state.tree, state.location) * lumberjackXpMultiplier(player);
       const xp = felling.bonus ? baseXp + baseXp / 10 : baseXp;
       let pendingLog = null;
       if (!felling.skipLog && !InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
@@ -1384,7 +1415,10 @@ function requestedChop(event) {
 
 function requestedAxe(event) {
   const candidate = event.itemId == null ? null : AXES.find((axe) => axe.id === event.itemId);
-  event.axe = event.itemId == null ? findBestUsableAxe(event.player) : candidate && canUseAxe(event.player, candidate) ? candidate : null;
+  // Free worlds: a members axe answers no request (canoes, vines), as it chops no tree there.
+  event.axe = event.itemId == null
+    ? findBestUsableAxe(event.player, choppingAxeEligible)
+    : candidate && choppingAxeEligible(candidate) && canUseAxe(event.player, candidate) ? candidate : null;
 }
 
 function pauseWoodcutting(event) {

@@ -4,6 +4,8 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
+const WorldDefinition = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
+const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const InfernalPickaxe = require("./mining/InfernalPickaxe.Mining");
@@ -17,6 +19,7 @@ const ClueGeodes = require("./mining/ClueGeodes.Mining");
 const CalcifiedWater = require("./mining/CalcifiedWater.Mining");
 const Saltpetre = require("./mining/Saltpetre.Mining");
 const VarrockArmour = require("./mining/VarrockArmour.Mining");
+const ProspectorOutfit = require("./mining/ProspectorOutfit.Mining");
 const { pauseForLevelUp, actionInterval } = require("./SkillActions");
 
 // rsprox recordings: a mined-out rock becomes "rocks1"/"rocks2" (the digit of the rock's own gameval,
@@ -70,16 +73,17 @@ let miningTick = 0;
 // Wiki Pickaxe "Ticks between rolls": the pickaxe sets how often the game rolls, never the chance.
 // `key` names its wall swings: human_mining_<key>_pickaxe_wall, sang_mining_wall_<key>_pickaxe.
 // Dragon and infernal: 3 ticks, 1/6 chance of 2; crystal: 3 ticks, 1/4 chance of 2 (members worlds only).
+// `standard`: the plain tools, bronze to dragon, as Woodcutting marks its axes (bots wield only these).
 const PICKAXES = [
-  { id: ItemIds.BRONZE_PICKAXE, key: "bronze", requiredLevel: 1, attemptIntervalTicks: 8, animation: new Animation(625) },
-  { id: ItemIds.IRON_PICKAXE, key: "iron", requiredLevel: 1, attemptIntervalTicks: 7, animation: new Animation(626) },
-  { id: ItemIds.STEEL_PICKAXE, key: "steel", requiredLevel: 6, attemptIntervalTicks: 6, animation: new Animation(627) },
-  { id: ItemIds.BLACK_PICKAXE, key: "black", requiredLevel: 11, attemptIntervalTicks: 5, animation: new Animation(3873) },
-  { id: ItemIds.MITHRIL_PICKAXE, key: "mithril", requiredLevel: 21, attemptIntervalTicks: 5, animation: new Animation(629) },
-  { id: ItemIds.ADAMANT_PICKAXE, key: "adamant", requiredLevel: 31, attemptIntervalTicks: 4, animation: new Animation(628) },
-  { id: ItemIds.RUNE_PICKAXE, key: "rune", requiredLevel: 41, attemptIntervalTicks: 3, animation: new Animation(624) },
-  { id: ItemIds.DRAGON_PICKAXE, key: "dragon", requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(7139) },
-  { id: ItemIds.CRYSTAL_PICKAXE, key: "crystal", requiredLevel: 71, attemptIntervalTicks: 3, fastRollChance: 1 / 4, animation: new Animation(8347) },
+  { id: ItemIds.BRONZE_PICKAXE, key: "bronze", standard: true, requiredLevel: 1, attemptIntervalTicks: 8, animation: new Animation(625) },
+  { id: ItemIds.IRON_PICKAXE, key: "iron", standard: true, requiredLevel: 1, attemptIntervalTicks: 7, animation: new Animation(626) },
+  { id: ItemIds.STEEL_PICKAXE, key: "steel", standard: true, requiredLevel: 6, attemptIntervalTicks: 6, animation: new Animation(627) },
+  { id: ItemIds.BLACK_PICKAXE, key: "black", standard: true, requiredLevel: 11, attemptIntervalTicks: 5, animation: new Animation(3873) },
+  { id: ItemIds.MITHRIL_PICKAXE, key: "mithril", standard: true, requiredLevel: 21, attemptIntervalTicks: 5, animation: new Animation(629) },
+  { id: ItemIds.ADAMANT_PICKAXE, key: "adamant", standard: true, requiredLevel: 31, attemptIntervalTicks: 4, animation: new Animation(628) },
+  { id: ItemIds.RUNE_PICKAXE, key: "rune", standard: true, requiredLevel: 41, attemptIntervalTicks: 3, animation: new Animation(624) },
+  { id: ItemIds.DRAGON_PICKAXE, key: "dragon", standard: true, requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(7139) },
+  { id: ItemIds.CRYSTAL_PICKAXE, key: "crystal", requiredLevel: 71, requiredAgility: 50, attemptIntervalTicks: 3, fastRollChance: 1 / 4, animation: new Animation(8347) },
   { id: ItemIds.INFERNAL_PICKAXE, key: "infernal", requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(4482) },
   // Cosmetic and uncharged variants mine as their base tool; `key` and `animation` are each one's own cache
   // sequences (human_mining_<key>_pickaxe*). `walls` names the wall swings where the cache orders the words differently.
@@ -104,7 +108,7 @@ const PICKAXES = [
   { id: ItemIds.INFERNAL_PICKAXE_UNCHARGED_, key: "infernal", requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(4482) },
   { id: ItemIds.INFERNAL_PICKAXE_UNCHARGED__2, key: "trailblazer", requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(11831) },
   { id: ItemIds.INFERNAL_PICKAXE_UNCHARGED__4, key: "trailblazer_reloaded", requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(11832) },
-  { id: ItemIds.CRYSTAL_PICKAXE_INACTIVE_, key: "crystal", requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(8347) },
+  { id: ItemIds.CRYSTAL_PICKAXE_INACTIVE_, key: "crystal", requiredLevel: 61, requiredAgility: 50, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(8347) },
   // The league's Echo pickaxe (Wiki): a crystal pickaxe with no requirement that always rolls every 2 ticks; `rank` places it above the crystal one.
   { id: ItemIds.ECHO_PICKAXE, key: "crystal", requiredLevel: 1, rank: 72, attemptIntervalTicks: 2, animation: new Animation(8347) },
 ];
@@ -367,7 +371,7 @@ function getMiningLevel(player) {
 
 /**
  * The level the success rolls use: the visible level, capped at 99, plus invisible boosts other plugins
- * add ("mining:level-boost", the celestial ring's +4), which do count past 99 (Wiki "Skilling success
+ * add ("mining:level-boost", the celestial ring's +4, the Mining Guild's +7), which do count past 99 (Wiki "Skilling success
  * rate", Boosts over 99). Requirements still read the visible level.
  */
 function getRollMiningLevel(player) {
@@ -429,6 +433,13 @@ function answerBestPickaxe(request) {
   }
 }
 
+/** "mining:pickaxe": the pickaxe `itemId` is (Mining's own list), or null; no level check, only "is it a pickaxe". */
+function answerPickaxe(request) {
+  if (request && request.itemId != null && request.pickaxe == null) {
+    request.pickaxe = PICKAXES.find((pickaxe) => pickaxe.id === request.itemId) ?? null;
+  }
+}
+
 /** "mining:roll-interval": ticks to the next roll with `pickaxe`, for other mining content (stars, GotR, Volcanic Mine). */
 function answerRollInterval(request) {
   if (request && request.pickaxe && request.ticks == null) {
@@ -445,7 +456,12 @@ function findBestPickaxe(player) {
     if (miningLevel < pickaxe.requiredLevel) {
       continue;
     }
+    // Wiki (Crystal pickaxe): "50 Agility … required to wield it", as the crystal axe (Woodcutting) checks.
+    if (player.getSkillManager().getCurrentLevel(Skill.AGILITY) < (pickaxe.requiredAgility ?? 1)) {
+      continue;
+    }
     if (weaponId === pickaxe.id || player.getInventory().contains(pickaxe.id)) {
+      if (!WorldDefinition.isMembersWorld() && CacheDefinitions.getItem(pickaxe.id)?.isMembers === true) continue;
       return pickaxe;
     }
   }
@@ -481,16 +497,19 @@ function awardOre(player, state, landedOutcome) {
   // The task path passes the outcome its rollAttempt already landed (no second
   // roll); direct callers (tests, bot seams) omit it and roll here, as before.
   const outcome = landedOutcome !== undefined ? landedOutcome : (state.rock.outcomes ? rollOutcome(state.rock, getRollMiningLevel(player)) : null);
-  const oreId = outcome?.itemId ?? state.rock.oreId;
+  let oreId = outcome?.itemId ?? state.rock.oreId;
   // A plain success gives oreAmount (rubium's two splinters from level 72);
   // an outcome rock gives its rolled outcome amount.
-  const amount = outcome?.min !== undefined ? outcomeAmount(outcome) : oreAmount(player, state.rock);
+  let amount = outcome?.min !== undefined ? outcomeAmount(outcome) : oreAmount(player, state.rock);
   const event = {
     player,
     rock: state.rock,
     pickaxe: state.pickaxe,
     outcome,
     oreId,
+    amount,
+    spend: null,
+    rockName: state.rock.objectName,
     multiplier: 1,
     bonusOre: 0,
     location: {
@@ -500,6 +519,10 @@ function awardOre(player, state, landedOutcome) {
     },
   };
   pluginApi.emitCustomEvent("mining:ore-yield", event);
+  // Upstream-shaped listeners (Bracelet of Clay) may retarget the yield:
+  // adopt a changed oreId/amount; `spend` runs below once the ore is kept.
+  if (event.oreId != null) oreId = event.oreId;
+  if (Number.isFinite(event.amount)) amount = Math.max(0, Math.floor(event.amount));
   const bonusOre = Math.max(0, Math.floor(event.bonusOre));
   const xpMultiplier = event.multiplier > 0 ? event.multiplier : 0;
   // Content may take the ore off the player as it is mined ("mining:hand-over",
@@ -523,6 +546,7 @@ function awardOre(player, state, landedOutcome) {
     pendingOre = prepareOre(player, oreId, amount + bonusOre, outcome?.xp ?? state.rock.xp);
     countOre(player, state.rock.countEach ? amount + bonusOre : 1);
     kept = true;
+    event.spend?.();
     if (bonusOre > 0) {
       player.sendMessage(`A rich seam — ${bonusOre} extra ore!`);
     }
@@ -535,8 +559,8 @@ function awardOre(player, state, landedOutcome) {
     if (state.rock.gameMessage) player.sendMessage(line);
     else spam(player, line);
   }
-  CrystalPickaxe.tryUseCharge(player);
-  const xpGranted = (outcome?.xp ?? state.rock.xp) * xpMultiplier;
+  if (state.pickaxe?.id === ItemIds.CRYSTAL_PICKAXE) CrystalPickaxe.tryUseCharge(player);
+  const xpGranted = (outcome?.xp ?? state.rock.xp) * xpMultiplier * ProspectorOutfit.xpMultiplier(player);
   player.getSkillManager().addExperiences(Skill.MINING, xpGranted);
   // OSRS gives a winning pet the last backpack slot before the resource.
   // Storage and XP retain their order; ordinary success consumers run after delivery.
@@ -560,7 +584,7 @@ function awardOre(player, state, landedOutcome) {
     objectId: state.objectId ?? null,
   };
   pluginApi.emitCustomEvent("mining:success", success);
-  if (kept && !state.rock.outcomes) mineExtraOre(player, state.rock, outcome);
+  if (kept && !state.rock.outcomes) mineExtraOre(player, state.rock, outcome, oreId);
   return { bonusOre, xpMultiplier, outcome, petRolled: petRoll.handled, stop: success.stop === true };
 }
 
@@ -666,9 +690,20 @@ function exhaustRock(rockObject, rock, viewers, whole = rockObject) {
     const { id, delay, radius } = rock.depletionSound;
     pluginApi.core.Sounds.playAreaSound({ soundId: id, delay, radius, x: at.getX(), y: at.getY(), level: at.getZ() });
   }
-  TaskManager.submit(new RockRespawnTask(rock.respawnTicks, whole, depleted));
-  for (const viewer of viewers) sendRespawnTimer(viewer, depleted, rock.respawnTicks);
+  const respawnTicks = respawnTicksFor(rockObject, rock);
+  TaskManager.submit(new RockRespawnTask(respawnTicks, whole, depleted));
+  for (const viewer of viewers) sendRespawnTimer(viewer, depleted, respawnTicks);
   return depleted;
+}
+
+/**
+ * How long a mined-out rock stays empty: the Wiki rock page's time, which content may shorten
+ * ("mining:respawn-ticks" { object, rock, ticks }, the Mining Guild's members' area).
+ */
+function respawnTicksFor(rockObject, rock) {
+  const request = { object: rockObject, rock: rock.objectName, ticks: rock.respawnTicks };
+  pluginApi.emitCustomEvent("mining:respawn-ticks", request);
+  return Number.isFinite(request.ticks) ? Math.max(1, request.ticks) : rock.respawnTicks;
 }
 
 /** Failures are message boxes in live OSRS (rsprox recordings). */
@@ -1015,19 +1050,21 @@ function deliverOre(player, ore) {
  * A sandstone or granite piece is doubled at its own size (Wiki Sandstone rocks; rsprox capture
  * 3165: "Your cape allows you to mine an additional ore.", two 1kg pieces, two counts).
  */
-function mineExtraOre(player, rock, outcome) {
+function mineExtraOre(player, rock, outcome, minedOreId) {
   if (rock.infinite || rock.noExtraOre) {
     return;
   }
-  const oreId = outcome?.itemId ?? rock.oreId;
+  // The rock's own ore decides who may add one; `minedOreId` is what that success actually yielded.
+  const rockOreId = outcome?.itemId ?? rock.oreId;
+  const oreId = minedOreId ?? rockOreId;
   const xp = outcome?.xp ?? rock.xp;
-  const request = { player, oreId, rockLevel: rock.level, bonuses: [] };
+  const request = { player, oreId: rockOreId, rockLevel: rock.level, bonuses: [] };
   pluginApi.emitCustomEvent("mining:extra-ore", request);
   for (const bonus of request.bonuses) {
     if (inventoryBlocks(player, oreId) || giveOre(player, oreId, 1, xp) !== 1) break;
     if (bonus.message) spam(player, bonus.message);
     countOre(player);
-    player.getSkillManager().addExperiences(Skill.MINING, xp);
+    player.getSkillManager().addExperiences(Skill.MINING, xp * ProspectorOutfit.xpMultiplier(player));
   }
 }
 
@@ -1146,6 +1183,7 @@ module.exports = {
     api.onPlayerDisconnect(endMiningSession);
     api.onCustomEvent("level-up:popup-opened", pauseMining);
     api.onCustomEvent("mining:best-pickaxe", answerBestPickaxe);
+    api.onCustomEvent("mining:pickaxe", answerPickaxe);
     api.onCustomEvent("mining:roll-interval", answerRollInterval);
     api.persistAttribute(ORE_MINED_ATTRIBUTE, 0);
     api.onPlayerLogin(sendOresMined);
@@ -1173,6 +1211,7 @@ module.exports = {
     CalcifiedWater.attach(api, ROCK_BY_NAME.get(CalcifiedWater.ROCK_NAME), exhaustRock, minersKeepStanding);
     Saltpetre.attach(api);
     VarrockArmour.attach(api);
+    ProspectorOutfit.attach(api);
 
     api.log("registered", {
       rocks: ROCKS.length,

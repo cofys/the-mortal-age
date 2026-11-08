@@ -67,13 +67,23 @@ setups, but combat now always requires visibility, including when using the old 
 ## Welcome screen message
 
 `pluginConfig` `"WelcomeScreen:messageOfTheWeek"` is the text on the scroll at the bottom of
-the welcome screen. It defaults to `Welcome to Old School RuneScape!`. The text can use the game's
+the welcome screen. It defaults to `Welcome to <name>!`, using the world name below. The text can use the game's
 `<col=rrggbb>` and `<br>` tags. League worlds show their own league message instead.
 
 ```json
 {
   "pluginConfig": { "WelcomeScreen:messageOfTheWeek": "Double XP this weekend!<br>Have fun." }
 }
+```
+
+## World name
+
+`"name"` is the world's display name (default `Old School RuneScape`): the login screen, World
+list, welcome messages and bank title use it. It is plain text of 1 to 64 characters, without
+`<` or `>`.
+
+```json
+{ "name": "My World" }
 ```
 
 ## Display names
@@ -154,4 +164,12 @@ require the optional PvP statistics plugin to display.
 
 Ranked PvP Arena match finding (the Grouping tab's PvP Arena button, `DuelArena` plugin) is only
 available on designated worlds. Enable it with `"pluginConfig": { "DuelArena:pvpArenaWorld": true }`
-in `world.local.json` (default off). Legacy Duels are unaffected.
+in `world.local.json` (default off).
+
+Unranked duels are on every world. In the Emir's Arena, player option 1 is Challenge and 4 is
+Load-outs. On a normal world, Challenge first asks whether the duel is an Unranked Duel or a Legacy
+Duel. On a PvP Arena world, Challenge goes straight to an unranked duel. The fight uses the player's
+main character: their items, stats and spellbook are set aside for the fight and come back when
+they leave the arena (`duelarena/Stash.DuelArena.js`). A save taken mid-fight (a periodic save,
+a crash) writes their own character standing in the Emir's Arena, never the arena's gear, so a
+world sharing saves with this one is safe with `DuelArena` turned off.

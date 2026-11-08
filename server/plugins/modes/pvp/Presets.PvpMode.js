@@ -11,6 +11,8 @@ const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { EquipmentRequirements } = require("../../../src/main/typescript/elvarg/game/model/equipment/EquipmentRequirements");
 const { EffectTimer } = require("../../../src/main/typescript/elvarg/game/model/EffectTimer");
+const { PluginManager } = require("../../../src/main/typescript/elvarg/plugins/PluginManager");
+const { DuelState } = require("../../../src/main/typescript/elvarg/game/content/Duelling");
 const { MagicSpellbook } = require("../../../src/main/typescript/elvarg/game/model/MagicSpellbook");
 const { Flag } = require("../../../src/main/typescript/elvarg/game/model/Flag");
 const { Bank } = require("../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
@@ -46,6 +48,24 @@ const CUSTOM_PRESET_SLOT_ATTRIBUTE = "pvp:selected-custom-preset-slot";
 let presetsEnabled = false;
 
 let pluginApi = null;
+
+/**
+ * Not mid-fight, nowhere in a duel (from the request to the end), and not where the player can't teleport out
+ * (Last Man Standing, Castle Wars, raids, the Inferno and Fight Caves, the Gauntlet, Pest Control and the other
+ * minigames that keep their own gear and refuse teleports, through their area or the plugins' teleport hooks, as
+ * TeleportHandler asks): a preset there would re-gear them, bank the minigame's items and reset their stats.
+ */
+function presetBusyRefusal(player) {
+  // Bots re-gear from presets wherever they fight, by design (as bankRefusal exempts them).
+  if (player.isPlayerBot?.()) return null;
+  const duel = player.getDueling?.()?.getState?.();
+  if (duel !== undefined && duel !== DuelState.NONE) return "You can't load a preset during a duel.";
+  if (pluginApi?.core?.CombatFactory?.inCombat?.(player)) return "You can't load a preset during combat.";
+  const area = player.getArea?.();
+  if (area && area.canTeleport?.(player, 20) === false) return "You can't load a preset here.";
+  if (PluginManager.emitCanTeleport(player, 20) === false) return "You can't load a preset here.";
+  return null;
+}
 
 /**
  * "presets:can-use" { player, allow, message }: other content may keep a player from presets
@@ -228,6 +248,13 @@ function isSpawnable(itemId) {
     return allowed.includes(itemId);
   }
   return false;
+}
+
+/** How many real (not preset-spawned) copies of `itemId` a container holds. */
+function realAmount(container, itemId) {
+  return container.getValidItems()
+    .filter((item) => item.getId() === itemId && !item.isPresetItem?.())
+    .reduce((sum, item) => sum + item.getAmount(), 0);
 }
 
 /** What bankCarriedItems would bank: everything carried but the preset's own spawned items. */
@@ -597,6 +624,21 @@ function applyPreset(player, preset) {
     sender.sendMessage("You can't load a preset in the wilderness!");
     return false;
   }
+  const busyText = presetBusyRefusal(player);
+  if (busyText) {
+    sender.sendMessage(busyText);
+    return false;
+  }
+  // The gear goes straight into the slots below: each piece must pass what wearing it would (duel rules, minigame
+  // and quest gear, members items). Checked before anything is banked or cleared.
+  for (const item of player.isPlayerBot?.() ? [] : preset.getEquipment() ?? []) {
+    if (!isValidItem(item)) continue;
+    const slot = equipmentSlotOf(item.getId());
+    if (slot >= 0 && PluginManager.emitCanEquip(player, slot, item) === false) {
+      sender.sendMessage(`You can't wear the ${item.getDefinition().getName()} here.`);
+      return false;
+    }
+  }
   // Inventory weapons must follow the same rules when the player switches gear later.
   for (const item of [...(preset.getEquipment() ?? []), ...(preset.getInventory() ?? [])]) {
     if (!isValidItem(item) || equipmentSlotOf(item.getId()) < 0) continue;
@@ -617,8 +659,10 @@ function applyPreset(player, preset) {
       }
       nonSpawnableRequirements.push(item);
 
-      const inventoryAmt = player.getInventory().getAmount(item.getId());
-      const equipmentAmt = player.getEquipment().getAmount(item.getId());
+      // Only real copies count: the preset's own spawned copies are wiped below, not banked, so counting them let a
+      // custom preset take nothing from the bank and spawn a plain copy (free preset items became tradeable ones).
+      const inventoryAmt = realAmount(player.getInventory(), item.getId());
+      const equipmentAmt = realAmount(player.getEquipment(), item.getId());
       const bankAmt = player
         .getBank(Bank.getTabForItem(player, item.getId()))
         .getAmount(item.getId());
@@ -646,22 +690,48 @@ function applyPreset(player, preset) {
   player.getInventory().resetItems().refreshItems();
   player.getEquipment().resetItems().refreshItems();
 
-  if (nonSpawnableRequirements.length > 0) {
-    for (const item of nonSpawnableRequirements) {
-      if (player.getInventory().containsItem(item)) {
-        player.getInventory().deletes(item);
-      } else if (player.getEquipment().containsItem(item)) {
-        player.getEquipment().deletes(item);
-      } else {
-        player
-          .getBank(Bank.getTabForItem(player, item.getId()))
-          .deletes(item);
-      }
+  // Every real copy is in the bank now (carried ones were banked, the inventory and equipment reset), so that is
+  // where the preset's non-spawnable items come from.
+  // The item given back is the one taken: its own meta (charges), not the meta saved with the preset. Copying the
+  // saved meta onto a clone refilled a charged item (a toxic staff, serpentine helm, sceptre) on every reload.
+  // One id can sit in several bank stacks (different meta, a legacy split, a carried stack banked beside its own), so
+  // the amount is taken from each stack in turn and given back as one part per meta: taking from the first stack only
+  // and spawning the full amount made the rest out of nothing.
+  const takenParts = new Map();
+  for (const item of nonSpawnableRequirements) {
+    const bank = player.getBank(Bank.getTabForItem(player, item.getId()));
+    const parts = [];
+    let needed = item.getAmount();
+    while (needed > 0) {
+      const slot = bank.getItems().findIndex((candidate) => candidate?.getId() === item.getId() && candidate.getAmount() > 0);
+      if (slot < 0) break;
+      const real = bank.getItems()[slot];
+      const taken = Math.min(needed, real.getAmount());
+      const meta = real.getMeta() ? structuredClone(real.getMeta()) : null;
+      const same = parts.find((part) => JSON.stringify(part.meta) === JSON.stringify(meta));
+      if (same) same.amount += taken;
+      else parts.push({ amount: taken, meta });
+      bank.deleteAtSlot(slot, taken);
+      needed -= taken;
     }
+    takenParts.set(item, parts);
   }
+  // Parts after the first (another meta) can't share the preset's slot: they go to the inventory after the kit, or
+  // back to the bank when it has no room.
+  const extraParts = [];
+  const spawnTaken = (item) => {
+    const next = spawnPresetItem(item, preset, player);
+    const parts = takenParts.get(item);
+    if (!next || !parts) return next;
+    if (parts.length === 0) return null;
+    next.setAmount(parts[0].amount);
+    next.setMeta(parts[0].meta);
+    for (const part of parts.slice(1)) extraParts.push(new Item(item.getId(), part.amount, part.meta));
+    return next;
+  };
 
   for (const item of preset.getInventory() ?? []) {
-    const next = spawnPresetItem(item, preset, player);
+    const next = spawnTaken(item);
     if (!next) {
       continue;
     }
@@ -670,7 +740,7 @@ function applyPreset(player, preset) {
 
   const wearer = presetWearer(preset);
   for (const item of preset.getEquipment() ?? []) {
-    const next = spawnPresetItem(item, preset, player);
+    const next = spawnTaken(item);
     if (!next) {
       continue;
     }
@@ -687,6 +757,10 @@ function applyPreset(player, preset) {
       continue;
     }
     player.getEquipment().setItem(slot, next);
+  }
+  for (const part of extraParts) {
+    if (player.getInventory().getAddableAmount(part) >= part.getAmount()) player.getInventory().addItem(part);
+    else player.getBank(Bank.getTabForItem(player, part.getId())).add(part, false);
   }
 
   player.setSpellbook(preset.getSpellbook());

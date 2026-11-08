@@ -1,9 +1,10 @@
 "use strict";
 
-const { api, Animation, Item, ItemIdentifiers, Skill } = require("./Core.Construction");
+const { api, Animation, Item, Skill } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const Data = require("./Data.Construction");
 const House = require("./House.Construction");
+const CarpenterOutfit = require("./CarpenterOutfit.Construction");
 const Menu = require("./Menu.Construction");
 const WORKBENCH = require("./data/workbench.json");
 
@@ -62,7 +63,7 @@ function makeFlatpack(player, bench, buildable) {
   player.performAnimation(new Animation(BUILD_ANIMATION));
   // Kept materials (a league fragment's planks) may leave no slot free: the flatpack then falls to the floor.
   player.getInventory().forceAdd(player, new Item(FLATPACK_OF.get(buildable.key), 1));
-  player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
+  player.getSkillManager().addExperiences(Skill.CONSTRUCTION, CarpenterOutfit.withBonus(player, buildable.experience));
 }
 
 function interfaceClick(event) {
@@ -100,7 +101,7 @@ function installFlatpack(event) {
     return player.sendMessage("This furniture cannot be upgraded. Remove the previous furniture if you wish to install a flatpack here.");
   }
   if (House.constructionLevel(player) < buildable.level) return player.sendMessage(`You need Construction level ${buildable.level} to build that.`);
-  if (!player.getInventory().contains(ItemIdentifiers.HAMMER)) return player.sendMessage("You need a hammer in order to install flatpack furniture.");
+  if (!House.hasHammer(player)) return player.sendMessage("You need a hammer in order to install flatpack furniture.");
   player.getInventory().delete(event.itemId, 1);
   House.hammer(player);
   house.setFurniture(target, buildable);

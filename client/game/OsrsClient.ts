@@ -139,7 +139,9 @@ import {
     sendBankCustomQuantity,
     LOGIN_FLAG_REMEMBER,
     LOGIN_FLAG_TOKEN,
+    disposeServerConnection,
     forgetRememberedLogin,
+    sendHandshake,
     sendLogin,
     sendInteractStop,
     sendLogout,
@@ -191,6 +193,7 @@ import { SeqTypeLoader } from "../rs/config/seqtype/SeqTypeLoader";
 import { SpotAnimTypeLoader } from "../rs/config/spotanimtype/SpotAnimTypeLoader";
 import { VarManager } from "../rs/config/vartype/VarManager";
 import { chatHistory } from "../rs/cs2/ChatHistory";
+import { FriendLoginUpdates } from "./chat/FriendLoginUpdates";
 import { Cs2Vm, ScriptArgMagic, type ScriptEvent, createScriptEvent } from "../rs/cs2/Cs2Vm";
 import { setSpawnSearch } from "../rs/cs2/spawnSearch";
 import { Opcodes as Cs2Opcodes } from "../rs/cs2/Opcodes";
@@ -249,6 +252,7 @@ import {
     DEFAULT_SCREEN_WIDTH,
     MOUSE_CROSS_YELLOW,
 } from "./ClientState";
+import { type ChatRequest, chatRequestOption, chatRequestSlot } from "./chatRequests";
 import { GameRenderer } from "./GameRenderer";
 import { OsrsRendererType, createRenderer } from "./GameRenderers";
 import { InputManager } from "./InputManager";
@@ -601,7 +605,8 @@ export class OsrsClient {
     isMembersWorld: boolean = true;
     private localChatNameIcons: number[] = [];
     private localChatNamePrefix: string = "";
-    private readonly tradeRequestTargetsByName = new Map<string, number>();
+    /** Request lines (trade, challenge, load-out share) by sender: who sent it, what answers it. */
+    private readonly chatRequestsByName = new Map<string, ChatRequest>();
     private accountTypeVarbitAvailable?: boolean;
 
     // ========== Game State ==========
@@ -994,6 +999,13 @@ export class OsrsClient {
     tradeOfferInventory: Inventory = new Inventory(28);
     /** The other player's offered items use OSRS's inventory-other offset. */
     tradeOtherOfferInventory: Inventory = new Inventory(28);
+    /**
+     * Ids of the extra inventories (beyond inv/worn/bank) the server has actually sent. The CS2 VM
+     * map is seeded with empty trade/shop/collection inventories at startup, so presence in that
+     * map alone does not mean the server sent one; the RuneLite facade reads this set instead.
+     */
+    // Trade, shop and collection inventories arrive through their own handlers and are never added here, so getItemContainer returns null for those ids.
+    readonly serverSentInventoryIds = new Set<number>();
     private tradeState?: TradeWindowState;
     private inventorySeededFromServer: boolean = false;
     private readonly pendingInventoryMovePredictions: Array<{
@@ -1075,6 +1087,7 @@ export class OsrsClient {
     private groundItemMeshesPending = false;
     private unsubscribeChatMessages?: () => void;
     private unsubscribeFriendsChat?: () => void;
+    private readonly friendLoginUpdates = new FriendLoginUpdates();
     private unsubscribeClans?: () => void;
     private unsubscribeSkills?: () => void;
     private unsubscribeRunEnergy?: () => void;
@@ -1566,7 +1579,7 @@ export class OsrsClient {
             getWidgetManager: () => this.widgetManager,
             getInputManager: () => this.inputManager,
             getRendererCanvas: () => this.renderer?.canvas,
-            getTradeRequestTargetsByName: () => this.tradeRequestTargetsByName,
+            getChatRequestsByName: () => this.chatRequestsByName,
         });
     }
 
@@ -2001,11 +2014,12 @@ export class OsrsClient {
             openUrl: openClientUrl,
             sendPlayerOption: (playerName: string, option: number) => {
                 const normalizedName = playerName.trim().toLowerCase();
-                const tradeTarget = self.tradeRequestTargetsByName.get(normalizedName);
-                if (tradeTarget !== undefined) {
-                    // Type-101's chat action is always Trade, even if the
-                    // cache script passes a menu-specific action value.
-                    sendPlayerOption(tradeTarget, 2);
+                const request = self.chatRequestsByName.get(normalizedName);
+                const requestSlot = request ? chatRequestSlot(request.option) : undefined;
+                if (request && requestSlot !== undefined) {
+                    // A request line's accept answers with the option it asks for (Trade, or the
+                    // Challenge / Load-outs the server labelled), whatever value the script passes.
+                    sendPlayerOption(request.playerId, requestSlot);
                     return;
                 }
                 const index = self.playerEcs.findIndexByName(playerName);
@@ -3163,6 +3177,7 @@ export class OsrsClient {
                                 Array.isArray(snapshot.slots) ? snapshot.slots : [],
                                 { selectedSlot: null },
                             );
+                            this.serverSentInventoryIds.add(inventoryId);
                             // Interfaces listening to this inventory redraw, as for any update;
                             // an "other" inventory (id + 32768) notifies listeners of its id.
                             markInvTransmit(inventoryId & 0x7fff);
@@ -3365,11 +3380,12 @@ export class OsrsClient {
                 } catch {}
                 // Add message to chat history for CS2 scripts to query
                 const isTradeRequest = msg.chatType === ChatMessageType.TRADE_REQUEST;
-                if (isTradeRequest && msg.from && msg.playerId !== undefined) {
-                    this.tradeRequestTargetsByName.set(
-                        msg.from.trim().toLowerCase(),
-                        msg.playerId | 0,
-                    );
+                const requestOption = chatRequestOption(msg.chatType ?? -1, msg.text);
+                if (requestOption && msg.from && msg.playerId !== undefined) {
+                    this.chatRequestsByName.set(msg.from.trim().toLowerCase(), {
+                        playerId: msg.playerId | 0,
+                        option: requestOption,
+                    });
                 }
                 if (msg.style && msg.playerId !== undefined) {
                     this.playerSyncManager?.setPublicChatStyle(msg.playerId, msg.style);
@@ -3423,6 +3439,7 @@ export class OsrsClient {
         } catch {}
         try {
             this.unsubscribeFriendsChat = subscribeFriendsChat((snapshot) => {
+                this.friendLoginUpdates.update(snapshot.friends);
                 const channel = snapshot.channel;
                 this.cs2Vm.context.friendList = snapshot.friends.map((friend) => ({ ...friend }));
                 this.cs2Vm.context.ignoreList = snapshot.ignores.map((ignored) => ({ ...ignored }));
@@ -5490,6 +5507,7 @@ export class OsrsClient {
     // URL/search params are not supported
 
     init(): void {
+        void this.loginState.refreshServerName();
         // Initialize default controlled player if not set by server
         if (this.controlledPlayerServerId === -1) {
             this.controlledPlayerServerId = 0; // Default server ID
@@ -5528,6 +5546,7 @@ export class OsrsClient {
 
     /** Enter on the login screen: Play for the remembered account, else Login on the form. */
     submitLoginFromKeyboard(): void {
+        if (this.loginState.extension) { this.loginState.extension.submit(); return; }
         if (this.gameState === GameState.CONNECTING) return;
         if (this.loginState.loginIndex === LoginIndex.WELCOME_DISPLAY_NAME) {
             if (this.processLoginAction(LoginActions.PLAY) === "connect") this.sendLoginRequest();
@@ -5926,7 +5945,7 @@ export class OsrsClient {
         if (!this.isOnLoginScreen()) return false;
 
         const handled = this.loginRenderer.handleKeyInput(this.loginState, key, char);
-        if (handled && this.loginState.loginIndex === LoginIndex.LOGIN_FORM) {
+        if (handled && !this.loginState.extension && this.loginState.loginIndex === LoginIndex.LOGIN_FORM) {
             this.loginState.savePersistedLoginState();
         }
         return handled;
@@ -6140,6 +6159,7 @@ export class OsrsClient {
                               }
                             : null,
                     );
+                    void this.loginState.refreshServerName();
                     this.loginState.saveLastServer();
                     this.loginState.showRememberedLogin();
                 }
@@ -6477,6 +6497,12 @@ export class OsrsClient {
                     this.widgetManager?.invalidateAll?.();
                 }
             } catch {}
+
+            if (this.isLoggedIn()) {
+                for (const message of this.friendLoginUpdates.drain()) {
+                    chatHistory.addMessage(5, message, "", "");
+                }
+            }
 
             // Widget transmit handlers and timers are processed on the client tick,
             // not on the render frame. These queue CS2 events which are then processed below.
@@ -7248,6 +7274,11 @@ export class OsrsClient {
         try {
             console.log("[shop] server update", state.stock?.length ?? 0, "items");
         } catch {}
+
+        // The legacy shop wire uses 516, also the native looting-bag inventory.
+        // A bag snapshot replaces this registry entry with its 28-slot container.
+        // Rebind the shop's retained container before publishing stock/transmits.
+        this.cs2Vm?.context?.inventories?.set(516, this.shopInventory);
 
         // Clear existing items and populate with shop stock
         this.shopInventory.clear();
@@ -8588,6 +8619,33 @@ export class OsrsClient {
     }
 
     /**
+     * Forget the extra inventories the last session sent: ids no longer count as sent, VM entries
+     * the server added are dropped, and the startup-seeded trade/shop/collection ones are put back
+     * to their empty seeded state. INV/WORN/BANK are left alone.
+     */
+    private forgetSentInventories(): void {
+        this.serverSentInventoryIds.clear();
+        const map = this.cs2Vm?.context?.inventories;
+        if (!map) return;
+        const seeded = new Map<number, Inventory>([
+            [90, this.tradeOfferInventory],
+            [90 + 32768, this.tradeOtherOfferInventory],
+            [516, this.shopInventory],
+            [620, this.collectionInventory],
+        ]);
+        for (const id of [...map.keys()]) {
+            if (id === 93 || id === 94 || id === 95) continue;
+            const original = seeded.get(id);
+            if (original) {
+                original.clear();
+                map.set(id, original);
+            } else {
+                map.delete(id);
+            }
+        }
+    }
+
+    /**
      * Reset all world/game state - used on disconnect/logout to prevent memory leaks.
      * Clears all players, NPCs, widgets, ground items, and other game entities.
      * @param fullReset If true, also clears chat history, vars, and transmit cycles (for full logout to login screen)
@@ -8625,6 +8683,7 @@ export class OsrsClient {
             console.warn("[OsrsClient] WidgetManager clear error:", err);
         }
         this.serverSubInterfaces.clear();
+        this.forgetSentInventories();
 
         // Clear ground items
         try {
@@ -8710,6 +8769,7 @@ export class OsrsClient {
 
         // Full reset only - clear persistent session state when going back to login screen
         if (fullReset) {
+            this.friendLoginUpdates.clear();
             // Clear chat history to prevent memory leak across sessions
             try {
                 chatHistory.clear();

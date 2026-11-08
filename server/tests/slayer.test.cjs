@@ -21,6 +21,7 @@ const Combat = require("../plugins/skills/slayer/Combat.Slayer");
 const Rewards = require("../plugins/skills/slayer/Rewards.Slayer");
 const Checks = require("../plugins/skills/slayer/Checks.Slayer");
 const Equipment = require("../plugins/skills/slayer/Equipment.Slayer");
+const CaveHorror = require("../plugins/skills/slayer/CaveHorror.Slayer");
 const Finishers = require("../plugins/skills/slayer/Finishers.Slayer");
 const Superiors = require("../plugins/skills/slayer/Superiors.Slayer");
 const Keys = require("../plugins/skills/slayer/Keys.Slayer");
@@ -29,6 +30,7 @@ const Choice = require("../plugins/skills/slayer/Choice.Slayer");
 const core = PluginManager.getCoreApi();
 const handlers = { events: new Map(), death: [], canAttack: [] };
 const emitted = [];
+const combatMethodProviders = [];
 const spawned = [];
 const commands = {};
 const persistedAttributes = new Map();
@@ -48,6 +50,7 @@ Slayer.register({
   onNpcHitModify() {},
   registerIncomingDamageModifier() {},
   onNpcBeforeDeath() {},
+  registerNpcCombatMethodProvider: (ids, ctor, options) => combatMethodProviders.push({ ids, ctor, options }),
   onItemOnNpc() {},
   onItemOnItem() {},
   registerCommand: (name, fn) => { commands[name] = fn; },
@@ -92,6 +95,12 @@ function createPlayer({ combat = 126, slayer = 99, levels = {}, points = 0 } = {
       getFreeSlots: () => 28 - inventory.length,
       contains: (id) => inventory.some(([item]) => item === id),
       adds: (id, amount) => inventory.push([id, amount]),
+      deleteNumber: (id, amount) => {
+        const index = inventory.findIndex(([item]) => item === id);
+        if (index < 0) return;
+        inventory[index][1] -= amount;
+        if (inventory[index][1] <= 0) inventory.splice(index, 1);
+      },
     }),
   };
   const sender = new PacketSender(player);
@@ -416,6 +425,21 @@ test("rewards: the Buy tab sells enum 840's items for enum 842's prices", () => 
   assert.equal(varbit(player, "slayer_points"), 65);
 });
 
+test("rewards: the buttons answer only while the rewards are open at a master", () => {
+  const buttons = new Map();
+  Rewards.attach({ onCustomEvent() {}, onInterfaceActionButton: (id, fn) => buttons.set(id, fn) });
+  const player = createPlayer({ points: 100 });
+  const slot = [...CacheDefinitions.getEnumValues(840)].find(([, item]) => item === 4160)[0];
+  const buy = buttons.get((426 << 16) | 25);
+  player.getInterfaceId = () => -1;
+  buy({ player, slot, opId: 2 });
+  assert.deepEqual(player.inventory, [], "closed: nothing bought");
+  assert.equal(varbit(player, "slayer_points"), 100);
+  player.getInterfaceId = () => 426;
+  buy({ player, slot, opId: 2 });
+  assert.deepEqual(player.inventory, [[4160, 250]], "open: bought");
+});
+
 test("slayer:grant-points and slayer:current-task", () => {
   const player = createPlayer();
   handlers.events.get("slayer:grant-points")[0]({ player, points: 30 });
@@ -478,6 +502,87 @@ test("protective gear: a dust devil hits a bare face for 16 and drains", () => {
   assert.equal(Equipment.protectedFrom(helmet, Equipment.GEAR.monsters[0]), true, "a Slayer helmet covers earmuffs");
 });
 
+test("every recolour of the Slayer helmet protects like the plain one", () => {
+  const ids = core.ItemIdentifiers;
+  const banshee = Equipment.GEAR.monsters[0];
+  for (const id of [ids.RED_SLAYER_HELMET, ids.RED_SLAYER_HELMET_I_, ids.HYDRA_SLAYER_HELMET]) {
+    assert.equal(Equipment.protectedFrom(equip(createPlayer(), { 0: id }), banshee), true, `item ${id}`);
+  }
+  assert.equal(Equipment.protectedFrom(equip(createPlayer(), { 0: 4164 }), banshee), false, "a facemask is no earmuffs");
+});
+
+function gearVictim(slots, hitpoints = 99) {
+  const current = new Map([["ATTACK", 99], ["DEFENCE", 99], ["STRENGTH", 99]]);
+  const player = equip(createPlayer(), slots);
+  player.isNpc = () => false;
+  const said = [];
+  player.forceChat = (text) => said.push(text);
+  player.said = said;
+  player.current = current;
+  player.getSkillManager = () => ({
+    getMaxLevel: (skill) => (skill === Skill.HITPOINTS ? hitpoints : 99),
+    getCurrentLevel: (skill) => current.get(skill.getName?.().toUpperCase?.()) ?? 99,
+    setCurrentLevel: (skill, level) => current.set(skill.getName?.().toUpperCase?.(), level),
+  });
+  return player;
+}
+
+function landedHit(monsterName, player) {
+  const monster = npcNamed(monsterName);
+  monster.isPlayer = () => false;
+  const roll = { attacker: monster, target: player, forceAccurate: false };
+  Equipment.hitRoll(roll);
+  const damage = { value: 2, setDamage(v) { this.value = v; } };
+  Equipment.incomingDamage(player, damage, { attacker: monster });
+  Equipment.hitResolved({ attacker: monster, target: player });
+  return { roll, damage: damage.value };
+}
+
+test("a sourhog without reinforced goggles hits 20-30, drains Attack and Defence by 90% and the player shouts", () => {
+  const player = gearVictim({});
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) {
+    const { roll, damage } = landedHit("Sourhog", gearVictim({}));
+    assert.equal(roll.forceAccurate, true);
+    seen.add(damage);
+  }
+  assert.ok([...seen].every((damage) => damage >= 20 && damage <= 30) && seen.size > 1, [...seen].join());
+  landedHit("Sourhog", player);
+  assert.equal(player.current.get("ATTACK"), 10);
+  assert.equal(player.current.get("DEFENCE"), 10);
+  assert.equal(player.current.get("STRENGTH"), 99, "only Attack and Defence drain");
+  assert.equal(player.said[0], "Argh! My eyes!");
+  for (const slots of [{ 0: core.ItemIdentifiers.REINFORCED_GOGGLES }, { 0: core.ItemIdentifiers.RED_SLAYER_HELMET_I_ }]) {
+    const safe = gearVictim(slots);
+    const { roll, damage } = landedHit("Sourhog", safe);
+    assert.equal(roll.forceAccurate, false);
+    assert.equal(damage, 2);
+    assert.equal(safe.current.get("ATTACK"), 99);
+    assert.deepEqual(safe.said, []);
+  }
+});
+
+test("a sourhog drains 90% of the current level, boosted or already drained", () => {
+  const boosted = gearVictim({});
+  boosted.current.set("ATTACK", 118);
+  landedHit("Sourhog", boosted);
+  assert.equal(boosted.current.get("ATTACK"), 12, "118 - floor(118 * 0.9)");
+  const drained = gearVictim({});
+  drained.current.set("DEFENCE", 10);
+  landedHit("Sourhog", drained);
+  assert.equal(drained.current.get("DEFENCE"), 1, "10 - 9");
+});
+
+test("a fever spider without Slayer gloves hits for 12.5% of the Hitpoints level", () => {
+  const bare = gearVictim({}, 99);
+  assert.equal(landedHit("Fever spider", bare).damage, 12);
+  assert.equal(landedHit("Fever spider", gearVictim({}, 10)).damage, 1);
+  const gloved = gearVictim({ 9: core.ItemIdentifiers.SLAYER_GLOVES_2 });
+  const { roll, damage } = landedHit("Fever spider", gloved);
+  assert.equal(roll.forceAccurate, false);
+  assert.equal(damage, 2);
+});
+
 test("kurask only take damage from leaf-bladed weapons", () => {
   const kurask = npcNamed("Kurask");
   const hitWith = (weapon) => {
@@ -494,6 +599,23 @@ test("kurask only take damage from leaf-bladed weapons", () => {
   };
   assert.equal(hitWith(4587), 0, "a dragon scimitar does nothing");
   assert.equal(hitWith(core.ItemIdentifiers.LEAF_BLADED_SWORD), 20);
+});
+
+// Wiki (Harpie Bug Swarm): a lit bug lantern "is required to damage these monsters (the lantern must be lit and
+// equipped)".
+test("a harpie bug swarm only takes damage while a lit bug lantern is worn", () => {
+  const swarm = npcNamed("Harpie Bug Swarm");
+  const hitWearing = (slots) => {
+    const player = equip(createPlayer(), slots);
+    let damage = 20;
+    const hit = { getAttacker: () => player, getCombatType: () => core.CombatType.MELEE, setTotalDamage: (value) => { damage = value; } };
+    player.getAsPlayer = () => player;
+    Equipment.npcHit({ npc: swarm, hit });
+    return damage;
+  };
+  assert.equal(hitWearing({ 3: 4587 }), 0, "no lantern: no damage");
+  assert.equal(hitWearing({ 3: 4587, 5: core.ItemIdentifiers.UNLIT_BUG_LANTERN }), 0, "an unlit lantern does nothing");
+  assert.equal(hitWearing({ 3: 4587, 5: core.ItemIdentifiers.LIT_BUG_LANTERN }), 20, "a lit lantern worn: the hit lands");
 });
 
 test("a gargoyle waits at 0 hitpoints for the rock hammer", () => {
@@ -531,6 +653,29 @@ test("a gargoyle waits at 0 hitpoints for the rock hammer", () => {
   const auto = { npc: fresh, preventDeath: false };
   Finishers.beforeDeath(auto);
   assert.equal(auto.preventDeath, false, "Gargoyle Smasher with a hammer finishes it");
+});
+
+test("a bag of salt or ice cooler is consumed when used too early, and salt works from 4 hitpoints", () => {
+  const player = createPlayer();
+  player.performAnimation = () => {};
+  const cases = [["Rockslug", 4161, 4, 5], ["Desert Lizard", 6696, 4, 5]];
+  for (const [name, item, threshold, early] of cases) {
+    player.inventory.push([item, 2]);
+    const npc = npcNamed(name);
+    let hitpoints = early;
+    Object.assign(npc, {
+      getAttribute: () => undefined, setAttribute() {},
+      getHitpoints: () => hitpoints, setHitpoints: (value) => { hitpoints = value; },
+      getCombat: () => ({ getKiller: () => player }),
+    });
+    Finishers.itemOnNpc({ player, target: npc, itemId: item, handled: false });
+    assert.match(player.messages.at(-1), /isn't weak enough/, name);
+    assert.equal(player.inventory.filter(([id]) => id === item).reduce((n, [, a]) => n + a, 0), 1, `${name}: the early use is consumed`);
+    hitpoints = threshold;
+    Finishers.itemOnNpc({ player, target: npc, itemId: item, handled: false });
+    assert.equal(player.messages.at(-1), require("../plugins/skills/data/slayer-finishers.json").finishers.find((f) => f.names.includes(name)).finished, name);
+    assert.equal(player.inventory.filter(([id]) => id === item).length, 0, `${name}: the finishing use is consumed`);
+  }
 });
 
 test("the rock hammer also finishes the Grotesque Guardians, each with its own line ('Dusk cracks apart.')", () => {
@@ -1189,5 +1334,83 @@ test("the Morytania Diary's Slayer XP also lifts Dusk's 1,350 on the Slayer Towe
     kill(player, npc(Common.ids.npcs.duskPhase4, { getX: () => 1697, getY: () => 4570, getZ: () => 0 }));
     assert.equal(varp(player, "slayer_count"), 4, "Dusk counted");
     assert.deepEqual(player.xp.map(([, amount]) => amount), [1350 * multiplier], `${tier} diary on the roof`);
+  }
+});
+
+// Wiki (Cave horror, Witchwood icon, Magical melee) and recordings 4053/4066/1846 (the howl, the steam-head animation).
+function caveHorrorFight({ baseHitpoints = 99, icon = false } = {}) {
+  const ctor = combatMethodProviders.find((entry) => entry.ids.includes(core.NpcIdentifiers.CAVE_HORROR))?.ctor;
+  const played = [];
+  const sent = [];
+  const player = createPlayer({ levels: { [Skill.HITPOINTS.getIndex()]: baseHitpoints } });
+  player.getAsPlayer = () => player;
+  player.performAnimation = (animation) => played.push(["player", animation.getId()]);
+  player.getEquipment = () => ({ get: () => (icon ? { getId: () => core.ItemIdentifiers.WITCHWOOD_ICON } : null) });
+  const npc = {
+    performAnimation: (animation) => played.push(["npc", animation.getId()]),
+    getAttackAnim: () => 4235,
+    getAttackSound: () => new core.Sound(1, 1, 0, 0),
+    getCombat: () => ({ getTarget: () => player }),
+  };
+  return { ctor, played, sent, player, npc };
+}
+
+test("cave horrors fight with their own per-attack combat method", () => {
+  const entry = combatMethodProviders.find((candidate) => candidate.ids.includes(core.NpcIdentifiers.CAVE_HORROR));
+  assert.deepEqual(entry.ids, [1047, 1048, 1049, 1050, 1051]);
+  assert.equal(entry.options.singleton, false);
+  const { ctor } = caveHorrorFight();
+  assert.equal(new ctor().accuracyDefenceType(core.CombatType.MELEE), core.CombatType.MAGIC, "magical melee rolls against Magic defence");
+  assert.equal(new ctor().type(), core.CombatType.MELEE, "and is blocked by Protect from Melee");
+});
+
+test("a cave horror screams every 4 ticks without a witchwood icon, for a tenth of the base Hitpoints level", () => {
+  for (const [base, expected] of [[99, 9], [94, 9], [89, 8], [9, 0]]) {
+    const { ctor, played, player, npc } = caveHorrorFight({ baseHitpoints: base });
+    const method = new ctor();
+    assert.equal(method.attackSpeed(npc), 4);
+    method.start(npc, player);
+    assert.deepEqual(played, [["npc", 4237], ["player", 2835]], "the howl and the steam-head animation");
+    assert.equal(CaveHorror.screamDamage(player), expected, `base ${base}`);
+  }
+});
+
+test("a witchwood icon turns the scream into a regular attack and a coin toss against the kick", () => {
+  const random = Math.random;
+  try {
+    Math.random = () => 0.25;
+    const scream = caveHorrorFight({ icon: true });
+    const screaming = new scream.ctor();
+    assert.equal(screaming.attackSpeed(scream.npc), 5, "a scream is followed by a 5-tick wait");
+    screaming.start(scream.npc, scream.player);
+    assert.deepEqual(scream.played, [["npc", 4237], ["player", 2835]]);
+    assert.equal(screaming.guaranteed, false, "the scream rolls as a regular attack");
+    assert.equal(screaming.playsBlockAnimation(), false, "the scream keeps its own player animation");
+
+    Math.random = () => 0.75;
+    const kick = caveHorrorFight({ icon: true });
+    const kicking = new kick.ctor();
+    assert.equal(kicking.attackSpeed(kick.npc), 4, "a kick is followed by a 4-tick wait");
+    kicking.start(kick.npc, kick.player);
+    assert.deepEqual(kick.played, [["npc", 4235]], "the kick is the horror's attack animation, with no steam head");
+  } finally {
+    Math.random = random;
+  }
+});
+
+test("the attack the speed was asked for is the attack that starts", () => {
+  const random = Math.random;
+  try {
+    const { ctor, played, player, npc } = caveHorrorFight({ icon: true });
+    Math.random = () => 0.75; // kick
+    const asked = new ctor();
+    asked.attackSpeed(npc);
+    Math.random = () => 0.25; // would be a scream if it were rolled again
+    new ctor().attackSpeed(npc);
+    const started = new ctor();
+    started.start(npc, player);
+    assert.deepEqual(played, [["npc", 4235]]);
+  } finally {
+    Math.random = random;
   }
 });

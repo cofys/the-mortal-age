@@ -1,5 +1,11 @@
 export type ShopCurrency = "COINS" | "BLOOD_MONEY" | "POINTS" | string;
 
+export interface ShopSalesPolicy {
+    generalStore?: boolean;
+    sellMultiplier?: number;
+    priceChangePer?: number;
+}
+
 export interface ShopStockDefinition {
     id: number;
     amount: number;
@@ -19,7 +25,8 @@ export class ShopDefinition {
         private readonly defaultDestockTicks: number,
         private readonly soldItemDestockTicks: number,
         private readonly source: string,
-        private readonly kingdomId: string | null = null
+        private readonly kingdomId: string | null = null,
+        private readonly salesPolicy: ShopSalesPolicy = {}
     ) {}
 
     public static replace(definitions: ShopDefinition[]): void {
@@ -81,5 +88,9 @@ export class ShopDefinition {
     /** The great-power kingdom this shop belongs to (from shops.json), or null if neutral/unknown. */
     public getKingdomId(): string | null {
         return this.kingdomId;
+    }
+
+    public getSalesPolicy(): Readonly<ShopSalesPolicy> {
+        return this.salesPolicy;
     }
 }

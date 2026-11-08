@@ -25,7 +25,8 @@
  * - `canAttack(player, target)`: false refuses (after sending its own message).
  * - `useChargeAt`: "canAttack" (default) or "start".
  * - `noChargesMessage`, `ranOutMessage`, `chargeUsed(player, staff, left)`, `emptied(player)`.
- * - `methodFlags`: properties copied onto the combat method for other content to read.
+ * - `methodFlags`: properties copied onto the combat method for other content to read. Every
+ *   staff's method carries `poweredStaff: true` (the dwarf multicannon's accuracy reads it).
  * - `swapWhenEmpty`: false keeps an emptied staff charged (a revenant weapon keeps its deposit).
  */
 
@@ -64,6 +65,16 @@ function definePoweredStaff(api, config) {
     if (charges > 0 && chargedByUncharged.has(id)) item.setId(chargedByUncharged.get(id));
     if (charges <= 0 && unchargedByCharged.has(id) && config.swapWhenEmpty !== false) item.setId(unchargedByCharged.get(id));
     return charges;
+  }
+
+  /**
+   * "item:fill-charges" { player, item, handled }: content that hands out a staff ready to use
+   * (the PvP Arena's load-outs) asks for a full one: charged, at its most charges.
+   */
+  function fillCharges(event) {
+    if (!isStaff(event.item?.getId?.())) return;
+    setCharges(event.item, config.maxCharges);
+    event.handled = true;
   }
 
   function spellFor(player) {
@@ -192,7 +203,7 @@ function definePoweredStaff(api, config) {
 
   function getMethod() {
     // Flags other content reads off the method (the Wilderness plugin's warpedSceptreBuiltInSpell).
-    return method ?? (method = Object.assign(buildMethod(), config.methodFlags ?? {}));
+    return method ?? (method = Object.assign(buildMethod(), { poweredStaff: true }, config.methodFlags ?? {}));
   }
 
   function resolve(attacker) {
@@ -232,6 +243,7 @@ function definePoweredStaff(api, config) {
     useCharge,
     chargesOf,
     setCharges,
+    fillCharges,
     weaponOf,
     wields,
     isStaff,

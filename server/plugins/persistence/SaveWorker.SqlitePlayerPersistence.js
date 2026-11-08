@@ -97,8 +97,8 @@ function takeBackup(database, databasePath, when = new Date()) {
 
 /**
  * Returns `write(message) -> answer` for a connection: `message.writes` are
- * `{ kind: "row", json }` (the player's save) and `{ kind: "history", json, reason }` (a copy),
- * validated and committed in one transaction. A `{ type: "backup" }` message snapshots the whole
+ * `{ kind: "row", json }` (the player's save) and `{ kind: "history", json, reason }` (a copy), and `{ kind: "delete", historyKey }` (removes the row and re-keys the
+ * player's history to `historyKey`), validated and committed in one transaction. A `{ type: "backup" }` message snapshots the whole
  * database instead (VACUUM INTO + rotation). The backend also uses this on the game thread if
  * the writer thread can't run.
  */
@@ -111,6 +111,7 @@ function createWriter(database, skillCount, databasePath) {
       save_json = excluded.save_json,
       updated_at = excluded.updated_at
   `);
+  const deleteRow = database.prepare("DELETE FROM player_saves WHERE username = ?");
   function commit({ username, savedAt, writes }) {
     for (const write of writes) {
       if (write.kind === "row") validateSerializedSave(write.json, username, skillCount);
@@ -119,7 +120,10 @@ function createWriter(database, skillCount, databasePath) {
     try {
       for (const write of writes) {
         if (write.kind === "row") writeRow.run(username, write.json, savedAt);
-        else history.record(username, write.json, write.reason, savedAt);
+        else if (write.kind === "delete") {
+          deleteRow.run(username);
+          history.rekey(username, write.historyKey);
+        } else history.record(username, write.json, write.reason, savedAt);
       }
       database.exec("COMMIT");
     } catch (error) {

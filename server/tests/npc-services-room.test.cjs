@@ -652,3 +652,297 @@ test('deferred Thormac enchanting preserves a newer native main shop', async t =
     const closed = resources(); await input(enchant); assert.deepEqual(resources(), closed, 'only closing332 ends the admitted service; stale clicks cannot bill another staff');
   });
 });
+
+
+// Declared preowned barter inputs; no Wintertodt rewards are earned in this test.
+test('Ignisia exchanges a glove for the full fifty owned burnt pages or refuses', async t => {
+  const GLOVE = 20712, PAGE = 20718, NPC = 7374, X = 1634, Y = 3948;
+  assert.equal(I.WARM_GLOVES, GLOVE); assert.equal(I.BURNT_PAGE, PAGE);
+  assert.equal(core.WorldDefinition.isMembersWorld(), true);
+  for (const [id, name, stackable] of [[GLOVE, 'Warm gloves', false], [PAGE, 'Burnt page', true]]) {
+    const definition = core.ItemDefinition.forId(id);
+    assert.equal(definition.getName(), name); assert.equal(definition.isNoted(), false);
+    assert.equal(definition.isStackable(), stackable);
+  }
+  const spawns = require('../data/definitions/npc-spawns.json');
+  assert.ok(spawns.some(n => n.id === NPC && n.name === 'Ignisia' && n.x === X && n.y === Y
+    && (n.level ?? 0) === 0 && n.wanderRadius === 0));
+  const cases = [
+    {name:'fifty headroom', gap:50, control:true},
+    {name:'fifty-one headroom', gap:51, control:true},
+    {name:'No at the real confirmation', gap:51, control:true, no:true},
+    {name:'no glove offers nothing', gap:51, control:true, noGlove:true},
+    {name:'full bag frees the glove slot', gap:MAX_STACK_AMOUNT, control:true, fullBag:true},
+    {name:'twenty-five headroom', gap:25},
+    {name:'full page stack', gap:0},
+  ];
+  let controlsPassed = 0;
+  for (const mode of cases) await t.test(mode.name, async child => {
+    if (!mode.control) assert.equal(controlsPassed, 5, 'all native controls qualify before a target');
+    const f = actor(child, {desertDiary:false}), p = f.p, inv = f.inv;
+    const sender = p.getPacketSender(), manager = p.getDialogueManager();
+    let turns = 0;
+    const turn = () => {
+      assert.ok(++turns <= 96, 'bounded native input/task/movement turns');
+      p.resetUpdating(); core.World.processCycle = (core.World.processCycle + 1) & 0x7fffffff;
+      core.TaskManager.process(); f.c.processTurnPackets();
+      const q = p.getMovementQueue(); q.beginCycle(); q.processEntityPursuit();
+      if (q.hasPendingWork()) q.process(); core.TaskManager.processWalkTo(p.getIndex());
+    };
+    const input = async packet => { await f.c.dispatch([packet]); for (let n = 0; n < 6; n++) turn(); };
+    const stores = id => ({inventory:inv.getAmount(id), equipment:p.getEquipment().getAmount(id),
+      banks:p.getBanks().reduce((sum,b,tab) => sum + (b && tab !== core.Bank.BANK_SEARCH_TAB_INDEX ? b.getAmount(id) : 0), 0),
+      floor:core.World.getItems().filter(g => !g.isPendingRemoval() && g.getOwner() === p.getUsername()
+        && g.getPrivateArea() === p.getPrivateArea() && g.getItem().getId() === id)
+        .reduce((sum,g) => sum + g.getItem().getAmount(), 0)});
+    const total = vector => Object.values(vector).reduce((sum,n) => sum+n, 0);
+    const xp = () => core.Skill.values().map(skill => p.getSkillManager().getExperience(skill));
+    const current = (Type, group) => {
+      const entry = manager.getCurrent(); assert.ok(entry instanceof Type);
+      assert.equal(sender.getChatboxGroupId(), group);
+      assert.equal(manager.getOwner(), undefined); assert.equal(sender.getChatboxOwner(), undefined);
+      const mount = sender.subInterfaceTargets.get(group); assert.ok(mount);
+      assert.equal(sender.getSubInterfaceAt(mount.targetUid), mount);
+      return entry;
+    };
+    const option = (title, options) => {
+      assert.equal(core.MultiChatboxPrompt.getPending(p), null, 'this is the native OptionDialogue route');
+      const entry = current(core.OptionDialogue, 219);
+      assert.equal(entry.getTitle(), title); assert.deepEqual(entry.getOptions(), options);
+      return entry;
+    };
+    const choose = number => input({type:'dialogue_continue', widgetId:core.OptionDialogue.OPTIONS_WIDGET_ID, childIndex:number});
+    assert.ok(p.isRegistered() && p.getHitpoints() > 0); assert.equal(p.getPrivateArea(), null);
+    assert.equal(total(stores(GLOVE)), 0); assert.equal(total(stores(PAGE)), 0);
+    if (!mode.noGlove) inv.add(plain(GLOVE), false);
+    if (MAX_STACK_AMOUNT-mode.gap > 0) inv.add(plain(PAGE, MAX_STACK_AMOUNT-mode.gap), false);
+    if (mode.fullBag) {
+      assert.equal(core.ItemDefinition.forId(229).getName(), 'Vial');
+      assert.equal(core.ItemDefinition.forId(229).isStackable(), false);
+      for (let n = 0; n < 27; n++) inv.add(plain(229), false);
+    }
+    inv.refreshItems();
+    const initialVials = stores(229);
+    assert.equal(inv.getAmount(GLOVE), mode.noGlove ? 0 : 1);
+    assert.equal(inv.getAmount(PAGE), MAX_STACK_AMOUNT-mode.gap);
+    for (const id of [GLOVE, PAGE]) {
+      const slot = inv.getSlotForItemId(id);
+      if (slot >= 0) assert.equal(inv.getItems()[slot].getMeta(), null);
+    }
+    assert.equal(inv.getAddableAmount(plain(PAGE, 50)), mode.fullBag ? 0 : Math.min(mode.gap,50));
+    assert.equal(inv.getFreeSlots(), mode.fullBag ? 0 : mode.noGlove ? 27 : 26, 'observed physical capacity before the trade');
+    const initial = {glove:stores(GLOVE), pages:stores(PAGE), xp:xp()};
+    core.RegionManager.loadMapFiles(X,Y);
+    const stand = [[0,-1],[0,1],[-1,0],[1,0]].map(([dx,dy]) => new core.Location(X+dx,Y+dy,0))
+      .find(at => !core.RegionManager.blocked(at,null));
+    assert.ok(stand, 'a collision-checked adjacent approach at the actual indexed spawn');
+    p.setLocation(stand); p.needsPlacement = false;
+    const npc = core.NPC.create(NPC, new core.Location(X,Y,0));
+    assert.equal(core.World.getNpcs().add(npc), true);
+    child.after(() => {
+      p.closeInterruptibleInterfaces(); PM.emitPlayerDisconnect({player:p, username:p.getUsername()});
+      core.TaskManager.cancelTasks(p); core.World.getNpcs().remove(npc);
+      for (const g of core.World.getItems().filter(g => g.getOwner() === p.getUsername())) core.ItemOnGroundManager.deregister(g);
+    });
+    const definition = npc.getCurrentDefinition(p); assert.equal(definition.getName(), 'Ignisia');
+    const clickType = definition.getActions().indexOf('Exchange')+1; assert.ok(clickType > 0, 'actual cache Exchange operation');
+    await input({type:'npc_option', index:npc.getIndex(), clickType});
+    const greeting = current(core.NpcDialogue,231);
+    assert.equal(greeting.getNpcId(), NPC);
+    assert.equal(greeting.getText().replace(/\s+/g,' ').trim(), 'Do you have something for me?');
+    assert.deepEqual({glove:stores(GLOVE),pages:stores(PAGE),xp:xp()}, initial);
+    await input({type:'dialogue_continue', widgetId:(231<<16)|5, childIndex:-1});
+    option(undefined, ['Yes, I do.', 'Err... nope. Sorry.']); await choose(1);
+    if (mode.noGlove) {
+      assert.equal(manager.isActive(), false); assert.equal(core.MultiChatboxPrompt.getPending(p), null);
+      assert.deepEqual({glove:stores(GLOVE),pages:stores(PAGE),xp:xp()}, initial);
+      controlsPassed++; return;
+    }
+    option('What would you like to trade for?', ['Extra Crate.', 'Burnt Pages.']); await choose(2);
+    option('Trade in 1x Warm gloves for 50x burnt pages?', ['Yes.', 'No.']);
+    assert.equal(inv.getAmount(GLOVE), 1, 'the same declared glove is still carried at the actual confirmation');
+    assert.equal(inv.getAddableAmount(plain(PAGE,50)), mode.fullBag ? 0 : Math.min(mode.gap,50));
+    assert.deepEqual({glove:stores(GLOVE),pages:stores(PAGE),xp:xp()}, initial);
+    await choose(mode.no ? 2 : 1);
+    const after = {glove:stores(GLOVE),pages:stores(PAGE),xp:xp()};
+    const spent = total(initial.glove)-total(after.glove), credited = total(after.pages)-total(initial.pages);
+    // First economic target: the fixed invoice is fully delivered across owned stores or refused atomically.
+    assert.equal(credited, spent*50, 'fixed fifty-page barter must conserve: '+JSON.stringify({mode:mode.name,initial,after,spent,credited}));
+    assert.ok(spent === 0 || spent === 1);
+    if (mode.control && !mode.no) { assert.equal(spent,1); assert.equal(credited,50); }
+    if (mode.no) assert.deepEqual(after, initial);
+    assert.deepEqual(after.xp, initial.xp);
+    assert.deepEqual(stores(229), initialVials, 'barter retains all declared filler items');
+    if (mode.control) {
+      assert.equal(manager.isActive(), false); assert.equal(core.MultiChatboxPrompt.getPending(p), null);
+      controlsPassed++;
+    }
+  });
+});
+
+
+// An older terminal conversation may open its menu next tick, but cannot own a newer completed main.
+test('deferred Loinur menu preserves a completed newer native price checker', async t => {
+  const { ItemContainer } = require('../dist/game/model/container/ItemContainer');
+  const NPC = 7231, X = 1670, Y = 3834, MENU = 187, CHECKER = 464, SIDE = 238;
+  const MAIN_TARGET = (161 << 16) | 16, SIDE_TARGET = (161 << 16) | 74;
+  const PRICE_BUTTON = (387 << 16) | 3;
+  const norm = text => String(text).replace(/\s+/g, ' ').trim();
+  const data = require('../plugins/world/data/lovakengj-minecarts.json');
+  const spawns = require('../data/definitions/npc-spawns.json');
+  assert.ok(spawns.some(n => n.id === NPC && n.name === 'Loinur' && n.x === X && n.y === Y && n.level === 0));
+  assert.equal(core.WorldDefinition.isMembersWorld(), true);
+  assert.equal(core.CacheDefinitions.getNpcId('lovakengj_minecart_arceuus'), NPC);
+  assert.equal(core.CacheDefinitions.getInterfaceId('menu'), MENU);
+  assert.equal(core.CacheDefinitions.getInterfaceId('ge_pricechecker'), CHECKER);
+  assert.equal(core.CacheDefinitions.getInterfaceId('ge_pricechecker_side'), SIDE);
+  assert.equal(core.CacheDefinitions.getComponentId('wornitems:pricechecker'), PRICE_BUTTON);
+  const cases = ['stationary destination menu', 'direct price checker', 'newer price checker'];
+  let controlsPassed = 0;
+  for (const mode of cases) await t.test(mode, async child => {
+    if (mode === 'newer price checker') assert.equal(controlsPassed, 2);
+    const f = actor(child, {desertDiary:false}), p = f.p, sender = p.getPacketSender();
+    const { MAIN_PROFILE } = require('../dist/game/entity/impl/player/persistence/PlayerProfile');
+    assert.equal(p.getProfile(), MAIN_PROFILE); assert.equal(p.isPlayerBot(), false);
+    assert.equal(p.getAttribute(Progress.TASKS_ATTRIBUTE), undefined, 'no diary eligibility was injected');
+    const manager = p.getDialogueManager(), submitted = [], actions = [], widgets = [], completed = [], scripts = [];
+    let npc, inAction = false, turns = 0, executed = 0, returned = 0;
+    child.after(() => {
+      // These are references submitted by this actual action, not the shared DEFAULT_KEY bucket.
+      for (const task of submitted) task.stop();
+      p.closeInterruptibleInterfaces();
+      if (npc) core.World.getNpcs().remove(npc);
+      for (const g of core.World.getItems().filter(g => g.getOwner() === p.getUsername())) core.ItemOnGroundManager.deregister(g);
+    });
+    const items = container => container ? container.getItems().flatMap((item, slot) => item?.getId() > 0 && item.getAmount() > 0
+      ? [{slot, id:item.getId(), amount:item.getAmount(), meta:item.getMeta()}] : []) : [];
+    const resources = () => ({inventory:items(f.inv), equipment:items(p.getEquipment()),
+      banks:p.getBanks().flatMap((bank, tab) => bank && tab !== core.Bank.BANK_SEARCH_TAB_INDEX ? [{tab, items:items(bank)}] : []),
+      floor:core.World.getItems().filter(g => !g.isPendingRemoval() && g.getOwner() === p.getUsername()
+        && g.getPrivateArea() === p.getPrivateArea()).map(g => ({id:g.getItem().getId(), amount:g.getItem().getAmount(), meta:g.getItem().getMeta()})),
+      checker:items(p.__priceCheckerContainer), xp:core.Skill.values().map(skill => p.getSkillManager().getExperience(skill))});
+    const turn = () => {
+      assert.ok(++turns <= 80, 'bounded native global/input/movement phases');
+      p.resetUpdating(); core.World.processCycle = (core.World.processCycle + 1) & 0x7fffffff;
+      core.TaskManager.process(); f.c.processTurnPackets();
+      const q = p.getMovementQueue(); q.beginCycle(); q.processEntityPursuit();
+      if (q.hasPendingWork()) q.process(); core.TaskManager.processWalkTo(p.getIndex());
+    };
+    const input = async packet => { await f.c.dispatch([packet]); for (let n = 0; n < 6; n++) turn(); };
+    const current = (Type, group, text) => {
+      const entry = manager.getCurrent(); assert.ok(entry instanceof Type);
+      assert.equal(norm(entry.getText()), text); assert.equal(sender.getChatboxGroupId(), group);
+      assert.equal(manager.getOwner(), undefined); assert.equal(sender.getChatboxOwner(), undefined);
+      const mount = sender.subInterfaceTargets.get(group); assert.ok(mount);
+      assert.equal(sender.getSubInterfaceAt(mount.targetUid), mount);
+      if (entry instanceof core.NpcDialogue) assert.equal(entry.getNpcId(), NPC);
+      return entry;
+    };
+    const resume = group => ({type:'dialogue_continue', widgetId:(group << 16) | 5, childIndex:-1});
+    const pricePacket = {type:'widget_action', widgetId:PRICE_BUTTON, groupId:387, childId:3, buttonNum:1};
+    const emit = PM.emitCustomEvent;
+    child.mock.method(PM, 'emitCustomEvent', function(name, event) {
+      if (name === 'npc-dialogue:action' && event.player === p && event.stepId === '6kP-8W') {
+        inAction = true;
+        try { const result = emit.call(this, name, event); actions.push({event, cycle:core.World.getProcessCycle()}); return result; }
+        finally { inAction = false; }
+      }
+      if (name === 'player:widget-action' && event.player === p && event.packet.widgetId === PRICE_BUTTON) {
+        const observation = {before:event.handled, cycle:core.World.getProcessCycle()};
+        const result = emit.call(this, name, event); observation.after = event.handled; widgets.push(observation); return result;
+      }
+      return emit.call(this, name, event);
+    });
+    const submit = core.TaskManager.submit;
+    child.mock.method(core.TaskManager, 'submit', function(task) {
+      const result = submit.call(this, task);
+      if (inAction && task.pluginName === 'LovakengjMinecarts') submitted.push(task);
+      return result;
+    });
+    const click = PM.emitInterfaceActionClick;
+    child.mock.method(PM, 'emitInterfaceActionClick', function(event) {
+      const result = click.call(this, event);
+      if (event.player === p && event.buttonId === PRICE_BUTTON) completed.push({result, handled:event.handled,
+        cycle:core.World.getProcessCycle(), mount:sender.getSubInterfaceAt(MAIN_TARGET), side:sender.getSubInterfaceAt(SIDE_TARGET),
+        interfaceId:p.getInterfaceId(), status:p.getStatus(), container:p.__priceCheckerContainer});
+      return result;
+    });
+    const clientScript = sender.sendClientScript;
+    child.mock.method(sender, 'sendClientScript', function(...args) { scripts.push(args); return clientScript.apply(this, args); });
+    assert.equal(f.inv.getAmount(I.COINS), 0); f.inv.add(plain(I.COINS,20), false); f.inv.refreshItems();
+    assert.equal(f.inv.getAmount(I.COINS), 20); assert.equal(f.inv.getItems()[f.inv.getSlotForItemId(I.COINS)].getMeta(), null);
+    assert.equal(p.getPrivateArea(), null); assert.ok(p.isRegistered() && p.getHitpoints() > 0);
+    const initial = resources();
+    const checker = () => {
+      assert.equal(widgets.length,1); assert.equal(widgets[0].before,false); assert.equal(widgets[0].after,false);
+      assert.equal(completed.length,1); assert.equal(completed[0].result,true);
+      assert.equal(p.getInterfaceId(),CHECKER); assert.equal(p.getStatus(),core.PlayerStatus.PRICE_CHECKING);
+      const mount = sender.getSubInterfaceAt(MAIN_TARGET), side = sender.getSubInterfaceAt(SIDE_TARGET);
+      assert.ok(mount && side); assert.equal(mount.groupId,CHECKER); assert.equal(side.groupId,SIDE);
+      assert.ok(Object.isFrozen(mount) && Object.isFrozen(side));
+      assert.equal(completed[0].mount,mount); assert.equal(completed[0].side,side);
+      assert.equal(completed[0].interfaceId,CHECKER); assert.equal(completed[0].status,core.PlayerStatus.PRICE_CHECKING);
+      const container = p.__priceCheckerContainer;
+      assert.ok(container instanceof ItemContainer); assert.equal(container.getPlayer(),p);
+      assert.equal(container.capacity(),28); assert.deepEqual(container.getValidItems(),[]);
+      assert.equal(completed[0].container,container); return {mount,side,container};
+    };
+    if (mode === 'direct price checker') {
+      await input(pricePacket); const opened = checker();
+      turn(); assert.equal(sender.getSubInterfaceAt(MAIN_TARGET),opened.mount);
+      assert.deepEqual(resources(),initial); assert.equal(submitted.length,0); assert.equal(actions.length,0);
+      controlsPassed++; return;
+    }
+    core.RegionManager.loadMapFiles(X,Y);
+    const stand = [[0,-1],[0,1],[-1,0],[1,0]].map(([dx,dy]) => new core.Location(X+dx,Y+dy,0))
+      .find(at => !core.RegionManager.blocked(at,null));
+    assert.ok(stand, 'a collision-checked adjacent tile at the canonical conductor spawn');
+    p.setLocation(stand); p.needsPlacement = false;
+    npc = core.NPC.create(NPC,new core.Location(X,Y,0)); assert.equal(core.World.getNpcs().add(npc),true);
+    const definition = npc.getCurrentDefinition(p); assert.equal(definition.getName(),'Loinur');
+    const clickType = definition.getActions().indexOf('Talk-to')+1; assert.ok(clickType > 0);
+    await input({type:'npc_option',index:npc.getIndex(),clickType});
+    current(core.NpcDialogue,231,'Can I help you today?'); await input(resume(231));
+    const pending = core.MultiChatboxPrompt.getPending(p);
+    assert.ok(pending); assert.equal(pending.title,'Select an option');
+    assert.deepEqual(pending.options,['Can I go for a ride?', "I'm fine, thanks."]);
+    assert.equal(manager.getCurrent(),undefined); assert.equal(manager.getOwner(),undefined);
+    assert.equal(sender.getChatboxOwner(),undefined); assert.equal(sender.getChatboxGroupId(),219);
+    const optionMount = sender.subInterfaceTargets.get(219); assert.ok(optionMount);
+    assert.equal(sender.getSubInterfaceAt(optionMount.targetUid),optionMount);
+    await input({type:'dialogue_continue',widgetId:core.MultiChatboxPrompt.OPTIONS_WIDGET_ID,
+      childIndex:pending.options.indexOf('Can I go for a ride?')+1});
+    current(core.PlayerDialogue,217,'Can I go for a ride?'); await input(resume(217));
+    current(core.NpcDialogue,231,'Of course.'); assert.equal(submitted.length,0); assert.equal(actions.length,0);
+    assert.deepEqual(resources(),initial);
+    // Both decoded packets are drained synchronously in ONE actual player's input phase.
+    await f.c.dispatch(mode === 'newer price checker' ? [resume(231),pricePacket] : [resume(231)]);
+    turn();
+    assert.equal(actions.length,1); assert.equal(actions[0].event.handled,true); assert.equal(actions[0].event.end,true);
+    assert.equal(actions[0].event.npcId,NPC); assert.equal(actions[0].event.text,'(Lovakengj Minecart Network interface opens.)');
+    assert.equal(submitted.length,1); const task = submitted[0];
+    assert.equal(task.key,core.Task.DEFAULT_KEY); assert.equal(task.getDelay(),1); assert.equal(task.getRemainingTicks(),1);
+    assert.equal(task.isImmediate(),false); assert.equal(task.isRunning(),true);
+    const execute = task.execute;
+    child.mock.method(task,'execute',function() { executed++; const result = execute.call(this); returned++; return result; });
+    let opened;
+    if (mode === 'newer price checker') {
+      opened = checker(); assert.equal(actions[0].cycle,widgets[0].cycle); assert.equal(widgets[0].cycle,completed[0].cycle);
+      assert.deepEqual(resources(),initial); assert.equal(task.isRunning(),true);
+    }
+    assert.equal(executed,0); assert.equal(returned,0);
+    turn();
+    assert.equal(executed,1); assert.equal(returned,1); assert.equal(task.isStopped(),true);
+    if (mode === 'stationary destination menu') {
+      assert.equal(p.getInterfaceId(),MENU); assert.equal(sender.getSubInterfaceAt(MAIN_TARGET)?.groupId,MENU);
+      assert.ok(scripts.some(args => args[0] === 217 && args[1] === 1 && args[2] === data.menuTitle
+        && args[3] === data.stations.map(station => station.label).join('|')));
+      assert.deepEqual(resources(),initial); controlsPassed++; return;
+    }
+    // First lifetime target; subsequent state/resource/XP checks remain UNREACHED on an earlier failure.
+    assert.equal(sender.getSubInterfaceAt(MAIN_TARGET),opened.mount,'the completed newer main lifetime survives the older queued menu');
+    assert.equal(p.getInterfaceId(),CHECKER); assert.equal(p.getStatus(),core.PlayerStatus.PRICE_CHECKING);
+    assert.equal(sender.getSubInterfaceAt(SIDE_TARGET),opened.side); assert.equal(p.__priceCheckerContainer,opened.container);
+    assert.deepEqual(resources(),initial);
+  });
+});

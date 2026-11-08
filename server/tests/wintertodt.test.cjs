@@ -64,6 +64,8 @@ function container(size) {
   const self = {
     slots,
     getItems: () => slots.map(view),
+    // Plain mock slots copied as real Items for Ignisia's native inventory preflight.
+    getCopiedItems: () => slots.map(slot => new (Shared.core().Item)(slot?.id ?? -1, slot?.amount ?? 0)),
     setItem(slot, item) {
       const id = item?.getId?.() ?? -1;
       slots[slot] = id > 0 ? { id, amount: item.getAmount?.() || 1 } : null;
@@ -410,6 +412,27 @@ test('cold hits take ten times their hitsplat from warmth, show on bar 79, and k
   assert.deepEqual(player.damage, [99], 'a hit for all your hitpoints');
 });
 
+test('warmth dropping below 10% asks the ring of life to save the player; 10% and 0% do not', () => {
+  const player = fighter('Lifesaver');
+  startRound();
+  const asked = [];
+  (hooks.custom['ring-of-life:activate'] ??= []).push((request) => asked.push(request.player));
+  const cost = Warmth.damageFor(player, 'standard') * 10;
+  Warmth.setWarmth(player, 100 + cost);
+  Warmth.hurt(player, 'standard', Attacks.COLD_MESSAGE);
+  assert.equal(Warmth.warmthOf(player), 100);
+  assert.deepEqual(asked, [], 'exactly 10% is not below it');
+  Warmth.setWarmth(player, 99 + cost);
+  Warmth.hurt(player, 'standard', Attacks.COLD_MESSAGE);
+  assert.equal(Warmth.warmthOf(player), 99);
+  assert.deepEqual(asked, [player], 'wiki: a ring of life will activate if warmth drops below 10%');
+  Warmth.setWarmth(player, cost);
+  Warmth.hurt(player, 'standard', Attacks.COLD_MESSAGE);
+  assert.equal(Warmth.warmthOf(player), 0);
+  assert.deepEqual(asked, [player], 'dropping to 0% is instant death, not a save');
+  hooks.custom['ring-of-life:activate'].pop();
+});
+
 test('warmth regenerates 8% a minute plus 1% per warm item; food and potions restore it', () => {
   const player = fighter('Thawing');
   for (const id of [I.PYROMANCER_HOOD, I.PYROMANCER_GARB]) player.equipment.adds(id);
@@ -455,6 +478,38 @@ test('lighting needs a tinderbox or torch and a healthy pyromancer; it pays 25 p
   Corners.setBrazier(SW, Shared.BRAZIER.UNLIT);
   hooks.objects.Brazier.Light({ player: torch, object: swBrazier });
   assert.equal(torch.animations.at(-1), Shared.ANIM.LIGHT_TORCH, 'capture: 7174 with the bruma torch');
+});
+
+test('the pyromancer outfit raises the Firemaking XP of lighting and feeding, and no other skill', () => {
+  // The Firemaking plugin answers "firemaking:xp-multiplier" with the outfit's bonus.
+  const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+  const api = fakeApi();
+  require('../plugins/skills/Firemaking.plugin').register({
+    ...api,
+    getTaskManager: () => ({ submit() {} }),
+    getObjectManager: () => ({ register() {}, deregister() {} }),
+    getItemOnGroundManager: () => ({ registerLocation() {}, getGroundItem() {}, deregister() {} }),
+    getWorld: () => ({ getObjects: () => [] }),
+    onPlayerDisconnect() {}, onItemOnItem() {}, onItemOnGroundItem() {}, onGroundItemClick() {}, log() {},
+  });
+  startRound();
+  Corners.setBrazier(SW, Shared.BRAZIER.UNLIT);
+  const dressed = fighter('Pyromancer');
+  const Item = Shared.core().Item;
+  dressed.inventory.adds(Shared.ITEM.TINDERBOX);
+  dressed.inventory.adds(Shared.ITEM.BRUMA_KINDLING, 1);
+  dressed.equipment.setItem(Equipment.HEAD_SLOT, new Item(I.PYROMANCER_HOOD, 1));
+  hooks.objects.Brazier.Light({ player: dressed, object: swBrazier });
+  ticks(3);
+  assert.equal(dressed.xp, 6 * 99 * 1.004, 'the hood alone: 0.4% on the 6x lighting XP');
+  dressed.equipment.setItem(Equipment.BODY_SLOT, new Item(I.PYROMANCER_GARB, 1));
+  dressed.equipment.setItem(Equipment.LEG_SLOT, new Item(I.PYROMANCER_ROBE, 1));
+  dressed.equipment.setItem(Equipment.FEET_SLOT, new Item(I.PYROMANCER_BOOTS, 1));
+  dressed.xp = 0;
+  hooks.objects['Burning brazier'].Feed({ player: dressed, object: swBrazier });
+  ticks(3);
+  assert.equal(dressed.xp, 99 * 3.8 * 1.025, 'the full set: 2.5% on feeding kindling');
+  assert.equal(dressed.xpBySkill.Construction ?? 0, 0);
 });
 
 test('feeding burns kindling first, then roots, one every 3 ticks, until they run out', () => {

@@ -140,7 +140,7 @@ function loc(name) {
   return core.CacheDefinitions.getLocId(name);
 }
 
-function createPlayer({ pickaxe = ItemIds.RUNE_PICKAXE, level = 99, full = false, amulet = -1 } = {}) {
+function createPlayer({ pickaxe = ItemIds.RUNE_PICKAXE, level = 99, full = false, amulet = -1, worn = {}, at = [3285, 3367] } = {}) {
   const attributes = new Map();
   const packets = { sounds: [], configs: [], scripts: [] };
   const added = [];
@@ -170,7 +170,11 @@ function createPlayer({ pickaxe = ItemIds.RUNE_PICKAXE, level = 99, full = false
       add: (item) => added.push([item.getId(), item.getAmount()]),
       getItems: () => [],
     }),
-    getEquipment: () => ({ getItems: () => (amulet > 0 ? [null, null, { getId: () => amulet }] : []) }),
+    getEquipment: () => {
+      const items = amulet > 0 ? [null, null, { getId: () => amulet }] : [];
+      for (const [slot, id] of Object.entries(worn)) items[slot] = { getId: () => id };
+      return { getItems: () => items };
+    },
     getSkillManager: () => ({
       getCurrentLevel: () => level,
       addExperiences: (skill, amount) => xp.push([skill, amount]),
@@ -179,7 +183,7 @@ function createPlayer({ pickaxe = ItemIds.RUNE_PICKAXE, level = 99, full = false
     getForceMovement: () => null,
     getHitpoints: () => 10,
     isRegistered: () => true,
-    getLocation: () => new core.Location(3285, 3367, 0),
+    getLocation: () => new core.Location(at[0], at[1], 0),
     sendMessage(text) { player.messages.push(text); },
     performAnimation(animation) { player.animations.push(animation.getId()); },
     performGraphic(graphic) { player.graphics.push([graphic.id, graphic.height]); },
@@ -233,6 +237,42 @@ test("rock level, experience and respawn follow the Wiki rock pages", () => {
   for (const [name, [level, xp, respawn]] of Object.entries(expected)) {
     const rock = byName.get(name);
     assert.deepEqual([rock.level, rock.xp, rock.respawnTicks], [level, xp, respawn], name);
+  }
+});
+
+// Wiki Prospector_outfit: helmet 0.4%, jacket 0.8%, legs 0.6%, boots 0.2% and 0.5% for the set (2.5%);
+// golden pieces count the same; Varrock_armour_4 "acts as a prospector jacket in terms of XP bonus".
+test("the prospector outfit adds its Wiki Mining XP to every ore, extra ores included", () => {
+  const I = core.ItemIdentifiers, E = core.Equipment;
+  const slots = { head: E.HEAD_SLOT, body: E.BODY_SLOT, legs: E.LEG_SLOT, feet: E.FEET_SLOT };
+  const outfits = [
+    [{}, 35],
+    [{ [slots.head]: I.PROSPECTOR_HELMET }, 35 * 1.004],
+    [{ [slots.head]: I.PROSPECTOR_HELMET, [slots.body]: I.PROSPECTOR_JACKET }, 35 * 1.012],
+    [{ [slots.body]: I.GOLDEN_PROSPECTOR_JACKET, [slots.legs]: I.PROSPECTOR_LEGS_3 }, 35 * 1.014],
+    [{ [slots.head]: I.PROSPECTOR_HELMET, [slots.body]: I.PROSPECTOR_JACKET, [slots.legs]: I.PROSPECTOR_LEGS,
+      [slots.feet]: I.PROSPECTOR_BOOTS }, 35 * 1.025],
+    [{ [slots.head]: I.GOLDEN_PROSPECTOR_HELMET, [slots.body]: I.PROSPECTOR_JACKET, [slots.legs]: I.GOLDEN_PROSPECTOR_LEGS,
+      [slots.feet]: I.PROSPECTOR_BOOTS_2 }, 35 * 1.025],
+    [{ [slots.head]: I.PROSPECTOR_HELMET, [slots.body]: I.VARROCK_ARMOUR_4, [slots.legs]: I.PROSPECTOR_LEGS,
+      [slots.feet]: I.PROSPECTOR_BOOTS }, 35 * 1.025],
+    [{ [slots.body]: I.VARROCK_ARMOUR_3 }, 35],
+  ];
+  for (const [worn, expected] of outfits) {
+    // A Mining cape's extra ore gives the same XP again, with the same outfit bonus (Varrock_armour_4 changes).
+    const h = harness({ emit: (key, request) => { if (key === "mining:extra-ore") request.bonuses.push({}); } });
+    const player = createPlayer({ worn });
+    const originalRandom = Math.random;
+    Math.random = () => 0;
+    const { restore } = mineRock(h, player, "Iron rocks", loc("ironrock2"));
+    try {
+      h.tick(9);
+      assert.deepEqual(player.xp.length, 2, JSON.stringify(worn));
+      for (const [, amount] of player.xp) assert.ok(Math.abs(amount - expected) < 1e-9, JSON.stringify(worn));
+    } finally {
+      Math.random = originalRandom;
+      restore();
+    }
   }
 });
 
@@ -563,7 +603,6 @@ test("dragon, infernal and crystal pickaxes sometimes roll a tick early on membe
   // Face 40 (0.158): under the dragon's 1/6 and the crystal's 1/4, so every interval is 2 ticks.
   for (const pickaxe of [ItemIds.DRAGON_PICKAXE, ItemIds.INFERNAL_PICKAXE, ItemIds.CRYSTAL_PICKAXE]) {
     assert.deepEqual(rollTicks({ pickaxe, rest: face(40) }), [2, 4, 6, 8, 10, 12], `pickaxe ${pickaxe}`);
-    assert.deepEqual(rollTicks({ pickaxe, rest: face(40), members: false }), [2, 5, 8, 11], `pickaxe ${pickaxe} on F2P`);
   }
   // Face 50 (0.197): past the dragon's 1/6, still under the crystal's 1/4.
   assert.deepEqual(rollTicks({ pickaxe: ItemIds.DRAGON_PICKAXE, rest: face(50) }), [2, 5, 8, 11]);
@@ -585,6 +624,11 @@ test("\"mining:roll-interval\" answers other mining content with the pickaxe's i
     Math.random = () => 0.1;
     assert.equal(ask({ attemptIntervalTicks: 3, fastRollChance: 1 / 6 }), 2, "a dragon pickaxe's early roll");
     assert.equal(ask({ attemptIntervalTicks: 3 }), 3, "a rune pickaxe never rolls early");
+    core.WorldDefinition.isMembersWorld = () => false;
+    for (const chance of [1 / 6, 1 / 4]) {
+      assert.equal(ask({ attemptIntervalTicks: 3, fastRollChance: chance }), 3, "a virtual fast profile does not roll early on F2P");
+    }
+    core.WorldDefinition.isMembersWorld = () => true;
     Math.random = () => 0.5;
     assert.equal(ask({ attemptIntervalTicks: 3, fastRollChance: 1 / 6 }), 3);
   } finally {
@@ -624,6 +668,72 @@ test("invisible boosts count past 99, a visible boost does not (Wiki Skilling su
     try {
       h.tick(2);
       assert.equal(player.added.length, expected, `level ${level} + ${boost}`);
+    } finally {
+      restoreRandom();
+      restore();
+    }
+  }
+});
+
+/** The Mining Guild plugin's handlers for the events Mining asks, wired like the plugin manager does. */
+function guildEvents() {
+  const handlers = new Map();
+  require("../plugins/areas/MiningGuild.plugin").register(new Proxy({
+    core,
+    onCustomEvent: (key, fn) => handlers.set(key, [...(handlers.get(key) ?? []), fn]),
+  }, { get: (target, key) => target[key] ?? noop }));
+  return (key, request) => { for (const fn of handlers.get(key) ?? []) fn(request); };
+}
+
+test("Mining Guild members' area (Wiki; recording 3285): iron empties for 4 ticks instead of 9, the timer says so", () => {
+  const emit = guildEvents();
+  for (const [x, y, ticks] of [[3030, 9720, 4], [3028, 9720, 4], [3032, 9737, 9]]) {
+    const h = harness({ emit });
+    const player = createPlayer({ at: [x - 1, y] });
+    const restoreRandom = scriptRandom([], 0);
+    const { rock, restore } = mineRock(h, player, "Iron rocks", loc("ironrock1"), x, y);
+    try {
+      for (let tick = 0; tick < 20 && !h.registered.length; tick++) h.tick(1);
+      assert.equal(h.registered.length, 1, "mined out");
+      assert.equal(player.packets.scripts.at(-1)[5], ticks, `timer at ${x},${y}`);
+      h.tick(ticks - 1);
+      assert.equal(h.registered.at(-1) === rock, false, "still empty a tick before");
+      h.tick(1);
+      assert.equal(h.registered.at(-1), rock, `back after ${ticks} ticks`);
+    } finally {
+      restoreRandom();
+      restore();
+    }
+  }
+});
+
+test("Mining Guild members' area (Wiki rock pages; 3285): half the respawn for its rocks, amethyst keeps 75 s", () => {
+  const emit = guildEvents();
+  const object = (x, y) => ({ getLocation: () => new core.Location(x, y, 0) });
+  const ticksFor = (rock, x, y, ticks) => { const request = { object: object(x, y), rock, ticks }; emit("mining:respawn-ticks", request); return request.ticks; };
+  // Members' area: iron 5.4 s -> 2.4 s, mithril 2 min -> 1 min (99 in 3285), adamantite 4 -> 2 min, runite 12 -> 6 min.
+  assert.deepEqual([ticksFor("Iron rocks", 3030, 9720, 9), ticksFor("Mithril rocks", 3032, 9716, 200),
+    ticksFor("Adamantite rocks", 3039, 9722, 400), ticksFor("Runite rocks", 3056, 9721, 1200)], [4, 100, 200, 600]);
+  assert.equal(ticksFor("Amethyst crystals", 3023, 9698, 125), 125, "amethyst's Wiki time is already the guild's");
+  // The free-to-play half, the corridors' far ends and the surface keep the normal time.
+  assert.deepEqual([ticksFor("Mithril rocks", 3046, 9733, 200), ticksFor("Adamantite rocks", 3034, 9732, 400),
+    ticksFor("Iron rocks", 3032, 9737, 9), ticksFor("Iron rocks", 3285, 3368, 9)], [200, 400, 9, 9]);
+});
+
+test("Mining Guild members' area (Wiki Mining Guild): an invisible +7 Mining on the success rolls, only inside it", () => {
+  const emit = guildEvents();
+  const boost = (x, y) => { const request = { player: createPlayer({ at: [x, y] }), boost: 0 }; emit("mining:level-boost", request); return request.boost; };
+  assert.deepEqual([boost(3025, 9721), boost(3019, 9731), boost(3043, 9729), boost(3001, 9711)], [7, 7, 7, 7]);
+  assert.deepEqual([boost(3034, 9737), boost(3019, 9734), boost(3043, 9730), boost(3025, 3338)], [0, 0, 0, 0]);
+  // Runite is 19/256 at 99 and 20/256 at 106: face 19 only lands with the guild's +7 on a level 99.
+  for (const [at, expected] of [[[3030, 9726], 1], [[3034, 9737], 0]]) {
+    const h = harness({ emit });
+    const player = createPlayer({ level: 99, at });
+    const restoreRandom = scriptRandom([0, face(19)]);
+    const { restore } = mineRock(h, player, "Runite rocks", loc("runiterock1"), at[0] + 1, at[1]);
+    try {
+      h.tick(2);
+      assert.equal(player.added.length, expected, `standing at ${at}`);
     } finally {
       restoreRandom();
       restore();
@@ -1418,5 +1528,101 @@ test("sulphur mining stops when the breathing filter is removed before the roll"
     assert.equal(player.xp.length, 0);
   } finally {
     restore();
+  }
+});
+
+test("free worlds skip members pickaxes and keep the best free tool", () => {
+  const original = core.WorldDefinition.isMembersWorld;
+  try {
+    core.WorldDefinition.isMembersWorld = () => false;
+    harness();
+    assert.equal(core.CacheDefinitions.getItem(ItemIds.DRAGON_PICKAXE).isMembers, true);
+    assert.equal(core.CacheDefinitions.getItem(ItemIds.BRONZE_PICKAXE).isMembers, false);
+    const player = createPlayer({ pickaxe: ItemIds.DRAGON_PICKAXE });
+    const inventory = player.getInventory();
+    inventory.contains = id => id === ItemIds.DRAGON_PICKAXE || id === ItemIds.BRONZE_PICKAXE;
+    player.getInventory = () => inventory;
+    assert.equal(Mining.findBestPickaxe(player)?.id, ItemIds.BRONZE_PICKAXE);
+    core.WorldDefinition.isMembersWorld = () => true;
+    assert.equal(Mining.findBestPickaxe(player)?.id, ItemIds.DRAGON_PICKAXE);
+  } finally {
+    core.WorldDefinition.isMembersWorld = original;
+  }
+});
+
+// A bracelet of clay softens clay and doubles soft clay (Wiki Bracelet_of_clay, Soft_clay_rocks). Mining
+// only asks "mining:ore-yield"; the item plugin (tests/bracelet-of-clay.test.cjs) answers.
+function yieldHarness({ oreId, amount, taker = null, extra = false }) {
+  const spent = [];
+  const extraAsked = [];
+  const h = harness({
+    emit: (key, request) => {
+      if (key === "mining:ore-yield") {
+        request.oreId = oreId ?? request.oreId;
+        request.amount = amount ?? request.amount;
+        request.spend = () => spent.push(request.oreId);
+      } else if (key === "mining:hand-over") request.taker = taker;
+      else if (key === "mining:extra-ore" && extra) { extraAsked.push(request.oreId); request.bonuses.push({}); }
+    },
+  });
+  return { h, spent, extraAsked };
+}
+
+test("\"mining:ore-yield\" decides the ore and amount a success gives, and a charge is spent once it is kept", () => {
+  const { h, spent } = yieldHarness({ oreId: ItemIds.SOFT_CLAY, amount: 2 });
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineRock(h, player, "Clay rocks", loc("clayrock1"));
+  try {
+    h.tick(3);
+    assert.deepEqual(player.added, [[ItemIds.SOFT_CLAY, 2]]);
+    assert.deepEqual(spent, [ItemIds.SOFT_CLAY]);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
+test("an ore handed over as it is mined spends no \"mining:ore-yield\" charge", () => {
+  const { h, spent } = yieldHarness({ oreId: ItemIds.SOFT_CLAY, taker: "Miner Magnus" });
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineRock(h, player, "Clay rocks", loc("clayrock1"));
+  try {
+    h.tick(3);
+    assert.deepEqual(player.added, []);
+    assert.deepEqual(spent, []);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
+test("an extra ore is asked for by the rock's own ore but given as what the success yielded", () => {
+  const { h, extraAsked } = yieldHarness({ oreId: ItemIds.SOFT_CLAY, extra: true });
+  const player = createPlayer();
+  const restoreRandom = scriptRandom([], 0);
+  const { restore } = mineRock(h, player, "Clay rocks", loc("clayrock1"));
+  try {
+    h.tick(3);
+    assert.deepEqual(extraAsked, [ItemIds.CLAY]);
+    assert.deepEqual(player.added, [[ItemIds.SOFT_CLAY, 1], [ItemIds.SOFT_CLAY, 1]]);
+  } finally {
+    restoreRandom();
+    restore();
+  }
+});
+
+test("Varrock armour 1 may add an extra clay (Wiki Mining_enhancers: clay is armour tier 1)", () => {
+  let handler;
+  require("../plugins/skills/mining/VarrockArmour.Mining").attach({ core, onCustomEvent: (key, fn) => { if (key === "mining:extra-ore") handler = fn; } });
+  const original = Math.random;
+  Math.random = () => 0;
+  try {
+    const request = { player: { getEquipment: () => ({ getItems: () => ({ [core.Equipment.BODY_SLOT]: { getId: () => ItemIds.VARROCK_ARMOUR_1 } }) }) }, oreId: ItemIds.CLAY, bonuses: [] };
+    handler(request);
+    assert.equal(request.bonuses.length, 1);
+  } finally {
+    Math.random = original;
   }
 });

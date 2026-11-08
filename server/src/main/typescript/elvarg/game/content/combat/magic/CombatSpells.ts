@@ -15,6 +15,7 @@ import { Misc } from "../../../../util/Misc";
 import { ItemIdentifiers } from "../../../../util/ItemIdentifiers";
 import { Equipment } from "../../../model/container/impl/Equipment";
 import { PrayerHandler } from "../../PrayerHandler";
+import { TeleBlock } from "./TeleBlock";
 import { CombatEffectSpell } from "./CombatEffectSpell";
 import { CombatNormalSpell, CombatNormalSpellOptions } from "./CombatNormalSpell";
 import { CombatSpell } from "./CombatSpell";
@@ -39,6 +40,19 @@ class ChargeSpell extends Spell {
     }
 
     cast(player: Player): boolean {
+        // Wiki (Charge): it needs the Mage Arena I miniquest, which ends with the statues' god cape (the Mage Arena
+        // plugin answers "mage-arena:cape-received"). Refused before the runes; TSPS wording for the line.
+        const arena = { player, received: null as boolean | null };
+        PluginManager.emitCustomEvent("mage-arena:cape-received", arena);
+        if (arena.received !== true) {
+            // A league relic may lift every spell's quest requirement (Wiki: Grimoire), as for Dream Mentor's spells.
+            const unlock = { player, name: "charge", unlocked: false };
+            PluginManager.emitCustomEvent("magic:spell-unlocked", unlock);
+            if (unlock.unlocked !== true) {
+                player.sendMessage("You need to complete the Mage Arena to cast this spell.");
+                return true;
+            }
+        }
         // The cooldown is checked before the runes are taken, so a refused cast costs nothing.
         if (!this.canCast(player, false) || !this.canCast(player, true)) {
             return true;
@@ -511,7 +525,7 @@ export class CombatSpells {
         },
 
         itemsRequired(player) {
-            return [new Item(556, 1), new Item(558, 1), new Item(554, 3)];
+            return [new Item(556, 2), new Item(558, 1), new Item(554, 3)];
         },
 
         levelRequired() {
@@ -924,16 +938,13 @@ export class CombatSpells {
             return new Graphic(329);
         },
         maximumHit() {
-            return 19;
+            return 10; // Magic / 10 and the Slayer's staff (e) are added by plugins/items/SlayersStaff.plugin.js.
         },
         startGraphic() {
             return null; // None live; 327 is the Slayer salt sprinkle.
         },
         baseExperience() {
             return 30;
-        },
-        equipmentRequired(player) {
-            return [new Item(4170)];
         },
         itemsRequired(player) {
             return [new Item(558, 4), new Item(560, 1)];
@@ -1070,7 +1081,7 @@ export class CombatSpells {
             return [new Item(2416)];
         },
         itemsRequired: (player: Player): Item[] => {
-            return [new Item(556, 4), new Item(565, 2), new Item(554, 2)];
+            return [new Item(556, 4), new Item(565, 2), new Item(554, 1)];
         },
         levelRequired: (): number => {
             return 60;
@@ -1104,7 +1115,7 @@ export class CombatSpells {
             return [new Item(2417)];
         },
         itemsRequired: (player: Player): Item[] => {
-            return [new Item(556, 4), new Item(565, 2), new Item(554, 2)];
+            return [new Item(556, 1), new Item(565, 2), new Item(554, 4)];
         },
         levelRequired: (): number => {
             return 60;
@@ -1389,7 +1400,7 @@ export class CombatSpells {
         maximumHit: () => 16,
         startGraphic: () => new Graphic(1865),
         baseExperience: () => 27,
-        itemsRequired: () => [new Item(554, 3), new Item(566)],
+        itemsRequired: () => [new Item(554, 3), new Item(562)],
         levelRequired: () => 44,
         spellId: () => 20398,
     }, true);
@@ -1553,7 +1564,7 @@ export class CombatSpells {
             return 90;
         },
         itemsRequired(player) {
-            return [new Item(557, 12), new Item(555, 12), new Item(556, 1)];
+            return [new Item(557, 12), new Item(555, 12), new Item(566, 1)];
         },
         levelRequired() {
             return 80;
@@ -1581,10 +1592,7 @@ export class CombatSpells {
                     return;
                 }
                 // Wiki: 5 minutes, halved when Protect from Magic was already up.
-                const seconds = player.getPrayerActive()[PrayerHandler.PROTECT_FROM_MAGIC] ? 150 : 300;
-                player.getCombat().getTeleblockTimer().start(seconds);
-                player.getPacketSender().sendEffectTimer(seconds, EffectTimer.TELE_BLOCK)
-                    .sendMessage("You have just been teleblocked!");
+                TeleBlock.apply(player, cast.isPlayer() ? (cast as Player).getUsername() : "a monster");
             } else if (castOn.isNpc()) {
                 if (cast.isPlayer()) {
                     (cast as Player).sendMessage("Your spell has no effect on this target.");
@@ -1685,7 +1693,7 @@ export class CombatSpells {
         () => { return 0; },
         (cast: Mobile, castOn: Mobile) => { return Projectile.createProjectile(cast, castOn, 360, 0, 20, 43, 31); },
         () => { return new Graphic(361); },
-        () => { return 18; },
+        () => { return 16; },
         () => { return 34; },
         () => {
             return [
@@ -1705,7 +1713,7 @@ export class CombatSpells {
         () => { return 1; },
         () => { return null; },
         () => { return new Graphic(389); },
-        () => { return 13; },
+        () => { return 17; },
         () => { return 36; },
         () => { return [new Item(556, 2), new Item(554, 2), new Item(562, 4), new Item(560, 2)]; },
         () => { return 62; },

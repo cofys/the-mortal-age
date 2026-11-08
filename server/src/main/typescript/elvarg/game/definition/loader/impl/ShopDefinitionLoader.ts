@@ -18,6 +18,9 @@ interface RawShopStockDefinition {
 }
 
 interface RawShopDefinition {
+    generalStore?: unknown;
+    sellMultiplier?: unknown;
+    priceChangePer?: unknown;
     id?: unknown;
     name?: unknown;
     currency?: unknown;
@@ -201,7 +204,12 @@ export class ShopDefinitionLoader extends DefinitionLoader {
             defaultDestockTicks,
             soldItemDestockTicks,
             source,
-            kingdomId
+            kingdomId,
+            {
+                generalStore: typeof raw.generalStore === "boolean" ? raw.generalStore : undefined,
+                sellMultiplier: Number.isSafeInteger(raw.sellMultiplier) && Number(raw.sellMultiplier) >= 0 ? Number(raw.sellMultiplier) : undefined,
+                priceChangePer: Number.isSafeInteger(raw.priceChangePer) && Number(raw.priceChangePer) >= 0 ? Number(raw.priceChangePer) : undefined,
+            }
         );
     }
 

@@ -1,3 +1,4 @@
+import { TeleBlock } from "../../content/combat/magic/TeleBlock";
 import { Player } from "../../entity/impl/player/Player";
 import { TeleportType } from "./TeleportType";
 import { Task } from "../../task/Task";
@@ -160,7 +161,7 @@ export class TeleportHandler {
 
         if (!player.getCombat().getTeleblockTimer().finished()) {
             if (Wilderness.isIn(player)) {
-                player.sendMessage("A magical spell is blocking you from teleporting.");
+                player.sendMessage(TeleBlock.attemptMessage(player));
                 return false;
             } else {
                 player.getCombat().getTeleblockTimer().stop();
@@ -171,6 +172,11 @@ export class TeleportHandler {
         if (player.getMovementQueue().isMovementBlocked()) {
             return false;
         }
+
+        // Content can refuse a teleport without changing the area's existing override policy.
+        const restriction = { player, destination: targetLocation, wildernessLevelLimit, spellName, allow: null as boolean | null };
+        PluginManager.emitCustomEvent("teleport:can-start", restriction);
+        if (restriction.allow === false) return false;
 
         const area = player.getArea();
         const canTeleport = (area ? PluginManager.callArea(area, "canTeleport", player, wildernessLevelLimit, targetLocation) : null)

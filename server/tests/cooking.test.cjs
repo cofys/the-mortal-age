@@ -420,7 +420,6 @@ function bankedMaker(cooking, carried, banked, fill) {
     setBank: (tab, bank) => { tabs[tab] = bank; return p; },
     isSearchingBank: () => false,
     getCurrentBankTab: () => 0,
-    getPacketSender: () => new Proxy({}, { get: (_t, _k) => function sender() { return this; } }),
   });
   Bank.withoutLimit(p, () => {
     for (let id = 0, added = 0; added < fill; id++) {
@@ -447,6 +446,67 @@ test("wine ferments 20 ticks after the last jug, carried and banked at once, wit
   assert.equal(amount(obj("jug_unfermented_wine")), 0);
   assert.equal(amount(obj("jug_wine")), 40);
   assert.deepEqual(p.xp, [41 * 200]);
+});
+
+// Wiki (Jug of wine): no more than 60,000 unfermented jugs at once.
+test("wine stops at 60000 pending jugs across inventory and bank without spending the next ingredients", () => {
+  const Wine = Cooking._test.wine;
+  const pending = obj("jug_unfermented_wine");
+  const { p, tabs } = bankedMaker(99, [[obj("grapes"), 3], [obj("jug_water"), 3], [pending, 1]], [[pending, 59998]], 0);
+  tabs[2] = null; // Player banks are initialized lazily.
+  tabs[core.Bank.BANK_SEARCH_TAB_INDEX].add(new core.Item(pending, 60000), false);
+  useItems(p, "grapes", "jug_water");
+  p.sent.menu.execute(pending, 3);
+  ticks(2);
+  assert.equal(tabs[0].getAmount(pending) + p.getInventory().getAmount(pending), 60000);
+  const timer = Wine.fermenting.get(p);
+  ticks(4);
+  assert.equal(tabs[0].getAmount(pending) + p.getInventory().getAmount(pending), 60000);
+  assert.equal(p.getInventory().getAmount(obj("grapes")), 2);
+  assert.equal(p.getInventory().getAmount(obj("jug_water")), 2);
+  assert.deepEqual(p.xp, []);
+  assert.equal(Wine.fermenting.get(p), timer, "the refused jug does not reset fermentation");
+  Wine.fermenting.delete(p);
+});
+
+test("wine at the pending cap preserves single-jug ingredients and resumes after fermentation", () => {
+  const Wine = Cooking._test.wine;
+  const pending = obj("jug_unfermented_wine");
+  const { p, tabs } = bankedMaker(99, [[obj("grapes"), 1], [obj("jug_water"), 1]], [[pending, 60000]], 0);
+  Wine.fermenting.set(p, 7);
+  useItems(p, "jug_water", "grapes");
+  ticks(2);
+  assert.equal(p.getInventory().getAmount(pending), 0);
+  assert.equal(p.getInventory().getAmount(obj("grapes")), 1);
+  assert.equal(p.getInventory().getAmount(obj("jug_water")), 1);
+  assert.equal(Wine.fermenting.get(p), 7);
+  assert.deepEqual(p.xp, []);
+  for (let i = 0; i < 7; i++) Wine.fermentTick();
+  assert.equal(tabs[0].getAmount(pending), 0);
+  assert.equal(tabs[0].getAmount(obj("jug_wine")), 60000);
+  assert.deepEqual(p.xp, [12000000]);
+  useItems(p, "grapes", "jug_water");
+  ticks(2);
+  assert.equal(p.getInventory().getAmount(pending), 1);
+  assert.equal(p.getInventory().getAmount(obj("grapes")), 0);
+  assert.equal(Wine.fermenting.get(p), Wine.FERMENT_TICKS);
+  Wine.fermenting.delete(p);
+});
+
+test("wine rechecks the pending cap when a previously opened quantity menu is submitted", () => {
+  const Wine = Cooking._test.wine;
+  const pending = obj("jug_unfermented_wine");
+  const { p, tabs } = bankedMaker(99, [[obj("grapes"), 2], [obj("jug_water"), 2]], [[pending, 59998]], 0);
+  useItems(p, "grapes", "jug_water");
+  tabs[1].add(new core.Item(pending, 2), false);
+  Wine.fermenting.set(p, 5);
+  p.sent.menu.execute(pending, 2);
+  ticks(4);
+  assert.equal(p.getInventory().getAmount(pending), 0);
+  assert.equal(p.getInventory().getAmount(obj("grapes")), 2);
+  assert.equal(p.getInventory().getAmount(obj("jug_water")), 2);
+  assert.equal(Wine.fermenting.get(p), 5);
+  Wine.fermenting.delete(p);
 });
 
 test("a full bank's wine ferments without losing any: the outcome takes the unfermented stack's slot", () => {
@@ -801,6 +861,63 @@ test('Brutus t-bone steaks cook on native ranges and fires with the correct leve
       assert.deepEqual(yieldState(), { raw: 0, cooked: amount, burnt: 0, xp: successXp * amount },
         diagnostic('autocook and menu both complete normally after their real approach'));
     }
+  });
+  await t.test('choosing Cook 1 from a multi-item range menu keeps the captured first-food delay', t => {
+    const f = actor(t, 99, range, raw, 2), { p } = f;
+    hooks.object.Range.Cook({ player: p, object: range });
+    const menu = p.getCreationMenu();
+    assert.ok(menu);
+    cookingTurn(p, () => menu.execute(raw, 1));
+    assert.equal(p.getInventory().getAmount(cooked), 0);
+    cookingTurn(p);
+    assert.equal(p.getInventory().getAmount(cooked), 0);
+    cookingTurn(p);
+    assert.equal(p.getInventory().getAmount(cooked), 1);
+    assert.equal(p.getInventory().getAmount(raw), 1);
+    assert.equal(xpGained(f), successXp);
+  });
+  await t.test('native ground pickup then single-item range Cook repeats every two turns without a menu', t => {
+    const { DropItemPacketListener } = require('../dist/net/packet/impl/DropItemPacketListener');
+    const { PickupItemPacketListener } = require('../dist/net/packet/impl/PickupItemPacketListener');
+    const { ObjectActionPacketListener } = require('../dist/net/packet/impl/ObjectActionPacketListener');
+    const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+    const tuna = ItemIds.RAW_TUNA, cookedTuna = ItemIds.TUNA;
+    const f = actor(t, 99, range, tuna, 4), { p } = f, inventory = p.getInventory();
+    const click = new ObjectActionPacketListener();
+    cookingTurn(p, () => click.executeAction(p, rangeId, range.getLocation().getX(), range.getLocation().getY(), 0, 'Cook'));
+    for (let i = 0; i < 8 && !p.getCreationMenu(); i++) cookingTurn(p);
+    assert.ok(p.getCreationMenu(), 'SETUP: native range routing found a reachable standing tile');
+    p.closeInterruptibleInterfaces();
+    const originalItems = core.World.getItems().slice();
+    t.after(() => core.World.getItems().splice(0, core.World.getItems().length, ...originalItems));
+    let clock = Date.now();
+    t.mock.method(Date, 'now', () => clock);
+    for (let slot = 0; slot < 4; slot++) DropItemPacketListener.drop(p, tuna, Inventory.INTERFACE_ID, slot);
+    assert.equal(inventory.getAmount(tuna), 0, 'real Drop moves every raw tuna out of inventory');
+    const animations = [];
+    const animate = p.performAnimation.bind(p);
+    t.mock.method(p, 'performAnimation', animation => { animations.push(animation.getId()); return animate(animation); });
+    const turns = [];
+    for (let done = 1; done <= 4; done++) {
+      clock += 600;
+      cookingTurn(p, () => PickupItemPacketListener.pickup(p, tuna, p.getLocation().getX(), p.getLocation().getY()));
+      assert.equal(inventory.getAmount(tuna), 1, 'native ground pickup supplies exactly one raw tuna');
+      assert.equal(inventory.getAmount(cookedTuna), done - 1);
+      clock += 600;
+      cookingTurn(p, () => click.executeAction(p, rangeId, range.getLocation().getX(), range.getLocation().getY(), 0, 'Cook'));
+      assert.equal(p.getCreationMenu(), null, 'single raw tuna skips the quantity menu');
+      assert.equal(inventory.getAmount(tuna), 0, 'Cook consumes the picked-up tuna in its input turn');
+      assert.equal(inventory.getAmount(cookedTuna), done, 'one output per two-turn pickup/Cook pair');
+      assert.equal(xpGained(f), done * 100 * core.GameConstants.EXPERIENCE_MULTIPLIER);
+      assert.equal(Cooking.isCookingActive(p), false, 'no pending cook can consume the next pickup');
+      turns.push(core.World.processCycle);
+    }
+    assert.deepEqual(turns.slice(1).map((turn, i) => turn - turns[i]), [2, 2, 2]);
+    assert.deepEqual(animations, Array(4).fill(core.CacheDefinitions.getSeqId('human_cooking')),
+      'each Cook replays its animation without an intervening reset from the batch runner');
+    for (let i = 0; i < 5; i++) cookingTurn(p);
+    assert.equal(inventory.getAmount(cookedTuna), 4, 'no delayed duplicate output');
+    assert.equal(xpGained(f), 400 * core.GameConstants.EXPERIENCE_MULTIPLIER);
   });
   await t.test('manual raw karambwan re-use on each tick cooks one per tick (Wiki 1-tick Cooking)', t => {
     const rawK = obj('tbwt_raw_karambwan'), cookedK = obj('tbwt_cooked_karambwan');
@@ -1393,13 +1510,14 @@ await suite.test('a members-world range cooks raw mackerel', async t => {
       range: [objectId, x, y, loc.getZ(), range.getType(), range.getFace()],
       start: [start.getX(), start.getY(), start.getZ()], turn: turns };
     assert.deepEqual([snapshot.raw, snapshot.cooked, snapshot.burnt, snapshot.xp, snapshot.events],
-      [1, 0, 0, xp, 0], `SETUP: pre-consumption snapshot ${JSON.stringify(snapshot)}`);
+      expectedXp > 0 ? [0, 1, 0, xp + expectedXp, 1] : [1, 0, 0, xp, 0],
+      `single-item Cook result ${JSON.stringify(snapshot)}`);
     if (session) {
       assert.equal(session.cookable.raw, raw, 'SETUP: admitted session uses the selected raw food');
       assert.equal(session.objectId, objectId, 'SETUP: admitted session uses the resolved range');
     }
     if (expectedXp > 0) {
-      assert.equal(Cooking.isCookingActive(p), true, 'SETUP: control cooking admitted');
+      assert.equal(Cooking.isCookingActive(p), false, 'single-item range Cook already completed');
       for (let n = 0; n < 20 && inv.getAmount(cooked) === 0; n++) turn();
       assert.deepEqual([inv.getAmount(raw), inv.getAmount(cooked), inv.getAmount(burnt)], [0, 1, 0]);
       assert.equal(skills.getExperience(skill) - xp, expectedXp);

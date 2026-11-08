@@ -19,6 +19,7 @@
  */
 const Capes = require("./Common.SkillCapes");
 
+
 const STAMINA_KEY = "stamina";
 const GRAPPLE_KEY = "grapple";
 const SPELLBOOK_KEY = "spellbook";
@@ -131,6 +132,12 @@ function changeSpellbook(player, name) {
   }
   if (Capes.dailyUses(player, SPELLBOOK_KEY) >= SPELLBOOKS_PER_DAY) {
     player.sendMessage(spellbookChanges(player));
+    return;
+  }
+  // Wiki: the magic cape switches "to any spellbook they have unlocked" (core SpellbookLocks).
+  const locked = Capes.core.SpellbookLocks.spellbookLockedRefusal(player, MagicSpellbook[book.key]);
+  if (locked) {
+    player.sendMessage(locked);
     return;
   }
   if (book.key === "LUNAR" && Capes.baseLevel(player, Skill.DEFENCE) < 40) {

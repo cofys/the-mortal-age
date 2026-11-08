@@ -30,6 +30,9 @@ const WALK_OVER_MAX_TICKS = 2;
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Large doors", "Castle door", "Cell Door", "Cell door",
   "Glass door", "Magic door", "Magic guild door", "Metal door", "Mind Door", "Mithril door", "Tent door", "Wall",
+  // The Ranging Guild's entrance (11665, diagonal, Open only). Its 40 Ranged gate is
+  // areas/RangingGuild.plugin.js; this only swings the leaf.
+  "Guild door",
   "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
   "Vitur door", "Myrmel door", "Shadum door", "Jovkai door", "Chained door", "Trapdoor",
   "Longhall door", "Prison door", "Arena Entrance", "Arena Exit",
@@ -61,12 +64,15 @@ const NAMELESS_DOOR_LEAF_IDS = Object.freeze({
   PIP_MAUSOLEUM_GATE_OPEN: 3446, // inacpip_underground_door; Priest in Peril capture 2026-11-02
   CRANDOR_SECRET_DOOR_OPEN: 25039, // dragonsecretdoor_open; capture 2951
   INVISWALL: 38848, // actionless collision blocker; captures 2951 and 740
+  // inactivepoordoor: Melzar's front door opens onto it (Dragon Slayer I capture 20261106T101002 tick
+  // 2070), which the cache doesn't pair by name; ObjectIdentifiers has no property for it.
+  MELZAR_DOOR_OPEN: 1539,
 });
 
 let SELF_OPENING_DOOR_IDS, IN_PLACE_DOOR_IDS, OWN_TILE_DOOR_IDS, SINGLE_DOOR_OPEN_IDS, COMPOSITE_DOOR_OPENINGS, WOODEN_GATES, WOODEN_GATE_BY_ID;
 let DOUBLE_DOOR_ID_FAMILIES, DOUBLE_DOOR_FAMILY_IDS_BY_ID, DORGESH_CITY_DOOR_IDS;
 let SPECIAL_DOUBLE_DOOR_PAIRS, SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID, SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID;
-let PASS_THROUGH_GATES;
+let PASS_THROUGH_GATES, PASS_THROUGH_FAMILIES;
 
 function defineDoorData({ ObjectIdentifiers: O }) {
   // Doors with no open variant in the cache: OSRS opens them by rotating the same loc
@@ -78,6 +84,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // are nameless with no actions and are never placed, so the pairing below cannot find them.
   SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231,
     O.DOOR_283, // Ardougne Castle's lockpick door has no separate open loc in the cache.
+    // The Ranging Guild's entrance (11665) is Open only; 11666 is a ladder, so there is no
+    // open leaf to pair with and the leaf swings in place.
+    O.GUILD_DOOR,
     O.DOOR_287, O.DOOR_358, O.GATE_52, O.WALL_9, O.DOOR_115, O.LARGE_DOOR_23,
     // The Blood Moon Rises crank-wheel house exit (61824) has no cache Close partner.
     O.DOOR_831,
@@ -102,7 +111,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Taverley jail/deeper-dungeon gates are Open-only model609 locs with no
     // uniquely named open partner; keep their IDs while swinging the panels.
     O.DOOR_99, O.GATE_57,
-    // The Champions' Guild door (1805): its id+1 is an unrelated nameless loc.
+    // The Champions' Guild door (1805) is a pass-through gate (PASS_THROUGH_GATES takes its clicks
+    // first); its id+1 is an unrelated nameless loc.
     O.DOOR_45,
     // Holy Grail: Merlin's workshop door in Camelot (24, merlinworkshop) and the Draynor Manor
     // whistle-room door (22, whistledoor) are Open-only; their id+1 are a clock spindle and the
@@ -356,6 +366,16 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // crossRows is a gate more than one tile thick whose tiles the map blocks: the player is carried
   // across, from the low side to the high side or back, along their own row.
   PASS_THROUGH_GATES = Object.freeze([
+    // Waterfall guide xWBSnGkQTi4 3:53.2-3:54.4: Golrie's panel opens, the player walks
+    // through, then it closes (~1.2s). Cache 1991 is Open-only model609, with no open loc.
+    Object.freeze({
+      closed: [[O.DOOR_46, 2515, 9575, 0, 1]],
+      opened: [[NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2515, 9575, 0, 1], [O.DOOR_46, 2515, 9576, 0, 2]],
+      crossY: 9576,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 62,
+    }),
     // Guidor's gate, south-east Varrock (rsprox 1663, 3218, 3220): on Open the leaves swing to the
     // south edges of the two tiles west, the player steps through, and the gate shuts two ticks
     // later. Live also puts a solid inviswall where the closed leaves stood; it is left out, as
@@ -496,6 +516,39 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // (carry) and anyone else is stopped by the real clipping. Captured going north only; the way back
     // south is the same wall in reverse. The wall is reachable only from the tiles beside it, so every
     // crossing is one step.
+    // The Champions' Guild door, Varrock (revision 242 capture 20261106T101002, ticks 969-973 in,
+    // 1029-1031 and 1106-1108 out): Open swaps the door for INVISWALL on its own tile and
+    // championdoor_open (23637) on the tile inside, with sound 46; the player walks across and the door
+    // is back two ticks later. ChampionsGuild.plugin's Quest point check runs before this (door:toggle).
+    Object.freeze({
+      closed: [[O.DOOR_45, 3191, 3363, 0, 3]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 3191, 3363, 0, 3],
+        [O.DOOR_465, 3191, 3362, 0, 0], // championdoor_open
+      ],
+      crossY: 3363,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 46,
+    }),
+    // The Ranging Guild's entrance (11665, diagonal, Open only, no open leaf in the cache).
+    // RangingGuild.plugin's 40 Ranged check runs before this (door:toggle). The leaf swings to the
+    // tile north and an inviswall keeps the doorway blocked, so nobody can walk or follow through
+    // it: the opener is carried the two tiles across, from 2657 to 2659 or back.
+    Object.freeze({
+      closed: [[O.GUILD_DOOR, 2658, 3438, 0, 0, 9]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2658, 3438, 0, 0, 9],
+        [O.GUILD_DOOR, 2658, 3439, 0, 1, 9],
+      ],
+      crossBetween: [2657, 2659],
+      crossRows: [3438],
+      // The fence is diagonal, so the side comes from x - y, not x alone: 2658,3439 (the doorman's
+      // tile) shares the leaf's x but is outside, and x alone carried that opener back out.
+      eastwardFrom: (here) => here.getX() - here.getY() <= 2658 - 3438,
+      closeTicks: 2,
+      openSoundId: 62,
+    }),
     Object.freeze({
       closed: [[O.WALL_9, 2836, 9600, 0, 3]],
       opened: [
@@ -508,6 +561,22 @@ function defineDoorData({ ObjectIdentifiers: O }) {
       openSoundId: 2410,
     }),
   ]);
+  // Pass-through doors placed many times, as a family: every placement of the door works like a
+  // PASS_THROUGH_GATES entry built from its own tile and face. Open puts INVISWALL on the door's
+  // tile and its open leaf on the tile past the edge the door blocks, turned a quarter (face + 1),
+  // with the sound; the opener walks over the blocker and the door is back two ticks later. The open
+  // leaf is the cache's `<name>_open` loc (reddoor -> reddoor_open, funexit -> funexit_open), as
+  // Chests.plugin pairs chests by gameval; `open` names it only where the cache doesn't pair it.
+  // Melzar's Maze (Dragon Slayer I capture 20261106T101002): the front door at tick 2070, every
+  // colour door and the exit doors (ticks 2109-2688), crossed both ways with the leaf always on the
+  // same side. The quest's key rules run before this (door:toggle) and open them through door:open.
+  PASS_THROUGH_FAMILIES = new Map([
+    // Same guide 7:15.37-7:16.50: the Baxtorian doors close behind the walking player.
+    [O.DOOR_48, { open: NAMELESS_DOOR_LEAF_IDS.DOOR_48_OPEN }],
+    [O.DOOR_91, { open: NAMELESS_DOOR_LEAF_IDS.MELZAR_DOOR_OPEN }],
+    [O.RED_DOOR, {}], [O.ORANGE_DOOR, {}], [O.YELLOW_DOOR, {}], [O.BLUE_DOOR, {}],
+    [O.MAGENTA_DOOR, {}], [O.GREEN_DOOR, {}], [O.EXIT_DOOR, {}],
+  ].map(([closed, family]) => [closed, Object.freeze({ openSoundId: 62, closeTicks: 2, ...family })]));
   DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
     DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
       familyIds.map((id) => [id, familyIds])
@@ -1433,6 +1502,33 @@ function handleDoubleDoor(player, object, objectId, location) {
   return true;
 }
 
+/** Tile offsets past a wall loc's blocked edge, by face (0 west, 1 north, 2 east, 3 south). */
+const PAST_EDGE = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+
+/** The cache's `<gameval>_open` loc for a closed loc, or null. */
+function openLeafByName(closedId) {
+  const name = core.CacheDefinitions.getLocNames().get(closedId);
+  return name ? core.CacheDefinitions.getLocId(`${name}_open`) : null;
+}
+
+/** A PASS_THROUGH_FAMILIES door's gate at its own placement, or null. */
+function familyGateAt(objectId, x, y, z, face) {
+  const family = PASS_THROUGH_FAMILIES.get(objectId);
+  if (!family || !Number.isInteger(face)) return null;
+  const open = family.open ?? openLeafByName(objectId);
+  if (open == null) return null;
+  const f = face & 3, [dx, dy] = PAST_EDGE[f];
+  return {
+    closed: [[objectId, x, y, z, f]],
+    opened: [[NAMELESS_DOOR_LEAF_IDS.INVISWALL, x, y, z, f], [open, x + dx, y + dy, z, (f + 1) & 3]],
+    // The boundary crossed is the blocked edge: x for west, x + 1 for east, y + 1 for north, y for south.
+    ...(f === 0 || f === 2 ? { crossX: f === 0 ? x : x + 1 } : { crossY: f === 1 ? y + 1 : y }),
+    walkOver: true,
+    closeTicks: family.closeTicks,
+    openSoundId: family.openSoundId,
+  };
+}
+
 function passThroughGateAt(objectId, x, y, z) {
   return PASS_THROUGH_GATES.find((gate) =>
     [...gate.closed, ...gate.opened].some(([id, gx, gy, gz]) => id === objectId && gx === x && gy === y && gz === z)) ?? null;
@@ -1453,8 +1549,13 @@ const GATE_WALK_ANIMATION = 819;
 function carryAcrossGate(player, gate, y, z) {
   const [low, high] = gate.crossBetween;
   const here = player.getLocation();
-  const row = gate.crossRows.includes(here.getY()) ? here.getY() : y;
-  const eastward = here.getX() < (low + high) / 2;
+  // A single-row gate crosses on that row whatever the clicked leaf's own y is: once the gate is
+  // open the leaf has swung off the passage, and following its y carried the opener along the fence.
+  const row = gate.crossRows.includes(here.getY()) ? here.getY()
+    : gate.crossRows.length === 1 ? gate.crossRows[0] : y;
+  // A diagonal gate's two sides are not the two halves of x: a player standing north of the leaf
+  // shares its x, so the gate says which side is which.
+  const eastward = gate.eastwardFrom ? gate.eastwardFrom(here) : here.getX() < (low + high) / 2;
   const from = cloneLocation(eastward ? low : high, row, z);
   if (Math.abs(here.getX() - from.getX()) > 1 || Math.abs(here.getY() - from.getY()) > 1) return;
   if (!here.equals(from)) player.moveTo(from.clone());
@@ -1541,11 +1642,11 @@ function stepThroughGate(player, gate, x, y, z) {
 }
 
 /** Opens a pass-through gate, steps the player across it and shuts it again (see PASS_THROUGH_GATES). */
-function handlePassThroughGate(player, objectId, location) {
+function handlePassThroughGate(player, objectId, location, object = null) {
   const x = location?.getX?.() ?? location?.x;
   const y = location?.getY?.() ?? location?.y;
   const z = location?.getZ?.() ?? location?.z ?? 0;
-  const gate = passThroughGateAt(objectId, x, y, z);
+  const gate = passThroughGateAt(objectId, x, y, z) ?? familyGateAt(objectId, x, y, z, object?.getFace?.());
   if (!gate) return false;
   const privateArea = player.getPrivateArea?.() ?? null;
   const anchorKey = doorStateKey(`pass-through:${gate.closed[0].slice(1).join(",")}`, privateArea);
@@ -1577,7 +1678,7 @@ function toggleDoor({ player, object, objectId, definition, location, clickType 
   const request = { player, object, objectId, definition, location, clickType, handled: false };
   api.emitCustomEvent("door:toggle", request);
   if (request.handled) return true;
-  if (handlePassThroughGate(player, objectId, location)) return true;
+  if (handlePassThroughGate(player, objectId, location, object)) return true;
   if (handleCompositeDoor(player, object, objectId)) return true;
   if (handleWoodenGate(player, object, objectId, location)) return true;
   if (handleDoubleDoor(player, object, objectId, location)) return true;
@@ -1591,7 +1692,7 @@ function requestDoorOpen(event) {
   const location = event.object.getLocation();
   const definition = core.ObjectDefinition.forPlayer(objectId, event.player) ?? event.object.getDefinition();
   // A pass-through gate may have no "Open" of its own (the troll prison door is "Unlock").
-  if (handlePassThroughGate(event.player, objectId, location)) {
+  if (handlePassThroughGate(event.player, objectId, location, event.object)) {
     event.handled = true;
     return;
   }

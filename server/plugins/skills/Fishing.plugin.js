@@ -4,6 +4,8 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { ItemIds, NpcIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const WorldDefinition = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
+const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 const QuestRuntime = require("../quests/QuestRuntime");
 const InfernalHarpoon = require("./fishing/InfernalHarpoon.Fishing");
 const CrystalHarpoon = require("./fishing/CrystalHarpoon.Fishing");
@@ -16,6 +18,7 @@ const Wilderness = require("./fishing/Wilderness.Fishing");
 const Mastery = require("./fishing/Mastery.Fishing");
 const Supply = require("./fishing/Supply.Fishing");
 const RadasBlessing = require("./fishing/RadasBlessing.Fishing");
+const SpiritFlakes = require("./fishing/SpiritFlakes.Fishing");
 const KarambwanVessel = require("./fishing/Karambwan.Fishing");
 const ClueBottles = require("./fishing/ClueBottles.Fishing");
 const { pauseForLevelUp } = require("./SkillActions");
@@ -161,7 +164,7 @@ const HARPOONS = Object.freeze([
   // The league's Echo harpoon (Wiki): a crystal harpoon with no requirement and no charges.
   { ids: [ItemIds.ECHO_HARPOON], level: 1, bonus: 135 },
   // Charged crystal harpoons consume one charge per fish (./fishing/CrystalHarpoon.Fishing.js).
-  { ids: [ItemIds.CRYSTAL_HARPOON, ItemIds.CRYSTAL_HARPOON_3], level: 71, bonus: 135, crystal: true },
+  { ids: [ItemIds.CRYSTAL_HARPOON, ItemIds.CRYSTAL_HARPOON_3], level: 71, agility: 50, bonus: 135, crystal: true },
   // Charged infernal harpoons can cook what they catch (./fishing/InfernalHarpoon.Fishing.js).
   {
     ids: [ItemIds.INFERNAL_HARPOON, ItemIds.INFERNAL_HARPOON_OR_, ItemIds.INFERNAL_HARPOON_OR__3],
@@ -176,7 +179,7 @@ const HARPOONS = Object.freeze([
     level: 75,
     bonus: 120,
   },
-  { ids: [ItemIds.CRYSTAL_HARPOON_INACTIVE_], level: 71, bonus: 120 },
+  { ids: [ItemIds.CRYSTAL_HARPOON_INACTIVE_], level: 71, agility: 50, bonus: 120 },
   { ids: [ItemIds.DRAGON_HARPOON, ItemIds.DRAGON_HARPOON_OR_, ItemIds.DRAGON_HARPOON_OR__3], level: 61, bonus: 120 },
   { ids: [ItemIds.HARPOON, ItemIds.BARB_TAIL_HARPOON], level: 1, bonus: 100 },
 ]);
@@ -543,8 +546,13 @@ function questAllows(player, name) {
 /** The best variant of the tool the player can use, carried or wielded; null if none. */
 function findTool(player, tool) {
   const level = getFishingLevel(player);
-  const has = (id) => player.getInventory().contains(id) || player.getEquipment?.()?.contains(id);
-  const found = tool.variants.find((variant) => variant.level <= level && (variant.ids.length === 0 || variant.ids.some(has))) ?? null;
+  // Free worlds: a members tool (dragon, infernal or crystal harpoon) is no tool there, as Mining and Woodcutting rule.
+  const usableHere = (id) => WorldDefinition.isMembersWorld() || CacheDefinitions.getItem(id)?.isMembers !== true;
+  const has = (id) => (player.getInventory().contains(id) || player.getEquipment?.()?.contains(id)) && usableHere(id);
+  // Wiki (Crystal harpoon): "71 Fishing, 70 Attack, and 50 Agility to wield".
+  const agility = player.getSkillManager().getCurrentLevel(Skill.AGILITY);
+  const found = tool.variants.find((variant) => variant.level <= level && agility >= (variant.agility ?? 1) &&
+    (variant.ids.length === 0 || variant.ids.some(has))) ?? null;
   if (found) return found;
   // Content may stand in for the tool ("fishing:tool", a league relic's harpoon that fishes as any of them).
   const request = { player, variants: tool.variants, variant: null };
@@ -745,22 +753,26 @@ function inventoryBlocks(player, tool) {
 }
 
 /**
- * Rada's blessing: a chance to double a catch, with no experience or bait. The Wiki
- * (Rada's blessing 4) shows "Rada's blessing enabled you to catch an extra fish." for it. An
- * infernal harpoon gives the extra its own chance to be cooked (Wiki: Infernal harpoon), which
- * gives Cooking XP and uses an infernal charge. That the extra uses no crystal harpoon charge is
- * inferred, not Wiki.
- * Junk is left out: the Wiki says "fish" and doesn't settle it.
+ * Rada's blessing and spirit flakes: a chance to double a catch, with no experience or bait. They
+ * stack (Wiki: Fishing enhancers), so one roll covers both: the flakes' 50% first, then the
+ * blessing's chance on top. The Wiki (Rada's blessing 4) shows "Rada's blessing enabled you to catch
+ * an extra fish." for the blessing; the flakes have no message. An infernal harpoon gives the extra
+ * its own chance to be cooked (Wiki: Infernal harpoon), which gives Cooking XP and uses an infernal
+ * charge. That the extra uses no crystal harpoon charge is inferred, not Wiki.
+ * Wiki (Spirit flakes): non-fish catches and tertiary items are eligible for the flakes' double
+ * catch, so big net junk doubles; Rada's blessing text is silent on junk, so it stays fish-only.
  */
-function landExtra(player, variant, fish, amount) {
-  if (fish.junk || !RadasBlessing.rollExtraFish(player)) return;
+function landExtra(player, variant, fish, amount, flaked) {
+  const source = RadasBlessing.rollExtraFish(player, flaked ? SpiritFlakes.EXTRA_FISH_CHANCE : 0);
+  if (!source || (source === "blessing" && fish.junk)) return;
+  const message = source === "blessing" ? RadasBlessing.EXTRA_FISH_MESSAGE : null;
   if (variant.infernal && InfernalHarpoon.tryCookFish(player, fish.id)) {
-    spam(player, RadasBlessing.EXTRA_FISH_MESSAGE);
+    if (message) spam(player, message);
     return;
   }
   if (!hasRoom(player, fish)) return;
   giveCatch(player, fish.id, amount);
-  spam(player, RadasBlessing.EXTRA_FISH_MESSAGE);
+  if (message) spam(player, message);
 }
 
 function landCatch(player, tool, variant, caught, spotId = null) {
@@ -771,7 +783,7 @@ function landCatch(player, tool, variant, caught, spotId = null) {
   for (const fish of caught) {
     if (!hasRoom(player, fish)) break;
     const amount = fish.amount(player);
-    landed.push({ fish, amount });
+    landed.push({ fish, amount, flaked: tool !== TOOLS.PARK_NET && SpiritFlakes.consumeFlake(player) });
     if (!variant.infernal || !InfernalHarpoon.tryCookFish(player, fish.id)) {
       giveCatch(player, fish.id, amount, fish.experience * xpMultiplier);
       spam(player, fish.message(amount));
@@ -784,9 +796,9 @@ function landCatch(player, tool, variant, caught, spotId = null) {
       player.getSkillManager().addExperiences(skill, xp);
     }
   }
-  // Rada's blessing rolls once for each fish, after the whole catch has its slots.
-  for (const { fish, amount } of landed) {
-    landExtra(player, variant, fish, amount);
+  // Rada's blessing and the flakes roll once for each fish, after the whole catch has its slots.
+  for (const { fish, amount, flaked } of landed) {
+    landExtra(player, variant, fish, amount, flaked);
   }
   // One bottle roll set per natural catch batch; Rada's extra is not another action.
   // The tutorial pond is outside the supported scope; no retail exclusion is inferred.
@@ -998,6 +1010,7 @@ module.exports = {
     TaskManager.submit(new FishingTask(activeSessions));
     InfernalHarpoon.attach(api);
     RadasBlessing.attach(api);
+    SpiritFlakes.attach(api);
     CrystalHarpoon.attach(api);
     Guild.attach(api);
     AnglerOutfit.attach(api);
