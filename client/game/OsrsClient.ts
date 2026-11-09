@@ -3460,6 +3460,8 @@ export class OsrsClient {
                 context.clanChannel = clans.channels.get(OWN_CLAN_TYPE) ?? null;
                 context.listenedClanSettings = clans.settings.get(LISTENED_CLAN_TYPE) ?? null;
                 context.listenedClanChannel = clans.channels.get(LISTENED_CLAN_TYPE) ?? null;
+                context.affinedClanSettings = new Map([...clans.settings].filter(([type]) => type !== LISTENED_CLAN_TYPE));
+                context.affinedClanChannels = new Map([...clans.channels].filter(([type]) => type !== LISTENED_CLAN_TYPE));
                 context.clanVars = clans.vars;
                 markClanSettingsTransmit();
                 markClanChannelTransmit();
@@ -3736,6 +3738,9 @@ export class OsrsClient {
             this.trackServerSubscription(
                 subscribeHandshake(({ id, name, appearance, chatIcons, chatPrefix, isAdmin, membersWorld }) => {
                     try {
+                        if (this.controlledPlayerServerId !== -1 && this.controlledPlayerServerId !== (id | 0)) {
+                            this.resetWorld(true);
+                        }
                         const isMembersWorld = membersWorld !== false;
                         if (isMembersWorld !== this.isMembersWorld) {
                             this.isMembersWorld = isMembersWorld;
@@ -4463,6 +4468,15 @@ export class OsrsClient {
         this.deviceOptions.set(DEVICE_OPTION_SCREEN_BRIGHTNESS, brightness);
         saveScreenBrightness(brightness);
         if (this.renderer) this.renderer.brightness = gammaFromScreenBrightness(brightness);
+        this.screenBrightnessListener?.(brightness);
+    }
+
+    /** Receives every brightness the client applies; the GPU plugin mirrors it into its own option. */
+    screenBrightnessListener?: (value: number) => void;
+
+    /** The current Settings "Screen brightness" (0..100). */
+    getScreenBrightness(): number {
+        return this.deviceOptions.get(DEVICE_OPTION_SCREEN_BRIGHTNESS) ?? loadScreenBrightness();
     }
 
     private applyInterfaceScalingPercentDeviceOption(value: number): void {

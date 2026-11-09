@@ -758,7 +758,7 @@ const FOLLOW_UP_QUESTS = [
           ],
         },
         rewards: {
-          items: [["STEEL_SWORD", 1], ["COINS", 100]],
+          items: [["STEEL_SHORTSWORD", 1], ["COINS", 100]],
           xp: [["SMITHING", 300]],
           message: "Honest work wins — this time.",
         },

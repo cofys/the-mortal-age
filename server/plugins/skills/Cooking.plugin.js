@@ -31,6 +31,7 @@ function startBotCooking(player, object, cookable) {
 
 module.exports = {
   name: "Cooking",
+  description: "Cooking on fires, ranges and ovens, plus doughs, pies, pizzas, wine, sacred eels, leaping fish and gnome cooking.",
   register(api) {
     require("./cooking/Cookers.Cooking")(api);
     require("./cooking/Recipes.Cooking")(api);

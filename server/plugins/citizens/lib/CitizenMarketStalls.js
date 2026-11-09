@@ -91,11 +91,11 @@ const WARE_POOLS = Object.freeze({
     "BREAD", "COOKED_MEAT", "TROUT", "SALMON", "CAKE", "MEAT_PIE",
   ]),
   supplier: Object.freeze([
-    "IRON_SWORD", "BRONZE_SWORD", "STEEL_SWORD", "BRONZE_ARROW",
+    "IRON_SHORTSWORD", "BRONZE_SHORTSWORD", "STEEL_SHORTSWORD", "BRONZE_ARROW",
     "IRON_ARROW", "OAK_SHIELD", "LEATHER_BOOTS", "LEATHER_GLOVES",
   ]),
   prime: Object.freeze([
-    "BREAD", "CAKE", "IRON_SWORD", "FEATHER", "ROPE", "POT", "KNIFE",
+    "BREAD", "CAKE", "IRON_SHORTSWORD", "FEATHER", "ROPE", "POT", "KNIFE",
     "BUCKET", "TINDERBOX", "LEATHER_GLOVES",
   ]),
 });

@@ -89,7 +89,8 @@ function useCharge(player, item, cost = 1) {
 /** Doubles a dose and spends the charges it costs: one, or two for an extended stamina dose (Wiki). */
 function doubleStamina(request) {
   const ring = wornRing(request?.player);
-  if (!ring) {
+  // Wiki (Ring of endurance): the Agility cape's Stamina Boost "is not doubled and uses no charges".
+  if (!ring || request.ringDoubles === false) {
     return;
   }
   request.energy *= 2;
@@ -139,6 +140,7 @@ function uncharge({ player, item }) {
 
 module.exports = {
   name: "RingOfEndurance",
+  description: "Charges the ring of endurance with stamina potions, doubles a worn ring's stamina doses and cuts run-energy drain at 500 or more charges.",
   members: true,
   _test: { charges, wornRing, useCharge, doubleStamina, chargeRing, uncharge, passiveApplies, drainModifier, MAX_CHARGES },
   register(api) {

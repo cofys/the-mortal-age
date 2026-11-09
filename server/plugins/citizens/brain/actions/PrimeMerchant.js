@@ -136,7 +136,7 @@ function isMySupplier(player, kingdomId) {
 }
 
 function createPrimeMerchantAction(spec, world) {
-  const wareId = resolveWareId(spec.wareItem ?? "BRONZE_SWORD");
+  const wareId = resolveWareId(spec.wareItem ?? "BRONZE_SHORTSWORD");
   const pricePerWare = Math.max(1, Math.floor(Number(spec.pricePerWare ?? 78)));
   const wholesalePrice = Math.max(1, Math.floor(Number(spec.wholesalePrice ?? 55)));
   const restockThreshold = Math.max(1, Math.floor(Number(spec.restockThreshold ?? 3)));

@@ -215,7 +215,7 @@
           "restockTarget": 20,
           "restockThreshold": 3,
           "type": "primeMerchant",
-          "wareItem": "BRONZE_SWORD",
+          "wareItem": "BRONZE_SHORTSWORD",
           "wholesalePrice": 55
         }
       ],

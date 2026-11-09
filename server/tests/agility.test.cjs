@@ -56,6 +56,7 @@ const agilityApi = {
   registerArea: (area) => hooks.areas.push(area),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
   onPlayerLogin: (handler) => hooks.login.push(handler),
+  onPlayerProcess() {},
   onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
   onCustomEvent: (name, handler) => { hooks.listeners[name] = handler; },
   emitCustomEvent: (name, payload) => {
@@ -360,6 +361,17 @@ test("every shortcut plays out from either side without leaving the player locke
   } finally {
     Math.random = random;
   }
+});
+
+test("Karuulm Slayer Dungeon stepover rocks (34544) are shortcuts that cross two tiles in either direction", () => {
+  const rocks = SHORTCUTS.filter((shortcut) => shortcut.object === 34544);
+  assert.deepEqual(rocks.map((shortcut) => shortcut.at).sort(), [[1302, 10205, 0], [1311, 10215, 0], [1321, 10205, 0]]);
+  const east = rocks.find((shortcut) => shortcut.at[0] === 1321);
+  const context = (pos) => ({ obj: { id: 34544, x: 1321, y: 10205, z: 0 }, pos });
+  const west = east.steps(context({ x: 1320, y: 10205, z: 0 }));
+  const back = east.steps(context({ x: 1322, y: 10205, z: 0 }));
+  assert.deepEqual([west[0].move, back[0].move].map((m) => [m.x ?? m[0], m.y ?? m[1]]), [[1322, 10205], [1320, 10205]]);
+  assert.equal(east.end, "You climb over the rocks.");
 });
 
 test("shortcut audit: current directional Agility gates and captured no-sequence climbs", () => {
@@ -723,6 +735,7 @@ test("Yanille's south-wall grapple updates Ardougne medium progress after crossi
     core: PluginManager.getCoreApi(),
     persistAttribute() {},
     onPlayerLogin() {},
+    onPlayerProcess() {},
     getTaskManager: () => taskManager,
     emitCustomEvent() {},
   });
@@ -1667,6 +1680,15 @@ test("Varrock: the course helper is highlighted for the lap and told each obstac
   assert.deepEqual(player.state.varbitLog.filter(([id]) => id === HIGHLIGHT_VARBIT).map(([, value]) => value), [7, 0]);
   assert.equal(course("varrock").lapBonus, 0, "the Wiki's obstacle XP adds up to the lap");
   assert.equal(course("canifis").lapBonus, 0);
+});
+
+// Wiki (Obstacle pipe (Barbarian Outpost)): "Passing through the pipe awards the player 10 Agility experience."
+test("the Barbarian Outpost pipe gives 10 Agility XP, either way through", () => {
+  for (const from of [[2552, 3561, 0], [2552, 3558, 0]]) {
+    const player = createPlayer(...from);
+    const ticks = timeline(player, 20210, [2552, 3559, 0]);
+    assert.equal(ticks.reduce((sum, entry) => sum + entry.xp, 0), 10, `from ${from}`);
+  }
 });
 
 test("rooftop gaps: the jump two ticks after arriving, the landing (2588) a tick later, the XP the tick after (rsprox captures)", () => {

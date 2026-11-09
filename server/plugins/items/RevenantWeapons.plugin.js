@@ -155,10 +155,12 @@ function dismantle({ player, item }) {
   }
   // The weapon's own slot is freed for the ether, so only a full stack of it can be refused.
   const slot = inventory.getItems().indexOf(item);
+  // A copy to put back: the delete empties the slot's own Item (id -1), so restoring `item` restored nothing.
+  const kept = item.clone();
   inventory.deleteAtSlot(slot, 1, false);
   const ether = new core.Item(core.ItemIdentifiers.REVENANT_ETHER, DISMANTLE_ETHER);
   if (inventory.getAddableAmount(ether) < DISMANTLE_ETHER) {
-    inventory.setItem(slot, item);
+    inventory.setItem(slot, kept);
     player.sendMessage(`You don't have enough inventory space to dismantle your ${label}.`);
     return true;
   }
@@ -251,6 +253,7 @@ function deathItemDrop(event) {
 
 module.exports = {
   name: "RevenantWeapons",
+  description: "Adds Viggora's chainmace, the Ursine chainmace and Craw's bow: revenant ether charging, Wilderness damage bonus, uncharging and dismantling.",
   members: true,
   _test: { CHARGES_META, DEPOSIT_META, UNPAID_META, ACTIVATION_ETHER, MAX_CHARGES, DISMANTLE_ETHER, chargesOf, addEther, chargeWithEther, uncharge, dismantle, attackStarted, checkAmmo, decrementAmmo, rangedBoost, rangedDamageBoost, addToSlayerBonus, meleeBoost, deathItemDrop },
   register(pluginApi) {

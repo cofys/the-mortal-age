@@ -89,6 +89,8 @@ function harness(t, members = true) {
       WorldDefinition: { isMembersWorld: () => members }, World: { getProcessCycle: () => Math.floor(now / 600), forEachNetworkPlayer() {} },
       NpcDefinition: { forId: id => ({ getName: () => NPC_NAMES[id] }) },
       Animation, Graphic, Task, PlayerRights,
+      // The real manager mounts the combat tab (593) for the weapon; the events only need it re-mounted.
+      WeaponInterfaceManager: { assign: player => player.getPacketSender().sendTabInterface(0, 593) },
       DialogueChainBuilder, NpcDialogue, PlayerDialogue, StatementDialogue,
       ItemStatementDialogue, EndDialogue, ActionDialogue, GameObject: FakeGameObject, ObjectManager,
       MapObjects: { get: () => null, mapObjects, getHash: (x, y, z) => `${x},${y},${z}` } },
@@ -213,11 +215,11 @@ function harness(t, members = true) {
       getSkillManager: () => ({ getMaxLevel: skill => levels.get(skill) ?? 1,
         getExperience: skill => xp.get(skill) ?? 0, getTotalLevel: () => p.totalLevel ?? 1,
         addExperience(skill, amount, multipliers) {
-          assert.equal(multipliers, false);
+          assert.equal(multipliers, true, 'reward XP takes the world and account rates (#3672)');
           if (!p.blockXp) xp.set(skill, Math.min(200_000_000, (xp.get(skill) ?? 0) + amount));
         } }),
       getSpellbook: () => ({ getInterfaceId: () => 218 }),
-      getPacketSender: () => ({ closeSubInterface() {}, sendTabInterface() {}, sendInterface(id) { p.interfaceId = id; },
+      getPacketSender: () => ({ closeSubInterface() {}, sendTabInterface() { return this; }, sendGameframeTabSetup() { return this; }, sendInterface(id) { p.interfaceId = id; },
         sendInterfaceRemoval() { p.interfaceId = -1; p.chatboxGroupId = -1; }, sendString(text, uid) {
           p.trayTitle = text; (p.strings ??= new Map()).set(uid, text);
         },
@@ -550,7 +552,8 @@ test('Grand Exchange footprint samples use the active cache plaza and paving, ex
   });
   assert.equal(terrain.tileAt(3164, 3487, 0).underlay, 55);
   assert.equal(terrain.tileAt(3145, 3489, 0).overlay.id, 173);
-  for (const [x, y] of [[3144, 3489], [3145, 3506]]) {
+  // Rev 242 paved new paths north-west of the plaza, (3145, 3506) among them; (3146, 3504) is still grass.
+  for (const [x, y] of [[3144, 3489], [3146, 3504]]) {
     const tile = terrain.tileAt(x, y, 0);
     assert.equal(tile.overlay, null);
     assert.notEqual(tile.underlay, 55, 'the grass corners are outside the plaza');

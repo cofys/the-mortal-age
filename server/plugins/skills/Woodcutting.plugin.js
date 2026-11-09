@@ -20,6 +20,7 @@ const Weather = require("./woodcutting/Weather.Woodcutting");
 const Wilderness = require("./woodcutting/Wilderness.Woodcutting");
 const Mastery = require("./woodcutting/Mastery.Woodcutting");
 const Supply = require("./woodcutting/Supply.Woodcutting");
+const KandarinHeadgear = require("./woodcutting/KandarinHeadgear.Woodcutting");
 const FarmedRedwood = require("./farming/Redwood.Farming");
 const { pauseForLevelUp, actionInterval } = require("./SkillActions");
 
@@ -89,17 +90,18 @@ function inventoryBlocks(player, logId) {
   return !request.room;
 }
 
-/** Storage takes the log first; retain an unstored yield until the pet opportunity resolves. */
-function prepareLog(player, logId, xp = 0) {
-  const request = { player, itemId: logId, amount: 1, stored: 0, skill: Skill.WOODCUTTING, xp };
+/** Storage takes the logs first; retain an unstored yield until the pet opportunity resolves. */
+function prepareLog(player, logId, xp = 0, amount = 1) {
+  const request = { player, itemId: logId, amount, stored: 0, skill: Skill.WOODCUTTING, xp };
   pluginApi.emitCustomEvent("storage:gather", request);
-  return request.stored === 0 ? new Item(logId, 1) : null;
+  return request.stored < amount ? new Item(logId, amount - request.stored) : null;
 }
 
 function deliverLog(player, log) {
   if (!log) return;
-  if (player.getInventory().getAddableAmount(log) >= log.getAmount()) player.getInventory().add(log, true);
-  else ItemOnGroundManager.registers(player, log);
+  const fits = Math.min(player.getInventory().getAddableAmount(log), log.getAmount());
+  if (fits > 0) player.getInventory().add(new Item(log.getId(), fits), true);
+  if (fits < log.getAmount()) ItemOnGroundManager.registers(player, new Item(log.getId(), log.getAmount() - fits));
 }
 
 const BIRD_NESTS = Object.freeze({
@@ -198,7 +200,8 @@ const AXES = [
   axe(ItemIds.STEEL_AXE, 6, 2, 875, { standard: true }),
   axe(ItemIds.BLACK_FELLING_AXE, 11, 3, 10067, { felling: true }),
   axe(ItemIds.BLACK_AXE, 11, 3, 873, { standard: true }),
-  axe(ItemIds.BLESSED_AXE, 21, 4, 871),
+  // No blessed axe: it "does not retain the functionality of the mithril axe used to create it" and only chops the
+  // undead trees (Wiki: Blessed axe), which Animal Magnetism handles with its own check.
   axe(ItemIds.MITHRIL_FELLING_AXE, 21, 4, 10068, { felling: true }),
   axe(ItemIds.MITHRIL_AXE, 21, 4, 871, { standard: true }),
   axe(ItemIds.ADAMANT_FELLING_AXE, 31, 5, 10069, { felling: true }),
@@ -214,6 +217,7 @@ const AXES = [
   axe(ItemIds.INFERNAL_AXE_UNCHARGED__2, 61, 7, 8778, { requiredFiremaking: 85 }),
   axe(ItemIds.INFERNAL_AXE_UNCHARGED__4, 61, 7, 8778, { requiredFiremaking: 85 }),
   axe(ItemIds.CRYSTAL_AXE_INACTIVE_, 71, 7, 8324, { requiredAgility: 50 }),
+  axe(ItemIds.CRYSTAL_FELLING_AXE_INACTIVE_, 71, 7, 10072, { requiredAgility: 50, felling: true }),
   axe(ItemIds.CRYSTAL_FELLING_AXE, 71, 7, 10072, { requiredAgility: 50, felling: true }),
   axe(ItemIds.CRYSTAL_AXE, 71, 7, 8324, { requiredAgility: 50 }),
   axe(ItemIds.INFERNAL_AXE, 61, 7, 2117, { requiredFiremaking: 85, speed: 0.3 }),
@@ -745,14 +749,44 @@ function calculateCutChance(level, tree, axe) {
   return Math.min(1, Math.max(0, successes / 256));
 }
 
+/** Most players a tree's group bonus counts (Wiki: Forestry, "up to a maximum of +10 with ten players"). */
+const GROUP_BONUS_MAX = 10;
+
+/**
+ * Wiki (Forestry; Temporary skill boost): "Each player will receive a +1 boost to Woodcutting for each player at the
+ * tree, up to a maximum of +10" ("Between +1 and +10", "for each person chopping a tree", the chopper included).
+ * Not on a normal tree, in the Woodcutting Guild or on a farmed tree. Trees chopped on another plugin's request
+ * (farming patches, Trouble Brewing, Lost City's dramen tree) are left out: none is an ordinary world tree.
+ */
+function groupBonus(player, state, sessions = activeSessionsRef) {
+  if (!state || state.requested || state.tree?.name === "normal tree" || Guild.isInGuild(player)) return 0;
+  let chopping = 0;
+  for (const [other, session] of sessions ?? []) {
+    if (session.requested || session.objectId !== state.objectId || session.privateArea !== state.privateArea) continue;
+    if (!session.location?.equals?.(state.location)) continue;
+    if (other.isRegistered?.() === false) continue;
+    chopping++;
+  }
+  return Math.min(GROUP_BONUS_MAX, chopping);
+}
+
 /**
  * Woodcutting depth seam (./woodcutting/WOODCUTTING-DEPTH.md): every chop roll emits
  * "woodcutting:cut-chance" so depth modules can scale the cut. Listeners multiply
  * event.multiplier; a multiplier <= 0 fails the roll. Additive only.
+ * The 4th argument is the caller's session state (upstream Forestry group
+ * bonus reads it); the depth event's location is the plain {x,y,z} the depth
+ * modules destructure, derived from the state's engine Location.
  */
-function rollLog(player, tree, axe, context = null) {
-  const level = getWoodcuttingLevel(player) + Guild.invisibleBoost(player);
+function rollLog(player, tree, axe, state = null) {
+  const isSession = !!(state && (state.tree || state.objectId !== undefined || state.requested !== undefined));
+  const level = getWoodcuttingLevel(player) + Guild.invisibleBoost(player)
+    + (isSession ? groupBonus(player, state) : 0);
   const chance = calculateCutChance(level, tree, axe);
+  const rawLocation = state?.location ?? null;
+  const location = rawLocation && typeof rawLocation.getX === "function"
+    ? { x: rawLocation.getX(), y: rawLocation.getY(), z: rawLocation.getZ() }
+    : rawLocation;
   const event = {
     player,
     tree,
@@ -760,7 +794,7 @@ function rollLog(player, tree, axe, context = null) {
     level,
     chance,
     multiplier: 1,
-    location: context?.location ?? null,
+    location,
   };
   pluginApi.emitCustomEvent("woodcutting:cut-chance", event);
   if (!(event.multiplier > 0)) return false;
@@ -988,6 +1022,10 @@ function maybeDropBirdNest(player, nestMultiplier = 1) {
   const event = { player, multiplier: nestMultiplier };
   pluginApi.emitCustomEvent("woodcutting:nest-roll", event);
   const depthMultiplier = event.multiplier > 0 ? event.multiplier : 0;
+  // Wiki (Bird nest): "Free players won't see them while woodcutting." Members only, as the felling rations are.
+  // (A fixture with no core has no world to ask, as choppingAxeEligible allows.)
+  const worlds = pluginApi?.core?.WorldDefinition;
+  if (worlds && !worlds.isMembersWorld()) return false;
   // Content may make nests commoner ("woodcutting:nest-chance", a league fragment): `multiplier` times.
   const boost = { player, multiplier: 1 };
   pluginApi?.emitCustomEvent("woodcutting:nest-chance", boost);
@@ -1302,13 +1340,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     // Content may chop faster ("skills:action-interval", a league relic's 2-tick pace).
     state.nextActionTick = currentTick + actionInterval(pluginApi, player, Skill.WOODCUTTING, "chop", WOODCUTTING_ACTION_INTERVAL_TICKS);
     // Content may turn a miss into a hit ("woodcutting:attempt", a league relic's second chance).
-    const attempt = { player, object: activeTree, logId: state.tree.logId, success: rollLog(player, state.tree, state.axe, {
-        location: {
-          x: state.location.getX(),
-          y: state.location.getY(),
-          z: state.location.getZ(),
-        },
-      }) };
+    const attempt = { player, object: activeTree, logId: state.tree.logId, success: rollLog(player, state.tree, state.axe, state) };
     pluginApi.emitCustomEvent("woodcutting:attempt", attempt);
     if (!attempt.success) {
       continue;
@@ -1320,14 +1352,23 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       rollForesterRationEnergy(player, state.axe);
       const baseXp = treeBaseXp(player, state.tree, state.location) * lumberjackXpMultiplier(player);
       const xp = felling.bonus ? baseXp + baseXp / 10 : baseXp;
+      const logAmount = KandarinHeadgear.logsPerChop(player, state.tree.logId);
       let pendingLog = null;
-      if (!felling.skipLog && !InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
-        pendingLog = prepareLog(player, state.tree.logId, xp);
-        countLog(player);
+      let burnt = false;
+      if (!felling.skipLog) {
+        burnt = InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId);
+        if (!burnt) {
+          pendingLog = prepareLog(player, state.tree.logId, xp, logAmount);
+          countLog(player);
+        }
       }
       // A burnt log still says it was cut (rsprox captures 1637, 3996); a felling skip gives no log.
       if (!felling.skipLog) sendSpam(player, logMessage(state.tree));
-      CrystalAxe.tryUseCharge(player);
+      // Only the charged crystal axe doing the chopping spends a charge: one carried beside the axe in use (an infernal
+      // axe ranked above it, or a dragon axe below the crystal's 50 Agility) is left alone, as Mining's pickaxe.
+      if (state.axe?.id === ItemIds.CRYSTAL_AXE || state.axe?.id === ItemIds.CRYSTAL_FELLING_AXE) {
+        CrystalAxe.tryUseCharge(player, Math.random, state.axe.id);
+      }
       player
         .getSkillManager()
         .addExperiences(Skill.WOODCUTTING, xp);
@@ -1345,7 +1386,8 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         treeName: state.tree.name,
         location: state.location,
         // Resource-count consumers distinguish a felling omission from the successful action.
-        logAmount: felling.skipLog ? 0 : 1,
+        // A burnt log still reports one (as before the headgear), never the doubled amount.
+        logAmount: felling.skipLog ? 0 : burnt ? 1 : logAmount,
         axeId: state.axe?.id ?? null,
         xpReward: state.tree.xpReward,
         location: {
@@ -1411,6 +1453,9 @@ function requestedChop(event) {
   let tree = [...FARMED_TREES, ...TREES].find(tree => tree.logId === event.logId);
   if (tree && event.removeOnly) tree = { ...tree, logId: -1, xpReward: 0, multi: false };
   if (tree) event.handled = startWoodcutting(event.player, event.object, tree, activeSessionsRef);
+  // Another plugin's tree (a farming patch, Trouble Brewing, the dramen tree) takes no Forestry group bonus.
+  const session = event.handled ? activeSessionsRef.get(event.player) : null;
+  if (session) session.requested = true;
 }
 
 function requestedAxe(event) {
@@ -1425,8 +1470,14 @@ function pauseWoodcutting(event) {
   pauseForLevelUp(event, activeSessionsRef, (player) => stopWoodcutting(activeSessionsRef, player, false));
 }
 
+/** An accepted emote replaces chopping while keeping the new emote animation. */
+function interruptForEmote({ player }) {
+  stopWoodcutting(activeSessionsRef, player, false);
+}
+
 module.exports = {
   name: "Woodcutting",
+  description: "Woodcutting: chopping trees with the Forestry despawn timer, stump respawns, the logs-chopped tracker, and bird's nest and ring drops.",
   register(api) {
     pluginApi = api;
     api.onCustomEvent("woodcutting:chop", requestedChop);
@@ -1444,6 +1495,7 @@ module.exports = {
     CrystalAxe.attach(api);
     EntTrunk.attach(api, { findBestUsableAxe, calculateCutChance, lumberjackXpMultiplier, maybeDropBirdNest });
     ThickVines.attach(api, { axesBestFirst: AXES_BEST_FIRST, lumberjackXpMultiplier });
+    KandarinHeadgear.attach(api);
     Shrine.attach(api);
     // Woodcutting depth (./woodcutting/WOODCUTTING-DEPTH.md): attach order is listener order -
     // Groves stamps event.grove/event.drive, Weather stamps event.conditions, then the rest.
@@ -1457,6 +1509,7 @@ module.exports = {
       stopWoodcutting(activeSessions, player, false);
     });
     api.onCustomEvent("level-up:popup-opened", pauseWoodcutting);
+    api.onCustomEvent("player:emote", interruptForEmote);
     api.persistAttribute(LOGS_CHOPPED_ATTRIBUTE, 0);
     api.onPlayerLogin(sendLogsChopped);
     api.onCustomEvent("woodcutting:logs-chopped", answerLogsChopped);
@@ -1495,5 +1548,5 @@ module.exports = {
   calculateCutChance,
   /** Stops the player's chopping (a Forestry event spawning beside them). */
   stopWoodcutting: (player) => activeSessionsRef && stopWoodcutting(activeSessionsRef, player),
-  _test: { maybeDropBirdNest, setApi: (api) => { pluginApi = api; ItemOnGroundManager = api.getItemOnGroundManager(); } },
+  _test: { maybeDropBirdNest, groupBonus, sessions: () => activeSessionsRef, setApi: (api) => { pluginApi = api; ItemOnGroundManager = api.getItemOnGroundManager(); } },
 };

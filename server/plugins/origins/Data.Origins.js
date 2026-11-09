@@ -51,7 +51,7 @@ const ORIGINS = [
     // plugins/interface/TeleportInterface.plugin.js — an in-game teleport the
     // server already uses.
     spawn: { x: 2964, y: 3378, z: 0 },
-    kit: [...BASE_KIT, ["BRONZE_SWORD", 1], ["WOODEN_SHIELD", 1], ["RED_CAPE", 1], ["BREAD", 2]],
+    kit: [...BASE_KIT, ["BRONZE_SHORTSWORD", 1], ["WOODEN_SHIELD", 1], ["RED_CAPE", 1], ["BREAD", 2]],
     icon: "SARADOMIN_BANNER",
     epithet: "The kingdom with no king",
     welcome: "The white walls rise ahead of you. Make them proud.",

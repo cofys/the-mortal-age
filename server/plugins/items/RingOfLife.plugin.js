@@ -54,6 +54,13 @@ function onIncomingDamage(entity, hitDamage) {
     return;
   }
 
+  // A phoenix necklace that is about to heal the wearer goes first, and the ring stays on.
+  const phoenix = { player, remaining, active: false };
+  pluginApi?.emitCustomEvent("phoenix-necklace:will-trigger", phoenix);
+  if (phoenix.active) {
+    return;
+  }
+
   saveFromDeath(player);
 }
 
@@ -102,6 +109,7 @@ function onLowWarmth(request) {
 
 module.exports = {
   name: "RingOfLife",
+  description: "Teleports the wearer to their respawn point and breaks the ring when a hit leaves 10% Hitpoints or less, with the Defence cape doing the same.",
   members: true,
   _test: { onIncomingDamage, onLowWarmth, toggleRespawn, ARDOUGNE_ATTRIBUTE, ARDOUGNE_MARKET },
   register(api) {

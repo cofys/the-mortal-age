@@ -291,6 +291,7 @@ function resetLunarBatch({ player }) {
 
 module.exports = {
   name: "VarrockDiary",
+  description: "Credits Varrock diary tasks such as Thessalia's store, the newspaper, the pottery bowl, the spirit tree and the balloon, from other plugins' successes.",
   members: true,
   dependsOn: ["AchievementDiaries"],
   register(registry) {
@@ -316,7 +317,9 @@ module.exports = {
     api.onCustomEvent("jewellery:teleport-arrival", jewelleryTeleport);
     api.onCustomEvent("player:emote", emote);
     api.onCustomEvent("firemaking:success", burned);
-    api.onCustomEvent("diary:task", resetYewOnOtherTask);
+    // Completing or progressing another task resets it (Wiki); a repeat of a task already done is neither.
+    api.onCustomEvent("diary:task-completed", resetYewOnOtherTask);
+    api.onCustomEvent("diary:task-progressed", resetYewOnOtherTask);
     api.onCustomEvent("herblore:made", potionMade);
     api.onCustomEvent("cooking:success", cooked);
     api.onCustomEvent("skills:produced", dartTips);

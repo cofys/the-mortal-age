@@ -172,6 +172,10 @@ class CraftingTask extends Task {
   }
 }
 
+function stopCraftingOnInteractionCleared({ player }) {
+  Shared.stopCrafting(player);
+}
+
 module.exports = {
   name: "Crafting",
   // Data-driven recipes for bots: derived from the GEMS table so the hand-cut
@@ -186,8 +190,10 @@ module.exports = {
   })),
   startBotCrafting,
   isCraftingActive,
+  description: "Crafting: leather, gems, jewellery, glassblowing, pottery, spinning, weaving, battlestaves, snelms and light orbs.",
   register(api) {
     Shared.attach(api);
+    api.onCustomEvent("player:interaction-cleared", stopCraftingOnInteractionCleared);
     require("./crafting/Leather.Crafting")(api);
     require("./crafting/Gems.Crafting")(api);
     require("./crafting/Snelms.Crafting")(api);

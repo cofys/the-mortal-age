@@ -98,9 +98,12 @@ function graphicTile(player, object) {
   return new core.Location(clamp(at.getX(), location.getX(), sizeX), clamp(at.getY(), location.getY(), sizeY), location.getZ());
 }
 
-/** A data-file altar's offering: its scale of the burying experience, rounded up as burying is. */
+/**
+ * A data-file altar's offering: its scale of the burying experience. Experience keeps tenths (SkillManager floors the
+ * rest), so 350% of bones' 4.5 is the Wiki's 15.7, not 16 (Wiki: Bones, Bat bones, Monkey bones at the Chaos altar).
+ */
 function dataBlessing(altar) {
-  return (bone) => ({ experience: Math.ceil(bone.xp * altar.xpScale), message: DATA.message });
+  return (bone) => ({ experience: bone.xp * altar.xpScale, message: DATA.message });
 }
 
 /** One offering of the first `boneId` carried; false when there is none left or the altar is gone. */
@@ -161,6 +164,11 @@ function stopOffering({ player }) {
   offerings.delete(player);
 }
 
+/** Both widget and inventory packet routes check item permissions before dispatching Bury. */
+function interruptOfferingForInventoryAction(event) {
+  if (event.action === "action" && event.option?.toLowerCase() !== "examine") stopOffering(event);
+}
+
 function pauseOffering(event) {
   pauseForLevelUp(event, offerings, (player) => stopOffering({ player }));
 }
@@ -213,13 +221,15 @@ function offerOnAltar(request) {
 
 module.exports = {
   name: "BoneAltars",
+  description: "Offering bones on altars, including the Chaos Temple altar's boosted Prayer XP and house altars, repeating while bones last.",
   members: true,
-  _test: { altarAt, spared, zealotPieces, graphicTile },
+  _test: { altarAt, spared, zealotPieces, graphicTile, dataBlessing },
   register(pluginApi) {
     api = pluginApi;
     core = pluginApi.core;
     api.onItemOnObject(useBoneOnAltar, { noted: false });
     api.onCustomEvent("level-up:popup-opened", pauseOffering);
     api.onCustomEvent("bone-altars:offer", offerOnAltar);
+    api.onCanUseItem(interruptOfferingForInventoryAction);
   },
 };

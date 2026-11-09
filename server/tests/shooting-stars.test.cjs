@@ -438,13 +438,11 @@ test("Dusuri: introduction until met, the Trade action sets star_trader_met, tra
 test("Dusuri: displayed refunds, value messages and actual sales pay 80% for all four rewards", (t) => {
   const data = require("../data/definitions/shops.json").find((shop) => shop.name === "Dusuri's Star Shop");
   ShopDefinition.replace([new ShopDefinition(data.id, data.name, data.currency,
-    data.originalStock.map((stock) => ({ ...stock, price: data.prices[stock.id] })), 1, 1, 1, "test")]);
+    data.originalStock.map((stock) => ({ ...stock, price: data.prices[stock.id] })), 1, 1, 1, "test",
+    { generalStore: data.generalStore, sellMultiplier: data.sellMultiplier, priceChangePer: data.priceChangePer })]);
   ShopManager.initialize();
   ShopManager.registerItemCurrency(core.ItemIdentifiers.STARDUST);
-  t.mock.method(PluginManager, "emitCustomEvent", (name, request) => {
-    if (name === "shop:sell-price") Dusuri.sellPrice(request);
-    if (name === "shop:can-sell") Dusuri.canSell(request);
-  });
+  t.mock.method(PluginManager, "emitCustomEvent", () => {});
   const p = miner();
   const packets = [];
   p.getSession = () => ({ sendClientPacket: (packet) => packets.push(packet) });
@@ -481,12 +479,6 @@ test("Dusuri: displayed refunds, value messages and actual sales pay 80% for all
   assert.equal(p.getInventory().getAmount(core.ItemIdentifiers.STARDUST), before, "metadata-locked items remain unsellable");
   assert.equal(p.getInventory().getAmount(data.originalStock[0].id), 1);
   ShopManager.close(p);
-  const otherShop = { shopName: "Another shop", buyPrice: 2000, price: 1700 };
-  Dusuri.sellPrice(otherShop);
-  assert.equal(otherShop.price, 1700);
-  const otherSale = { shopName: "Another shop", sellable: false };
-  Dusuri.canSell(otherSale);
-  assert.equal(otherSale.sellable, false);
 });
 
 test("celestial ring: charge with stardust, extra ores up to adamantite spend charges, uncharge returns it", () => {
@@ -590,4 +582,29 @@ test("celestial ring: equipping the ring while the stardust prompt is open spend
   p.getEnteredAmountAction().execute(15);
   assert.equal(Ring.charges(worn), 15);
   assert.equal(p.getInventory().getAmount(I.STARDUST), 5);
+});
+
+test("a reward-currency shop buys nothing back; a tokkul shop still does", (t) => {
+  const { ShopDefinition: Definition } = require("../dist/game/definition/ShopDefinition");
+  const COAL = core.ItemIdentifiers.COAL;
+  const shopFor = (id, currency) => new Definition(id, `Test ${currency}`, currency, [{ id: COAL, amount: 100, restockTicks: null, price: null }], 1, 1, 1, "test");
+  ShopDefinition.replace([shopFor(90001, "MARK OF GRACE"), shopFor(90002, "TOKKUL")]);
+  ShopManager.initialize();
+  ShopManager.registerItemCurrency(core.ItemIdentifiers.MARK_OF_GRACE);
+  ShopManager.registerItemCurrency(core.ItemIdentifiers.TOKKUL);
+  // Coal sells as any sellable item does (the item gameplay data isn't loaded here).
+  t.mock.method(PluginManager, "emitCustomEvent", (name, request) => { if (name === "shop:can-sell") request.sellable = true; });
+  const sellCoal = (shopId, currencyId) => {
+    const p = miner();
+    p.getSession = () => ({ sendClientPacket: () => true });
+    p.getInventory().adds(COAL, 1);
+    ShopManager.open(p, shopId);
+    const slot = p.getInventory().getItems().findIndex((item) => item?.getId() === COAL);
+    ShopManager.handleWidgetAction(p, { groupId: ShopManager.SIDE_INTERFACE_ID, childId: 0, buttonNum: 0, slot, itemId: COAL, option: "Sell 1" });
+    return { coal: p.getInventory().getAmount(COAL), paid: p.getInventory().getAmount(currencyId) };
+  };
+  assert.deepEqual(sellCoal(90001, core.ItemIdentifiers.MARK_OF_GRACE), { coal: 1, paid: 0 }, "the reward shop refuses it");
+  const tokkul = sellCoal(90002, core.ItemIdentifiers.TOKKUL);
+  assert.equal(tokkul.coal, 0, "the tokkul shop buys it");
+  assert.ok(tokkul.paid > 0, "for tokkul");
 });

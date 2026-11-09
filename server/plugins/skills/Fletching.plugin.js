@@ -209,6 +209,7 @@ class FletchingBotTask extends Task {
 module.exports = {
   answerShafts,
   name: "Fletching",
+  description: "Fletching: every Wiki recipe for bows, arrows, bolts and more, with menus and animations, plus an arrow shaft event for other content.",
   members: true,
   // Bot entry points + recipe table for citizen brains.
   FLETCHING_RECIPES,

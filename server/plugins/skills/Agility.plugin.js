@@ -1,5 +1,6 @@
 const ObstacleRunner = require("./agility/ObstacleRunner.Agility");
 const { COURSES } = require("./agility/courses/Courses.Agility");
+const Pyramid = require("./agility/courses/AgilityPyramid.Agility");
 const { SHORTCUTS } = require("./agility/shortcuts/Shortcuts.Agility");
 
 /** Attribute holding { course, index } for the lap in progress. */
@@ -830,6 +831,7 @@ function getLapProgress(player) {
 
 module.exports = {
   name: "Agility",
+  description: "The Agility skill: rooftop and other obstacle courses, lap counting, marks of grace and Grace's lap-counter toggle.",
   members: true,
   findBestCourseForLevel,
   isObstacleRunning,
@@ -846,6 +848,7 @@ module.exports = {
     api.persistAttribute(LAPS_ATTRIBUTE);
     api.persistAttribute(LAP_COUNTER_OFF_ATTRIBUTE);
     api.persistAttribute(MARK_COOLDOWN_ATTRIBUTE, 0);
+    api.persistAttribute(Pyramid.PYRAMID_TOP_ATTRIBUTE, false);
     api.onNpcInteraction("Grace", { "Toggle Counter": toggleLapCounter });
     api.onObjectRoute(routeToObstacle);
     api.onObjectFirstClick([...OBSTACLES_BY_OBJECT.keys()], operateObstacle);
@@ -857,6 +860,9 @@ module.exports = {
     api.onPlayerLogout(finishObstacleOnLogout);
     api.onPlayerLogout(pauseMarksOnLogout);
     api.onPlayerLogin(resumeMarksOnLogin);
+    api.onPlayerLogin(Pyramid.syncPyramidTop);
+    // A taken top clears once its player is off the pyramid by any way but the doorway (a teleport, a death).
+    api.onPlayerProcess(({ player }) => Pyramid.clearPyramidTop(player));
     api.onCustomEvent("ground-items:taken", creditMarkTaken);
 
     api.log("registered", {

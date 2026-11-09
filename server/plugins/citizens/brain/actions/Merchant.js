@@ -85,7 +85,7 @@ const MERCHANT_COLD_LINES = Object.freeze({
 // Ad lines live in the pure CitizenHawker module, picked by poolKey + stock tier
 // so merchants never hawk wares they don't have (empty shelves => silence).
 function poolKeyForWare(wareId) {
-  return wareId === ItemIds.BRONZE_SWORD ? "bronze_sword" : "bread";
+  return wareId === ItemIds.BRONZE_SHORTSWORD ? "bronze_sword" : "bread";
 }
 
 function resolveWareId(name) {

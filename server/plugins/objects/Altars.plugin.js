@@ -68,6 +68,8 @@ function handlePrayerAltar(player, fullMessage = "You already have full Prayer p
   Sounds.sendSound(player, Sound.PRAYER_RECHARGE);
   skillManager.setCurrentLevels(Skill.PRAYER, maxPrayer);
   skillManager.updateSkill(Skill.PRAYER);
+  // Wiki: Prayer (5 April 2023) - praying at an altar resets the timer on Prayer point draining effects.
+  player.setPrayerPointDrain(0);
   player.sendMessage("You recharge your Prayer points.");
   return true;
 }
@@ -244,6 +246,7 @@ function arceuusSpellbook({ player }) {
 
 module.exports = {
   name: "Altars",
+  description: "Altar actions: pray to restore Prayer points, switch spellbooks at Ancient, Lunar and Dark altars, and the Chaos, Nature, Guthix and Occult altars.",
   register: (pluginApi) => {
     api = pluginApi;
     core = pluginApi.core;

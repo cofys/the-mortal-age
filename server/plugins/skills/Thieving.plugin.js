@@ -135,6 +135,7 @@ function stealFromStallBot(player, stallName, object) {
 
 module.exports = {
   name: "Thieving",
+  description: "Thieving: pickpocketing NPCs, opening coin pouches, stealing from stalls, blackjacking, the ham trapdoor and the Ardougne castle doors.",
   members: true,
   register(api) {
     core = api.core;

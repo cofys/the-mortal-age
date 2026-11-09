@@ -279,3 +279,85 @@ test("a drop becoming public cannot merge into recurring supply", t => {
   assert.equal(source.getItem().getAmount(), 3);
   assert.equal(drop.getItem().getAmount(), 5);
 });
+
+for (const [label,id,x,y,z,delay] of [
+  ["Crossbow",837,3174,3663,0,500],
+  ["Shears",1735,3152,3306,0,100],
+  ["Aldarin Hammer",2347,1373,2949,0,100],
+  ["Outer Fortis Pestle",233,1667,3068,0,100],
+  ["Outer Fortis Vial of water",227,1668,3068,0,100],
+  ["Fortis Chisel",1755,1657,3142,0,100],
+  ["Overlook Tinderbox",590,1625,3287,0,100],
+  ["Outer Fortis Spade",952,1641,3052,0,100],
+  ["Aldarin Spade",952,1405,2938,0,100],
+]) test("audited "+label+" definition preserves full-bag refusal and its real respawn delay", t=>{
+  const f=respawnFixture(t);
+  const definition=require("../data/definitions/ground-items.json").find(row=>
+    row.id===id&&row.location.x===x&&row.location.y===y&&row.location.z===z);
+  assert.ok(definition,"audited source definition is present");
+  f.player.getLocation=()=>new Location(x,y,z);
+  const {GroundItemSpawnDefinitionLoader}=require("../dist/game/definition/loader/impl/GroundItemSpawnDefinitionLoader");
+  const pile=new GroundItemSpawnDefinitionLoader().toItemOnGround(definition);
+  assert.ok(pile);assert.equal(pile.getRespawnTimer(),delay);assert.equal(pile.isStaticSpawn(),true);
+  ItemOnGroundManager.register(pile);
+  for(let slot=0;slot<28;slot++)f.inventory.setItem(slot,new Item(385));
+  ItemOnGroundManager.pickup(f.player,pile);
+  assert.equal(pile.isPendingRemoval(),false);assert.equal(pile.getItem().getAmount(),1);
+  assert.equal(f.inventory.getAmount(id),0);ItemOnGroundManager.process();assert.equal(f.tasks.length,0);
+  f.inventory.setItem(0,new Item(-1,0));ItemOnGroundManager.pickup(f.player,pile);
+  assert.equal(f.inventory.getAmount(id),1);assert.equal(pile.isPendingRemoval(),true);
+  const restored=finishRespawn(f,1);
+  assert.equal(restored.getRespawnTimer(),delay,"uses full source delay, never a shortened fixture");
+  assert.deepEqual([restored.getPosition().getX(),restored.getPosition().getY(),restored.getPosition().getZ()],[x,y,z]);
+});
+
+for(const[id,x,y,amount]of[[557,1394,3116,4],[558,1392,3118,2]])test("audited member rune "+id+" conserves a capped-stack partial pickup and restores its source quantity",t=>{
+ const f=respawnFixture(t),definition=require("../data/definitions/ground-items.json").find(r=>r.id===id&&r.location.x===x&&r.location.y===y&&r.location.z===0);
+ assert.ok(definition,"audited member rune source row");assert.equal(definition.members,true);
+ f.player.getLocation=()=>new Location(x,y,0);
+ const {GroundItemSpawnDefinitionLoader}=require("../dist/game/definition/loader/impl/GroundItemSpawnDefinitionLoader");
+ const pile=new GroundItemSpawnDefinitionLoader().toItemOnGround(definition);
+ assert.equal(pile.getRespawnTimer(),100);assert.equal(pile.getItem().getAmount(),amount);
+ ItemOnGroundManager.register(pile);
+ f.inventory.setItem(0,new Item(id,MAX_STACK_AMOUNT-1));
+ for(let slot=1;slot<28;slot++)f.inventory.setItem(slot,new Item(385));
+ ItemOnGroundManager.pickup(f.player,pile);
+ assert.equal(f.inventory.getAmount(id),MAX_STACK_AMOUNT);assert.equal(pile.getItem().getAmount(),amount-1);
+ assert.equal(pile.isPendingRemoval(),false);ItemOnGroundManager.process();assert.equal(f.tasks.length,0);
+ f.inventory.resetItems();ItemOnGroundManager.pickup(f.player,pile);
+ assert.equal(f.inventory.getAmount(id),amount-1);assert.equal(pile.isPendingRemoval(),true);
+ const restored=finishRespawn(f,amount);assert.equal(restored.getRespawnTimer(),100);
+ assert.deepEqual([restored.getPosition().getX(),restored.getPosition().getY(),restored.getPosition().getZ()],[x,y,0]);
+});
+
+for(const[x,y]of[[2671,3737],[2672,3738]])test("real Telegrab landing transfers island Nature source and respawns full quantity at"+x+","+y,t=>{
+ const f=respawnFixture(t),r=require("../data/definitions/ground-items.json").find(r=>r.id===561&&r.location.x===x&&r.location.y===y);
+ assert.ok(r);f.player.getLocation=()=>new Location(2678,3731,0);
+ const {GroundItemSpawnDefinitionLoader}=require("../dist/game/definition/loader/impl/GroundItemSpawnDefinitionLoader");
+ const pile=new GroundItemSpawnDefinitionLoader().toItemOnGround(r);ItemOnGroundManager.register(pile);
+ f.listener.landGroundItemGrab(f.player,561,pile.getPosition());
+ assert.equal(f.inventory.getAmount(561),2);assert.equal(pile.isPendingRemoval(),true);
+ const restored=finishRespawn(f,2);assert.equal(restored.getRespawnTimer(),200);
+});
+test("island Nature Telegrab landing preserves capped/full bags and original respawn quantity",t=>{
+ const f=respawnFixture(t),r=require("../data/definitions/ground-items.json").find(r=>r.id===561&&r.location.x===2671&&r.location.y===3737);
+ assert.ok(r);f.player.getLocation=()=>new Location(2678,3731,0);
+ const {GroundItemSpawnDefinitionLoader}=require("../dist/game/definition/loader/impl/GroundItemSpawnDefinitionLoader");
+ const pile=new GroundItemSpawnDefinitionLoader().toItemOnGround(r);ItemOnGroundManager.register(pile);
+ for(let s=0;s<28;s++)f.inventory.setItem(s,new Item(385));
+ f.listener.landGroundItemGrab(f.player,561,pile.getPosition());assert.equal(pile.getItem().getAmount(),2);assert.equal(pile.isPendingRemoval(),false);
+ f.inventory.setItem(0,new Item(561,MAX_STACK_AMOUNT-1));f.listener.landGroundItemGrab(f.player,561,pile.getPosition());
+ assert.equal(f.inventory.getAmount(561),MAX_STACK_AMOUNT);assert.equal(pile.getItem().getAmount(),1);assert.equal(pile.isPendingRemoval(),false);
+ f.inventory.resetItems();f.listener.landGroundItemGrab(f.player,561,pile.getPosition());assert.equal(f.inventory.getAmount(561),1);
+ assert.equal(finishRespawn(f,2).getRespawnTimer(),200);
+});
+
+for(const[id,x,y]of[[1925,1667,3124],[1925,1644,3093],[1931,1666,3124]])test("Civitas container "+id+"@"+x+","+y+" preserves full-bag refusal and100tick respawn",t=>{
+ const f=respawnFixture(t),r=require("../data/definitions/ground-items.json").find(r=>r.id===id&&r.location.x===x&&r.location.y===y&&r.location.z===0);assert.ok(r);
+ f.player.getLocation=()=>new Location(x,y,0);
+ const {GroundItemSpawnDefinitionLoader}=require("../dist/game/definition/loader/impl/GroundItemSpawnDefinitionLoader");
+ const pile=new GroundItemSpawnDefinitionLoader().toItemOnGround(r);ItemOnGroundManager.register(pile);
+ for(let s=0;s<28;s++)f.inventory.setItem(s,new Item(385));ItemOnGroundManager.pickup(f.player,pile);assert.equal(pile.isPendingRemoval(),false);assert.equal(f.inventory.getAmount(id),0);assert.equal(pile.getItem().getAmount(),1);
+ f.inventory.setItem(0,new Item(-1,0));ItemOnGroundManager.pickup(f.player,pile);assert.equal(f.inventory.getAmount(id),1);assert.equal(pile.isPendingRemoval(),true);
+ assert.equal(finishRespawn(f,1).getRespawnTimer(),100);
+});

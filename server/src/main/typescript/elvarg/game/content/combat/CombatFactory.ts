@@ -7,6 +7,7 @@ import { WeaponInterfaces } from "./WeaponInterfaces";
 import { WeaponInterfaceManager } from "./WeaponInterfaceManager";
 import { AccuracyFormulasDpsCalc } from "./formula/AccuracyFormulasDpsCalc";
 import { DamageFormulas } from "./formula/DamageFormulas";
+import { withHitVictim } from "./EquipmentEffects";
 import { HitDamage } from "./hit/HitDamage";
 import { HitMask } from "./hit/HitMask";
 import { PendingHit } from "./hit/PendingHit";
@@ -221,15 +222,17 @@ export class CombatFactory {
         const prayerType = resolveSpecialAttackType(specialTraits?.damageType) ?? type;
         let maxHit = 0;
         let minimumFloor = 0;
-        if (type == CombatType.MELEE) {
-            maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.MELEE);
-        } else if (type == CombatType.RANGED) {
-            maxHit = PluginManager.modifyRangedMaxHit(entity, victim, DamageFormulas.sourceMaxHit(entity, CombatType.RANGED));
-        } else if (type == CombatType.MAGIC) {
-            const bounds = DamageFormulas.sourceHitBounds(entity, CombatType.MAGIC, victim);
-            maxHit = bounds.maximum;
-            minimumFloor = bounds.minimum;
-        }
+        withHitVictim(entity, victim, () => {
+            if (type == CombatType.MELEE) {
+                maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.MELEE);
+            } else if (type == CombatType.RANGED) {
+                maxHit = PluginManager.modifyRangedMaxHit(entity, victim, DamageFormulas.sourceMaxHit(entity, CombatType.RANGED));
+            } else if (type == CombatType.MAGIC) {
+                const bounds = DamageFormulas.sourceHitBounds(entity, CombatType.MAGIC, victim);
+                maxHit = bounds.maximum;
+                minimumFloor = bounds.minimum;
+            }
+        });
         const rolls = type == CombatType.MELEE || type == CombatType.RANGED || type == CombatType.MAGIC;
         const range = rolls
             ? CombatFactory.specialDamageRange(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor)
@@ -303,11 +306,43 @@ export class CombatFactory {
     }
 
     /**
+     * The victim's protection prayer against this hit, once. Wiki (Prayer flicking): it must be on "the tick your enemy
+     * attacks", so addPendingHit reads it when the attack is queued (after the method and plugins have finalized the
+     * hit, and before its XP); a hit queued when it lands (Scurrius' bolts, the Leviathan's bite) is read then. The
+     * impact pass only covers hits that skipped the queue (a manipulateHit replacement).
+     */
+    public static applyProtectionPrayer(hit: PendingHit): void {
+        if (typeof hit.hasAppliedImpactProtection === "function" && hit.hasAppliedImpactProtection()) return;
+        const hits = typeof hit.getHits === "function" ? hit.getHits() : null;
+        const attacker = hit.getAttacker();
+        const victim = hit.getTarget();
+        if (!Array.isArray(hits) || hits.length === 0 || !attacker || !victim) return;
+        const bypassProtection = typeof hit.bypassesProtectionPrayer === "function"
+            && hit.bypassesProtectionPrayer();
+        const protectionType = typeof hit.getProtectionType === "function"
+            ? hit.getProtectionType()
+            : hit.getCombatType();
+        if (!bypassProtection && protectionType !== undefined) {
+            const prayer = PrayerHandler.getProtectingPrayer(protectionType);
+            if (PrayerHandler.isActivated(victim, prayer)) {
+                const reduction = attacker.isNpc()
+                    ? CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_NPCS
+                    : CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_PLAYERS;
+                for (const damage of hits) damage.multiplyDamage(reduction);
+            }
+        }
+        if (typeof hit.markImpactProtectionApplied === "function") {
+            hit.markImpactProtectionApplied();
+        }
+        if (typeof hit.updateTotalDamage === "function") hit.updateTotalDamage();
+    }
+
+    /**
      * Applies the victim's defensive reactions when a pre-rolled hit actually lands.
-     * Protection prayers are read now (a last-tick flick counts) and Elysian / incoming
-     * damage modifiers react now rather than when the attack was launched. The roll was
-     * already capped to the target's HP at roll time, so a heal after the roll can make
-     * the hit non-lethal.
+     * Elysian and other incoming-damage modifiers react now rather than when the attack
+     * was launched; the protection prayer was already applied when the hit was queued
+     * (applyProtectionPrayer). The roll was already capped to the target's HP at roll
+     * time, so a heal after the roll can make the hit non-lethal.
      */
     public static applyHitTimeDefences(hit: PendingHit): void {
         if (!hit || typeof hit.getHits !== "function") {
@@ -323,27 +358,7 @@ export class CombatFactory {
             return;
         }
 
-        const protectionApplied = typeof hit.hasAppliedImpactProtection === "function"
-            && hit.hasAppliedImpactProtection();
-        if (!protectionApplied) {
-            const bypassProtection = typeof hit.bypassesProtectionPrayer === "function"
-                && hit.bypassesProtectionPrayer();
-            const protectionType = typeof hit.getProtectionType === "function"
-                ? hit.getProtectionType()
-                : hit.getCombatType();
-            if (!bypassProtection && protectionType !== undefined) {
-                const prayer = PrayerHandler.getProtectingPrayer(protectionType);
-                if (PrayerHandler.isActivated(victim, prayer)) {
-                    const reduction = attacker.isNpc()
-                        ? CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_NPCS
-                        : CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_PLAYERS;
-                    for (const damage of hits) damage.multiplyDamage(reduction);
-                }
-            }
-            if (typeof hit.markImpactProtectionApplied === "function") {
-                hit.markImpactProtectionApplied();
-            }
-        }
+        CombatFactory.applyProtectionPrayer(hit);
 
         const incomingApplied = typeof hit.hasAppliedImpactIncoming === "function"
             && hit.hasAppliedImpactIncoming();
@@ -411,8 +426,8 @@ export class CombatFactory {
      * NpcDefinitions carry a single max hit (the wiki's highest style), so a boss
      * whose styles cap differently passes the cap for the style it rolled - the
      * bounds ride as flat bonuses so the exact integer max survives
-     * rollSpecialDamage's floor. Protection prayers still reduce the result at
-     * impact unless bypassProtectionPrayer is set. Damage is capped to the
+     * rollSpecialDamage's floor. Protection prayers still reduce the result
+     * when the hit is queued unless bypassProtectionPrayer is set. Damage is capped to the
      * target's current hitpoints, matching the cap PendingHit rolls with.
      */
     public static applyStyleDamage(
@@ -508,6 +523,8 @@ export class CombatFactory {
             return;
         }
         const base = Math.min(...delays);
+        const queue = target.getCombat().getHitQueue();
+        const generation = queue.getIncomingGeneration();
         for (let i = 0; i < hits.length; i++) {
             const extra = Math.max(0, delays[i] - base);
             if (extra <= 0) {
@@ -519,8 +536,10 @@ export class CombatFactory {
                     super(extra);
                 }
                 execute(): void {
-                    if (target.isRegistered() && target.getHitpoints() > 0) {
-                        target.getCombat().getHitQueue().addPendingDamage([hits[i]]);
+                    // Dropped when the queue's incoming hits were cleared meanwhile (phoenix necklace).
+                    if (target.isRegistered() && target.getHitpoints() > 0
+                        && queue.getIncomingGeneration() === generation) {
+                        queue.addPendingDamage([hits[i]]);
                     }
                     this.stop();
                 }
@@ -902,6 +921,8 @@ export class CombatFactory {
             });
         }
 
+        // The protection prayer is read on the attack's tick, before the XP is paid on what the hit deals.
+        CombatFactory.applyProtectionPrayer(qHit);
         qHit.capDamageToBudget();
 
         if (attacker.isPlayer()) {
@@ -959,8 +980,9 @@ export class CombatFactory {
             return;
         }
 
-        // Defensive reactions are read on the impact tick, not when the attack was rolled,
-        // and before target-side consumers such as Nightmare Zone absorption spend the hit.
+        // Defensive reactions are read on the impact tick, not when the attack was rolled (the protection
+        // prayer was applied when the hit was queued), and before target-side consumers such as Nightmare
+        // Zone absorption spend the hit.
         CombatFactory.applyHitTimeDefences(qHit);
 
         // Before target takes damage, manipulate the hit to handle last-second effects.
@@ -1332,10 +1354,12 @@ export class CombatFactory {
         // The target may now hit back without a skull, whatever this attack's damage and before it lands.
         CombatFactory.recordAttackedBy(target, attacker);
 
-        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes, so
-        // the skull "cannot disappear during PvP combat". The skull keeps its colour.
+        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes. The skull keeps its
+        // colour. Only initiating does: an attacked player may retaliate without it, skulled or not (a skull can't
+        // run out mid-fight anyway, Player.processSkullTimer holds it).
         if (attacker.isSkulled()) {
-            CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
+            const retaliating = CombatFactory.wasAttackedBy(attacker, target) || attacker.getCombat().getAttacker() == target;
+            if (!retaliating) CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
             return;
         }
 
@@ -1642,8 +1666,10 @@ export class CombatFactory {
             return true;
         }
 
+        // rsprox_transcripts/229/02760.txt:7555 (and 227/00096:101707): a bow with nothing in the ammo slot.
+        const NO_AMMO = "There is no ammo left in your quiver.";
         if (ammoData == null) {
-            return reject("You don't have any ammunition to fire.");
+            return reject(NO_AMMO);
         }
 
         if (CombatFactory.usesWeaponSlotAmmo(rangedWeapon)) {
@@ -1655,7 +1681,11 @@ export class CombatFactory {
         }
 
         let ammoSlotItem = player.getEquipment().getItems()[Equipment.AMMUNITION_SLOT];
-        if (ammoSlotItem.getId() == -1 || ammoSlotItem.getAmount() < amountRequired) {
+        if (ammoSlotItem.getId() == -1 || ammoSlotItem.getAmount() <= 0) {
+            return reject(NO_AMMO);
+        }
+        // Some, but fewer than the weapon fires at once (a dark bow's two): no recording, our wording.
+        if (ammoSlotItem.getAmount() < amountRequired) {
             return reject("You don't have the required amount of ammunition to fire that.");
         }
 
@@ -1671,12 +1701,10 @@ export class CombatFactory {
             }
         }
 
+        // rsprox 230/00356.txt:8615 "You can't use that ammo with your crossbow.", 227/00550.txt:395792 "...your bow.".
         if (!properReq) {
-            let ammoName = ammoSlotItem.getDefinition().getName(),
-                weaponName = player.getEquipment().getItems()[Equipment.WEAPON_SLOT].getDefinition().getName(),
-                add = !ammoName.endsWith("s") && !ammoName.endsWith("(e)") ? "s" : "";
-            return reject("You can not use " + ammoName + "" + add + " with "
-                + Misc.anOrA(weaponName) + " " + weaponName + ".");
+            const weaponName = String(player.getEquipment().getItems()[Equipment.WEAPON_SLOT].getDefinition().getName() ?? "");
+            return reject(`You can't use that ammo with your ${/crossbow|ballista/i.test(weaponName) ? "crossbow" : "bow"}.`);
         }
 
         return true;
@@ -1835,7 +1863,10 @@ export class CombatFactory {
 
             // If we are at 0 ammo remove the item from the equipment completely.
             if (worn.getAmount() == 0) {
-                player.sendMessage("You have run out of ammunition!");
+                // The last arrow or bolt goes without a line (rsprox_transcripts/227/00096.txt:101682: the slot
+                // clears, and only the next attempt says "There is no ammo left in your quiver."). Thrown weapons
+                // keep theirs: no recording shows the last one go.
+                if (slot == Equipment.WEAPON_SLOT) player.sendMessage("You have run out of ammunition!");
                 player.getEquipment().set(slot, new Item(-1));
 
                 if (slot == Equipment.WEAPON_SLOT) {

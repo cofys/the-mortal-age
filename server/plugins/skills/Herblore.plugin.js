@@ -288,6 +288,7 @@ const HERBLORE_RECIPES = [
 
 module.exports = {
   name: "Herblore",
+  description: "Herblore: cleaning grimy herbs, mixing potions, grinding secondaries with a pestle and mortar, and Guthix balance.",
   members: true,
   HERBLORE_RECIPES,
   startBotHerblore,
@@ -297,6 +298,7 @@ module.exports = {
     require("./herblore/Cleaning.Herblore")(api);
     require("./herblore/Mixing.Herblore")(api);
     require("./herblore/Grinding.Herblore")(api);
+    require("./herblore/Coconut.Herblore")(api);
     require("./herblore/GuthixBalance.Herblore")(api);
 
     // Fork bot session task + cleanup (upstream units manage their own).
