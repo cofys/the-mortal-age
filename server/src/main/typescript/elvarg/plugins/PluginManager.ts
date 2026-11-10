@@ -1979,8 +1979,22 @@ export class PluginManager {
   }
 
   public static emitItemAction(event: PluginItemActionEvent): boolean {
+    // The stack the click covered, read before any handler consumes it ("Open-all" empties it).
+    const covered = Number.isInteger(event?.itemId) ? Number(event?.player?.getInventory?.().getAmount?.(event.itemId) ?? 1) || 1 : 1;
     for (const hook of PluginManager.itemActionHooks) {
       PluginManager.executeHook(hook, event, "item_action", "item_action");
+    }
+    // An inventory action something answered (not a click nothing took): `item:operated`
+    // { player, itemId, option, amount }, the option lower-cased and the amount the stack it covered,
+    // for whatever counts the deed itself (a league task).
+    if (event.handled === true && event.player && Number.isInteger(event.itemId)) {
+      const option = PluginManager.itemActionOption(CacheDefinitions.getItem(event.itemId), event);
+      PluginManager.emitCustomEvent("item:operated", {
+        player: event.player,
+        itemId: event.itemId,
+        option: option === null ? undefined : String(option).toLowerCase(),
+        amount: covered,
+      });
     }
     return event.handled === true;
   }
@@ -2643,6 +2657,7 @@ export class PluginManager {
       BoatManager: require("../game/content/sailing/BoatManager").BoatManager,
       BOAT_VIEW_DISTANCE: require("../game/content/sailing/WorldEntitySync").BOAT_VIEW_DISTANCE,
       Sailing: require("../game/content/sailing/Sailing").Sailing,
+      BoatMoveMode: require("../game/content/sailing/Boat").BoatMoveMode,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
       PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
       TemplatedInstanceArea: require(`${model}/areas/impl/TemplatedInstanceArea`).TemplatedInstanceArea,

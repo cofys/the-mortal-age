@@ -952,6 +952,22 @@ test('wooden gate swings hinge + extension panels open from a closed hinge click
   }
 });
 
+test("Tenzing's gate swings both leaves east from either closed panel", () => {
+  for (const [id, y] of [[3725, 3555], [3726, 3554]]) {
+    const h = buildHarness();
+    try {
+      h.place(3725, 2824, 3555, 2);
+      h.place(3726, 2824, 3554, 2);
+      assert.deepEqual(h.click(id, 2824, y, 2), [
+        ['deregister', 3725, 2824, 3555, 2],
+        ['deregister', 3726, 2824, 3554, 2],
+        ['register', 3727, 2825, 3555, 1],
+        ['register', 3728, 2826, 3555, 1],
+      ]);
+    } finally { h.restore(); }
+  }
+});
+
 test('clicking the closed extension opens the same way as the hinge', () => {
   const h = buildHarness();
   try {
@@ -2349,6 +2365,34 @@ test('Murder Mystery mansion Large doors 25748/25750 open their real north thres
     }
     ObjectManager.register(new GameObject(25748, new Location(2740, 3572, 0), 0, 1, null), true);
     ObjectManager.register(new GameObject(25750, new Location(2741, 3572, 0), 0, 1, null), true);
+    h.restore();
+  }
+});
+
+test('Murder Mystery mansion gate 26130/26131 opens both leaves together (issue 4053)', async () => {
+  await initializeMapCollisionOnce();
+  RegionManager.loadMapFiles(2741, 3555, true);
+  const definitions = new Map([26130, 26131, 26132, 26133].map(id => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager, realMapObjects: true });
+  const at = (id, x, y) => MapObjects.get(id, new Location(x, y, 0), null);
+  const anyAt = (id, x, y) => [y - 1, y, y + 1].some(yy => [x - 1, x, x + 1].some(xx => at(id, xx, yy)));
+  try {
+    assert.ok(at(26130, 2741, 3555) && at(26131, 2742, 3555), 'cache places both closed gate leaves');
+    h.click(26131, 2742, 3555, 1, 'Open', 'Gate');
+    assert.equal(at(26130, 2741, 3555), null, 'left leaf left its closed tile');
+    assert.equal(at(26131, 2742, 3555), null, 'right leaf left its closed tile');
+    assert.ok(anyAt(26132, 2741, 3555), 'left leaf became its open loc 26132');
+    assert.ok(anyAt(26133, 2742, 3555), 'right leaf became its open loc 26133');
+    h.submitted.at(-1).execute();
+    assert.ok(at(26130, 2741, 3555) && at(26131, 2742, 3555), 'auto-close restores both leaves');
+  } finally {
+    for (const [id, x, y] of [[26132, 2741, 3555], [26133, 2742, 3555]]) {
+      for (const yy of [y - 1, y, y + 1]) for (const xx of [x - 1, x, x + 1]) {
+        const object = at(id, xx, yy); if (object) ObjectManager.deregister(object, true);
+      }
+    }
+    if (!at(26130, 2741, 3555)) ObjectManager.register(new GameObject(26130, new Location(2741, 3555, 0), 0, 1, null), true);
+    if (!at(26131, 2742, 3555)) ObjectManager.register(new GameObject(26131, new Location(2742, 3555, 0), 0, 1, null), true);
     h.restore();
   }
 });

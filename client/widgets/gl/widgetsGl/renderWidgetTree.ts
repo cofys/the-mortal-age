@@ -19,6 +19,7 @@ import {
 } from "../../../widgets/menu/utils";
 import { MinimapRenderer, getMinimapMaps } from "../MinimapRenderer";
 import { drawChooseOptionMenu } from "../choose-option";
+import { isChatMessageAreaWidget } from "../../../game/widgets/interaction/chatboxClickThrough";
 import { GLRenderer } from "../renderer";
 import {
     ClipRect,
@@ -316,6 +317,10 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         input.setMenuHandler((x: number, y: number) => {
             const canvas = glr.canvas as HTMLCanvasElement & { __ui?: any };
             const ui = (canvas.__ui = canvas.__ui || {});
+            // A click-through chatbox's message area belongs to the world menu, which carries
+            // the chat line's options itself.
+            const chatThrough = !!osrsClientRef?.isChatboxClickThrough?.();
+            const passesThrough = (widget: any) => chatThrough && isChatMessageAreaWidget(widget);
             // callback for static children lookup
             const getStaticChildren = osrsClientRef?.widgetManager
                 ? (uid: number) => osrsClientRef.widgetManager.getStaticChildrenByParentUid(uid)
@@ -418,7 +423,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     const uidNum = Number.parseInt(hid.slice("widget:".length), 10);
                     if (!Number.isNaN(uidNum) && getByUid) {
                         const w = getByUid(uidNum);
-                        if (w && !(w as any).__dummyRoot) {
+                        if (w && !(w as any).__dummyRoot && !passesThrough(w)) {
                             let candEntries: any[] = [];
                             let hasCustom = false;
                             try {
@@ -498,6 +503,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             // Pick the most actionable widget by scanning from topmost back down
             for (let i = hits.length - 1; i >= 0; i--) {
                 const candidate = hits[i];
+                if (passesThrough(candidate)) continue;
                 // Try custom entries first
                 let candEntries: any[] = [];
                 let hasCustom = false;
@@ -568,7 +574,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             // right-click always opens a menu with at least "Cancel". The world
             // pass skips picks over UI entirely, so without this the click would
             // produce no menu at all.
-            const blockingWidget = UI_findBlockingWidgetInHits(hits, {
+            const blockingWidget = UI_findBlockingWidgetInHits(hits.filter((hit: any) => !passesThrough(hit)), {
                 getWidgetFlags,
                 getWidgetByUid: getByUid,
             });

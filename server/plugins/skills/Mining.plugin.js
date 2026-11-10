@@ -617,7 +617,11 @@ function awardOre(player, state, landedOutcome) {
     rockName: state.rock.objectName,
     bonusOre,
     xp: xpGranted,
-    location: event.location,
+    // Upstream's success consumers (Mining Guild minerals) read an engine
+    // Location (getX/...); the depth event above keeps its plain {x,y,z}.
+    // The engine Location's public x/y/z fields keep the fork depth
+    // listeners that destructure event.location working unchanged.
+    location: state.location,
     stop: false,
     petRolled: petRoll.handled,
     pickaxeId: state.pickaxe?.id ?? null,
@@ -896,6 +900,8 @@ function rollAttempt(player, rock) {
  */
 function giveGem(player, { itemId }) {
   if (itemId == null) return;
+  // "mining:gem" { player, itemId }: the gem pre-roll's find, for a league's "Obtain a Gem While Mining".
+  pluginApi.emitCustomEvent("mining:gem", { player, itemId });
   player.sendMessage(gemMessage(itemId));
   // Ours (no source covers it): with no room anywhere, which an open coal bag can bring about while
   // still mining, the gem falls to the floor rather than vanishing.

@@ -38,6 +38,9 @@ const DOOR_NAMES = new Set([
   "Longhall door", "Prison door", "Arena Entrance", "Arena Exit",
   // Pollnivneach curtains: closed 1533 "Open" -> open 1534 "Close" (closed id + 1, cache-derived).
   "Curtain",
+  // Tower of Life's entrance (21814): tol_tower_wall_door -> tol_tower_wall_door_open (21815).
+  // TowerOfLife.Quest.js checks the builder's outfit first (door:toggle).
+  "Tower door",
 ]);
 
 // Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
@@ -124,7 +127,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Holy Grail: Merlin's workshop door in Camelot (24, merlinworkshop) and the Draynor Manor
     // whistle-room door (22, whistledoor) are Open-only; their id+1 are a clock spindle and the
     // sacks, and their same-model Close locs (1536, none for 22) belong to other doors.
-    O.DOOR_3, O.DOOR_4]);
+    O.DOOR_3, O.DOOR_4,
+    // Khazard stronghold: Open-only ordinary door models, no distinct open loc.
+    O.DOOR_67]);
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
   // the way to the Blast Furnace, shares DOOR_180's model but offers no option). Witch's House's
@@ -157,6 +162,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Troll Stronghold's cache has an action-less open loc 3811 with the same
     // model as closed 3810, so it cannot be paired by the normal action scan.
     [O.STOREROOM_DOOR, O.STOREROOM_DOOR + 1],
+    // Tower of Life's door: the open loc 21815 has the same model but no action (cache gameval
+    // tol_tower_wall_door / tol_tower_wall_door_open).
+    [O.TOWER_DOOR, O.TOWER_DOOR + 1],
     // Slepe church crypt gate: its open form 39513 has the same model but no action.
     [O.GATE_210, O.GATE_211],
     // Active cache dump (osrs-241 2026-10-20): 2000/2002 "Door" have Open and
@@ -212,6 +220,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     woodenGate(O.GATE_17, O.GATE_167, O.GATE_168, O.GATE_169),
     woodenGate(O.GATE_18, O.GATE_20, O.GATE_19, O.GATE_25),
     woodenGate(O.GATE_21, O.GATE_22, O.GATE_23, O.GATE_24),
+    // Tenzing's gate: RSProx 3252 tick 5732 swings both leaves east.
+    woodenGate(O.GATE_74, O.GATE_75, O.GATE_76, O.GATE_77),
     woodenGate(O.GATE_78, O.GATE_79, O.GATE_80, 4314), // 4314: open extension, nameless in the cache
     woodenGate(O.GATE_83, O.GATE_84, O.GATE_85, O.GATE_86),
     woodenGate(O.GATE_113, O.GATE_114, O.GATE_115, 12819), // 12819: open extension, nameless in the cache
@@ -257,6 +267,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.GATE_40, O.GATE_41, O.GATE_29, O.GATE_30]),
     // Sinclair Mansion: model-639 open leaves have a null cache name but a Close action.
     Object.freeze([O.LARGE_DOOR_79, O.LARGE_DOOR_80, 25749, 25751]),
+    // Murder Mystery's mansion gate (2741/2742,3555): mirrored leaves with different models, so the
+    // generic pairing sees two single gates. 26130/26131 open into 26132/26133 (…openl / …openr).
+    Object.freeze([O.GATE_177, O.GATE_178, O.GATE_179, O.GATE_180]),
     // Sins of the Father Arboretum: closed 39251/39253 "Large door" (Open, model
     // 40489) swing east into the nameless/actionless 39252/39254 leaves on the
     // adjacent tiles (capture 1637; matching cache pair).
@@ -320,6 +333,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
     [O.LARGE_DOOR_79, O.LARGE_DOOR_80],
     [25749, 25751],
+    // Murder Mystery mansion gate (issue 4053): closed 26130/26131, open 26132/26133.
+    [O.GATE_177, O.GATE_178],
+    [O.GATE_179, O.GATE_180],
     // Sins of the Father Arboretum double door (capture 1637).
     [O.LARGE_DOOR_100, O.LARGE_DOOR_101],
   ]);
@@ -363,6 +379,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.DOORS_22, O.DOORS_26],
     [O.DOORS_29, O.DOORS_31],
     [O.DOORS_30, O.DOORS_32],
+    [O.GATE_177, O.GATE_179],
+    [O.GATE_178, O.GATE_180],
     [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
     [O.LARGE_DOOR_9, O.LARGE_DOOR_10],
