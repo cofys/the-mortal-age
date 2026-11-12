@@ -57,11 +57,11 @@ before(() => {
   content();
   const real = PluginManager.createApi("SeaCombatTest");
   api = { ...real, persistAttribute() {}, sendMultiChatboxPrompt: () => true };
-  require("../plugins/skills/sailing/Sailing.plugin").register(api);
-  require("../plugins/skills/sailing/Crew.plugin").register(api);
-  require("../plugins/skills/sailing/SeaCombat.plugin").register(api);
-  require("../plugins/skills/sailing/StaticShips.plugin").register(api);
-  require("../plugins/skills/sailing/PortTasks.plugin").register(api);
+  require("../plugins/skills/sailing/Panel.Sailing").register(api);
+  require("../plugins/skills/sailing/Crew.Sailing").register(api);
+  require("../plugins/skills/sailing/SeaCombat.Sailing").register(api);
+  require("../plugins/skills/sailing/StaticShipHooks.Sailing").register(api);
+  require("../plugins/skills/sailing/PortTasks.Sailing").register(api);
   require("../plugins/npcs/NpcDrops.plugin").register(api);
 });
 
@@ -699,7 +699,7 @@ test("from a deck: ranged and magic at sea creatures are allowed, melee isn't, n
 });
 
 test("the first heading after taking the helm sets sail; a heading with the sails lowered only turns (rsprox)", () => {
-  const helm = require("../plugins/skills/sailing/Helm.plugin");
+  const helm = require("../plugins/skills/sailing/Helm.Sailing");
   const player = captain();
   const { boat } = aboardWithCannon(player, { type: "skiff", cannon: "adamant cannon" });
   const listeners = [];
@@ -932,6 +932,38 @@ test("crew following the captain take the captain's target when the captain atta
     assert.equal(player.said.at(-1), "Fire!");
   } finally {
     World.getNpcs().remove(tern);
+    leave(player);
+  }
+});
+
+test("looted runes go to the rune pouch first, under the Rune-picking setting (Wiki: Rune pouch)", () => {
+  const player = captain();
+  const { boat, owned, loc, hotspot } = aboardWithCannon(player);
+  const osprey = seaNpc(OSPREY, outboard(boat, owned, hotspot.id, loc, 1));
+  const AIR_RUNE = 556;
+  const asked = [];
+  const previous = PluginManager.emitCustomEvent;
+  PluginManager.emitCustomEvent = (name, payload) => {
+    if (name === "npc-drops:add") payload.drops.push({ itemId: AIR_RUNE, amount: 30 });
+    if (name === "rune-pouch:gather") {
+      asked.push({ ...payload });
+      if (payload.itemId === AIR_RUNE) payload.stored = payload.amount;
+    }
+    return previous.call(PluginManager, name, payload);
+  };
+  try {
+    PluginManager.emitNpcDeath({ killer: player, npc: osprey, npcId: OSPREY, location: {}, remains: null });
+    Loot.harvest({ player, npc: osprey, clickType: 1, handled: false });
+    tick(2);
+    assert.equal(Loot.corpses.has(osprey), false, "harvested");
+    const air = asked.find((request) => request.itemId === AIR_RUNE);
+    assert.ok(air, "the pouch was asked for the runes");
+    assert.equal(air.amount, 30);
+    assert.equal(air.runePicking, true, "only while Rune-picking is on");
+    assert.equal(player.inventory.getAmount(AIR_RUNE), 0, "what the pouch took isn't added again");
+  } finally {
+    PluginManager.emitCustomEvent = previous;
+    World.getNpcs().remove(osprey);
     leave(player);
   }
 });

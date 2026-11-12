@@ -142,7 +142,7 @@ const LUMBERJACK_SET_BONUS = 0.005;
 
 // OSRS Wiki (Woodcutting, Maple tree): the Kandarin Diary medium reward makes the maples in Seers'
 // Village give 110 XP per log; the Lumberjack outfit bonus applies on top. The box is the diary's
-// own Seers' Village region (plugins/achievements/diaries/KandarinDiaryFinish.plugin.js).
+// own Seers' Village region (plugins/achievements/diaries/KandarinDiaryFinish.AchievementDiaries.js).
 const SEERS_VILLAGE = { minX: 2670, maxX: 2780, minY: 3430, maxY: 3530, z: 0 };
 
 // OSRS Wiki seed nest table (1,011 slots). `text` is the seed as the search line names it (rsprox
@@ -317,6 +317,8 @@ const TREES = [
     respawnTicksMax: 98,
     stumpId: ObjectIds.TREE_STUMP_2,
     multi: false,
+    // Regular and achey trees give clue nests, never the other kinds of bird nest (Wiki: Tree).
+    birdNests: false,
   },
   {
     name: "achey tree",
@@ -331,6 +333,7 @@ const TREES = [
     respawnTicksMax: 98,
     stumpId: ObjectIds.ACHEY_TREE_STUMP,
     multi: false,
+    birdNests: false,
   },
   {
     name: "oak",
@@ -529,6 +532,8 @@ const TREES = [
     respawnTicks: 199,
     multi: true,
     despawnTicks: 440,
+    // Redwoods give clue nests but no regular bird nests (Wiki: Woodcutting), farmed ones too.
+    birdNests: false,
   },
   {
     name: "hollow",
@@ -647,6 +652,18 @@ const TREES = [
 ];
 
 const TREES_BY_NAME = new Map(TREES.flatMap((tree) => tree.objectNames.map((name) => [name, tree])));
+// Pest Control's island trees chop and fall as normal trees, but say nothing when the log comes, show no stump
+// countdown and leave the logs-chopped count alone. Kept out of TREES, so bots don't look for them.
+const PEST_CONTROL_TREE = Object.freeze({
+  ...TREES.find((tree) => tree.name === "normal tree"),
+  name: "pest control tree",
+  objectNames: [],
+  objectIds: [ObjectIds.TREE_59, ObjectIds.TREE_60],
+  logLine: false,
+  countsLogs: false,
+  respawnTimer: false,
+});
+const TREES_BY_OBJECT_ID = new Map(PEST_CONTROL_TREE.objectIds.map((id) => [id, PEST_CONTROL_TREE]));
 // Farmed sailing hardwoods chop like the wild trees but regrow on farming's own patch timer.
 const FARMED_HARDWOODS = ["camphor", "ironwood", "rosewood"].map((name) => ({
   ...TREES.find((tree) => tree.name === name),
@@ -771,6 +788,14 @@ function groupBonus(player, state, sessions = activeSessionsRef) {
 }
 
 /**
+ * "woodcutting:group-bonus" ({ player, players }): the players at the tree the player is chopping, for the
+ * buff bar's Group Woodcutting Bonus; 0 when they aren't chopping a tree that gives one.
+ */
+function answerGroupBonus(request) {
+  request.players = groupBonus(request.player, activeSessionsRef?.get?.(request.player) ?? null);
+}
+
+/**
  * Woodcutting depth seam (./woodcutting/WOODCUTTING-DEPTH.md): every chop roll emits
  * "woodcutting:cut-chance" so depth modules can scale the cut. Listeners multiply
  * event.multiplier; a multiplier <= 0 fails the roll. Additive only.
@@ -865,6 +890,8 @@ function rollForesterRationEnergy(player, axe) {
   }
   player.addRunEnergyUnits(2000);
   player.getPacketSender().sendRunEnergy();
+  // Wiki (Forester's ration): "a game message in the chatbox will state" this, with a regular axe.
+  player.sendMessage("You consume a Forester's ration and feel energised.");
   return true;
 }
 
@@ -1188,7 +1215,7 @@ function depleteTree(player, treeObject, tree) {
   );
   ObjectManager.deregister(treeObject, true);
   ObjectManager.register(stump, true);
-  sendRespawnTimer(player, stump, respawnTicks);
+  if (tree.respawnTimer !== false) sendRespawnTimer(player, stump, respawnTicks);
   TaskManager.submit(new TreeRespawnTask(respawnTicks, treeObject, stump));
   return true;
 }
@@ -1350,7 +1377,8 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     }
 
     // A nest falls instead of that roll's log: no log, line or XP (rsprox capture 293, five nests).
-    if (state.tree.logId >= 0 && !maybeDropBirdNest(player)) {
+    // Trees without bird nests (birdNests: false) still roll clue nests below.
+    if (state.tree.logId >= 0 && !(state.tree.birdNests !== false && maybeDropBirdNest(player))) {
       const felling = fellingChop(player, state.axe);
       rollForesterRationEnergy(player, state.axe);
       const baseXp = treeBaseXp(player, state.tree, state.location) * lumberjackXpMultiplier(player);
@@ -1362,11 +1390,11 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         burnt = InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId);
         if (!burnt) {
           pendingLog = prepareLog(player, state.tree.logId, xp, logAmount);
-          countLog(player);
+          if (state.tree.countsLogs !== false) countLog(player);
         }
       }
       // A burnt log still says it was cut (rsprox captures 1637, 3996); a felling skip gives no log.
-      if (!felling.skipLog) sendSpam(player, logMessage(state.tree));
+      if (!felling.skipLog && state.tree.logLine !== false) sendSpam(player, logMessage(state.tree));
       // Only the charged crystal axe doing the chopping spends a charge: one carried beside the axe in use (an infernal
       // axe ranked above it, or a dragon axe below the crystal's 50 Agility) is left alone, as Mining's pickaxe.
       if (state.axe?.id === ItemIds.CRYSTAL_AXE || state.axe?.id === ItemIds.CRYSTAL_FELLING_AXE) {
@@ -1440,7 +1468,7 @@ let ObjectManager;
 let ItemOnGroundManager;
 
 function handleChop(event) {
-  const tree = TREES_BY_NAME.get(event.definition.getName());
+  const tree = TREES_BY_OBJECT_ID.get(event.object?.getId?.()) ?? TREES_BY_NAME.get(event.definition.getName());
   if (!tree) {
     return;
   }
@@ -1490,6 +1518,7 @@ module.exports = {
     pluginApi = api;
     api.onCustomEvent("woodcutting:chop", requestedChop);
     api.onCustomEvent("woodcutting:axe", requestedAxe);
+    api.onCustomEvent("woodcutting:group-bonus", answerGroupBonus);
     TaskManager = api.getTaskManager();
     ObjectManager = api.getObjectManager();
     ItemOnGroundManager = api.getItemOnGroundManager();
@@ -1557,5 +1586,5 @@ module.exports = {
   calculateCutChance,
   /** Stops the player's chopping (a Forestry event spawning beside them). */
   stopWoodcutting: (player) => activeSessionsRef && stopWoodcutting(activeSessionsRef, player),
-  _test: { maybeDropBirdNest, groupBonus, sessions: () => activeSessionsRef, setApi: (api) => { pluginApi = api; ItemOnGroundManager = api.getItemOnGroundManager(); } },
+  _test: { maybeDropBirdNest, groupBonus, answerGroupBonus, sessions: () => activeSessionsRef, setApi: (api) => { pluginApi = api; ItemOnGroundManager = api.getItemOnGroundManager(); } },
 };

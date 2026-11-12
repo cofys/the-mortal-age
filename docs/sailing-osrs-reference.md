@@ -288,12 +288,14 @@ From rsprox captures 697 and 698 (the Sailing beta, where Board asked "What kind
 **Boat schematics (59718) "Modify":**
 1. Varp 5190 is set to the boat type's row (8110-8112), and varbit 19525 to the boat's slot + 1.
 2. Script 2524 `[-1, -3]`, then interface **939** opens as the main modal. Script 8809 initialises it.
-3. 939:17 gets slots 0-50 with op 1 and script triggers.
+3. 939:17 gets slots 0-50 with op 1 and script triggers (`IF_SCRIPT_TRIGGER`, bit 23). The official client needs that event: without it, Build shows its spinner and never sends the trigger (see Build).
 4. Each option's preview is the part's **loc**. Script 8825 takes the loc id from the option's db row (script 9075, default 59660), its animation (9077) and its angle (9076), and passes the loc id to opcode 1214 (`cc_setmodel_loc`, model type 8). The client draws that loc's centrepiece model (shape 10) and never treats the id as a model id.
    - The angles come from table 188: the part's angles row (column 4 of its hull/keel/… row) holds `[boat size, offsetX, offsetY, xan, yan, zan, zoom]` tuples, and 9076 picks the one for the boat type's size (table 166 column 0). The skiff's hull is (-10, 0, 130, 1950, 0, 5000).
    - 9076 reads those tuples one value at a time: a packed db field's low 4 bits select one tuple element (1-based; 0 is the whole tuple).
 
-**Build:** script 8834 calls `if_triggeroplocal` on 939:17 with the option row as one int argument.
+**Build:** script 8834 shows the loading spinner (939:23, script 7137), then calls `if_triggeroplocal` on 939:17 with the option row as one int argument.
+- Only script 8811 (939's init and refresh) hides the spinner again, so the server closes or refreshes 939 after every Build.
+- The official client (RuneLite) sends the trigger (`IF_SCRIPT_TRIGGER`) only if the option has the script-trigger event. With op 1 alone, the spinner stayed up and nothing reached the server. The tsps browser client sends the trigger without checking the event.
 - The live packet carried `A6 81 01 00`: a zigzag varint of row **8275**, the skiff's camphor hull.
 - The server:
   1. takes the materials from the inventory;
@@ -384,10 +386,15 @@ From captures of salvaging a small shipwreck with a sloop's adamant hook, deploy
 **Wrecks** are loc pairs: an active form with "Inspect" (60464 small, 60466 fisherman's, 60468 barracuda, 60470 large, 60472 pirate, 60474 mercenary, 60476 Fremennik, 60478 merchant) and a sunken form with no ops (the next id).
 - The cache map places every wreck sunken: 16 small spots (two groups of 8), and the other types in groups of 6 (barracuda's 43 are strung out unevenly). The small group south-east of the Pandemonium is at about (3085-3132, 2928-2989).
 - The server raises some of each group, sinks a wreck when its time is up, and raises another of the group (Wiki: "When one shipwreck sinks, another in the area immediately rises").
+- Sinking and rising animate (rsprox captures 235/3792, small and barracuda): on the tick a wreck sinks it becomes the sunken loc and plays its type's `*_shipwreck_full_to_depleted`; the next tick another of the group becomes the active loc with `*_depleted_to_full`; two ticks after each transition the loc gets its idle (`*_depleted_idle`, `*_full_idle`). Each type's four sequences are consecutive in the cache (small 13600-13603, fisherman 13604, barracuda 13608, pirate 13612, mercenary 13616, merchant 13620, Fremennik 13624, large 13628: full idle, depleted idle, full to depleted, depleted to full). Ours: a group with no other sunken wreck raises the one that sank.
 - Salvaging starts a wreck's despawn timer: small 2:30, fisherman's, barracuda, large and pirate 3:00, mercenary 3:15, Fremennik 3:45, merchant 4:00. When it sinks: "You salvage all you can from the shipwreck before it is reclaimed by the sea."
+
+**Inspect** (op 1 on an active wreck), a message box (rsprox captures, rev 235: 3457, 3461, 3467, 936, 938, 948, 1007, 4290): "It's a Barracuda shipwreck. You might be able to salvage something from the wreckage using a salvaging hook." Below the wreck's level it adds " However, you'll first need a Sailing level of 35 to do so." The names as captured: small, fisherman's, Barracuda, large, pirate, merchant; mercenary and Fremennik have no capture (ours: "mercenary", "Fremennik"). One rev 235 capture (3414) shows "It might be possible to salvage something from the wreckage, but you're not really sure how to do so yet." for a player who can't salvage yet; what decides it isn't known, so the server doesn't send it.
 
 **Deploy** (op 1 on a salvaging hook):
 - No wreck in range: "There are no shipwrecks within range of the salvaging hook." Nothing else.
+- Only sunken wrecks in range: a message box, "This shipwreck has already been plundered. Perhaps there's another one nearby?" (rsprox captures 235/3792, 235/3834).
+- Below the wreck's level: "You need a Sailing level of at least N to salvage this shipwreck." Ours: no capture or Wiki text.
 - Otherwise: "You cast out your salvaging hook towards the shipwreck...", player animation 13576, and the hook loc plays 13573.
 - 3 ticks later varbit `sailing_sidepanel_player_at_facility_n` (19193 + hotspot; 19200 for hotspot 7) goes to 1, and from then on every tick the player replays 13577 and the hook 13574.
 - The first salvage came 10 ticks after the cast: "You reel in some salvage." (spam filter), the salvage in the inventory, and the wreck's XP (small 10).
@@ -399,11 +406,14 @@ From captures of salvaging a small shipwreck with a sloop's adamant hook, deploy
 - The animation replays with each, with sound 10864 after the first and 10866 after the rest.
 - With none left: "You have no more salvage to sort."
 - Loot: each salvage's pre-rolls first (1 in n each), then its main table by weight.
+- The find line is spam, with the amount written with a thousands separator ("find: 3,504 x Coins."). A find from the salvage's own collection log section (every pre-roll, and Opulent salvage's table Dragon cannonball) is a game message instead: Dragon nails, Mouldy doll, Broken compass, Rusty coin, Smashed mirror, Boat bottle, Sailors' amulet and Dragon cannon barrel every time in rev 235 captures. Opulent salvage's Dragon cannonball is spam in the earliest captures and a game message in later ones, which fits the 10 December 2025 update that put it in the collection log.
+- Salvage above the player's level is left; sorting ends with "You do not have a high enough Sailing level to sort through any more salvage." (Wiki, Opulent salvage trivia; no capture). Ours: the same line refuses Sort-salvage when all of it is above the player's level.
+- Cannonball amounts follow the Wiki (2-5, 2-7 and so on): rev 235 captures give the amounts from before the 18 March 2026 update that raised them (1-3, 1-5, 1-2, and 1 for the pre-roll Dragon cannonball).
 
 ## Shipwrights' workbench
 
 Locs 59723 (`shipwright_workbench`) and 59724 (`shipwright_workbench_small`) beside the shipwrights:
-Craft, Craft-hull-parts, Craft-repair-kits. Plugin: `plugins/skills/sailing/ShipwrightsWorkbench.plugin.js`,
+Craft, Craft-hull-parts, Craft-repair-kits. Plugin: `plugins/skills/sailing/ShipwrightsWorkbench.Sailing.js`,
 recipes in `plugins/skills/sailing/data/shipwrights-workbench.json`. The cache has no recipe table (only the
 part tables' materials name the products), so recipes, levels, XP and ticks are the OSRS Wiki's item pages.
 
@@ -556,7 +566,9 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
     - the raft's placeholder id (59661).
   - Guessed rather than captured:
     - the part names in the swap message ("mast and sails");
-    - the level, materials and "already has that" messages.
+    - the level, materials and "already has that" messages;
+    - after a refused Build (parts or a facility), the init (8809) runs again so Build's spinner goes, and 939 stays open. No capture has a refused Build;
+    - a Build that arrives after 939 has closed builds nothing.
   - Materials come from the inventory only.
 - **Ports**, guessed rather than captured:
   - Disembarking at a port's gangplank docks the boat there if it wasn't (the capture docked at the buoy first). It needs the port's level unless the boat is already docked there.

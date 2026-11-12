@@ -49,6 +49,7 @@ const combat = {
     stunTicks: (_player, ticks, _force, options) => log.push(`stun ${ticks} ticks, graphic ${options?.graphic?.id}/${options?.graphic?.height}, message ${options?.message}`),
 };
 const { PluginManager } = require("../dist/plugins/PluginManager");
+let runePouchAnswer = null;
 Thieving.register({
     core: { ...PluginManager.getCoreApi(), CombatFactory: combat, TaskManager: { submit: (task) => { task.setRunning(true); submitted.push(task); } } },
     onCustomEvent: () => {},
@@ -62,6 +63,7 @@ Thieving.register({
         if (name === 'thieving:success') log.push(name);
         if (name === 'thieving:done' && repeatAgain) request.again = true;
         if (name === 'thieving:pickpocket-target') pickpocketTargetAnswer?.(request);
+        if (name === 'rune-pouch:gather') runePouchAnswer?.(request);
         // The Skillcapes plugin answers this; a worn Thieving cape is all these tests need.
         if (name === 'skillcape:has-perk' && request.skill === 'THIEVING') {
             request.result = request.player.getEquipment().get(Equipment.CAPE_SLOT)?.getId() === I.THIEVING_CAPE;
@@ -70,6 +72,27 @@ Thieving.register({
     log: () => {},
 });
 Sounds.sendSound = () => {};
+
+test('a failed H.A.M. trapdoor pick numbs the fingers: the recorded line and 1 Thieving off (Wiki: Trapdoor (H.A.M. Hideout))', () => {
+    const core = PluginManager.getCoreApi();
+    const typed = [];
+    let level = 16;
+    const player = {
+        getPacketSender: () => ({ sendTypedMessage: (type, text) => typed.push([type, text]) }),
+        getSkillManager: () => ({
+            getCurrentLevel: () => level,
+            setCurrentLevels: (skill, value) => { assert.equal(skill, core.Skill.THIEVING); level = value; },
+            updateSkill() {},
+        }),
+    };
+    HamTrapdoor._test.fumbled(player);
+    // rsprox 227/01723.txt:186365-186387: spam line, then Thieving 16 -> 15.
+    assert.deepEqual(typed, [[core.ChatType.SPAM, 'You fail to pick the lock - your fingers get numb from fumbling with the lock.']]);
+    assert.equal(level, 15);
+    level = 1;
+    HamTrapdoor._test.fumbled(player);
+    assert.equal(level, 1, 'never below 1, so picking can go on');
+});
 
 test('the H.A.M. entrance uses its own published curve without repeat-failure scaling', () => {
     const chance = HamTrapdoor._test.successChance;
@@ -602,8 +625,104 @@ test('a workman, as captured: game-channel lines that trail off, and the brush f
     const workman = DATA.targets.find((t) => t.key === 'digsite_workman');
     const brush = workman.table.findIndex((e) => e.id === I.SPECIMEN_BRUSH);
     const before = workman.table.slice(0, brush).reduce((sum, e) => sum + Pickpocket._test.rateOf(e.rate), 0);
-    const { click, next } = attempt(t, { name: 'Digsite workman', random: before + 0.01, who: player() });
+    const { click, ticks } = attempt(t, { name: 'Digsite workman', random: before + 0.01, who: player() });
     assert.deepEqual(click, ["You attempt to pick the workman's pocket..."]);
-    assert.ok(next.includes("You pick the workman's pocket..."), next.join(' | '));
-    assert.ok(next.includes('You find a specimen brush.'), next.join(' | '));
+    assert.deepEqual(ticks.slice(0, 2), [[], []]);
+    assert.ok(ticks[2].includes("You pick the workman's pocket..."), ticks[2].join(' | '));
+    assert.ok(ticks[2].includes('You find a specimen brush.'), ticks[2].join(' | '));
+});
+
+test('a delayed workman success retains its roll and stops if either actor becomes unavailable', (t) => {
+    const original = Math.random;
+    t.after(() => { Math.random = original; });
+    for (const unavailable of ['player', 'dead', 'npc', 'none']) {
+        submitted.length = 0;
+        log.length = 0;
+        const who = player();
+        const target = npc();
+        Math.random = () => 0.5;
+        Thieving._test.pickpocket({ player: who, npc: target, npcId: 0, definition: { getName: () => 'Digsite workman' } });
+        const task = submitted[0];
+        task.execute();
+        if (unavailable === 'player') who.isRegistered = () => false;
+        if (unavailable === 'dead') who.getHitpoints = () => 0;
+        if (unavailable === 'npc') target.isRegistered = () => false;
+        // A later failure roll must not replace the successful first roll.
+        Math.random = () => 0.999999;
+        const skillManager = who.getSkillManager();
+        who.getSkillManager = () => ({ ...skillManager, getCurrentLevel: () => 1 });
+        task.execute();
+        if (task.isRunning()) task.execute();
+        assert.equal(task.isRunning(), false, unavailable);
+        assert.equal(log.includes('xp 10.4'), unavailable === 'none', unavailable);
+    }
+});
+
+test('an older workman completion cannot clear or repeat a newer accepted interaction', (t) => {
+    const original = Math.random;
+    t.after(() => { Math.random = original; repeatAgain = false; });
+    Math.random = () => 0.5;
+    repeatAgain = true;
+    for (const sameTarget of [true, false]) {
+        submitted.length = 0;
+        const who = player();
+        const olderNpc = npc();
+        const newerNpc = sameTarget ? olderNpc : npc();
+        const event = (target) => ({ player: who, npc: target, npcId: 0, definition: { getName: () => 'Digsite workman' } });
+        Thieving._test.pickpocket(event(olderNpc));
+        const older = submitted[0];
+        older.execute();
+        who.interacting = newerNpc;
+        Thieving._test.pickpocket(event(newerNpc));
+        older.execute();
+        older.execute();
+        assert.equal(who.interacting, newerNpc);
+        assert.equal(submitted.length, 2, 'old outcome does not schedule a repeat');
+        repeatAgain = false;
+        const newer = submitted[1];
+        newer.execute(); newer.execute(); newer.execute();
+        assert.equal(who.interacting, null);
+        repeatAgain = true;
+    }
+});
+
+test('a delayed workman repeat respects a changed interaction', (t) => {
+    const original = Math.random;
+    t.after(() => { Math.random = original; repeatAgain = false; });
+    Math.random = () => 0.5;
+    repeatAgain = true;
+    submitted.length = 0;
+    const who = player();
+    const target = npc();
+    who.interacting = target;
+    Thieving._test.pickpocket({ player: who, npc: target, npcId: 0, definition: { getName: () => 'Digsite workman' } });
+    who.interacting = null;
+    const task = submitted[0];
+    task.execute(); task.execute(); task.execute();
+    assert.equal(submitted.length, 1, 'cancelled interaction does not schedule a repeat');
+    submitted.length = 0;
+    who.interacting = target;
+    Thieving._test.pickpocket({ player: who, npc: target, npcId: 0, definition: { getName: () => 'Digsite workman' } });
+    const repeated = submitted[0];
+    repeated.execute(); repeated.execute(); repeated.execute();
+    assert.equal(submitted.length, 2, 'unchanged interaction schedules the requested repeat');
+});
+
+test('stolen runes go to the rune pouch first; what it does not take goes to the inventory (Wiki: Rune pouch)', () => {
+    const { giveLoot } = Pickpocket._test;
+    const rogue = DATA.targets.find((t) => t.key === 'rogue');
+    const asked = [];
+    runePouchAnswer = (request) => { asked.push({ ...request }); if (request.itemId === I.AIR_RUNE) request.stored = request.amount; };
+    try {
+        const who = player();
+        giveLoot(who, rogue, [{ id: I.AIR_RUNE, amount: 8 }], () => 0);
+        assert.equal(who.inv.getAmount(I.AIR_RUNE), 0, 'all eight in the pouch');
+        assert.deepEqual(asked.map(({ itemId, amount, runePicking }) => [itemId, amount, runePicking]), [[I.AIR_RUNE, 8, undefined]],
+            'asked for the whole stack, whatever the Rune-picking setting');
+        runePouchAnswer = () => {};
+        giveLoot(who, rogue, [{ id: I.AIR_RUNE, amount: 8 }], () => 0);
+        assert.equal(who.inv.getAmount(I.AIR_RUNE), 8, 'no pouch room: the inventory');
+    } finally {
+        runePouchAnswer = null;
+    }
 });

@@ -61,6 +61,7 @@ function mockApi() {
   const handlers = {
     variant: [],
     condition: [],
+    interfaceClicks: [],
     custom: new Map(),
     namedObjects: [],
     npcInteractions,
@@ -117,6 +118,7 @@ function mockApi() {
     onCanBankItem: h => handlers.canBankItem.push(h),
     onCanEquip: h => handlers.canEquip.push(h),
     getPluginConfig: (_key, fallback) => fallback,
+    onInterfaceActionClick: (h) => handlers.interfaceClicks.push(h),
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
     onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
     onItemOnObject: (...args) => handlers.itemOnObject.push(typeof args[0] === 'function' ? args[0] : args[2]),
@@ -914,15 +916,17 @@ test('While Guthix Sleeps only tracks a shirt through the player’s own broav',
   const player = { getLocation: () => new api.core.Location(2519,3249,0),
     getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key,value),
     getInventory: () => ({ deleteNumber() {} }),
-    sendMessage() {}, getPacketSender: () => ({ sendVarbit() {} }) };
+    sendMessage() {}, performAnimation() {}, getPacketSender: () => ({ sendVarbit() {} }) };
   const npc = { getId: () => 13518, getOwner: () => player,
     getMovementQueue: () => ({ addSteps: location => moves.push(location) }) };
   const event = { player, itemId:29521, target:npc };
   assert.equal(handlers.at(-1)({...event,target:{...npc,getOwner:()=>({})}}),false);
   assert.equal(handlers.at(-1)(event),true);
   assert.equal(event.handled,true);
+  // The find comes 7 ticks after the sniff (rsprox 226/01698.txt:32945-33145).
+  for (let i = 0; i < 7; i++) api.core.TaskManager.process();
   assert.equal(attributes.get('while-guthix-sleeps:broav-trail'),1);
-  assert.equal(moves.length,1);
+  assert.equal(moves.length,0,'the broav stays put (rsprox 226/01698.txt)');
 });
 
 test("While Guthix Sleeps counts Thaerisk's actual assassin kill without a player death event", () => {
@@ -13960,6 +13964,7 @@ test('Song of the Elves Iorwerth scroll lands on the walkable camp tile', () => 
     ...base.core,
     TeleportHandler: {
       checkReqs: () => true,
+      confirm: (player, destination, go, level, { item } = {}) => go(item),
       teleport: (player, location) => player.moveTo(location),
     },
   };
@@ -14338,11 +14343,12 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
 
 test('Regicide tripwires use the Agility success roll and apply the dart hit and poison on failure', () => {
   const { api: base } = mockApi();
-  const objectHooks = [];
+  const objectHooks = [], poisoned = [];
+  const core = { ...base.core, CombatFactory: { ...base.core.CombatFactory, poisonEntity: (target, severity) => poisoned.push([target, severity]) } };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'onObjectInteraction'
       ? (handler) => objectHooks.push(handler)
-      : target[prop],
+      : prop === 'core' ? core : target[prop],
   });
   require('../plugins/quests/quests/Regicide.Quest')(api);
   const interact = objectHooks[0];
@@ -14351,7 +14357,7 @@ test('Regicide tripwires use the Agility success roll and apply the dart hit and
   const location = { x: 2285, y: 3187, z: 0 };
   const object = { getFace: () => 3 };
   const createPlayer = (agility) => {
-    const state = { moves: [], hits: [], poison: 0 };
+    const state = { moves: [], hits: [], poison: 0, said: [] };
     const position = { x: 2286, y: 3188, z: 0 };
     const player = {
       getLocation: () => ({ getX: () => position.x, getY: () => position.y, getZ: () => position.z }),
@@ -14362,6 +14368,7 @@ test('Regicide tripwires use the Agility success roll and apply the dart hit and
       }),
       isPoisoned: () => false,
       setPoisonDamage: (amount) => { state.poison = amount; },
+      sendMessage: (text) => state.said.push(text),
       moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
     };
     return { player, state };
@@ -14392,8 +14399,10 @@ test('Regicide tripwires use the Agility success roll and apply the dart hit and
     interact(failure);
     assert.equal(failure.handled, true);
     assert.equal(caught.state.hits[0][0].getDamage(), 10);
-    assert.equal(caught.state.poison, 2);
-    assert.deepEqual(caught.state.moves, [], 'a triggered tripwire leaves the player on the near side');
+    // rsprox_transcripts/230/02969.txt and 237/01105.txt: the snag line, real poison at 10, and the crossing.
+    assert.deepEqual(caught.state.said, ['You snag the trip wire as you step over it.']);
+    assert.deepEqual(poisoned, [[caught.player, 10]]);
+    assert.deepEqual(caught.state.moves, [[2284, 3188, 0]], 'a snag still steps over');
   } finally {
     Math.random = originalRandom;
   }
@@ -18312,22 +18321,33 @@ test("Death Plateau walks the castle and inn stairs without climbing", (t) => {
 });
 
 test("Death Plateau doors require Eohric's hint and the solved puzzle", () => {
-  const { api, handlers, quest, player, messages } = questScene('DeathPlateau');
+  const { api, handlers, quest, player } = questScene('DeathPlateau');
   const door = api.core.ObjectIdentifiers.DOOR_115;
+  const started = [];
+  player.getDialogueManager = () => ({ startDialogues: (chain) => started.push(chain) });
   const toggle = objectId => {
     const event = { player, objectId, handled: false };
     handlers.custom.get('door:toggle').forEach(handler => handler(event));
     return event.handled;
   };
+  // Transcript:Death_Plateau: the refusal is the player's chathead line; after Eohric, a knock from the corridor, and
+  // leaving the room is the door's own pass-through.
+  player.moveTo(new api.core.Location(2906, 3542, 1));
   for (const stage of [0, 10]) {
     quest.setStage(player, stage);
+    started.length = 0;
     assert.equal(toggle(door), true);
-    assert.match(messages.at(-1), /without a reason/);
+    assert.ok(JSON.stringify([...started[0].getDialogues().values()]).includes('without a reason'));
   }
   for (const stage of [20, 30, 40, 60, 80]) {
     quest.setStage(player, stage);
-    assert.equal(toggle(door), false, 'the shared door handler opens it');
+    assert.equal(toggle(door), false, 'leaving: the shared door handler opens it');
   }
+  player.moveTo(new api.core.Location(2906, 3543, 1));
+  quest.setStage(player, 20);
+  started.length = 0;
+  assert.equal(toggle(door), true, 'entering: the knock first');
+  assert.ok(JSON.stringify([...started[0].getDialogues().values()]).includes('You knock on the door.'));
   for (const stage of [0, 55, 60, 65, 70, 80]) {
     quest.setStage(player, stage);
     assert.equal(toggle(api.core.ObjectIdentifiers.LARGE_DOOR_23), stage < 65);
@@ -21825,29 +21845,18 @@ test('Song of the Elves remembers Elena’s earlier answer and fills the cave di
   assert.equal(line.text, 'Is Sam here, Sam?', 'the player gives the transcript fake identity instead of their actual name');
 });
 
-test('The Lost Tribe reads its symbol book and advances only when the reader closes', t => {
+test('The Lost Tribe reads its symbol book and advances only when the reader closes', () => {
+  // Real-engine coverage, arrows included: lost-tribe-symbol-book.test.cjs.
   const { api, handlers } = mockApi();
-  const runtimePath = require.resolve('../plugins/quests/QuestRuntime');
-  const previousRuntime = require.cache[runtimePath];
-  delete require.cache[runtimePath];
-  const runtime = require(runtimePath);
-  t.after(() => {
-    if (previousRuntime) require.cache[runtimePath] = previousRuntime;
-    else delete require.cache[runtimePath];
-  });
-  const buttons = new Map(), texts = new Map(), varbits = new Map();
-  let openInterface = -1;
-  api.onInterfaceActionButton = (ids, handler) => {
-    for (const id of Array.isArray(ids) ? ids : [ids]) buttons.set(id, handler);
-  };
   require('../plugins/quests/quests/LostTribe.Quest')(api);
-  const quest = runtime.getRegisteredQuests().find(entry => entry.key === 'the_lost_tribe');
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().filter(entry => entry.key === 'the_lost_tribe').at(-1);
   const attrs = new Map([['quest.the_lost_tribe.stage', 7]]);
+  const hidden = new Map(), varbits = new Map();
+  let openInterface = -1;
   const sender = new Proxy({
-    sendString: (text, uid) => texts.set(uid, text),
     sendVarbit: (id, value) => varbits.set(id, value),
     sendInterface: group => { openInterface = group; },
-    sendInterfaceRemoval: () => { openInterface = -1; },
+    sendInterfaceDisplayState: (uid, hide) => hidden.set(uid, hide),
   }, { get: (target, key) => target[key] ?? (() => {}) });
   const player = {
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
@@ -21855,12 +21864,10 @@ test('The Lost Tribe reads its symbol book and advances only when the reader clo
   };
   handlers.playerLogin.find((handler) => handler.name === "handleLogin")({ player });
   handlers.namedItemActions.get('Goblin symbol book').Read({ player });
-  assert.equal(openInterface, 392, 'Read opens the shared book interface');
-  assert.equal(texts.get((392 << 16) | 6), 'A History of the Goblin Race');
-  assert.match(texts.get((392 << 16) | 50), /Rekeshuun.*Idithuun/);
+  assert.equal(openInterface, 183, 'Read opens lost_tribe_symbol_book');
+  assert.equal(hidden.get((183 << 16) | 33), false, 'on its title spread');
   assert.equal(quest.getStage(player), 7, 'reading begins without skipping the book');
-  buttons.get((392 << 16) | 7)({ player, buttonId: (392 << 16) | 7 });
-  assert.equal(openInterface, -1);
+  for (const handler of handlers.custom.get('interface:closed')) handler({ player, interfaceId: 183 });
   assert.equal(quest.getStage(player), 8, 'closing the book completes the reading step');
   assert.equal(varbits.get(532), 6);
 });

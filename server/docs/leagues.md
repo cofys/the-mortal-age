@@ -2,11 +2,12 @@
 
 The Leagues game mode (https://oldschool.runescape.wiki/w/Leagues) on this server: a league
 character per account, League Points, tasks, ranks, relic tiers and relics, area unlocks, combat
-masteries and the league screens. Plugins: `plugins/modes/LeagueMode.plugin.js` (the profile,
+masteries and the league screens. The `LeagueMode` plugin switch controls all of these.
+`plugins/modes/LeagueMode.plugin.js` attaches the base module (the profile,
 its league, XP rate, the tiers' passives, journal tab, Summary / Info / Rank, ranks, statistics
-and shared content), `LeaguePoints.plugin.js` (points), `LeagueTasks.plugin.js` (the task catalog, triggers and list), `LeagueRelics.plugin.js` (tiers and
-relics), `LeagueAreaUnlocks.plugin.js` (areas), `LeagueCombatMasteries.plugin.js` (Raging
-Echoes' combat masteries) and `LeaguePacts.plugin.js` (Demonic Pacts' pact tree); data in `plugins/modes/data/leagues.json`, `league-ranks.json`,
+and shared content), `Points.LeagueMode.js` (points), `Tasks.LeagueMode.js` (the task catalog, triggers and list), `Relics.LeagueMode.js` (tiers and
+relics), `AreaUnlocks.LeagueMode.js` (areas), `CombatMasteries.LeagueMode.js` (Raging
+Echoes' combat masteries) and `Pacts.LeagueMode.js` (Demonic Pacts' pact tree); data in `plugins/modes/data/leagues.json`, `league-ranks.json`,
 `league-relics.json`, `league-areas.json`, `league-boosted-drops.json` and
 `league-combat-masteries.json`, `league-tasks.json` (generated), `league-task-list.json` and
 `league-task-triggers.json`.
@@ -82,44 +83,44 @@ An account can own several characters ([character slots](../../docs/character-sl
 | --- | --- | --- |
 | `journal:tab-mounted` | `{ player, groupId, tabIndex }` (SideJournalDefaults) | LeagueMode listens |
 | `league:profile` | `{ player } -> { league: type \| null }` | LeagueMode |
-| `league:login` | `{ player, league }` after a league profile's login | LeaguePoints, LeagueRelics listen |
-| `league:highest-tier` | `{ player } -> { tier }` (0-based, -1 none) | LeagueRelics |
-| `league:award-task` | `{ player, id, points, name } -> { awarded }` | LeaguePoints (once per id) |
-| `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
-| `league:saved-points` | `{ save } -> { points, tasks }` (an offline league character's save) | LeaguePoints |
+| `league:login` | `{ player, league }` after a league profile's login | Points, Relics listen |
+| `league:highest-tier` | `{ player } -> { tier }` (0-based, -1 none) | Relics |
+| `league:award-task` | `{ player, id, points, name } -> { awarded }` | Points (once per id) |
+| `league:points` | `{ player } -> { points, tasks }` | Points |
+| `league:saved-points` | `{ save } -> { points, tasks }` (an offline league character's save) | Points |
 | `league:account-points` | `{ player } -> { leagues, total }` (a main character's league points, by type) | LeagueMode (Records) |
 | `league:award-renown` / `league:spend-renown` | `{ player, amount } -> { awarded }` / `{ spent }` (Shattered Relics' Sage's Renown) | LeagueMode (Shattered) |
 | `league:renown` | `{ player } -> { renown }` | LeagueMode (Shattered) |
 | `league:grant-fragment` | `{ player, id, xp? }` owns a Shattered Relics fragment | LeagueMode (Fragments) |
 | `league:unlock-skill` | `{ player, skill }` unlocks a Shattered Relics skill for free | LeagueMode (Unlocks) |
 | `league:unlocks` | `{ player } -> { skills, bosses, quests }` | LeagueMode (Unlocks) |
-| `league:open-tasks` / `league:open-fragments` / `league:open-unlocks` | `{ player }` from Shattered Relics' side panel | LeagueTasks (#1358) / Fragments / Unlocks |
-| `league:completed-tasks` | `{ player } -> { ids }` | LeaguePoints |
-| `league:complete-task` | `{ player, id } -> { found, completed }` (a catalog task, by id) | LeagueTasks |
-| `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueTasks, LeagueRelics, LeagueAreaUnlocks listen |
-| `league:has-relic` | `{ player, relic } -> { active }` | LeagueRelics |
-| `league:masteries` | `{ player } -> { league, masteries: { melee, ranged, magic }, passiveTier, points: { earned, spent, available }, challenges }` | LeagueCombatMasteries |
+| `league:open-tasks` / `league:open-fragments` / `league:open-unlocks` | `{ player }` from Shattered Relics' side panel | Tasks (#1358) / Fragments / Unlocks |
+| `league:completed-tasks` | `{ player } -> { ids }` | Points |
+| `league:complete-task` | `{ player, id } -> { found, completed }` (a catalog task, by id) | Tasks |
+| `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), Tasks, Relics, Area unlocks listen |
+| `league:has-relic` | `{ player, relic } -> { active }` | Relics |
+| `league:masteries` | `{ player } -> { league, masteries: { melee, ranged, magic }, passiveTier, points: { earned, spent, available }, challenges }` | Combat masteries |
 | `league:mastery-point` | `{ player, challenge, earned }` after a Combat Mastery point | - |
 | `league:mastery-unlocked` | `{ player, style, tier, key, passiveUnlocked }` after an unlock | - |
-| `stats:heal` | `{ player, previous, amount, hitpoints }` before any heal (core); `amount` may change | LeagueCombatMasteries |
-| `skills:restore` | `{ player, skill, amount, max }` before a stat restore or boost (core); `amount` may change | LeagueCombatMasteries |
-| `combat:hit-rolled` | `{ attacker, target, combatType, damage, minimum, maximum }` after a hit's damage roll, before defences (core); `damage` may change | LeagueCombatMasteries |
-| `league:relics` | `{ player } -> { league, chosen }` (tier index -> slot) | LeagueRelics |
-| `league:content-rows` | `{ player, league, base, structs, enums, dbRows }`: units push the rows the client lacks | LeagueRelics (Catalog), LeagueTasks (Catalog), LeagueMode (Rank), LeagueAreaUnlocks answer |
+| `stats:heal` | `{ player, previous, amount, hitpoints }` before any heal (core); `amount` may change | Combat masteries |
+| `skills:restore` | `{ player, skill, amount, max }` before a stat restore or boost (core); `amount` may change | Combat masteries |
+| `combat:hit-rolled` | `{ attacker, target, combatType, damage, minimum, maximum }` after a hit's damage roll, before defences (core); `damage` may change | Combat masteries |
+| `league:relics` | `{ player } -> { league, chosen }` (tier index -> slot) | Relics |
+| `league:content-rows` | `{ player, league, base, structs, enums, dbRows }`: units push the rows the client lacks | Relics (Catalog), Tasks (Catalog), LeagueMode (Rank), Area unlocks answer |
 | `league:send-content` | `{ player }`: send the content payload again (before an interface opens) | LeagueMode (Content) |
 | `league:rank` | `{ player } -> { rank, name, next }` (ranks reached 0-7, the next threshold) | LeagueMode (Rank) |
 | `league:statistics` | `{ player } -> { counters }` (the summary's rows by name) | LeagueMode (Statistics) |
 | `league:joined` | `{ player, league }` the first time a character joins its league | LeagueMode (Tutorial) listens |
-| `league:area-unlocked` | `{ player, league, area, slot }` when an area is unlocked | LeagueAreaUnlocks (#1352) emits; Tutorial listens |
+| `league:area-unlocked` | `{ player, league, area, slot }` when an area is unlocked | Area unlocks (#1352) emits; Tutorial listens |
 | `league:tutorial-stage` | `{ player } -> { stage }` (league_tutorial_completed while a tutorial runs) | LeagueMode (Tutorial) |
 | `screen-highlight:show` / `:close` / `:finished` | a walkthrough in an interface (see Tutorial) | ScreenHighlight |
 | `interface:opened` | `{ player, groupId, targetUid, type }` whenever a group is mounted (core, PacketSender) | Tutorial listens |
 | `welcome-screen:shown` | `{ player }` when the welcome screen is up | Tutorial, Welcome listen |
-| `league:areas` | `{ player } -> { league, unlocked: [area ids], next: { slot, tasks } \| null, available }` | LeagueAreaUnlocks |
-| `league:area-at` | `{ x, y, player \| league } -> { area: id \| null, name }` | LeagueAreaUnlocks |
+| `league:areas` | `{ player } -> { league, unlocked: [area ids], next: { slot, tasks } \| null, available }` | Area unlocks |
+| `league:area-at` | `{ x, y, player \| league } -> { area: id \| null, name }` | Area unlocks |
 | `league:near-bank` | `{ player, distance? } -> { near }` (a bank loc or banker within `distance`, Shattered Relics' `bank.distance` unless given) | LeagueMode (NearBank) |
-| `league:teleport-cast` | `{ player } -> { cast: { steps, lockTick, landTick } \| null }` (the league's area-teleport cast, `teleportCast`) | LeagueAreaUnlocks |
-| `league:relic-triggered` | `{ player, relic }` when a once-in-a-while relic fires (Undying Retribution, Last Stand) | LeagueRelics emits |
+| `league:teleport-cast` | `{ player } -> { cast: { steps, lockTick, landTick } \| null }` (the league's area-teleport cast, `teleportCast`) | Area unlocks |
+| `league:relic-triggered` | `{ player, relic }` when a once-in-a-while relic fires (Undying Retribution, Last Stand) | Relics emits |
 | `ironman:set-mode` | `{ player, mode } -> { handled }` (the Ironman plugin's) | LeagueMode emits at a league login |
 | `ironman:change-mode` | `{ player, from, to, allowed, reason }` (the Ironman plugin asks before a setup choice) | LeagueMode refuses for a league character |
 
@@ -306,6 +307,27 @@ data `panels`):
   the seven ranks from the struct's threshold enum (param 1857) and trophy enum (2041), the names
   from enum 5201 and `league_points_completed`.
 
+**Busy refusal.** View Demonic Pacts / Combat Mastery (656:32), View Relics (656:44), View Areas
+(656:40) and View Tasks (656:36) answer a locked player (`Player.isLocked`: a teleport's cast, before
+the move, or an agility obstacle) with the game message "Please finish what you are doing first." and
+open nothing, through the plugin API's `refuseWhileBusy`, which the interface-click packet checks before
+any handler. As captured: View Tasks two ticks into a standard teleport cast, the tick before the move
+(227/00075), and View Tasks during the Varrock Rooftop wall swing (227/01723).
+
+Not modelled (those clicks still open here):
+- The Royal seed pod's arrival: live refused View Demonic Pacts one and four ticks after the move,
+  during the arrival animation, and opened it the tick after the pod's message (237/01149). Here a
+  teleport releases the player on the tick they move.
+- Live also refused during a stall theft (237/01148) and on the tick a box trap check finished
+  (237/01108). Neither locks the player here.
+- A few refusals came in states the captures don't make clear: after dialogues, banking or inventory
+  clicks (227/00552, 01710, 01757, 01768).
+- Other holds (a spell freeze, a boss's stun or knockback, a cutscene, a ride, a loc's climb, the
+  Leagues home teleport's cast) don't count.
+- Summary, Info and Rank have no captured refusal and aren't gated.
+- The same line answers other interfaces (the account tab's bond and inbox buttons, settings buttons),
+  which this doesn't cover yet.
+
 ### Ranks
 
 `league/Rank.LeagueMode.js`, data `league-ranks.json`: seven ranks a league (Bronze to Dragon) at
@@ -352,8 +374,9 @@ finished value, 12 (every Raging Echoes capture's login) or Leagues VI's 14 (243
   client draws the new page. `orbs_disabled` (4084) and `chatoverlay_allowmesoverlap` (10690) are 1
   while it runs. It opens once the welcome screen's Play is clicked, or the new character's design
   closes. Not sent, though captured: `minimap_toggle` (no such packet here), `side_journal_tab` = 1
-  with the quest list mounted on Get Started (this client mounts journal tabs on their click), and
-  the orbs interface reopened at the end (this client keeps it).
+  with the quest list mounted on Get Started (this client mounts journal tabs on their click).
+  As captured, a login while it runs leaves the orbs (160) closed, and the end opens them again
+  (`settings:restore-data-orbs`, which keeps them closed for a player who hid them).
 - **Stages** (Raging Echoes; Demonic Pacts adds 11-13 and finishes at 14): 0 the welcome page, Get
   Started (677:9) sets `league_3_has_seen_cutscene` and jumps to 3; 3 flashes the journal stone
   (`flashside` 3, OP1 armed on stone2 of every gameframe layout: 161:61, 164:54, 548:66) until it is
@@ -686,7 +709,7 @@ A quest the character had started keeps its quest items when a pack completes it
 
 ## Relics
 
-`LeagueRelics.plugin.js`, data `plugins/modes/data/league-relics.json`: eight tiers a league,
+`Relics.LeagueMode.js`, data `plugins/modes/data/league-relics.json`: eight tiers a league,
 each with a point cost, a passive and three relics (Wiki); a tier's pick is permanent. A
 character's picks live in `league:relics` (tier index -> slot 1-3).
 
@@ -1274,7 +1297,7 @@ above: every league character is a standard Ironman.
 
 ## Combat masteries (Raging Echoes)
 
-`LeagueCombatMasteries.plugin.js`, data `plugins/modes/data/league-combat-masteries.json`
+`CombatMasteries.LeagueMode.js`, data `plugins/modes/data/league-combat-masteries.json`
 (https://oldschool.runescape.wiki/w/Raging_Echoes_League/Combat_Masteries): three styles of six
 tiers, each needing the previous tier of its style (`requires` in the data), paid with Combat
 Mastery points; the first time any style reaches a tier, a passive for every style comes with it.
@@ -1362,7 +1385,7 @@ not recorded, so there are none.
 
 ## Demonic Pacts
 
-`LeaguePacts.plugin.js` (units in `leaguepacts/`), data `plugins/modes/data/league-pacts.json`:
+`Pacts.LeagueMode.js` (units in `leaguepacts/`), data `plugins/modes/data/league-pacts.json`:
 Demonic Pacts' pact tree (Wiki Demonic_Pacts_League/Demonic_Pacts). Only a Demonic Pacts
 character has it; other plugins ask `league:pacts` { player } (pacts, earned, spendable, resets)
 and `league:pact-effect` { player, effect } (an effect varbit's gameval name -> value).
@@ -1451,7 +1474,7 @@ and `league:pact-effect` { player, effect } (an effect varbit's gameval name -> 
 
 ## Areas
 
-`LeagueAreaUnlocks.plugin.js` (units in `leagueareas/`), data `plugins/modes/data/league-areas.json`.
+`AreaUnlocks.LeagueMode.js` (units in `leagueareas/`), data `plugins/modes/data/league-areas.json`.
 A league character starts in Misthalin and Karamja (the Wiki's start; live unlocks Karamja free
 during its tutorial, which this server has none of) and picks up to three more areas as its
 completed tasks reach the league's thresholds: Trailblazer Reloaded 60, 140 and 300 tasks from
@@ -1592,7 +1615,7 @@ is `select_button` 512:84 and the unlock `confirm_button` 512:62 (rev 227's echo
 
 ## Tasks
 
-`LeagueTasks.plugin.js` with its units in `plugins/modes/leaguetasks/`: the catalog of each league's
+`Tasks.LeagueMode.js` with its units in `plugins/modes/leaguetasks/`: the catalog of each league's
 tasks, the triggers that award them and the cache's task list interface. A completed task is a key
 of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's.
 
@@ -2053,3 +2076,19 @@ the loc exists.
 The cache's "League Skill Cape Shop" (652) is not a shop: its only script (3201) creates 22 tiny
 cape items and prints "Loading: <cape>" for each, a model preloader. Nothing sells through it, and
 the Wiki names no such shop.
+
+When Tutorial Island is enabled on the same world, league character profiles use the league's
+onboarding only. The profile is selected before login hooks run; Tutorial Island neither starts
+nor resumes on that profile, including old saves with island progress. Main characters still
+use Tutorial Island normally. This keeps the quest journal mounted for the league tutorial's
+Open the Leagues Menu step, including after the welcome screen rebuilds the gameframe.
+
+The separate Leagues VI Yama's Lair plays **Sign Here** (Wiki
+[Yama's Lair](https://oldschool.runescape.wiki/w/Yama%27s_Lair), cache song 280).
+`YamaLair.LeagueAreaUnlocks.js` supplies the existing area's music policy for plane 0 of cache
+map square 5975, including the recorded start (1503, 5602) and League Home Teleport landing
+(1502, 5592). The whole map square is used as the isolated lair's boundary; the Wiki names the
+music but does not draw a music polygon for this copy. The session owns unlocking and playback,
+so relog/return work and manual music modes remain respected. The generated Modern and Classic
+Wiki music maps are unchanged. The regression records server music output and unlock bits;
+it does not establish client audio rendering or a natural end-to-end World login playthrough.

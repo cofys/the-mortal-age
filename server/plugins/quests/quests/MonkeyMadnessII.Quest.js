@@ -1491,6 +1491,9 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
       api.sendMultiChatboxPrompt(player, "Enter the hidden trapdoor?", "Yes.", () => {
         player.moveTo(DUNGEON_ENTRY);
         player.sendMessage("You enter the Ape Atoll dungeon.");
+        // Wiki (Monkey Madness II): entering Kruk's Dungeon to find Kruk, the greegree will "wrench itself from your
+        // hands", dropping to the ground with a full inventory. The later Kruk-greegree entry needs it worn.
+        if (stage === STAGE_ARCHER_ASKED) api.emitCustomEvent("greegree:wrench-off", { player });
       }, "No.", () => player.getPacketSender().sendInterfaceRemoval());
       return;
     }
@@ -1646,8 +1649,8 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
       event.handled = true;
       // Wiki (Royal seed pod): it "can teleport up to level 30 wilderness"; the usual teleport rules apply otherwise.
       if (!TeleportHandler.checkReqs(player, GRAND_TREE_KING, SEED_POD_WILDERNESS_LIMIT)) return;
-      TeleportHandler.teleport(player, GRAND_TREE_KING.clone(), TeleportType.NORMAL, false,
-        () => player.sendMessage("The Royal seed pod teleports you to the Grand Tree."));
+      TeleportHandler.confirm(player, GRAND_TREE_KING, () => TeleportHandler.teleport(player, GRAND_TREE_KING.clone(), TeleportType.NORMAL, false,
+        () => player.sendMessage("The Royal seed pod teleports you to the Grand Tree.")), SEED_POD_WILDERNESS_LIMIT);
       return;
     }
     if (option !== "read") return;

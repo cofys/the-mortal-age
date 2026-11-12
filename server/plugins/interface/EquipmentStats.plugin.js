@@ -1,6 +1,7 @@
 
 const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
 const { EquipPacketListener } = require("../../src/main/typescript/elvarg/net/packet/impl/EquipPacketListener");
+const { sendExaminePrice } = require("../../src/main/typescript/elvarg/game/content/ExaminePrice");
 const { WeaponProfiles } = require("../../src/main/typescript/elvarg/game/content/combat/WeaponProfile");
 const wear = require("../items/lib/item-wear");
 
@@ -189,6 +190,7 @@ function handleItemAction({ player, buttonId, action }) {
     let text = definition.getExamine() || definition.getName();
     if (wear.isWearable(item)) text += ` (${wear.describe(item)})`;
     player.sendMessage(text);
+    sendExaminePrice(player, item.getId(), item.getAmount());
   }
   return true;
 }

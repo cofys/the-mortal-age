@@ -14,6 +14,7 @@ import { encodeShopClose, encodeShopOpen } from "../../../../net/protocol/Client
 import { PlayerSave } from "../../../entity/impl/player/persistence/PlayerSave";
 import { scarcityPriceMultiplier, kingdomPriceBias, hatredTierForShop } from "./shopPricing";
 import { Inventory } from "../impl/Inventory";
+import { examineItem } from "../../../content/ExaminePrice";
 
 export interface ShopItemContainerAction {
     kind: "value" | "buy_sell" | "x";
@@ -382,8 +383,7 @@ export class ShopManager {
             // must still hold the item the client showed there.
             if (!item || (packet.itemId != null && packet.itemId > 0 && packet.itemId !== item.itemId)) return true;
             if (examine) {
-                const definition = ItemDefinition.forId(item.itemId);
-                player.sendMessage(definition.getExamine() || definition.getName());
+                examineItem(player, item.itemId, item.amount);
             } else {
                 this.handleItemContainerAction(player, {
                     kind: amount != null ? "buy_sell" : "value",
@@ -400,8 +400,7 @@ export class ShopManager {
             const item = player.getInventory().getItems()[packet.slot];
             if (!item || item.getId() < 0) return true;
             if (examine) {
-                const definition = ItemDefinition.forId(item.getId());
-                player.sendMessage(definition.getExamine() || definition.getName());
+                examineItem(player, item.getId(), item.getAmount());
             } else {
                 this.handleItemContainerAction(player, {
                     kind: amount != null ? "buy_sell" : "value",
@@ -739,9 +738,8 @@ export class ShopManager {
             return;
         }
 
-        // Content may hand the purchase over as another item ("shop:delivery", a league relic's noted purchases), or as
-        // a bundle of several per item bought (`amount`, the PvP Arena's Blighted surge sack (x50)).
-        const delivery = { player, shopId: shop.definition.getId(), currency: shop.definition.getCurrency(), itemId, deliverId: itemId, amount: 1 };
+        // Content may change the delivered item or bundle size; capacity upgrades opt into a delivery receipt.
+        const delivery = { player, shopId: shop.definition.getId(), currency: shop.definition.getCurrency(), itemId, deliverId: itemId, amount: 1, captureDelivery: false };
         PluginManager.emitCustomEvent("shop:delivery", delivery);
         const deliverId = Number.isInteger(delivery.deliverId) && delivery.deliverId > 0 ? delivery.deliverId : itemId;
         const perPurchase = Number.isInteger(delivery.amount) && delivery.amount > 0 ? delivery.amount : 1;
@@ -770,11 +768,16 @@ export class ShopManager {
             shop.definition.getCurrency(),
             unitPrices.slice(0, removed).reduce((total, each) => total + each, 0)
         );
+        // Opt-in receipt for one nonstackable item: retain the actual newly filled slot and object.
+        const deliveredSlot = delivery.captureDelivery && removed === 1 && perPurchase === 1 && !delivered.isStackable?.()
+            ? inventory.getEmptySlot() : -1;
         inventory.adds(deliverId, removed * perPurchase);
+        const deliveredItem = deliveredSlot >= 0 ? inventory.getItems()[deliveredSlot] : null;
         PluginManager.emitCustomEvent("shop:purchase", {
             player, shopId: shop.definition.getId(), shopName: shop.definition.getName(),
             itemId, amount: removed, originalStock: (shop.originalAmounts.get(itemId) ?? 0) > 0,
             currency: shop.definition.getCurrency(),
+            ...(delivery.captureDelivery ? { deliverId, deliveredSlot, deliveredItem } : {}),
         });
         Sounds.sendSound(player, Sound.PICK_UP_ITEM);
         this.refresh(shop.definition.getId());
@@ -1224,6 +1227,14 @@ export class ShopManager {
      * so wanderers are never mispriced as home customers.
      */
     private static itemPrice(shop: RuntimeShop, definition: ItemDefinition, player?: any): number {
+        // A per-shop price override IS the item's canonical price in this
+        // shop (upstream's ratedBuyPrice likewise bows out for overrides):
+        // the scarcity/kingdom scalers below price definition-value items,
+        // they do not re-price an explicitly authored price.
+        const override = shop.itemPrices.get(definition.getId());
+        if (override != null && override > 0) {
+            return override;
+        }
         const base = this.basePrice(shop, definition);
         if (!(base > 0)) {
             return base;
