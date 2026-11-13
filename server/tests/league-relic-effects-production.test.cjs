@@ -278,6 +278,24 @@ test("Friendly Forager: a secondary kept 90% of the time, a 3-dose potion made w
   }
 });
 
+test("Friendly Forager with Prescription goggles: a torstol potion (unf) the goggles already kept keeps one vial, not two", () => {
+  const Shared = require("../plugins/minigames/mixology/Shared.Mixology");
+  const Goggles = require("../plugins/minigames/mixology/Goggles.Mixology");
+  Shared.bind({ core, emitCustomEvent() {} });
+  const player = cases(FORAGER, 5).relic;
+  player.getEquipment().setItem(core.Equipment.HEAD_SLOT, new core.Item(obj("mm_alchemist_hat"), 1));
+  Math.random = () => 0.05; // both rolls win: the goggles' 10% and the relic's 90%
+  const ingredients = ["4dose2attack", "4dose2defense", "4dose2strength", "torstolvial"].map((name) => ({ id: obj(name), count: 1 }));
+  const request = {
+    player, recipe: { product: "4dose2combat", productId: obj("4dose2combat"), ingredients }, productId: obj("4dose2combat"),
+    consume: ingredients.map((item) => ({ ...item })), returns: [{ id: obj("vial_empty"), count: 3 }],
+  };
+  Goggles.saveSecondaries(request); // the goggles answer first
+  emit("herblore:mix", request);
+  assert.deepEqual(request.consume.map((item) => item.count), [1, 1, 1, 0], "the torstol potion (unf) is kept");
+  assert.equal(request.returns[0].count, 2, "its vial is kept once: two vials back, not one");
+});
+
 test("through Herblore's own cleaning: one click cleans every grimy herb of the kind for Production Master, one for the others", () => {
   require("../plugins/skills/herblore/Cleaning.Herblore")(new Proxy({ core }, {
     get: (target, key) => (key in target ? target[key] : (handler) => { if (key === "onItemFirstAction") hooks.cleanHerb = handler; }),
@@ -407,4 +425,40 @@ test("Friendly Forager: Demonic Pacts' pouch holds 100 of each herb (Wiki, 15 Ap
     assert.equal(pouch.getMetaValue(FORAGER_STORE)[guam], cap, `league ${league}: full`);
     assert.equal(player.getInventory().getAmount(guam), 10, "the rest stay out");
   }
+});
+
+// Plugins load by path, so the amulet of chemistry (plugins/items) answers "herblore:mix" before the league
+// relics (plugins/modes). Wiki (Amulet of chemistry): it "provides no benefit when making potions that always
+// output 4 doses"; Friendly Forager makes every such potion with 4 doses, so its dose costs no charge.
+test("Friendly Forager with an amulet of chemistry answering first: the relic's fourth dose spends no charge", (t) => {
+  const Amulet = require("../plugins/items/AmuletOfChemistry.plugin");
+  const attack = ["1dose1attack", "2dose1attack", "3dose1attack", "4dose1attack"].map(obj);
+  Amulet._test.initialize({ core, emitCustomEvent(name, request) {
+    const doses = attack.indexOf(request.itemId) + 1;
+    if (name === "potions:dose-family" && doses > 0) request.family = { doses, byDose: [0, ...attack] };
+  } });
+  const mixListeners = custom["herblore:mix"];
+  const madeListeners = custom["herblore:made"];
+  custom["herblore:mix"] = [Amulet._test.onMix, ...(mixListeners ?? [])];
+  custom["herblore:made"] = [Amulet._test.onMade, ...(madeListeners ?? [])];
+  t.after(() => { custom["herblore:mix"] = mixListeners; custom["herblore:made"] = madeListeners; });
+  let mixHandler;
+  require("../plugins/skills/herblore/Mixing.Herblore")(new Proxy({ core }, {
+    get: (target, key) => (key in target ? target[key] : (handler) => { if (key === "onItemOnItem") mixHandler = handler; }),
+  }));
+  const brew = (player) => {
+    player.getEquipment().setItem(core.Equipment.AMULET_SLOT, new core.Item(I.AMULET_OF_CHEMISTRY, 1));
+    const skills = player.getSkillManager();
+    skills.setMaxLevels(Skill.HERBLORE, 10, false);
+    skills.setCurrentLevels(Skill.HERBLORE, 10, false);
+    const inventory = player.getInventory();
+    inventory.resetItems();
+    inventory.adds(obj("guamvial"), 1).adds(obj("eye_of_newt"), 1);
+    mixHandler({ player, usedItemId: obj("eye_of_newt"), usedWithItemId: obj("guamvial"), handled: false });
+    return [inventory.getAmount(attack[3]), player.getAttribute(Amulet._test.CHARGES_ATTRIBUTE) ?? Amulet._test.MAX_CHARGES];
+  };
+  const forager = cases(FORAGER, 5);
+  Math.random = () => 0.01; // the amulet's 5% wins
+  assert.deepEqual(brew(forager.relic), [1, 5], "the relic's 4 doses; the amulet keeps all five charges");
+  assert.deepEqual(brew(forager.main), [1, 4], "without the relic the amulet's dose costs a charge");
 });

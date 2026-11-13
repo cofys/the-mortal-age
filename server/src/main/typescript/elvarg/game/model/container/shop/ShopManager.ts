@@ -553,17 +553,25 @@ export class ShopManager {
         sender.sendVarbit(this.QUANTITY_VARBIT, this.quantityMode(player));
         sender.sendSubInterface(targetUid, this.MAIN_INTERFACE_ID, 0)
             .sendSubInterface((161 << 16) | 79, this.SIDE_INTERFACE_ID, 1)
-            .sendInterfaceScript(1074, [516, shop.definition.getName(), this.currencyItemId(shop.definition.getCurrency()), 0, 1])
+            .sendInterfaceScript(1074, [516, this.title(shop.definition.getName()), this.currencyItemId(shop.definition.getCurrency()), 0, 1])
             .sendInterfaceFlagsRange((this.MAIN_INTERFACE_ID << 16) | 16, 0, 299, 1662)
             .sendInterfaceScript(149, [this.SIDE_INTERFACE_ID << 16, 93, 4, 7, 0, -1, "Value", "Sell 1", "Sell 5", "Sell 10", "Sell 50"])
             .sendInterfaceFlagsRange(this.SIDE_INTERFACE_ID << 16, 0, 27, 1086)
             .sendItemContainer(player.getInventory(), this.INVENTORY_INTERFACE_ID);
         player.getSession().sendClientPacket(encodeShopOpen(
-            String(shop.definition.getId()), shop.definition.getName(),
+            String(shop.definition.getId()), this.title(shop.definition.getName()),
             this.currencyItemId(shop.definition.getCurrency()), this.isGeneralStore(shop), 1, 1, stock
         ));
         if (opening) Sounds.sendSound(player, Sound.CONTAINER_OPEN);
         return true;
+    }
+
+    /**
+     * The title a shop shows: its name without the Wiki's " (shop)" disambiguation ("Slayer
+     * Equipment", "Oziach"), which the shop data keeps to tell the shop from its owner.
+     */
+    private static title(name: string): string {
+        return name.replace(/ \(shop\)$/, "");
     }
 
     private static refresh(shopId: number): void {
@@ -1033,6 +1041,8 @@ export class ShopManager {
      * and arrows sold at the Ranging Guild turned coins into archery tickets.
      */
     private static buysItem(shop: RuntimeShop, itemId: number): boolean {
+        // Wiki StoreLines all "buy=N/A": Farming Supplies, the inns and pubs refuse every sale.
+        if (shop.definition.getSalesPolicy().buysNothing === true) return false;
         if (!this.BUYBACK_CURRENCIES.has(String(shop.definition.getCurrency()).toUpperCase())) {
             const request = {
                 shopId: shop.definition.getId(), shopName: shop.definition.getName(),
@@ -1062,6 +1072,7 @@ export class ShopManager {
      * item to this shop." (cache script9714's wording; no recording).
      */
     private static sellRefusal(shop: RuntimeShop): string {
+        if (shop.definition.getSalesPolicy().buysNothing === true) return "You cannot sell to this shop.";
         const buysAnything = this.BUYBACK_CURRENCIES.has(String(shop.definition.getCurrency()).toUpperCase())
             || [...shop.originalAmounts.keys()].some((stocked) => this.buysItem(shop, stocked));
         return buysAnything ? "You can't sell this item to this shop." : "You cannot sell to this shop.";

@@ -33,7 +33,7 @@ const DOOR_NAMES = new Set([
   // The Ranging Guild's entrance (11665, diagonal, Open only). Its 40 Ranged gate is
   // areas/RangingGuild.plugin.js; this only swings the leaf.
   "Guild door",
-  "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
+  "Gate", "Metal gate", "Wooden gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
   "Vitur door", "Myrmel door", "Shadum door", "Jovkai door", "Chained door", "Trapdoor",
   "Longhall door", "Prison door", "Arena Entrance", "Arena Exit",
   // Pollnivneach curtains: closed 1533 "Open" -> open 1534 "Close" (closed id + 1, cache-derived).
@@ -259,6 +259,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     woodenGate(O.GATE_322, O.GATE_319, O.GATE_320, O.GATE_321),
     // Tutorial Island survival gate: swings open into 8810/8811's open panels (Zenyte Gate.java).
     woodenGate(O.GATE_90, O.GATE_91, O.GATE_85, O.GATE_86),
+    // Shilo Village's inner gate: its nameless open panels (2263/2264) are not placed
+    // on the cache map, so the generic same-model pairing cannot find them.
+    woodenGate(O.WOODEN_GATE, O.WOODEN_GATE_2, 2263, 2264),
   ]);
 
   WOODEN_GATE_BY_ID = new Map();
@@ -700,6 +703,21 @@ function defineDoorData({ ObjectIdentifiers: O }) {
       walkOver: true,
       closeTicks: 2,
       openSoundId: 71,
+    }),
+    // Necrovarus's tomb door in the Temple of Phasmatys once unlocked (Ghosts Ahoy capture
+    // 20261112T092603-5ab63b4 ticks 1691-1693 in, 1711-1713 out): INVISWALL on the door's tile and
+    // the open door on the tile west, sound 56, the player walks across and the door is back two
+    // ticks later. The quest keeps it locked until the bone key is used on it (door:toggle).
+    Object.freeze({
+      closed: [[O.DOOR_144, 3656, 3514, 1, 0]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 3656, 3514, 1, 0],
+        [O.DOOR_145, 3655, 3514, 1, 1],
+      ],
+      crossX: 3656,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 56,
     }),
     // Dragon Slayer's secret wall into Crandor's dungeon (capture 2951 ticks 85-89): the quest opens it
     // through door:open once the shortcut is unlocked. The player walks 2836,9598 -> 9599 -> 9600 while

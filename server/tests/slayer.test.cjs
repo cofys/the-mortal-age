@@ -48,6 +48,7 @@ Slayer.register({
   onCombatHitRoll() {},
   onCombatHitResolved() {},
   onNpcHitModify() {},
+  onPlayerDealtDamage() {},
   registerIncomingDamageModifier() {},
   onNpcBeforeDeath() {},
   registerNpcCombatMethodProvider: (ids, ctor, options) => combatMethodProviders.push({ ids, ctor, options }),
@@ -433,7 +434,8 @@ test("the gem's Check gives the task and the streak", () => {
   const player = createPlayer({ points: 20 });
   giveTask(player, 3, "Bloodveld", 44);
   Checks.check(player);
-  assert.equal(player.messages[0], "You're assigned to kill bloodveld; only 44 more to go.");
+  assert.equal(player.messages[0],
+    "<col=ef1020>You're assigned to kill </col>bloodveld<col=ef1020>; only </col>44<col=ef1020> more to go.");
   assert.match(player.messages[1], /currently have a total of <\/col>20 points/);
 });
 
@@ -949,6 +951,11 @@ test("Abyssal demons need either quest; partly-done quests only need starting", 
     player.quests.dragon_slayer_i = "not started";
     assert.equal(Tasks.meetsQuests(player, taskId("Blue Dragons")), false);
     assert.equal(Tasks.meetsQuests(player, taskId("Goblins")), true, "no quest");
+    // Wiki (Slayer task/Brine rats): "completion of Olaf's Quest"; only the cavern needs it partly done.
+    player.quests.olafs_quest = "started";
+    assert.equal(Tasks.meetsQuests(player, taskId("Brine Rats")), false, "Olaf's Quest started is not enough");
+    player.quests.olafs_quest = "complete";
+    assert.equal(Tasks.meetsQuests(player, taskId("Brine Rats")), true);
   });
   // No quest plugin answering (a quest tsps doesn't have): the task isn't blocked.
   assert.equal(Tasks.meetsQuests(createPlayer(), taskId("Ghouls")), true);

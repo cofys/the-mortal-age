@@ -179,6 +179,8 @@ function mix(request) {
   const unfinished = /\(unf\)$/i.test(name(request.productId));
   if (!unfinished) {
     request.consume.forEach((item, index) => {
+      // Already kept by another listener (Prescription goggles): no second roll, and no second vial back.
+      if (item.count <= 0) return;
       const secondary = index > 0 && (alsoSaved.has(item.id) || !Common.isPotion(item.id));
       if (!secondary || neverSaved.has(item.id) || Math.random() >= effect.secondarySaveChance) return;
       item.count = 0;
@@ -192,7 +194,10 @@ function mix(request) {
   // Brewed with 4 doses, not 3: only a potion brewed from an unfinished one, not an upgrade of a dosed potion.
   const upgrade = request.consume.some((item) => /\(\d\)$/.test(name(item.id)));
   const fourDose = upgrade ? null : fourDoseOf(request.recipe?.product);
-  if (Number.isInteger(fourDose)) request.productId = fourDose;
+  if (!Number.isInteger(fourDose)) return;
+  request.productId = fourDose;
+  // The dose is the relic's: an amulet of chemistry that answered first spends no charge on it.
+  request.extraDose = false;
 }
 
 /** A league's batch (`leagueBatch`, Demonic Pacts' Herblore all at once), as the production relics answer. */

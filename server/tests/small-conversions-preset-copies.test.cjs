@@ -86,6 +86,26 @@ test("bone staff: preset chaos runes are refused; only plain ones charge, and Un
   assert.equal(amount(f.inv, I.CHAOS_RUNE, false), 50);
 });
 
+test("bone staff creation with only preset chaos runes says preset items cannot be used, not that runes are missing", (t) => {
+  const f = actor(t);
+  levels(f, core.Skill.CRAFTING);
+  f.inv.setItem(0, new core.Item(I.BATTLESTAFF, 1));
+  f.inv.setItem(1, new core.Item(I.SCURRIUS_SPINE, 1));
+  f.inv.setItem(2, new core.Item(I.CHISEL, 1));
+  f.inv.setItem(3, preset(new core.Item(I.CHAOS_RUNE, 1000)));
+  itemOnItem(f, I.SCURRIUS_SPINE, I.BATTLESTAFF);
+  assert.equal(f.messages.at(-1), PRESET_TEXT);
+  assert.equal(f.inv.getAmount(I.BATTLESTAFF), 1, "nothing made");
+  assert.equal(amount(f.inv, I.CHAOS_RUNE, true), 1000);
+  // Preset and plain together still short of 1,000 plain: the preset line; too few in all: the runes line.
+  f.inv.setItem(4, new core.Item(I.CHAOS_RUNE, 400));
+  itemOnItem(f, I.SCURRIUS_SPINE, I.BATTLESTAFF);
+  assert.equal(f.messages.at(-1), PRESET_TEXT);
+  f.inv.setItem(3, new core.Item(-1, 0));
+  itemOnItem(f, I.SCURRIUS_SPINE, I.BATTLESTAFF);
+  assert.equal(f.messages.at(-1), "You need 1,000 chaos runes and a Scurrius' spine to create the Bone staff.");
+});
+
 test("rat bone mace: a preset rune mace makes a preset bone mace", (t) => {
   const f = actor(t);
   levels(f, core.Skill.SMITHING, core.Skill.CRAFTING, core.Skill.FLETCHING);
@@ -270,6 +290,54 @@ test("Shadow of the Storm: a preset black dye is refused; a plain dye on a cape 
   assert.equal(f.inv.getAmount(I.RED_CAPE), 0);
   assert.equal(f.inv.getAmount(I.VIAL), 1, "the dye's vial comes back");
   assert.equal(f.inv.getAmount(I.BLACK_DYE), 0);
+});
+
+// The copy the player used converts, not the first copy by id (review of #3012).
+function itemOnSlots(f, usedSlot, usedWithSlot) {
+  const items = f.inv.getItems();
+  PM.emitItemOnItem({ player: f.p, usedItem: items[usedSlot], usedItemId: items[usedSlot].getId(), usedItemSlot: usedSlot,
+    usedWithItem: items[usedWithSlot], usedWithItemId: items[usedWithSlot].getId(), usedWithItemSlot: usedWithSlot, handled: false });
+}
+
+test("Taste of Hope: the fountain fills the vial used, not the first vial", (t) => {
+  const f = actor(t);
+  questStage(f, "taste_of_hope", 45);
+  f.inv.setItem(3, new core.Item(I.VIAL, 1));
+  f.inv.setItem(27, preset(new core.Item(I.VIAL, 1)));
+  const fountain = { getId: () => 32557, getLocation: () => f.p.getLocation().clone() };
+  PM.emitItemOnObject({ player: f.p, itemId: I.VIAL, item: f.inv.getItems()[27], itemSlot: 27, objectId: 32557, object: fountain, handled: false });
+  assert.equal(f.inv.getItems()[27].getId(), I.VIAL_OF_WATER, "the used vial in slot 27 is filled");
+  assert.equal(f.inv.getItems()[3].getId(), I.VIAL, "the plain vial in slot 3 is untouched");
+});
+
+test("Shadow of the Storm: a plain dye used beside an earlier preset dye dyes, and the used dye leaves the vial", (t) => {
+  const f = actor(t);
+  f.inv.setItem(0, preset(new core.Item(I.BLACK_DYE, 1)));
+  f.inv.setItem(1, new core.Item(I.BLACK_DYE, 1));
+  f.inv.setItem(2, new core.Item(I.RED_CAPE, 1));
+  f.inv.setItem(3, new core.Item(I.RED_CAPE, 1));
+  itemOnSlots(f, 1, 3);
+  assert.notEqual(f.messages.at(-1), PRESET_TEXT);
+  assert.equal(f.inv.getItems()[1].getId(), I.VIAL, "the used dye became the vial");
+  assert.equal(f.inv.getItems()[0].getId(), I.BLACK_DYE, "the preset dye is untouched");
+  assert.equal(f.inv.getItems()[3].getId(), I.BLACK_CAPE, "the cape used is dyed");
+  assert.equal(f.inv.getItems()[2].getId(), I.RED_CAPE, "the other cape is untouched");
+  itemOnSlots(f, 2, 0);
+  assert.equal(f.messages.at(-1), PRESET_TEXT, "using the preset dye itself is refused");
+  assert.equal(f.inv.getItems()[2].getId(), I.RED_CAPE);
+});
+
+test("rat bone shortbow: the spine goes onto the yew shortbow used, not the first one", (t) => {
+  const f = actor(t);
+  levels(f, core.Skill.FLETCHING);
+  f.inv.setItem(0, preset(new core.Item(I.YEW_SHORTBOW, 1)));
+  f.inv.setItem(1, new core.Item(I.SCURRIUS_SPINE, 1));
+  f.inv.setItem(2, new core.Item(I.KNIFE, 1));
+  f.inv.setItem(5, new core.Item(I.YEW_SHORTBOW, 1));
+  itemOnSlots(f, 1, 5);
+  assert.equal(f.inv.getItems()[5].getId(), I.BONE_SHORTBOW, "the bow used becomes the bone shortbow");
+  assert.equal(f.inv.getItems()[5].isPresetItem(), false);
+  assert.equal(f.inv.getItems()[0].getId(), I.YEW_SHORTBOW, "the preset bow in slot 0 is untouched");
 });
 
 // Smiths gloves: the shop item and ice gloves have reversible, confirmed use (Wiki transcripts).

@@ -26,8 +26,9 @@ const WIKI_CHART = {
     man: [180, 240], farmer: [150, 240], ham: [135, 239], warrior: [100, 240], rogue: [75, 240],
     master_farmer: [90, 240], guard: [50, 240], wealthy_citizen: [35, 200], desert_bandit: [50, 240],
     knight: [50, 240], menaphite_thug: [50, 160], watchman: [15, 160],
-    // Both cite Mod Ash: "LOW: 35 HIGH: 160" (Paladin) and "LOW: 33 HIGH: 140" (Gnome).
-    paladin: [35, 160], gnome: [33, 140], hero: [39, 160], vyre: [8, 128],
+    // The charts both pages render (Normal: low1/high1). Each page also keeps a commented-out
+    // chart citing Mod Ash ("LOW: 35 HIGH: 160", "LOW: 33 HIGH: 140"), which the Wiki doesn't show.
+    paladin: [40, 170], gnome: [43, 175], hero: [39, 160], vyre: [8, 128],
     elf_lletya: [6, 100], elf_prifddinas: [6, 100], tzhaar_hur: [-200, 200],
 };
 /** The Wiki has no chart for these: each uses the one its `estimatedFrom` names. */
@@ -50,6 +51,8 @@ const combat = {
 };
 const { PluginManager } = require("../dist/plugins/PluginManager");
 let runePouchAnswer = null;
+/** The client loot tracker entries content asked for ("loot-tracker:add-npc"). */
+const tracked = [];
 Thieving.register({
     core: { ...PluginManager.getCoreApi(), CombatFactory: combat, TaskManager: { submit: (task) => { task.setRunning(true); submitted.push(task); } } },
     onCustomEvent: () => {},
@@ -61,6 +64,7 @@ Thieving.register({
     onItemAction: () => {},
     emitCustomEvent: (name, request) => {
         if (name === 'thieving:success') log.push(name);
+        if (name === 'loot-tracker:add-npc') tracked.push({ npcId: request.npcId, items: request.items, at: log.length });
         if (name === 'thieving:done' && repeatAgain) request.again = true;
         if (name === 'thieving:pickpocket-target') pickpocketTargetAnswer?.(request);
         if (name === 'rune-pouch:gather') runePouchAnswer?.(request);
@@ -161,8 +165,9 @@ function player({ level = 99, farming = 99, stunLeft = 0, worn = {}, inventory =
         performAnimation: (animation) => log.push(`anim ${animation.getId()}`),
         getBlockAnim: () => 420,
         sendMessage: (message) => log.push(message),
+        getDialogueManager: () => ({ startDialogues: (chain) => log.push(`statement: ${chain.dialogues.get(0).getText()}`) }),
         getPacketSender: () => ({
-            sendTypedMessage: (_type, message) => log.push(`spam: ${message}`),
+            sendTypedMessage: (type, message) => log.push(`${type === PluginManager.getCoreApi().ChatType.MESBOX ? 'mesbox' : 'spam'}: ${message}`),
             sendSound: (id) => log.push(`sound ${id}`),
         }),
         getAttribute: (key) => attrs.get(key),
@@ -194,6 +199,7 @@ function attempt(t, { name = 'Man', npcId = 0, random = 0, who = player({ level:
     t.after(() => { Math.random = original; });
     log.length = 0;
     submitted.length = 0;
+    tracked.length = 0;
     const event = { player: who, npc: npc(), npcId, definition: { getName: () => name } };
     const result = Thieving._test.pickpocket(event);
     const click = [...log];
@@ -276,18 +282,51 @@ test('the interpolation rounds as the Wiki module does, at a level where the sum
     // Flooring without the module's +0.5 would give 156/256 (61.0% instead of 61.3%).
     const warrior = DATA.targets.find((t) => t.key === 'warrior');
     assert.equal(successChance(player({ level: 40 }), warrior), 157 / 256);
-    // The two charts that had been transcribed stale (see WIKI_CHART above).
+    // Paladin and Gnome: the charts the Wiki pages render (see WIKI_CHART above).
     const at = (key, level) => successChance(player({ level }), DATA.targets.find((t) => t.key === key));
-    assert.equal(at('paladin', 70), 124 / 256, '48.4%, not the 51.9% of a 40/170 chart');
-    assert.equal(at('paladin', 99), 161 / 256);
-    assert.equal(at('gnome', 75), 115 / 256, '44.9%, not the 56.3% of a 43/175 chart');
-    assert.equal(at('gnome', 99), 141 / 256);
+    assert.equal(at('paladin', 70), 133 / 256, '51.9%, the rendered 40/170 chart');
+    assert.equal(at('paladin', 99), 171 / 256);
+    assert.equal(at('gnome', 75), 144 / 256, '56.3%, the rendered 43/175 chart');
+    assert.equal(at('gnome', 99), 176 / 256);
 });
 
 test('a success announces the pickpocket before adding loot so RuneLite can snapshot the old inventory', (t) => {
     const { click, ticks } = attempt(t);
     assert.deepEqual(click, ["spam: You attempt to pick the man's pocket."]);
     assert.deepEqual(ticks, [['anim 881', "spam: You pick the man's pocket.", 'add Coin pouch x1', 'xp 8', 'thieving:success'], [], []]);
+});
+
+test('a success reports its loot to the client loot tracker after the loot lands, before the xp', (t) => {
+    const { ticks } = attempt(t, { npcId: N.MAN });
+    assert.deepEqual(ticks[0], ['anim 881', "spam: You pick the man's pocket.", 'add Coin pouch x1', 'xp 8', 'thieving:success']);
+    const pouch = DATA.targets.find((target) => target.key === 'man').coinPouch.id;
+    assert.deepEqual(tracked, [{ npcId: N.MAN, items: [[pouch, 1]], at: 3 }], 'the coin pouch, as it landed');
+});
+
+test('a Master Farmer success reports each seed it gave; a failure reports nothing', (t) => {
+    attempt(t, { name: 'Master Farmer', npcId: N.MASTER_FARMER, who: player() });
+    assert.equal(tracked.length, 1);
+    assert.equal(tracked[0].npcId, N.MASTER_FARMER);
+    assert.ok(tracked[0].items.length >= 1 && tracked[0].items.every(([id, amount]) => NAMES.get(id)?.endsWith('seed') && amount >= 1), JSON.stringify(tracked[0].items));
+    attempt(t, { random: 0.99 });
+    assert.deepEqual(tracked, []);
+});
+
+test('too low a Thieving level opens a message box naming the target, with its mesbox chat line', (t) => {
+    const { click, ticks } = attempt(t, { name: 'Guard', who: player({ level: 39 }) });
+    const line = "You need level 40 thieving to pick the guard's pocket.";
+    assert.deepEqual(click, [`mesbox: ${line}`, `statement: ${line}`]);
+    assert.deepEqual(ticks, [[], [], []], 'no attempt');
+});
+
+test("the Varlamore and Kastori Master Farmers shout the default catch line; the others keep theirs", (t) => {
+    const farmer = DATA.targets.find((target) => target.key === 'master_farmer');
+    for (const npcId of [N.MASTER_FARMER_11, N.MASTER_FARMER_15]) {
+        const { next } = attempt(t, { name: 'Master Farmer', npcId, random: 0.99, who: player() });
+        assert.equal(next[1], "npc: What do you think you're doing?", `npc ${npcId}`);
+    }
+    const { next } = attempt(t, { name: 'Master Farmer', npcId: N.MASTER_FARMER, random: 0.99, who: player() });
+    assert.equal(next[1], `npc: ${farmer.catchLine}`);
 });
 
 test('Master Farmer loot also follows the success message', (t) => {
@@ -483,7 +522,7 @@ test('NPC ids pick between targets that share a name; anything else falls throug
     assert.equal(targetFor('Bandit', N.BANDIT_10).key, 'pollnivnian_bearded_bandit');
     const result = attempt(t, { name: 'Bandit', npcId: N.BANDIT_10 });
     assert.equal(result.handled, true);
-    assert.ok(result.click.some((line) => line.includes('level of at least 45')));
+    assert.ok(result.click.some((line) => line.startsWith('mesbox: You need level 45 thieving to pick ')), result.click.join(' | '));
 });
 
 test('loot: Master Farmer herb seeds follow Farming level; the workman pays coins after The Dig Site', () => {

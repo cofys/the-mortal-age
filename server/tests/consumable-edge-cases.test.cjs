@@ -233,9 +233,9 @@ test("two divine potions keep their own five minutes: the second doesn't drop th
   const player = createPlayer({ current: 99 });
   let now = 1_000_000;
   t.mock.method(Date, "now", () => now);
-  applyDivine(player, (p) => p.levels.set(Skill.ATTACK, 118), [Skill.ATTACK], { damage: 0 });
+  applyDivine(player, (p) => p.levels.set(Skill.ATTACK, 118), [Skill.ATTACK]);
   now += 60_000;
-  applyDivine(player, (p) => p.levels.set(Skill.RANGED, 112), [Skill.RANGED], { damage: 0 });
+  applyDivine(player, (p) => p.levels.set(Skill.RANGED, 112), [Skill.RANGED]);
   const skills = () => (player.getAttribute("potions:divine:state")?.targets ?? []).map((entry) => entry.skillIndex).sort();
   assert.deepEqual(skills(), [Skill.ATTACK.getIndex(), Skill.RANGED.getIndex()].sort(), "both stay pinned");
   now += 4 * 60_000 + 1; // the first potion's five minutes are over, the second has a minute left
@@ -263,7 +263,7 @@ test("divine potions: the warning at 30 ticks left, the worn-off line at the end
     const player = createPlayer({ current: 99 });
     const lines = [];
     player.sendMessage = (text) => lines.push(text);
-    applyDivine(player, (p) => { for (const skill of skills) p.levels.set(skill, 112); }, skills, { damage: 0 });
+    applyDivine(player, (p) => { for (const skill of skills) p.levels.set(skill, 112); }, skills);
     return { player, lines };
   };
   const bastion = drink([Skill.RANGED, Skill.DEFENCE]);
@@ -787,6 +787,29 @@ test("a Zamorak brew takes 12% of current Hitpoints, rounded down, with no flat 
     Potions._test.findPotionEntry(ItemIdentifiers.ZAMORAK_BREW_4_).potion.effect(player);
     assert.equal(player.levels.get(Skill.HITPOINTS), hp - lost, `at ${hp} Hitpoints`);
   }
+});
+
+// Wiki (Zamorak brew): Defence drops by 2 + 10% of the current level. rsprox 234/00831 (base Defence 99): 116 -> 103,
+// 103 -> 91; rsprox 237/04060 (base Prayer 99): Prayer 71 -> 80 and 79 -> 88, so the Prayer gain is 10% of the base level.
+test("a Zamorak brew drains Defence from the current level and restores Prayer from the base level", (t) => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const player = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  t.mock.method(player, "getPacketSender", () => sender);
+  const skills = player.getSkillManager();
+  for (const skill of [Skill.DEFENCE, Skill.PRAYER, Skill.HITPOINTS]) skills.setMaxLevel(skill, 99);
+  skills.setCurrentLevel(Skill.HITPOINTS, 99, false);
+  skills.setCurrentLevel(Skill.DEFENCE, 116, false);
+  skills.setCurrentLevel(Skill.PRAYER, 71, false);
+  const brew = Potions._test.findPotionEntry(ItemIdentifiers.ZAMORAK_BREW_4_).potion.effect;
+  brew(player);
+  assert.equal(skills.getCurrentLevel(Skill.DEFENCE), 103, "116 loses 2 + 11");
+  assert.equal(skills.getCurrentLevel(Skill.PRAYER), 80, "71 gains 9 (10% of 99)");
+  brew(player);
+  assert.equal(skills.getCurrentLevel(Skill.DEFENCE), 91, "103 loses 2 + 10");
+  skills.setCurrentLevel(Skill.DEFENCE, 1, false);
+  brew(player);
+  assert.equal(skills.getCurrentLevel(Skill.DEFENCE), 0, "a drained Defence still loses the flat 2, floored at 0");
 });
 
 test("a weaker antipoison never shortens an active poison immunity", () => {

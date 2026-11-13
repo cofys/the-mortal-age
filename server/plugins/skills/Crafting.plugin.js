@@ -1,7 +1,7 @@
 /**
  * Crafting (Wiki: Crafting; facts and capture ids in docs/crafting.md): sewing leather and
  * hides, cutting gems and amethyst, gold and silver jewellery, glassblowing, pottery,
- * spinning and weaving, and battlestaves. Each unit is in ./crafting/.
+ * spinning and weaving, battlestaves, and gems on silver sickles (b). Each unit is in ./crafting/.
  *
  * Fork graft (2026-10-21 upstream merge): upstream split Crafting into the
  * ./crafting/ units above; the fork's citizen gem-cutting bot entry point
@@ -204,6 +204,7 @@ module.exports = {
     require("./crafting/Pottery.Crafting")(api);
     require("./crafting/Spinning.Crafting")(api);
     require("./crafting/Battlestaves.Crafting")(api);
+    require("./crafting/GemSickles.Crafting")(api);
 
     // Fork bot session task + cleanup (upstream units manage their own).
     api.getTaskManager().submit(new CraftingTask(ACTIVE_CRAFTING_SESSIONS));

@@ -1,7 +1,7 @@
 // Run after `yarn build`: node --test tests/sea-charting.test.cjs
 // Sailing's sea charting against the cache and the rsprox captures (docs/sea-charting.md).
 const assert = require("node:assert/strict");
-const { before, test } = require("node:test");
+const { after, before, test } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
@@ -110,6 +110,7 @@ function captain({ level = 99 } = {}) {
       addExperiences: (skill, amount) => xp.push(amount),
     }),
     getEquipment: () => ({ get: () => undefined, getItems: () => [], contains: () => false }),
+    getSpellbook: () => ({ getInterfaceId: () => 218 }),
     getBank: () => ({ contains: () => false }),
     getDialogueManager: () => ({
       startDialogues: (chain) => { player.chain = chain; current = [...chain.getDialogues().values()][0]; },
@@ -424,6 +425,11 @@ test("the crab statue hands over a Medallion fragment (rsprox 944)", () => {
 });
 
 const spyglass = require("../plugins/skills/sailing/charting/Spyglass.Charting");
+// The combat tab's weapon setup needs a whole player; here it only mounts the tab.
+const { WeaponInterfaceManager } = require("../dist/game/content/combat/WeaponInterfaceManager");
+const realAssign = WeaponInterfaceManager.assign;
+WeaponInterfaceManager.assign = (player) => player.getPacketSender().sendTabInterface(0, 593);
+after(() => { WeaponInterfaceManager.assign = realAssign; });
 
 test("the spyglass far from any view: nothing to look at (rsprox 907 and others)", () => {
   const player = captain();
@@ -476,6 +482,70 @@ test("the spyglass by the Wizards' Tower plays its captured view, then charts it
     spyglass.lookThrough({ player });
     assert.equal(player.messages().at(-1), "There isn't anything nearby worth looking at.");
   } finally {
+    leave(player);
+  }
+});
+
+test("a spyglass view locks the tabs, XP drops and world options, then gives them back (rsprox 948, 939)", () => {
+  const player = captain();
+  player.setAttribute("xp-drops:enabled", true);
+  const hudResets = [];
+  PluginManager.createApi("SpyglassHudTest").onCustomEvent("boss-hud:reset", (event) => hudResets.push(event.player));
+  const boat = atTheHelm(player);
+  BoatManager.teleport(boat, { fineX: 3104 * 128 + 64, fineY: 3183 * 128 + 64 });
+  tick(); // the boarded sidepanel is mounted a tick after boarding
+  const TOPLEVEL = 161;
+  assert.equal(player.varbits.get(19151), 1, "sailing_sidepanel_visible: the sidepanel is on the combat tab");
+  try {
+    const from = player.sent.length;
+    spyglass.lookThrough({ player });
+    tick(2);
+    assert.deepEqual(hudResets, [player], "the fade out clears the NPC health overlay");
+    assert.ok(!player.sent.slice(from).some(([key]) => key === "sendHideNpcOps"), "the world stays clickable until the cutscene tick");
+    tick(2);
+    const closed = player.sent.slice(from).filter(([key]) => key === "closeSubInterface").map(([, uid]) => uid & 0xffff);
+    // xp_drops, then combat, magic, stats, journal, inventory, worn items, prayer, settings, emotes.
+    assert.deepEqual(closed.sort((a, b) => a - b), [9, 76, 77, 78, 79, 80, 81, 82, 87, 88]);
+    assert.ok(player.sent.slice(from).every(([key, uid]) => key !== "closeSubInterface" || uid >>> 16 === TOPLEVEL));
+    assert.deepEqual(player.sent.slice(from).filter(([key]) => key === "sendHideNpcOps" || key === "sendHideObjOps"),
+      [["sendHideNpcOps", true], ["sendHideObjOps", true]]);
+
+    const restoreFrom = player.sent.length;
+    tick(23);
+    const restored = player.sent.slice(restoreFrom);
+    assert.ok(restored.some(([key]) => key === "sendCameraReset"));
+    assert.deepEqual(restored.filter(([key]) => key === "sendHideNpcOps" || key === "sendHideObjOps"),
+      [["sendHideNpcOps", false], ["sendHideObjOps", false]]);
+    assert.ok(restored.some(([key, uid, group]) => key === "sendSubInterface" && uid === ((TOPLEVEL << 16) | 9) && group === 122), "XP drops back");
+    const tabs = restored.filter(([key]) => key === "sendTabInterface").map(([, slot, group]) => [slot, group]);
+    for (const group of [320, 629, 149, 387, 541, 218, 116, 216]) assert.ok(tabs.some(([, each]) => each === group), `tab ${group} back`);
+    const combatTab = restored.filter(([key, uid]) => key === "sendSubInterface" && uid === ((TOPLEVEL << 16) | 76)).map(([, , group]) => group);
+    assert.equal(combatTab.at(-1), 937, "the sailing sidepanel back on the combat tab");
+    assert.deepEqual(hudResets, [player, player], "the fade back in clears it again");
+  } finally {
+    leave(player);
+  }
+});
+
+test("a random event that took the player during a view keeps its tabs closed at the view's end", () => {
+  const events = require("../plugins/npcs/random-events/Teleports.RandomEvents");
+  const realSessionOf = events.sessionOf;
+  const player = captain();
+  const boat = atTheHelm(player);
+  BoatManager.teleport(boat, { fineX: 3104 * 128 + 64, fineY: 3183 * 128 + 64 });
+  tick();
+  try {
+    spyglass.lookThrough({ player });
+    tick(4);
+    events.sessionOf = (each) => (each === player ? { kind: "drill" } : realSessionOf(each));
+    const from = player.sent.length;
+    tick(23);
+    const restored = player.sent.slice(from);
+    assert.ok(restored.some(([key]) => key === "sendCameraReset"), "the view still ends");
+    assert.ok(!restored.some(([key]) => key === "sendTabInterface"), "no tab is re-mounted");
+    assert.deepEqual(restored.filter(([key]) => key === "sendHideNpcOps"), [["sendHideNpcOps", false]]);
+  } finally {
+    events.sessionOf = realSessionOf;
     leave(player);
   }
 });
@@ -832,6 +902,84 @@ test("a drink crate: no crowbar, the drink, already holding one (rsprox 907, 948
     crateClick(player, "drink_crate_mango_gin");
     assert.equal(player.getInventory().getAmount(spot.item), 1);
     assert.match(dialogueTexts(player)[0], /The crate contains a bottle of captain clop's mango gin, but you don't take it as you already have one/);
+  } finally {
+    leave(player);
+  }
+});
+
+test("with a full inventory the weather troll keeps her station and the crate its drink", () => {
+  const { Item } = require("../dist/game/model/Item");
+  const player = captain();
+  player.questsDone = new Set(["prying_times"]);
+  atTheHelm(player);
+  const spot = common.spotByKey("weather_troll_rimmington_strait");
+  const troll = { getLocation: () => new Location(spot.location[0], spot.location[1], 0) };
+  const crate = common.spotByKey("drink_crate_mango_gin");
+  try {
+    player.getInventory().add(new Item(ITEM_CROWBAR, 1), true);
+    while (player.getInventory().getFreeSlots() > 0) player.getInventory().add(new Item(1351, 1), true);
+    player.chain = null;
+
+    weather.collectData({ player, npc: troll });
+    assert.equal(player.getInventory().getAmount(ITEM_STATION), 0);
+    assert.equal(player.getAttribute("charting:weather-station"), undefined);
+    assert.equal(player.messages().at(-1), "You don't have enough inventory space.");
+    assert.equal(dialogueTexts(player).length, 0);
+
+    crateClick(player, "drink_crate_mango_gin");
+    assert.equal(player.getInventory().getAmount(crate.item), 0);
+    assert.match(dialogueTexts(player)[0], /The crate contains a bottle of captain clop's mango gin, but you don't have enough room to take it/);
+    assert.equal([...player.chain.getDialogues().values()][0].getItemId(), crate.item);
+    assert.ok(!player.sent.some(([key, id]) => key === "sendSoundEffect" && id === 67));
+
+    // The last slot free: both hand over as usual.
+    player.getInventory().delete(1351, 1);
+    weather.collectData({ player, npc: troll });
+    assert.equal(player.getInventory().getAmount(ITEM_STATION), 1);
+    player.getInventory().delete(1351, 1);
+    crateClick(player, "drink_crate_mango_gin");
+    assert.equal(player.getInventory().getAmount(crate.item), 1);
+
+    // Full again, with the bottle held: the room is what it says is missing.
+    crateClick(player, "drink_crate_mango_gin");
+    assert.equal(player.getInventory().getAmount(crate.item), 1);
+    assert.match(dialogueTexts(player)[0], /but you don't have enough room to take it/);
+  } finally {
+    leave(player);
+  }
+});
+
+test("a sampled drink stays in its crate, except the few that can be sampled again", () => {
+  const { Item } = require("../dist/game/model/Item");
+  const player = captain();
+  player.questsDone = new Set(["prying_times"]);
+  atTheHelm(player);
+  try {
+    player.getInventory().add(new Item(ITEM_CROWBAR, 1), true);
+    const banker = common.spotByKey("drink_crate_bankers_draught");
+    common.mark(player, banker);
+    player.chain = null;
+    crateClick(player, "drink_crate_bankers_draught");
+    assert.equal(player.getInventory().getAmount(banker.item), 0);
+    assert.match(dialogueTexts(player)[0], /The crate contains a bottle of banker's draught, but you don't take it as you've already sampled it before/);
+    assert.ok(!player.sent.some(([key, id]) => key === "sendSoundEffect" && id === 67));
+
+    const repeatable = ["drink_crate_wild_whisky", "drink_crate_black_lobster", "drink_crate_sailing_cat", "drink_crate_fishier_stout", "drink_crate_puzzlers_poteen"];
+    assert.deepEqual(common.spotsOfType("drink_crate").filter((spot) => spot.drink?.repeatable).map((spot) => spot.key).sort(), [...repeatable].sort());
+    const whisky = common.spotByKey("drink_crate_wild_whisky");
+    common.mark(player, whisky);
+    crateClick(player, "drink_crate_wild_whisky");
+    assert.equal(player.getInventory().getAmount(whisky.item), 1);
+    assert.match(dialogueTexts(player)[0], /You pry open the crate and take a bottle of wild wood whisky to sample/);
+
+    // Sampled again, it gives no further XP.
+    player.xp.length = 0;
+    player.attributes.set(drinkCrate.NO_WARNING_ATTRIBUTE, true);
+    const slot = player.getInventory().getItems().findIndex((item) => item?.getId() === whisky.item);
+    drinkCrate.drink({ player, item: player.getInventory().get(slot), itemId: whisky.item, slot, clickType: 2, option: "Drink", handled: false });
+    assert.equal(player.getInventory().getAmount(whisky.item), 0);
+    assert.equal(player.messages().includes("You drink the bottle of wild wood whisky."), true);
+    assert.deepEqual(player.xp, []);
   } finally {
     leave(player);
   }

@@ -61,10 +61,10 @@ character**, a save kept apart from its main one (`persistence/PlayerProfile.ts`
   `::unmute`, `::ban` and `::unban` (those four are still stubs that punish nobody).
 - Known limits: the SQLite backend's one-time import of legacy JSON saves reads only the main
   files; an offline update to either save (an external store purchase) is refused while the
-  account's other character is online, since both share the name; the friends chat's offline
-  owner lookup (`FriendsChatManager.js`) and the AI bots' name checks (`RegisterAiBots`,
-  `PlayerFactory`) still read the main save only, so on a league world an offline owner's channel
-  is the main character's and a name held only by a league character counts as free for a bot.
+  account's other character is online, since both share the name.
+- The friends chat's offline owner lookup (`FriendsChatManager.js`) reads the world's character
+  too, and a new AI bot never takes a name any character is saved under (`RegisterAiBots`). Bots
+  themselves are always main characters, so their own saves (`PlayerFactory`) stay main.
 
 The world's league is the one a new league character joins; the character keeps it in
 `league:type`. A new character starts at the league's levels (Wiki: Trailblazer and Trailblazer
@@ -796,7 +796,7 @@ varp `league_relic_effect_toggle_1` with the recorded "Relic - ..." lines (237/0
 | 1 | Endless Harvest | done (Trailblazer Reloaded's unit; banking by toggle, resources never deplete) |
 | 1 | Barbarian Gathering | partial: second chance, Strength/Agility XP, bare hands that fish without bait (`fishing:tool`) and chop and mine as the crystal axe and pickaxe (`woodcutting:tool`, `mining:tool`); not the Knapsack's storage: its Fill, Check, Open/Close and Dispose (and the bank's Empty) have no recording and no line in the Wiki, and no Leagues VI recording carries the knapsack |
 | 1 | Abundance | done: the +10 is a visible, permanent boost of every non-combat skill's current level with the resting level raised to match, as the Defence pact's (233/246 Leagues VI recordings: base + 10, Slayer and Sailing too, combat skills unboosted, kept through level-ups) |
-| 2 | Hotfoot | partial: cooked fish, smelted ore, running XP in the boots (10 + floor(Agility x 2/3) every 10 ticks of 2-tile moves, Wiki: Searing boots), laps counted twice with +25% XP, no failures, a 33% mark chance on the nine rooftop courses (`agility:mark-chance`; the mark cooldown still runs), a picked-up course mark finishing the lap with 10,000 coins (`agility:mark-taken`), Prifddinas's portal shards tenfold (`agility:course-item`; the portal's own shard and line, 237/01149, are new to the course), the Brimhaven arena's tickets and vouchers twofold (`minigame:points`); not termites finishing a lap or doubled (the Colossal Wyrm courses' termites pass through `agility:course-item`, but the relic's termite rules aren't known) |
+| 2 | Hotfoot | partial: cooked fish, smelted ore, running XP in the boots (10 + floor(Agility x 2/3) every 10 ticks of 2-tile moves, Wiki: Searing boots), laps counted twice with +25% XP, no failures, a 33% mark chance on the nine rooftop courses (`agility:mark-chance`; the mark cooldown still runs), a picked-up course mark or Colossal Wyrm termites finishing the lap with 10,000 coins (`agility:mark-taken`, `agility:course-find-taken`), Prifddinas's portal shards tenfold and the Wyrm courses' termites twofold (`agility:course-item`; the portal's own shard and line, 237/01149, are new to the course), the Brimhaven arena's tickets and vouchers twofold (`minigame:points`) |
 | 2 | Friendly Forager | partial: Raging Echoes' unit, plus Herblore at once and 100 of each herb (Wiki, 15 April 2026); the recorded lines. Not the worn Withdraw-all and Withdraw-last (their behaviour is in no source), nor the herb sack's shared store (Wiki: it shares the silklined herb sack's) |
 | 2 | Woodsman | partial: Fletching batches, log burning, Hunter catches, impling loot doubled and noted (`hunter:impling-loot`), double rumour XP and sack loot rolls (`hunter:rumour-reward`, `hunter:sack-rolls`), whistles that keep their charges (`quetzals:whistle-charge`); not the trap's herb or tree seed: the Wiki says only "a random herb seed or tree seed", and no Leagues VI recording has a Woodsman holder (every trapper in them chose Friendly Forager) |
 | 3 | Bank Heist | done |
@@ -947,7 +947,7 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   stacks nor notes, once), the pickpocket repeats itself while neither the player nor the NPC
   has moved (`thieving:done`), Agility rolls and fire lighting succeed (`agility:roll`,
   `firemaking:light-roll`), Hunter catches never fail (`hunter:catch-chance`), box traps give
-  double loot and XP (`hunter:rewards`) and look for prey every 2 ticks instead of 5
+  double loot and XP (`hunter:rewards`) and look for prey every 2 ticks instead of 3
   (`hunter:lure-interval`: the Wiki says "faster" and no more, so the number is ours), impling
   jars never break (`hunter:jar-kept`), and up to nine logs burn in one action
   (`firemaking:logs-per-action`, one fire, XP for each). Not here: the Sage's greaves (not in
@@ -1115,8 +1115,8 @@ Animal Wrangler's Hunter and cooking ones) do not.
   helmet's check offers a new task from the last master or a cancel at the usual price
   (`slayer:remote-task`; not Mortimer's tasks, a choice with modifiers made in person: ours); the bracelet of slaughter works 35% of the time and uses no charge;
   superiors come 1 time in 25; each gives Slayer points (ours: 5 plus a fifth of its Slayer
-  requirement, the Wiki says only "based on" it) and six more rolls on its normal monster's table;
-  a quarter spawn bloodthirsty (a message of ours says so): nine rolls, a clue scroll for sure when
+  requirement, the Wiki says only "based on" it) and six rolls in all on its normal monster's table (the Wiki's "six rolls", a kill total: what the superior's own table already rolls counts, three for a superior whose page says rolls=3, so the relic adds 3 there and 5 elsewhere);
+  a quarter spawn bloodthirsty (a message of ours says so): nine rolls in all, a clue scroll for sure when
   its table has one (the rarest the player can take now, by its chance), three times the unique chance and a roll on the bloodthirsty
   table (Wiki, Bloodthirsty Nechryarch). Not here: the expeditious bracelet (not in this server);
   the variants' stronger stats, names and icon (no NPCs of their own in this cache).
@@ -1475,8 +1475,11 @@ and `league:pact-effect` { player, effect } (an effect varbit's gameval name -> 
 ## Areas
 
 `AreaUnlocks.LeagueMode.js` (units in `leagueareas/`), data `plugins/modes/data/league-areas.json`.
-A league character starts in Misthalin and Karamja (the Wiki's start; live unlocks Karamja free
-during its tutorial, which this server has none of) and picks up to three more areas as its
+A Trailblazer Reloaded character starts in Misthalin and Karamja (the Wiki's start; live unlocks
+Karamja free during its tutorial, which this server has none of for that league). A Raging Echoes
+character starts in Misthalin alone and picks Karamja free during the league tutorial, whose areas
+page waits for it (`firstPick` at 0 tasks; Wiki Raging_Echoes_League/Areas, recording 227/00196).
+Each then picks up to three more areas as its
 completed tasks reach the league's thresholds: Trailblazer Reloaded 60, 140 and 300 tasks from
 Asgarnia, the Fremennik Province, Kandarin, the Kharidian Desert, Morytania, Tirannwn, the
 Wilderness and Kourend; Raging Echoes 90, 200 and 400, Varlamore among them (Wiki). Only the next
@@ -1623,19 +1626,47 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   (`yarn generate:league-tasks [--from <dir>] [--save <dir>] [--check]`) from the Wiki's
   Trailblazer_Reloaded_League/Tasks, Raging_Echoes_League/Tasks and Demonic_Pacts_League/Tasks
   pages (one `{{TRLTaskRow}}` / `{{RELTaskRow}}` / `{{DPLTaskRow}}` template per task in the raw wikitext: name, description, requirements, tier,
-  region, the Wiki's id) and the rev 241 cache; never edit it by hand, change the generator and
-  re-run it (same inputs, identical file; `--check` fails when the committed file is stale). A
-  task has a stable string id (its name's slug; saves hold ids, so the list order is free to
-  change), `wikiId`, tier 1-5, points (Easy 10, Medium 40 Trailblazer Reloaded / 30 Raging
-  Echoes, Hard 80, Elite 200, Master 400: the Wiki rows show the first two, the pages' per-area
-  totals reproduce the rest, and Raging Echoes' match cache enum 2671), the client's area id
-  (enum 3412: Global 0, Misthalin 1 ... Kourend 10, Wilderness 11, Varlamore 21), a category (enum
-  3411: 1 Skill, 2 Combat, 3 Quest, 4 Achievement, 5 Minigame, 6 Other) and, where derivable, a
-  `trigger`. The Wiki has no category: a task the cache's own list has by name (enum 5950's rows
-  of DB table 118 `action`, column 35: most of Raging Echoes and the Trailblazer Reloaded tasks
-  that share a name) takes the cache's, the rest a rule in the generator (`categorySource:
-  "rule"`, ours). The Wiki's Trailblazer Reloaded id 1522 is on two tasks (The Frozen Door,
-  Defeat Vardorvis); kept as the Wiki has it.
+  region, the Wiki's id), the rev 241 cache and each past league's era cache (below); never edit
+  it by hand, change the generator and re-run it (same inputs, identical file; `--check` fails
+  when the committed file is stale). A task has a stable string id (the Wiki name's slug; saves
+  hold ids, so the list order is free to change), `wikiId`, tier 1-5, points (Easy 10, Medium 40
+  Trailblazer Reloaded / 30 Raging Echoes, Hard 80, Elite 200, Master 400: the Wiki rows show the
+  first two, the pages' per-area totals reproduce the rest, and each era cache's enum 2671 agrees),
+  the client's area id (enum 3412: Global 0, Misthalin 1 ... Kourend 10, Wilderness 11, Varlamore
+  21), a category (enum 3411: 1 Skill, 2 Combat, 3 Quest, 4 Achievement, 5 Minigame, 6 Other) and,
+  where derivable, a `trigger`.
+- **Era caches** (`eraCache` on a league; `scripts/league-era-cache.ts`). A past league's task list
+  is in the caches Jagex served during it, not in ours: enum 2670 gives the league's struct, its
+  param 868 the list enum (position -> task struct), and a task struct its id (873, the Wiki's id),
+  name (874), description (875), category (1016, enum 3411) and area (1017, enum 3412); the tier is
+  param 1852 for Trailblazer Reloaded, 2044 for Raging Echoes, and a missing param reads its default
+  (Trailblazer Reloaded's "Equip a Full Angler's Outfit" has no area: Global). The generator fetches
+  only the config reference table and the enum, param and struct groups of a cache pinned by its
+  OpenRS2 id (`/caches/runescape/<id>/archives/<archive>/groups/<group>.dat`, CRC-checked against
+  the reference table) into `server/era-caches/` (gitignored), and takes each task's name,
+  description, category and area from it (`categorySource: "era"`): the text and filters the
+  client showed. The Wiki keeps the tier (which must agree), requirements and the id, so a task the
+  game spells differently ("Pickpocket a HAM Member", the Wiki's "H.A.M.") keeps its saved id. The
+  trigger is derived from the Wiki's text only, which keeps details the in-game text drops. A rule
+  only the in-game text words is shown but not enforced, because where a live capture tests one the
+  league did not enforce it either: Raging Echoes' "Use the special attack of a Dragon Axe in the
+  Fremennik Province" completed in Varrock (capture 227/00086), and "Reach level 10 in any skill (not
+  including Agility and Hitpoints)", Trailblazer's text, on Agility 10 (rsprox.net capture
+  20241209T063558). "Burn 200 Redwood Logs in Kourend" and "Fletch a Redwood Shield in Kourend" follow
+  the same reading; no capture shows them either way. Two Wiki remarks the
+  captures bear out shape the trigger too: "(does not require a kiteshield / Crozier)" leaves that
+  piece out of a god set (a Leagues V capture completed the rune set without a shield), and
+  "(actually on Waterbirth Island)" is the place ("Pick up Snapegrass from Lunar Isle" completed at
+  2553,3754). Category ids are
+  the same since Trailblazer; an era area id keeps its number where today's enum 3412 names it the
+  same (all of these do; Kourend & Kebos is 10). The pinned cache is the league's last whose list
+  is final: Trailblazer Reloaded 1642 (12 Dec 2023; its list last changed by 6 Dec, and 1677 on the
+  last day is the same), Raging Echoes 2023 (15 Jan 2025; three descriptions changed by 10 Dec, and
+  2028 on the last day is the same). Twisted and Trailblazer can plug in the same way (their tier is
+  param 876; Twisted's task structs have no category or area, so it needs its own). The Demonic Pacts task of the same name, or
+  a rule, would give 241 Trailblazer Reloaded and 119 Raging Echoes tasks another category (the
+  generator reports the counts). The Trailblazer Reloaded id 1522 is on two tasks (The Frozen Door,
+  Defeat Vardorvis) on the Wiki and in the cache alike, told apart by name.
 - **Demonic Pacts' catalog is the cache's own list** (`fromCache: true`): this cache (rev 241) is
   the Demonic Pacts cache, so its task enum 5950 and table 118 rows are that league's. The
   generator reads them in position order: name, description, tier, area and category as the client
@@ -1698,7 +1729,7 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   the hand-maintained overlay `data/league-task-triggers.json` (by league type and task id; it
   wins). Kinds: `kill { npcs, count }`, kills of any of the NPCs (by name) added up per task in
   `league:task-kills` (task id -> kills); `level { skill, level }`, `any-level { level,
-  excluding }`, `total-level`, `base-level` (Sailing left out, it came after both leagues) and
+  excluding }`, `total-level` and `base-level` (both leave Sailing out: no league had it) and
   `combat-level { level }` on `onPlayerLevelUp` and at login; `level-up` on any level gained;
   `quest { name }` on `quest:completed` and at login (`quest:is-complete`). A kill is credited
   from an NPC's death (`onNpcDeath`, to its killer) and from the shared credited-kill event

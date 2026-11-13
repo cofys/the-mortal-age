@@ -1605,8 +1605,11 @@ export class OsrsClient {
         return false;
     }
 
-    /** Mounts a sub-interface and runs everything the open packet asked for. */
-    private mountSubInterface(payload: any): void {
+    /**
+     * Mounts a sub-interface and runs everything the open packet asked for. `remount` mounts
+     * an open again after a root change, which the server does not resend the contents of.
+     */
+    private mountSubInterface(payload: any, remount = false): void {
         if (!this.widgetManager) {
             return;
         }
@@ -1656,7 +1659,7 @@ export class OsrsClient {
                 this.widgetManager.invalidateWidgetRender(w);
             }
         }
-        this.customInterfaces.onInterfaceOpened(payload.groupId | 0);
+        this.customInterfaces.onInterfaceOpened(payload.groupId | 0, remount);
     }
 
     /**
@@ -2842,8 +2845,9 @@ export class OsrsClient {
                         ? new Map<number, number>() : undefined;
                     const transferredTargets = new Set<number>();
                     if (transfers) {
+                        const parents = this.widgetManager.interfaceParents;
                         // Nested mounts keep their component address when their containing pane moves.
-                        for (const [target] of this.widgetManager.interfaceParents) {
+                        for (const [target] of parents) {
                             if ((target >>> 16) !== previousRoot) transfers.set(target, target);
                         }
                         for (const [standardTargetUid, entry] of previousMounts) {
@@ -2853,6 +2857,18 @@ export class OsrsClient {
                                 this.widgetManager.getSubInterface(source)?.group === entry.payload.groupId) {
                                 transfers.set(source, target);
                                 transferredTargets.add(standardTargetUid);
+                            }
+                        }
+                        // ...but not when that pane is dropped: a mount inside it closes with it (and is
+                        // announced as closed), however deep, instead of staying mounted out of sight.
+                        for (let pruned = true; pruned;) {
+                            pruned = false;
+                            const keptGroups = new Set([...transfers.keys()].map((target) => parents.get(target)?.group));
+                            for (const source of [...transfers.keys()]) {
+                                if ((source >>> 16) === previousRoot || keptGroups.has(source >>> 16)) continue;
+                                transfers.delete(source);
+                                transferredTargets.delete(source);
+                                pruned = true;
                             }
                         }
                     }
@@ -2896,10 +2912,14 @@ export class OsrsClient {
                     // panes previously absent from the layout need initialization.
                     for (const [standardTargetUid, entry] of previousMounts) {
                         if (transferredTargets.has(standardTargetUid)) continue;
+                        // A nested mount comes back with its pane (opened before it), not into an unmounted one.
+                        const container = (standardTargetUid >>> 16) & 0xffff;
+                        if (!gameframes.includes(container) &&
+                            this.widgetManager.getContainerUidForGroup(container) === undefined) continue;
                         this.mountSubInterface({
                             ...entry.payload,
                             targetUid: standardTargetUid,
-                        });
+                        }, true);
                     }
                     // Trigger initial onVarTransmit for root interface widgets
                     this.triggerInitialVarTransmitForGroup(payload.groupId);
@@ -2953,9 +2973,8 @@ export class OsrsClient {
                         this.mountSubInterface(payload);
                     } else {
                         // A server-defined interface the client has not seen yet: fetch its
-                        // definition, then mount. This costs one round trip on the first
-                        // open of a session, so a server should not send component updates
-                        // in the same batch as that open - they would land before the
+                        // definition, then mount. Updates for it that arrive in the meantime
+                        // (its contents, sent with the open) are held and applied once its
                         // widgets exist.
                         const pendingGroupId = payload.groupId | 0;
                         const pendingTargetUid = payload.targetUid | 0;
@@ -3239,7 +3258,7 @@ export class OsrsClient {
                     }
                 }
             } else if (payload?.action === "inventory_stop_transmit") {
-                stopInventoryTransmit(inventoriesMap, payload.inventoryId);
+                stopInventoryTransmit(inventoriesMap, payload.inventoryId, this.serverSentInventoryIds);
             } else if (payload?.action === "run_script") {
                 // RUNCLIENTSCRIPT packet - run a CS2 script with arguments
                 const scriptId = Number(payload.scriptId) | 0;
@@ -7432,6 +7451,8 @@ export class OsrsClient {
             }
         }
 
+        // Sent again after a stop-transmit: getItemContainer(BANK) answers for it again.
+        this.serverSentInventoryIds.add(95);
         // Mark inv cycle for bank (95) - handlers fire during processWidgetTransmits()
         markInvTransmit(95);
 
@@ -8849,7 +8870,8 @@ export class OsrsClient {
     /**
      * Forget the extra inventories the last session sent: ids no longer count as sent, VM entries
      * the server added are dropped, and the startup-seeded trade/shop/collection ones are put back
-     * to their empty seeded state. INV/WORN/BANK are left alone.
+     * to their empty seeded state. INV/WORN/BANK keep their objects; the bank counts as unsent
+     * until the server sends it again.
      */
     private forgetSentInventories(): void {
         this.serverSentInventoryIds.clear();

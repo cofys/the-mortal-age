@@ -545,6 +545,8 @@ export interface PluginPlayerBeforeDeathEvent {
   preventDeath: boolean;
   /** Set false when the plugin says "Oh dear, you are dead!" itself (at the moment it chooses). */
   announce?: boolean;
+  /** The line the respawn tick prints instead of "Oh dear, you are dead!" (a safe minigame's own). */
+  message?: string;
 }
 
 export interface PluginPlayerOptionEvent {
@@ -1559,6 +1561,8 @@ export interface PluginCoreApi {
   WeaponInterfaces: any;
   Barrows: any;
   applyPrayerDrainModifiers(entity: any, amount: number, context?: any): number;
+  /** Who an attacker's hit is judged against: an area hit's own victim while it is rolled, else the combat target. */
+  hitTargetOf(attacker: any): any;
   CombatEquipment: any;
   CanAttackResponse: any;
   CombatType: any;
