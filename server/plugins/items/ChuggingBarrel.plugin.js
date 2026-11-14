@@ -110,7 +110,7 @@ function isBarrelAtSlot(player, item, slot) {
 
 function canStore(dose) {
   const name = dose.potion.name;
-  if (dose.potion.area || name === "Hunting mix" || NON_POTION_DRINKS.has(name)) return false;
+  if (dose.potion.area || dose.potion.chuggable === false || name === "Hunting mix" || NON_POTION_DRINKS.has(name)) return false;
   return !dose.potion.requiresFoodPermission || name.endsWith("mix") || FOOD_PERMISSION_POTIONS.has(name);
 }
 
@@ -135,7 +135,6 @@ function setItem(player, item, id) {
  */
 function itemBox(player, items, text, then = null) {
   const { DialogueChainBuilder, ItemStatementDialogue, DoubleItemStatementDialogue, ActionDialogue, EndDialogue } = core;
-  player.getPacketSender().sendTypedMessage(core.ChatType.MESBOX, text.replace(/<br>/g, " "));
   const chain = new DialogueChainBuilder().add(items.length > 1
     ? new DoubleItemStatementDialogue(0, items[0], items[1], text)
     : new ItemStatementDialogue(0, items[0], text));
@@ -452,7 +451,8 @@ function transfer(player, selected, quantity, mode) {
     player.sendMessage(MESSAGE.WITHDRAWN(moved, name));
   } else {
     if (!store && Object.keys(stored).length >= POTION_TYPES) {
-      player.sendMessage(MESSAGE.FULL(name));
+      // A sixth kind: Store names the clicked vial ("...Extreme energy potion(4)."), Fill the 1-dose form.
+      player.sendMessage(MESSAGE.FULL(mode === "store" ? core.CacheDefinitions.getItem(selected.item.getId()).name : name));
       return;
     }
     const room = Math.max(0, DOSES_PER_POTION - (store?.doses ?? 0));

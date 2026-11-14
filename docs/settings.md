@@ -98,7 +98,7 @@ These rows only needed wiring: the cache's own scripts (or our client and server
 | Show mouseover text | 147 | varbit 10035 `mouseover_text_disabled`, see below | our client's top-left text, HUD layout (4731) |
 | Agility helper | 163 | varbit 12379 `agility_helper_disabled` | Agility helper (script 5184), from the course data `Agility.plugin.js` sends |
 | Highlight Agility obstacles | 164 | varbit 12380 `agility_helper_highlight_obstacles_enabled` | our client's obstacle highlight |
-| Enable Minimap zoom | 166 | varbit 12983 `minimap_zoom_lock_disabled` | minimap scroll zoom (scripts 876, 5190, 7025, 7028) |
+| Enable Minimap zoom | 166 | varbit 12983 `minimap_zoom_lock_disabled`, ticked at 0 (the row is drawn inverted); our client makes the row's toggle (5190) set the zoom from the ticked state, as 876, 7025 and 7028 read it | minimap scroll zoom (scripts 876, 5190, 7025, 7028) |
 | Show the Store button on desktop | 181 | varbit 13037 `tli_storebutton_toggle_desktop` | the minimap's Store button (scripts 389, 920, 2414) |
 | Chatbox Mode - Set Automatically | 195 | varbit 13120 `option_chatbox_mode_autoset` | chat input (script 73) |
 | Show number of options in mouseover tooltips | 209 | varbit 13133 `mouseover_tooltips_hide_opcount` | mouseover tooltips (script 4728) |
@@ -219,6 +219,8 @@ All on the tick the level is gained:
 5. **Pop-up**, unless set to Disabled: script 2379 (`toplevel_chatbox_resetbackground`), then `levelup_display` (233) in the chatbox modal with `<col=000080>Congratulations, you just advanced a <Skill> level.`, `Your <Skill> level is now <n>.`, `Click here to continue`, and only that skill's icon shown.
 
 With pop-ups disabled, players kept skilling and fighting straight through their level-ups (one recording has 539 in a row). With pop-ups enabled, SkillLevelUp emits `level-up:popup-opened` `{ player, skill, pause }`; skilling plugins retain their current session and pause its progress. Continuing the last queued skill/combat notification resumes that session with its remaining resources and work. Moving, starting another action, closing/replacing the popup, dying or logging out cancels it. Resume-on-Continue follows issue #1071's requested behavior; the captured popup packets remain unchanged.
+
+Experience paid in the middle of a conversation lands at once, but its level-up (message, jingle, graphic and pop-up) waits until the conversation has closed and comes the tick after (the user's Mahogany Homes captures, rev 241/242: 20261111T012755 t897 experience, t902 last line, t903 level-up; 20261029T203602 t7336-7346), so it no longer cuts a reward conversation short.
 
 World owners can set `"SkillLevelUp:interruptActions": false` in world.json's `pluginConfig` (or world.local.json) to keep actions running on level-up. This skips the blocking skill/combat pop-ups while retaining chat messages, total-level announcements, graphics and sounds. The default is `true`, which follows the player's existing pop-up preference. Restart the server after changing the world configuration.
 

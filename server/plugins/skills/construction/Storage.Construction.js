@@ -31,7 +31,9 @@ const TIER = Ids.component("poh_costumes:tier");
 const MODE = Ids.component("poh_costumes:mode");
 const DEPOSIT_ALL = Ids.component("poh_costumes:depositall");
 const SIDE_MODAL = Ids.component("toplevel_osrs_stretch:sidemodal");
-const INV = CacheDefinitions.getInventoryId("poh_costumes");
+// The rows count what is stored with invother_total, so the storage goes out as an "other"
+// inventory (id + 32768).
+const INV = CacheDefinitions.getInventoryId("poh_costumes") + 32768;
 const PLAYER_INV = CacheDefinitions.getInventoryId("inv");
 const VARP_TIERS = Ids.varp("if2"); // the chest's highest tier, -1 for other furniture
 const VARBIT_MODE = Ids.varbit("poh_costumes_mode");
@@ -565,7 +567,6 @@ function depositAll(player, state) {
   depositing.set(player, run);
   openFor.delete(player);
   sender.sendInterfaceRemoval();
-  sender.sendTypedMessage(ChatType.MESBOX, "Searching...");
   StatementDialogue.send(player, "Searching...", false);
   const valid = () => depositing.get(player) === run && player.isRegistered?.() !== false
     && sameContext(state.event, state, state.position);
@@ -585,7 +586,6 @@ function depositAll(player, state) {
       }
       if (idle < NOTHING_TICKS) return;
       depositing.delete(player);
-      sender.sendTypedMessage(ChatType.MESBOX, "Your items do not belong in here.");
       player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, "Your items do not belong in here.")));
       this.stop();
     }

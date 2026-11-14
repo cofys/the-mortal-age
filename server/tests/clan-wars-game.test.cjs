@@ -1313,8 +1313,8 @@ for (const [key,values] of Object.entries(NEGOTIATED_RULE_CHOICES)) {
     const revision=session.revision;
     await click(b,'clanwars_setup:accept'); await click(a,`clanwars_setup:dropdown_${key}`,values.at(-1)+1);
     assert.equal(session.revision,revision); assert.equal(session.accepted.has(b),true,'same selection is a no-op');
-    await click(a,'clanwars_setup:dropdown_specialattacks',2);
-    assert.equal(session.rules.specialattacks,key==='specialattacks'||membership?2:0,'deferred Staff-only choice cannot change terms');
+    await click(a,'clanwars_setup:dropdown_specialattacks',4);
+    assert.equal(session.rules.specialattacks,key==='specialattacks'||membership?2:0,'unsupported special-attack choice cannot change terms');
     assert.equal(a.getPacketSender().getVarbit(core.CacheDefinitions.getVarbitId('clanwars_specialattacks')),session.rules.specialattacks);
     await click(a,'clanwars_setup:accept'); assert.equal(session.stage,'confirm');
     const agreed={...session.rules}; await click(a,`clanwars_setup:dropdown_${key}`,1);
@@ -3602,7 +3602,7 @@ test('native Turrets slot12 is deliberate and all ten offers retain numeric0 and
   await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',12);assert.equal(session.rules.arena,4,'ordinary native12 reaches authoritative Turrets offer');assert.equal(session.accepted.size,0);
   for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),4);assert.match(require('../plugins/minigames/clanwars/Rules.ClanWars').summary(session.rules),/Turrets/);
   for(const[slot,arena]of[[0,0],[3,1],[6,2],[9,3],[15,5],[18,6],[33,11],[36,12],[39,13],[12,4]]){tick(9);await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,arena);assert.equal(session.accepted.size,0);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),arena);}
-  for(const slot of[1,2,22,27,30,42,45,48,65535]){await click(a,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,4);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),4);}
+  for(const slot of[1,2,22,28,30,42,45,48,65535]){await click(a,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,4);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),4);}
   tick(9);await click(a,'clanwars_setup:accept');await click(b,'clanwars_setup:accept');assert.equal(session.stage,'confirm');tick(5);await click(a,'clanwars_confirm:button');await click(b,'clanwars_confirm:button');const game=C.channelGames.get(C.channel(a).key);assert.ok(game);assert.equal(game.rules.arena,4);assert.equal(game.layout.name,'Turrets');
 });
 for(const mode of [0,1,16]) test(`native Turrets mode ${mode} retains restrictions and lifetime`,async()=>{
@@ -3762,7 +3762,7 @@ test('native Northleach slot24 resets acceptance and all eleven offers retain ex
   await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',24);assert.equal(session.rules.arena,8,'ordinary native24 reaches authoritative Northleach offer');assert.equal(session.accepted.size,0);
   assert.match(require('../plugins/minigames/clanwars/Rules.ClanWars').summary(session.rules),/Northleach Quell/);
   for(const[slot,arena]of[[0,0],[3,1],[6,2],[9,3],[12,4],[15,5],[18,6],[33,11],[36,12],[39,13],[24,8]]){tick(9);await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,arena);assert.equal(session.accepted.size,0);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),arena);}
-  for(const slot of[1,2,22,27,30,42,45,48,65535]){await click(a,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,8);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),8);}
+  for(const slot of[1,2,22,28,30,42,45,48,65535]){await click(a,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,8);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),8);}
   tick(9);await click(a,'clanwars_setup:accept');await click(b,'clanwars_setup:accept');assert.equal(session.stage,'confirm');tick(5);await click(a,'clanwars_confirm:button');await click(b,'clanwars_confirm:button');const game=C.channelGames.get(C.channel(a).key);assert.ok(game);assert.equal(game.rules.arena,8);assert.equal(game.layout.name,'Northleach Quell');
 });
 
@@ -3963,7 +3963,7 @@ test('native Ghastly slot21 resets acceptance and all twelve offers retain expli
   await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',21);assert.equal(session.rules.arena,7,'ordinary native21 reaches authoritative Ghastly offer');assert.equal(session.accepted.size,0);
   assert.match(require('../plugins/minigames/clanwars/Rules.ClanWars').summary(session.rules),/Ghastly Swamp/);
   for(const[slot,arena]of[[0,0],[3,1],[6,2],[9,3],[12,4],[15,5],[18,6],[33,11],[36,12],[39,13],[24,8],[21,7]]){tick(9);await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,arena);assert.equal(session.accepted.size,0);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),arena);}
-  for(const slot of[1,2,22,27,30,42,45,48,65535]){await click(a,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,7);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),7);}
+  for(const slot of[1,2,22,28,30,42,45,48,65535]){await click(a,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,7);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),7);}
   tick(9);await click(a,'clanwars_setup:accept');await click(b,'clanwars_setup:accept');assert.equal(session.stage,'confirm');tick(5);await click(a,'clanwars_confirm:button');await click(b,'clanwars_confirm:button');const game=C.channelGames.get(C.channel(a).key);assert.ok(game);assert.equal(game.rules.arena,7);assert.equal(game.layout.name,'Ghastly Swamp');
 });
 
@@ -4150,7 +4150,7 @@ test('native Ghastly genuine NPC death claims drops before Prayer consumers and 
   // Remove the later ordinary world respawn after observing it, without changing the shared definition.
   tick(settle);const worldClones=[...core.World.getNpcs()].filter(n=>n?.getId()===5626&&n!==survivor&&n.getPrivateArea()==null&&n.getSpawnPosition().equals(world.getSpawnPosition()));assert.equal(worldClones.length,1,'world5626 default respawn remains canonical');for(const n of worldClones){fixtureNpcs.add(n);C.api.removeNpc(n);}
   // Supplied quest checkpoint and canonical pouch producer, no fake visibleGhasts map.
-  worldPlayer.setAttribute('quest.nature_spirit.stage',90);const source=C.api.spawnNpc({id:945,x:3223,y:3218,z:0,wanderRadius:0});fixtureNpcs.add(source);const pouch=new core.Item(I.DRUID_POUCH_2,1);worldPlayer.getInventory().setItem(5,pouch);const existing=new Set([...core.World.getNpcs()]);const request={player:worldPlayer,target:source,npcId:945,targetIndex:source.getIndex(),item:pouch,itemId:I.DRUID_POUCH_2,slot:5,handled:false};assert.equal(PM.emitItemOnNpc(request),true);
+  worldPlayer.setAttribute('quest.nature_spirit.stage',90);const source=C.api.spawnNpc({id:945,x:3223,y:3218,z:0,wanderRadius:0});fixtureNpcs.add(source);const pouch=new core.Item(I.DRUID_POUCH_2,1);worldPlayer.getInventory().setItem(5,pouch);const existing=new Set([...core.World.getNpcs()]);const request={player:worldPlayer,target:source,npcId:945,targetIndex:source.getIndex(),item:pouch,itemId:I.DRUID_POUCH_2,slot:5,handled:false};assert.equal(PM.emitItemOnNpc(request),true);tick(3); // rsprox NatureSpirit 1310-1312: the form two ticks on
   const revealed=[...core.World.getNpcs()].find(n=>n&&!existing.has(n)&&n.getId()===946&&n.getOwner()===worldPlayer);assert.ok(revealed,'actual quest reveal owns visible identity');fixtureNpcs.add(revealed);assert.equal(revealed.isOwnerOnly(),true);await ghastKill(worldPlayer,revealed);assert.equal(worldPlayer.getAttribute('quest.nature_spirit.stage'),95,'canonical quest death advances its own visible identity');
   for(const drop of core.World.getItems().slice())if(!ground.includes(drop))core.ItemOnGroundManager.deregister(drop);
   console.log('GHASTLY_NPC_DEATH '+JSON.stringify({ownedClaim:true,noOwnedPrayer:true,noReplacement:true,settle,worldBonecrusher:true,worldRespawn:true,questVisiblePositive:true}));
@@ -4224,4 +4224,466 @@ test('native Ghastly World consumed queued-add refusal cancels the match without
   const{a,b,game}=await ghastGame(),list=core.World.getNpcs(),add=list.add.bind(list);let refused=0;
   const inject=t.mock.method(list,'add',function(npc,...args){if(npc.getId()===5626&&refused<3){refused++;return false;}return add(npc,...args);});
   tick(game.starts-C.now());assert.equal(refused,3);const old=game.ghasts.npcs.slice();assert.equal(old.length,2);ghastSameRefs(npcQueueFailures.splice(0),[old[0]],'World shifts a refused addition without requeue; the other registers');assert.equal(core.World.getAddNPCQueue().includes(old[0]),false);assert.equal(Boolean(old[0].isRegistered()),false);assert.equal(core.World.getNpcs().get(old[0].getIndex())===old[0],false,'refused actor never occupies a World slot');assert.equal(old[1].isRegistered(),true);inject.mock.restore();tick();assert.equal(game.phase,'over');assert.match(game.ghasts.failure,/queued registration failed/);assert.equal(game.ghasts.ready,false);assert.equal(game.area.isDestroyed(),true);for(const npc of old)ghastAbsent(npc,game.area,'consumed registration refusal immediate cleanup');assert.ok(old.every(n=>!n.isRegistered()&&!core.World.getAddNPCQueue().includes(n)));for(const p of[a,b]){assert.equal(C.matches.has(p),false);lobby(p);}tick(120);assert.ok(old.every(n=>!n.isRegistered()&&!core.World.getAddNPCQueue().includes(n)));assert.equal(refused,3,'no automatic registration retry');for(const npc of old)ghastAbsent(npc,game.area,'consumed registration refusal delayed cleanup');
+});
+
+// R: Gridlock. Source qualification is distinct from these native gameplay outcomes.
+const GRIDLOCK_ORIGIN=[3456,4800],GRIDLOCK_LANDINGS=[[3465,4829,0],[3575,4899,0]],GRIDLOCK_JAILS=[[3519,4861,0],[3519,4865,0]];
+const GRIDLOCK_ROWS=[...Array.from({length:53},(_,n)=>4806+n),...Array.from({length:53},(_,n)=>4868+n)];
+const GRIDLOCK_FLOORS=[[14487,4809],[14485,4810],[14485,4811],[14487,4813],[14487,4820],[14485,4822],[14493,4826],[14487,4829],[14485,4831],[14485,4838],[14493,4844],[14487,4853],[14485,4868],[14496,4871],[14496,4880],[14485,4883],[14485,4884],[14498,4889],[14484,4908],[14484,4909],[14484,4914],[14484,4915]];
+const GRIDLOCK_ROUTES={4806:[[3500,4842],[3518,4840],[3518,4806]],4832:[[3500,4842],[3518,4840],[3518,4832]],4858:[[3500,4842],[3518,4858]],4868:[[3500,4852],[3518,4868]],4894:[[3500,4852],[3518,4880],[3518,4894]],4920:[[3500,4852],[3518,4880],[3518,4915],[3518,4920]]};
+const gridSource=(p,game)=>[p.getLocation().getX()-game.area.getBaseX()+3456,p.getLocation().getY()-game.area.getBaseY()+4800,0];
+const gridWalk=northleachWalk;
+function gridObject(game,name,xy,plane=0){const id=core.CacheDefinitions.getLocId(name),at=game.area.at([...xy,plane]),found=[];for(let x=0;x<16;x++)for(let y=0;y<16;y++)found.push(...game.area.getChunkObjects(plane,x,y).filter(o=>o.getId()===id&&o.getLocation().equals(at)));assert.equal(found.length,1,'unique observed Gridlock object');ghastIdentity(found[0].getPrivateArea(),game.area,'Gridlock template owner');return found[0];}
+const gridReachable=(game,from,to)=>layoutReachable(game,from,to,GRIDLOCK_ORIGIN);
+function gridPlane(area,plane=0,settings=false){if(!settings){const a=[];for(let y=0;y<128;y++)for(let x=0;x<128;x++)a.push(area.getClip(area.tile(x,y,plane)));return a;}const a=new Uint8Array(4*16384);for(let x=0;x<16;x++)for(let y=0;y<16;y++)area.copyChunkSettings(a,plane,x,y);return Array.from(a.subarray(plane*16384,(plane+1)*16384));}
+function gridTemplate(){const area=new core.TemplatedInstanceArea(16,16);for(let x=0;x<16;x++)for(let y=0;y<16;y++)area.setChunk(0,x,y,{sourceChunkX:432+x,sourceChunkY:600+y,sourcePlane:0,rotation:0});area.at=tile=>area.tile(tile[0]-3456,tile[1]-4800,tile[2]);return area;}
+async function gridGame(terms=null,mode=1){const a=actor(true),b=actor(true);channel(a);channel(b);const game=await negotiate(a,b,null,mode,terms,9);await join(a);await join(b);return{a,b,game};}
+function gridSide(game,players,side){const p=players.find(p=>game.members.get(p)===side);assert.ok(p);return p;}
+async function gridRoute(p,game,points){for(const xy of points)await gridWalk(p,game,xy);}
+function gridFlood(game,from){const queue=[from.slice(0,2)],seen=new Set([from.slice(0,2).join(',')]);for(let i=0;i<queue.length;i++){const[x,y]=queue[i];for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy,key=`${nx},${ny}`;if(nx<3456||nx>3583||ny<4800||ny>4927||seen.has(key))continue;if(core.RegionManager.canMovestart(game.area.at([x,y,0]),game.area.at([nx,ny,0]),1,1,game.area)){seen.add(key);queue.push([nx,ny]);}}}return seen;}
+function gridWallAbsent(wall,area,retainedRemoval=false){assert.equal(core.ObjectManager.objectsAt(wall.getLocation()).includes(wall),false);assert.equal(core.World.getObjects().includes(wall),false);assert.equal(core.World.getRemovedObjects().includes(wall),retainedRemoval,'canonical live-scene removal marker versus destroyed-area purge');assert.equal(area.getObjects().includes(wall),false);}
+
+test('native Gridlock slot27 invalidates agreement and all thirteen offers preserve default1 and numeric0',async()=>{
+  const a=actor(),b=actor();channel(a);channel(b);await challenge(a,b);await challenge(b,a);const session=C.negotiations.get(a),bit=core.CacheDefinitions.getVarbitId('clanwars_arena');assert.equal(session.rules.arena,1);
+  await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',27);assert.equal(session.rules.arena,9,'ordinary native27 offers Gridlock');assert.equal(session.accepted.size,0);
+  assert.match(require('../plugins/minigames/clanwars/Rules.ClanWars').summary(session.rules),/Gridlock/);
+  for(const arena of[0,1,2,3,4,5,6,7,8,11,12,13,9]){tick(9);await click(a,'clanwars_setup:accept');assert.equal(session.accepted.has(a),true);await click(b,'clanwars_setup:arena',arena*3);assert.equal(session.rules.arena,arena);assert.equal(session.accepted.size,0);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),arena);}
+  for(const slot of[1,2,22,28,30,42,45,48,65535]){await click(a,'clanwars_setup:arena',slot);assert.equal(session.rules.arena,9);for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(bit),9);}
+  tick(9);await click(a,'clanwars_setup:accept');await click(b,'clanwars_setup:accept');assert.equal(session.stage,'confirm');tick(5);await click(a,'clanwars_confirm:button');await click(b,'clanwars_confirm:button');const game=C.channelGames.get(C.channel(a).key);assert.ok(game);assert.equal(game.rules.arena,9);assert.equal(game.layout.name,'Gridlock');
+});
+
+for(const mode of[0,1,8,16,20])test(`native Gridlock mode ${mode} preserves restrictions late-entry and timed lifetime`,async()=>{
+  const a=actor(true),b=actor(true),late=actor(true);channel(a,[late]);channel(b);const game=await negotiate(a,b,null,mode,{food:1,prayer:2},9);await join(a);await join(b);assert.equal(game.rules.food,1);assert.equal(game.rules.prayer,2);completePreparation(game);assert.equal(game.ghasts,undefined);
+  assert.equal(game.area.canAttack(a,b,CombatFactory.MELEE_COMBAT),true);assert.equal(game.area.canAttack(a,b,{type:()=>core.CombatType.RANGED}),false);assert.equal(game.area.canAttack(a,b,{type:()=>core.CombatType.MAGIC}),false);
+  if(mode){await join(late);assert.equal(game.fighters.has(late),true);assert.deepEqual(position(late),positionAt(game,GRIDLOCK_LANDINGS[game.members.get(late)]));}else{Match.enter({player:late});assert.equal(game.members.has(late),false);}
+  if(mode===16||mode===20){core.World.processCycle=game.ends-1;tick();assert.equal(game.phase,'over');for(const p of[a,b,late])lobby(p);}
+});
+
+test('native Gridlock full16384 flags and106 owned walls preserve22 floor identities and all directional footprints',async()=>{
+  const{a,b,game}=await gridGame(),reference=gridTemplate();
+  try{
+    const base=gridPlane(reference),settings=gridPlane(reference,0,true),walls=game.walls.slice(),id=core.CacheDefinitions.getLocId('clanwars_barrier_darkrock'),d=core.CacheDefinitions.getObject(id),row=new Set(GRIDLOCK_ROWS);
+    assert.deepEqual([game.area.widthChunks,game.area.heightChunks],[16,16]);assert.deepEqual([d.sizeX,d.sizeY,d.clipType,d.blocksProjectile],[1,1,1,true]);assert.equal(walls.length,106);assert.equal(base.length,16384);assert.equal(game.ghasts,undefined);assert.deepEqual(gridPlane(game.area,0,true),settings);
+    const regions=new Map([13899,13900,14155,14156].map(id=>[id,require('../dist/game/collision/TemplateRegionData').getTemplateRegion(id)]));
+    for(let x=0;x<128;x++)for(let y=0;y<128;y++)assert.equal(settings[x*128+y],regions.get((((3456+x)>>6)<<8)|((4800+y)>>6)).settings[((x&63)<<6)|(y&63)]);
+    for(let x=0;x<16;x++)for(let y=0;y<16;y++){assert.deepEqual(game.area.getChunk(0,x,y),reference.getChunk(0,x,y));for(const z of[1,2,3])assert.equal(game.area.getChunk(z,x,y),null);}
+    for(const z of[1,2,3]){assert.ok(gridPlane(game.area,z).every(mask=>mask===0x200100));assert.ok(gridPlane(game.area,z,true).every(value=>value===0));}
+    const copies=[],floors=[];for(let x=0;x<16;x++)for(let y=0;y<16;y++)for(const object of game.area.getChunkObjects(0,x,y)){copies.push(object);const xy=gridSource({getLocation:()=>object.getLocation()},game);if(object.getType()===22&&xy[0]===3519&&row.has(xy[1]))floors.push(object);if(object.getType()<9||object.getType()>11||!object.getDefinition().isSolid())continue;const def=object.getDefinition(),odd=object.getFace()%2,w=odd?def.sizeY:def.sizeX,h=odd?def.sizeX:def.sizeY;for(const wy of row)assert.equal(3519>=xy[0]&&3519<xy[0]+w&&wy>=xy[1]&&wy<xy[1]+h,false,'full rotated nonzero solid footprint never overlaps barrier');}
+    assert.equal(copies.length,1911);assert.equal(floors.length,22);assert.deepEqual(floors.map(o=>[o.getId(),gridSource({getLocation:()=>o.getLocation()},game)[1]]).sort((a,b)=>a[1]-b[1]),GRIDLOCK_FLOORS);
+    for(const floor of floors){assert.equal(floor.getFace(),0);assert.equal(floor.getDefinition().isClippedDecoration(),false);assert.equal((floor.getDefinition().getInteractions()??[]).some(Boolean),false);ghastIdentity(core.MapObjects.getPrivateArea(a,floor.getId(),floor.getLocation()),floor,'exact coexistent floor identity');}
+    for(const wall of walls){assert.equal(wall.getId(),id);assert.equal(wall.getType(),10);assert.equal(wall.getFace(),1);ghastIdentity(wall.getPrivateArea(),game.area,'owned Gridlock wall');ghastIdentity(core.MapObjects.getPrivateArea(a,id,wall.getLocation()),wall,'native exact wall lookup');assert.equal(core.ObjectManager.objectsAt(wall.getLocation()).filter(o=>o.getId()===id&&o.getPrivateArea()===game.area&&o.getType()===10).length,1);const xy=gridSource({getLocation:()=>wall.getLocation()},game);assert.equal(xy[0],3519);assert.equal(row.has(xy[1]),true);assert.equal(base[(xy[1]-4800)*128+63]&0x20100,0);}
+    for(let y=0;y<128;y++)for(let x=0;x<128;x++)assert.equal(game.area.getClip(game.area.tile(x,y,0)),base[y*128+x]|(x===63&&row.has(y+4800)?0x20100:0));
+    const west=gridFlood(game,GRIDLOCK_LANDINGS[0]),east=gridFlood(game,GRIDLOCK_LANDINGS[1]);assert.equal(west.size,6549);assert.equal(east.size,6662);assert.equal([...west].some(key=>east.has(key)),false);assert.equal(gridFlood(game,GRIDLOCK_JAILS[0]).size,31);assert.equal(gridFlood(game,GRIDLOCK_JAILS[1]).size,24);
+    completePreparation(game);assert.deepEqual(gridPlane(game.area),base);assert.deepEqual(gridPlane(game.area,0,true),settings);assert.equal(gridFlood(game,GRIDLOCK_LANDINGS[0]).size,13317);for(const wall of walls){gridWallAbsent(wall,game.area,true);ghastIdentity(core.MapObjects.getPrivateArea(a,id,wall.getLocation()),null,'removed wall no longer resolves as live object');}for(const floor of floors)ghastIdentity(core.MapObjects.getPrivateArea(a,floor.getId(),floor.getLocation()),floor,'floor survives wall removal');
+    console.log('GRIDLOCK_GEOMETRY '+JSON.stringify({main:13317,holdings:[31,24],walls:106,staging:[6549,6662],floors:22,masks:16384,planes:[0]}));
+  }finally{reference.destroy();}
+});
+
+for(const y of[4806,4832,4858,4868,4894,4920])test(`native Gridlock identical crossing atY${y} refuses staging then walks after actual200 start`,async()=>{
+  const{a,b,game}=await gridGame(),p=gridSide(game,[a,b],0);assert.deepEqual(position(p),positionAt(game,GRIDLOCK_LANDINGS[0]));await gridRoute(p,game,GRIDLOCK_ROUTES[y]);assert.ok(C.now()+8<game.starts,'ordinary staging arrival precedes canonical boundary');const target=game.area.at([3520,y,0]);await wire(p,walkClickFrame(target));tick(3);assert.equal(game.phase,'staging');assert.equal(gridSource(p,game)[0]<3519,true);const staging=position(p);completePreparation(game);await gridWalk(p,game,[3518,y]);await gridWalk(p,game,[3520,y]);assert.deepEqual(position(p),[target.getX(),target.getY(),0]);console.log('GRIDLOCK_CROSSING '+JSON.stringify({y,requested:[target.getX(),target.getY(),0],staging,combat:position(p),ordinaryAssignedLanding:true}));
+});
+
+for(const side of[0,1])test(`native Gridlock side${side} assigned-landing routes reach real ordinary player melee and health loss`,async()=>{
+  const{a,b,game}=await gridGame();completePreparation(game);const west=gridSide(game,[a,b],0),east=gridSide(game,[a,b],1),y=side?4868:4858;
+  for(const p of[a,b]){ghastFighter(p);assert.deepEqual(position(p),positionAt(game,GRIDLOCK_LANDINGS[game.members.get(p)]));}
+  await gridRoute(west,game,GRIDLOCK_ROUTES[y]);await gridWalk(east,game,[3520,y]);const attacker=side?east:west,victim=side?west:east,attempts=[],resolved=[];
+  ghastObserve=(kind,e)=>{if(e.attacker!==attacker||e.target!==victim)return;if(kind==='prepare')attempts.push(C.now());if(kind==='resolved'){const row={cycle:C.now(),raw:e.hit.getHits().map(h=>h.getDamage()),accurate:e.hit.isAccurate()};resolved.push(row);for(const hit of e.hit.getHits())hit.onApplied(taken=>{row.taken=(row.taken??0)+taken;});}};
+  const frame=Buffer.alloc(4);frame[0]=44;frame[1]=128;frame.writeUInt16BE(victim.getIndex(),2);const decoded=decodeClientPackets(frame);assert.equal(decoded[0].index,victim.getIndex());assert.equal(decoded[0].option,1);await wire(attacker,frame);ghastIdentity(attacker.getCombat().getTarget(),victim,'ordinary decoded opposing player target');const hp=victim.getHitpoints();ghastTurns=true;for(let n=0;n<160&&victim.getHitpoints()===hp;n++)tick();
+  assert.ok(attempts.length>0);assert.ok(resolved.some(row=>row.raw.some(x=>x>0)&&row.taken>0));assert.ok(victim.getHitpoints()<hp);assert.equal(game.phase,'combat');assert.equal(game.ghasts,undefined);console.log('GRIDLOCK_ORDINARY_MELEE '+JSON.stringify({side,y,attempts,resolved,positions:[position(west),position(east)],naturalRolls:true,suppliedDamage:false}));
+});
+
+for(const side of[0,1])test(`native Gridlock side${side} real safe death owns ${side?24:31}cell holding both view and Exit deadline`,async()=>{
+  const{a,b,game}=await gridGame({rejoiningdelay:side}),victim=gridSide(game,[a,b],side),killer=victim===a?b:a;completePreparation(game);victim.getInventory().add(new core.Item(995,79,{qa:'gridlock-holding',side}));const inventory=carriedItems(victim),kills=game.kills.slice(),killerSide=game.members.get(killer);
+  // Supplied settled combat tiles and pre-rolled lethal hit; native death/holding/UI routes are real.
+  await lethalMelee(killer,victim,game,true,[[3518,4858,0],[3519,4858,0]]);tick(6);assert.equal(game.jailed.has(victim),true);assert.deepEqual(position(victim),positionAt(game,GRIDLOCK_JAILS[side]));assert.deepEqual(carriedItems(victim),inventory);assert.equal(game.kills[killerSide],kills[killerSide]+1);assert.equal(game.kills[1-killerSide],kills[1-killerSide]);
+  const holding=gridFlood(game,GRIDLOCK_JAILS[side]);assert.equal(holding.size,side?24:31);assert.equal(gridReachable(game,GRIDLOCK_JAILS[0],GRIDLOCK_JAILS[1]),false);for(const start of GRIDLOCK_JAILS)for(const end of GRIDLOCK_LANDINGS)assert.equal(gridReachable(game,start,end),false);
+  let boundary=0;for(const key of holding){const[x,y]=key.split(',').map(Number);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){if(!dx&&!dy)continue;if(holding.has(`${x+dx},${y+dy}`))continue;boundary++;assert.equal(core.RegionManager.canMovestart(game.area.at([x,y,0]),game.area.at([x+dx,y+dy,0]),1,1,game.area),false,'every actual holding boundary step refuses');}}assert.ok(boundary>0);
+  for(const target of[GRIDLOCK_LANDINGS[side],GRIDLOCK_JAILS[1-side]]){await wire(victim,walkClickFrame(game.area.at(target)));tick(6);assert.equal(holding.has(gridSource(victim,game).slice(0,2).join(',')),true);}
+  const orbXY=[3519,side?4867:4859],orb=gridObject(game,'clanwars_viewing_start_darkrock',orbXY),inactive=mappedLayoutObjects(game,'clanwars_viewing_darkrock')[0],fakeOrb=new core.GameObject(orb.getId(),orb.getLocation().clone(),orb.getType(),orb.getFace(),game.area);assert.equal(orb.getId(),26741);assert.ok(inactive);assert.equal(viewingUnit().use({player:victim,object:inactive}),false);try{assert.equal(viewingUnit().use({player:victim,object:fakeOrb}),false);}finally{game.area.detach(fakeOrb);}
+  await gridWalk(victim,game,[3519,side?4866:4860]);const calls=scriptCalls(victim);await layoutObjectInput(victim,game,'clanwars_viewing_start_darkrock',orbXY,'Use');const view=viewingUnit().active.get(victim);assert.ok(view);assert.equal(victim.getInterfaceId(),C.group('clanwars_view'));assert.equal(victim.isAppearanceHidden(),true);assert.equal(victim.isUntargetable(),true);assert.equal(victim.getMovementQueue().isMovementBlocked(),true);
+  const{encodeCameraTarget}=require('../dist/net/protocol/ClientProtocol');for(const[index,name]of['central','sw','se','nw','ne'].entries()){await click(victim,`clanwars_view:${name}`,index%2);const fx=[.5,.25,.75,.25,.75][index],fy=[.5,.25,.25,.75,.75][index],at=game.area.tile(128*fx,128*fy,0);assert.deepEqual(position(victim),[at.getX(),at.getY(),0]);assert.deepEqual(calls.filter(([id])=>id===562).at(-1),[562,index,9752]);assert.ok(victim.nativePackets.some(frame=>frame.equals(encodeCameraTarget({x:at.getX(),y:at.getY(),level:0}))));assert.equal(victim.getSession().isTileInScene(at.getX(),at.getY(),0),true);}
+  assert.equal(game.area.canAttack(killer,victim,CombatFactory.MELEE_COMBAT),false);await wire(victim,Buffer.from([VIEW_CLOSE_PACKET]));restoredViewer(victim,game,view.location);
+  const exitXY=[3519,side?4864:4863],owned=gridObject(game,'clanwars_prisonportal_darkrock',exitXY),otherExit=gridObject(game,'clanwars_prisonportal_darkrock',[3519,side?4863:4864]),fake=new core.GameObject(owned.getId(),owned.getLocation().clone(),owned.getType(),owned.getFace(),game.area);assert.equal(owned.getId(),26738);assert.equal(otherExit.getId(),26738);assert.equal(owned===otherExit,false);assert.equal(gridReachable(game,GRIDLOCK_JAILS[side],[3519,side?4862:4865,0]),false,'other same-gameval Exit remains in the other holding');try{assert.equal(Match.exit({player:victim,object:fake}),false);}finally{game.area.detach(fake);}
+  const deadline=game.returnAt.get(victim.getLongUsername());await gridWalk(victim,game,[3519,side?4865:4862]);if(side)assert.ok(deadline-C.now()>22,'real refused Exit is exercised before deadline');await layoutObjectInput(victim,game,'clanwars_prisonportal_darkrock',exitXY,'Exit');if(side){assert.equal(game.jailed.has(victim),true);assert.equal(game.fighters.has(victim),false);assert.equal(game.returnAt.get(victim.getLongUsername()),deadline);assert.ok(deadline>C.now());tick(deadline-C.now());await layoutObjectInput(victim,game,'clanwars_prisonportal_darkrock',exitXY,'Exit');}
+  assert.equal(game.jailed.has(victim),false);assert.equal(game.fighters.has(victim),true);assert.deepEqual(position(victim),positionAt(game,GRIDLOCK_LANDINGS[side]));assert.deepEqual(carriedItems(victim),inventory);console.log('GRIDLOCK_HOLDING '+JSON.stringify({side,cells:holding.size,boundary,orb:orbXY,model:9752,exit:exitXY,delay:side,allFiveViews:true}));
+});
+
+test('native Gridlock thirteenth layout preserves twelve live configurations and both side-correct rotated Forfeits',async()=>{
+  const old=[];for(const arena of[0,1,2,3,4,5,6,7,8,11,12,13]){const a=actor(true),b=actor(true);channel(a);channel(b);const game=await negotiate(a,b,null,1,null,arena);await join(a);await join(b);old.push({game,players:[a,b],rules:{...game.rules},layout:game.layout});}
+  const{a,b,game}=await gridGame(),Q=old.find(row=>row.game.rules.arena===7);assert.equal(new Set([...old.map(row=>row.game.area),game.area]).size,13);const foreign=gridObject(Q.game,'clanwars_prisonportal_swamp',[3393,4933]);assert.equal(Match.exit({player:a,object:foreign}),false);
+  for(const p of[a,b]){const side=game.members.get(p),xy=side?[3579,4897]:[3459,4827],name=side?'clanwars_exitportal_greyrock_s':'clanwars_exitportal_greyrock_n',object=gridObject(game,name,xy),approach=side?[3578,4899]:[3461,4829];assert.equal(object.getId(),side?26731:26732);assert.equal(object.getType(),10);assert.equal(object.getFace(),side?3:1);assert.deepEqual([object.getDefinition().sizeX,object.getDefinition().sizeY,object.getDefinition().getBlockingMask()],[4,2,30]);const fake=new core.GameObject(object.getId(),object.getLocation().clone(),10,object.getFace(),game.area);try{assert.equal(Match.forfeit({player:p,object:fake}),false);}finally{game.area.detach(fake);}assert.equal(gridReachable(game,GRIDLOCK_LANDINGS[side],[...approach,0]),true);assert.equal(gridReachable(game,GRIDLOCK_LANDINGS[1-side],[...approach,0]),false);for(let x=0;x<2;x++)for(let y=0;y<4;y++)assert.equal(game.area.getClip(game.area.at([xy[0]+x,xy[1]+y,0]))&0x20100,0x20100,'entire actual rotated2x4 footprint blocks');await gridWalk(p,game,side?[3581,4899]:[3458,4829]);assert.equal(require('../dist/game/model/movement/path/PathFinder').PathFinder.reachedObject(p,object.getLocation().getX(),object.getLocation().getY(),4,2,object.getFace(),10,30),false,'opposite rotated access edge does not reach');await gridWalk(p,game,approach);assert.equal(require('../dist/game/model/movement/path/PathFinder').PathFinder.reachedObject(p,object.getLocation().getX(),object.getLocation().getY(),4,2,object.getFace(),10,30),true,'actual rotated native access side');await layoutObjectInput(p,game,name,xy,'Forfeit');assert.equal(C.matches.has(p),false);lobby(p);}
+  tick(Math.max(1,game.starts-C.now()+1));assert.equal(game.phase,'over');assert.equal(game.area.isDestroyed(),true);assert.equal(game.ghasts,undefined);for(const row of old){assert.notEqual(row.game.phase,'over');assert.equal(row.game.area.isDestroyed(),false);assert.deepEqual(row.game.rules,row.rules);ghastIdentity(row.game.layout,row.layout,'old layout identity');for(const p of row.players)ghastIdentity(C.matches.get(p),row.game,'prior membership preserved');}ghastReady(Q.game);
+});
+
+test('native Gridlock Ignore5 six versus six uses actual safe defeat and keeps supplies',async()=>{
+  const{b,teams,players,game}=await stragglerGame(6,1,3,{},9);completePreparation(game);assert.equal(game.fighters.size,12);const victim=teams[0][1];give(victim,core.ItemIdentifiers.SHRIMPS,'gridlock-ignore5');const inventory=carriedItems(victim);await lethalMelee(b,victim,game,true,[[3518,4858,0],[3519,4858,0]]);tick(8);assert.equal(game.phase,'over');assert.equal(game.area.isDestroyed(),true);assert.deepEqual(carriedItems(victim),inventory);for(const p of players)lobby(p);
+});
+
+test('native Gridlock full rotated skeleton torch and directional wall routes trace every ordinary step',async t=>{
+  const{a,b,game}=await gridGame();completePreparation(game);const p=gridSide(game,[a,b],0);p.setRunning(false);const movement=p.getMovementQueue(),process=movement.process.bind(movement),trace=[];const watch=t.mock.method(movement,'process',function(...args){const from=p.getLocation().clone(),value=process(...args),to=p.getLocation().clone();if(!from.equals(to)){assert.ok(Math.max(Math.abs(from.getX()-to.getX()),Math.abs(from.getY()-to.getY()))<=1,'walking setup records every native step including wire ticks');assert.equal(core.RegionManager.canMovestart(from,to,1,1,game.area),true);trace.push([from.getX(),from.getY(),to.getX(),to.getY()]);}return value;});
+  try{
+    await gridRoute(p,game,[[3500,4842],[3512,4861]]);
+    for(const spec of[{name:'standing_torch',xy:[3513,4861],face:0,size:[1,1],from:[3512,4861],to:[3514,4861],projectile:true},{name:'wild1_skeleton_3',xy:[3525,4872],face:1,size:[1,2],from:[3525,4871],to:[3525,4874],projectile:false},{name:'wild5_skeleton_3',xy:[3524,4827],face:0,size:[2,1],from:[3524,4826],to:[3524,4828],projectile:false}]){const object=gridObject(game,spec.name,spec.xy),at=object.getLocation(),from=game.area.at([...spec.from,0]),to=game.area.at([...spec.to,0]);assert.equal(object.getFace(),spec.face);assert.equal(object.getType(),10);assert.equal((object.getDefinition().getInteractions()??[]).some(Boolean),false);assert.equal(core.CacheDefinitions.getObject(object.getId()).blocksProjectile,spec.projectile);for(let x=0;x<spec.size[0];x++)for(let y=0;y<spec.size[1];y++)assert.equal(game.area.getClip(game.area.at([spec.xy[0]+x,spec.xy[1]+y,0]))&0x20100,spec.projectile?0x20100:0x100);await gridWalk(p,game,spec.from);trace.length=0;await wire(p,walkClickFrame(at));tick(8);for(const step of trace){const xy=[step[2]-game.area.getBaseX()+3456,step[3]-game.area.getBaseY()+4800];assert.equal(xy[0]>=spec.xy[0]&&xy[0]<spec.xy[0]+spec.size[0]&&xy[1]>=spec.xy[1]&&xy[1]<spec.xy[1]+spec.size[1],false);}assert.equal(core.RegionManager.canMovestart(from,at,1,1,game.area),false);assert.equal(core.RegionManager.canProjectileAttackReturn(from,to,1,game.area),!spec.projectile);await gridWalk(p,game,spec.to);assert.ok(trace.length>0);console.log('GRIDLOCK_OBSTACLE '+JSON.stringify({id:object.getId(),source:spec.xy,shape:spec.size,ray:!spec.projectile,stepsIncludingWire:trace.length,arrival:position(p)}));}
+    const wall=gridObject(game,'wild1_wall_top',[3480,4841]);assert.equal(wall.getType(),0);assert.equal(wall.getFace(),1);await gridWalk(p,game,[3480,4841]);const from=game.area.at([3480,4841,0]),to=game.area.at([3480,4842,0]);assert.equal(core.RegionManager.blocked(from,game.area),false);assert.equal(core.RegionManager.blocked(to,game.area),false);assert.equal(core.RegionManager.canMovestart(from,to,1,1,game.area),false);assert.equal(core.RegionManager.canProjectileAttackReturn(from,to,1,game.area),false);trace.length=0;await gridWalk(p,game,[3480,4842]);assert.ok(trace.length>1);console.log('GRIDLOCK_DIRECTIONAL_WALL '+JSON.stringify({source:[3480,4841],face:1,stepsIncludingWire:trace.length,arrival:position(p)}));
+    const open=game.area.at([3465,4829,0]),next=game.area.at([3466,4829,0]);assert.equal(core.RegionManager.canMovestart(open,next,1,1,game.area),true);assert.equal(core.RegionManager.canProjectileAttackReturn(open,next,1,game.area),true);
+  }finally{watch.mock.restore();}
+});
+
+test('native Gridlock complete nullable action inventory refuses invented resources while seeded world Tree still produces',async t=>{
+  resourceRandom(t);const{a,b,game}=await gridGame();completePreparation(game);const p=gridSide(game,[a,b],0),I=core.ItemIdentifiers,wood=require('../plugins/skills/Woodcutting.plugin');p.getSkillManager().setCurrentLevel(core.Skill.WOODCUTTING,99);p.getSkillManager().setMaxLevel(core.Skill.WOODCUTTING,99);give(p,I.BRONZE_AXE,'gridlock-negative-resource');const objects=[];for(let x=0;x<16;x++)for(let y=0;y<16;y++)objects.push(...game.area.getChunkObjects(0,x,y));assert.equal(objects.length,1911);const actionable=objects.filter(o=>o.getDefinition().getInteractions()?.some(Boolean));assert.equal(actionable.length,6);assert.deepEqual(actionable.map(o=>[o.getId(),o.getDefinition().getInteractions().filter(Boolean)]).sort((a,b)=>a[0]-b[0]),[[26731,['Forfeit']],[26732,['Forfeit']],[26738,['Exit']],[26738,['Exit']],[26741,['Use']],[26741,['Use']]]);
+  const baseline=gridPlane(game.area),settings=gridPlane(game.area,0,true),inventory=carriedItems(p),xp=p.getSkillManager().getExperience(core.Skill.WOODCUTTING),listener=new(require('../dist/net/packet/impl/ObjectActionPacketListener').ObjectActionPacketListener)();
+  await gridRoute(p,game,[[3500,4842],[3512,4861]]);for(const[name,xy,approach]of[['standing_torch',[3513,4861],[3512,4861]],['wild1_wall_top',[3480,4841],[3480,4841]],['wild2_dugupsoil_1',[3519,4810],[3519,4810]]]){const object=gridObject(game,name,xy);assert.equal((object.getDefinition().getInteractions()??[]).some(Boolean),false);await gridWalk(p,game,approach);for(const action of['Chop down','Climb-up'])listener.executeAction(p,object.getId(),object.getLocation().getX(),object.getLocation().getY(),0,action);listener.executeAction(p,object.getId(),object.getLocation().getX(),object.getLocation().getY(),1);tick(8);assert.equal(wood.isWoodcuttingActive(p),false);assert.equal(treeTask(object),undefined);assert.deepEqual(carriedItems(p),inventory);assert.equal(p.getSkillManager().getExperience(core.Skill.WOODCUTTING),xp);ghastIdentity(core.MapObjects.getPrivateArea(p,object.getId(),object.getLocation()),object,'null-action source object unchanged');}
+  const world=actor(true);world.moveTo(new core.Location(3222,3218,0));core.RegionManager.loadMapFiles(3222,3218);const tree=new core.GameObject(core.CacheDefinitions.getLocId('tree2'),new core.Location(3223,3218,0),10,2,null);core.ObjectManager.register(tree,true);tick();try{const before=world.getSkillManager().getExperience(core.Skill.WOODCUTTING),task=await chopTree(world,tree);assert.equal(world.getInventory().getAmount(I.LOGS),1);assert.ok(world.getSkillManager().getExperience(core.Skill.WOODCUTTING)>before);assert.ok(task.getRemainingTicks()>0);tick(task.getRemainingTicks()+1);assert.equal(task.isStopped(),true);ghastIdentity(core.MapObjects.get(tree.getId(),tree.getLocation(),null),tree,'disclosed seeded world producer respawns normally');assert.deepEqual(gridPlane(game.area),baseline);assert.deepEqual(gridPlane(game.area,0,true),settings);}finally{core.ObjectManager.deregister(tree,true);}
+});
+
+test('native Gridlock food drink prayer special vetoes retain safe-death metadata and unlock after exit',async()=>{
+  const{a,b,game}=await gridGame({food:1,drinks:1,prayer:2,specialattacks:2});for(const p of[a,b])ruleStats(p);completePreparation(game);const I=core.ItemIdentifiers;give(a,I.SHRIMPS,'gridlock-food');give(a,I.ATTACK_POTION_4_,'gridlock-potion');let before=resources(a);await nativeItem(a,I.SHRIMPS,'Eat');assert.deepEqual(resources(a),before);await nativeItem(a,I.ATTACK_POTION_4_,'Drink');assert.deepEqual(resources(a),before);await nativeButton(a,prayerWidget(core.PrayerHandler.THICK_SKIN));assert.equal(a.getPrayerActive().some(Boolean),false);assert.deepEqual(resources(a),before);await wield(a,I.DRAGON_DAGGER,'gridlock-special');before=resources(a);await nativeButton(a,'orbs:specbutton');assert.equal(a.isSpecialActivated(),false);assert.deepEqual(resources(a),before);const inventory=carriedItems(a);await lethalMelee(b,a,game,true,[[3518,4858,0],[3519,4858,0]]);tick(6);assert.equal(game.jailed.has(a),true);assert.deepEqual(carriedItems(a),inventory);assert.deepEqual(a.getEquipment().get(core.Equipment.WEAPON_SLOT).getMeta(),{qa:'gridlock-special'});game.finish(null);tick(2);a.setHitpoints(50);await nativeItem(a,I.SHRIMPS,'Eat');assert.equal(a.getInventory().contains(I.SHRIMPS),false);await nativeItem(a,I.ATTACK_POTION_4_,'Drink');assert.equal(a.getInventory().contains(I.ATTACK_POTION_3_),true);assert.deepEqual(a.getInventory().getValidItems().find(item=>item.getId()===I.ATTACK_POTION_3_).getMeta(),{qa:'gridlock-potion'});
+});
+
+for(const kind of['staging-cancel','combat-cancel','logout','live-leave','expiry','dying-cancel'])test(`native Gridlock ${kind} cleans finite walls membership viewers and delayed callbacks`,async()=>{
+  const{a,b,game}=await gridGame(kind==='expiry'?{rejoiningdelay:1}:null,kind==='expiry'?16:1),walls=game.walls.slice();give(a,core.ItemIdentifiers.SHRIMPS,'gridlock-lifecycle');const inventory=carriedItems(a),reference=gridTemplate(),baseline=gridPlane(reference),settings=gridPlane(reference,0,true);reference.destroy();
+  if(kind!=='staging-cancel')completePreparation(game);
+  if(kind==='logout')PM.emitPlayerLogout({player:a,username:a.getUsername()});else if(kind==='live-leave')await Match.leave({player:a});else if(kind==='expiry'){await lethalMelee(b,a,game,true,[[3518,4858,0],[3519,4858,0]]);tick(6);const side=game.members.get(a);await gridWalk(a,game,[3519,side?4866:4860]);await layoutObjectInput(a,game,'clanwars_viewing_start_darkrock',[3519,side?4867:4859],'Use');assert.equal(viewingUnit().active.has(a),true);assert.ok(game.returnAt.has(a.getLongUsername()));core.World.processCycle=game.ends-1;}else if(kind==='dying-cancel'){await lethalMelee(b,a,game,false,[[3518,4858,0],[3519,4858,0]]);assert.equal(a.getHitpoints(),0);game.finish(null);}else game.finish(null);
+  tick(8);finishedMatch(game,[a,b]);assert.deepEqual(carriedItems(a),inventory);for(const wall of walls)gridWallAbsent(wall,game.area);const base=[game.area.getBaseX(),game.area.getBaseY()],replacement=gridTemplate();try{assert.deepEqual([replacement.getBaseX(),replacement.getBaseY()],base,'actual16x16 slot reused after lifecycle route');assert.deepEqual(gridPlane(replacement),baseline);assert.deepEqual(gridPlane(replacement,0,true),settings);tick(120);finishedMatch(game,[a,b]);assert.deepEqual(gridPlane(replacement),baseline);assert.deepEqual(gridPlane(replacement,0,true),settings);assert.deepEqual(carriedItems(a),inventory);for(const wall of walls)gridWallAbsent(wall,game.area);assert.equal(game.ghasts,undefined);}finally{replacement.destroy();}
+});
+
+test('native Gridlock actual16x16 reuse preserves live Gridlock and natural Ghastly engine with world identity',async()=>{
+  const{a,b,game}=await gridGame(),other=await gridGame(),Q=await ghastGame();completePreparation(Q.game);assert.equal(game.phase,'combat');assert.equal(other.game.phase,'combat');ghastReady(Q.game);for(const p of[Q.a,Q.b]){ghastFighter(p);ghastFood(p);}const qPlayer=gridSide(Q.game,[Q.a,Q.b],0),qNpc=Q.game.ghasts.npcs[0];await ghastAttack(qPlayer,qNpc);qPlayer.getCombat().reset();const attempts=[];ghastObserve=(kind,e)=>{if(kind==='prepare'&&Q.game.ghasts.npcs.includes(e.attacker))attempts.push(C.now());};
+  const old=gridObject(game,'clanwars_viewing_start_darkrock',[3519,4859]),live=gridObject(other.game,'clanwars_viewing_start_darkrock',[3519,4859]),baseline=gridPlane(game.area),settings=gridPlane(game.area,0,true),liveBefore=gridPlane(other.game.area),qBefore=ghastPlane(Q.game.area,0),base=[game.area.getBaseX(),game.area.getBaseY()];core.RegionManager.loadMapFiles(3222,3218);const world=C.api.spawnNpc({id:5626,x:3222,y:3218,z:0,wanderRadius:0});assert.ok(world);fixtureNpcs.add(world);const worldDefinition=world.getDefinition(),worldAt=world.getSpawnPosition().clone(),worldClip=core.RegionManager.getClipping(3222,3218,0,null);assert.equal(world.isRegistered(),true);assert.equal(Boolean(world.__skipDefaultRespawn),false);game.finish(null);finishedMatch(game,[a,b]);const replacement=gridTemplate();try{assert.deepEqual([replacement.getBaseX(),replacement.getBaseY()],base);const fresh=gridObject({area:replacement},'clanwars_viewing_start_darkrock',[3519,4859]);assert.equal(fresh===old,false);ghastIdentity(fresh.getPrivateArea(),replacement,'replacement exact owner');ghastIdentity(replacement.resolveObject(fresh.getId(),fresh.getLocation()),fresh,'replacement native lookup');assert.deepEqual(gridPlane(replacement),baseline);assert.deepEqual(gridPlane(replacement,0,true),settings);ghastTurns=true;tick(120);assert.ok(attempts.length>=10,'other match really continued native ghast turns');assert.deepEqual(gridPlane(replacement),baseline);assert.deepEqual(gridPlane(other.game.area),liveBefore);assert.deepEqual(ghastPlane(Q.game.area,0),qBefore);ghastIdentity(core.MapObjects.getPrivateArea(other.a,live.getId(),live.getLocation()),live,'live Gridlock object preserved');assert.equal(Match.exit({player:other.a,object:old}),false);assert.equal(viewingUnit().use({player:other.a,object:old}),false);for(const p of[other.a,other.b])ghastIdentity(C.matches.get(p),other.game,'live Gridlock membership');ghastReady(Q.game);assert.equal(world.isRegistered(),true);ghastIdentity(world.getDefinition(),worldDefinition,'world shared definition unchanged');assert.equal(world.getSpawnPosition().equals(worldAt),true);assert.equal(core.RegionManager.getClipping(3222,3218,0,null),worldClip);assert.equal(Boolean(world.__skipDefaultRespawn),false);console.log('GRIDLOCK_REUSE '+JSON.stringify({base,settle:120,otherGhastNativeAttempts:attempts.length,worldIdentityPreserved:true}));}finally{replacement.destroy();}
+});
+
+// T: actual native utility producers. Loaded lazily so the inherited 288 cases
+// retain their original registration set. Checkpoint locations and fixed damage
+// below are supplied controls; they do not claim natural timing/RNG/render parity.
+const T_POWER_ATTRIBUTE='power-of-death:until';
+const T_STAVES=[
+  ['StaffOfTheDead',11791,'staff_of_the_dead',7083,1228],
+  ['ToxicStaffOfTheDead',12904,'toxic_staff_of_the_dead',1720,1228],
+  ['StaffOfLight',22296,'staff_of_light',7967,1516],
+  ['StaffOfBalance',24144,'staff_of_balance',3652,1733],
+];
+const T_WEAPON_BUTTONS=[(593<<16)|41,(593<<16)|57,'orbs:specbutton','orbs_nomap:specbutton','orbs_osm:specbutton','orbs_osm_nomap:specbutton'];
+let tInstalled=false;
+const tRegenerations=new WeakMap(),tEnergyMarks=new WeakMap();
+function tRecordRegeneration(event){
+  const rows=tRegenerations.get(event.player)??[];
+  rows.push({cycle:C.now(),amount:Math.max(0,event.amount|0)});tRegenerations.set(event.player,rows);
+}
+function tExpectedEnergy(player){
+  const mark=tEnergyMarks.get(player);assert.ok(mark,'native world cast bound energy checkpoint');
+  return Math.min(100,mark.energy+(tRegenerations.get(player)??[]).slice(mark.index).reduce((n,row)=>n+row.amount,0));
+}
+function tInstall(){
+  if(tInstalled)return;
+  const api=PM.createApi('ClanWarsTActualSpecialProducers');
+  api.onCustomEvent('combat-special:regenerate',tRecordRegeneration);
+  for(const[name]of T_STAVES)require(`../plugins/combat/specials/${name}.SpecialAttack`)(api);
+  require('../plugins/combat/effects/Rondache.EquipmentEffects')(api);
+  require('../plugins/combat/specials/Rondache.SpecialAttack')(api);
+  require('../plugins/objects/RejuvenationPool.plugin').register(api);
+  require('../plugins/minigames/lms/Common.LastManStanding').init(api);
+  require('../plugins/minigames/lms/Items.LastManStanding').registerAliases();
+  require('../plugins/minigames/championschallenge/Common.ChampionsChallenge').init(api);
+  require('../plugins/minigames/championschallenge/Rules.ChampionsChallenge').attachRules(api);
+  tInstalled=true;
+}
+async function tEquip(player,itemId,slot=core.Equipment.WEAPON_SLOT){
+  give(player,itemId,`T-${itemId}`);
+  const actions=core.CacheDefinitions.getItem(itemId).inventoryActions;
+  const action=actions.includes('Wield')?'Wield':'Wear';
+  assert.ok(actions.includes(action),'cache declares a real native equip action');
+  await nativeItem(player,itemId,action);
+  assert.equal(player.getEquipment().get(slot).getId(),itemId,'native equip reached intended slot');
+}
+function tEffectTrace(t,p){
+  const animations=[],graphics=[],events=[];
+  const animation=p.performAnimation.bind(p),graphic=p.performGraphic.bind(p),emit=PM.emitSpecialAttackDisabled.bind(PM);
+  t.mock.method(p,'performAnimation',value=>{animations.push([C.now(),value.getId()]);return animation(value);});
+  t.mock.method(p,'performGraphic',value=>{graphics.push([C.now(),value.getId()]);return graphic(value);});
+  t.mock.method(PM,'emitSpecialAttackDisabled',(player,id)=>{const result=emit(player,id);events.push({player,id,result});return result;});
+  return{animations,graphics,events};
+}
+function tCheckpoint(game,a,b){
+  for(const[p,xy]of[[a,[3293,4955,0]],[b,[3294,4955,0]]]){
+    p.moveTo(game.area.at(xy));p.setNeedsPlacement(false);p.resetUpdating();AreaManager.process(p);
+  }
+  assert.equal(CombatFactory.canAttackByPolicy(a,b,CombatFactory.MELEE_COMBAT),CanAttackResponse.CAN_ATTACK);
+}
+async function tTarget(a,b){
+  const frame=Buffer.alloc(4);frame[0]=44;frame[1]=128;frame.writeUInt16BE(b.getIndex(),2);
+  await wire(a,frame);assert.equal(a.getCombat().getTarget(),b,'actual native opposing Attack selected');
+}
+function tIncoming(a,b,raw,type=core.CombatType.MELEE){
+  const hit=new core.HitDamage(raw,core.HitMask.RED).setSource(a);
+  CombatFactory.applyIncomingHitDamage(a,b,type,hit);
+  return hit.getDamage();
+}
+function tQueue(a,b,raw,delay=1){
+  const hit=new core.PendingHit(a,b,CombatFactory.MELEE_COMBAT,{damage:raw,rollAccuracy:false,handleAfterHitEffects:false,experience:false,delay});
+  CombatFactory.addPendingHit(hit);return hit;
+}
+function tImpacts(n=1){for(let i=0;i<n;i++){tick();require('../dist/game/content/combat/hit/HitQueue').HitQueue.processAll(C.now());}}
+async function tWorldPower(p,staff=T_STAVES[0]){
+  assert.equal(C.matches.has(p),false,'world-earned means outside actual membership');
+  ruleStats(p,99);await tEquip(p,staff[1]);
+  const before=C.now();await nativeButton(p,'orbs:specbutton');
+  const until=p.getAttribute(T_POWER_ATTRIBUTE);
+  assert.equal(p.getSpecialPercentage(),0,'actual world utility drains full energy');
+  assert.equal(p.isSpecialActivated(),false,'instant utility is not naturally prearmed');
+  assert.equal(until,before+100,'actual dispatch starts canonical 100tick deadline');
+  tEnergyMarks.set(p,{energy:p.getSpecialPercentage(),index:(tRegenerations.get(p)??[]).length});
+  return until;
+}
+
+for(const mode of[0,1,16])test(`native T option1 offer invalidation resync confirmation mode${mode}`,async()=>{
+  tInstall();const a=actor(true),b=actor(true);channel(a);channel(b);const calls=scriptCalls(a);
+  await challenge(a,b);await challenge(b,a);
+  if(mode){await click(a,'clanwars_setup:wincondition',mode*3);tick(9);}
+  const session=C.negotiations.get(a),original={...session.rules};
+  await click(b,'clanwars_setup:accept');assert.equal(session.accepted.has(b),true);
+  await click(a,'clanwars_setup:dropdown_specialattacks',2);
+  assert.equal(session.rules.specialattacks,1,'new authoritative No Staff offer');
+  assert.equal(session.accepted.size,0,'real opponent acceptance invalidated');
+  for(const[key,value]of Object.entries(original))if(key!=='specialattacks')assert.equal(session.rules[key],value);
+  for(const p of[a,b])assert.equal(p.getPacketSender().getVarbit(core.CacheDefinitions.getVarbitId('clanwars_specialattacks')),1);
+  await click(b,'clanwars_setup:accept');assert.equal(session.accepted.has(b),false);tick(9);
+  const revision=session.revision;
+  for(const slot of[0,4,65534]){
+    await click(a,'clanwars_setup:dropdown_specialattacks',slot);
+    assert.equal(session.revision,revision);assert.equal(session.rules.specialattacks,1);
+  }
+  // 0xffff is the native no-slot sentinel, not an unsupported dropdown row.
+  // The preserved legacy event.action=op1 fallback selects Allowed (slot1).
+  const sentinel=clickFrame('clanwars_setup:dropdown_specialattacks',65535),decoded=decodeClientPackets(sentinel);
+  assert.equal(decoded.length,1);assert.equal(decoded[0].slot,undefined);assert.equal(decoded[0].buttonNum,1);
+  await wire(a,sentinel);assert.equal(session.rules.specialattacks,0);assert.equal(session.revision,revision+1);
+  await click(a,'clanwars_setup:dropdown_specialattacks',2);assert.equal(session.rules.specialattacks,1);tick(9);
+  await click(a,'clanwars_setup:accept');await click(b,'clanwars_setup:accept');
+  assert.equal(session.stage,'confirm');tick(5);
+  await click(a,'clanwars_confirm:button');await click(b,'clanwars_confirm:button');
+  const game=C.channelGames.get(C.channel(a).key);assert.ok(game);assert.equal(game.rules.specialattacks,1);assert.equal(game.rules.magic,4);
+  await join(a);await join(b);
+  const text=calls.filter(([id])=>id===554).at(-1)[2];
+  assert.match(text,/No Staff of the Dead; other permitted specials are allowed/);
+  assert.match(text,/Power of Death is already unavailable while Magic is disabled/);
+});
+
+for(const staff of T_STAVES)for(const term of[0,1,2])test(`native T ${staff[0]} MagicDisabled veto special${term} all weapon inputs`,async t=>{
+  tInstall();const{a,b,game}=await ruleGame({specialattacks:term});
+  await tEquip(a,staff[1]);assert.equal(a.getCombatSpecial().getId(),staff[2]);
+  const trace=tEffectTrace(t,a),messages=messagesOf(a);
+  for(const button of T_WEAPON_BUTTONS){
+    const before=resources(a),target=a.getCombat().getTarget(),effect=a.getAttribute(T_POWER_ATTRIBUTE),an=trace.animations.length,gfx=trace.graphics.length;
+    await nativeButton(a,button);
+    assert.equal(a.getSpecialPercentage(),100,'forbidden actual producer must not drain');
+    assert.equal(a.getAttribute(T_POWER_ATTRIBUTE),effect,'no protection starts');
+    assert.deepEqual(resources(a),before);assert.equal(a.getCombat().getTarget(),target);
+    assert.equal(trace.animations.length,an);assert.equal(trace.graphics.length,gfx);assert.equal(a.isSpecialActivated(),false);
+    assert.equal(trace.events.at(-1).player,a);assert.equal(trace.events.at(-1).id,staff[2],'canonical native selection carried through generic event');
+    assert.match(messages.at(-1),term===2?/Special attacks are disabled/:/Power of Death is unavailable while Magic is disabled/);
+  }
+  assert.equal(messages.some(s=>s.includes('Spirits of deceased')),false);
+  tCheckpoint(game,a,b);assert.equal(CombatFactory.canAttackByPolicy(a,b,CombatFactory.MELEE_COMBAT),CanAttackResponse.CAN_ATTACK,'ordinary staff melee remains legal');
+  assert.notEqual(CombatFactory.canAttackByPolicy(a,b,CombatFactory.MAGIC_COMBAT),CanAttackResponse.CAN_ATTACK,'ordinary magical combat stays refused');
+});
+
+for(const staff of T_STAVES)test(`native T world ${staff[0]} effect duration refresh and unstacked damage`,async t=>{
+  tInstall();const p=actor(true),attacker=actor(true);const trace=tEffectTrace(t,p),until=await tWorldPower(p,staff);
+  assert.deepEqual(trace.animations.at(-1),[until-100,staff[3]]);assert.deepEqual(trace.graphics.at(-1),[until-100,staff[4]]);
+  assert.equal(tIncoming(attacker,p,21),10);assert.equal(tIncoming(attacker,p,20,core.CombatType.RANGED),20);assert.equal(tIncoming(attacker,p,20,core.CombatType.MAGIC),20);
+  tick(10);p.setSpecialPercentage(100);const cast=C.now();await nativeButton(p,'orbs:specbutton');
+  const refreshed=p.getAttribute(T_POWER_ATTRIBUTE);assert.equal(refreshed,cast+100);assert.ok(refreshed>until);assert.equal(tIncoming(attacker,p,40),20);
+  tick(refreshed-C.now()-1);assert.equal(tIncoming(attacker,p,21),10);tick();assert.equal(tIncoming(attacker,p,21),21,'exact original producer expiry');
+  assert.equal(p.getAttribute(T_POWER_ATTRIBUTE),refreshed,'expiry does not invent a restoration');
+});
+
+for(const term of[0,1,2])test(`native T same staff player selects actual Rondache offhand special${term}`,async t=>{
+  tInstall();const{a,b,game}=await ruleGame({specialattacks:term});await tEquip(a,11791);await tEquip(a,core.ItemIdentifiers.RONDACHE,core.Equipment.SHIELD_SLOT);
+  tCheckpoint(game,a,b);await tTarget(a,b);const Effects=require('../plugins/combat/effects/Rondache.EquipmentEffects'),trace=tEffectTrace(t,a);
+  const inputs=[[(593<<16)|67,1],['orbs:specbutton',2],['orbs_nomap:specbutton',2],['orbs_osm:specbutton',2],['orbs_osm_nomap:specbutton',2]];
+  for(const[button,op]of inputs){
+    Effects.setCharges(a,20);a.setSpecialPercentage(100);b.setHitpoints(99);const before=trace.animations.length;
+    await nativeButton(a,button,op);
+    assert.equal(Effects.charges(a),term===2?20:0,'real shield producer spends charges only when allowed');
+    assert.equal(a.getSpecialPercentage(),100,'shield spends no weapon special energy');
+    assert.equal(trace.events.at(-1).id,'rondache');
+    assert.equal(trace.animations.length>before,term!==2);
+    assert.equal(a.getAttribute(T_POWER_ATTRIBUTE)==null,true,'offhand never starts weapon protection');
+    tImpacts(2);
+  }
+  Effects.setCharges(a,20);await nativeButton(a,'orbs:specbutton',1);
+  assert.equal(a.getSpecialPercentage(),100);assert.equal(Effects.charges(a),20);assert.equal(trace.events.at(-1).id,'staff_of_the_dead');
+});
+
+for(const term of[0,1,2])test(`native T DragonBattleaxe and actual DDS toggle retain special${term} semantics`,async()=>{
+  tInstall();const{a,b,game}=await ruleGame({specialattacks:term});await tEquip(a,core.ItemIdentifiers.DRAGON_BATTLEAXE);
+  await nativeButton(a,'orbs:specbutton');assert.equal(a.getSpecialPercentage(),term===2?100:0);
+  assert.equal(a.getSkillManager().getCurrentLevel(core.Skill.ATTACK),term===2?99:90);
+  assert.equal(a.getSkillManager().getCurrentLevel(core.Skill.STRENGTH),term===2?99:118);
+  ruleStats(a);await tEquip(a,core.ItemIdentifiers.DRAGON_DAGGER);tCheckpoint(game,a,b);await tTarget(a,b);
+  await nativeButton(a,'orbs:specbutton');assert.equal(a.isSpecialActivated(),term!==2);
+  assert.equal(a.getSpecialPercentage(),100,'arming ordinary DDS is not a paid attack');
+  if(term!==2){
+    // The existing engine-turn switch runs the actual registered DDS method.
+    // Accuracy is unforced; drain/animation/target prove the ordinary swing.
+    const prepared=[];ghastObserve=(kind,e)=>{if(kind==='prepare'&&e.attacker===a&&e.target===b)prepared.push(e);};
+    ghastTurns=true;try{for(let n=0;n<20&&a.getSpecialPercentage()===100;n++)tick();}finally{ghastTurns=false;ghastObserve=null;}
+    assert.equal(a.getSpecialPercentage(),75,'native armed DDS actually swung and paid once');
+    assert.ok(prepared.length>0,'actual combat preparation reached');assert.equal(a.isSpecialActivated(),false);
+  }
+});
+
+for(const term of[0,1,2])test(`native T registered LMS alias and nonproducer selections special${term}`,async t=>{
+  tInstall();const{a}=await ruleGame({specialattacks:term}),alias=core.CacheDefinitions.getObjId('br_sotd');
+  assert.equal(alias,23613);assert.equal(core.ItemAliases.baseOf(alias),11791,'actual LMS signature registration, not a supplied alias');
+  assert.equal(core.CombatSpecial.getForWeaponId(alias).getId(),'staff_of_the_dead');
+  await tEquip(a,alias);const trace=tEffectTrace(t,a);await nativeButton(a,'orbs:specbutton');
+  assert.equal(a.getSpecialPercentage(),100);assert.equal(a.getAttribute(T_POWER_ATTRIBUTE)==null,true);assert.equal(trace.events.at(-1).id,'staff_of_the_dead');
+  // Actual uncharged items may be worn; they must not be promoted to POD.
+  for(const name of['toxic_sotd','toxic_sotd_deadman']){
+    const id=core.CacheDefinitions.getObjId(name);assert.ok(id>0);assert.equal(core.CombatSpecial.getForWeaponId(id)==null,true);
+    await tEquip(a,id);assert.equal(a.getCombatSpecial()==null,true);const n=trace.events.length;
+    await nativeButton(a,'orbs:specbutton');assert.equal(trace.events.length,n);assert.equal(a.getSpecialPercentage(),100);
+  }
+  for(const name of['cert_sotd','placeholder_sotd']){const id=core.CacheDefinitions.getObjId(name);assert.ok(id>0);assert.equal(core.CombatSpecial.getForWeaponId(id)==null,true,`${name} has no invented producer`);}
+});
+
+test('native T legacy optional context default messages first answer Champions and toggle off',async t=>{
+  tInstall();const{a,b,game}=await ruleGame({specialattacks:0});await tEquip(a,11791);
+  assert.equal(PM.emitSpecialAttackDisabled(a),null,'contextless legacy query invents no selected identity');
+  const other=await ruleGame({specialattacks:2});
+  assert.match(PM.emitSpecialAttackDisabled(other.a),/Special attacks are disabled/,'legacy all-special veto still answers');
+  const p=actor(true),Gallery=require('../plugins/minigames/championschallenge/Gallery.ChampionsChallenge');
+  ruleStats(p);await tEquip(p,11791);
+  const sessionOf=Gallery.sessionOf.bind(Gallery),session={challenge:{rule:{special:true}},inArena:()=>true};
+  // Supplied Champions session tests its actual unchanged hook consumer only;
+  // it does not claim native admission to a Champions basement.
+  const observer=t.mock.method(Gallery,'sessionOf',player=>player===p?session:sessionOf(player));
+  assert.match(PM.emitSpecialAttackDisabled(p,'staff_of_the_dead'),/not allowed to use Special Attacks/);
+  assert.match(PM.emitSpecialAttackDisabled(p),/not allowed to use Special Attacks/);
+  p.getPacketSender().sendInterfaceRemoval();await nativeButton(p,'orbs:specbutton');assert.equal(p.getSpecialPercentage(),100,'actual activation obeys unchanged Champions hook with supplied session');assert.equal(p.getAttribute(T_POWER_ATTRIBUTE)==null,true);
+  p.getPacketSender().sendInterfaceRemoval();observer.mock.restore();
+  const api=PM.createApi('ClanWarsTLegacyOrdering');let enabled=true,later=0;
+  api.onSpecialAttackDisabled(event=>{if(enabled&&event.player===p)event.disabled=true;});
+  api.onSpecialAttackDisabled(event=>{if(enabled&&event.player===p){later++;event.message='must not replace first answer';event.disabled=true;}});
+  try{assert.equal(PM.emitSpecialAttackDisabled(p),"You can't use special attacks here.");assert.equal(later,0);}finally{enabled=false;}
+  // Arm a real DDS outside, then enter rule2: existing preparation disarms it.
+  await tEquip(a,core.ItemIdentifiers.DRAGON_DAGGER);await nativeButton(a,'orbs:specbutton');assert.equal(a.isSpecialActivated(),true);
+  // Preserve the existing toggle-off exception, using the actual rule2 hook:
+  // this supplied rules view is a hook control, not a naturally armed rule2 route.
+  const old=game.rules;try{game.rules={...old,specialattacks:2};await nativeButton(a,'orbs:specbutton');assert.equal(a.isSpecialActivated(),false);}finally{game.rules=old;}
+  assert.equal(a.getSpecialPercentage(),100);assert.equal(C.matches.get(b),game);
+});
+
+async function tLateGame(term){
+  tInstall();const a=actor(true),b=actor(true),late=actor(true);for(const p of[a,b,late])ruleStats(p,99);
+  channel(a,[late]);channel(b);const game=await negotiate(a,b,2,1,{specialattacks:term});await join(a);await join(b);completePreparation(game);
+  const until=await tWorldPower(late);await join(late);
+  assert.equal(C.matches.get(late),game);assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),until);assert.ok(until>C.now(),'genuine late entry has positive remaining world-earned duration');
+  assert.equal(late.getSpecialPercentage(),0,'entry did not refund utility energy');
+  return{a,b,late,game,until};
+}
+
+for(const term of[0,1,2])test(`native T first entry 200tick preparation expires world protection special${term}`,async()=>{
+  tInstall();const a=actor(true),b=actor(true);channel(a);channel(b);ruleStats(b,99);
+  // Earn before negotiation, then preserve exactly that timestamp through entry.
+  const until=await tWorldPower(a),game=await negotiate(a,b,2,1,{specialattacks:term});await join(a);await join(b);
+  assert.equal(a.getAttribute(T_POWER_ATTRIBUTE),until);assert.equal(game.phase,'staging');
+  const lines=messagesOf(a);await nativeButton(a,'orbs:specbutton');assert.equal(a.getSpecialPercentage(),tExpectedEnergy(a),'staging veto allows only actual natural regeneration');assert.match(lines.at(-1),term===2?/Special attacks are disabled/:/Power of Death is unavailable/);assert.equal(a.getAttribute(T_POWER_ATTRIBUTE),until);
+  completePreparation(game);assert.ok(C.now()>=until);assert.equal(tIncoming(b,a,20),20,'normal preparation outlasts world buff');
+  assert.equal(a.getAttribute(T_POWER_ATTRIBUTE),until);assert.equal(a.getSpecialPercentage(),tExpectedEnergy(a),'preparation allows only canonical regeneration');game.finish(null);tick(2);assert.equal(a.getAttribute(T_POWER_ATTRIBUTE),until);assert.equal(a.getSpecialPercentage(),tExpectedEnergy(a),'finish did not reset energy');
+});
+
+for(const term of[0,1,2])test(`native T positive late carry safe death jail viewing return and finish special${term}`,async()=>{
+  const{a,b,late,game,until}=await tLateGame(term);tCheckpoint(game,b,late);
+  const originalInventory=contents(late.getInventory()),originalEquipment=contents(late.getEquipment());
+  const hp=late.getHitpoints();tQueue(b,late,20);tImpacts(1);assert.equal(late.getHitpoints(),hp-10,'actual pending incoming melee applies carried mitigation');
+  assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),until);
+  late.setHitpoints(99);
+  // Three simultaneously prepared capped99 hits each reduce to49. A single
+  // capped lethal hit cannot kill through 50% protection. Damage is controlled.
+  for(let n=0;n<3;n++)tQueue(b,late,99);tImpacts(1);assert.equal(late.getHitpoints(),0);
+  tick(8);assert.equal(game.jailed.has(late),true);assert.equal(late.isSpecialActivated(),false);
+  assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),until);assert.deepEqual(contents(late.getInventory()),originalInventory);assert.deepEqual(contents(late.getEquipment()),originalEquipment);
+  assert.equal(late.getSpecialPercentage(),tExpectedEnergy(late),'safe death changed no energy beyond actual regeneration');
+  const lines=messagesOf(late);await nativeButton(late,'orbs:specbutton');assert.equal(late.getSpecialPercentage(),tExpectedEnergy(late));assert.match(lines.at(-1),term===2?/Special attacks are disabled/:/Power of Death is unavailable/);assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),until);
+  await openView(late,game);assert.equal(viewingUnit().active.has(late),true);assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),until);
+  await click(late,'clanwars_view:ne');await wire(late,Buffer.from([VIEW_CLOSE_PACKET]));assert.equal(viewingUnit().active.has(late),false);
+  await jailExit(late,game);assert.equal(game.fighters.has(late),true);assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),until);assert.equal(late.getSpecialPercentage(),tExpectedEnergy(late));
+  game.finish(null);tick(2);for(const p of[a,b,late])lobby(p);
+  assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),until);assert.equal(late.getSpecialPercentage(),tExpectedEnergy(late),'finish/exit allows only actual natural regeneration, no refund/restore');
+  console.log('T_CARRY '+JSON.stringify({term,deadline:until,after:C.now(),remaining:until-C.now(),safeDeath:true,originalEquipment:true}));
+});
+
+for(const term of[0,1,2])test(`native T real DDS prearm entry late entry swap and safe return special${term}`,async()=>{
+  tInstall();const a=actor(true),b=actor(true),late=actor(true);for(const p of[a,b,late])ruleStats(p,99);channel(a,[late]);channel(b);
+  const game=await negotiate(a,b,2,1,{specialattacks:term});
+  for(const p of[a,late]){await tEquip(p,core.ItemIdentifiers.DRAGON_DAGGER);await nativeButton(p,'orbs:specbutton');assert.equal(p.isSpecialActivated(),true,'genuine world DDS prearm');}
+  await join(a);await join(b);assert.equal(a.isSpecialActivated(),term!==2);assert.equal(a.getSpecialPercentage(),100);
+  completePreparation(game);await join(late);assert.equal(late.isSpecialActivated(),term!==2);assert.equal(late.getSpecialPercentage(),100);
+  await tEquip(late,11791);assert.equal(late.isSpecialActivated(),false,'native weapon swap clears real prearm');
+  await tEquip(late,core.ItemIdentifiers.DRAGON_DAGGER);await nativeButton(late,'orbs:specbutton');assert.equal(late.isSpecialActivated(),term!==2);
+  await lethalMelee(b,late,game);tick(8);assert.equal(game.jailed.has(late),true);assert.equal(late.isSpecialActivated(),false);
+  await jailExit(late,game);assert.equal(game.fighters.has(late),true);assert.equal(late.isSpecialActivated(),false);
+});
+
+test('native T carried deadline follows actual variant swaps zero damage no staff hit and native pool',async()=>{
+  tInstall();const p=actor(true),other=actor(true);const until=await tWorldPower(p);
+  for(const staff of T_STAVES){await tEquip(p,staff[1]);assert.equal(p.getAttribute(T_POWER_ATTRIBUTE),until);assert.equal(tIncoming(other,p,21),10);}
+  await tEquip(p,core.ItemIdentifiers.DRAGON_DAGGER);assert.equal(p.getAttribute(T_POWER_ATTRIBUTE),until,'unequip alone does not clear');
+  assert.equal(tIncoming(other,p,0),0);assert.equal(p.getAttribute(T_POWER_ATTRIBUTE),until,'zero damage does not clear');
+  assert.equal(tIncoming(other,p,8),8);assert.equal(p.getAttribute(T_POWER_ATTRIBUTE)==null,true,'positive hit without staff clears');
+  await tEquip(p,11791);assert.equal(tIncoming(other,p,20),20,'re-equipping cannot resurrect');
+  p.setSpecialPercentage(100);await nativeButton(p,'orbs:specbutton');assert.ok(p.getAttribute(T_POWER_ATTRIBUTE)>C.now());
+  // Disclosed seeded world pool; actual cache action and native object dispatcher.
+  const id=core.CacheDefinitions.getLocId('poh_pool_regeneration');assert.equal(id,29241);
+  core.RegionManager.loadMapFiles(3222,3218);p.moveTo(new core.Location(3222,3218,0));p.getCombat().reset();other.getCombat().reset();tick(2);
+  const pool=new core.GameObject(id,new core.Location(3223,3218,0),10,0,null);core.ObjectManager.register(pool,true);tick();
+  try{
+    assert.equal(pool.getDefinition().getName(),'Ornate pool of Rejuvenation');const op=pool.getDefinition().getInteractions().indexOf('Drink')+1;assert.ok(op>0);
+    const at=pool.getLocation();new(require('../dist/net/packet/impl/ObjectActionPacketListener').ObjectActionPacketListener)().executeAction(p,id,at.getX(),at.getY(),op);tick(8);
+    assert.equal(p.getAttribute(T_POWER_ATTRIBUTE)==null,true,'real pool producer clears protection');assert.equal(p.getSpecialPercentage(),100);
+  }finally{core.ObjectManager.deregister(pool,true);}
+});
+
+for(const boundary of['expiry','swap','finish','leave'])test(`native T queued final impact uses canonical current ${boundary} state`,async()=>{
+  const{b,late,game,until}=await tLateGame(0);tCheckpoint(game,b,late);late.setHitpoints(99);
+  if(boundary==='expiry')tick(until-C.now()-1);
+  const queued=tQueue(b,late,20,1);assert.equal(queued.getHits()[0].getDamage(),20,'unmitigated controlled roll queued before defensive reaction');
+  if(boundary==='swap')await tEquip(late,core.ItemIdentifiers.DRAGON_DAGGER);
+  else if(boundary==='finish')game.finish(null);
+  else if(boundary==='leave')Match.leave({player:late});
+  // Explicit pre-placement checkpoint: process a due hit while exit's actual
+  // moveTo placement flag is still set. This proves that finite ordering only;
+  // it does not assert global cancellation of every post-exit queued impact.
+  if(boundary==='finish'||boundary==='leave'){assert.equal(late.isNeedsPlacement(),true);core.World.processCycle++;require('../dist/game/content/combat/hit/HitQueue').HitQueue.processAll(C.now());}
+  else tImpacts(1);
+  if(boundary==='expiry'||boundary==='swap')assert.equal(late.getHitpoints(),79,'impact sees expiry/current nonstaff rather than queue-time protection');
+  else assert.equal(late.getHitpoints(),99,'actual pending-placement guard drops this due impact');
+  assert.equal(late.getAttribute(T_POWER_ATTRIBUTE),boundary==='swap'?null:until);
+  assert.equal(late.getSpecialPercentage(),tExpectedEnergy(late),'only actual natural regeneration, no match lifecycle refund');
+});
+
+for(const term of[0,1,2])test(`native T weapon fallback shield and invalid nonutility offhand special${term}`,async t=>{
+  tInstall();const{a,b,game}=await ruleGame({specialattacks:term});
+  await tEquip(a,core.ItemIdentifiers.RONDACHE,core.Equipment.SHIELD_SLOT);await tEquip(a,12902);
+  assert.equal(core.CombatSpecial.getForWeaponId(12902),null);assert.equal(a.getCombatSpecial().getId(),'rondache','real assign falls back to worn shield');
+  tCheckpoint(game,a,b);await tTarget(a,b);const trace=tEffectTrace(t,a),Effects=require('../plugins/combat/effects/Rondache.EquipmentEffects');
+  Effects.setCharges(a,20);await nativeButton(a,(593<<16)|57);
+  assert.equal(Effects.charges(a),term===2?20:0);assert.equal(a.getSpecialPercentage(),100);assert.equal(trace.events.at(-1).id,'rondache');tImpacts(2);
+  await tEquip(a,11791);await tEquip(a,core.ItemIdentifiers.BRONZE_KITESHIELD,core.Equipment.SHIELD_SLOT);
+  const n=trace.events.length;await nativeButton(a,'orbs:specbutton',2);
+  assert.equal(trace.events.length,n,'real shield with no utility is rejected before hook');assert.equal(a.getSpecialPercentage(),100);assert.equal(a.getAttribute(T_POWER_ATTRIBUTE)==null,true);
+  const Listener=require('../dist/net/packet/impl/EquipPacketListener').EquipPacketListener;
+  const children=Array.from({length:14},(_,n)=>15+n).filter(child=>Listener.resolveEquipmentSlot(387,child)===core.Equipment.WEAPON_SLOT);
+  assert.equal(children.length,1);const before=resources(a),events=trace.events.length;
+  await nativeButton(a,(387<<16)|children[0],2);
+  assert.deepEqual(resources(a),before);assert.equal(trace.events.length,events,'worn item operation has no invented staff activation');
+});
+
+test('native T world affordability is unchanged and context IDs distinguish real weapon from shield',async t=>{
+  tInstall();const p=actor(true);ruleStats(p);await tEquip(p,11791);const trace=tEffectTrace(t,p),lines=messagesOf(p);p.setSpecialPercentage(99);
+  const before=resources(p);await nativeButton(p,'orbs:specbutton');assert.deepEqual(resources(p),before);assert.equal(p.getAttribute(T_POWER_ATTRIBUTE)==null,true);assert.equal(trace.animations.length,0);assert.equal(trace.graphics.length,0);assert.match(lines.at(-1),/not enough power|enough power left/);
+  assert.equal(trace.events.at(-1).id,'staff_of_the_dead');assert.equal(trace.events.at(-1).result,null);
+  p.setSpecialPercentage(100);await nativeButton(p,'orbs:specbutton');assert.equal(p.getSpecialPercentage(),0);assert.ok(p.getAttribute(T_POWER_ATTRIBUTE)>C.now());
 });

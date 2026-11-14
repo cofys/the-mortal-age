@@ -1,7 +1,7 @@
 /**
  * Crafting (Wiki: Crafting; facts and capture ids in docs/crafting.md): sewing leather and
  * hides, cutting gems and amethyst, gold and silver jewellery, glassblowing, pottery,
- * spinning and weaving, battlestaves, and gems on silver sickles (b). Each unit is in ./crafting/.
+ * spinning and weaving, battlestaves, limestone bricks, and gems on silver sickles (b). Each unit is in ./crafting/.
  *
  * Fork graft (2026-10-21 upstream merge): upstream split Crafting into the
  * ./crafting/ units above; the fork's citizen gem-cutting bot entry point
@@ -190,13 +190,14 @@ module.exports = {
   })),
   startBotCrafting,
   isCraftingActive,
-  description: "Crafting: leather, gems, jewellery, glassblowing, pottery, spinning, weaving, battlestaves, snelms and light orbs.",
+  description: "Crafting: leather, gems, jewellery, glassblowing, pottery, spinning, weaving, battlestaves, snelms, limestone bricks and light orbs.",
   register(api) {
     Shared.attach(api);
     api.onCustomEvent("player:interaction-cleared", stopCraftingOnInteractionCleared);
     require("./crafting/Leather.Crafting")(api);
     require("./crafting/Gems.Crafting")(api);
     require("./crafting/Snelms.Crafting")(api);
+    require("./crafting/Limestone.Crafting")(api);
     require("./crafting/Buttons.Crafting")(api);
     require("./crafting/Jewellery.Crafting")(api);
     require("./crafting/Glassblowing.Crafting")(api);

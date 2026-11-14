@@ -28,7 +28,7 @@ free-for-all portal remains separate.
 
 Two captains or channel owners in the Clan Wars building right-click each other and
 choose Challenge. Reciprocal requests open the native setup interface. The offered
-configuration is **melee-only Last Team Standing, First to X kills or timed Most kills on Plateau, Sylvan Glade, Forsaken Quarry, Clan Cup Arena, Soggy Swamp, Classic, Lumbridge Castle, Falador Park, Wasteland, Turrets, Northleach Quell or Ghastly Swamp**;
+configuration is **melee-only Last Team Standing, First to X kills or timed Most kills on Plateau, Sylvan Glade, Forsaken Quarry, Clan Cup Arena, Soggy Swamp, Classic, Lumbridge Castle, Falador Park, Wasteland, Turrets, Northleach Quell, Ghastly Swamp or Gridlock**;
 this is an explicit supported configuration, not a claim about official default settings.
 The team cap, supported mode, bounded restrictions and departure/rejoining terms described below are negotiable. Other combat controls are hidden; unsupported arenas and
 objective mode selections are refused and reset to the server offer.
@@ -244,9 +244,9 @@ runtime outcomes and independent acceptance belong to the PR evidence.
 
 Wiki Clan Wars revision 15379109 and the pinned revision-242 cache agree on food
 and drinks Allowed/Disabled, prayers All allowed/No overhead icons/Disabled, and
-special attacks Allowed/No Staff of the Dead/Disabled. This slice offers food and
+special attacks Allowed/No Staff of the Dead/Disabled. The original restriction delivery offered food and
 drinks values 0/1, prayer values 0/1/2, and special-attack values 0/2. The Staff-only
-value 1 remains deferred and is refused/reset to the server offer. Melee stays
+value 1 was deferred then; the bounded follow-up below adds it. Melee stays
 allowed, ranged stays disabled and magical combat stays disabled; no ammunition,
 charge or item restoration rule is added.
 
@@ -1019,3 +1019,148 @@ Never-registered checks use canonical falsey semantics with the same concrete
 absence checks. It changes no production behavior or hazard requirement. These
 failed runs and the upstream original baseline remain distinct evidence; no full
 340-test result is established by their partial results.
+
+## Gridlock
+
+Gridlock (arena 9, native slot 27) uses the existing supported melee modes,
+restrictions, Ignore 5 and safe deaths. Plateau remains the default and explicit
+Wasteland remains valid. The [pinned Clan Wars Wiki](https://oldschool.runescape.wiki/w/Clan_Wars?oldid=15379109)
+and revision-242 chooser describe a huge four-way multi-mountain map suited to
+King of the Hill, rangers and mages. This slice does not introduce objective modes,
+four teams, ranged/magic combat or a new membership-world enforcement policy.
+
+The bounded copy uses source origin (3456,4800), sixteen by sixteen chunks, plane
+0, from regions 13899/13900/14155/14156. All four raw planes were inspected: all
+1,911 raw locs and actual owned copies are on plane 0. The upper settings/clips
+were empty in that observation, which establishes neither playable upper floors
+nor a retail floor ban. Planes 1/2/3 remain unmapped as a bounded copy choice.
+No stairs, resource actions or bridge transitions were found; mountain wording
+does not manufacture a climb route. Terrain height and rendering parity are not
+established by these source facts.
+
+Native directional and solid masks give a 13,317-tile main component and isolated
+31-tile lower and 24-tile upper holdings, all inside the source observation's
+boundary. Landings (3465,4829)/(3575,4899) and jails (3519,4861)/(3519,4865) are
+TSPS choices. The preparation cut scans X3519 at Y4802..4858 and Y4868..4925,
+skipping blocked tiles. Its 106 darkrock barriers split the main component into
+6,549 west and 6,662 east tiles. The holdings are left unchanged; no synthetic
+jail blocking is added. Twenty-two nonblocking type-22 floor locs coincide with
+the row and retain their exact identities and underlying collision on removal.
+
+Both active darkrock viewing orbs 26741 use model 9752, at (3519,4859)/(3519,4867).
+The two Exit portals 26738 at (3519,4863)/(3519,4864) share a gameval but remain
+distinct owned objects in distinct holdings. Existing exact instance ownership
+and native interaction routes apply; fake and foreign objects gain no authority.
+Forfeits 26732/26731 at (3459,4827)/(3579,4897) have faces 1/3: their canonical
+4x2 definitions rotate to 2x4 footprints, with access mask 30 admitting the east
+and west edges respectively. Portal labels do not override those actual sides.
+
+The other source objects have no usable actions. Null-action dug-up floor locs,
+walls, torches and skeletons gain no harvesting or climb handlers. Ordinary native
+walking uses the real directional walls and rotated solid footprints; projectile
+blocking remains distinct, including projectile-passable skeletons and blocking
+torches. A 128-tile copy can require successive ordinary movement targets within
+the centered native route-search window; a distant click is not a teleport or
+proof of an extreme-to-extreme path.
+
+The existing game and Rules fixtures cover negotiation, all supported modes,
+supplies, six identical staging/combat crossing targets, full 16,384 native ground
+masks/settings and coexistent floor identities, both real deaths/holding bounds,
+view-close and owned Exit deadlines, both side-correct Forfeits, ownership and
+instance cleanup/reuse. These describe required assertions; actual outcomes and
+failed attempts belong to the exact tested revision reported with the PR. The
+source-only qualification's 312 checks do not prove implemented Gridlock gameplay
+or transfer Ghastly Swamp's results. All twelve earlier layouts, including its
+shared ghast hazard, remain distinct controls. No rendered scene, login, natural
+RNG, retail placement/timing or complete issue #153 resolution is claimed.
+
+The completed fixture adds 29 game cases and one Rules case. Its inherited
+259-game/21-Rules/six-shake/one-WASD/56-Cooking controls plus these additions give
+373 expected reported tests, not observed outcomes here. Former unsupported
+native-slot-27 samples now use malformed child 28; numeric-arena-9 negative
+samples use malformed 9.5. Existing other refusals remain. The new ordinary player
+melee cases and concurrent Ghastly control use the inherited native-turn helper;
+other cases retain their previous tick path. Obstacle observers delegate every
+real movement call and record steps including the input's first processing ticks.
+
+Natural melee uses real turns and unforced rolls. Separate safe-death/Ignore5
+and delayed-death controls supply settled combat tiles and pre-rolled lethal hits;
+timed-expiry checks advance to the real deadline. The world Tree positive is
+explicitly seeded with controlled log success, not natural resource acquisition
+inside Gridlock. Removed live-scene barriers may retain canonical removal markers;
+destruction must purge them before slot reuse. None of these controls is a retail
+placement, timing, probability, rendering or full-quest claim.
+
+The original paired baseline `18aed5d3` passed all 259 inherited game cases and
+failed all 29 Gridlock cases at the absent arena-9/native-27 offer (expected 9,
+actual default 1). Every subsequent Gridlock behavior and later suite was
+unreached. Its fixtures matched the original fixed `66c9f5e7`, which completed
+288 game cases with 286 passes and two fixture TypeErrors: the floor and obstacle
+checks called `.some()` on canonical nullable interaction lists. Both runs kept
+complete unchanged source, compiled-output and cache post-run content seals.
+
+The focused fixture correction treats null interaction lists as no actions,
+preserving the exact no-nonnull-action requirement and every remaining identity,
+geometry, footprint, movement and restoration assertion. It changes no production
+behavior or canonical definition initialization. The first failed case had not
+reached its remaining floor/wall lookup, native OR, flood and restoration checks;
+the second had not reached torch/skeleton/directional-wall obstacle checks. Later
+Rules/shake/WASD/Cooking were unreached in that failed fixed run. Original baseline
+offer-absence evidence is upstream of both corrections and remains bounded causal
+evidence; it does not establish corrected-baseline fixture byte identity or
+execution. Failed actuals remain separate from any later corrected result.
+
+## No Staff of the Dead and the existing Magic Disabled term
+
+The native special-attacks dropdown now accepts 0 (Allowed), 1 (No Staff of the
+Dead) and 2 (Disabled). Offer changes invalidate agreement, and confirmation names
+the selected term. Magic remains fixed to Disabled (4). The [Staff of the Dead
+page, revision 15361545](https://oldschool.runescape.wiki/w/Staff_of_the_Dead?oldid=15361545)
+records that Clan Wars rules forbidding Magic also prevent Power of Death.
+The individually sourced [Toxic staff](https://oldschool.runescape.wiki/w/Toxic_Staff_of_the_Dead?oldid=15363039),
+[Staff of Light](https://oldschool.runescape.wiki/w/Staff_of_Light?oldid=15364807)
+and [Staff of Balance](https://oldschool.runescape.wiki/w/Staff_of_Balance?oldid=15299804)
+share that special. Their four canonical producers are therefore refused under
+both 0 and 1 by Magic Disabled; 2 still refuses all specials. Option 1 is redundant
+for Power of Death in this supported configuration. This does not define which
+variants the No Staff label alone excludes in an unimplemented Magic-enabled match.
+
+Power of Death is an instant utility special: it starts on the button press,
+without a target attack going through the arena's melee policy. The existing
+restriction event now carries the optional ID of the actual resolved special.
+This distinguishes a staff's weapon button from the same player's real Rondache
+shield button or offhand orb operation. A staff in the weapon slot does not block
+an unrelated shield utility. The core change only passes that generic identity;
+Clan Wars owns the four-ID policy. Existing one-argument event queries and the
+Champions Challenge consumer keep their behavior. Missing optional context does
+not invent a selected identity; actual native activation supplies it. Other
+utility and ordinary melee specials retain their existing requirements under 0/1,
+and ordinary magical combat remains refused. There is no blanket MAGIC-utility veto.
+
+This is an activation-only restriction. As an explicit TSPS lifecycle choice,
+protection earned outside a match keeps its original deadline and shared removal
+behavior across entry, return, death, finish and exit. Clan Wars does not reset,
+suspend, refund, refresh, snapshot or restore it. A normal 200-tick preparation
+outlasts the already-running 100-tick effect; a late entrant can still have time
+left. That carry policy is not a claim about retail entry parity. The canonical
+producer still halves positive melee damage while one of its registered staves
+is held, expires after 100 ticks, clears on a positive hit without one or on a
+rejuvenation pool, and refreshes without stacking when legitimately used outside.
+A pending impact uses the existing modifier's current clock and equipment.
+
+Native utility activation does not remain prearmed. Real weapon swaps reset the
+armed state; genuine ordinary melee prearm remains allowed under 0/1 and the
+existing Disabled entry policy clears it under 2 without spending energy. The
+shared staff definitions/effect producer, Match lifecycle and all thirteen layouts
+are preserved. Uncharged, noted and placeholder items are not invented special
+producers. Existing resolved LMS aliases are classified by their actual selected
+special ID; this does not add aliases or repair the shared producer's separate
+four-item mitigation set, or promise full LMS effect parity.
+
+The required verification distinguishes authoritative option-1 absence from the
+separate old option-0 Magic Disabled utility path. It covers actual four-producer
+native vetoes before payment/effect, real staff-plus-shield selection, other
+utility/melee/world positives, legacy consumers and the explicitly attributed
+carry policy. Fixtures and runtime results must be reviewed at their exact heads;
+this section makes no standalone native execution claim. No ranged/ammunition,
+ordinary magic, objective mode, modern-clan or full-#153 completion follows.
