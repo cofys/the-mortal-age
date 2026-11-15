@@ -206,6 +206,7 @@ module.exports = {
     require("./crafting/Spinning.Crafting")(api);
     require("./crafting/Battlestaves.Crafting")(api);
     require("./crafting/GemSickles.Crafting")(api);
+    require("./crafting/WallOfFlame.Crafting")(api);
 
     // Fork bot session task + cleanup (upstream units manage their own).
     api.getTaskManager().submit(new CraftingTask(ACTIVE_CRAFTING_SESSIONS));
