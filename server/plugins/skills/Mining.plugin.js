@@ -247,7 +247,8 @@ const ROCKS = [
   // No petBase: "Players cannot obtain the rock golem from mining salts in the salt mine" (Wiki Rock golem).
   // Ours: basalt has no rock golem either (the Wiki names no rate). No Wiki success chart: [100, 201] is fitted
   // to the capture's 23 of 29 rolls at 99. A pickaxe slower than 4 ticks keeps its own interval (only an infernal
-  // pickaxe was recorded). The gem pre-roll is kept as on other rocks: no gem came in 29 rolls, too few to say.
+  // pickaxe was recorded). No gem pre-roll: the Wiki rock pages (Te salt rocks, ...) carry no gem table, and no gem
+  // came in the capture's 29 rolls.
   ...[
     ["Te salt rocks", ItemIdentifiers.TE_SALT, "Te salt"],
     ["Efh salt rocks", ItemIdentifiers.EFH_SALT, "Efh salt"],
@@ -256,7 +257,7 @@ const ROCKS = [
   ].map(([objectName, itemId, name]) => ({
     objectName,
     level: 72, xp: 5, oreId: itemId,
-    chance: [100, 201], gems: true, respawnTicks: 9, rollTicks: 4,
+    chance: [100, 201], respawnTicks: 9, rollTicks: 4,
     yield: { min: 1, chance: 1 / 7 }, depletedRock: "my2arm_saltrock_empty", minerDepletionSound: 2661,
     outcomes: [itemId === ItemIdentifiers.BASALT
       ? { itemId, min: 1, max: 1, weight: 1, xp: 5, message: "You manage to mine some Basalt." }
@@ -602,6 +603,7 @@ function awardOre(player, state, landedOutcome) {
     oreId,
     amount,
     spend: null,
+    rockObject: state.rockObject ?? null,
     rockName: state.rock.objectName,
     multiplier: 1,
     bonusOre: 0,
@@ -616,6 +618,9 @@ function awardOre(player, state, landedOutcome) {
   // adopt a changed oreId/amount; `spend` runs below once the ore is kept.
   if (event.oreId != null) oreId = event.oreId;
   if (Number.isFinite(event.amount)) amount = Math.max(0, Math.floor(event.amount));
+  // An enhancer's extra ore is the rock's own ore unless the content names
+  // another (`extraOreId` on the yield event - upstream inline semantics).
+  const extraOreId = event.extraOreId ?? oreId;
   const bonusOre = Math.max(0, Math.floor(event.bonusOre));
   const xpMultiplier = event.multiplier > 0 ? event.multiplier : 0;
   // Content may take the ore off the player as it is mined ("mining:hand-over",
@@ -681,7 +686,7 @@ function awardOre(player, state, landedOutcome) {
     objectId: state.objectId ?? null,
   };
   pluginApi.emitCustomEvent("mining:success", success);
-  if (kept && !state.rock.outcomes) mineExtraOre(player, state.rock, outcome, oreId);
+  if (kept && !state.rock.outcomes) mineExtraOre(player, state.rock, outcome, extraOreId);
   return { bonusOre, xpMultiplier, outcome, petRolled: petRoll.handled, stop: success.stop === true };
 }
 

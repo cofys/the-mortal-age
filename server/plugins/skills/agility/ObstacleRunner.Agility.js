@@ -126,9 +126,12 @@ function animate(player, id, delay = 0) {
  * An obstacle's message: a string is a game message, `{ spam: text }` goes to the filterable spam
  * channel, `{ mesbox: text }` is a message box (live sends most obstacle lines as spam), and
  * `{ itembox: { item, text } }` is a message box showing an item, its text logged as live does.
+ * A list sends each in turn (a spam line, then a game message).
  */
 function sendMessage(player, message) {
-  if (typeof message === "string") {
+  if (Array.isArray(message)) {
+    for (const line of message) sendMessage(player, line);
+  } else if (typeof message === "string") {
     player.sendMessage(message);
   } else if (message?.spam) {
     player.getPacketSender().sendTypedMessage(ChatType.SPAM, message.spam);
@@ -310,10 +313,7 @@ function createObstacleTask(Task) {
       } else if (step.complete) {
         this.complete();
       } else if (step.gfx != null) {
-        // Graphic reads a third argument of 0-2 as a Priority, so a height is only passed when set.
-        player.performGraphic(step.height
-          ? new Graphic(step.gfx, step.delay ?? 0, step.height)
-          : new Graphic(step.gfx, step.delay ?? 0));
+        player.performGraphic(Graphic.delayed(step.gfx, step.delay ?? 0, step.height ?? 0));
       } else if (step.merge) {
         if (this.context.object) {
           const { start, end, ...bounds } = step.merge;

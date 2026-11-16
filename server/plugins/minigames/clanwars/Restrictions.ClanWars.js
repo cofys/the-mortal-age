@@ -68,6 +68,15 @@ function magicalSpecial(id) {
 function noSpellbookMagic(event) {
   const game = gameOf(event.player);
   if (!game) return;
+  // Explicit finite TSPS policy for modes2/3; Standard/Disabled utility scope stays below.
+  if ((game.rules.magic === Magic.BINDING_ONLY || game.rules.magic === Magic.CLASSIC_F2P)
+    && !Magic.supportedSpell(event.spell, game.rules.magic)) {
+    event.disabled = true;
+    event.player.sendMessage(game.rules.magic === Magic.CLASSIC_F2P
+      ? "Classic F2P combat supports the 12 elemental strike, bolt and blast spells, Confuse, Weaken, Curse and Bind; other casts, including utilities, are unavailable in this battle."
+      : "Binding only supports Bind, Snare and Entangle; other casts, including utility spells, are unavailable in this battle.");
+    return;
+  }
   if (event.spellbook === C.core.MagicSpellbook.NORMAL) {
     // NORMAL utility remains under its existing conditions. The ordinary combat
     // spell object is available here before canCast deletes runes or commits a tome.
@@ -80,7 +89,11 @@ function noSpellbookMagic(event) {
         || event.player.getArea() !== game.area || target.getArea() !== game.area
         || event.spell !== Magic.selectedSpell(event.player)
         || C.core.CombatFactory.getMethod(event.player) !== C.core.CombatFactory.MAGIC_COMBAT) {
-        message = "Cast supported elemental spells at an opposing fighter during the battle.";
+        message = game.rules.magic === Magic.CLASSIC_F2P
+          ? "Cast supported Classic F2P spells manually at an opposing fighter during the battle."
+          : game.rules.magic === Magic.BINDING_ONLY
+          ? "Cast Bind, Snare or Entangle at an opposing fighter during the battle."
+          : "Cast supported Standard spells at an opposing fighter during the battle.";
       }
     }
     if (!message) return;

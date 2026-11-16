@@ -2,7 +2,7 @@ import fs = require("fs");
 import path = require("path");
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { GameConstants } from "../../../GameConstants";
-import { NpcDefinition } from "../../NpcDefinition";
+import { NpcDefinition, NpcProjectileArc } from "../../NpcDefinition";
 import { DefinitionLoader } from "../DefinitionLoader";
 import { CombatType } from "../../../content/combat/CombatType";
 
@@ -50,6 +50,8 @@ type CombatAnimation = {
     projectile?: number;
     /** The spotanim the npc plays on its own tick when it fires a ranged shot (an arrow drawn on a bow). */
     launchGraphic?: number;
+    /** Its ranged shot's recorded flight, where it differs from the shared NPC arrow flight. */
+    projectileArc?: { startHeight?: number; endHeight?: number; angle?: number; progress?: number };
     /** Ticks from the death animation to the death itself; 2 when absent. */
     deathTicks?: number;
     /** Ticks from removal to respawn; 25 when absent, 0 to disable. */
@@ -213,6 +215,9 @@ function capturedRoles(entry: CapturedAnimations): NonNullable<CombatAnimation["
 
 const normalizeName = (value?: string) => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 
+/** Custom NPC attack types the editor accepts that name an element, not a combat style: they resolve to melee. */
+const ELEMENT_ONLY_ATTACK_TYPES = new Set(["fire", "water", "earth", "air", "dragonfire"]);
+
 /** Dump attack_type tokens that mean "this thing can hit you in melee". */
 const MELEE_ATTACK_TYPES = new Set(["stab", "slash", "crush", "melee"]);
 
@@ -229,6 +234,10 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         if (["crush", "slash", "stab", "melee", "ranged", "magic", "fire", "water", "earth", "air", "dragonfire"].includes(style)) {
             target.attackType = NpcDefinitionLoader.resolveAttackType([style]);
             target.attackStyle = style;
+            if (ELEMENT_ONLY_ATTACK_TYPES.has(style)) {
+                // Accepted as before, but no combat method reads it: the NPC still attacks in melee.
+                console.warn(`[npc-definitions] custom npc ${id}: attackType "${style}" has no combat style of its own; it attacks in melee (use "magic" or "ranged")`);
+            }
         }
     }
 
@@ -310,6 +319,16 @@ export class NpcDefinitionLoader extends DefinitionLoader {
     }
 
     /** Status rules have one canonical source, independent of combat-stat snapshots. */
+    /** A `projectileArc` entry with its finite numbers only; null when it gives none. */
+    public static projectileArc(source: any): NpcProjectileArc | null {
+        if (!source || typeof source !== "object") return null;
+        const arc: Record<string, number> = {};
+        for (const key of ["startHeight", "endHeight", "angle", "progress"]) {
+            if (Number.isFinite(source[key])) arc[key] = source[key];
+        }
+        return Object.keys(arc).length ? Object.freeze(arc) as NpcProjectileArc : null;
+    }
+
     public static applyStatusImmunities(definition: NpcDefinition, cacheName: string, source: any): void {
         if (!source || typeof source.name !== "string" || normalizeName(source.name) !== normalizeName(cacheName)) return;
         Object.assign(definition, {
@@ -357,10 +376,13 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         }
         const projectiles: Record<string, number> = {};
         const launchGraphics: Record<string, number> = {};
+        const projectileArcs: Record<string, NpcProjectileArc> = {};
         for (const [id, entry] of Object.entries((animationFile.npcs ?? {}) as Record<string, CombatAnimation>)) {
             if (entry?.anims) animations[id] = entry;
             if (Number.isInteger(entry?.projectile)) projectiles[id] = entry.projectile as number;
             if (Number.isInteger(entry?.launchGraphic)) launchGraphics[id] = entry.launchGraphic as number;
+            const arc = NpcDefinitionLoader.projectileArc(entry?.projectileArc);
+            if (arc) projectileArcs[id] = arc;
         }
         // Only hand-made entries stop the guess below; captures leave a role open when they do not settle it.
         const configuredAnimationIds = new Set(Object.keys(animations));
@@ -460,6 +482,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             ...Object.keys(animations), ...Object.keys(observedAnimations),
             ...Object.keys(projectiles),
             ...Object.keys(launchGraphics),
+            ...Object.keys(projectileArcs),
             ...Object.keys(capturedDeaths),
         ]);
         let applied = 0;
@@ -522,6 +545,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             if (Number.isInteger(launchGraphics[key])) {
                 definition.launchGraphicId = launchGraphics[key];
             }
+            if (projectileArcs[key]) definition.projectileArc = projectileArcs[key];
 
             const respawn = animationFile.npcs?.[key]?.respawn;
             if (Number.isInteger(respawn) && respawn >= 0) definition.setRespawn(respawn);

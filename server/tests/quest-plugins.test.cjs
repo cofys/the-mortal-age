@@ -175,6 +175,76 @@ test('Quests.plugin registers every quest and enforces equipment requirements wh
   ]);
 });
 
+test("Mourning's End II brings Eluned in when the static Lletya spawn is absent", () => {
+  const { api, handlers } = mockApi();
+  const spawned = [], removed = [], tasks = [];
+  api.core = { ...api.core, TaskManager: { submit: task => tasks.push(task) } };
+  api.getWorld = () => ({ getNpcs: () => [] });
+  api.spawnNpc = spawn => {
+    const npc = {
+      id: spawn.id,
+      getLocation: () => new api.core.Location(spawn.x, spawn.y, spawn.z),
+      getOwner: () => spawn.owner,
+    };
+    spawned.push(spawn);
+    return npc;
+  };
+  api.removeNpc = npc => removed.push(npc);
+  require("../plugins/quests/quests/MourningsEndPartII.Quest")(api);
+  let dialogueActive = true;
+  const player = {
+    getAttribute: () => undefined,
+    setAttribute: () => {},
+    getDialogueManager: () => ({ isActive: () => dialogueActive }),
+  };
+  const arianwyn = { getLocation: () => new api.core.Location(2353, 3172, 0) };
+  for (const handler of handlers.custom.get("npc-dialogue:action") ?? []) {
+    handler({ player, stepId: "vIeP1X", npc: arianwyn });
+  }
+  assert.equal(spawned.length, 1, "one owned Eluned copy stands in");
+  assert.equal(spawned[0].id, 6286, "the Lletya Eluned id");
+  assert.equal(tasks.length, 1, "a dialogue watcher is scheduled");
+
+  // The line event fires before the line is shown, so the copy must stay for the whole dialogue.
+  tasks.shift().execute();
+  assert.equal(removed.length, 0, "the copy stays while the dialogue is open");
+
+  dialogueActive = false;
+  tasks.shift().execute();
+  assert.equal(removed.length, 1, "closing or walking away from the dialogue clears the copy");
+});
+
+test("Mourning's End II ignores another player's owner-only Eluned copy", () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.core = { ...api.core, TaskManager: { submit: () => {} } };
+  const firstPlayer = { name: "first" };
+  const otherCopy = {
+    getId: () => 6286,
+    getLocation: () => new api.core.Location(2354, 3172, 0),
+    getOwner: () => firstPlayer,
+    getCurrentDefinition: () => ({ getName: () => "Eluned" }),
+  };
+  api.getWorld = () => ({ getNpcs: () => [otherCopy] });
+  api.spawnNpc = spawn => {
+    spawned.push(spawn);
+    return { id: spawn.id, getLocation: () => new api.core.Location(spawn.x, spawn.y, spawn.z), getOwner: () => spawn.owner };
+  };
+  api.removeNpc = () => {};
+  require("../plugins/quests/quests/MourningsEndPartII.Quest")(api);
+  const secondPlayer = {
+    getAttribute: () => undefined,
+    setAttribute: () => {},
+    getDialogueManager: () => ({ isActive: () => true }),
+  };
+  const arianwyn = { getLocation: () => new api.core.Location(2353, 3172, 0) };
+  for (const handler of handlers.custom.get("npc-dialogue:action") ?? []) {
+    handler({ player: secondPlayer, stepId: "vIeP1X", npc: arianwyn });
+  }
+  assert.equal(spawned.length, 1, "the second player gets their own copy beside Arianwyn");
+  assert.equal(spawned[0].owner, secondPlayer);
+});
+
 test('Lost City only warns about low combat when a starting skill is also missing', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/LostCity.Quest')(api);
@@ -2204,6 +2274,52 @@ test('Blood Moon Ranis parlour door drops a recoverable skull for the display ca
   placeItem({ player, itemId: 33740, objectId: 61672, location: { x: 2497, y: 7374, z: 0 }, handled: false });
   assert.deepEqual(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.caseItems.sort(),
     ['hourglass', 'knife', 'skull']);
+});
+
+test('Blood Moon dining room holds the poem scroll on its captured tile until the player carries it', () => {
+  const { api, handlers } = mockApi();
+  api.spawnNpc = spec => ({ ...spec, getHitpoints: () => 10, setScriptedMovement() {} });
+  api.removeNpc = () => {};
+  const drops = [], items = new Map();
+  // Other dining-room loot (including mysterious jerky) is independent of this scroll.
+  const poemDrops = () => drops.filter(([id]) => id === 33746);
+  api.getItemOnGroundManager = () => ({ getGroundItem: () => null,
+    registerLocation: (_player, item, location) => drops.push([item.getId(), location.getX(), location.getY(), location.getZ()]) });
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 70],
+    ['quest.the_blood_moon_rises.castle-room', 1],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-story', {}],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2327, 7361, 0), moveTo: location => { player.location = location; },
+    getUsername: () => 'castle-poem-scroll', getDisplayName: () => 'castle-poem-scroll', getPrivateArea: () => null,
+    getInventory: () => ({ contains: id => (items.get(id) ?? 0) > 0, getFreeSlots: () => 28 }),
+    sendMessage() {}, getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  const enterDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const enter = (id, x, y, z = 0) => enterDoor({ player, objectId: id, definition: { id, getName: () => 'Door' },
+    location: { x, y, z }, option: 'Enter', handled: false });
+  enter(61577, 2327, 7360);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 2, 'the lobby door leads into the dining room');
+  assert.deepEqual(poemDrops(), [[33746, 2337, 7365, 0]], 'the poem scroll lies on the tile live drops it (rec 4288 tick 3124)');
+
+  drops.length = 0;
+  enter(61572, 2341, 7373);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.deepEqual(poemDrops(), [], 'the lobby gets no scroll');
+  items.set(33746, 1);
+  enter(61577, 2327, 7360);
+  assert.deepEqual(poemDrops(), [], 'a carried scroll is not dropped again');
+  items.set(33746, 0);
+  enter(61572, 2341, 7373);
+  enter(61577, 2327, 7360);
+  assert.deepEqual(poemDrops(), [[33746, 2337, 7365, 0]], 'a lost scroll is back on its tile');
 });
 
 test('Blood Moon prisoner scene waits for the transcript, then leaves the player by the bench key', () => {
@@ -8591,7 +8707,9 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.equal(core.PrayerHandler.getProtectingPrayer(rangedFollowup.style), core.PrayerHandler.PROTECT_FROM_MISSILES,
       'Protect from Missiles applies through the ordinary ranged hit pipeline');
     assert.equal(current.__dt2FinalWightNextRanged, false, 'starting the follow-up consumes its one-shot marker');
-    assert.equal(current.animation?.id, 7617, 'the ranged follow-up uses the animation captured for NPC 12328');
+    assert.equal(current.animation?.id, 426, 'the ranged follow-up draws a bow (human_bow), as every recorded 12328 shot');
+    assert.deepEqual([current.graphic?.id, current.graphic?.height], [21, 102],
+      'the shot launches mithril_arrow_launch at height 102 (rsprox_transcripts/226/01703.txt:370902)');
     assassinCombat.start(current, p);
     const nextAssassinHit = assassinCombat.hits(current, p)[0];
     assert.equal(nextAssassinHit.style, core.CombatType.MELEE, 'later Assassin attacks return to ordinary melee');
@@ -18436,9 +18554,12 @@ test('an active Troll Romance owns Tenzing so its Trollweiss dialogue is not mas
   handlers.custom.get('npc-dialogue:choice')
     .find((handler) => handler.name === 'handleTenzingSharedChoice')(choice);
   assert.equal(choice.end, true, 'the empty quest=no stub is replaced');
-  assert.equal(started.length, 1);
-  assert.deepEqual(started[0].variant, { page: 'Tenzing', variant: 'after-death-plateau' });
-  assert.equal(typeof started[0].select, 'function');
+  // The Trollweiss menu is read first (its "anything else?" menu), then the generic branch plays.
+  assert.equal(started.length, 2);
+  assert.equal(started[0].variant, 'finding-the-flowers-talking-to-tenzing');
+  assert.deepEqual(started[0].select([{ type: 'choice', options: [] }]), [], 'the read starts nothing');
+  assert.deepEqual(started[1].variant, { page: 'Tenzing', variant: 'after-death-plateau' });
+  assert.equal(typeof started[1].select, 'function');
 
   trollRomance.setStage(player, trollRomance.completionValue);
   assert.deepEqual(handlers.variant.at(-2)({ player, npcId: TENZING }),
@@ -20715,13 +20836,14 @@ test('RFD Jubbly hunting requires the Ogre bow and equipped Ogre arrows', () => 
   drop({ player, itemId: ids.BALLOON_TOAD, option: 'Drop', handled: false });
   const bird = spawnedBird;
   assert.ok(bird);
+  let lastEvent = null;
   const attempt = () => {
-    const event = { attacker: player, target: bird, allow: true };
+    const event = lastEvent = { attacker: player, target: bird, allow: true };
     attack(event);
     return event.allow;
   };
   assert.equal(attempt(), false);
-  assert.match(messages.at(-1), /ogre bow and ogre arrows/);
+  assert.match(lastEvent.message, /ogre bow and ogre arrows/);
   equipment.set(api.core.Equipment.AMMUNITION_SLOT, ids.OGRE_ARROW);
   assert.equal(attempt(), true);
 });

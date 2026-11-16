@@ -61,6 +61,8 @@ export class Bank extends ItemContainer {
     public static readonly FULL_EVENT = "bank:full";
     /** `{ player }` once the bank interface has opened (not on a tab change). */
     public static readonly OPENED_EVENT = "bank:opened";
+    /** Live's line when a withdraw finds no inventory room, for plugin storages in the bank too. */
+    public static readonly INVENTORY_FULL_MESSAGE = INVENTORY_FULL_MESSAGE;
     /** Players whose items move between tabs, or load, without the capacity applying. */
     private static readonly unlimited = new Set<Player>();
     public static readonly TOTAL_BANK_TABS = 11;
@@ -101,6 +103,23 @@ export class Bank extends ItemContainer {
     /** `{ player }` after the open bank redraws its items and the side panel's inventory. */
     public static readonly REFRESHED_EVENT = "bank:refreshed";
     public static readonly PLACEHOLDER_IDENTITY_EVENT = "bank:placeholder-identity";
+
+    /**
+     * Whether the player owns any of `itemIds` in their inventory, worn equipment or bank: the
+     * bank tabs only (the search tab repeats them), and a placeholder (its id at amount 0) owns
+     * nothing. Other storage (a looting bag, the POH, group storage) is not looked at.
+     */
+    public static owns(player: Player, itemIds: number | readonly number[]): boolean {
+        const ids = (typeof itemIds === "number" ? [itemIds] : [...itemIds]).filter((id) => Number.isInteger(id) && id >= 0);
+        if (!ids.length) return false;
+        const held = (container: ItemContainer | null | undefined) => !!container && ids.some((id) => container.getAmount(id) > 0);
+        if (held(player.getInventory()) || held(player.getEquipment())) return true;
+        const banks = player.getBanks();
+        for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+            if (tab !== Bank.BANK_SEARCH_TAB_INDEX && held(banks[tab])) return true;
+        }
+        return false;
+    }
 
     public static placeholderIdentity(itemId: number): { placeholderId: number; itemIds: number[] } | null {
         if (!Number.isInteger(itemId) || itemId < 0) return null;

@@ -254,6 +254,10 @@ export interface PluginNpcDeathEvent {
   killer: any;
   /** Every player who damaged the npc recently, the killer among them. */
   damagers?: any[];
+  /** The player who landed the killing hit (Combat.getLastDamager), which can differ from the top damager `killer`. */
+  lastDamager?: any;
+  /** The weapon `lastDamager` held as the NPC began dying (-1 for none), not whatever they swapped to since. */
+  lastDamagerWeaponId?: number;
   npc: any;
   npcId: number;
   location: { x: number; y: number; z: number };
@@ -323,6 +327,24 @@ export interface PluginCanAttackEvent {
   /** The attacking combat method, so handlers can allow/deny per style. */
   method?: any;
   allow: boolean | null;
+  /**
+   * With `allow = false`, what the attacking player is told. The core says it, and only on the
+   * player's own attack (Combat), never when the same check runs passively (Retribution, cannons,
+   * relic scanners, bots), so a handler never messages from inside this predicate.
+   * `response` picks one of the core's refusals, a `CanAttackResponse` name such as
+   * "ALREADY_UNDER_ATTACK", with its own message and handling (that one once per interaction,
+   * and pursuit keeps going); without it the refusal is CANT_ATTACK_IN_AREA, which ends the
+   * attack and sends `message` (a plain game message) once.
+   */
+  response?: string;
+  message?: string;
+}
+
+/** The first refusal `PluginManager.emitCanAttackDecision` met, or `allow` true/null. */
+export interface PluginCanAttackDecision {
+  allow: boolean | null;
+  response?: string;
+  message?: string;
 }
 
 export interface PluginCanTeleportEvent {
@@ -722,6 +744,8 @@ export interface PluginItemActionOptions {
 export interface PluginItemOnObjectEvent {
   player: any;
   object: any;
+  /** The loc as this player sees it: a multiloc's variant (an island amenity once built). */
+  definition?: ObjectDefinition;
   objectId: number;
   item: any;
   itemId: number;
