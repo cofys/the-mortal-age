@@ -5923,8 +5923,9 @@ export class OsrsClient {
         // This ensures this.gameState returns the new state when callbacks fire
         this.stateMachine.transition(newState, true);
 
-        if (newState === GameState.LOGIN_SCREEN && !this.loginState.titleMusicDisabled) {
-            this.scheduleLoginMusicStart(100);
+        if (newState === GameState.LOGIN_SCREEN) {
+            void this.loginRenderer.refreshClientBackground();
+            if (!this.loginState.titleMusicDisabled) this.scheduleLoginMusicStart(100);
         }
 
         // AFTER transition: set up callbacks that depend on the new state
@@ -6438,6 +6439,7 @@ export class OsrsClient {
                               }
                             : null,
                     );
+                    void this.loginRenderer.refreshClientBackground();
                     void this.loginState.refreshServerName();
                     this.loginState.saveLastServer();
                     this.loginState.showRememberedLogin();

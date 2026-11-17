@@ -424,6 +424,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `AdventurePaths` | AdventurePaths | achievements | yes | Adventure Paths with Adventurer Jon: the Combat and Gatherer paths, task claims, starter kits, the Combat voucher and the Lamp of the Gatherer. |
 | `CollectionLog` | CollectionLog | achievements | yes | Collection log: records items obtained from drops and other sources, with the log and overview interfaces, new-item popups and a ::clog command. |
 | `CombatAchievements` | CombatAchievements | achievements | yes | Combat Achievements: 655 tasks in six tiers with points, Ghommal's tier rewards, the five interfaces and boss kill counts. |
+| `KourendTalismanDrops` | KourendTalismanDrops | achievements | yes | Doubles Xeric's talisman drops from lizardmen after the easy Kourend diary. (members only) |
 | `AgentMcp` | AgentMcp | agent | yes | Runs an MCP server that lets a tool such as Claude Code drive an online player for testing. Active only when AGENT_MCP=1 is set. |
 | `AgilityPyramid` | AgilityPyramid | areas | yes | Moves the Agility Pyramid's sliding blocks on floors 1 and 3, which push players down a floor for 8 damage. The course itself is a separate plugin. (members only) |
 | `AncientPyramidMummies` | Ancient Pyramid Mummies | areas | yes | Ancient Pyramid mummy transformations: fire spells and lit fire arrows set them alight, water spells douse them. (members only) |
@@ -447,6 +448,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `EnchantedValley` | EnchantedValley | areas | yes | Enchanted Valley's trees: chopping wakes a level-scaled tree spirit instead of cutting the tree. (members only) |
 | `FeroxEnclave` | FeroxEnclave | areas | yes | Ferox Enclave: its barriers and safe ground, the Pools of Refreshment and the Clan Wars free-for-all arena behind the white portal. |
 | `ForthosDungeon` | ForthosDungeon | areas | yes | Forthos Dungeon: the Spider's Den's multi-combat room and the grubby gate's 57 Thieving unlock. (members only) |
+| `FossilBoneMachine` | FossilBoneMachine | areas | yes | Feed enriched bones into Fossil Island's strange machine for Prayer experience. (members only) |
 | `FossilIslandUnderwater` | FossilIslandUnderwater | areas | yes | Fossil Island rowboats and the sea floor dive, with an oxygen bar that drowns players lacking a fishbowl helmet and diving apparatus. (members only) |
 | `FossilStorage` | FossilStorage | areas | yes | Fossil Island Museum Camp's fossil storage crates and the cleaning bench that cleans unidentified fossils. (members only) |
 | `GrandTree` | GrandTree | areas | yes | Opens and shuts the Grand Tree's front doors and walks the player through, as captured. (members only) |
@@ -454,7 +456,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `KalphiteCave` | KalphiteCave | areas | yes | Makes the Kalphite Cave multi-combat and lets only players on a kalphite Slayer task attack its kalphites, with Buggie warning the rest off. (members only) |
 | `Karamja` | Karamja | areas | yes | Karamja volcano access: the rocks, cave entrance and climbing rope between the surface and the TzHaar city. |
 | `Keldagrim` | Keldagrim | areas | yes | Keldagrim access: the cave exit to Rellekka, the cave-to-city passage, the house stairs and the ferrymen across the river. (members only) |
-| `KourendWoodland` | KourendWoodland | areas | yes | The Old Memorial in the Kourend Woodland: Inspect shows King Kharedst IV's inscription. (members only) |
+| `KourendWoodland` | KourendWoodland | areas | yes | The Old Memorial in the Kourend Woodland: Inspect shows King Kharedst IV's inscription, then offers book recharging. (members only) |
 | `McGruborsWood` | McGruborsWood | areas | yes | Keeps McGrubor's Wood's main gate locked, so the wood is entered by the loose railing or a fairy ring. |
 | `MiningGuild` | MiningGuild | areas | yes | Mining Guild entry needs 60 Mining; its members' area gives an invisible +7 Mining level, halves rock respawn times and rolls unidentified minerals. |
 | `Misthalin` | Misthalin | areas | yes | Misthalin area interactions: the Edgeville dungeon ladder and trapdoor, Varrock's manhole to the sewers, the Wizards' Tower basement, and the Lumbridge Swamp Caves dark hole and wall markers. |
@@ -595,7 +597,8 @@ This table lists bundled plugins that have a description. The world config page 
 | `FreezeTimer` | Freeze Timer | interface | yes | Sends the remaining freeze time and spell for the client's freeze-timer overlay. |
 | `FriendsList` | FriendsList | interface | yes | Friends list and friends chat: private messages, chat filters and friends-chat channels. |
 | `GrandExchange` | GrandExchange | interface | yes | The Grand Exchange: offers, offer collection and the item-price resource it uses. |
-| `Grouping` | Grouping | interface | yes | Player groups of up to five with their own chat-channel, and the Grouping tab's activity chat-channels: ::group to form, invite, accept, promote, kick, leave or disband, kept across logins. |
+| `GroupStorage` | GroupStorage | interface | yes | Group Ironman's shared group storage at the Group storage chests: 80 spaces (up to 200 with unlocks), one member at a time, Save to keep changes, deposit-only for leavers, members' items fixed on free-to-play worlds. |
+| `Grouping` | Grouping | interface | yes | Player groups of up to five with their own chat-channel, and the Grouping tab's activity chat-channels: ::group to form, invite, accept, promote, kick, leave or disband, kept across logins. A Group Ironman's group takes only Group Ironmen and keeps leavers for seven days. |
 | `IgnoreList` | IgnoreList | interface | yes | Reserved for the ignore list. Nothing is attached yet because the client does not send add or remove actions. |
 | `ItemsKeptOnDeath` | ItemsKeptOnDeath | interface | yes | Items Kept on Death screen showing what you would keep or lose, with skull, Protect Item, PvP and Wilderness level toggles. |
 | `LoginTips` | LoginTips | interface | yes | Sends a 'Did you know?' tip after the login greeting, following the All Settings row that turns them off. |
@@ -612,7 +615,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `ScreenHighlight` | ScreenHighlight | interface | yes | Step-by-step highlight walkthrough overlay with text and Continue button that other content, such as the league tutorial, can trigger. |
 | `SetSkillLevel` | SetSkillLevel | interface | yes | On PvP worlds with presets, clicking a Skills tab stat prompts you to set that skill's level, with checks against gear, combat and the Wilderness. |
 | `Settings` | Settings | interface | yes | All Settings browser, keybindings panel and game client layout dropdown, saving the chosen settings and XP drop options per player. |
-| `SideChannels` | SideChannels | interface | yes | Tab bar of the social tab, switching between chat channel, Your Clan and grouping, and remembering the chosen tab between logins. |
+| `SideChannels` | SideChannels | interface | yes | Tab bar of the social tab, switching between chat channel, Your Clan, grouping and (for Group Ironmen) the Group Ironman tab, and remembering the chosen tab between logins. |
 | `SideJournalDefaults` | SideJournalDefaults | interface | yes | The side journal's tabs and the custom Character Summary, with buttons that follow each player's commands. |
 | `SkillGuide` | SkillGuide | interface | yes | Opens the skill guide (new or old style, as All Settings chooses) when you pick View guide on a Skills tab stat, and opens a quest's journal from the Quest XP tab. |
 | `SkillLevelUp` | SkillLevelUp | interface | yes | Level-up feedback: chat message, unlock messages, graphic, sound and the level-up pop-up, which pauses skilling until you press Continue. |
@@ -626,14 +629,14 @@ This table lists bundled plugins that have a description. The world config page 
 | `VengeanceTimer` | Vengeance Timer | interface | yes | Keeps the client's 30-second Vengeance cooldown overlay in sync with the player's cooldown. |
 | `VoiceChat` | VoiceChat | interface | no | Proximity voice chat: signalling between nearby players on the same plane and private area. Voice also needs client support and browser microphone permission. |
 | `WasdCamera` | WasdCamera | interface | yes | Lets web client players turn on WASD camera in All Settings > Controls: W, A, S and D turn the camera like the arrow keys, and Enter opens chat. Off for each player until they turn it on; turn the plugin off to remove the option. |
-| `WelcomeScreen` | WelcomeScreen | interface | yes | Welcome screen at login with the message of the week and a Play button, with the text set by the world's plugin config. |
+| `WelcomeScreen` | WelcomeScreen | interface | yes | Welcome screen at login with the message of the week, an rsps.app banner and a Play button, with the text set by the world's plugin config. |
 | `WorldMapPlayers` | World Map Players | interface | yes | Gives admins a live dot on the world map for every online player, with bots marked differently, refreshed every few ticks. |
 | `WorldMapPosition` | WorldMapPosition | interface | yes | Keeps the world map's player marker up to date while the map is open, on land or aboard a boat. |
 | `XpReward` | XpReward | interface | yes | The 'Choose the stat you wish to be advanced' interface used by experience lamps, with level and unlock checks before granting the XP. |
 | `AbyssalTentacle` | AbyssalTentacle | items | yes | Abyssal tentacle: 25% chance to poison on hit, 10,000 charges, one used per attack, plus Check, Dissolve and whip-plus-tentacle combining. (members only) |
 | `AccursedSceptre` | AccursedSceptre | items | yes | Accursed sceptre and Thammaron's sceptre: powered-staff casting on revenant ether charges, Wilderness NPC bonus, Check, Swap and Uncharge. (members only) |
 | `AmuletOfBloodFury` | AmuletOfBloodFury | items | yes | Amulet of blood fury: made from a Blood shard and amulet of fury, 30,000 charges, heals from damage dealt with its proc graphic, counts down every 500 hits, with Check and Revert. (members only) |
-| `AmuletOfChemistry` | AmuletOfChemistry | items | yes | Amulet of chemistry: 5% chance of an extra potion dose when mixing in Herblore, five charges per amulet, with Options and Break. (members only) |
+| `AmuletOfChemistry` | AmuletOfChemistry | items | yes | Amulet of chemistry: 5% extra-dose chance with five charges. Alchemist's amulet: 15% chance, charging, noted refunds and persistent item charges. (members only) |
 | `AncientRingCrafting` | AncientRingCrafting | items | yes | Desert Treasure II ancient rings: break Fremennik rings with a chisel, combine icons with vestiges and craft the finished rings at a furnace. (members only) |
 | `AncientRings` | AncientRings | items | yes | Stops the Ultor, Bellator, Magus and Venator rings being worn until the player has killed the matching Desert Treasure II boss. (members only) |
 | `AncientSceptre` | AncientSceptre | items | yes | Ancient sceptre passive: boosts the Ancient magic smoke, shadow, blood and ice spell effects by 10%, for the quartz sceptres too; the blood ancient sceptre's Blood spells overheal by 10%; the ice ancient sceptre's Ice spells are 10% more accurate against targets that can be frozen. (members only) |
@@ -758,11 +761,12 @@ This table lists bundled plugins that have a description. The world config page 
 | `SlayerHelmet` | SlayerHelmet | items | yes | Adds the black mask and Slayer helmet: Slayer-task accuracy and damage boosts, assembling and disassembling, imbuing with a scroll, and uncharging a charged black mask. (members only) |
 | `SlayersStaff` | SlayersStaff | items | yes | Adds Magic Dart for 55 Slayer with staves such as the Slayer's staff, plus the Slayer's staff (e)'s charges and Slayer's enchantment. (members only) |
 | `SoulreaperAxe` | SoulreaperAxe | items | yes | Soulreaper axe components: Inspect each, and assemble the four with 2,000 blood runes into the axe. (members only) |
-| `Spade` | Spade | items | yes | Plays the digging animation and sound for the Dig option on spades (the Large spade only says it cannot dig), leaves the click open for treasure trails and quest digs, and says nothing was found when none of them claims it. |
+| `Spade` | Spade | items | yes | Plays the digging animation and sound for the Dig option on spades (the Large spade only says it cannot dig), lets content refuse a dig before it starts, leaves the click open for treasure trails and quest digs, and says nothing was found when none of them claims it. |
 | `SpellRuneSaving` | SpellRuneSaving | items | yes | Gives the Staff of the dead family a 1 in 7 chance, and the Kodai wand a 15% chance, to save a spell's runes. (members only) |
 | `SteelKeyRing` | SteelKeyRing | items | yes | Stores reusable keys and opens the native Check-keys interface. |
 | `StorageItems` | StorageItems | items | yes | Adds the coal bag, gem bag, gem pouch, fish barrel, log basket, Forestry kit, plank sack, tackle box, meat and fur pouches and reagent pouch, filled by gathering skills. (members only) |
 | `SurgePotion` | SurgePotion | items | yes | Surge potions restore 25% special attack energy a dose, with a five-minute wait between doses that a house pool, the free-for-all portal or a death ends. (members only) |
+| `TeleportAnchoringScroll` | TeleportAnchoringScroll | items | yes | Read the teleport anchoring scroll to unlock protection from Abyssal demon and Elder Chaos druid player teleports. (members only) |
 | `TeleportSpheres` | TeleportSpheres | items | yes | Breaking a Dorgesh-kaan, Goblin village or Plain of Mud sphere teleports to a random spot in its area. (members only) |
 | `TonalzticsOfRalos` | TonalzticsOfRalos | items | yes | Adds Tonalztics of Ralos, a thrown weapon charged with Sunfire splinters, one charge per throw, with Check, Charge and Uncharge. (members only) |
 | `ToxicBlowpipe` | ToxicBlowpipe | items | yes | Adds the toxic blowpipe: loading Zulrah's scales and darts, dart-based ranged strength, checking, unloading, uncharging, dismantling and picking ammunition up into it. (members only) |
@@ -786,7 +790,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `ZurielsStaff` | ZurielsStaff | items | yes | Zuriel's staff (bh): standard and Ancient offensive spells cast in 4 ticks; Ice spells +10% accuracy, Blood spells heal 50% more, Smoke poison and Shadow Attack drain doubled. (members only) |
 | `ArcheryCompetition` | ArcheryCompetition | minigames | yes | Runs the Ranging Guild's Archery Competition: the Competition Judge charges 200 coins for 10 bronze arrows scored on the targets. (members only) |
 | `BarbarianAssault` | BarbarianAssault | minigames | yes | Runs Barbarian Assault: Commander Connad, the Outpost ladder, role assignment and the nine waves plus the final Queen wave in private arenas. (members only) |
-| `Barrows` | Barrows | minigames | yes | Adds the Barrows minigame: the six brothers' crypts and puzzle door, the prayer drain, the reward chest and the Barrows minimap. (members only) |
+| `Barrows` | Barrows | minigames | yes | Adds the Barrows minigame: the six brothers' crypts and puzzle door, the prayer drain, the reward chest, the Barrows minimap, the strange old lockpick on the tunnel doors and the Strange Old Man's condensed tunnel warnings. (members only) |
 | `BlastFurnace` | BlastFurnace | minigames | yes | Adds the Blast Furnace: smelting ore on the conveyor and collecting bars from the dispenser. (members only) |
 | `BountyHunter` | BountyHunter | minigames | yes | Adds Bounty Hunter in Daimon's Crater, with the shared crater state split into units for each part of the minigame. (members only) |
 | `BrimhavenAgilityArena` | BrimhavenAgilityArena | minigames | yes | Adds the Brimhaven Agility Arena: pay Cap'n Izzy, cross the obstacles and tag the marked pillar for arena tickets and vouchers. (members only) |
@@ -841,16 +845,17 @@ This table lists bundled plugins that have a description. The world config page 
 | `VolcanicMine` | VolcanicMine | minigames | yes | Adds the Volcanic Mine on Fossil Island: Petrified Pete, vents, gas, lava, the boulder, hazards and the reward on exit. (members only) |
 | `Wintertodt` | Wintertodt | minigames | yes | Adds Wintertodt: the world-wide round behind the Doors of Dinh, the camp outside and its reward cart. (members only) |
 | `FreeToPlay` | FreeToPlay | modes | no | Switches this world to free-to-play. The spawn must be inside a free-to-play area. |
-| `Ironman` | Ironman | modes | yes | Adds Ironman, Ultimate and Hardcore Ironman accounts, chosen at the Ironman tutor, downgraded with Adam, or set by the ::ironman command. |
+| `GroupIronman` | GroupIronman | modes | yes | Group Ironman's rules: The Node, the Group Ironman tab and group chat, storage unlocks, forming groups, Hardcore groups' shared lives, Unranked groups, what a leaver becomes, and new members' weekly wealth limits and item restrictions. |
+| `Ironman` | Ironman | modes | yes | Adds Ironman, Ultimate, Hardcore and Group Ironman accounts (Group, Hardcore Group and Unranked Group), chosen at the Ironman tutor, downgraded with Adam, or set by the ::ironman command. |
 | `LeagueMode` | LeagueMode | modes | yes | Leagues characters, progression, tasks, relics, region unlocks, combat masteries, Demonic Pacts and rewards. (members only) |
 | `PvpMode` | PvpMode | modes | yes | Adds the ::presets and ::kits commands, opens presets after a PvP death, and lets accounts that may use presets have their prayers without the unlock quests. |
 | `AggressionToggle` | AggressionToggle | npcs | yes | Adds the ::aggro command, an administrator cheat that keeps monsters aggressive after the ten-minute tolerance, usable by all if commands allow. |
 | `AliLeafletDropper` | AliLeafletDropper | npcs | yes | Ali the Leaflet Dropper in Al Kharid hands out the Al kharid flyer (Take-flyer and his Talk-to), and the flyer can be read. |
 | `Amrod` | Amrod | npcs | yes | Amrod exchanges unnoted crystal seeds for crystal shards in Prifddinas. (members only) |
 | `Apothecary` | Apothecary | npcs | yes | Gives the Varrock Apothecary's Potions interface: strength, energy and antipoison potions made from the player's own ingredients, feeding the Varrock diary. |
-| `Asyff` | Asyff | npcs | yes | Adds Asyff's Custom Fur Clothing in Varrock: the wiki's kebbit, camo, Larupia, Graahk and Kyatt sets, gloves and capes for their fur and coin fees. (members only) |
+| `Asyff` | Asyff | npcs | yes | Adds Asyff and Pellem's Custom Fur Clothing: the Wiki's kebbit, camo, Larupia, Graahk and Kyatt sets, gloves and capes for their fur and coin fees. (members only) |
 | `Baraek` | Baraek | npcs | yes | Makes Baraek in Varrock sell fur for 20 coins, or 18 as the fallback, taking the coins and giving the fur from his dialogue. |
-| `BarbarianTraining` | BarbarianTraining | npcs | yes | Adds Barbarian Training's rod fishing, barehanded fishing and Herblore steps with Otto Godblessed, unlocking leaping fish catches, barehanded harpoon fishing and the barbarian mixes. (members only) |
+| `BarbarianTraining` | BarbarianTraining | npcs | yes | Adds Otto's Barbarian Training lessons and progression for fishing, firemaking, Herblore and spear/hasta smithing. (members only) |
 | `Bartenders` | Bartenders | npcs | yes | Makes the Blue Moon Inn, Dancing Donkey, Sheared Ram and Dragon Inn bartenders take coins and hand over a beer or Greenman's ale. |
 | `BasiliskKnights` | BasiliskKnights | npcs | yes | Basilisk Knight combat: walks into melee range, then melee or magic beside the player; magic from where it can't step closer, at the player's attack speed (4 ticks at the fastest), with the captured cast. (members only) |
 | `Caique` | Caique | npcs | yes | Lets players pet the sitting caiques of Kastori and the Tlati Rainforest, which peck back for 1 damage with the captured animations. (members only) |
@@ -861,7 +866,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `DormantNpcs` | DormantNpcs | npcs | yes | Makes disguised crabs and wyrms lie dormant as scenery, rising and sinking when a player steps near or attacks them. (members only) |
 | `DrJekyll` | DrJekyll | npcs | yes | Adds Dr Jekyll, the random-event NPC, with Talk-to and Dismiss options. (members only) |
 | `Dragons` | Dragons | npcs | yes | Gives standard, brutal and metallic dragons their melee and dragonfire attacks, with long range for brutal and metallic ones. |
-| `ElderChaosDruid` | ElderChaosDruid | npcs | yes | Adds the Wilderness Elder Chaos druid, a magic attacker casting Wind Wave and Tele Block with captured animations and projectiles. (members only) |
+| `ElderChaosDruid` | ElderChaosDruid | npcs | yes | Adds the Wilderness Elder Chaos druid, a magic attacker casting Wind Wave and Tele Block with captured animations and projectiles, that teleports fleeing players back beside it. (members only) |
 | `EliteVoidKnight` | EliteVoidKnight | npcs | yes | Lets the Elite Void Knight upgrade a Void knight top or robe to the elite version for 200 Commendation points, after the Hard Western diary. (members only) |
 | `ElunedEnchant` | ElunedEnchant | npcs | yes | Eluned's Enchant: recharges carried crystal teleport seeds into teleport crystals (3 charges, 5 after the hard Western Provinces Diary) for 750 coins falling to 150. (members only) |
 | `Entrana` | Entrana | npcs | yes | Enforces Entrana's item restrictions on ferry and balloon travel: the monks search for armour, weapons, jars and supplies, with the Wiki's exceptions. (members only) |
@@ -885,6 +890,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `NpcSpawns` | NpcSpawns | npcs | yes | Registers the NPC spawn list and the map editor's custom spawn patch as definition sources. |
 | `Osten` | Osten | npcs | yes | Lets Osten recolour graceful pieces to the Kourend house colours for 15 marks of grace each, after each house's quest, and revert them for free. (members only) |
 | `Patchy` | Patchy | npcs | yes | Patchy's sewing interface on Mos Le'Harmless: Sew and Talk-to open it, and Confirm sews the picked costume piece for 500 coins. (members only) |
+| `Pellem` | Pellem | npcs | yes | Lets Pellem make mixed-hide armour for the transcript's fur and coin costs. (members only) |
 | `Peter` | Peter | npcs | yes | Peter at the Fossil Island Museum Camp turns rare or normal fossil drops off and on for the player, through his fossils talk and the Toggle Fossils option. (members only) |
 | `Pets` | Pets | npcs | yes | Pet followers: summoning, dismissing, item-backed ownership, storage, Probita reclaim, Metamorphosis variants and pet-specific behaviour. |
 | `RandomEvents` | RandomEvents | npcs | yes | Random events: Genie, Drill Demon, Mime, Maze, Pillory and others, plus the Lamp and Book of Knowledge; owner-only ::randevt tests them. |
@@ -907,6 +913,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `Tutors` | Tutors | npcs | yes | Lumbridge combat and skill tutors: hands out training weapons, runes, tools and other starter gear, with a shared 30-minute claim for ranged and magic. |
 | `Tyss` | Tyss | npcs | yes | Tyss at the Dark Altar toggles the Arceuus spellbook from his Spellbook option and two dialogue choices. (members only) |
 | `UndeadDruids` | UndeadDruids | npcs | yes | Undead Druids use melee at melee range and magic from range, matching the Wiki and RSProx 2966. (members only) |
+| `VikingShouters` | VikingShouters | npcs | yes | The Jatizso and Neitiznot watchtower guards chant their islands' names, and Watch-shouting shows their recorded insult round with its camera. (members only) |
 | `WizardJalarast` | WizardJalarast | npcs | yes | Wizard Jalarast at the Wizards' Tower makes splitbark armour: Trade opens the purchase menu, and each piece takes its bark, fine cloth and coins. (members only) |
 | `Wyrms` | Wyrms | npcs | yes | Wyrm and wyrmling combat: melee when the target is adjacent, magic from range, with separate max hits per style. (members only) |
 | `Wyson` | Wyson | npcs | yes | Wyson the gardener sells woad leaves through his dialogue: 15 coins for one leaf, 20 coins for two. |
@@ -921,6 +928,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `Chests` | Chests | objects | yes | Generic household chests: Open and Shut swap between the closed and open locs, and searching an open one finds nothing. |
 | `DairyCow` | DairyCow | objects | yes | Dairy cows: Milk fills an empty bucket, and Steal-cowbell is a 15 Thieving action unlocked once Cold War is started. |
 | `Doors` | Doors | objects | yes | Opens and closes doors, gates and double doors, swapping between closed and open locs, with route handling and reapplied state on region load. |
+| `FarmingShed` | FarmingShed | objects | yes | Borrow a rake and spade from the Lumbridge Swamp shed. |
 | `KeyChests` | KeyChests | objects | yes | Key-opened chests: Taverley crystal chest, Mount Karuulm brimstone chest, Larran's Wilderness chests, Prifddinas' Elven chest, Forthos' Grubby Chest and the Zombie Pirate's Locker, plus crystal key crafting. (members only) |
 | `Ladders` | Ladders | objects | yes | Climbing for ladders, staircases, trapdoors, ropes and similar scenery, moving the player a level up or down with the climb animation. |
 | `LeafyPalmTree` | LeafyPalmTree | objects | yes | Lets players shake Kharazi Jungle's Leafy Palm Trees for a palm leaf on the ground, with a 35-second cooldown per tree. (members only) |
@@ -990,6 +998,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `CharterShips` | CharterShips | world | yes | Charter ship crew: pay a fare to sail between ports on the map, or trade with them, with Ring of Charos discounts and Sailing ports. (members only) |
 | `ChristmasDinner` | ChristmasDinner | world | yes | The Christmas 2025 Dinner event: scene, NPC dialogue, serving platters, escort and completion cutscene and rewards, running only in its calendar window. |
 | `CrossFloor` | CrossFloor | world | no | See nearby players, NPCs, ground items and temporary objects on lower floors. |
+| `CustomSprites` | CustomSprites | world | yes | Serves the world's own sprites (data/sprites) to the browser client over the content API. |
 | `Darkness` | Darkness | world | yes | Makes Lumbridge Swamp Caves and the Mole Hole dark: without a lit light source you are warned, then bitten by insects every tick, and cannot attack. |
 | `DateMinutes` | DateMinutes | world | yes | Sends the client the current minute since 1970 on login and each new minute, so home and minigame teleport cooldown timers can display. |
 | `DefinitionArchives` | DefinitionArchives | world | yes | Installs bundled item, NPC and object definition changes at runtime and sends them to every client on login and when they change. |
@@ -1031,6 +1040,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `TableItems` | TableItems | world | yes | Using a tradeable item on a table places it there, visible to others after 60 seconds and despawning after 10 minutes. |
 | `TarSwampMushroom` | TarSwampMushroom | world | yes | Fossil Island's Tar Swamp rubber cap mushroom: Jump on throws the player to the mud pit, softened by 9 bittercaps (Fill). (members only) |
 | `Vineyard` | Vineyard | world | yes | Aldarin's vineyard foreman hands out the grape barrel. (members only) |
+| `WarningScreens` | WarningScreens | world | yes | Warning screens before dangerous areas, counted per player and toggled off after enough showings, and the Lumbridge Doomsayer who turns them back on. |
 | `WaterSources` | WaterSources | world | yes | Using an empty jug, vial, bucket, bowl, cup, fishbowl or waterskin on a fountain, sink, well, pump or tap fills them one per tick. |
 <!-- world-config:generated:end -->
 

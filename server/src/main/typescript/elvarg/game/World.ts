@@ -51,8 +51,10 @@ export class World {
     private static playerBots: Map<string, any> = new Map<string, any>();
     private static npcs: MobileList<NPC> = new MobileList<NPC>(
         World.MAX_NPCS,
-        (npc) => World.registerNpcPosition(npc),
-        (npc) => World.unregisterNpcPosition(npc)
+        // The owner index follows the list itself, so every way in and out (the queues,
+        // PluginManager.removeNpc's direct removal, a rolled-back add) keeps it exact.
+        (npc) => { World.registerNpcPosition(npc); NPC.indexOwner(npc); },
+        (npc) => { World.unregisterNpcPosition(npc); NPC.forgetOwner(npc); }
     );
     private static items: ItemOnGround[] = [];
     private static playerArray: Player[] = []
@@ -309,6 +311,7 @@ export class World {
         nextLocation: Location | null | undefined
     ): void {
         if (!player || !previousLocation || !nextLocation || previousLocation.equals(nextLocation)) return;
+        const teleportSerial = player.getTeleportSerial();
         player.claimTileOccupancy?.();
         World.removePlayerFromTileOccupants(player, previousLocation);
         World.addPlayerToTileOccupants(player, nextLocation);
@@ -322,6 +325,14 @@ export class World {
                 World.activeNpcsForUpdate = World.collectActiveNpcsForUpdate();
             }
             PluginManager.emitPlayerMapSquareChange({ player, previous: previousLocation, location: nextLocation });
+        }
+        // Existing map-square hooks can move the player recursively. That move already emits its
+        // own notification; never publish the stale outer destination as the current location.
+        if (player.isRegistered() && player.getLocation().equals(nextLocation)
+            && player.getTeleportSerial() === teleportSerial) {
+            PluginManager.emitPlayerLocationChange({
+                player, previous: previousLocation.clone(), location: nextLocation.clone(),
+            });
         }
     }
 
@@ -1131,6 +1142,11 @@ export class World {
 
     public static getRemoveNPCQueue(): NPC[] {
         return this.removeNPCQueue;
+    }
+
+    /** The registered NPCs `owner` owns (an index, not a scan of every NPC). */
+    public static getNpcsOwnedBy(owner: Player | null | undefined): NPC[] {
+        return NPC.ownedBy(owner);
     }
 
     public findSpawnedObject(id: number, loc: Location): GameObject | undefined {
