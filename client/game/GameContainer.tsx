@@ -35,9 +35,12 @@ import {
     isPortraitLeftHanded, subscribePortraitHandedness, PORTRAIT_COMPONENTS,
 } from "./plugins/portraitmode/PortraitLayout";
 import { FirstPersonPlugin } from "./plugins/firstperson/FirstPersonPlugin";
+import { ProtocolNoticeBanner } from "./ProtocolNoticeBanner";
+import type { ProtocolNotice } from "../network/serverConnection/protocolCompatibility";
 
 interface OsrsContainerProps {
     osrsClient: OsrsClient;
+    protocolNotice?: ProtocolNotice;
 }
 
 type WidgetActionBridgeEvent = {
@@ -114,7 +117,7 @@ function resolvePointerCoordinate(
     return -1;
 }
 
-export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
+export function GameContainer({ osrsClient, protocolNotice }: OsrsContainerProps): JSX.Element {
     const mobileGameframe = useResponsiveGameframe(osrsClient);
     const allowPortrait = useSyncExternalStore(subscribePortraitModeEnabled, isPortraitModeEnabled);
     const leftHanded = useSyncExternalStore(subscribePortraitHandedness, isPortraitLeftHanded);
@@ -407,6 +410,7 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
             >
                 <div className="game-canvas-shell">
                     <div className="game-canvas-stage">
+                        <ProtocolNoticeBanner notice={protocolNotice} configManager={osrsClient.runeLite.configManager} />
                         {loadingBarOverlay}
 
                         {!hideUi && osrsClient.isLoggedIn() && <ControlsHelp

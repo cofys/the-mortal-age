@@ -20,6 +20,7 @@ const Weather = require("./woodcutting/Weather.Woodcutting");
 const Wilderness = require("./woodcutting/Wilderness.Woodcutting");
 const Mastery = require("./woodcutting/Mastery.Woodcutting");
 const Supply = require("./woodcutting/Supply.Woodcutting");
+const SplitLogs = require("./woodcutting/SplitLogs.Woodcutting");
 const KandarinHeadgear = require("./woodcutting/KandarinHeadgear.Woodcutting");
 const FarmedRedwood = require("./farming/Redwood.Farming");
 const { pauseForLevelUp, actionInterval } = require("./SkillActions");
@@ -1623,6 +1624,7 @@ module.exports = {
     Wilderness.attach(api);
     Mastery.attach(api);
     Supply.attach(api);
+    SplitLogs.attach(api, { findBestUsableAxe, lumberjackXpMultiplier });
 
     api.onPlayerDisconnect(({ player }) => {
       stopWoodcutting(activeSessions, player, false);

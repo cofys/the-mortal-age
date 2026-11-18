@@ -73,7 +73,7 @@
  *  - Bridges keep their broken appearance after Repair (the swap object has no
  *    placement here); clicking Walk-across on a repaired bridge moves the
  *    player over it. Rope spinning enforces Crafting 30 with a
- *    system message. The chest, splitting, curing, shield-making and head-taking
+ *    system message. The chest, curing, shield-making and head-taking
  *    steps use short system messages where the wiki transcript has no line.
  *    The shield Woodcutting level refusal is silent until wording is sourced.
  *  - The weapon/shield "hands free" check follows Cold War: WEAPON_SLOT and
@@ -226,7 +226,6 @@ module.exports = function registerTheFremennikIslesQuest(api) {
 
   const JESTER_CHEST = ObjectIdentifiers.CHEST_70; // 21299
   const SPINNING_WHEEL = ObjectIdentifiers.SPINNING_WHEEL_5; // 21304
-  const WOODCUTTING_STUMP = ObjectIdentifiers.WOODCUTTING_STUMP; // 21305
   const WEST_BRIDGE_IDS = new Set([
     ObjectIdentifiers.ROPE_BRIDGE_6, // 21310
     ObjectIdentifiers.ROPE_BRIDGE_7, // 21311
@@ -489,15 +488,16 @@ module.exports = function registerTheFremennikIslesQuest(api) {
     return Number(player.getAttribute(BORK_ATTRIBUTE)) || 0;
   }
 
-  /** One of Bork's three supplies, once each (his menu stays up until all three are claimed), and only if it fits. */
+  /** Wiki: one request per supply, filling only the available inventory space. */
   function claimBorkSupply(player, bit, itemId, amount) {
     if (borkFlags(player) & bit) return;
     const inventory = player.getInventory();
-    if ((inventory.getFreeSlots?.() ?? amount) < amount) {
+    const granted = inventory.getAddableAmount(new Item(itemId, amount));
+    if (granted > 0) {
+      inventory.adds(itemId, granted);
+    } else {
       inventory.full?.();
-      return;
     }
-    inventory.adds(itemId, amount);
     setFlag(player, BORK_ATTRIBUTE, bit);
   }
 
@@ -741,6 +741,10 @@ module.exports = function registerTheFremennikIslesQuest(api) {
     return borkFlags(player) === (BORK_FOOD | BORK_STRENGTH | BORK_PRAYER)
       ? "facing-the-trolls-talking-to-bork-after-claiming-all-supplies"
       : "facing-the-trolls-talking-to-bork";
+  }
+
+  function requestBorkSupplies({ player }) {
+    return !!play(player, BORK_SIGMUNDSON, borkVariant(player));
   }
 
   function taxVariant(player, npcId) {
@@ -1684,34 +1688,36 @@ module.exports = function registerTheFremennikIslesQuest(api) {
     player.sendMessage("You spin the yak hair into rope.");
   }
 
-  function useWoodcuttingStump(event) {
-    const { player } = event;
-    if (stageOf(player) >= STAGE_ARMOUR_DONE && !hasItem(player, NEITIZNOT_SHIELD)) {
-      if (
-        hasItem(player, ARCTIC_PINE_LOGS, 2) &&
-        hasItem(player, ROPE) &&
-        hasItem(player, BRONZE_NAILS) &&
-        hasItem(player, HAMMER)
-      ) {
-        event.handled = true;
-        if (player.getSkillManager().getCurrentLevel(Skill.WOODCUTTING) < 56) {
-          return;
-        }
-        player.getInventory().deleteNumber(ARCTIC_PINE_LOGS, 2);
-        player.getInventory().deleteNumber(ROPE, 1);
-        player.getInventory().deleteNumber(BRONZE_NAILS, 1);
-        player.getInventory().adds(NEITIZNOT_SHIELD, 1);
-        player.sendMessage("You make a Neitiznot shield.");
-        api.emitCustomEvent("fremennik-isles:shield-made", { player });
-        return;
-      }
-    }
-    if (!hasItem(player, ARCTIC_PINE_LOGS)) return;
-    event.handled = true;
-    const amount = player.getInventory().getAmount(ARCTIC_PINE_LOGS);
-    player.getInventory().deleteNumber(ARCTIC_PINE_LOGS, amount);
-    player.getInventory().adds(SPLIT_LOG, amount);
-    player.sendMessage("You split the arctic pine logs.");
+  /**
+   * The stump's "Neitiznot shield" choice ("woodcutting:stump-shield" from
+   * skills/woodcutting/SplitLogs.Woodcutting.js, which also splits the logs).
+   */
+  const SHIELD_WOODCUTTING_LEVEL = 56;
+  const SHIELD_CRAFTING_XP = 34;
+  const SHIELD_SOUND = 2101;
+
+  function makeNeitiznotShield(request) {
+    const { player } = request;
+    if (stageOf(player) < STAGE_ARMOUR_DONE) return;
+    const inventory = player.getInventory();
+    const available = () => Math.min(Math.floor(inventory.getAmount(ARCTIC_PINE_LOGS) / 2),
+      inventory.getAmount(ROPE), inventory.getAmount(BRONZE_NAILS));
+    if (available() < 1 || !hasItem(player, HAMMER)) return;
+    request.handled = true;
+    const canMake = () => stageOf(player) >= STAGE_ARMOUR_DONE && available() > 0 &&
+      hasItem(player, HAMMER) && player.getSkillManager().getCurrentLevel(Skill.WOODCUTTING) >= SHIELD_WOODCUTTING_LEVEL;
+    request.start(Math.min(request.amount, available()), canMake, () => {
+      inventory.deleteNumber(ARCTIC_PINE_LOGS, 2);
+      inventory.deleteNumber(ROPE, 1);
+      inventory.deleteNumber(BRONZE_NAILS, 1);
+      inventory.adds(NEITIZNOT_SHIELD, 1);
+      player.getPacketSender().sendTypedMessage(api.core.ChatType.SPAM, "You make a Neitiznot shield.");
+      player.performAnimation(new api.core.Animation(api.core.CacheDefinitions.getSeqId("human_woodcrafting_hammer")));
+      player.getPacketSender().sendSoundEffect(SHIELD_SOUND, 1, 0, 0);
+      player.getSkillManager().addExperiences(Skill.CRAFTING, SHIELD_CRAFTING_XP);
+      api.emitCustomEvent("fremennik-isles:shield-made", { player });
+      return true;
+    });
   }
 
   function handleObjectInteraction(event) {
@@ -1750,10 +1756,6 @@ module.exports = function registerTheFremennikIslesQuest(api) {
     }
     if (objectId === SPINNING_WHEEL) {
       spinYakHair(event);
-      return;
-    }
-    if (objectId === WOODCUTTING_STUMP) {
-      useWoodcuttingStump(event);
     }
   }
 
@@ -2002,12 +2004,14 @@ module.exports = function registerTheFremennikIslesQuest(api) {
   api.onNpcInteraction("Mawnis Burowgar", { "Talk-to": talkToMawnis });
   api.onNpcInteraction("Kjedelig Uppsen", { "Talk-to": talkToKjedelig });
   api.onNpcInteraction("Trogen Konungarde", { "Talk-to": talkToKjedelig });
+  api.onNpcInteraction("Bork Sigmundson", { "Request-supplies": requestBorkSupplies });
   api.onNpcInteraction(handleSpecialTalk);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onCustomEvent("woodcutting:stump-shield", makeNeitiznotShield);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnItem(handleItemOnItem);
   api.onItemAction(handleItemAction);
