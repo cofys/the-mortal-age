@@ -676,6 +676,8 @@ test("Demonic Pacts: Varlamore to start, Misthalin shut but Zanaris and the Abys
   assert.equal(open(3222, 3218).area, MISTHALIN, "Lumbridge is Misthalin's");
   assert.equal(query("league:areas", { player: pacts }).next?.tasks, 80, "the cache's own thresholds");
   assert.equal(areaAt(2412, 4434, { league: 6 }), null, "Zanaris is open from everywhere");
+  assert.equal(areaAt(2591, 4319, { league: 6 }), null, "Puro-Puro is open from everywhere");
+  assert.equal(areaAt(2591, 4319, { league: 5 }), MISTHALIN, "Puro-Puro remains in Misthalin for earlier leagues");
   assert.equal(areaAt(3040, 4839, { league: 6 }), null, "and the Abyss");
   assert.equal(areaAt(2412, 4434, { league: 5 }), MISTHALIN, "Raging Echoes keeps them Misthalin's");
   assert.equal(areaAt(1150, 3420, { league: 6 }), VARLAMORE, "the Stranglewood counts as Varlamore");
@@ -1484,4 +1486,17 @@ test("real league two-step run stops at the sourced intra-square Misthalin edge"
   assert.ok(p.getLocation().equals(actual));
   assert.equal(movement.isMovings(), false);
   assert.equal(movement.size(), 0);
+});
+
+test("Demonic Pacts still excludes Slayer monsters in locked areas", () => {
+  const previous = worldLeague;
+  worldLeague = 6;
+  const player = character("slayerareas");
+  worldLeague = previous;
+  assert.deepEqual(player.getAttribute("league:areas"), [VARLAMORE]);
+  const available = (id, npcId) => query("slayer:task-available", {
+    player, task: { id }, available: true, counts: (id) => id === npcId,
+  }).available;
+  assert.equal(available(-624201, core.NpcIdentifiers.ABYSSAL_DEMON_3), false, "locked-area monsters stay unavailable");
+  assert.equal(available(-624202, core.NpcIdentifiers.IMP_2), true, "starting-area monsters stay available");
 });

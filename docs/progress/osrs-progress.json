@@ -7106,7 +7106,8 @@
             "Transcript page is \"Sheep Herder\"; the four sheep need distinct NPC ids/spawns and herd-path handling (there is no generic herding system yet).",
             "West Ardougne access is gated by Plague City, so the start check should read that quest's varp once implemented.",
             "Main 3b61a15a8 (6 November 2026): #2631 Let the plague sheep standing in the world be prodded. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3484 Sheep Herder: grant the 1,000 Hunter experience the reward now includes."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3484 Sheep Herder: grant the 1,000 Hunter experience the reward now includes.",
+            "2026-11-18: #6219 removes the private-spawn area restriction from prodding world sheep, allowing blue and yellow sheep to move from their configured spawn patches while retaining collision and west-gate checks. Native packet regression cases in server/tests/plague-sheep-multi.test.cjs cover all 12 configured world-sheep spawns. Wiki: https://oldschool.runescape.wiki/w/Sheep_Herder. This does not establish complete herding timing or client-rendering parity."
           ],
           "taskDetails": [
             {
@@ -8085,6 +8086,8 @@
           "wiki": "https://oldschool.runescape.wiki/w/Big_Chompy_Bird_Hunting",
           "implementedIn": [
             "server/plugins/quests/quests/BigChompyBirdHunting.Quest.js",
+            "server/plugins/quests/quests/Hunt.BigChompyBirdHunting.js",
+            "server/plugins/quests/quests/Chest.BigChompyBirdHunting.js",
             "server/plugins/quests/QuestRuntime.js"
           ],
           "devNotes": [
@@ -8092,7 +8095,8 @@
             "The 'Big Chompy Bird Hunting' page in npc-dialogues.json carries 51 variants ('starting-off'); source ids/slugs from npc-dialogues.json + npc-dialogue-index.json / osrsreboxed.",
             "Ogre bow/arrow creation is a Fletching interaction; the hunt is a world interaction on the fixed hunting area.",
             "Main 3b61a15a8 (6 November 2026): #2472 Record successful activity rewards in the collection log; #2501 Complete Western Provinces Diary gameplay task integrations. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3962 Big Chompy: send the transcript's ingredient reminder with the failed-cook refusal. #3955 Big Chompy: record Rantz's ingredient when he names it again before cooking. #2942 Chompy hunt: rename the demonstration-bird release and drop the unsourced hard tier. 6 merged PRs changed recorded implementation files for this entry."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3962 Big Chompy: send the transcript's ingredient reminder with the failed-cook refusal. #3955 Big Chompy: record Rantz's ingredient when he names it again before cooking. #2942 Chompy hunt: rename the demonstration-bird release and drop the unsourced hard tier. 6 merged PRs changed recorded implementation files for this entry.",
+            "2026-11-18, branch feat/big-chompy-parity: aligned the whole quest with a rev 242 whole-quest rsprox capture (stage 0 to 65 plus post-quest hats): per-stage Rantz/Bugs/Fycie pages and the capture's stage-change lines, Rantz's two post-quest menus, the Strength-rolled chest with its how-many bellows prompt, timed toad inflation with the three-toad escape, bait placement/burst messages, Rantz's demonstration (no camera; his shot and miss), the hunting hint arrow, the bird turning into its carcass in place, plucking to the floor (generated drop table, 30 Hunter XP), the three-step spit-roast, per-player fixed seasonings, the capture's completion scroll, the ogre bow's pre-quest Check kills and the cave exits' messages. Verified by server/tests/big-chompy-capture.test.cjs (26, including a real-click stage 0 to 65 route) and the updated chompy/qh728-q006 tests; facts and recorded differences in docs/quests/big-chompy-bird-hunting/README.md. Remaining: Claim-hats and post-quest Check kills (no source for their wording), the turf/ogre-area bait limits and the chest relock time."
           ],
           "taskDetails": [
             {
@@ -15570,10 +15574,11 @@
           ],
           "devNotes": [
             "Landed on tsps main in PR #198 (f17647f9): server/plugins/quests/quests/ZogreFleshEaters.Quest.js is loaded by Quests.plugin.js and owns persisted quest stages, transcript variants/conditions, gameplay hooks, journal and completion rewards.",
-            "Remaining parity: the Jiggig cutscene camera and the blackened-area entry event are not played; the barricade climb, cave stairs and tomb-door movement rely on the generic object/teleport plugins (only the door key check and its transcript are wired here); the cup of tea is a ground item, so pouring is wired through item-on-ground-item (plus a raw 4838 object fallback); Relicym's balm mixing and brutal-arrow fletching are not reproduced (only the reward unlocks); Slash Bash is spawned owner-only with no disease/despawn simulation; the \"grows weary\" flee/despawn message is not triggered; the black-prism 2,000 coin sale to Zavistic is not wired.",
+            "Superseded by the 2026-11-18 note below (the cutscene camera, entry event, barricade climb, stairs, doors, balm and prism sale are now played). Remaining parity: the Jiggig cutscene camera and the blackened-area entry event are not played; the barricade climb, cave stairs and tomb-door movement rely on the generic object/teleport plugins (only the door key check and its transcript are wired here); the cup of tea is a ground item, so pouring is wired through item-on-ground-item (plus a raw 4838 object fallback); Relicym's balm mixing and brutal-arrow fletching are not reproduced (only the reward unlocks); Slash Bash is spawned owner-only with no disease/despawn simulation; the \"grows weary\" flee/despawn message is not triggered; the black-prism 2,000 coin sale to Zavistic is not wired.",
             "PR #417 (78214015): the quest audit (#410) replayed all 73 ported quests; systemic fixes (ground-items.json loaded, onNpcDeath killer, scoped dialogue/condition/object hooks, rev-241 object ids, completion scroll) make this one completable by normal play.",
             "Main 3b61a15a8 (6 November 2026): #2596 Stop quests losing rewards and payments to a full inventory. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4352 Zogre Flesh Eaters: answer Sithik's undead-ogre and disease steps by their current ids."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4352 Zogre Flesh Eaters: answer Sithik's undead-ogre and disease steps by their current ids.",
+            "2026-11-18, branch fix/4410-zogre-flesh-eaters (with osrsreboxed-db fix/zogre-flesh-eaters-rev242-capture): aligned the quest with a whole revision 242 run (the user's RSProx capture ZogreFleshEaters.bin): the Wiki's start requirements (no Fletching; Smithing/Herblore boostable, Ranged not), the barricade as the player's varbit 496 multiloc with the guard's timed crush and Climb-over, the tomb stairs' fade and landings, the north-west room's scene (505), the skeleton zombie and Slash Bash with their smoke puffs and hint arrows, the coffin lid's held grunts and Strength drain, the stone doors swinging, the transcript's message and item boxes, Sithik turning once the player goes down his ladder, the prism sale to Zavistic (504), Uglug Nar's balm refusal and dose prices, the captured journal pages and completion scroll (no bone reward: Slash Bash's drop table gives them). Verified by tests/zogre-flesh-eaters-capture.test.cjs and tests/qh728-q128.test.cjs; docs/quests/zogre-flesh-eaters/README.md lists the capture facts. Remaining: the uncaptured journal pages, the lid's chance, the ogre coffins' Pick-lock, the dialogue runtime's 'previous' after 'What are Zogres?'."
           ],
           "taskDetails": [
             {
