@@ -230,6 +230,8 @@ export type NpcView = Tile & ActorUpdateView & {
   tint?: { startCycle: number; endCycle: number; hue: number; saturation: number; lightness: number; weight: number };
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
+  /** false: a move this tick is re-added without the jump flag, so clients walk it (NPC.teleportInView). */
+  jump?: boolean;
   /** The boat/static ship this NPC stands on (its deck) rather than the main world. */
   worldView?: number;
   rotation: number;
@@ -2531,16 +2533,37 @@ export function encodeWidgetRunScript(
   );
 }
 
-export function encodeRunClientScript(scriptId: number, args: (number | string)[] = []): Buffer {
+export function encodeRunClientScript(scriptId: number, args: ScriptArg[] = []): Buffer {
   const id = Buffer.alloc(2);
   id.writeUInt16BE(scriptId & 0xffff);
   return encodeServerPacket(ServerPacketId.RUN_CLIENT_SCRIPT, Buffer.concat([id, scriptArgs(args)]));
 }
 
-function scriptArgs(args: (number | string | bigint)[]): Buffer {
+/**
+ * A clientscript argument. An array is one of the cache's array arguments (stringarray,
+ * intarray): it goes as type 3 (ints) or 4 (strings), a u16 length and the values. An empty
+ * array goes as an int array.
+ */
+export type ScriptArg = number | string | bigint | number[] | string[];
+
+function scriptArgs(args: ScriptArg[]): Buffer {
   const parts: Buffer[] = [Buffer.from([args.length])];
   for (const arg of args) {
-    if (typeof arg === "bigint") {
+    if (Array.isArray(arg)) {
+      const strings = arg.length > 0 && typeof arg[0] === "string";
+      const head = Buffer.alloc(3);
+      head[0] = strings ? 4 : 3;
+      head.writeUInt16BE(arg.length, 1);
+      parts.push(head);
+      for (const value of arg as (number | string)[]) {
+        if (strings) parts.push(string(String(value)));
+        else {
+          const int = Buffer.alloc(4);
+          int.writeInt32BE(Number(value) | 0);
+          parts.push(int);
+        }
+      }
+    } else if (typeof arg === "bigint") {
       const value = Buffer.alloc(9);
       value[0] = 2;
       value.writeBigInt64BE(arg, 1);
@@ -3770,7 +3793,7 @@ export function encodeNpcSync(
     const worldView = view.worldView;
     writer.writeBits(1, worldView != null ? 1 : 0);
     if (worldView != null) writer.writeBits(32, worldView & 0xffff);
-    writer.writeBits(1, readd.has(view.index) ? 1 : 0);
+    writer.writeBits(1, readd.has(view.index) && view.jump !== false ? 1 : 0);
     writer.writeBits(large ? 8 : 5, signed(view.y - base.y, large ? 8 : 5));
     writer.writeBits(large ? 8 : 5, signed(view.x - base.x, large ? 8 : 5));
     writer.writeBits(3, view.rotation & 7);

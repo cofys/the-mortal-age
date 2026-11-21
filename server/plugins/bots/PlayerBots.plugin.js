@@ -12,6 +12,7 @@ const { registerBotEvents } = require("./runtime/RegisterBotEvents.PlayerBots");
 const { registerPvpChatter } = require("./behaviours/pvp/PvpChatter.PlayerBots");
 const { createBotPluginLogging } = require("./runtime/PluginLogging.PlayerBots");
 const { bootPlayerBotsRuntime } = require("./runtime/PluginBoot.PlayerBots");
+const { STARTUP_ROUTINES_KEY, registerStartupRoutines } = require("./runtime/StartupRoutines.PlayerBots");
 const { createBotBenchmark } = require("./runtime/Benchmark.PlayerBots");
 const { startBotSites } = require("./brain/SiteSpawner.PlayerBots");
 const { setActiveBotRuntime } = require("./runtime/RuntimeRegistry.PlayerBots");
@@ -191,7 +192,6 @@ const BOT_CONFIG = Object.freeze({
     ]),
   }),
 });
-
 /** Scripted bots accept every duel; AI bots aren't scripted, so they are left out. */
 function isScriptedBot(player) {
   return player?.isPlayerBot?.() === true && player.getAttribute?.(AI_BOT_ATTRIBUTE) !== true;
@@ -212,6 +212,7 @@ function registerDuelBotAcceptance(api) {
   });
 }
 
+
 module.exports = {
   name: "PlayerBots",
   description: "Populates the world with player bots: PvP-loadout fighters and optional AI chat bots, with admin commands to manage them.",
@@ -220,9 +221,13 @@ module.exports = {
       type: "json", label: "Bot activities allowed", defaultText: "Every activity",
       help: "A list of the activities bots may be spawned for; any other spawn is refused, e.g. [\"bounty-hunter\", \"last-man-standing\"]. Activities: world (the world's own population: Wilderness roamers and the bot sites), ai, bounty-hunter, last-man-standing, castle-wars, soul-wars, pest-control, developer (bot commands, the benchmark, --stressTest).",
     },
+    [STARTUP_ROUTINES_KEY]: {
+      type: "json", label: "Start bot routines on boot", defaultText: "No additional startup deployments",
+      help: "List registered routine IDs and counts, e.g. [{\"id\":\"varrock_patrol\",\"count\":2}]. Uses the same routine, start setup and optional environment caps as manual deployment.",
+    },
     "PlayerBots:ai": {
       type: "json", label: "AI bots", defaultText: "AI bots off (3 bots when enabled)",
-      help: "Settings for bots that chat through an AI model, merged over the shipped defaults, e.g. { \"enabled\": true, \"count\": 3, \"places\": [\"lumbridge\"] }. Also takes names, disclose, providers and gifts; API keys come from the server environment, never here.",
+      help: "Settings for bots that chat through an AI model, merged over the shipped defaults, e.g. { \"enabled\": true, \"count\": 3, \"places\": [\"lumbridge\"] }. Count is capped at the world's player capacity. Also takes names, disclose, providers and gifts; API keys come from the server environment, never here.",
     },
     [RETREAT_TELEPORT_CHANCE_CONFIG]: {
       type: "number", label: "PvP bot retreat teleport chance (%)", default: DEFAULT_RETREAT_TELEPORT_CHANCE,
@@ -231,7 +236,7 @@ module.exports = {
     },
     "PlayerBots:sites": {
       type: "json", label: "Bot site overrides", defaultText: "No overrides: the shipped bot-sites.json applies",
-      help: "Maps a bot site id to the properties to change for it, e.g. { \"some_site\": { \"enabled\": false } }. Sites not named keep their shipped properties; a world.local.json value replaces the world.json one as a whole.",
+      help: "Maps a bot site id to the properties to change for it, e.g. { \"some_site\": { \"enabled\": false } }. Total queued site bots are capped at the world's player capacity. Sites not named keep their shipped properties; a world.local.json value replaces the world.json one as a whole.",
     },
     "PlayerBots:activeRegionBotsByRegion": {
       type: "json", label: "Wilderness bots per map square", defaultText: "Shipped value in bot-sites.json",
@@ -263,6 +268,7 @@ module.exports = {
       config: BOT_CONFIG,
     });
     setActiveBotRuntime(boot.runtime, BOT_CONFIG.behaviorMode, boot.brainRegistry);
+    registerStartupRoutines(api, boot);
 
     createBotBenchmark({
       api,
@@ -303,7 +309,7 @@ module.exports = {
       brainRegistry: boot.brainRegistry,
     });
 
-    const aiRuntime = registerAiBots({
+    registerAiBots({
       api,
       botApi,
       runtime: boot.runtime,
@@ -311,7 +317,6 @@ module.exports = {
       world: boot.brainWorld,
       resetMovementState,
     });
-    boot.brainRegistry.aiAgentAvailable = typeof aiRuntime?.getAiGraphAgent === "function";
 
     registerBotEvents({
       api,

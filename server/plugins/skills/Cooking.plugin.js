@@ -60,6 +60,8 @@ module.exports = {
   startBotCooking,
   /** True for a fire, range or oven the game lets you cook on (name and Cook action). */
   isCooker: Cookers.isCooker,
+  /** True for a loc that cooks as a fire: a fire by name, a lit fireplace or the op-less farmhouse pot. */
+  isFire: Cookers.isFire,
   /** Whether the player may cook this food at all (world, level, quest and rumour gates), without messages. */
   canCookFood: Cookers.canCookFood,
   /** Every food a fire or range cooks, by its raw item id (after register). */

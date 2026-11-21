@@ -16,6 +16,10 @@ function onLogin({ player }) {
   try {
     // Skip bots — they don't use the web client
     if (player?.isPlayerBot?.() === true) return;
+    // The token is delivered to the web client over the network channel; a
+    // session with no network client (headless/test) has nobody to deliver
+    // to, and the send would only pollute the player's message stream.
+    if (player?.getSession?.()?.hasNetworkClient?.() !== true) return;
     ContentApiAuth.issueToken(player);
   } catch (e) {
     console.error("[content-api-auth] failed to issue token on login", e);

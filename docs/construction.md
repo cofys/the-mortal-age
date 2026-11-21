@@ -223,6 +223,14 @@ the generic Ladders plugin's `ladders:climb`, which otherwise claims every Climb
   telescope's accuracy (Wiki: oak 24, teak 9, mahogany 2 minutes), via
   `shooting-stars:forecast`. Which regions take "the" is inferred beyond the captured
   "the Kharidian Desert".
+- **S.T.A.S.H chart:** the wall chart space's fourth chart (furniture row 5790,
+  `poh_wallchart_4`): Construction 40, a bolt of cloth and a S.T.A.S.H blueprint, 16 experience,
+  `human_poh_build_wall` and synth 938 (rsprox.net rec 2804, rev 229, ticks 4949 and 5330). View
+  opens the same STASH units chart as Watson's noticeboard (ticks 5337-5338; see
+  [treasure-trails.md](treasure-trails.md)). The blueprint is Watson's (500 coins, rec 2804
+  tick 5098); his sale is not wired yet.
+- **Build menu names:** the furniture row's name, sentence-cased ("Spice Rack" is sent as
+  "Spice rack", "Oak Telescope" as "Oak telescope"; recs 271 and 2804).
 - **Crystal ball, elemental sphere, crystal of power:** change an elemental staff's element;
   battlestaffs cost 100 and mystic staffs 1,000 runes of the new element (Wiki).
 - **Bookcases:** `poh_bookcase` (910) lists enum 5210's books and shows the found ones from
@@ -320,6 +328,14 @@ Using a pet on menagerie furniture stores it; the pet house's View lists the sto
 985, varps 864, 1416 and 4718, cache scripts 639-643) and takes them back, and Toggle (varbit
 2013) lets them roam the menagerie outside building mode. Stored pets count as owned
 (`pets:held-elsewhere`).
+
+The Pet list's Read opens `poh_petlist` (210) as rsprox captures 2581, 2777, 2782, 2793 and
+3121 send it: script 2524 (-1, -1), the modal, Examine (op10) on list slots 0 to the last slot
+of enum 985, and script 647 with one green "Owned" or red "Not owned" cell per slot, each
+followed by `|`. A slot is Owned when the reader owns that pet (`pets:owns`, the insurance
+record): recording 2581's nine Owned slots are exactly its nine `pet_insurance_*` bits, with
+nothing stored in the menagerie. Examine sends the pet's examine for owned and unowned slots
+alike (2581: "A tiny frost nagua." on the unowned Moxi, slot 61).
 
 ### Dungeon and throne room
 
@@ -507,6 +523,14 @@ there!", or "Hmph. Come back when you have 5,000 coins.". Twisted theme first sa
 let me borrow your blueprints ..."; leaving it shows "The Estate agent returns your blueprints."
 (message box). The Wilderness theme is only listed once it can be used (the captures show it
 rarely, so when it shows otherwise isn't known).
+
+The exit portal's Lock and Remove board advert (rsprox captures local 1001005, local 1001008 and
+248, rev 229): Lock answers on the click's tick in a message box, "Your house is now locked to all
+visitors." or "Visitors can now enter your house.", and sets `poh_house_locked`; a guest gets "You
+can only lock your own house." (message box). Remove board advert asks the board's "Remove your
+advert?" (Yes. / No.); Yes says "Your house is no longer being advertised.". A guest gets "This is
+not your portal to configure." and an owner with no advert up "You are not currently advertising
+your house." (both game messages).
 
 A new house's save lists its garden's exit portal by hotspot only; loading a house now places
 such furniture, so the portal shows, and you arrive in front of it.
