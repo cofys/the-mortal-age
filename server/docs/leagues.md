@@ -1311,12 +1311,19 @@ Tier 1 counts once the character chose its first relic.
   Pyramid Plunder's sceptre (`Pyramid plunder`), the Grand Hallowed Coffin's ring of endurance,
   Fishing Trawler's angler pieces, Tai Bwo Wannai's gout tuber and, in Raging Echoes and Demonic
   Pacts, aerial fishing's golden tench (the coffins' strange lockpick is not on the pages).
+  The Gauntlet's reward chest (`The Gauntlet`, `The Corrupted Gauntlet`) boosts the crystal
+  seeds' own 1-in-n rolls (not the clue or Youngllef); the Lunar Chest (`Moons of Peril`) each
+  Moon's 1/56 unique roll (not the standard table or Eyatlalli); each Fortis Colosseum wave
+  (`Fortis Colosseum`) the echo crystal (the page's echo boots row), sunfire fanatic and
+  Tonalztics rows, multiplied in the wave's table while the other rows share what is left (not
+  the pet); a Doom of Mokhaiotl delve (`Doom of Mokhaiotl`, Demonic Pacts) its unique roll (not
+  Dom); and a pickpocket target's `dropSource` (pickpocketing.json) its `first` rolls: vyres'
+  blood shard (`Vyre`) and Prifddinas elves' teleport seed (`Elf (Thieving)`).
   Sources rolled by their own plugins are in the data but inert until that plugin asks
   `drops:chance` with the source's name: the Grotesque Guardians, Corporeal Beast's sigils (not
-  on its table here), the Gauntlet, Moons of Peril, the Colosseum, Hunter rumours, the Shrine,
-  the seed pack, the Fountain of Rune, Larran's and the brimstone chest, the Zombie Pirate's
-  Locker, chewed bones, the Volcanic Mine ore pack, Shades of Mort'ton, and the pickpocketed
-  blood shards (vyres) and teleport seeds (elves).
+  on its table here), Hunter rumours, the Shrine, the seed pack, the Fountain of Rune, Larran's
+  and the brimstone chest, the Zombie Pirate's Locker, chewed bones, the Volcanic Mine ore pack
+  and Shades of Mort'ton.
 - **Minigame points** (Trailblazer Reloaded 3x/5x/8x from tiers 2/5/7; Raging Echoes and Demonic
   Pacts 4x/8x from tiers 1/4): a minigame asks `minigame:points { player, minigame, points }` as it awards and
   the league multiplies `points` (floored) when the passive's `minigames` (leagues.json) lists it. Other
@@ -1802,7 +1809,7 @@ is `select_button` 512:84 and the unlock `confirm_button` 512:62 (rev 227's echo
   names is open to everyone: instances, Death's Office, the POH, random events, the essence mine,
   Tutorial Island (the Wiki's accommodations). The surface-offset fallback remains an
   approximation of entrance ownership, not an authoritative dungeon map. Known approximations
-  of the remaining grid: Catherby's beach east of x 2816 falls with Asgarnia, the River Salve's east bank at Paterdomus with Misthalin, the Citharede Abbey and the
+  of the remaining grid: map square 44,53 (Catherby's beach and Harry's Fishing Shop) is wholly Kandarin, including White Wolf Mountain's southern slopes and the white wolves there, since the Wiki puts the mountain on the Kandarin/Asgarnia border and gives no tile outline (Asgarnia's rect starts at 44,54), the River Salve's east bank at Paterdomus with Misthalin, the Citharede Abbey and the
   Giants' Plateau east of Al Kharid (the map square holding the abbey's own cabbage field) with the
   desert while the Abandoned Mine in the square below stays Morytania, Tutorial Island's eastern
   tip with the desert. `league:area-at { x, y }` answers for any tile.
@@ -2198,8 +2205,12 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
     Surge spells) and "Hit 150 damage or more with the Keris Partisan" (25979, as "Defeat a Kalphite
     with the Keris Partisan" names it).
   - `ca-boss { monsters }`: the Wiki task rows' groups of Combat Achievement monsters (below).
-  Not yet: the solo kills ("Royal Titans without any other player joining", "Nex in a private
-  instance"), the timed runs (Prifddinas lap 1:10, Corrupted Gauntlet 4:30, Sepulchre 6:30) and "Vorkath
+  - Solo encounters: a `credited` kill that is also `solo` counts only a `combat-achievements:kill`
+    whose `solo` is true, the encounter's own word (overlay). "Defeat the Royal Titans solo" ("without
+    any other player joining"): the player spawned the fight alone and nobody joined before the kill.
+    "Defeat Nex Solo" ("in a private instance without help from any other player"): a private
+    chamber, the player alone at the start and at the kill, and no other player's damage.
+  Not yet: the timed runs (Prifddinas lap 1:10, Corrupted Gauntlet 4:30, Sepulchre 6:30) and "Vorkath
   15 times without leaving". Each needs its encounter's own event first.
 - **Places from location lines** (`generate-league-tasks.ts`, `PLACE_DEFS` with `locLines`): a task
   whose place is where its subject stands takes the subject pages' own location lines for bounds. The
@@ -2502,7 +2513,8 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   Mithril Spear"), a spell (`spells`, "with an earth spell"), a combat style (`style`, "with
   melee"), equipment worn at the death (`worn`, "while dressed like it"), a single blow of at
   least the target's hitpoints (`oneHit`, "in one hit"), a target that never hurt a player
-  (`noDamage`, "without taking any damage from it"), or no other player's damage (`solo`); a count
+  (`noDamage`, "without taking any damage from it"), or no other player's damage (`solo`; on a
+  `credited` kill it is the encounter's report instead, above); a count
   within a time window (`window { count, ticks }`, "3 chickens in 6 seconds", "8 penguins within 5
   seconds") keeps the ticks of its kills for the session (not persisted). `kill-any-with { items,
   count }` is any attackable NPC killed with one of the items as the final blow ("5 creatures with a
@@ -2537,9 +2549,8 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   `combat-achievements:completed` and at login. "Within the areas you have unlocked" is not
   checked.
 - **Not mapped yet:** deeds with a condition (a streak), boss kills whose wording is about the
-  encounter rather than the fight ("Defeat Nex Solo" and "Defeat the Royal Titans solo" want a
-  private fight with no one else ever joining, not the `solo` fight condition; "Defeat Vorkath 15
-  Times Without Leaving" wants a 15th no-leave signal the encounter does not keep), the Echo bosses
+  encounter rather than the fight ("Defeat Vorkath 15 Times Without Leaving" wants a 15th no-leave
+  signal the encounter does not keep), the Echo bosses
   and the awakened variants no plugin completes (no content), a kill that is really a Slayer task's
   own condition, and kills whose NPC is never attackable (the Port Sarim prisoner); places with no
   sourced bounds (open towns, regions), open groups ("any Dragon weapon"), transport without an

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-20",
+  "updated": "2026-11-22",
   "note": "Progress measures functional equivalence with OSRS through implementation tasks: done counts fully, in progress counts halfway, and to do counts zero. Automated test coverage is evidence, not a scoring requirement. Reconciled against tsps main 3e9ee2d67 on 11 November 2026, covering 1,355 merged PRs since the 6 November checkpoint 3b61a15a8. This sync credits the implemented portions of Clan Wars, Burthorpe Games Room, ranked PvP Arena, Trouble Brewing, Intelligence Gathering, Halloween, seasonal rares, Brutus and Maggot King. It also records Hunter Rumours, diary and League task updates, Sailing, bank-funded Grand Exchange offers, Curse of the Empty Lord, quest progression fixes, combat and interface work. Existing inventory, task scope and weights are retained. Only merged main changes are credited.",
   "schema": {
     "item": [
@@ -1639,7 +1639,8 @@
             "PR #283 (f4131ce7): startWoodcutting re-faces the tree after Combat.reset() cleared the face set by the object click, so the chopping stance matches OSRS.",
             "PR #370 (88b3c516): Woodcutting Guild gates, the Ent dungeon, Ent trunks and the shrine, as captured.",
             "Main 3b61a15a8 (6 November 2026): #2306 fix: apply Forester rations to felling-axe chops; #2315 fix: stop woodcutting after a completed one-step walk; #2511 feat(mining): Cam Torum calcified rocks and oozing water; #2528 Implement remaining Morytania diary activities. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4251 Settings: clue scroll warnings for skilling clues, and the level-up chatbox list. #2779 Apply clue vessel combat and Wilderness modifiers. #2755 Add clue bottles for supported Fishing catches."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4251 Settings: clue scroll warnings for skilling clues, and the level-up chatbox list. #2779 Apply clue vessel combat and Wilderness modifiers. #2755 Add clue bottles for supported Fishing catches.",
+            "2026-11-23 (fix/busy-modal-pause): woodcutting, mining and fishing wait while a busy main modal (varbit 12393: the diary journal, the CA overview, View equipment stats) is open, and start over after it closes without a re-click (the start animation, and for fishing and woodcutting the start message, then a fresh click's first-roll delay), as rsprox captures 227/00555 t24898-24920 and 227/00562 t153-182 show (Leagues V worlds). Verified by server/tests/busy-modal-pause.test.cjs; see docs/busy-modals.md. Those captures are revision 227; make-X skills and attacks under a busy modal are unrecorded and unchanged. The four task statuses remain done."
           ],
           "taskDetails": [
             {
@@ -1833,7 +1834,8 @@
             "Client feedback connected by PR #209 (be801847): native level-up display with per-skill model, level-up clears the interrupted animation, cache frame sounds replace duplicate explicit sends, and movement cancels pending actions; see server/docs/skill-client-feedback.md.",
             "Main sync 9949ef068: PR #639 adds Tempoross harpoonfish spots; PR #656 adds the fish barrel and tackle box storage items.",
             "Main 3b61a15a8 (6 November 2026): #2313 Add Rada's blessing's chance of an extra fish; #2333 fix(leagues): Leagues VI bugs from #2324; #2467 Restore missing unique drop sources and spirit angler exchange; #2510 fix: Varlamore fixes from #2449 (Cam Torum doors, Renu, pets, ground items) and fishing interrupt; #2528 Implement remaining Morytania diary activities. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3659 Prevent minnow loss when shark stack is full. #3098 Fishing: Kylie's minnow exchange checks for shark room again when the amount is entered."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3659 Prevent minnow loss when shark stack is full. #3098 Fishing: Kylie's minnow exchange checks for shark room again when the amount is entered.",
+            "2026-11-23 (fix/busy-modal-pause): woodcutting, mining and fishing wait while a busy main modal (varbit 12393: the diary journal, the CA overview, View equipment stats) is open, and start over after it closes without a re-click (the start animation, and for fishing and woodcutting the start message, then a fresh click's first-roll delay), as rsprox captures 227/00555 t24898-24920 and 227/00562 t153-182 show (Leagues V worlds). Verified by server/tests/busy-modal-pause.test.cjs; see docs/busy-modals.md. Those captures are revision 227; make-X skills and attacks under a busy modal are unrecorded and unchanged. The four task statuses remain done."
           ],
           "taskDetails": [
             {
@@ -1939,7 +1941,8 @@
             "PR #283 (f4131ce7): a shape-22 floor decoration only refuses a fire tile when its definition is a clipped decoration (blocksFireTile), so Tutorial Island's walkable grass no longer blocks lighting; scenery and existing fires still block. server/tests/firemaking.test.cjs covers.",
             "Main 8403b60db (4 November 2026): #2029 — The player steps off the log on the lighting-roll tick, before the fire appears; timing follows the recorded sequence.",
             "Main 3b61a15a8 (6 November 2026): #2544 Finish sixteen remaining Kandarin Diary gameplay tasks; #2601 Treasure Trails: Audit clue steps and fix supported gaps; #2682 Cut leaping fish with a knife for roe, caviar and offcuts. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #2816 Handle extinguishing carried torches."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #2816 Handle extinguishing carried torches.",
+            "Last light in the dark (rsprox captures, local 1000134-1000140, Lumbridge Swamp Caves): the lit candle lantern now has Extinguish ('You extinguish the lantern.' spam); Extinguish on the only lit candle or lantern keeps it with 'Extinguishing the candle/lantern would leave you without a light source.', and Drop on the only carried light keeps it with 'Dropping that would leave you without a light source.' (Darkness drop policy). Tasks unchanged. Remaining: the torch and oil lamp refuse silently (their lines were not captured), and the darkness_level overlay (varbit 278) per light strength is not sent in the caves."
           ],
           "taskDetails": [
             {
@@ -2218,7 +2221,8 @@
             "Gaps: no MLM, shooting stars, amethyst/volcanic sulphur, mining gloves, or named rock variants for every cache object (rocks match by name via ROCK_BY_NAME).",
             "Client feedback connected by PR #209 (be801847): native level-up display with per-skill model, level-up clears the interrupted animation, cache frame sounds replace duplicate explicit sends, and movement cancels pending actions; see server/docs/skill-client-feedback.md.",
             "Main 281766303 (2 November 2026): #1887 allows 3rd age and other pickaxe variants to mine.",
-            "Main 3b61a15a8 (6 November 2026): #2490 Credit supported Kourend and Kebos Diary gameplay tasks; #2511 feat(mining): Cam Torum calcified rocks and oozing water; #2548 Add remaining Kourend Diary skill and combat actions; #2621 Keep calcified rocks standing for Endless Harvest miners when the water stops; #2658 Add the Runite Golem's rock and the Wilderness Diary's rune scimitar task; #2663 Store and keep gems in an open gem bag. (7 merged PRs touch the recorded implementation; highlights shown.) Existing completion credit and documented limitations are retained unless explicitly updated below."
+            "Main 3b61a15a8 (6 November 2026): #2490 Credit supported Kourend and Kebos Diary gameplay tasks; #2511 feat(mining): Cam Torum calcified rocks and oozing water; #2548 Add remaining Kourend Diary skill and combat actions; #2621 Keep calcified rocks standing for Endless Harvest miners when the water stops; #2658 Add the Runite Golem's rock and the Wilderness Diary's rune scimitar task; #2663 Store and keep gems in an open gem bag. (7 merged PRs touch the recorded implementation; highlights shown.) Existing completion credit and documented limitations are retained unless explicitly updated below.",
+            "2026-11-23 (fix/busy-modal-pause): woodcutting, mining and fishing wait while a busy main modal (varbit 12393: the diary journal, the CA overview, View equipment stats) is open, and start over after it closes without a re-click (the start animation, and for fishing and woodcutting the start message, then a fresh click's first-roll delay), as rsprox captures 227/00555 t24898-24920 and 227/00562 t153-182 show (Leagues V worlds). Verified by server/tests/busy-modal-pause.test.cjs; see docs/busy-modals.md. Those captures are revision 227; make-X skills and attacks under a busy modal are unrecorded and unchanged. The four task statuses remain done."
           ],
           "taskDetails": [
             {
@@ -3043,7 +3047,8 @@
             "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4362 Settings: the examine price line on plugin item interfaces. #4295 Sawmill: coupons pay for their own log's plank. #4196 Construction: hall rug spaces lose their Build ghosts under a staircase. 39 merged PRs changed recorded implementation files for this entry.",
             "2026-11-17: POH bookcases remember successful inventory acquisition before the first Search, including later disposal. Both displayed availability and Take apply the Wiki completion requirements for Book on chemicals (The Dig Site), Translation book (The Grand Tree) and Beaten book (Elemental Workshop II); existing acquisition history is preserved. Planning/snapshot inventories, failed adds and bank placeholders do not discover books. See docs/construction.md and server/tests/poh-bookcase-discovery.test.cjs: 18 focused real-object checks cover actual shop/Exam Centre acquisition, native Drop/Take, GE/Bank/pickup/trade transfers (including failed GE capacity and committed bank collection), all three registered quest gates, capacity, metadata/identity, accepted quantities, captured Take sound/channel/refusal feedback, encoded catalog-row Take/Examine permissions and save restoration. Lost unrecorded history and a full per-book requirement audit remain outside this correction; rendered native persistence verification is recorded separately when completed.",
             "2026-11-21: Remove-room on POH staircases, the oubliette ladder and throne room trapdoors removes the room at their other end (spiral staircases ask which), with the captured refusals; Remove on stair furniture still skips its own stairs warning.",
-            "2026-11-21: Pick-up on a pet roaming the menagerie now takes it back to the owner's backpack, as the pet list's Take does: that NPC goes, its stored bit and form varbit clear and the other pets keep roaming (rsprox captures 2779-2784, rev 229); storing or taking a pet no longer respawns the other roaming pets. server/plugins/skills/construction/Menagerie.Construction.js, server/tests/menagerie-pet-pickup.test.cjs (4 real-object checks: pick-up, full backpack, bank PIN, 21 stored pets). Guest Pick-up and the full-backpack message are ours (unrecorded)."
+            "2026-11-21: Pick-up on a pet roaming the menagerie now takes it back to the owner's backpack, as the pet list's Take does: that NPC goes, its stored bit and form varbit clear and the other pets keep roaming (rsprox captures 2779-2784, rev 229); storing or taking a pet no longer respawns the other roaming pets. server/plugins/skills/construction/Menagerie.Construction.js, server/tests/menagerie-pet-pickup.test.cjs (4 real-object checks: pick-up, full backpack, bank PIN, 21 stored pets). Guest Pick-up and the full-backpack message are ours (unrecorded).",
+            "2026-11-22: #6511 pet houses store the menagerie's extras (pet rocks, cats, dogs, fishbowls, toy cats, broavs, spooky chairs, Humphrey Dumphrey, the Mayor of Catherby and Archibald) in inventory poh_menagerie_pets, shown after the unique pets in View, taken back from the list or by Pick-up on their roaming poh_* NPC; kittens are turned away and every pet house tier holds its limit, extras included (oak 3 ... desecrated 12; nature: all unique pets + 12 extras), as rsprox captures 2779 and 2782 (rev 229) and the Wiki Menagerie page give. Picking the roaming pet rock up completes the Fremennik Diary medium task. server/plugins/skills/construction/Menagerie.Construction.js, data/menagerie-extras.json, server/tests/menagerie-extra-pets.test.cjs (10 real-object checks). With no pet house built, storing gets the recorded refusal (2777); the 13th-extra refusal is ours (unrecorded). Removing a pet house that holds pets is not yet refused (recorded in 2779 and 2793)."
           ],
           "taskDetails": [
             {
@@ -5843,13 +5848,18 @@
           "wiki": "https://oldschool.runescape.wiki/w/Murder_Mystery",
           "implementedIn": [
             "server/plugins/quests/quests/MurderMystery.Quest.js",
+            "server/plugins/quests/murdermystery/State.MurderMystery.js",
+            "server/plugins/quests/murdermystery/Journal.MurderMystery.js",
+            "server/plugins/quests/murdermystery/Evidence.MurderMystery.js",
+            "server/plugins/quests/murdermystery/Poison.MurderMystery.js",
             "server/plugins/quests/QuestRuntime.js"
           ],
           "devNotes": [
             "Ported in server/plugins/quests/quests/MurderMystery.Quest.js (transcript-driven variant selection, conditions and hand-ins); see the file header for documented gaps.",
             "Transcript page is \"Murder Mystery\"; the evidence items need ItemIdentifiers ids and the crime-scene objects need ObjectIdentifiers ids.",
             "The culprit is fixed (read the wiki) - do not randomise it, or the clue chain will not line up.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3745 Murder Mystery: hand-in needs only the thread and killer's print."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3745 Murder Mystery: hand-in needs only the thread and killer's print.",
+            "2026-11-22, branch feat/murder-mystery-capture: Murder Mystery aligned with four whole runs of the quest (the user's RSProx capture MurderMystery.bin, revision 242, Frank the murderer; local recordings 1001551 and 1001958, David; 1001930, Carol): every Wiki line played from the transcript instead of the plugin's own wording, the Wiki's {{tbox}} lines as messageboxes; the window, dagger, pot, barrels, sacks, gate and flour barrel with the captured timing and inventory slots; flour, flypaper and print matching as captured; the poison salesman straight to his menu once he has named the buyers, and The Fremennik Trials' hand-off; per-suspect poison stories and places; the guard's evidence menu, the hand-in (the Wiki's 'her' kept; the captures' 'him' for a son is a recorded difference), the evidence removed from the bank too, the post-quest permission lines, the scroll's title, model placed at (78, 128) and jingle; the courtyard guard's and Pierre's post-quest lines; the captured journal. Lines the Wiki lacks were added in osrsreboxed-db's capture-sources.json. Verified by server/tests/murder-mystery-capture.test.cjs (29 checks) and an agent-MCP playthrough; facts in docs/quests/murder-mystery/README.md. Correction to the note above on the culprit: the Wiki and the four runs (murdersus 6, 4, 4, 3) show the murderer chosen at random at the start, which the plugin now does. Limitations: Anna's and David's green-thread answers, and the guard's poison-proof lines for Anna, Elizabeth and Frank, are missing from the Wiki and the captures."
           ],
           "taskDetails": [
             {
@@ -9330,7 +9340,9 @@
           "wiki": "https://oldschool.runescape.wiki/w/Enlightened_Journey",
           "implementedIn": [
             "server/plugins/quests/quests/EnlightenedJourney.Quest.js",
-            "server/plugins/quests/QuestRuntime.js"
+            "server/plugins/quests/QuestRuntime.js",
+            "server/plugins/quests/enlightenedjourney/Scenes.EnlightenedJourney.js",
+            "server/plugins/world/BalloonTransport.plugin.js"
           ],
           "devNotes": [
             "PR #462 (b0ba9f98): ported in server/plugins/quests/quests/EnlightenedJourney.Quest.js - transcript-driven (words in npc-dialogues.json; the plugin owns stage varbit/variant selection, conditions, spawns, journal and rewards) and played stage 0 to completion through the agent MCP.",
@@ -9338,7 +9350,8 @@
             "The 'Enlightened Journey' page in npc-dialogues.json carries 28 variants ('starting-off'); source ids/slugs from npc-dialogues.json + npc-dialogue-index.json / osrsreboxed.",
             "Balloon transport is the reward unlock; keep route travel in a transport plugin rather than the quest plugin.",
             "Main 3b61a15a8 (6 November 2026): #2399 Use the native OSRS quest list and repair quest state publication. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026): #4425 accepts willow branches from any source for the balloon basket."
+            "Main 3e9ee2d67 (11 November 2026): #4425 accepts willow branches from any source for the balloon basket.",
+            "2026-11-23, branch feat/quest-enlightened-journey: the quest as the user's revision 242 capture plays it (docs/quests/enlightened-journey/README.md) - zep_quest's own stage values and the hand-ins' varbits, the balloon diagram, the two experiment cutscenes and the basket scene, the crafting/dye/release beats, live's journal and scroll, every balloon route's captured screens and control cadence, the post-quest map, search and talks; dialogue fixes in RSPSApp/osrsreboxed-db#138. Verified by tests/enlightened-journey-capture.test.cjs and the balloon/quest tests, and a fresh agent playthrough to completion. Limits: the sapling's planting and growth are Wiki-only and unexercised; crashes past Entrana use calibrated tiles; the quest-rating interface and quest-history varbits are not implemented for any quest."
           ],
           "taskDetails": [
             {
@@ -10774,7 +10787,8 @@
             "The 'The Grand Tree' page in npc-dialogues.json carries 58 variants ('the-dying-tree'); source ids/slugs from npc-dialogues.json + npc-dialogue-index.json / osrsreboxed.",
             "The 'treachery-revealed-the-mystery-of-the-twigs' variant is the twig-pillar puzzle; wire it through onItemOnObject.",
             "Main 82657e165: #1528 the landings that blocked the quest route fixed.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4320 Finish the Grand Tree quest scenes and transitions. #4144 Fix the Grand Tree prison, shipyard and cave transitions. #4077 Land the Grand Tree trapdoor beside the cave ladder. 5 merged PRs changed recorded implementation files for this entry."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4320 Finish the Grand Tree quest scenes and transitions. #4144 Fix the Grand Tree prison, shipyard and cave transitions. #4077 Land the Grand Tree trapdoor beside the cave ladder. 5 merged PRs changed recorded implementation files for this entry.",
+            "2026-11-22, #6544: clicking Glough during his guard's climb or the escort no longer restarts his talk and calls a second guard, and the Karamja shipyard gate opens with both leaves swung west as in rsprox captures local 1002189 t11325 and local 1001562 t6137. Verified by server/tests/grand-tree-capture.test.cjs and grand-tree-start-native.test.cjs (both fail on the previous code) and an agent MCP run. Statuses unchanged."
           ],
           "taskDetails": [
             {
@@ -15179,14 +15193,19 @@
             "server/plugins/quests/quests/Watchtower.Quest.js",
             "server/plugins/quests/Quests.plugin.js",
             "server/plugins/quests/QuestRuntime.js",
-            "server/plugins/npcs/NpcDialogues.plugin.js"
+            "server/plugins/npcs/NpcDialogues.plugin.js",
+            "server/plugins/quests/watchtower/State.Watchtower.js",
+            "server/plugins/quests/watchtower/Journal.Watchtower.js",
+            "server/plugins/quests/watchtower/Scenes.Watchtower.js",
+            "server/plugins/objects/Doors.plugin.js"
           ],
           "devNotes": [
             "Landed on tsps main in PR #198 (f17647f9): server/plugins/quests/quests/Watchtower.Quest.js is loaded by Quests.plugin.js and owns persisted quest stages, transcript variants/conditions, gameplay hooks, journal and completion rewards.",
             "Remaining parity: the tower ladder and Gu'Tanoth gate objects are not wired (the trellis, bushes, chest, lever, rock and skavid cave entrances are); the dark-cave fallback, the enclave cutscene and the crystal-on-pillar placement are not simulated (the lever completes the quest directly); the \"Gor cur\" skavid that teaches \"Ar\" is absent from the transcript dump, so the mad skavid accepts the three teachable words; guard gate/bridge/southern roles are best-effort from their spawn coordinates; the rock cake source and the bank-storage branches rely on the shared item/bank systems.",
             "PR #417 (78214015): the quest audit (#410) replayed all 73 ported quests; systemic fixes (ground-items.json loaded, onNpcDeath killer, scoped dialogue/condition/object hooks, rev-241 object ids, completion scroll) make this one completable by normal play.",
             "Main 3b61a15a8 (6 November 2026): #2238 feat: complete Ardougne easy and medium diary tasks; #2374 fix: restore Watchtower rope crossings to Grew's island; #2399 Use the native OSRS quest list and repair quest state publication; #2534 Implement Ardougne Hard and Elite diary gameplay tasks. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4093 Fix quest progression, temple repair, and bone shortbow combat. #3796 Fix quest interactions, passage routing and Fishing Trawler recovery. #3297 fix: house portals need the Watchtower spell scroll read, as casting does. 4 merged PRs changed recorded implementation files for this entry."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4093 Fix quest progression, temple repair, and bone shortbow combat. #3796 Fix quest interactions, passage routing and Fishing Trawler recovery. #3297 fix: house portals need the Watchtower spell scroll read, as casting does. 4 merged PRs changed recorded implementation files for this entry.",
+            "2026-11-22, branch feat/watchtower-capture: the whole quest aligned with a revision 242 RSProx run (docs/quests/watchtower/README.md): live's stages (13 complete, 14 scroll read; old saves migrated), the varp 936 varbits driving the pillar multilocs and the per-player shaman multinpcs, the tower guard's ladder, the relic hand-in and assembly as live plays them, both Gu'Tanoth gates as pass-through gates, the battlement, gap, rock cake and city guard timings, all four teaching skavids (the Wiki lacked 'Gor cur'), the scared skavid's interruption, the cws_warning_12 enclave entry and the shaman/dragon scene, the potion, shamans, rock, pillars, lever into the completed tower and the scroll; Watchtower Teleport lands on the Wiki tablet page's tower centre in the completed copy (2933,4712,2); live's (2934,4713,2) is a recorded difference. Dialogue: Transcript:Watchtower revision 15399934 via osrsreboxed-db, with the lines it still lacks from capture-sources. Verified by server/tests/watchtower-capture.test.cjs (50) and the neighbouring Watchtower, teleport and diary tests. This supersedes the earlier notes' gaps (tower ladder, Gu'Tanoth gates, enclave cutscene, pillar placement and the missing 'Gor cur' skavid are now implemented). Remaining: the Ours items and recorded differences in the README (uncaptured refusals and journal pages, the guards' push down the hill, the lava push)."
           ],
           "taskDetails": [
             {
@@ -22024,7 +22043,8 @@
             "Main 0a219d100 (2026-11-03): #1940 fixes bracelet activation/death use, tunnel-rock flags, barricade corner collision and entry refusal. #1970 limits catapult auto-returns to a carrier’s own flag; stolen flags stay dropped and the owning team can return them at its own catapult from an adjacent tile. Exact catapult coordinates/team conditions remain reporter-backed rather than independently verified current OSRS behavior; source limits are recorded.",
             "Main 8403b60db (4 November 2026): #1985, #2058, #2062, #2068 — Practice barricade priority, death supplies and large-door resync are repaired; custom freeze/barricade-priority controls were removed in favor of the existing gameplay flow.",
             "Main 3b61a15a8 (6 November 2026): #2329 feat: open the native Castle Wars ticket exchange; #2342 Complete Castle Wars rewards and combat XP toggle; #2359 Fix Castle Wars flag drops on cleared tunnel rocks; #2379 Fix Castle Wars practice bot patrols and flag runs; #2388 fix: match the four-tick player death window. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3835 World config: plugins declare their own options (v0.1). #3755 Castle Wars: Lanthus' practice settings apply only to practice matches. #3713 Castle Wars: no bones in the lobby when the game ends mid-death. 6 merged PRs changed recorded implementation files for this entry."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #3835 World config: plugins declare their own options (v0.1). #3755 Castle Wars: Lanthus' practice settings apply only to practice matches. #3713 Castle Wars: no bones in the lobby when the game ends mid-death. 6 merged PRs changed recorded implementation files for this entry.",
+            "2026-11-22, PR #6522: Boost Potion Share is refused during a Castle Wars match, as documented at https://oldschool.runescape.wiki/w/Boost_Potion_Share. Inventory-target packet tests cover opposing teams with Accept Aid on and off and the same refusal for a caster with no recipient nearby (server/tests/lunar-potion-share.test.cjs)."
           ],
           "taskDetails": [
             {
@@ -25649,7 +25669,8 @@
             "Synced with tsps main e811aff0c (15 October 2026): PR #555 implements building, carving, decorating, visits, durability, offerings, rummaging, research points and collection-log rewards.",
             "Remaining: miniquest gate, moving ent routes/trails, research exchange, item bonuses, some drops and visual feedback.",
             "Main 82657e165: #1655 the Vale Totems miniquest (Ranulph and Isadora) gates the minigame: site 1 during the quest, all sites after, carving and decorating taught by its varbits. Ent routes/trails, the research exchange and item bonuses remain.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4072 Vale Totems: the miniquest as recorded, the carve menu, Exchange, notebook, flax bale and arrowtips. #2967 Send Vale Totems visit and collapse leaves in the same tick. #2964 NPC head icons: viewer-specific slots and Vale Totems durability leaves. 4 merged PRs changed recorded implementation files for this entry."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4072 Vale Totems: the miniquest as recorded, the carve menu, Exchange, notebook, flax bale and arrowtips. #2967 Send Vale Totems visit and collapse leaves in the same tick. #2964 NPC head icons: viewer-specific slots and Vale Totems durability leaves. 4 merged PRs changed recorded implementation files for this entry.",
+            "2026-11-22: moving ents leave paired trails. Both tiles activate four +15% build/carve XP grants and a one-use double offering on that ent’s next eligible visit. The Valley mechanics and cleanup task remains in progress. See docs/vale-totems.md for source intervals, labelled route and placement estimates, tests, and the remaining scenery interaction."
           ],
           "taskDetails": [
             {
@@ -30747,6 +30768,7 @@
             "docs/phantom-muspah.md"
           ],
           "devNotes": [
+            "2026-11-23: Sergeant Raymond warns players on the first Enter after Secrets of the North. Later Enters offer a confirmation with a persistent opt-out. Clear Mind from enchanted sapphire bolts drains 33 shield points at the normal Ranged level. Sources and focused tests: docs/phantom-muspah.md. Attacks remain in progress because corruption spells and documented damage estimates remain.",
             "Main fdf193b28: #1303 the scoreboard by the crevice. Attack gaps keep task 2 partial.",
             "Main sync 9949ef068: PR #619 implements the solo Phantom Muspah after Secrets of the North: the lair, ranged/magic/melee forms, shield phase, spikes and homing spikes, smoke clouds, corruption, kill credit and loot (docs/phantom-muspah.md).",
             "Attacks stay in progress: enchanted sapphire bolts/corruption spells draining the shield, the defence drain floor and the 33% freeze resistance are missing; the scoreboard and Sergeant Raymond's warning are absent; several damage values are estimates.",
@@ -31181,6 +31203,7 @@
             "Main 62d662706: #1516 magic bolts and fur balls roll as they land, so late prayer switches block them. The feeding damage reduction is still unknown.",
             "Main 8166111fa: #1404 the eating rounds, projectiles and Aldo's two forms match a live main-game capture. The feeding damage reduction is still unknown.",
             "Main sync 9949ef068: PR #617 reworks Scurrius from captures: the broken bars into the public (1500 HP) or private (500 HP) lair, Quick-escape, Historian Aldo, food piles, the boss HUD, respawns, and private instances that end with their NPCs on exit/teleport/death/logout.",
+            "2026-11-23: Aldo offers a weapon or a lamp on Trade and skips the weapon question for a single eligible weapon. The sewer patrol follows the recorded route and interval. See docs/scurrius.md for sources and checks. Feeding damage reduction and death-time NPC menu handling remain open.",
             "Rat bone weapons (creation, combat and staff) arrive with the same PR. Attacks stay in progress: the feeding damage reduction is unknown; Aldo's Trade only swaps spines for lamps.",
             "Main 3b61a15a8 (6 November 2026): #2229 NPCs: bound aggression and pursuit to the spawn's aggression range; #2356 Add configurable cross-floor visibility and combat; #2390 Refuse uncharging and refunds that wouldn't fit, rather than losing them. Existing completion credit and documented limitations are retained unless explicitly updated below.",
             "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4226 Settings: dialogues, messages and switches follow their All Settings rows. #4194 Scurrius: bolts and fur balls hit every player in the room. #4068 Scurrius: stomp out of reach between rounds, rats through prayer, own tiles. 6 merged PRs changed recorded implementation files for this entry."
@@ -33372,7 +33395,8 @@
             "Main 281766303 (2 November 2026): #1893 implements Entry/Normal/Hard mode behaviour, scaling, all six encounter changes, mode-aware rewards/records and a complete raid checkpoint. Boss/reward fidelity remains partial: Hard-mode supply points now use a documented lower-band fit after #2077, with documented spectator, book/varbit and encounter visual gaps.",
             "Main 8403b60db (4 November 2026): #2077 — Vault loss/re-entry rules, queued loot beyond six visible slots, collection-log counts, post-death Verzik hazards, Dawnbringer transfer and Hard supply bands were repaired. Derived supply/MVP values and documented spectator/encounter gaps keep fidelity partial.",
             "Main 3b61a15a8 (6 November 2026): #2191 Fix worn DFS and tentacle options unequipping the item (#2165); #2431 Items: Implement Mithril seed planting; #2478 Credit supported Morytania Diary gameplay tasks; #2538 Stop reward chests losing what a stack can't hold; #2591 Elvarg moves off a player under her. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4362 Settings: the examine price line on plugin item interfaces. #4344 Poison sources: pass severity (hit x 5) to poisonEntity. #4234 Settings: camera shake effects follow the combat and atmospheric camera shake settings. 14 merged PRs changed recorded implementation files for this entry."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4362 Settings: the examine price line on plugin item interfaces. #4344 Poison sources: pass severity (hit x 5) to poisonEntity. #4234 Settings: camera shake effects follow the combat and atmospheric camera shake settings. 14 merged PRs changed recorded implementation files for this entry.",
+            "2026-11-23: the notice board introduces the raid modes on first Read, asks about experience, and saves the default Entry or Normal Mode and tobquest_used_notice_board. Applicants are told when accepted, members get a message when leaving the lobby, and refreshing a stale party shows that it is no longer recruiting. See docs/theatre-of-blood.md for recordings and estimates. Party-member reordering and the six-hour login warning remain."
           ],
           "taskDetails": [
             {
@@ -43888,7 +43912,8 @@
             "Main 3b61a15a8 (6 November 2026): #2330 fix: handle Monster Inspect casts on NPCs; #2450 Restore recorded combat, prayer and area sound behavior; #2477 Credit supported Kandarin Diary gameplay tasks; #2486 Credit supported Varrock Diary gameplay and Plank Make batches; #2490 Credit supported Kourend and Kebos Diary gameplay tasks; #2503 Play Bones to Bananas' sound. (7 merged PRs touch the recorded implementation; highlights shown.) Existing completion credit and documented limitations are retained unless explicitly updated below.",
             "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4237 Settings: confirmations and messages for clue scrolls, STASH units, Plank Make, gravestone fees, trades and boat teleports. #3835 World config: plugins declare their own options (v0.1). #3846 Bones to Bananas/Peaches: every bone the Wiki lists, and the recorded no-bones line. 10 merged PRs changed recorded implementation files for this entry.",
             "2026-11-16, fix/spellbook-death-cleanup: death and logout clear the Arceuus ward, mark, Death Charge active effect, shadow veil, corruption, dark lure and the ward/shadow/offering cooldowns, and the Lunar Magic Imbue, Heal Group and Spellbook Swap timers; an active swap returns to Lunar first and the thrall is dismissed on logout too. The Vengeance and Death Charge cooldowns keep running, matching the captures; Death Charge resyncs its indicator on login (server/src/main/typescript/elvarg/game/entity/impl/player/Player.ts, magic/ArceuusSpells.ts, magic/LunarSpells.ts; server/tests/spell-status-death-cleanup.test.cjs).",
-            "2026-11-21, parity/prayer-magic-death-charge-rite: the Rite of vile transference's Read follows rsprox recording 3285 ticks 6162-6178 (objectbox, consume menu, varbit death_charge_scroll_used, read seq, spotanim 3288 and synth 5034, upgraded objectbox 6 ticks later); the upgrade makes Death Charge restore 15% from two kills per cast (Wiki), with the cache's red-skull cast/end spotanims 3288/3289, and Yama's Dossier counts a read rite as owned (server/plugins/items/RiteOfVileTransference.plugin.js, magic/ArceuusSpells.ts; server/tests/rite-of-vile-transference.test.cjs). Not recorded: an upgraded cast, so its messages are the plain spell's."
+            "2026-11-21, parity/prayer-magic-death-charge-rite: the Rite of vile transference's Read follows rsprox recording 3285 ticks 6162-6178 (objectbox, consume menu, varbit death_charge_scroll_used, read seq, spotanim 3288 and synth 5034, upgraded objectbox 6 ticks later); the upgrade makes Death Charge restore 15% from two kills per cast (Wiki), with the cache's red-skull cast/end spotanims 3288/3289, and Yama's Dossier counts a read rite as owned (server/plugins/items/RiteOfVileTransference.plugin.js, magic/ArceuusSpells.ts; server/tests/rite-of-vile-transference.test.cjs). Not recorded: an upgraded cast, so its messages are the plain spell's.",
+            "2026-11-22, PR #6522: Stat Restore Pot Share and Boost Potion Share can give doses to members of the caster's Group Ironman group within the existing 5x5 area even with Accept Aid off. The Wiki entries for both spells document this eligibility rule. Potion shares require a single unnoted potion. Stat Restore Pot Share's incompatible-item refusal follows public rsprox recording 4103, ticks 761–762. Boost Potion Share is refused during an active Castle Wars match. Packet tests verify eligibility, costs and action restrictions (server/tests/lunar-potion-share.test.cjs). Resources and restrictions stay in progress pending the broader Lunar cast restriction audit."
           ],
           "taskDetails": [
             {
@@ -43929,7 +43954,7 @@
               "steps": [
                 "Runes (astral 9075, cosmic 564, law 563, blood 565, etc.) are declared per spell and consumed by Spell.canCast; energy transfer additionally needs a full special bar (LunarSpells.ts:252).",
                 "Lunar cannot be autocast (Autocasting.ts:73); Vengeance fails in a duel (EffectSpells.ts:57); heal other refuses non-aid players and Vengeance other refuses a target that already has it (LunarSpells.ts:280).",
-                "Cast potion shares on the potion; dispatch potions:share for eligible players within two tiles, one paid dose each and a free caster dose."
+                "Cast potion shares on one unnoted inventory potion. Eligible recipients within two tiles either accept aid or belong to the caster's Group Ironman group. Each recipient costs one dose and the caster receives one free dose. Boost Potion Share is disabled during a Castle Wars match."
               ],
               "acceptanceCriteria": [
                 "Rune/energy/special requirements are exact and reversible (energy transfer swaps bars).",
@@ -43937,7 +43962,9 @@
               ],
               "refs": [
                 "server/src/main/typescript/elvarg/game/content/combat/magic/LunarSpells.ts:252",
-                "server/src/main/typescript/elvarg/game/content/combat/magic/Autocasting.ts:73"
+                "server/src/main/typescript/elvarg/game/content/combat/magic/Autocasting.ts:73",
+                "https://oldschool.runescape.wiki/w/Stat_Restore_Pot_Share",
+                "https://oldschool.runescape.wiki/w/Boost_Potion_Share"
               ]
             },
             {
@@ -45038,6 +45065,8 @@
           "wiki": "https://oldschool.runescape.wiki/w/Door",
           "implementedIn": [
             "server/plugins/objects/Doors.plugin.js",
+            "server/plugins/objects/LockedDoors.plugin.js",
+            "docs/locked-doors.md",
             "server/plugins/objects/Ladders.plugin.js",
             "server/src/main/typescript/elvarg/game/model/movement/MovementQueue.ts",
             "server/src/main/typescript/elvarg/game/model/movement/path/RsmodRouteFinding.ts",
@@ -45054,9 +45083,16 @@
             "docs/loc-teleports.md",
             "server/tests/object-state-replay.test.cjs",
             "server/docs/quest-helper-728-verification.md",
-            "server/plugins/areas/CrombwickManor.plugin.js"
+            "server/plugins/areas/CrombwickManor.plugin.js",
+            "docs/door-sounds.md",
+            "server/tests/brain-living-lower-door.test.cjs",
+            "docs/brain-living-lower-door.md",
+            "server/tests/double-door-sounds.test.cjs"
           ],
           "devNotes": [
+            "2026-11-22 (parity/locs-nicedoor-sounds): Arceuus's double doors (archeuus_door_double_left/right_* in turquoise, green, red and blue) open as one pair, both leaves turning on their own tiles into their _open locs, with nicedoor_open (81) and nicedoor_close (80) as an area sound of range 1 on the clicked leaf; the goblin outpost's inner double doors send 81/80 as the opener's private synth. Before, an Arceuus click swung only the clicked leaf a tile aside with synth 62, and the goblin outpost doors played 62/60. Recorded in the user's rsprox captures local 1001998 (ticks 1222-1223, 1335-1336), local 1000453 (tick 9681), local 1001339 (ticks 301-309) and public 2297 (ticks 448-457). server/plugins/objects/Doors.plugin.js, server/tests/double-door-sounds.test.cjs, in-game check on the worktree server. The red set is uncaptured and follows its cache family. See docs/door-sounds.md.",
+            "2026-11-22 (parity/locs-varrock-fence-gate): the fence gate east of Varrock by the quetzal platform (vm_fencegate_l/_r at 3296,3428-3429) is a pass-through gate, as live: vm_fencing_invisible_wall in the doorway, both leaves swung west, the player walks across the next tick and the gate is back two ticks after opening, with no synth (rsprox 232/3228 ticks 561-568, 642-644, 931-937; 232/3227, 232/3231). Before, Open did nothing: the shared door code found no way to open this pair, so the gate stayed shut and the player could not get through. server/plugins/objects/Doors.plugin.js, server/tests/varrock-fence-gate.test.cjs, docs/varrock-fence-gate.md, in-game check on the worktree server.",
+            "2026-11-22 (parity/locs-outhouse-occupied): the outhouse door (hos_grape_odddoor) at the Fossil Island Museum Camp 3722,3816 and the Hosidius vinery 1817,3537 answers Open with the man inside's chathead line \"Occupied!\" (hosidius_man_on_toilet, chatang1) and synth 2402, and stays shut, as live does (rsprox captures 231/3040 tick 5736, 227/local 1000187 tick 4946). Before, the click did nothing. LockedDoors.plugin.js with data/locked-doors.json, tests/locked-doors.test.cjs, docs/locked-doors.md.",
             "Main 4b1eac7f6: #1267 the Hunter Guild stairs fade and land as recorded.",
             "Main 21a2a1daa: #1045/#1051 repair shared/private open-door records, timed closing, region replay and instance cleanup without duplicate leaves or mismatched collision. The existing cache-derived climb links and captured loc transports remain implemented.",
             "#1088 adds cache-named/interleaved door pair support; #1198 registers the Druidic Ritual Prison door name. Both actual gate leaves, exact movement into/out of the cauldron room, manual/automatic closing and unrelated prison ownership are covered. A focused native gate/meat/relog checkpoint passed.",
@@ -45064,7 +45100,10 @@
             "Main 8403b60db (4 November 2026): #1991, #2031, #2168, #2192, #2203 — Named doors, reverse/double-door behavior, Desert Treasure pyramid routes and Mining Guild access are repaired.",
             "Main 3b61a15a8 (6 November 2026): #2431 Items: Implement Mithril seed planting; #2506 Keep Troll Stronghold's prison door and arena exit shut to locked players; #2510 fix: Varlamore fixes from #2449 (Cam Torum doors, Renu, pets, ground items) and fishing interrupt; #2534 Implement Ardougne Hard and Elite diary gameplay tasks; #2610 Skip a fight's sound in the loc teleport sync, and in the data it wrote; #2706 Allow reaching the Dwarven Boatman before starting The Giant Dwarf. (10 merged PRs touch the recorded implementation; highlights shown.) Existing completion credit and documented limitations are retained unless explicitly updated below.",
             "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4179 Edgeville Dungeon: the brass key door replaces itself while open. #4096 LocTeleports: Mos Le'Harmless cave entrance, Cavey Davey's warning and the exits. #4088 Ladders: handle the Grand Tree's Top-Floor and Bottom-Floor options. 8 merged PRs changed recorded implementation files for this entry.",
-            "21 November 2026 (parity/locs-crombwick-manor-doors): Crombwick Manor's front doors in Slepe (slp_mansion_door_l/_r) answer Open with the message box \"The door is locked.\" and stay shut, as live does (rsprox captures 227/1000270 tick 6370, 231/391 ticks 2613 and 5210; Wiki, Slepe: the manor is only reached from Kroy's laboratory). Before, the click did nothing. server/plugins/areas/CrombwickManor.plugin.js, tests/crombwick-manor-doors.test.cjs, in-game check on the worktree server."
+            "2026-11-22 (parity/locs-fremennik-isle-doors): Neitiznot's palisade gate opens with synth 36, the clicked leaf as fris_palisade_door_open_r and its partner as _open_l. Jatizso's town wall door opens with synth 71. Before, both played 62 and a door_l click swapped the leaves. Verified against public rsprox recordings 2722 and 3027 by server/tests/fremennik-isle-door-sounds.test.cjs. See docs/door-sounds.md; their Close sounds are still unrecorded.",
+            "2026-11-22: Darkmeyer's lower- and middle-tier doors play the recorded private Open and Close synths. Verified against public rsprox recordings 3050 and 3053, by native packet assertions in server/tests/object-state-replay.test.cjs, and in game at both recorded doors. Recording 3052 shows a silent unattended middle-tier close at tick 7574, while the server's timed close still sends positioned sound 60. Upper-tier and lower-tier timed-close audio still need captures. See docs/door-sounds.md.",
+            "21 November 2026 (parity/locs-crombwick-manor-doors): Crombwick Manor's front doors in Slepe (slp_mansion_door_l/_r) answer Open with the message box \"The door is locked.\" and stay shut, as live does (rsprox captures 227/1000270 tick 6370, 231/391 ticks 2613 and 5210; Wiki, Slepe: the manor is only reached from Kroy's laboratory). Before, the click did nothing. server/plugins/areas/CrombwickManor.plugin.js, tests/crombwick-manor-doors.test.cjs, in-game check on the worktree server.",
+            "2026-11-23 (parity/locs-living-lower-door): the zombie pirates' living lower door (22007 at 3817,2841) swaps in inviswall 38848 and secure-open leaf 21953 one tile west, plays synth 62, and restores two ticks later. Public rsprox 3032 ticks 4905-4910 records an eastward crossing from (3816,2841); ticks 5074-5076 record an immediate westward crossing from (3817,2841). The walked approach sends local face angle 1536 east toward the doorway on the wait turn only; the input/run step and crossing have no face mask. The in-reach reverse crossing has no mask on its input tick and syncs angle 1536 on the next tick. A native Bind before the delayed commit cancels the step, leaving the door shut without sound. Native OPLOC, Bind and World.process coverage is in server/tests/brain-living-lower-door.test.cjs. An agent MCP check on the worktree server (port 39824, because Windows holds 49824) confirmed the walked approach (arrival, then the crossing and swap two ticks later), the in-reach reverse crossing on the input tick, and the two-tick restore. Frozen Open behavior is not recorded, so a blocked commit follows the ordinary movement lock. The same loc also occurs at (3817,2847), whose behavior is not recorded and remains unsupported. The four existing task statuses remain done."
           ],
           "taskDetails": [
             {
@@ -45102,7 +45141,7 @@
             {
               "name": "Connect dialogue, animation and UI",
               "steps": [
-                "Transform the door with the paired loc id and a re-sent GameObject (OPEN_OBJECT_STATES + ObjectManager) plus Sound.DOOR_OPEN/DOOR_CLOSE or GATE_OPEN/GATE_CLOSE.",
+                "Transform the door with the paired loc id and a re-sent GameObject (OPEN_OBJECT_STATES + ObjectManager). Use the recorded synth pair for supported door families and the standard door or gate sounds otherwise.",
                 "Animate climbs with CLIMB_UP 828 / CLIMB_DOWN 827 and move after CLIMB_UP_TICKS/CLIMB_DOWN_TICKS (Ladders.plugin.js:8); only move if the player has not walked away mid-task."
               ],
               "acceptanceCriteria": [
@@ -52128,7 +52167,9 @@
             "client/game/OsrsClient.ts",
             "client/tests/widget-menu-use.test.ts",
             "client/game/plugins/inventorytags/InventoryTagsPlugin.ts",
-            "client/game/plugins/xptracker/XpTrackerPlugin.ts"
+            "client/game/plugins/xptracker/XpTrackerPlugin.ts",
+            "server/tests/interface-stop-action.test.cjs",
+            "docs/interface-interruption.md"
           ],
           "devNotes": [
             "Inventory is a cache widget group fed by the local client/rs/inventory/Inventory.ts container, updated from server packets in client/network/serverConnection/domain/inventory.ts.",
@@ -52140,7 +52181,8 @@
             "Main 281766303 (2 November 2026): #1720/#1721 add optional Item Stats and Item Rarity; #1795 fixes outline/menu ordering; #1891 leaves Item Stats disabled by default.",
             "Main 8403b60db (4 November 2026): #1935, #2147, #2170 — Item-price/hover presentation and optional worn actions are corrected without changing the equipment removal contract.",
             "Main 3b61a15a8 (6 November 2026): #2356 Add configurable cross-floor visibility and combat; #2399 Use the native OSRS quest list and repair quest state publication; #2450 Restore recorded combat, prayer and area sound behavior; #2561 Restore touch keyboard access for GE item search; #2714 Respect native minimap visibility and click states. Existing completion credit and documented limitations are retained unless explicitly updated below.",
-            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4370 Items: the bolt pouch: Hirko's sale, its interface, the extra ammo slot, Ammo-picking and death. #4338 Settings: mouse, hotkey and World Switcher rows follow their settings in the client. #3998 Let a transparent chatbox's message area click through to the world. 7 merged PRs changed recorded implementation files for this entry."
+            "Main 3e9ee2d67 (11 November 2026) changes touching recorded implementation: #4370 Items: the bolt pouch: Hirko's sale, its interface, the extra ammo slot, Ammo-picking and death. #4338 Settings: mouse, hotkey and World Switcher rows follow their settings in the client. #3998 Let a transparent chatbox's message area click through to the world. 7 merged PRs changed recorded implementation files for this entry.",
+            "2026-11-23 (fix/interface-stop-action): View equipment stats stops the player as live does: on the click's tick the walk is cleared (it does not resume after close), a pending route and a repeating skill end, and the face target and animation reset. While fighting, or being hit by, a living NPC it is refused with \"You cannot open the equip screen while in combat!\", interrupting nothing; Guide prices is refused the same way with \"You cannot open the price checker screen while in combat.\" (240/1001355 t1964-1969). Verified against rsprox captures 227/1000433 t11626, 227/01751 t3614-3620, 227/1000561 t12352, 227/1000507 t226, 227/1000539 t1775/t1780-1781 and 227/01885 t20819-20821 by server/tests/interface-stop-action.test.cjs; see docs/interface-interruption.md. The in-combat window after walking away is not recorded (it uses the 8-tick attacker window), and Items kept on death and Call follower are unchanged. The four task statuses remain done."
           ],
           "taskDetails": [
             {
