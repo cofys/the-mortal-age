@@ -25,6 +25,17 @@ Ticks count from the player's arrival at the patch.
 | Dig up | confirm "Are you sure you want to dig up this patch?" / "Yes, I want to clear it for new crops." / "No, I want to leave it as it is." | `human_dig` + 1470 at 0 and +3, cleared at +5 | spam "You start digging the farming patch..." then "You have successfully cleared this patch for new crops."; stumps: "You start digging up the (fruit) tree stump." / "You dig up the (fruit) tree stump."; a stump that regrows mid-dig ends the dig at +5 with the animation reset and gamemessage "You are too late - the tree has already regrown.", the tree kept (rsprox.net local 1000118 tick 358; fruit trees ours); no spade: "You need a spade to clear a farming patch." |
 | Wrong-state items (rsprox.net local 1000104, 1000253, 1000278, 1000296, 1000340, 1000454, 819) | | | all game, nothing used: a seed on weeds "This patch needs weeding first."; plant cure on an empty patch "This farming patch is empty.", on a growing crop "This patch doesn't need curing." (a weedy patch and a grown crop take the same, ours); an unpotted tree seed on its patch "You can only plant calquat tree seeds in a plantpot.", "willow tree seeds" (local 1000296), "Magic Tree seeds" (local 1000296, 1000253), "a crystal acorns" (other trees: "<crop> tree seeds", ours); a rake with no weeds "This bush patch doesn't need weeding right now." (the patch's name); compost on the hespori patch "This patch won't benefit from that kind of treatment." (Fertile Soil refuses with it before its runes go, ours) |
 | Chop without an axe | | | tree patches: "You need an axe to chop down this tree.<br>You do not have an axe which you have the woodcutting level to use."; fruit and crystal trees: "...that you have the Woodcutting level to use." |
+| Cut a willow branch (local 1000402 ticks 31153-31165) | secateurs on the checked willow: `pruning_high` (2277), sound 2440 | +3: the branch, the patch value, line | spam "You cut a branch from the willow tree."; none grown: game "There are no branches ready to cut yet." (ours) |
+
+## Willow branches
+
+Wiki (Willow branch, Willow tree (Farming)): a farmed willow has no branches until its health is checked, then grows
+one every 5 minutes (at the world's growth rate) up to 6; chopped to a stump it has none, and they start again from
+none when it grows back. Auguste's sapling (Enlightened Journey) is planted as a willow (Wiki: Auguste's sapling).
+rsprox local 1000402 shows the count in the patch value: 22 after Check-health (tick 883), 197 down to 192 as the
+1st to 6th branch grows (970-1470), a step back up for each cut (31156, 31165). Recorded difference: that recording
+grew a branch about every 100 ticks (one minute), not the Wiki's five; ours follows the Wiki. A full tree starts the
+next regrowth at a cut (ours). A checked willow saved before the count existed keeps all six.
 
 ## Harvests
 
@@ -42,12 +53,40 @@ Each swing repeats every 3 ticks; the produce comes `delay` ticks after its swin
 
 When the inventory fills: spam "You have run out of inventory space.", on the tick the last slot fills.
 
-## Compost bins (recording 1858)
+## Watering cans on a water source (rsprox 1108, 127, 1855, 3267, 3275)
 
-- **Fill:** `human_pickuptable` (832) + 2441 two ticks after the click, the item a tick later, every two ticks.
+A can used on the source fills **that can** on the click's own tick (after the walk): `human_pickuptable`
+(832), sound 2609, spam line, and the can becomes Watering can(8) (5340), from empty or part-filled alike.
+Then the **other empty cans fill by themselves**, lowest slot first, one every 4 ticks with the same swing,
+sound and line, and no input between: one click in 3275 (tick 28243) fills slots 9 to 18 at 28252, 28256 ...
+28288, and 3267 fills slots 7 and 8 at 1076 and 1080 from one click on the barrel. Only plain empty
+`Watering can`s are taken (part-filled cans and the 10-stack in 3275 slot 5 never are; Gricoller's can is not captured and is left out too). Any
+other click, walking away or using another item ends the chain; a later click starts it again from that can.
+
+| Source (loc) | Line |
+| --- | --- |
+| Fountain (879, 7143) | spam "You fill the watering can from the fountain." |
+| Water barrel (8702) | spam "You fill the watering can from the water barrel." |
+| Water pump (52646) | spam "You fill the watering can." |
+| Well (46805) | message box "If I drop my watering can down there I don't think I'm likely to get it back."; the can stays empty |
+
+Other sources (sink, gold sink, pump and drain, pump and tub) are not captured: they use the pump's plain line.
+
+## Compost bins (rsprox captures: recording 1858, local 1000103, 1000105, 1000324, 1000343, 1000444, 1000448, 1000451)
+
+- **Fill:** `human_pickuptable` (832) + 2441, the item a tick later, every two ticks. A player who
+  walked to the bin starts two ticks after arriving; one already standing at it animates on the
+  click's tick (local 1000451 t409, 1000448 t8592, 1000444 t22038, 1000324 t6782).
+- **Weeds** all go in at once, as many as the bin has room for, two ticks after the animation
+  (local 1000103 t712-716: 15; 1000324 t2035-2042: 10, t6786-6788: the last one; Wiki, Weeds).
+- **Clicking again** cancels the loop, as any click does; a click on that same loop (same bin,
+  action and item) picks it back up where it was; a click with another item starts at that loop's
+  next step, and a loop paused by a level-up pop-up starts afresh. Ours: no capture clicks a bin mid-loop.
 - **Close:** `human_push` (810) + 2428 and spam "You close the compost bin.", then a tick later game "The contents have begun to rot." and the bin closes.
 - **Open:** `human_push` + 2429 and spam "You open the compost bin.", the bin opening a tick later.
-- **Take compost:** `human_pickuptable` + 2436, the bucket filled a tick later, every four ticks.
+- **Take compost:** `human_pickuptable` + 2436, the bucket filled a tick later, every four ticks. It starts
+  two ticks after arriving, or a tick after the click when already standing at the bin (local 1000451 t317, t385;
+  1000105 t441).
 
 ## Bottomless compost bucket (rsprox captures, local recordings 1001537, 1001562, 1001663, 1001664, 1001928)
 

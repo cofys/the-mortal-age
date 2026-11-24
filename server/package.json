@@ -35,6 +35,7 @@
     "dev": "node ../scripts/client-version.mjs && node ../scripts/run-with-env.mjs - ./node_modules/nodemon/bin/nodemon.js --ext ts,json,js ./src/main/typescript/elvarg/Server.ts 0",
     "dev:stable": "node ../scripts/run-with-env.mjs - --max-old-space-size=4096 ./node_modules/ts-node/dist/bin.js ./src/main/typescript/elvarg/Server.ts 0",
     "dev:panel": "node ../scripts/client-version.mjs && node ../scripts/run-with-env.mjs - ./scripts/local-panel.cjs",
+    "models": "node ./scripts/model-extractor/server.cjs",
     "dev:stress": "node ../scripts/client-version.mjs && SERVER_PERF_PERIODIC_ENABLED=1 SERVER_PERF_PERIODIC_INTERVAL_MS=10000 SERVER_PERF_PERIODIC_SUMMARY_TICKS=30 node ../scripts/run-with-env.mjs - ./node_modules/nodemon/bin/nodemon.js --ext ts,json,js ./src/main/typescript/elvarg/Server.ts 0 --stressTest",
     "saves:rollback": "node ./scripts/rollback-saves.mjs",
     "saves:import-osrs-character": "node ./scripts/import-osrs-character.mjs",

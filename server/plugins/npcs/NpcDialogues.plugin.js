@@ -564,7 +564,7 @@ function flatten(steps, opts = {}) {
       // Some wiki exports inline the target body on a "continue" jump instead
       // of storing it in the page-level jump table. Prefer that body so nested
       // quest branches do not stop at the jump marker.
-      const target = Array.isArray(step.steps) ? step.steps : resolveJump(step, steps[position - 1], steps[position + 1]);
+      const target = Array.isArray(step.steps) ? step.steps : resolveJump(step, steps[position - 1] ?? step.previousLine, steps[position + 1]);
       // "end": a jump we cannot replay. Stop rather than leak into the next step.
       if (target === "end") {
         out.push({ type: "end" });
@@ -618,6 +618,19 @@ function characterPages(text) {
   const pages = [];
   for (let start = 0; start < lines.length; start += 4) pages.push(lines.slice(start, start + 4).join(" "));
   return pages;
+}
+
+/**
+ * The shops an open_shop target names: by exact name, else by name without a leading "The", the fold
+ * osrsreboxed-db's shop matching uses. A step targets the shops dump's page key ("Auburn Pub") while
+ * shops.json shows the recorded title ("The Auburn Pub", see import-osrs-shops.mjs display_name).
+ */
+function shopsNamed(target) {
+  const shops = ShopDefinition.all();
+  const exact = shops.filter((shop) => shop.getName() === target);
+  if (exact.length > 0 || typeof target !== "string") return exact;
+  const bare = (name) => name.replace(/^the\s+/i, "");
+  return shops.filter((shop) => bare(shop.getName()) === bare(target));
 }
 
 function shopName(api, player, npcId, step) {
@@ -794,9 +807,12 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       if (asked && !ownOption) return realBody(repeatsLine ? asked.slice(1) : asked) ?? asked;
     }
     // After an NPC line, "same as above" carries on as that line does where the page first has
-    // it (Bryn's first-time "What is this place?" continues as his full explanation).
+    // it (Bryn's first-time "What is this place?" continues as his full explanation). So does a
+    // player line that is no question of the page's (Barlak's "It's a giant snail shell!" after the
+    // tortoise shells goes on as his snail shell variant does).
     // A speaker "line" counts here only before a condition run (the Old Crone's line is one).
     const npcLine = typeof previous?.npc === "string" ? previous.npc
+      : typeof previous?.player === "string" && !context.pageOptions?.has(normText(previous.player)) ? previous.player
       : viaCondition && previous?.type === "line" && typeof previous.text === "string" ? previous.text : undefined;
     if (/^(above|below)/i.test(reference) && npcLine !== undefined) {
       const after = context.pageLines?.get(normText(npcLine))?.slice(1);
@@ -951,6 +967,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
    * option left after its conditions takes it without asking.
    */
   function presentMenu(menu, offset = 0, tail = [], via = null) {
+    // A menu breaks the line-then-call link the called-branch jump rule relies on.
+    context.lastSpoken = undefined;
     if (cancelled) return;
     const { step, rest, record } = menu;
     context.currentMenu = menu;
@@ -1171,6 +1189,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           }
           continue;
         }
+        // The line last shown, for a called branch that opens with a same-as jump (below).
+        context.lastSpoken = step;
         // `text` is mutable too, so a plugin can fill in the wiki's "[number]"-style blanks.
         const formatted = formatPlayerText(request.text, player);
         if (step.presentation === "overhead") {
@@ -1454,7 +1474,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // Wiki markers for content this server does not implement.
         if (step.type === "unavailable" || step.type === "reference") return unavailable();
         if (step.type === "call" && Object.hasOwn(branches, step.branch) && Array.isArray(branches[step.branch])) {
-          return run([...branches[step.branch], ...rest], currentRecord);
+          // A branch that is only a lost-target "same as above" (Barlak's perfect-tortoise-shell "Okay." calls one after
+          // "It's a giant snail shell!") resolves against the line shown before the call, as it would inline.
+          const body = branches[step.branch];
+          // Only after a player line: after an NPC line the branch's own fallback already holds (Timfraku's menu).
+          const lead = body[0]?.type === "jump" && !Array.isArray(body[0].steps) && typeof context.lastSpoken?.player === "string"
+            ? [{ ...body[0], previousLine: context.lastSpoken }, ...body.slice(1)] : body;
+          return run([...lead, ...rest], currentRecord);
         }
         if (step.type === "choice") return presentMenu({ step, rest, record: currentRecord });
         if (step.type === "counted_draw") {
@@ -1493,7 +1519,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         }
         if (step.type === "action" && step.action === "open_shop") {
           const target = shopName(api, player, npcId, step);
-          const named = ShopDefinition.all().filter((shop) => shop.getName() === target);
+          const named = shopsNamed(target);
           // A skill master's shop also has its skillcape copies under its name (Sellers.SkillCapes): open the
           // shops.json shop, which that plugin turns into the copy for a player with 99.
           const shops = named.length > 1 ? named.filter((shop) => shop.getSource() === "core") : named;
