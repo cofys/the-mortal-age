@@ -1190,6 +1190,14 @@ function useDenseOnDarkAltar(event) {
   convertDenseEssence(event.player);
 }
 
+function describeTeleports({ list }) {
+  for (const ruins of RUINS) list.push({ path: ["Runecrafting", "Mysterious ruins"], key: ruins.name,
+    name: `${ruins.name} altar`, tile: [...ruins.destination] });
+  for (const wizard of RUNE_ESSENCE_TELEPORT_NPCS) list.push({ path: ["NPC teleports", wizard], key: "essence-mine",
+    name: "Rune essence mine", location: RUNE_ESSENCE_MINE.clone() });
+  list.push({ path: ["NPC teleports", "Mage of Zamorak"], key: "abyss", name: "Abyss outer ring", location: ABYSS_OUTER_RING_LANDING.clone() });
+}
+
 module.exports = {
   name: "Runecrafting",
   startBotRunecrafting,
@@ -1213,6 +1221,7 @@ module.exports = {
   register(api) {
     require("../items/JewelleryPlaceholders")(api, [ABYSSAL_BRACELETS]);
     initialize(api);
+    api.onCustomEvent("adminpanel:teleport-destinations", describeTeleports);
     api.persistAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE);
 
     api.onPlayerLogin(syncTiaraOptions);

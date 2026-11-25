@@ -1800,6 +1800,10 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
     sender.sendVarbit(CacheDefinitions.getVarbitId(BUSY_VARBIT), 1);
   }
 
+  function describeTeleports({ list }) {
+    list.push({ path: ["Items", "Royal seed pod"], key: "grand-tree", name: "Grand Tree", location: GRAND_TREE_KING.clone() });
+  }
+
   function handleItemAction(event) {
     const { player, itemId } = event;
     const option = String(event.option ?? "").toLowerCase();
@@ -2247,6 +2251,7 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
   api.persistAttribute(SCRAWLED_READ_ATTRIBUTE);
 
   quest = registerQuest(api, {
+    combatNpcIds: () => [GLOUGH_DEMON_ID, LAB_GORILLA_ID, STRONGHOLD_GORILLA_ID, ...CRASH_TORTURED_IDS, ...CRASH_DEMONIC_IDS],
     key: "monkey_madness_ii",
     name: "Monkey Madness II",
     varpId: 1339,
@@ -2285,6 +2290,7 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
   api.onItemAction(handleItemAction);
   api.onNpcDeath(handleNpcDeath);
   api.onZoneEnter(CRASH_ZONE, handleCrashZone);
+  api.onCustomEvent("adminpanel:teleport-destinations", describeTeleports);
   api.onCustomEvent("loc-teleports:arrived", handleRecordedCavernArrival);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("quest:completed", handleQuestCompleted);

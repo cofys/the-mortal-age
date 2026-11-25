@@ -411,6 +411,12 @@ After changing a plugin's `description` or `config`, run `yarn --cwd server worl
 | `ShootingStars:announce` | boolean | `false` | **Announce landings.** Tells everyone online where a star landed. Useful on small worlds; OSRS has no such message. |
 | `ShootingStars:intervalMinutes` | number (> 0) | *90* | **Minutes between shooting stars.** Time between stars; a random 15 minutes either way is added on top. |
 
+#### Plugin area `tools` (`pluginConfig`)
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `WorldAdmin:playerTools` | boolean | `true` | **Player tools.** Show live teleport, item, skill and quest controls in the Players panel. The panel token grants owner access. |
+
 #### Plugin area `world` (`pluginConfig`)
 
 | Key | Type | Default | Description |
@@ -919,6 +925,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `MonkeySpeak` | MonkeySpeak | npcs | yes | Lets monkeys with an M'speak amulet section talk in words to a player wearing the amulet or past Monkey Madness II. |
 | `Nechryael` | Nechryael | npcs | yes | Lets nechryael and greater nechryael summon up to two death spawns that hit through protection prayers and leave after a minute. (members only) |
 | `NoteExchange` | NoteExchange | npcs | yes | Banknote exchange merchants such as Phials: use a banknote on them to swap it for the real items for a fee per note. |
+| `NpcChatter` | NpcChatter | npcs | yes | NPCs say their ambient overhead lines (ducks, sheep, GE experts, town criers, Goblin Village soldiers) with live timing. |
 | `NpcDialogues` | NpcDialogues | npcs | yes | Plays Talk-to dialogue transcripts for NPCs from the generated dialogue data, with hooks so quests can alter lines, choices and conditions. |
 | `NpcDrops` | NpcDrops | npcs | yes | Rolls NPC drop tables from the Wiki-derived drop data, with subtables, tertiary drops and hand-edited overrides. |
 | `NpcRivalries` | NpcRivalries | npcs | yes | Makes opposing NPC factions, such as Shayzien soldiers against lizardmen and the God Wars armies, hunt and fight each other. (members only) |
@@ -1051,6 +1058,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `DateMinutes` | DateMinutes | world | yes | Sends the client the current minute since 1970 on login and each new minute, so home and minigame teleport cooldown timers can display. |
 | `DefinitionArchives` | DefinitionArchives | world | yes | Installs bundled item, NPC and object definition changes at runtime and sends them to every client on login and when they change. |
 | `DesertTreasureScoreboards` | DesertTreasureScoreboards | world | yes | Unlocks the Desert Treasure II post-quest scoreboards for players who completed the quest, setting the shared scoreboard varbit on login and completion. (members only) |
+| `DistantWorld` | DistantWorld | world | yes | Public static spawn previews for the optional Distant World client plugin. Never widens NPC synchronization or simulation. |
 | `DorgeshKaanTrain` | DorgeshKaanTrain | world | yes | The Dorgesh-Kaan - Keldagrim train: after Another Slice of H.A.M., stepping into either station's train takes the player to the other city. (members only) |
 | `EagleTransport` | EagleTransport | world | yes | Eagle transport after Eagles' Peak: flights between the Eagles' Peak eyrie and the desert, jungle and polar eyries, and the routes in on foot. (members only) |
 | `EasterEvents` | EasterEvents | world | yes | The 2026 Easter event 'The brave chocolate egg': hunt Archibald around Varrock using the scribbled notes and egg box, within its calendar window. |
@@ -1064,6 +1072,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `GameUpdate` | GameUpdate | world | yes | Adds the owner-only ::gameUpdate command to schedule a server shutdown, pushing a live countdown to every player until it restarts. |
 | `GnomeGliders` | GnomeGliders | world | yes | Gnome glider pilots: the glider map, flights between destinations with the fade and last-destination option, needing The Grand Tree. (members only) |
 | `Gravestones` | Gravestones | world | yes | A PvM death leaves a gravestone only you can see for 15 minutes, then items go to Death's Office. Can be turned off for the older drop behaviour. |
+| `GroundItemsEditor` | GroundItemsEditor | world | yes | Loads ground item placements saved by the map editor. |
 | `HalloweenEvents` | HalloweenEvents | world | yes | The 2025 Halloween Spook-a-thon Decoration Contest, with its dialogue and spooky chair items, running only in its calendar window. |
 | `HolidayRewards` | HolidayRewards | world | yes | Diango's Holiday-items interface to reclaim lost holiday items, tracking which rare holiday items and alternate styles a player has unlocked, and his Redeem-code prompt. |
 | `IntelligenceGathering` | IntelligenceGathering | world | yes | Intelligence Gathering: the information board, Captain Ginea's hand-in and the timed gang meetings with a boss and gangsters. (members only) |
@@ -1075,6 +1084,7 @@ This table lists bundled plugins that have a description. The world config page 
 | `MagicCarpets` | MagicCarpets | world | yes | Rug Merchants fly riders by magic carpet between Shantay Pass, Pollnivneach and other desert stations, with fares, discounts and captured flight paths. (members only) |
 | `MagicMushtrees` | MagicMushtrees | world | yes | Fossil Island's Magic Mushtrees: the four-tree travel menu, with each tree unlocked per player once used. (members only) |
 | `ManagingMiscellania` | ManagingMiscellania | world | yes | Managing Miscellania: pay the kingdom's coffers and Advisor Ghrim collects daily coal, logs, herbs, flax, fish, hardwood and seeds, scaled by approval. (members only) |
+| `MapEditorCommands` | MapEditorCommands | world | yes | Lets the world owner load saved map packs without restarting. |
 | `MultiCombatApi` | MultiCombatApi | world | yes | Serves the bounds of multi-combat zones to the client over the content API, without exposing the full development world data. |
 | `Museum` | Museum | world | yes | Varrock Museum Kudos: the Dig Site cleaning activity, the finds storage crate, display cases, Historian Minas's quest timeline reports, Curator Haig Halen's salvaging relics, the fossil displays and the wall maps. (members only) |
 | `Music` | Music | world | yes | The music tab: track unlocking, jukebox selection, now-playing, the music cape from Olaf the Bard and air guitar unlock. |
