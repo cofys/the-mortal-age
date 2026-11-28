@@ -29,6 +29,7 @@ import { TouchControlsPlugin } from "../../../game/plugins/touchcontrols/TouchCo
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
 import { PortraitModePlugin } from "../../../game/plugins/portraitmode/PortraitModePlugin";
 import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
+import { PerformancePlugin } from "../../../game/performance/PerformancePlugin";
 import { ShaderFxPlugin } from "../../../game/plugins/shaderfx/ShaderFxPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
 import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItemsPlugin";
@@ -71,7 +72,6 @@ import { LegacyTileMarkersConfig } from "../../../game/plugins/tilemarkers/migra
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { AdminWorldMapPlugin } from "../../../game/plugins/adminworldmap/AdminWorldMapPlugin";
 import { TilePacksPlugin } from "../../../game/plugins/tilepacks/TilePacksPlugin";
-import { LowEndDevicePlugin } from "../../../game/plugins/lowenddevice/LowEndDevicePlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
 import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
 import { CustomXpDropsPlugin } from "../../../game/plugins/customxpdrops/CustomXpDropsPlugin";
@@ -155,9 +155,9 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     PuzzleSolverPlugin,
     StretchedModePlugin,
     GpuPlugin,
+    PerformancePlugin,
     DistantWorldPlugin,
     ShaderFxPlugin,
-    LowEndDevicePlugin,
     CameraPlugin,
     IsometricCameraPlugin,
     WasdCameraPlugin,

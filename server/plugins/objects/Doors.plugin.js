@@ -559,19 +559,21 @@ function defineDoorData({ ObjectIdentifiers: O, Sound }) {
       silent: true,
     }),
     // Witchaven's puzzle doors keep their clipped threshold while each permitted
-    // player crosses. Explicit placements also identify a temporarily open leaf.
+    // player crosses. Explicit placements also identify a temporarily open leaf: live's open leaf is
+    // inactiveposhdoor, and famcrest_doori2h1_open for the gold room's door (Family Crest, revision 242
+    // capture local 1002252 ticks 1241, 1254, 1283, 1356).
     ...[
-      [O.DOOR_73, 2719, 9671, 1, null, 9672],
-      [O.DOOR_75, 2722, 9671, 1, null, 9672],
-      [O.DOOR_76, 2727, 9690, 2, 2728, null],
-      [O.DOOR_77, 2723, 9711, 3, null, 9711],
-    ].map(([id, x, y, face, crossX, crossY]) => {
+      [O.DOOR_73, 2719, 9671, 1, null, 9672, "inactiveposhdoor"],
+      [O.DOOR_75, 2722, 9671, 1, null, 9672, "inactiveposhdoor"],
+      [O.DOOR_76, 2727, 9690, 2, 2728, null, "famcrest_doori2h1_open"],
+      [O.DOOR_77, 2723, 9711, 3, null, 9711, "inactiveposhdoor"],
+    ].map(([id, x, y, face, crossX, crossY, leaf]) => {
       const [dx, dy] = [[-1, 0], [0, 1], [1, 0], [0, -1]][face];
       return Object.freeze({
         closed: [[id, x, y, 0, face]],
         opened: [
           [NAMELESS_DOOR_LEAF_IDS.INVISWALL, x, y, 0, face],
-          [id, x + dx, y + dy, 0, (face + 1) & 3],
+          [core.CacheDefinitions.getLocId(leaf) ?? id, x + dx, y + dy, 0, (face + 1) & 3],
         ],
         crossX, crossY,
         walkOver: true,
@@ -1088,6 +1090,23 @@ function defineDoorData({ ObjectIdentifiers: O, Sound }) {
         [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 1825, 9973, 0, 0],
       ],
       crossX: 1825,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 62,
+    }),
+    // Keep Le Faye's large front doors (lefayeunopenabledoorl/r), Merlin's Crystal capture MerlinsCrystal.bin
+    // (rev 242) tick 1254: from inside, inviswall in both doorways and the inactive leaves (73/74) on the tiles
+    // inside, door_open (62); the player walks out and they are back two ticks later. From outside they stay
+    // locked (MerlinsCrystal.Quest's door:toggle, tick 1264).
+    Object.freeze({
+      closed: [[O.LARGE_DOOR, 2763, 3402, 0, 2], [O.LARGE_DOOR_2, 2763, 3401, 0, 2]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2763, 3402, 0, 2],
+        [O.LARGE_DOOR_3, 2764, 3402, 0, 1], // inaclefayeunopenabledoorl
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2763, 3401, 0, 2],
+        [O.LARGE_DOOR_4, 2764, 3401, 0, 3], // inaclefayeunopenabledoorr
+      ],
+      crossX: 2764,
       walkOver: true,
       closeTicks: 2,
       openSoundId: 62,

@@ -827,7 +827,7 @@ varp `league_relic_effect_toggle_1` with the recorded "Relic - ..." lines (237/0
 | Tier | Relic | State |
 | --- | --- | --- |
 | 1 | Endless Harvest | done (Trailblazer Reloaded's unit; banking by toggle, resources never deplete) |
-| 1 | Barbarian Gathering | partial: second chance, Strength/Agility XP, bare hands that fish without bait (`fishing:tool`) and chop and mine as the crystal axe and pickaxe (`woodcutting:tool`, `mining:tool`); the Knapsack's storage, a StorageItems container (3 kinds, 140 in all; Fill, Check, Open/Close, Dispose asking which kind, banked by the bank's Empty containers and Empty; Hotfoot's products go in: docs/storage-items.md). Not the Leagues Tutor's replacement of a lost Knapsack. No recording has the Knapsack, so its lines are ours |
+| 1 | Barbarian Gathering | partial: second chance, Strength/Agility XP, bare hands that fish without bait (`fishing:tool`) and chop and mine as the crystal axe and pickaxe (`woodcutting:tool`, `mining:tool`); the Knapsack's storage, a StorageItems container (3 kinds, 140 in all; Fill, Check, Open/Close, Dispose asking which kind, banked by the bank's Empty containers and Empty; Hotfoot's products go in: docs/storage-items.md). The Leagues Tutor's Collect-items gives back a lost Knapsack, and a closed one counts as owned (`storage:owned`). No recording has the Knapsack, so its lines are ours |
 | 1 | Abundance | done: the +10 is a visible, permanent boost of every non-combat skill's current level with the resting level raised to match, as the Defence pact's (233/246 Leagues VI recordings: base + 10, Slayer and Sailing too, combat skills unboosted, kept through level-ups) |
 | 2 | Hotfoot | partial: cooked fish, smelted ore, running XP in the boots (10 + floor(Agility x 2/3) every 10 ticks of 2-tile moves, Wiki: Searing boots), laps counted twice with +25% XP, no failures, a 33% mark chance on the nine rooftop courses (`agility:mark-chance`; the mark cooldown still runs), a picked-up course mark or Colossal Wyrm termites finishing the lap with 10,000 coins (`agility:mark-taken`, `agility:course-find-taken`), Prifddinas's portal shards tenfold and the Wyrm courses' termites twofold (`agility:course-item`; the portal's own shard and line, 237/01149, are new to the course), the Brimhaven arena's tickets and vouchers twofold (`minigame:points`) |
 | 2 | Friendly Forager | partial: Raging Echoes' unit, plus Herblore at once and 100 of each herb (Wiki, 15 April 2026); the recorded lines, the Withdraw menu and the bank's Empty. Not the worn Withdraw-all and Withdraw-last (their behaviour is in no source), nor the herb sack's shared store (Wiki: it shares the silklined herb sack's) |
@@ -1600,6 +1600,13 @@ and `league:pact-effect` { player, effect } (an effect varbit's gameval name -> 
   lands: the current melee style's skills and Hitpoints, or Attack with a weapon that is no melee
   weapon or while autocasting, whatever style came before (rsprox captures, Leagues VI: 237/01104,
   237/04057, 237/04099, 238/04142); its second hit pays too (ours, not captured).
+  How they show, as live does (238/04190: Thorns, its double hit, shield reflect and the block
+  heal): a reflected hit is hitsplat 18 on the player (its pair 19 for others) with
+  `leagues_6_fire_shield`; Thorns and the reflected hit are the player's max hits (43: fixed damage
+  is its own maximum, within the max hit settings; 1140 shows Thorns as 43 too); a block heal is a
+  heal splat (6) of what it healed with `leagues_6_health_regen` (the ring alone at full or capped hitpoints: 237/04092), never for a reflected hit's 0 (29 of 29
+  reflects alone; no cooldown: block heals come on consecutive ticks). Not matched yet: 04190's hitsplat
+  67 (always 3, beside a 0 or a heal), the distance heal's splat, and `leagues_6_sigil_of_life`.
 - **Readings of ours** (the units' heads list every one): an off-hand is any shield-slot item,
   shields included (the Wiki's Off-hand page is the shield slot table); shields go by name for
   Thorns and reflect, and Dinh's bulwark by its bulwark weapon interface, so the "Crate of
@@ -1766,7 +1773,12 @@ Recipe for Disaster's rescues through that quest, its "Another Cook's Quest" lef
 (`diaryTasks`, the Wiki's lists matched to the diaries plugin's task keys by their text; the
 Desert elite Kalphite Queen head and the Wilderness easy earth warrior have no task there) over
 `diary:task`, before the unlock's own line as recorded, and its Combat Achievements
-(`combatAchievements`, by name) over `combat-achievements:complete`.
+(`combatAchievements`, by name) over `combat-achievements:complete`. A character born in
+Varlamore is treated as having visited it: `varlamore_visited` (the varbit the fairy rings'
+AIS/AJP/CKQ and the charter ships' Varlamore routes gate on) is set at creation, saved in
+`league:varlamore-visited` (varbits are not saved) and sent again at every login, so a character
+made before the rule gets it too; any other character's first visit still comes from the
+quetzals' first Fortis landing.
 
 **Demonic Pacts' League Home Teleport** (`leagueareas/HomeTeleport.LeagueAreaUnlocks.js`, data
 `homeTeleport`; spellbook 218:5; 237/01098, 01107, 01149, 238/01248): Cast asks "Select an
@@ -2219,6 +2231,9 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   - The churn's butter: `produce`.
   - A piece of Crystal armour: CrystalSinging's new `crystal-singing:sung` { itemId, amount }. It is not
     `skills:produced`, which production relics would double.
+  - An Amulet of blood fury (all three leagues): AmuletOfBloodFury's `blood-fury:created` { player, itemId }
+    when a Blood shard on an Amulet of fury is confirmed (#6854). No skill makes it, so the generator's
+    `produce` trigger never fired; a recharge is not a creation.
   - Claws of Guthix, Flames of Zamorak and Saradomin Strike: `cast`, with a new `outside { rects, z }`
     condition. Its box is the Mage Arena as `Spells.MageArena.js` bounds it (3089-3117 x 3921-3946, plane 0),
     since a player's first casts are the arena's 100 before the spells work outside it.

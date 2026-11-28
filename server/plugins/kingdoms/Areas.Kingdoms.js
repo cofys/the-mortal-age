@@ -77,6 +77,20 @@ function isRealPlayer(mobile) {
   return mobile?.isPlayer?.() === true && mobile?.isPlayerBot?.() !== true;
 }
 
+/**
+ * Territory chat lines go only to players with a real network client.
+ * Headless harness players (tests, tooling) have no client to read them,
+ * and the lines otherwise leak into captured message streams they assert
+ * on — same seam as ContentApiAuth's login token issuance.
+ */
+function hasNetworkClient(player) {
+  try {
+    return player?.getSession?.()?.hasNetworkClient?.() === true;
+  } catch {
+    return false;
+  }
+}
+
 function boundariesOf(api, def) {
   const list = [];
   for (const [x1, x2, y1, y2] of def.rects) {
@@ -106,6 +120,7 @@ function enterKingdom(api, def, player) {
     kingdomId: def.id,
     name: def.name,
   });
+  if (!hasNetworkClient(player)) return;
   const home = player.getAttribute?.(Membership.KINGDOM_ID_ATTRIBUTE) === def.id;
   player.sendMessage(
     home ? `Welcome home to ${def.name}.` : `You enter ${def.name} — ${def.blurb}.`
@@ -124,6 +139,7 @@ function leaveKingdom(api, def, player) {
     kingdomId: def.id,
     name: def.name,
   });
+  if (!hasNetworkClient(player)) return;
   player.sendMessage(`You leave ${def.name}.`);
 }
 
